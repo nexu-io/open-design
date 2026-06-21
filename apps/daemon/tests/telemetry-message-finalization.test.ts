@@ -5,6 +5,7 @@ import {
   composeChatUserRequestForAgent,
   createFinalizedMessageTelemetryReporter,
   shouldReportRunCompletedFromMessage,
+  shouldReportRunCompletionTelemetryFallbackStatus,
   telemetryPromptFromRunRequest,
 } from '../src/server.js';
 
@@ -42,6 +43,13 @@ describe('Langfuse message finalization gate', () => {
         { telemetryFinalized: true },
       ),
     ).toBe(false);
+  });
+
+  it('schedules terminal fallback only for failed and canceled runs', () => {
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('failed')).toBe(true);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('canceled')).toBe(true);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('succeeded')).toBe(false);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('running')).toBe(false);
   });
 
   it('uses the explicit current prompt for telemetry instead of the full transcript', () => {
@@ -262,5 +270,264 @@ describe('Langfuse message finalization gate', () => {
       persistedEndedAt: 1234,
       appVersion: { version: '0.7.0', channel: 'beta', packaged: true },
     });
+  });
+
+  it('allows a real final message report after a terminal fallback report', async () => {
+    const run = {
+      id: 'run-failed-late-final',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'failed',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const capture = vi.fn<(event: { insertId?: string }) => void>();
+    const report = vi.fn(async (_args: any) => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, runStatus: 'failed', endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        reportTrigger: 'terminal_fallback',
+      },
+    );
+    reporter(
+      { ...terminalMessage, runId: run.id, runStatus: 'failed', endedAt: 1235 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        reportTrigger: 'final_message',
+      },
+    );
+    reporter(
+      { ...terminalMessage, runId: run.id, runStatus: 'failed', endedAt: 1236 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        reportTrigger: 'final_message',
+      },
+    );
+    await Promise.resolve();
+
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(report.mock.calls.map(([call]) => call.persistedEndedAt)).toEqual([
+      1234,
+      1235,
+    ]);
+    expect(capture).toHaveBeenCalledTimes(3);
+    expect(capture.mock.calls.map(([call]) => call.insertId)).toEqual(expect.arrayContaining([
+      'run-failed-late-final-langfuse-report-terminal_fallback-accepted',
+      'run-failed-late-final-langfuse-report-final_message-accepted',
+      'run-failed-late-final-langfuse-report-final_message-skipped-duplicate_run',
+    ]));
+  });
+
+  it('captures Langfuse report acceptance after final message reporting resolves', async () => {
+    const run = {
+      id: 'run-accepted',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'codex',
+      model: 'default',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const capture = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+        reportTrigger: 'terminal_fallback',
+      },
+    );
+    await Promise.resolve();
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        insertId: 'run-accepted-langfuse-report-terminal_fallback-accepted',
+        properties: expect.objectContaining({
+          run_id: 'run-accepted',
+          langfuse_trace_id: 'run-accepted',
+          langfuse_expected: true,
+          langfuse_delivery_status: 'accepted',
+          langfuse_report_result: 'accepted',
+          langfuse_report_trigger: 'terminal_fallback',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to the run analytics context when final message headers are missing', async () => {
+    const run = {
+      id: 'run-accepted-headerless-finalize',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'codex',
+      model: 'default',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+      analyticsContext: {
+        deviceId: 'device-from-run',
+        sessionId: 'session-from-run',
+        clientType: 'desktop',
+        locale: 'zh-CN',
+        requestId: 'request-from-run',
+      },
+    };
+    const capture = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+    await Promise.resolve();
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        context: run.analyticsContext,
+        insertId: 'run-accepted-headerless-finalize-langfuse-report-final_message-accepted',
+        properties: expect.objectContaining({
+          run_id: 'run-accepted-headerless-finalize',
+          langfuse_delivery_status: 'accepted',
+          langfuse_report_result: 'accepted',
+          langfuse_report_trigger: 'final_message',
+        }),
+      }),
+    );
+  });
+
+  it('captures skipped Langfuse reporting when a finalized message references a missing run', () => {
+    const capture = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => undefined) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report: vi.fn(),
+    });
+
+    reporter(
+      { ...terminalMessage, runId: 'run-missing', endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        insertId: 'run-missing-langfuse-report-final_message-skipped-run_not_found',
+        properties: expect.objectContaining({
+          project_id: 'project-1',
+          conversation_id: 'conv-1',
+          run_id: 'run-missing',
+          langfuse_report_result: 'skipped',
+          langfuse_report_skip_reason: 'run_not_found',
+        }),
+      }),
+    );
   });
 });

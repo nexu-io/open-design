@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reverie — Mythic Naturecore</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Viaoda+Libre&family=Imprima&display=swap" rel="stylesheet">
+  <style>
+    :root { scrollbar-gutter: stable; }
+    html, body { margin: 0; padding: 0; background: #0a0608; scroll-behavior: auto; }
+    body { font-family: 'Imprima', sans-serif; color: #fff; }
+    * { box-sizing: border-box; }
+
+    @keyframes bobUp {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+
+    /* ── Scroll spacer + sticky stage ── */
+    #scroll-root { height: 480vh; position: relative; }
+    #stage {
+      position: sticky; top: 0; left: 0; width: 100%; height: 100vh;
+      overflow: hidden; background: #0a0608;
+    }
+
+    /* ── Parallax layers ── */
+    .layer {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      will-change: transform, opacity; pointer-events: none;
+    }
+    #world {
+      background-size: cover; background-position: center;
+      transform-origin: 50% 50%;
+    }
+    #portal {
+      background-size: cover; background-position: center;
+      transform-origin: 52% 38%; z-index: 5;
+    }
+    .curtain {
+      top: 0; height: 100%; width: 62%;
+      background-size: cover; background-position: center; z-index: 8;
+    }
+    #curtain-left { left: 0; transform-origin: left center; }
+    #curtain-right { right: 0; transform-origin: right center; }
+
+    /* ── Nav ── */
+    nav {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 22px 48px; pointer-events: auto;
+    }
+    .nav-group { display: flex; align-items: center; gap: 30px; flex: 1; }
+    .nav-group.right { justify-content: flex-end; }
+    .nav-link {
+      text-transform: uppercase; font-size: 12px; letter-spacing: 0.12em;
+      color: #fff; opacity: 0.9; text-decoration: none;
+    }
+    .nav-logo { width: 28px; height: 28px; display: grid; place-items: center; }
+    .nav-mobile { display: none; }
+
+    /* ── Scene 1 hero ── */
+    #scene1 {
+      position: absolute; inset: 0; z-index: 46; pointer-events: none;
+    }
+    .hero-left {
+      position: absolute; top: 46%; left: 60px; transform: translateY(-50%);
+      max-width: 440px;
+    }
+    .hero-title {
+      font-family: 'Viaoda Libre', serif; color: #fff;
+      font-size: clamp(46px, 7vw, 92px); line-height: 1.0; letter-spacing: 0.01em;
+      margin: 0 0 22px; text-shadow: 0 2px 24px rgba(0,0,0,0.45);
+    }
+    .hero-sub {
+      font-size: 16px; line-height: 1.7; color: rgba(255,255,255,0.82); max-width: 440px;
+    }
+    .hero-right {
+      position: absolute; top: 50%; right: 40px; transform: translateY(-50%);
+      display: flex; gap: 18px;
+    }
+    .hero-card {
+      width: 158px; height: 158px; border-radius: 28px; overflow: hidden;
+      position: relative; background-size: cover; background-position: center;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+    }
+    .card-label {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px; backdrop-filter: blur(6px);
+      background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.18) 60%, transparent 100%);
+      font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .play-icon {
+      width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.92);
+      display: grid; place-items: center; color: #2a1808; flex: none;
+    }
+    .patron-metric {
+      position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 16px;
+      font-family: 'Viaoda Libre', serif; font-size: 22px; line-height: 1.1;
+      background: linear-gradient(to top, rgba(0,0,0,0.6), transparent 70%);
+    }
+
+    /* slider dots */
+    .dots {
+      position: absolute; bottom: 36px; left: 60px; display: flex; gap: 8px; z-index: 47;
+    }
+    .dots i { height: 4px; border-radius: 4px; background: #fff; display: block; }
+    .dots i.wide { width: 28px; opacity: 1; }
+    .dots i.thin { width: 14px; opacity: 0.45; }
+
+    /* scroll cue */
+    .scroll-cue {
+      position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 47;
+    }
+    .scroll-cue span {
+      text-transform: uppercase; font-size: 10px; letter-spacing: 0.22em; color: rgba(255,255,255,0.6);
+    }
+    .scroll-cue .chev {
+      width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.4);
+      display: grid; place-items: center; animation: bobUp 1.8s ease-in-out infinite;
+    }
+
+    /* ── Scene 2 CTA ── */
+    #scene2 {
+      position: absolute; inset: 0; z-index: 46;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; padding: 0 20px;
+    }
+    .cta-wrap { text-align: center; max-width: 520px; }
+    .cta-title {
+      font-family: 'Viaoda Libre', serif; color: #fff;
+      font-size: clamp(38px, 6vw, 78px); letter-spacing: 0.03em; line-height: 1.05;
+      margin: 0 0 24px; text-shadow: 0 2px 20px rgba(0,0,0,0.4);
+    }
+    .cta-text {
+      font-family: 'Imprima', sans-serif; font-size: 20px; line-height: 1.6;
+      color: rgba(255,255,255,0.82); max-width: 480px; margin: 0 auto;
+    }
+
+    /* entrance fade target */
+    .fade-ui { opacity: 0; transition: opacity 0.9s ease, transform 0.9s ease; }
+    .fade-ui.in { opacity: 1; }
+    .hero-left.fade-ui { transform: translateY(calc(-50% + 20px)); }
+    .hero-left.fade-ui.in { transform: translateY(-50%); }
+
+    @media (max-width: 767px) {
+      nav { padding: 18px 20px; }
+      .nav-group { display: none; }
+      .nav-mobile { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+      .hero-left { left: 50%; right: auto; transform: translate(-50%, -50%); top: 42%;
+        text-align: center; max-width: 280px; }
+      .hero-left.fade-ui { transform: translate(-50%, calc(-50% + 20px)); }
+      .hero-left.fade-ui.in { transform: translate(-50%, -50%); }
+      .hero-title { color: #3b1a0a; }
+      .hero-sub { color: #3b1a0a; max-width: 280px; margin: 0 auto; }
+      .hero-right { position: absolute; top: 64%; right: auto; left: 50%; transform: translateX(-50%); }
+      .hero-right .hero-card:nth-child(2),
+      .hero-right .hero-card:nth-child(3) { display: none; }
+      .dots { left: 50%; transform: translateX(-50%); }
+      .scroll-cue { display: none; }
+      .cta-title { font-size: 38px; }
+      .cta-text { font-size: 14px; max-width: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="scroll-root">
+    <div id="stage">
+      <!-- Parallax layers -->
+      <div id="world" class="layer"></div>
+      <div id="portal" class="layer"></div>
+      <div id="curtain-left" class="curtain layer"></div>
+      <div id="curtain-right" class="curtain layer"></div>
+
+      <!-- Navigation -->
+      <nav>
+        <div class="nav-group left">
+          <a class="nav-link" href="#">Worlds</a>
+          <a class="nav-link" href="#">Atelier</a>
+          <a class="nav-link" href="#">Immersions</a>
+        </div>
+        <div class="nav-logo" aria-label="Reverie">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 2l2.09 6.42H23l-5.45 3.96L19.64 19 14 15.04 8.36 19l2.09-6.62L5 8.42h6.91L14 2z" fill="#fff"/>
+          </svg>
+        </div>
+        <div class="nav-group right">
+          <a class="nav-link" href="#">Craft</a>
+          <a class="nav-link" href="#">Codex</a>
+          <a class="nav-link" href="#">Connect</a>
+        </div>
+        <div class="nav-mobile">
+          <a class="nav-link" href="#">Explore</a>
+          <div class="nav-logo">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 2l2.09 6.42H23l-5.45 3.96L19.64 19 14 15.04 8.36 19l2.09-6.62L5 8.42h6.91L14 2z" fill="#fff"/>
+            </svg>
+          </div>
+          <a class="nav-link" href="#">Connect</a>
+        </div>
+      </nav>
+
+      <!-- Scene 1: Hero -->
+      <div id="scene1">
+        <div class="hero-left fade-ui">
+          <h1 class="hero-title">FALL ›<br>INTO REVERIE</h1>
+          <p class="hero-sub">Singular voyages to astonishing destinations, woven from light and longing for those who seek beauty beyond the known.</p>
+        </div>
+        <div class="hero-right fade-ui">
+          <!-- Card 3 -->
+          <div class="hero-card" id="hc0">
+            <div class="card-label">
+              <span class="play-icon">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2l7 4-7 4V2z"/></svg>
+              </span>
+              View Reel
+            </div>
+          </div>
+          <!-- Card 1 -->
+          <div class="hero-card" id="hc1">
+            <div class="patron-metric">32 World<br>Patrons</div>
+          </div>
+          <!-- Card 2 -->
+          <div class="hero-card" id="hc2">
+            <div class="card-label">
+              <span class="play-icon">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2l7 4-7 4V2z"/></svg>
+              </span>
+              View Reel
+            </div>
+          </div>
+        </div>
+
+        <div class="dots fade-ui">
+          <i class="wide"></i><i class="thin"></i><i class="thin"></i><i class="thin"></i>
+        </div>
+
+        <div class="scroll-cue fade-ui">
+          <span>Descend</span>
+          <div class="chev">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scene 2: CTA -->
+      <div id="scene2">
+        <div class="cta-wrap">
+          <h2 class="cta-title">FORGE BEYOND THE REAL</h2>
+          <p class="cta-text">Singular voyages to astonishing destinations, shaped for those who seek beauty beyond the ordinary and the known.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Asset map (large stable CDN stills — kept remote) ──
+    var PORTAL_BG = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/portal_bg_mu60k9-78f20d.webp';
+    var CURTAIN_LEFT = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/curtain_left_cdht6q-c85f2f.webp';
+    var CURTAIN_RIGHT = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/curtain_right_a9bn3i-1ca8f6.webp';
+    var WORLD_BG = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/world_bg_jzzcn1-dfd909.webp';
+    // Cards MUST stay in this exact order (Card 3, Card 1, Card 2)
+    var CARD_IMAGES = [
+      'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/card_3_nbwm25-de0132.webp',
+      'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/card_2_wr6al6-b3a8c5.webp',
+      'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/card_1_jz8otj-096be2.webp'
+    ];
+
+    // ── Math helpers ──
+    function easeInOut(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+    // ── Parallax magnitudes ──
+    var MAG = { world: 6, portal: 7, curtainL: 14, curtainR: 14 };
+
+    // ── Wire backgrounds ──
+    var worldEl = document.getElementById('world');
+    var portalEl = document.getElementById('portal');
+    var curtLEl = document.getElementById('curtain-left');
+    var curtREl = document.getElementById('curtain-right');
+    worldEl.style.backgroundImage = "url('" + WORLD_BG + "')";
+    portalEl.style.backgroundImage = "url('" + PORTAL_BG + "')";
+    curtLEl.style.backgroundImage = "url('" + CURTAIN_LEFT + "')";
+    curtREl.style.backgroundImage = "url('" + CURTAIN_RIGHT + "')";
+    document.getElementById('hc0').style.backgroundImage = "url('" + CARD_IMAGES[0] + "')";
+    document.getElementById('hc1').style.backgroundImage = "url('" + CARD_IMAGES[1] + "')";
+    document.getElementById('hc2').style.backgroundImage = "url('" + CARD_IMAGES[2] + "')";
+
+    var scene1 = document.getElementById('scene1');
+    var scene2 = document.getElementById('scene2');
+    var heroLeft = document.querySelector('.hero-left');
+
+    // ── Responsive flag ──
+    var isMobile = false;
+    var mq = window.matchMedia('(max-width: 767px)');
+    function onMq(e) { isMobile = e.matches; }
+    onMq(mq);
+    if (mq.addEventListener) mq.addEventListener('change', onMq); else mq.addListener(onMq);
+
+    // ── Scroll progress (passive listener) ──
+    var scrollProgress = 0;
+    function readScroll() {
+      var root = document.getElementById('scroll-root');
+      var scrollable = root.offsetHeight - window.innerHeight;
+      scrollProgress = scrollable > 0 ? clamp(window.scrollY / scrollable, 0, 1) : 0;
+    }
+    window.addEventListener('scroll', readScroll, { passive: true });
+    window.addEventListener('resize', readScroll);
+    readScroll();
+
+    // ── Smooth mouse tracking ──
+    var targetRX = 0, targetRY = 0, curRX = 0, curRY = 0;
+    window.addEventListener('mousemove', function (e) {
+      targetRX = (e.clientX / window.innerWidth) * 2 - 1;
+      targetRY = (e.clientY / window.innerHeight) * 2 - 1;
+    });
+
+    // ── Render loop ──
+    function tick() {
+      curRX = lerp(curRX, targetRX, 0.07);
+      curRY = lerp(curRY, targetRY, 0.07);
+      var rx = curRX, ry = curRY;
+      var p = scrollProgress;
+      var eased = easeInOut(p);
+
+      // World layer
+      var worldScale = lerp(1, 1.18, p);
+      worldEl.style.transform = 'scale(' + worldScale + ') translate3d(' + (rx * MAG.world) + 'px,' + (ry * MAG.world) + 'px,0)';
+
+      // Portal frame
+      var portalScale = lerp(1, 7.5, p);
+      var portalOpacity = clamp(1 - (p - 0.65) / 0.2, 0, 1);
+      portalEl.style.opacity = portalOpacity;
+      portalEl.style.transform = 'scale(' + portalScale + ') translate3d(' + (rx * MAG.portal) + 'px,' + (ry * MAG.portal) + 'px,0)';
+
+      // Curtains
+      var curtainScrollScale = lerp(1, 1.3, p);
+      var totalShift = 62 + eased * 88; // 62% open -> up to 150%
+      curtLEl.style.transform = 'translateX(calc(-' + totalShift + '% + ' + (rx * MAG.curtainL) + 'px)) translateY(' + (ry * MAG.curtainL * 0.3) + 'px) scale(' + curtainScrollScale + ') translateZ(0)';
+      curtREl.style.transform = 'translateX(calc(' + totalShift + '% + ' + (rx * MAG.curtainR) + 'px)) translateY(' + (ry * MAG.curtainR * 0.3) + 'px) scale(' + curtainScrollScale + ') translateZ(0)';
+
+      // Scene 1 opacity
+      var s1 = clamp(1 - p / 0.22, 0, 1);
+      scene1.style.opacity = s1;
+      scene1.style.pointerEvents = s1 > 0.05 ? 'auto' : 'none';
+
+      // Scene 2 opacity
+      var s2 = clamp((p - 0.68) / 0.16, 0, 1);
+      scene2.style.opacity = s2;
+      scene2.style.pointerEvents = s2 > 0.05 ? 'auto' : 'none';
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // ── Entrance animation ──
+    // Curtains start fully closed, open after 100ms; UI fades in after 600ms.
+    curtLEl.style.transition = 'transform 1.4s cubic-bezier(0.22,1,0.36,1)';
+    curtREl.style.transition = 'transform 1.4s cubic-bezier(0.22,1,0.36,1)';
+    // start closed
+    curtLEl.style.transform = 'translateX(0%)';
+    curtREl.style.transform = 'translateX(0%)';
+
+    setTimeout(function () {
+      // release into the render-loop-driven 62% open
+      curtLEl.style.transform = 'translateX(-62%)';
+      curtREl.style.transform = 'translateX(62%)';
+    }, 100);
+
+    var fadeEls = document.querySelectorAll('.fade-ui');
+    setTimeout(function () {
+      for (var i = 0; i < fadeEls.length; i++) fadeEls[i].classList.add('in');
+    }, 600);
+
+    // Disable entry CSS transitions after 2200ms so mouse parallax has no lag.
+    setTimeout(function () {
+      curtLEl.style.transition = 'none';
+      curtREl.style.transition = 'none';
+      for (var i = 0; i < fadeEls.length; i++) fadeEls[i].style.transition = 'none';
+    }, 2200);
+  </script>
+</body>
+</html>

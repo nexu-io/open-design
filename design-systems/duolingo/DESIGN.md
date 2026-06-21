@@ -152,3 +152,9 @@ Shape language is friendly: 16–20px radii on cards, 12px on buttons, 9999px on
 - **Duration**: 180ms for button press; 320ms for skill-node unlock; 1.6s for active-node pulse.
 - **Easing**: `cubic-bezier(0.34, 1.56, 0.64, 1)` (back-out, slight overshoot) for unlocks.
 - **Mascot**: Duo blinks every 4–6s, jumps on streak milestones (480ms ease-out spring).
+
+## 7. Usage Guardrails
+
+- Keep the high-saturation owl green, chunky bottom shadows, and rounded lesson geometry together; flat green buttons alone do not read as Duolingo.
+- Reserve oversized bold type for lesson, streak, and progress moments where the product needs encouragement or feedback.
+- Use playful motion sparingly around progress state changes, avoiding generic bouncy animation on every control.

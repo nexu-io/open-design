@@ -14,25 +14,32 @@ Before starting:
    cp .env.example .env
    ```
 
-2. Generate a secure token:
+2. Generate a secure token (recommended unless your reverse proxy will both authenticate every request and set `OPEN_DESIGN_DISABLE_API_AUTH=1`):
 
    ```bash
    openssl rand -hex 32
    ```
 
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+3. Open `.env` in your editor and choose one auth mode:
+   - default: paste the token into `OD_API_TOKEN=`
+   - trusted reverse proxy that already authenticates every request: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
 
 Then pull and start the service:
 
 ```bash
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose pull
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose up -d --no-build
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose pull
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 ```
+
+Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
+`ghcr.io/nexu-io/od:<version>` to pin a supported release.
 
 Defaults:
 
 - Host port: `127.0.0.1:7456` (`OPEN_DESIGN_PORT=8080` to publish on `127.0.0.1:8080`)
-- Runtime data volume: `open_design_data` mounted at `/app/.od`
+- Runtime data: before documenting, changing, or choosing persistent daemon
+  storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
+  directory contract**. This README MUST NOT restate it.
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 
@@ -42,23 +49,49 @@ bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
 front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
-proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be
-allowed to call `/api`:
+proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
+be allowed to call `/api`:
 
 ```bash
 OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
 
+If the reverse proxy already authenticates every request and you do not want it
+to inject `Authorization: Bearer <OD_API_TOKEN>` upstream, set:
+
+```bash
+OPEN_DESIGN_DISABLE_API_AUTH=1
+```
+
+Use this only for trusted deployments where the daemon is reachable strictly
+through that authenticated proxy. It disables daemon-side bearer enforcement for
+all `/api/*` requests, so direct access to the daemon must remain blocked. The
+Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
+
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
 ```bash
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design@sha256:<digest> docker compose up -d --no-build
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od@sha256:<digest> docker compose up -d --no-build
 ```
 The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
-## Publish to Docker Hub
+If you install Codex inside an unprivileged Linux container and it fails while
+creating its `workspace-write` sandbox, opt into Codex's full-access mode for
+all Codex runs in that deployment:
+
+```bash
+OD_CODEX_SANDBOX=danger-full-access docker compose up -d --no-build
+```
+
+Only the exact value `danger-full-access` is supported; unknown values are
+ignored. Use this only for trusted, single-user deployments. It lets Codex run
+without the workspace-write sandbox, which is useful when the container host
+blocks unprivileged user namespaces, but it gives the Codex process broader
+filesystem access inside the container.
+
+## Manual image publish override
 
 ```bash
 deploy/scripts/publish-images.sh --image_tag latest
@@ -67,15 +100,15 @@ deploy/scripts/publish-images.sh --image_tag latest
 Useful overrides:
 
 ```bash
-IMAGE_NAMESPACE=your-dockerhub-user deploy/scripts/publish-images.sh --arch arm64
-deploy/scripts/publish-images.sh --image docker.io/your-user/open-design:0.1.0
+IMAGE_NAMESPACE=your-ghcr-org deploy/scripts/publish-images.sh --arch arm64
+deploy/scripts/publish-images.sh --image ghcr.io/your-org/od:0.1.0
 ```
 
 The script defaults to:
 
-- `docker.io/vanjayak/open-design:<tag>`
+- `ghcr.io/nexu-io/od:<tag>`
 - `linux/amd64,linux/arm64`
-- `skopeo` push strategy with Docker credentials read from `~/.docker/config.json`
+- `skopeo` push strategy with registry credentials read from `~/.docker/config.json`
 - preloading base images through `skopeo` to reduce Docker Hub pull flakiness
 
 If `127.0.0.1:7890` is available and no proxy is already set, the script uses it
@@ -126,3 +159,37 @@ COLIMA_BUILD_SWAP_CLEANUP_FORCE=1 COLIMA_BUILD_SWAPFILE=/custom-swapfile deploy/
 `cleanup` removes the default helper path and the old helper path. If you set a
 custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 `COLIMA_BUILD_SWAP_CLEANUP_FORCE=1` is also set.
+
+### Docker Desktop on macOS
+
+When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
+
+`Authorization: Bearer <OD_API_TOKEN> required`
+
+Workaround:
+
+1. Enable host networking in Docker Desktop:
+   `Docker Desktop → Settings → Resources → Network → Enable host networking → Apply and restart`
+
+2. Use a local override to docker-compose.yml:
+
+   ```yaml
+   services:
+     open-design:
+       network_mode: host
+       ports: []
+   ```
+
+3. Recreate the container:
+
+   ```bash
+   docker compose down
+   docker compose up -d --force-recreate
+   ```
+
+4. Verify:
+
+   ```bash
+   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
+   # host
+   ```

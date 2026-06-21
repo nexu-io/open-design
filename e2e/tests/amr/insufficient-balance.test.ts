@@ -8,7 +8,7 @@ import { writeFakeVelaBin } from '@/amr';
 import { createAmrProject, putAmrAppConfig } from '@/vitest/amr';
 import { listMessages } from '@/vitest/messages';
 import { readRunEvents, startRun, waitForRunTerminal } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 describe('AMR insufficient balance run failures', () => {
   test('fails the run with a recharge-facing AMR error when fake vela reports insufficient balance', { timeout: 180_000 }, async () => {
@@ -16,6 +16,7 @@ describe('AMR insufficient balance run failures', () => {
 
     await suite.with.toolsDev(async ({ webUrl }) => {
       const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-balance'), {
+        endpoints: suite.amr,
         failBalanceAtPrompt: true,
         requireLoginConfig: false,
       });
@@ -25,8 +26,7 @@ describe('AMR insufficient balance run failures', () => {
         agentCliEnv: {
           amr: {
             VELA_BIN: velaBin,
-            VELA_LINK_URL: 'http://localhost:18081',
-            VELA_RUNTIME_KEY: 'fake-runtime-key',
+            ...suite.amr.runtimeEnv(),
           },
         },
       });
@@ -51,7 +51,9 @@ describe('AMR insufficient balance run failures', () => {
 
       const events = await readRunEvents(webUrl, run.runId);
       expect(events).toContain('AMR_INSUFFICIENT_BALANCE');
-      expect(events).toContain('https://open-design.ai/amr/wallet');
+      expect(events).toContain(
+        'https://open-design.ai/amr/wallet?source=open_design',
+      );
 
       const messages = await listMessages(webUrl, project.project.id, project.conversationId);
       const assistant = messages.find((message) => message.id === assistantMessageId);

@@ -1,4 +1,5 @@
 import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { agentCapabilities } from '../capabilities.js';
 import type { RuntimeAgentDef } from '../types.js';
 import type { RuntimeModelOption } from '../types.js';
 
@@ -32,6 +33,16 @@ export const cursorAgentDef = {
     name: 'Cursor Agent',
     bin: 'cursor-agent',
     versionArgs: ['--version'],
+    helpArgs: ['--help'],
+    capabilityFlags: {
+      // Flag string -> capability key. After probing `--help`, detection sets
+      // `agentCapabilities['cursor-agent'][key] = true` for each substring it
+      // finds. `--trust` is only honored in `-p`/headless mode and only exists
+      // on newer cursor-agent builds; older installs reject it with
+      // "unknown option '--trust'" and exit 1, which kills Test and task
+      // execution (issue #4461). Gate on the probe like claude/codebuddy do.
+      '--trust': 'trust',
+    },
     // `cursor-agent models` prints account-bound model ids per line. When
     // the user isn't authed it prints "No models available for this
     // account." — that's not a model list, so we detect it and fall back.
@@ -62,6 +73,7 @@ export const cursorAgentDef = {
       options = {},
       runtimeContext = {},
     ) => {
+      const caps = agentCapabilities.get('cursor-agent') || {};
       const args = [];
       args.push(
         '--print',
@@ -69,8 +81,13 @@ export const cursorAgentDef = {
         'stream-json',
         '--stream-partial-output',
         '--force',
-        '--trust',
       );
+      // `--trust` grants workspace trust in headless runs, but only newer
+      // cursor-agent builds accept it; older ones exit 1 with "unknown option"
+      // (issue #4461). Pass it only when the `--help` probe saw it.
+      if (caps.trust) {
+        args.push('--trust');
+      }
       if (runtimeContext.cwd) {
         args.push('--workspace', runtimeContext.cwd);
       }
@@ -82,4 +99,8 @@ export const cursorAgentDef = {
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'cursor-agent',
+    // `cursor-agent status` is a cheap, side-effect-free auth check. Declaring
+    // it here is what makes detection surface an "auth required" badge for
+    // Cursor Agent (the generalized probe only runs for adapters that opt in).
+    authProbe: { args: ['status'], timeoutMs: 5000 },
 } satisfies RuntimeAgentDef;

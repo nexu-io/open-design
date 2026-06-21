@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
@@ -12,10 +13,12 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
+  bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
@@ -27,6 +30,7 @@ import {
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
+import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
@@ -59,7 +63,27 @@ async function withFakeAgent<T>(
     return await run();
   } finally {
     process.env.PATH = oldPath;
+    killProcessesUsingPath(dir);
     await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+function killProcessesUsingPath(pathFragment: string): void {
+  if (process.platform === 'win32') return;
+  let output = '';
+  try {
+    output = execFileSync('pgrep', ['-f', pathFragment], { encoding: 'utf8' });
+  } catch {
+    return;
+  }
+  for (const line of output.split('\n')) {
+    const pid = Number(line.trim());
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+    }
   }
 }
 
@@ -210,10 +234,202 @@ process.exit(0);
         expect(runsBody.runs[0]).toMatchObject({
           conversationId,
           status: 'failed',
-          exitCode: 0,
+          exitCode: 1,
         });
       },
     );
+  });
+
+  it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-config-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const cwdFile = join(markerDir, 'cwd.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'OpenCode cwd permission fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  fs.writeFileSync(${JSON.stringify(cwdFile)}, process.cwd());
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'cwd-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('cwd-permission-ok');
+
+        const effectiveCwd = (await fsp.readFile(cwdFile, 'utf8')).trim();
+        const raw = await fsp.readFile(envFile, 'utf8');
+        const parsed = JSON.parse(raw) as {
+          permission?: {
+            external_directory?: Record<string, string>;
+          };
+        };
+
+        expect(parsed.permission?.external_directory).toMatchObject({
+          [effectiveCwd]: 'allow',
+          [`${effectiveCwd}/*`]: 'allow',
+          [`${effectiveCwd}/**`]: 'allow',
+        });
+      },
+    );
+  });
+
+  it('strips inherited OpenCode server auth env before spawning the opencode CLI', async () => {
+    const inheritedPassword = process.env.OPENCODE_SERVER_PASSWORD;
+    process.env.OPENCODE_SERVER_PASSWORD = 'test-parent-server-password';
+
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-env-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-server-password.txt');
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_SERVER_PASSWORD || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'opencode-env-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('opencode-env-ok');
+          expect(await fsp.readFile(envFile, 'utf8')).toBe('');
+        },
+      );
+    } finally {
+      if (inheritedPassword == null) {
+        delete process.env.OPENCODE_SERVER_PASSWORD;
+      } else {
+        process.env.OPENCODE_SERVER_PASSWORD = inheritedPassword;
+      }
+    }
+  });
+
+
+  it('reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message reuse tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Assistant row reuse fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    const sqlite = new Database(dbFile);
+    try {
+      upsertMessage(sqlite as never, conversationId!, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        runStatus: 'failed',
+        startedAt: Date.now() - 1_000,
+        endedAt: Date.now() - 500,
+      });
+    } finally {
+      sqlite.close();
+    }
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'reused-assistant-row-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            assistantMessageId,
+            message: 'retry this turn',
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('reused-assistant-row-ok');
+      },
+    );
+
+    const verifyDb = new Database(dbFile, { readonly: true });
+    try {
+      const rows = verifyDb
+        .prepare(`SELECT id, content, run_id FROM messages WHERE conversation_id = ? AND role = 'assistant'`)
+        .all(conversationId) as Array<{ id: string; content: string; run_id: string | null }>;
+      expect(rows.filter((row) => row.id === assistantMessageId)).toHaveLength(1);
+      expect(rows.some((row) => row.id !== assistantMessageId && row.content.includes('reused-assistant-row-ok'))).toBe(false);
+      const reused = rows.find((row) => row.id === assistantMessageId);
+      expect(reused?.content).toContain('reused-assistant-row-ok');
+    } finally {
+      verifyDb.close();
+    }
   });
 
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
@@ -246,12 +462,19 @@ process.exit(1);
     );
   });
 
-  it('retries transient AMR Link catalog failures before aborting startup', async () => {
+  it('survives transient AMR Link catalog failures without aborting the run', async () => {
+    // The run preflight resolves the AMR catalog through the shared
+    // AmrModelLoadingCache, which degrades to the offline `vela model preset`
+    // seed whenever the authoritative `vela model list` is momentarily
+    // unavailable (and refreshes the remote catalog in the background). So a
+    // transient catalog failure must NOT abort the run — the per-run path no
+    // longer blocks on a synchronous `model list` retry loop.
     const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
     const previousLinkUrl = process.env.VELA_LINK_URL;
     const stateFile = join(tmpdir(), `od-amr-model-retry-${randomUUID()}.json`);
     try {
-      process.env.VELA_RUNTIME_KEY = 'fake-runtime-key';
+      // Unique key so the shared model cache key is unique per test run.
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
 
       await withFakeAgent(
@@ -262,7 +485,7 @@ const { spawn } = require('node:child_process');
 const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
 const stateFile = ${JSON.stringify(stateFile)};
 const args = process.argv.slice(2);
-if (args[0] === 'models') {
+if (args[0] === 'model' && args[1] === 'list') {
   const state = existsSync(stateFile)
     ? JSON.parse(readFileSync(stateFile, 'utf8'))
     : { attempts: 0 };
@@ -298,8 +521,13 @@ child.on('exit', (code, signal) => {
           expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
           expect(body).toContain('"type":"text_delta","delta":"vela."');
           expect(body).not.toContain('model_catalog_unavailable');
+          expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+          // The catalog probe runs at least once (remote attempted, then the
+          // run proceeds from the preset seed). We no longer assert an exact
+          // synchronous retry count: the remote retry/backoff now happens in
+          // the cache's background refresh, not on the per-run hot path.
           const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
-          expect(attempts.attempts).toBe(3);
+          expect(attempts.attempts).toBeGreaterThanOrEqual(1);
         },
       );
     } finally {
@@ -309,6 +537,153 @@ child.on('exit', (code, signal) => {
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
       else process.env.VELA_LINK_URL = previousLinkUrl;
     }
+  });
+
+  it('proceeds with the AMR run via the cached/preset catalog when the live model list is unavailable', async () => {
+    // Red spec for the packaged-nightly "AMR model the selected model is not
+    // available from Vela" report: the run preflight used to do a fresh,
+    // blocking `vela model list` (authoritative remote catalog) on EVERY run
+    // and fail-close the run whenever that single call timed out / errored —
+    // even though the user is logged in, the model picker already shows a
+    // model (seeded from the offline `vela model preset`), and the selected
+    // model is real. Under CorpLink/飞连 the remote call routinely exceeds the
+    // 10s timeout, so a logged-in user with a valid model could not run AMR at
+    // all. The fix reuses the shared AmrModelLoadingCache (cached remote when
+    // hot, otherwise the offline preset seed) instead of a per-run blocking
+    // remote probe, so a transient `model list` failure no longer kills the run.
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    try {
+      // A unique runtime key both marks the user as logged-in AND makes the
+      // shared model cache key unique so this case never reuses another test's
+      // cached remote catalog.
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const args = process.argv.slice(2);
+// Simulate a persistently unreachable authoritative catalog (gateway
+// timeout / 飞连 congestion): every \`vela model list\` fails. \`model preset\`,
+// \`login\`, and \`agent run\` still delegate to the fixture, mirroring the real
+// CLI where the offline preset and the ACP run do not need the gateway.
+if (args[0] === 'model' && args[1] === 'list') {
+  process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+  process.exit(1);
+}
+const child = spawn(process.execPath, [fixture, ...args], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'amr',
+              message: 'hello',
+              // Present in the preset seed (DEFAULT_MODEL_PRESET_JSON) but the
+              // live `model list` is unavailable, so only the preset path can
+              // surface it.
+              model: 'glm-5.1',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          // The run must NOT be fail-closed on the unavailable live catalog.
+          expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+          expect(body).not.toContain('model_catalog_unavailable');
+          expect(body).not.toContain('is not available from Vela');
+          // It must actually proceed into the ACP run and stream assistant text.
+          expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+          expect(body).toContain('"type":"text_delta","delta":"vela."');
+        },
+      );
+    } finally {
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('allows plugin authoring to succeed when the requested generated-plugin artifacts exist before close', async () => {
+    const projectId = `proj-plugin-authoring-success-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring artifact success fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const pluginDir = path.join(process.cwd(), 'generated-plugin');
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'open-design.json'), JSON.stringify({ name: 'generated-plugin' }, null, 2));
+  fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# Generated plugin\\n');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
+        expect(statusBody.status).toBe('succeeded');
+
+        const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+        expect(filesResponse.status).toBe(200);
+        const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
+        expect(filesBody.files.some((file) => file.name === 'generated-plugin/open-design.json')).toBe(true);
+        expect(filesBody.files.some((file) => file.name === 'generated-plugin/SKILL.md')).toBe(true);
+      },
+    );
   });
 
   it('does not report plugin authoring as succeeded when the agent only emits planning text without artifacts', async () => {
@@ -380,6 +755,259 @@ process.stdin.on('end', () => {
         expect(filesResponse.status).toBe(200);
         const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
         expect(filesBody.files.some((file) => file.name.startsWith('generated-plugin/'))).toBe(false);
+      },
+    );
+  });
+  it('does not fail plugin authoring when the turn-1 reply is a clarifying question-form awaiting the brief', async () => {
+    // The `od-plugin-authoring` plugin's turn-1 flow is to emit a
+    // `<question-form>` collecting the plugin brief, then STOP and wait for
+    // the user to answer — artifacts only land on the follow-up turn. The
+    // missing-artifacts guard must not treat that expected pause as a
+    // failure (regression: "Plugin authoring ended before generating the
+    // required generated-plugin artifacts.").
+    const projectId = `proj-plugin-authoring-question-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring question-form fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<question-form id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</question-form>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('<question-form');
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+  it('does not fail plugin authoring when the clarifying form uses the <ask-question> alias', async () => {
+    // `<ask-question>` is the alias the web form parser accepts alongside
+    // the canonical `<question-form>` (apps/web/src/artifacts/question-form.ts).
+    // Models sometimes drift to it; the UI still renders a valid brief form,
+    // so the daemon's missing-artifacts guard must recognize the alias too —
+    // otherwise the same "ended before generating…" regression returns for a
+    // supported clarification shape.
+    const projectId = `proj-plugin-authoring-alias-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring ask-question alias fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<ask-question id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('<ask-question');
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+  it('still fails plugin authoring when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
+    // The clarification carve-out must match the web parser's renderable-form
+    // contract (JSON body with a `questions` array), not just the opening
+    // tag. A `<question-form>` whose body is not valid form JSON renders as
+    // raw prose in the UI — no usable brief card — so suppressing the
+    // missing-artifacts failure for it would turn a hard failure into a false
+    // success. This pins that the guard stays gated on a renderable body.
+    const projectId = `proj-plugin-authoring-badform-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring malformed-form fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题。\\n<question-form id="discovery">\\nWhat should it do? (free text)\\n</question-form>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).not.toBe('succeeded');
+      },
+    );
+  });
+  it('does not fail plugin authoring when a valid form follows a Unicode preamble that expands under toLowerCase', async () => {
+    // The mirrored close-tag scan must stay in the original-string coordinate
+    // space. Some code points expand under toLowerCase ("İ" -> "i̇"), so
+    // lowercasing the whole buffer before indexing would desync the close-tag
+    // offset and corrupt the JSON body slice, failing a valid form. The
+    // preamble here contains "İ" before a well-formed form block.
+    const projectId = `proj-plugin-authoring-unicode-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring unicode-preamble fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'İstanbul brief — 先确认几个问题。\\n<ask-question id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -1349,6 +1977,181 @@ process.exit(0);
         expect(statusBody.status).toBe('failed');
       },
     );
+  });
+
+  it('parses successful Antigravity Gemini JSONL output instead of forwarding raw stdout', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5, cached: 0, duration_ms: 25 } }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('"type":"text_delta","delta":"Hello from Antigravity."');
+        expect(eventsBody).toContain('"type":"usage"');
+        expect(eventsBody).not.toContain('event: stdout');
+        expect(eventsBody).not.toContain('"role":"assistant"');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  it('forwards Antigravity plain stdout JSONL when it lacks the Gemini init marker', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'error', message: 'requested JSONL output' }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'return JSONL',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: stdout');
+        expect(eventsBody).toContain('requested JSONL output');
+        expect(eventsBody).not.toContain('event: error');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0, cached: 0, duration_ms: 25 } }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'Agent completed without producing any output');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('"type":"usage"');
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).not.toContain('event: stdout');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('preserves the first buffered stdout timestamp for Antigravity Gemini assistant text', () => {
+    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
+      [{
+        receivedAt: 1_234,
+        text: [
+          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
+          JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }),
+          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } }),
+        ].join('\n'),
+      }],
+    );
+
+    expect(timestamp).toBe(1_234);
+  });
+
+  it('stamps Antigravity Gemini assistant text from the chunk that completes the first assistant message', () => {
+    const timestamp = bufferedAntigravityGeminiFirstTokenAt([
+      {
+        receivedAt: 1_234,
+        text: `${JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' })}\n`,
+      },
+      {
+        receivedAt: 5_678,
+        text: `${JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true })}\n`,
+      },
+      {
+        receivedAt: 9_999,
+        text: `${JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } })}\n`,
+      },
+    ]);
+
+    expect(timestamp).toBe(5_678);
+  });
+
+  it('does not stamp a first token timestamp for Antigravity Gemini streams without assistant text', () => {
+    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
+      [{
+        receivedAt: 1_234,
+        text: [
+          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
+          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0 } }),
+        ].join('\n'),
+      }],
+    );
+
+    expect(timestamp).toBeNull();
   });
 
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {

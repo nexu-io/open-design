@@ -202,6 +202,9 @@ describe('QuestionFormView', () => {
     );
 
     const submit = screen.getByRole('button', { name: 'Send answers' });
+    // Required field unanswered → submit stays disabled (regression guard:
+    // the Questions-tab refactor must not make required fields optional on the
+    // standard submit path).
     expect((submit as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByLabelText('Editorial / magazine'));
@@ -220,6 +223,32 @@ describe('QuestionFormView', () => {
     });
   });
 
+  it('marks required fields with the inline indicator even when the footer is hidden', () => {
+    // Panel path (Questions tab): hideInternalSubmit hides the form footer, so
+    // the inline "*" next to a required label is the only per-field cue that a
+    // field is mandatory. A mixed required/optional form must still advertise
+    // which fields block the disabled Continue button.
+    const mixedForm = {
+      id: 'discovery',
+      title: 'Quick brief',
+      questions: [
+        { id: 'taskType', label: 'Task type', type: 'text', required: true },
+        { id: 'notes', label: 'Notes', type: 'text' },
+      ],
+    } as QuestionForm;
+
+    const onSubmit = vi.fn();
+    const { container } = render(
+      <QuestionFormView form={mixedForm} interactive hideInternalSubmit onSubmit={onSubmit} />,
+    );
+
+    const fields = container.querySelectorAll('.qf-field');
+    const requiredField = fields[0]!;
+    const optionalField = fields[1]!;
+    expect(requiredField.querySelector('.qf-required')?.textContent).toBe('*');
+    expect(optionalField.querySelector('.qf-required')).toBeNull();
+  });
+
   it('submits required select object options with stable values', () => {
     const onSubmit = vi.fn();
     const { container } = render(
@@ -227,6 +256,7 @@ describe('QuestionFormView', () => {
     );
 
     const submit = screen.getByRole('button', { name: 'Send answers' });
+    // Required select unanswered → submit stays disabled (regression guard).
     expect((submit as HTMLButtonElement).disabled).toBe(true);
 
     const select = container.querySelector('select');

@@ -1,0 +1,5 @@
+# Auto-label PRs that contribute a tutorial entry, so the daily
+# tutorials-youtube-sync digest can surface them for review.
+tutorials:
+  - changed-files:
+      - any-glob-to-any-file: 'apps/landing-page/app/content/tutorials/**'

@@ -19,6 +19,8 @@
 interface CandidateFile {
   readonly name: string;
   readonly path?: string;
+  readonly kind?: string;
+  readonly mtime?: number;
 }
 
 interface AutoOpenOptions {
@@ -92,4 +94,27 @@ export function decideAutoOpenAfterWrite(
     return resolve(basenameMatches[0]!.name);
   }
   return { shouldOpen: false, fileName: null };
+}
+
+function isHtmlPreviewFile(file: CandidateFile): boolean {
+  const path = file.path ?? file.name;
+  return file.kind === 'html' || /\.html?$/i.test(path);
+}
+
+export function selectAutoOpenProducedHtml(
+  producedFiles: ReadonlyArray<CandidateFile>,
+): string | null {
+  let selected: CandidateFile | null = null;
+  for (const file of producedFiles) {
+    if (!isHtmlPreviewFile(file)) continue;
+    if (!selected) {
+      selected = file;
+      continue;
+    }
+    const nextMtime = typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : 0;
+    const selectedMtime =
+      typeof selected.mtime === 'number' && Number.isFinite(selected.mtime) ? selected.mtime : 0;
+    if (nextMtime >= selectedMtime) selected = file;
+  }
+  return selected?.name ?? null;
 }

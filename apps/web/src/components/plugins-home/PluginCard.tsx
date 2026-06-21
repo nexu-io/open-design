@@ -13,6 +13,7 @@
 // needs to commit.
 
 import { useMemo, useState } from 'react';
+import { VisuallyHidden } from '@open-design/components';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import type { PluginShareAction } from '../../state/projects';
@@ -30,14 +31,19 @@ interface Props {
   pendingAny: boolean;
   pendingShareAction?: { pluginId: string; action: PluginShareAction } | null;
   isFeatured: boolean;
+  // Saved collection (rich layout only — the gallery tile has no save UI).
   isSaved: boolean;
+  onSave: (record: InstalledPluginRecord) => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   onOpenDetails: (record: InstalledPluginRecord) => void;
-  onSave: (record: InstalledPluginRecord) => void;
   onShareAction?: (
     record: InstalledPluginRecord,
     action: PluginShareAction,
   ) => void;
+  // 'rich' (default) keeps the hover-overlay metadata card. 'gallery'
+  // is the minimal live-preview tile: a top bar (dot + name + open
+  // fullscreen) over an eagerly-rendered example.html iframe.
+  layout?: 'rich' | 'gallery';
 }
 
 const MAX_VISIBLE_TAGS = 3;
@@ -50,14 +56,17 @@ export function PluginCard({
   pendingShareAction = null,
   isFeatured,
   isSaved,
+  onSave,
   onUse,
   onOpenDetails,
-  onSave,
   onShareAction,
+  layout = 'rich',
 }: Props) {
   const { locale } = useI18n();
   const [useMenuOpen, setUseMenuOpen] = useState(false);
-  const preview = useMemo(() => inferPluginPreview(record), [record]);
+  // Tiles prefer the cheap pre-baked hover-pan clip; the detail modal still
+  // opens the live interactive page (it calls inferPluginPreview without this).
+  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
   const title = localizePluginTitle(locale, record);
   const description = localizePluginDescription(locale, record);
   const tags = useMemo(
@@ -76,6 +85,66 @@ export function PluginCard({
   function pickUseAction(action: PluginUseAction) {
     setUseMenuOpen(false);
     onUse(record, action);
+  }
+
+  if (layout === 'gallery') {
+    // Live-preview tile: a macOS-window-style bar (status dot + plugin
+    // name) over an eagerly-rendered example.html iframe. The whole tile
+    // opens the detail surface.
+    // Decks render a fixed 16:9 stage; tag them so the gallery preview uses a
+    // 16:9 frame instead of the tall scroll-preview viewport (which would
+    // letterbox the stage and show a dark band above/below the slide).
+    const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
+    return (
+      <article
+        role="listitem"
+        className={[
+          'plugins-home__card',
+          'plugins-home__card--gallery',
+          `plugins-home__card--${preview.kind}`,
+          isActive ? 'is-active' : '',
+          isFeatured ? 'is-featured' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        data-plugin-id={record.id}
+        data-preview-kind={preview.kind}
+        {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
+        {...(isFeatured ? { 'data-featured': 'true' } : {})}
+        // Mouse convenience: clicking anywhere on the tile opens details.
+        // Keyboard/AT users get a real, announced control via the title
+        // button below — the tile itself stays a non-interactive listitem
+        // so screen readers don't announce a bare "listitem" as actionable.
+        onClick={() => onOpenDetails(record)}
+      >
+        <div className="plugins-home__gallery-bar">
+          <span className="plugins-home__gallery-dot" aria-hidden />
+          <button
+            type="button"
+            className="plugins-home__gallery-name"
+            title={title}
+            aria-label={`Open ${title} details`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenDetails(record);
+            }}
+            // The accessible, focusable control that opens the detail modal;
+            // also the e2e/visual hook equivalent to the rich card's Details.
+            data-testid={`plugins-home-details-${record.id}`}
+          >
+            {title}
+          </button>
+        </div>
+        <div className="plugins-home__gallery-frame">
+          <PreviewSurface
+            pluginId={record.id}
+            pluginTitle={title}
+            preview={preview}
+            eager
+          />
+        </div>
+      </article>
+    );
   }
 
   return (
@@ -261,7 +330,7 @@ export function PluginCard({
           data-testid={`plugins-home-save-${record.id}`}
         >
           <Icon name={isSaved ? 'check' : 'star'} size={12} />
-          <span className="sr-only">{isSaved ? 'Saved' : 'Save'}</span>
+          <VisuallyHidden>{isSaved ? 'Saved' : 'Save'}</VisuallyHidden>
         </button>
         <span className="plugins-home__card-title" title={title}>
           <span className="plugins-home__card-title-text">{title}</span>

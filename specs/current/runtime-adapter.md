@@ -67,7 +67,9 @@ Flow:
 
 1. The frontend submits `agentId`, user message, system prompt, project ID, attachments, model, and reasoning options.
 2. The daemon uses `getAgentDef(agentId)` to find the runtime definition.
-3. The daemon creates or locates `.od/projects/<projectId>/` as the agent working directory.
+3. The daemon creates or locates the daemon-managed project working directory.
+   This spec MUST NOT define daemon data paths; read root
+   [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**.
 4. The daemon validates uploaded image paths and project attachment paths.
 5. The daemon combines the system prompt, working directory hint, existing file list, attachment list, and user request into one prompt.
 6. The daemon prepares additional readable directories: `skills/` and `design-systems/`.
@@ -270,7 +272,7 @@ Existing protections include:
 - Reasoning options must exist in the runtime definition's `reasoningOptions`.
 - Image paths must be located inside the daemon temporary upload directory.
 - Attachment paths must be located inside the project working directory.
-- Agent working directories are constrained to `.od/projects/<projectId>/`.
+- Agent working directories are constrained to daemon-managed project storage.
 - ACP runtimes have timeout protection for the initialize, session/new, session/set_model, and session/prompt stages.
 - ACP runtimes listen for `stdin` errors and proactively clean up detection processes after model detection completes.
 - When the SSE connection closes, the daemon sends `SIGTERM` to the subprocess.

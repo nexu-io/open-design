@@ -17,6 +17,7 @@ import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
 import {
+  captureHostPage,
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
@@ -53,6 +54,29 @@ export function exportAsHtml(html: string, title: string): void {
   const doc = buildSrcdoc(html);
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
+}
+
+export async function exportProjectAsHtml(opts: {
+  projectId: string;
+  filePath: string;
+  fallbackHtml: string;
+  fallbackTitle: string;
+}): Promise<void> {
+  const segments = opts.filePath
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?inline=1`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
+  } catch (err) {
+    console.warn('[exportProjectAsHtml] falling back to source HTML export:', err);
+    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle);
+  }
 }
 
 // A file is treated as a preview-chrome wrapper only when it lives inside
@@ -393,6 +417,60 @@ export async function requestPreviewSnapshot(
   return result.ok ? result.snapshot : null;
 }
 
+/**
+ * Capture a rectangle of the on-screen window via the desktop host's
+ * compositor (Electron `webContents.capturePage`). Unlike the in-iframe
+ * SVG-foreignObject bridge, this returns the REAL rendered pixels — fonts,
+ * external CSS, gradients, cross-origin images and embedded <webview> content
+ * all paint faithfully and the canvas is never tainted, so it cannot produce
+ * the black/blank frames the foreignObject path does. Returns null when no
+ * desktop host is present (pure web), so callers fall back to the bridge.
+ *
+ * `clipRect` is in CSS pixels relative to the viewport (e.g. an iframe's
+ * getBoundingClientRect()); capturePage expects DIP page coordinates, which
+ * match 1:1 for the top-level window (it never scrolls).
+ */
+export async function captureHostRegionSnapshot(
+  clipRect: { left: number; top: number; width: number; height: number } | null,
+): Promise<PreviewSnapshot | null> {
+  if (!isOpenDesignHostAvailable()) return null;
+  const clip = clipRect && clipRect.width >= 1 && clipRect.height >= 1
+    ? {
+        x: Math.max(0, Math.round(clipRect.left)),
+        y: Math.max(0, Math.round(clipRect.top)),
+        width: Math.max(1, Math.round(clipRect.width)),
+        height: Math.max(1, Math.round(clipRect.height)),
+      }
+    : undefined;
+  try {
+    const result = await captureHostPage(clip ? { clip } : undefined);
+    if (result.ok && result.dataUrl && result.w >= 1 && result.h >= 1) {
+      return { dataUrl: result.dataUrl, w: result.w, h: result.h };
+    }
+  } catch {
+    /* fall through to null so the caller can use the bridge */
+  }
+  return null;
+}
+
+/**
+ * Capture an iframe's on-screen region through the desktop compositor.
+ * Convenience wrapper over captureHostRegionSnapshot using the iframe's
+ * current bounding rect.
+ */
+export async function captureHostIframeSnapshot(
+  iframe: HTMLIFrameElement | null,
+): Promise<PreviewSnapshot | null> {
+  if (!iframe) return null;
+  const rect = iframe.getBoundingClientRect();
+  return captureHostRegionSnapshot({
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
 /** Convert a data-URL to a Blob without re-encoding through canvas. */
 function dataUrlToBlob(dataUrl: string): Blob {
   if (!dataUrl.startsWith('data:')) {
@@ -407,6 +485,48 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
   return new Blob([arr], { type: mime });
+}
+
+type ClipboardItemCtor = new (
+  items: Record<string, Blob | Promise<Blob>>,
+) => ClipboardItem;
+
+/**
+ * Copy a PNG (or other image) data-URL onto the system clipboard as a real
+ * image item, so it can be pasted into the chat composer or any other app.
+ * Returns 'copied' on success, 'denied' when the clipboard API is missing or
+ * the browser refuses the write for permission/security reasons, and 'failed'
+ * for any other error (e.g. a malformed data-URL).
+ */
+export async function copyImageDataUrlToClipboard(
+  dataUrl: string,
+): Promise<'copied' | 'denied' | 'failed'> {
+  const clipboard = navigator.clipboard;
+  const ClipboardItemRef = (globalThis as { ClipboardItem?: ClipboardItemCtor })
+    .ClipboardItem;
+  if (!clipboard || typeof clipboard.write !== 'function' || !ClipboardItemRef) {
+    return 'denied';
+  }
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    // Safari only honours clipboard.write() inside the original user gesture,
+    // so prefer the Promise<Blob> ClipboardItem form when supported — it lets
+    // the browser resolve the blob lazily without losing the gesture context.
+    let item: ClipboardItem;
+    try {
+      item = new ClipboardItemRef({ [blob.type]: Promise.resolve(blob) });
+    } catch {
+      item = new ClipboardItemRef({ [blob.type]: blob });
+    }
+    await clipboard.write([item]);
+    return 'copied';
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return 'denied';
+    }
+    return 'failed';
+  }
 }
 
 export type ImageExportFormat = 'png' | 'jpeg' | 'webp';
@@ -607,7 +727,7 @@ export function exportAsImage(dataUrl: string, title: string): void {
   }
 }
 
-export type ProjectPdfExportResult = 'desktop' | 'fallback';
+export type ProjectPdfExportResult = 'desktop' | 'fallback' | 'cancelled';
 
 export async function exportProjectAsPdf(opts: {
   deck: boolean;
@@ -628,6 +748,7 @@ export async function exportProjectAsPdf(opts: {
     });
     if (!resp.ok) throw new Error(`desktop PDF export unavailable (${resp.status})`);
     const body = await resp.json().catch(() => ({}));
+    if (body?.canceled === true) return 'cancelled';
     if (body && body.ok === false) throw new Error(body.error || 'desktop PDF export failed');
     return 'desktop';
   } catch (err) {
@@ -779,12 +900,39 @@ export function buildSandboxedPreviewDocument(
 </html>`;
 }
 
+function currentOriginBaseHref(): string | undefined {
+  if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
+    return `${window.location.origin.replace(/\/+$/, '')}/`;
+  }
+  const base =
+    typeof document !== 'undefined' && typeof document.baseURI === 'string'
+      ? document.baseURI
+      : typeof window !== 'undefined' && typeof window.location?.href === 'string'
+        ? window.location.href
+        : undefined;
+  if (!base) return undefined;
+  try {
+    return new URL('/', base).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildBlobSafeSrcdoc(html: string, options?: SrcdocOptions): string {
+  const baseHref =
+    typeof options?.baseHref === 'string' ? options.baseHref : currentOriginBaseHref();
+  return buildSrcdoc(html, {
+    ...options,
+    ...(baseHref ? { baseHref } : {}),
+  });
+}
+
 export function openSandboxedPreviewInNewTab(
   html: string,
   title: string,
   srcdocOptions?: SrcdocOptions,
 ): void {
-  const doc = buildSandboxedPreviewDocument(buildSrcdoc(html, srcdocOptions), title);
+  const doc = buildSandboxedPreviewDocument(buildBlobSafeSrcdoc(html, srcdocOptions), title);
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -815,7 +963,7 @@ export async function exportAsPdf(
   // Generate a per-export nonce so the print-ready handshake is resistant to
   // spoofing by untrusted scripts inside the exported artifact.
   const nonce = randomUUID();
-  let doc = buildSrcdoc(html, opts);
+  let doc = buildBlobSafeSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);
 
@@ -850,8 +998,11 @@ export async function exportAsPdf(
   // popup.
   if (sandboxedPreview) {
     doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
-    doc = injectParentPrintReadyCache(doc, nonce);
   }
+  // Even in the non-sandboxed browser fallback we keep the same readiness
+  // cache contract as the desktop bridge so the popup can wait for actual
+  // rendered content instead of printing after a blind fixed delay.
+  doc = injectParentPrintReadyCache(doc, nonce);
   doc = injectPrintScript(doc, title);
 
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
@@ -886,10 +1037,13 @@ export async function exportAsPdf(
 
 function injectPrintScript(doc: string, title: string): string {
   const safeTitle = JSON.stringify(title || 'artifact');
-  // setTimeout gives stylesheets and images one tick to settle before the
-  // print dialog measures the page; without it some print previews come
-  // out blank in Chrome.
-  const script = `<script>try{document.title=${safeTitle}}catch(e){}window.addEventListener('load',function(){setTimeout(function(){try{window.focus();window.print()}catch(e){}},300)})</script>`;
+  // Browser fallback PDF export shares the same print-readiness signal as the
+  // desktop native path. When the cache is present, wait for it so the popup
+  // prints only after fonts, images, CSS image URLs, and final layout have
+  // settled. If the handshake script is blocked entirely (for example by a
+  // CSP that forbids inline scripts), fall back to the historical load+delay
+  // behavior instead of waiting for the full ready deadline.
+  const script = `<script>(function(){try{document.title=${safeTitle}}catch(e){}function doPrint(){try{window.focus();window.print()}catch(e){}}function afterStableFrames(fn){requestAnimationFrame(function(){requestAnimationFrame(fn)})}window.addEventListener('load',function(){if(typeof window.__odPrintReady!=='boolean'){setTimeout(doPrint,300);return}var deadline=Date.now()+30000;var handshakeStartDeadline=Date.now()+1000;(function waitForReady(){if(window.__odPrintReady===true){afterStableFrames(doPrint);return}if(window.__odPrintReadyStarted===false&&Date.now()>=handshakeStartDeadline){setTimeout(doPrint,300);return}if(Date.now()>=deadline){afterStableFrames(doPrint);return}setTimeout(waitForReady,50)})()})})();</script>`;
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
@@ -898,21 +1052,42 @@ function injectPrintScript(doc: string, title: string): string {
 function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // Wait for fonts, the window load event (which covers initial images), and
   // any images that are still loading after load fires (dynamically added or
-  // slow images that weren't complete by the time this script ran). This
-  // mirrors the safety of the legacy waitForPrintableContent() helper and
+  // slow images that weren't complete by the time this script ran). Also wait
+  // for CSS image URLs and two animation frames so background/list/border
+  // images and final layout are settled before the desktop bridge prints.
+  // This mirrors the safety of the legacy waitForPrintableContent() helper and
   // prevents image-heavy exports from printing with blank images.
+  //
+  // Once settled, the message also carries the artifact's own content
+  // dimensions (scroll/offset size of its documentElement). This script runs
+  // inside the sandboxed preview iframe, which the parent wrapper cannot
+  // measure directly (sandbox="allow-scripts" has no allow-same-origin, so
+  // iframe.contentDocument is null). Reporting the size from here lets the
+  // desktop bridge size the PDF page to the real content instead of the
+  // wrapper's viewport, which otherwise clips — or blanks — taller artifacts
+  // (issue #4067). The parent caches it via injectParentPrintReadyCache and
+  // inferPageSize() in apps/desktop/src/main/pdf-export.ts consumes it.
   //
   // The nonce is a per-export random UUID that verifies the readiness signal
   // came from our injected handshake, not a spoofed message from untrusted
   // artifact code.
-  const script = `<script data-od-print-ready>(function(){Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){var imgs=Array.from(document.images).filter(function(img){return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}).then(function(){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}'},'*')})})();<\/script>`;
+  const script = `<script data-od-print-ready>(function(){window.parent.postMessage({type:'OD_PRINT_READY_STARTED',nonce:'${nonce}'},'*');function waitForImages(){var imgs=Array.from(document.images).filter(function(img){if(img.loading==='lazy')img.loading='eager';return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}function cssUrlValues(value){var urls=[];if(!value||value==='none')return urls;value.replace(/url\\((['"]?)(.*?)\\1\\)/g,function(_,q,rawUrl){if(rawUrl&&!/^data:/i.test(rawUrl))urls.push(rawUrl);return''});return urls}function waitForCssBackgroundImages(){var urls=new Set();Array.from(document.querySelectorAll('*')).forEach(function(el){var style=window.getComputedStyle(el);cssUrlValues(style.backgroundImage).forEach(function(url){urls.add(url)});cssUrlValues(style.borderImageSource).forEach(function(url){urls.add(url)});cssUrlValues(style.listStyleImage).forEach(function(url){urls.add(url)})});return Promise.all(Array.from(urls).map(function(url){return new Promise(function(r){var img=new Image();img.onload=r;img.onerror=r;img.src=url})}))}function nextFrame(){return new Promise(function(r){requestAnimationFrame(function(){r(true)})})}Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){return Promise.all([waitForImages(),waitForCssBackgroundImages()])}).then(nextFrame).then(nextFrame).then(function(){var de=document.documentElement;var b=document.body||de;var w=Math.max(de.scrollWidth,b.scrollWidth,de.offsetWidth,b.offsetWidth);var h=Math.max(de.scrollHeight,b.scrollHeight,de.offsetHeight,b.offsetHeight);window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}',width:w,height:h},'*')})})();<\/script>`;
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
 }
 
 function injectParentPrintReadyCache(doc: string, nonce: string): string {
-  const script = `<script>window.__odPrintReady=false;window.addEventListener('message',function(e){if(e.data&&e.data.type==='OD_PRINT_READY'&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0])))window.__odPrintReady=true});<\/script>`;
+  // Cache the readiness flag and the content size the artifact reports through
+  // the handshake. window.__odPrintSize is read by inferPageSize() in
+  // apps/desktop/src/main/pdf-export.ts to size the PDF page to the real
+  // artifact rather than the wrapper viewport (issue #4067). Width/height are
+  // validated as positive finite numbers so a malformed message cannot poison
+  // the page size; the nonce + source check keep untrusted frames from spoofing
+  // either signal. window.__odPrintReadyStarted distinguishes a live handshake
+  // from a CSP-blocked one so the browser fallback can preserve the historical
+  // quick print path when the inner script never runs.
+  const script = `<script>window.__odPrintReady=false;window.__odPrintReadyStarted=false;window.__odPrintSize=null;window.addEventListener('message',function(e){if(e.data&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0]))){if(e.data.type==='OD_PRINT_READY_STARTED'){window.__odPrintReadyStarted=true;return}if(e.data.type==='OD_PRINT_READY'){window.__odPrintReady=true;if(Number.isFinite(e.data.width)&&Number.isFinite(e.data.height)&&e.data.width>0&&e.data.height>0)window.__odPrintSize={width:e.data.width,height:e.data.height}}}});<\/script>`;
   if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
   return script + doc;
 }

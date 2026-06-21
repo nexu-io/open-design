@@ -11,6 +11,7 @@ done
 asset_suffix="${ASSET_VERSION_SUFFIX:-}"
 mac_artifact_mode="${MAC_ARTIFACT_MODE:-dmg-and-zip}"
 release_dir="$RUNNER_TEMP/release-assets"
+tools_pack_dir="${TOOLS_PACK_DIR:-$RUNNER_TEMP/tools-pack}"
 mkdir -p "$release_dir"
 
 case "$mac_artifact_mode" in
@@ -21,8 +22,8 @@ case "$mac_artifact_mode" in
     ;;
 esac
 
-source_dmg="$RUNNER_TEMP/tools-pack/out/mac/namespaces/$TOOLS_PACK_NAMESPACE/dmg/Open Design-$TOOLS_PACK_NAMESPACE.dmg"
-source_zip="$RUNNER_TEMP/tools-pack/out/mac/namespaces/$TOOLS_PACK_NAMESPACE/zip/Open Design-$TOOLS_PACK_NAMESPACE.zip"
+source_dmg="$tools_pack_dir/out/mac/namespaces/$TOOLS_PACK_NAMESPACE/dmg/Open Design-$TOOLS_PACK_NAMESPACE.dmg"
+source_zip="$tools_pack_dir/out/mac/namespaces/$TOOLS_PACK_NAMESPACE/zip/Open Design-$TOOLS_PACK_NAMESPACE.zip"
 if [ ! -f "$source_dmg" ]; then
   echo "expected dmg not found at $source_dmg" >&2
   exit 1

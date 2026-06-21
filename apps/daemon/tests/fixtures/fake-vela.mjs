@@ -2,9 +2,9 @@
 /**
  * Fake vela CLI used by AMR integration tests. Routes by the first argv:
  *
- *   `vela models`                       → prints the live link model catalog
- *                                         in the same tabular shape as Vela
- *                                         0.0.1.
+ *   `vela model preset --format json`   → prints the local AMR picker seed.
+ *   `vela model list --format json`     → prints the authoritative remote
+ *                                         AMR model catalog.
  *
  *   `vela login`                        → writes ~/.amr/config.json (the
  *                                         active VELA_PROFILE only) and
@@ -43,6 +43,8 @@
  *   FAKE_VELA_SET_MODEL_ERROR    – when set, session/set_model returns a JSON-RPC error
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
+ *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
+ *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --format json`
  *   FAKE_VELA_REQUIRE_SET_MODEL  – strict gate (default on); set to '0' to
  *                                   accept session/prompt without prior
  *                                   session/set_model (legacy behaviour)
@@ -82,6 +84,35 @@ const DEFAULT_MODELS_STDOUT = [
   'public_model_qwen3_235b_a22b  vela',
   'public_model_seedance_2    vela',
 ].join('\n');
+const DEFAULT_MODEL_PRESET_JSON = JSON.stringify({
+  source: 'preset',
+  data: [
+    { id: 'deepseek-v4-flash' },
+    { id: 'deepseek-v3.2' },
+    { id: 'glm-5.1' },
+    { id: 'gemini-2.5-flash' },
+  ],
+});
+const DEFAULT_MODEL_LIST_JSON = JSON.stringify({
+  source: 'remote',
+  data: [
+    { id: 'deepseek-v3.2' },
+    { id: 'deepseek-v4-flash' },
+    { id: 'deepseek-v4-pro' },
+    { id: 'gemini-2.5-flash' },
+    { id: 'gemini-3.1-flash-lite-preview' },
+    { id: 'gemini-3.1-pro-preview' },
+    { id: 'gpt-5.4' },
+    { id: 'gpt-5.4-mini' },
+    { id: 'glm-5' },
+    { id: 'glm-5.1' },
+    { id: 'gpt-image-2' },
+    { id: 'kimi-k2.6' },
+    { id: 'minimax-m2.7' },
+    { id: 'qwen3-235b-a22b' },
+    { id: 'seedance-2' },
+  ],
+});
 
 // Real `vela agent run --runtime opencode` rejects session/prompt until
 // session/set_model has been called for the current session — see the
@@ -258,6 +289,32 @@ function loginAndExit() {
     stderr.write(`${env.FAKE_VELA_LOGIN_FAIL}\n`);
     exit(1);
   }
+  // Models a host whose direct amr-api device-authorization path is broken
+  // (#3726): fail unless the daemon routed login through its IPv4 API proxy
+  // (which sets VELA_API_URL). Lets tests assert the direct-first / proxy-
+  // fallback contract of the login route.
+  if (
+    env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL &&
+    !(env.VELA_API_URL ?? '').trim()
+  ) {
+    // FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS models a direct attempt that
+    // survives the daemon's 250ms startup grace and only then errors out before
+    // printing an activation URL — the pre-activation failure the proxy fallback
+    // must still catch.
+    const failDelayMs = Number(env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS) || 0;
+    if (failDelayMs > 0) {
+      setTimeout(() => {
+        stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
+        exit(1);
+      }, failDelayMs);
+      return;
+    }
+    stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
+    exit(1);
+  }
+  if (env.FAKE_VELA_ENV_DUMP_PATH) {
+    writeFileSync(env.FAKE_VELA_ENV_DUMP_PATH, JSON.stringify(env, null, 2), 'utf8');
+  }
   const profile = (env.VELA_PROFILE || 'prod').trim() || 'prod';
   const allowed = new Set(['prod', 'test', 'local']);
   if (!allowed.has(profile)) {
@@ -292,6 +349,12 @@ function loginAndExit() {
     stdout.write(`Login successful for ${userEmail}.\n`);
     exit(0);
   };
+  // Print the device-auth activation block first (what real `vela login` emits
+  // and what the daemon's waitForActivation keys off to detect steady state),
+  // then write config after the optional delay so the in-flight window is real.
+  stdout.write('Open this URL to continue:\n');
+  stdout.write('https://fake-vela.example/cli/activate?deviceId=fake-device\n\n');
+  stdout.write('Code: FAKE-CODE\n');
   if (delayMs > 0) setTimeout(finish, delayMs);
   else finish();
 }
@@ -303,4 +366,15 @@ if (argv[2] === 'login') {
 if (argv[2] === 'models') {
   stdout.write(`${env.FAKE_VELA_MODELS || DEFAULT_MODELS_STDOUT}\n`);
   exit(0);
+}
+
+if (argv[2] === 'model' && argv[4] === '--format' && argv[5] === 'json') {
+  if (argv[3] === 'preset') {
+    stdout.write(`${env.FAKE_VELA_MODEL_PRESET_JSON || DEFAULT_MODEL_PRESET_JSON}\n`);
+    exit(0);
+  }
+  if (argv[3] === 'list') {
+    stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
+    exit(0);
+  }
 }

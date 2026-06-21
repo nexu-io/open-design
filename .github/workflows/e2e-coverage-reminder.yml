@@ -1,0 +1,269 @@
+name: E2E coverage reminder
+
+on:
+  schedule:
+    # 10:00 UTC = 18:00 Asia/Shanghai
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: Hours of merged main PRs to inspect.
+        required: true
+        default: "24"
+      dry_run:
+        description: Log the reminder without sending it to Feishu.
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  remind:
+    name: Summarize E2E coverage follow-up
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'nexu-io/open-design' }}
+    steps:
+      - name: Send 24h E2E coverage reminder
+        uses: actions/github-script@v7
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_MAIN_CI_WEBHOOK }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const isManual = context.eventName === 'workflow_dispatch';
+            const lookbackHours = Number.parseInt("${{ inputs.lookback_hours || '24' }}", 10) || 24;
+            const dryRun = "${{ inputs.dry_run || 'false' }}" === 'true';
+            const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
+
+            const lowSignalPatterns = [
+              /^docs\//,
+              /^\.changeset\//,
+              /^\.github\/ISSUE_TEMPLATE\//,
+              /^\.github\/PULL_REQUEST_TEMPLATE/,
+              /^README(?:\.md)?$/i,
+              /^CHANGELOG(?:\.md)?$/i,
+              /^package-lock\.json$/,
+              /^pnpm-lock\.yaml$/,
+            ];
+
+            const areaRules = [
+              {
+                area: 'entry/onboarding',
+                patterns: [
+                  /^apps\/web\/src\/.*(Onboarding|Entry|Home|Starter|Hero)/i,
+                  /^e2e\/ui\/(amr-onboarding|entry-chrome-flows|entry-configuration-flows|critical-smoke)\.test\.ts$/,
+                ],
+                command: "pnpm -C e2e run test:ui:critical",
+              },
+              {
+                area: 'project workspace',
+                patterns: [
+                  /^apps\/web\/src\/.*(Project|Workspace|FileWorkspace|Artifact|Preview|DesignSystemPicker)/i,
+                  /^e2e\/ui\/(app|app-restoration|app-design-files|app-manual-edit|project-management-flows|workspace-keyboard-flows)\.test\.ts$/,
+                ],
+                command: "pnpm -C e2e exec playwright test -c playwright.config.ts ui/app.test.ts ui/app-restoration.test.ts ui/project-management-flows.test.ts --grep '\\[P0\\]|\\[P1\\]'",
+              },
+              {
+                area: 'chat/composer/upload',
+                patterns: [
+                  /^apps\/web\/src\/.*(Chat|Composer|AssistantMessage|Attachment|Upload|Message)/i,
+                  /^apps\/web\/src\/runtime\/in-project-link\.ts$/,
+                  /^e2e\/ui\/.*(chat|upload|comment|conversation).*\.test\.ts$/i,
+                ],
+                command: "pnpm -C e2e exec playwright test -c playwright.config.ts ui/app.test.ts ui/app-restoration.test.ts --grep 'file-upload|conversation|comment|\\[P0\\]'",
+              },
+              {
+                area: 'settings/BYOK/connectors',
+                patterns: [
+                  /^apps\/web\/src\/.*(Settings|Byok|Connector|ModelField|Provider|LocalCli|Codex|AMR)/i,
+                  /^e2e\/ui\/settings-.*\.test\.ts$/,
+                ],
+                command: "pnpm -C e2e exec playwright test -c playwright.config.ts ui/settings-api-protocol.test.ts ui/settings-connectors-auth-happy-path.test.ts ui/settings-connectors-auth-recovery.test.ts --grep '\\[P0\\]|\\[P1\\]'",
+              },
+              {
+                area: 'daemon/runtime',
+                patterns: [
+                  /^apps\/daemon\//,
+                  /^packages\/.*runtime/i,
+                  /^e2e\/ui\/(real-daemon-run|amr-run-failure-recovery|amr-logout-requires-relogin|settings-local-cli-codex-fallback)\.test\.ts$/,
+                ],
+                command: "pnpm -C e2e exec playwright test -c playwright.config.ts ui/real-daemon-run.test.ts ui/amr-run-failure-recovery.test.ts ui/settings-local-cli-codex-fallback.test.ts --grep '\\[P0\\]|\\[P1\\]'",
+              },
+              {
+                area: 'design files/artifact preview',
+                patterns: [
+                  /^apps\/web\/src\/.*(DesignFile|DesignFiles|ArtifactPreview|PreviewFrame|Deck|ManualEdit)/i,
+                  /^e2e\/ui\/(app-design-files|design-files-view-state-persist|app-manual-edit|workspace-keyboard-flows)\.test\.ts$/,
+                ],
+                command: "pnpm -C e2e exec playwright test -c playwright.config.ts ui/app-design-files.test.ts ui/app-manual-edit.test.ts ui/workspace-keyboard-flows.test.ts --grep '\\[P0\\]|\\[P1\\]'",
+              },
+            ];
+
+            function isLowSignalFile(file) {
+              return lowSignalPatterns.some((pattern) => pattern.test(file));
+            }
+
+            function matchAreas(files) {
+              return areaRules
+                .filter((rule) => files.some((file) => rule.patterns.some((pattern) => pattern.test(file))))
+                .map((rule) => rule.area);
+            }
+
+            const pulls = [];
+            for await (const response of github.paginate.iterator(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'closed',
+              base: 'main',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 100,
+            })) {
+              for (const pull of response.data) {
+                if (!pull.merged_at) {
+                  continue;
+                }
+                const mergedAt = new Date(pull.merged_at);
+                if (mergedAt < since) {
+                  continue;
+                }
+                pulls.push(pull);
+              }
+            }
+
+            const relevant = [];
+            for (const pull of pulls) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner,
+                repo,
+                pull_number: pull.number,
+                per_page: 100,
+              });
+              const filenames = files.map((file) => file.filename);
+              if (filenames.length > 0 && filenames.every(isLowSignalFile)) {
+                continue;
+              }
+              const areas = matchAreas(filenames);
+              if (!areas.length) {
+                continue;
+              }
+              relevant.push({
+                number: pull.number,
+                title: pull.title,
+                url: pull.html_url,
+                author: pull.user?.login || 'unknown',
+                mergedAt: pull.merged_at,
+                areas,
+              });
+            }
+
+            if (!relevant.length) {
+              core.info(`No E2E coverage reminders for ${pulls.length} merged PRs in the last ${lookbackHours}h.`);
+              return;
+            }
+
+            const areaMap = new Map();
+            for (const item of relevant) {
+              for (const area of item.areas) {
+                const list = areaMap.get(area) || [];
+                list.push(item);
+                areaMap.set(area, list);
+              }
+            }
+
+            const changedAreasText = [...areaMap.entries()]
+              .map(([area, items]) => `- ${area}: ${items.map((item) => `#${item.number}`).join(', ')}`)
+              .join('\n');
+            const prListText = relevant
+              .slice(0, 12)
+              .map((item) => `- #${item.number} ${item.title} (@${item.author})\n  ${item.url}`)
+              .join('\n');
+            const omittedText = relevant.length > 12
+              ? `\n- ...and ${relevant.length - 12} more`
+              : '';
+            const commands = [...new Set(
+              [...areaMap.keys()]
+                .map((area) => areaRules.find((rule) => rule.area === area)?.command)
+                .filter(Boolean),
+            )].slice(0, 4);
+            const commandsText = commands.map((command) => `- \`${command}\``).join('\n');
+
+            const content = [
+              `**Window:** last ${lookbackHours}h`,
+              `**Merged PRs:** ${pulls.length}`,
+              `**E2E follow-up candidates:** ${relevant.length}`,
+              '',
+              `**Changed areas:**\n${changedAreasText}`,
+              '',
+              `**PRs:**\n${prListText}${omittedText}`,
+              '',
+              `**Suggested follow-up:** Review whether existing P0/P1 cases cover these changes. This is a coverage reminder, not a CI failure.`,
+              '',
+              `**Suggested commands:**\n${commandsText || '- 手动按 changed area 选择对应 e2e shard'}`,
+            ].join('\n');
+
+            core.info(content);
+            if (dryRun) {
+              core.info('Dry run enabled; skipping Feishu send.');
+              return;
+            }
+
+            const webhook = process.env.FEISHU_WEBHOOK;
+            if (!webhook) {
+              core.setFailed('Missing FEISHU_MAIN_CI_WEBHOOK secret.');
+              return;
+            }
+
+            const body = {
+              msg_type: 'interactive',
+              card: {
+                config: {
+                  wide_screen_mode: true,
+                },
+                header: {
+                  template: 'blue',
+                  title: {
+                    tag: 'plain_text',
+                    content: 'Open Design E2E Coverage 24h Reminder',
+                  },
+                },
+                elements: [
+                  {
+                    tag: 'div',
+                    text: {
+                      tag: 'lark_md',
+                      content,
+                    },
+                  },
+                ],
+              },
+            };
+
+            const response = await fetch(webhook, {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+            const responseText = await response.text();
+            let responseJson = null;
+            try {
+              responseJson = JSON.parse(responseText);
+            } catch {
+              responseJson = null;
+            }
+            const feishuCode = responseJson?.StatusCode ?? responseJson?.code;
+            const hasFeishuError = feishuCode !== undefined && Number(feishuCode) !== 0;
+            if (!response.ok || hasFeishuError) {
+              core.setFailed(`Feishu notification failed: ${response.status} ${responseText}`);
+              return;
+            }
+            core.info(`Feishu notification accepted: ${response.status} ${responseText}`);

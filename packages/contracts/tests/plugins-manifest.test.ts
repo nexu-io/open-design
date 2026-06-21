@@ -44,6 +44,25 @@ describe('plugin manifest localized text', () => {
     );
   });
 
+  it('accepts a valid preview motion and rejects an invalid one', () => {
+    const manifest = PluginManifestSchema.parse({
+      name: 'sample-plugin',
+      version: '1.0.0',
+      od: {
+        preview: { type: 'html', entry: './index.html', motion: 'deck' },
+      },
+    });
+    expect(manifest.od?.preview?.motion).toBe('deck');
+
+    expect(() =>
+      PluginManifestSchema.parse({
+        name: 'sample-plugin',
+        version: '1.0.0',
+        od: { preview: { type: 'html', motion: 'sideways' } },
+      }),
+    ).toThrow();
+  });
+
   it('accepts localized title and description metadata', () => {
     const manifest = PluginManifestSchema.parse({
       name: 'sample-plugin',

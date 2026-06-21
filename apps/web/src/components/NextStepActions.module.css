@@ -1,0 +1,329 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-tint) 50%, var(--bg-panel)) 0%,
+    var(--bg-panel) 60%
+  );
+  animation: next-step-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes next-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    animation: none;
+  }
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* One flat row: Share + iteration directions all sit at the same level. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Share is a peer of the chips but reads as an action: accent text + icon and
+   a filled tint so it stands out without being promoted to its own tier. */
+.share {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.share:hover {
+  background: color-mix(in srgb, var(--accent-tint) 70%, var(--accent) 14%);
+  border-color: var(--accent);
+}
+
+.share:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Featured design-toolbox follow-up rows — the toolbox's primary entry point
+   now that it left the "+" menu. Each row reads as a suggested next step;
+   hovering reveals a detail card, clicking seeds the composer. */
+.toolboxList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolboxRowWrap {
+  position: relative;
+}
+
+.toolboxRow,
+.moreRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text-default);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.toolboxRow:hover,
+.moreRow:hover {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.toolboxRow:focus-visible,
+.moreRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toolboxRowIcon {
+  flex: none;
+  color: var(--accent-strong);
+}
+
+.toolboxRowTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolboxRowArrow {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.moreRow .toolboxRowTitle {
+  color: var(--text-muted);
+}
+
+/* Hover detail card — portaled to <body> and fixed-positioned next to the
+   hovered row (left/top set inline). The chat column clips/occludes an in-flow
+   card, so escaping to the body keeps it visible and above the preview pane. */
+.detail {
+  position: fixed;
+  z-index: 1000;
+  width: 240px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+  animation: next-step-in 140ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.detailTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-default);
+}
+
+.detailDesc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.detailSkill {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent-strong);
+}
+
+.detailBadge {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border);
+}
+
+.openDesignRow {
+  display: flex;
+  align-items: center;
+}
+
+.openDesignButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-default);
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.openDesignButton:hover:not(:disabled) {
+  background: var(--bg-default);
+  border-color: var(--border-strong);
+}
+
+.openDesignButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Cascading hover flyouts (More → Design toolbox / Share → ...). All portaled to
+   <body> with fixed positioning (left/top set inline) so the narrow chat column
+   never clips them; they float above the preview pane. */
+.flyout {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+  animation: next-step-in 140ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.flyoutMenu {
+  width: 200px;
+}
+.flyoutToolbox {
+  width: 300px;
+  max-height: min(70vh, 500px);
+  padding: 10px;
+}
+
+.toolboxFlyoutTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 8px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-default);
+}
+
+.toolboxFlyoutTitle svg {
+  color: var(--accent-strong);
+}
+
+.flyoutSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: var(--bg-default);
+}
+.flyoutSearch input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-default);
+  outline: none;
+}
+.flyoutScroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.flyoutSectionLabel {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.flyoutEmpty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.flyoutRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text-default);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.flyoutRow:hover:not(:disabled),
+.flyoutRow[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.flyoutRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.flyoutRow:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

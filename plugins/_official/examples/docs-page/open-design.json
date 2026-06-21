@@ -24,7 +24,7 @@
     "en": "Docs Page"
   },
   "version": "0.1.0",
-  "description": "A documentation page — inline-start nav, scrollable article body,\ninline-end table of contents. Use when the brief mentions \"docs\",\n\"documentation\", \"guide\", \"API reference\", or \"tutorial\".",
+  "description": "A documentation page — inline-start nav, scrollable article body, inline-end table of contents. Use when the brief mentions \"docs\", \"documentation\", \"guide\", \"API reference\", or \"tutorial\".",
   "description_i18n": {
     "zh-CN": "文档页面 — 侧边导航、可滚动正文和目录。当需求提到'文档'、'指南'、'API 参考'或'教程'时使用。",
     "zh-TW": "文件頁面 — 側邊導覽、可捲動內文和目錄。當需求提到'文件'、'指南'、'API 參考'或'教學'時使用。",
@@ -43,7 +43,7 @@
     "ar": "صفحة توثيق تحتوي على شريط تنقل جانبي، محتوى قابل للتمرير وجدول محتويات. استخدمها عندما يذكر الملخص 'توثيق' أو 'دليل' أو 'مرجع API' أو 'برنامج تعليمي'.",
     "tr": "Yan gezinme, kaydırılabilir makale içeriği ve içindekiler tablosu içeren dokümantasyon sayfası. Brief'te 'dokümantasyon', 'kılavuz', 'API referansı' veya 'öğretici' geçtiğinde kullanın.",
     "uk": "Сторінка документації з бічною навігацією, прокручуваним вмістом статті та змістом. Використовуйте, коли бриф згадує 'документація', 'посібник', 'довідник API' або 'підручник'.",
-    "en": "A documentation page — inline-start nav, scrollable article body,\ninline-end table of contents. Use when the brief mentions \"docs\",\n\"documentation\", \"guide\", \"API reference\", or \"tutorial\"."
+    "en": "A documentation page — inline-start nav, scrollable article body, inline-end table of contents. Use when the brief mentions \"docs\", \"documentation\", \"guide\", \"API reference\", or \"tutorial\"."
   },
   "license": "MIT",
   "author": {

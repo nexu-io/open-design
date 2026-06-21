@@ -208,6 +208,16 @@ body::before {
   color: var(--ink);
   text-decoration: none;
   font-size: 18px;
+  /*
+   * Pin the brand so it never participates in flex-shrink. `.nav-inner` is a
+   * `justify-content: space-between` flex row; in locales whose nav labels are
+   * longer (de/ru/pt-BR…) the link list widens the row past the container and
+   * the browser shrinks every shrinkable child proportionally — including the
+   * logo, which is why the wordmark looked smaller in some languages. The nav
+   * links absorb the squeeze instead (they already tighten/collapse to the
+   * hamburger at the 1180/1080 breakpoints below).
+   */
+  flex-shrink: 0;
 }
 .brand-mark {
   width: 36px; height: 36px;
@@ -1524,6 +1534,127 @@ section.tight { padding: 90px 0; }
 }
 .testimonial-art img { width: 100%; height: 100%; object-fit: contain; }
 
+/* ---------- AMR band ---------- */
+.amr-band {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.amr-band-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 18px 0 0;
+  text-align: center;
+}
+.amr-band-kicker {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.amr-band-title {
+  font-family: var(--sans);
+  font-size: clamp(30px, 5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 16px auto 0;
+  max-width: 720px;
+  color: var(--ink);
+}
+.amr-band-lead {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-mute);
+  margin: 16px auto 0;
+  max-width: 620px;
+}
+.amr-band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.amr-band-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+}
+.amr-band-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, var(--ink-soft));
+  flex: none;
+}
+.amr-band-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+}
+.amr-band-logos li {
+  display: inline-flex;
+  align-items: center;
+}
+.amr-band-logo {
+  /* <img>-loaded SVGs can't inherit page color; they paint in their own
+     default ink (near-black). Opacity softens the row. */
+  width: 26px;
+  height: 26px;
+  display: block;
+  opacity: 0.74;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.amr-band-logos li:hover .amr-band-logo {
+  opacity: 1;
+}
+.amr-band-more {
+  font-family: var(--sans);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  transform: translateY(-4px);
+}
+.amr-band-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+.amr-band-cta {
+  /* Reuse the dark .nav-cta pill; add the trailing arrow the nav CTAs use. */
+  padding: 11px 22px;
+  font-size: 14px;
+}
+.amr-band-cta::after {
+  content: '→';
+  color: var(--paper);
+  font-size: 13px;
+  margin-left: 7px;
+}
+
 /* ---------- CTA ---------- */
 .cta-grid {
   display: grid;
@@ -1805,10 +1936,10 @@ footer {
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
-/* nav: between 1080 and 1180 the brand tail + 5 nav links + 2 CTAs + dot
- * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
- * so the Star CTA never has to compress. */
-@media (max-width: 1180px) {
+/* nav: tighten the simplified static nav (this template has no hamburger /
+ * dropdown machinery — the app Header carries that). Matches the app's
+ * desktop-tighten band that ends at the ≤1280px hamburger breakpoint. */
+@media (max-width: 1280px) {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
   .nav-links { gap: 28px; }

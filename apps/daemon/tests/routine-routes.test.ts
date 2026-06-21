@@ -11,7 +11,7 @@ import {
   insertRoutineRun,
   openDatabase,
 } from '../src/db.js';
-import { registerRoutineRoutes } from '../src/routine-routes.js';
+import { registerRoutineRoutes } from '../src/routes/routine.js';
 
 describe('routine routes', () => {
   let tempDir: string;

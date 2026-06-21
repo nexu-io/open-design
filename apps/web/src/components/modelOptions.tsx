@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { AgentModelOption } from '../types';
 
 export function renderModelOptions(models: AgentModelOption[]) {
@@ -63,8 +63,10 @@ interface SearchableModelSelectProps
   searchPlaceholder: string;
   searchInputTestId?: string;
   popoverTestId?: string;
+  popoverClassName?: string;
   additionalOptions?: Array<{ value: string; label: string }>;
   minSearchableOptions?: number;
+  popoverMinWidth?: number;
 }
 
 export const SearchableModelSelect = forwardRef<
@@ -78,8 +80,10 @@ export const SearchableModelSelect = forwardRef<
     searchPlaceholder,
     searchInputTestId,
     popoverTestId,
+    popoverClassName,
     additionalOptions,
     minSearchableOptions = 8,
+    popoverMinWidth,
     className,
     ...buttonProps
   },
@@ -87,8 +91,9 @@ export const SearchableModelSelect = forwardRef<
 ) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [popoverStyle, setPopoverStyle] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [popoverStyle, setPopoverStyle] = useState<({ left: number; width: number; maxHeight: number } & ({ top: number; bottom?: never } | { bottom: number; top?: never })) | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const listboxId = useMemo(
@@ -138,16 +143,48 @@ export const SearchableModelSelect = forwardRef<
     };
   }, [open]);
 
+  const handlePopoverKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(false);
+    buttonRef.current?.focus();
+  };
 
   useLayoutEffect(() => {
     if (!open) return;
     const updatePosition = () => {
-      const rect = wrapRef.current?.getBoundingClientRect();
+      const rect =
+        buttonRef.current?.getBoundingClientRect() ??
+        wrapRef.current?.getBoundingClientRect();
       if (!rect) return;
+      const viewportWidth = typeof window === 'undefined' ? rect.width : window.innerWidth;
+      const viewportHeight = typeof window === 'undefined' ? rect.height : window.innerHeight;
+      const desiredWidth = Math.max(rect.width, popoverMinWidth ?? 0);
+      const maxWidth = Math.max(160, viewportWidth - 16);
+      const width = Math.min(desiredWidth, maxWidth);
+      const left = Math.min(
+        Math.max(8, rect.left),
+        Math.max(8, viewportWidth - width - 8),
+      );
+      const availableBelow = Math.max(140, viewportHeight - rect.bottom - 12);
+      const availableAbove = Math.max(140, rect.top - 12);
+      const shouldOpenUpward = availableBelow < 260 && availableAbove > availableBelow;
+      const maxHeight = Math.min(360, shouldOpenUpward ? availableAbove : availableBelow);
+      if (shouldOpenUpward) {
+        setPopoverStyle({
+          bottom: Math.max(8, viewportHeight - rect.top + 6),
+          left,
+          width,
+          maxHeight,
+        });
+        return;
+      }
       setPopoverStyle({
         top: rect.bottom + 6,
-        left: rect.left,
-        width: rect.width,
+        left,
+        width,
+        maxHeight,
       });
     };
     updatePosition();
@@ -172,7 +209,11 @@ export const SearchableModelSelect = forwardRef<
     <div className={`model-select-searchable${open ? ' is-open' : ''}`} ref={wrapRef}>
       <button
         {...buttonProps}
-        ref={ref}
+        ref={(node) => {
+          buttonRef.current = node;
+          if (typeof ref === 'function') ref(node);
+          else if (ref) ref.current = node;
+        }}
         type="button"
         role="combobox"
         aria-expanded={open}
@@ -190,14 +231,19 @@ export const SearchableModelSelect = forwardRef<
         ? createPortal(
             <div
               ref={popoverRef}
-              className="model-select-searchable__popover"
+              className={`model-select-searchable__popover${popoverClassName ? ` ${popoverClassName}` : ''}`}
               role="presentation"
               data-testid={popoverTestId}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={handlePopoverKeyDown}
               style={{
                 position: 'fixed',
-                top: `${popoverStyle.top}px`,
+                top: popoverStyle.top != null ? `${popoverStyle.top}px` : 'auto',
+                bottom: popoverStyle.bottom != null ? `${popoverStyle.bottom}px` : 'auto',
                 left: `${popoverStyle.left}px`,
                 width: `${popoverStyle.width}px`,
+                maxHeight: `${popoverStyle.maxHeight}px`,
               }}
             >
               {shouldShowSearch ? (
@@ -214,7 +260,14 @@ export const SearchableModelSelect = forwardRef<
                   />
                 </div>
               ) : null}
-              <div className="model-select-searchable__list" id={listboxId} role="listbox">
+              <div
+                className="model-select-searchable__list"
+                id={listboxId}
+                role="listbox"
+                style={{
+                  maxHeight: `${Math.max(96, popoverStyle.maxHeight - (shouldShowSearch ? 52 : 12))}px`,
+                }}
+              >
                 {filteredOptions.map((option) => {
                   const active = option.id === value;
                   return (

@@ -27,7 +27,7 @@ describe('native folder dialog helpers', () => {
     const script = buildWindowsFolderDialogCommand().args[3] ?? '';
 
     expect(script).toContain('$dialog = New-Object System.Windows.Forms.FolderBrowserDialog;');
-    expect(script).toContain('$dialog.ShowNewFolderButton = $false;');
+    expect(script).toContain('$dialog.ShowNewFolderButton = $true;');
     expect(script).toContain('$dialog.ShowDialog($owner)');
     expect(script).toContain('$owner.Dispose();');
   });

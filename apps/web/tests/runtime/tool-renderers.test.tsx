@@ -126,6 +126,45 @@ describe('ToolCard dispatch', () => {
     expect(markup).toContain('Q3 revenue');
   });
 
+  it('renders a persisted AskUserQuestion turn as a read-only summary with the answer, not raw JSON', () => {
+    // Legacy AUQ tool_use events survive in upgraded chat history. They must
+    // render the model-authored question text AND the persisted answer, not
+    // the `{"questions":[...]}` protocol blob GenericCard would surface.
+    const input = {
+      questions: [
+        {
+          question: 'Which framework should we target?',
+          header: 'Framework',
+          options: [{ label: 'React Native' }, { label: 'Flutter' }],
+        },
+      ],
+    };
+    // Persisted answer format: `${question}\n${answer}`.
+    const markup = renderToStaticMarkup(
+      <ToolCard
+        use={use(input, 'AskUserQuestion')}
+        result={ok('Which framework should we target?\nReact Native')}
+        runStreaming={false}
+        runSucceeded={true}
+      />,
+    );
+    expect(markup).toContain('Framework');
+    expect(markup).toContain('Which framework should we target?');
+    // The persisted answer is surfaced so history stays auditable.
+    expect(markup).toContain('React Native');
+    // The raw JSON payload must not leak into the card.
+    expect(markup).not.toContain('&quot;questions&quot;');
+    expect(markup).not.toContain('"questions"');
+  });
+
+  it('falls back to the generic card for an unparseable AskUserQuestion payload', () => {
+    const markup = renderToStaticMarkup(
+      <ToolCard use={use({ junk: true }, 'ask_user_question')} runStreaming={false} runSucceeded={true} />,
+    );
+    expect(markup).toContain('op-generic');
+    expect(markup).toContain('AskUserQuestion');
+  });
+
   it('passes the result content through as the `result` prop on completion', () => {
     registerToolRenderer('render_chart', ({ status, result }) => (
       <span data-testid="custom-chart" data-status={status}>
@@ -210,5 +249,18 @@ describe('ToolCard dispatch', () => {
     expect(markup).toContain('ls');
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  it('shows file edit error details alongside the target path', () => {
+    const markup = renderToStaticMarkup(
+      <ToolCard
+        use={use({ file_path: 'C:\\repo\\canvas2-nodes.jsx', old_string: 'a', new_string: 'b' }, 'Edit')}
+        result={err('String to replace was not found in C:\\repo\\canvas2-nodes.jsx')}
+        runStreaming={false}
+      />,
+    );
+
+    expect(markup).toContain('C:\\repo\\canvas2-nodes.jsx');
+    expect(markup).toContain('String to replace was not found');
   });
 });

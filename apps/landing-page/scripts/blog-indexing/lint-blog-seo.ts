@@ -82,6 +82,16 @@ function markdownLinks(body: string): Array<{ text: string; href: string }> {
   }));
 }
 
+// Staging / PR-preview builds set `OD_LANDING_NOINDEX=1`, which makes
+// `SeoHead` stamp `<meta name="robots" content="noindex, nofollow">` on every
+// page so the staging mirror stays out of the search index. The landing-page
+// CI builds with that flag set and then runs this linter against the same
+// `out/`, so the rendered `noindex` is expected here and must not be treated as
+// an indexability blocker. The production build leaves the flag unset, where
+// the noindex check below is meaningful. Detect the staging build from the same
+// env var the build reads so the two stay in lock-step.
+const STAGING_NOINDEX_BUILD = process.env.OD_LANDING_NOINDEX === '1';
+
 function checkRendered(slug: string, renderedOut: string, file: string): Finding[] {
   const htmlPath = path.join(REPO_ROOT, renderedOut, 'blog', slug, 'index.html');
   if (!existsSync(htmlPath)) return [];
@@ -96,7 +106,10 @@ function checkRendered(slug: string, renderedOut: string, file: string): Finding
   if (!/<meta\b[^>]*property=["']og:image["'][^>]*content=["'][^"']+["']/i.test(html)) {
     findings.push({ file, level: 'error', message: 'rendered page has no og:image' });
   }
-  if (/<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*\bnoindex\b/i.test(html)) {
+  if (
+    !STAGING_NOINDEX_BUILD &&
+    /<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*\bnoindex\b/i.test(html)
+  ) {
     findings.push({ file, level: 'error', message: 'rendered page is noindex' });
   }
   return findings;

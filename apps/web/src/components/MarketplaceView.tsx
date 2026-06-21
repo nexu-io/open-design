@@ -13,6 +13,8 @@ import { useEffect, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { listPlugins } from '../state/projects';
 import { navigate } from '../router';
+import { useI18n } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
 interface Marketplace {
   id: string;
@@ -22,6 +24,7 @@ interface Marketplace {
 }
 
 export function MarketplaceView() {
+  const { locale } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [marketplaces, setMarketplaces] = useState<Marketplace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,9 +98,9 @@ export function MarketplaceView() {
             onClick={() => navigate({ kind: 'marketplace-detail', pluginId: p.id })}
             data-plugin-id={p.id}
           >
-            <div className="marketplace-view__card-title">{p.title}</div>
-            {p.manifest?.description ? (
-              <div className="marketplace-view__card-desc">{p.manifest.description}</div>
+            <div className="marketplace-view__card-title">{localizePluginTitle(locale, p)}</div>
+            {localizePluginDescription(locale, p) ? (
+              <div className="marketplace-view__card-desc">{localizePluginDescription(locale, p)}</div>
             ) : null}
             <div className="marketplace-view__card-meta">
               <span>v{p.version}</span>

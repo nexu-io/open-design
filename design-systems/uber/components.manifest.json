@@ -1,0 +1,424 @@
+{
+  "schemaVersion": 1,
+  "brandId": "uber",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "Uber — reference components",
+    "description": "Reference fixture for design-systems/uber. Every visible value comes from tokens.css. Uber's signature moves: pure black and white (no tints), UberMove bold headlines, UberMoveText body, 999px full-pill buttons, whisper-soft shadows (0.12 opacity).",
+    "styleBlockCount": 1,
+    "selectorCount": 39,
+    "classCount": 19,
+    "elementCount": 21
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--ease-standard",
+      "--elev-raised",
+      "--fg",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl"
+    ],
+    "unusedDeclared": [
+      "--accent",
+      "--accent-active",
+      "--border",
+      "--danger",
+      "--elev-flat",
+      "--elev-ring",
+      "--fg-2",
+      "--font-mono",
+      "--motion-base",
+      "--radius-pill",
+      "--space-1",
+      "--space-12",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".body-muted",
+    ".body-sm",
+    ".btn",
+    ".btn-black",
+    ".btn-black:hover",
+    ".btn-white",
+    ".btn-white:hover",
+    ".btn:focus-visible",
+    ".card",
+    ".card-featured",
+    ".chip",
+    ".chip-row",
+    ".chip:hover",
+    ".chip.active",
+    ".container",
+    ".features-grid",
+    ".field",
+    ".field input",
+    ".field input::placeholder",
+    ".field input:focus",
+    ".field label",
+    ".footer-dark",
+    ".hero-actions",
+    ".hero-grid",
+    ".icon",
+    ".stack-3 > * + *",
+    ".stack-4 > * + *",
+    ".stack-6 > * + *",
+    "*",
+    "*::after",
+    "*::before",
+    "body",
+    "h1",
+    "h2",
+    "h3",
+    "html",
+    "p",
+    "section",
+    "section + section"
+  ],
+  "classes": [
+    "active",
+    "body-muted",
+    "body-sm",
+    "btn",
+    "btn-black",
+    "btn-white",
+    "card",
+    "card-featured",
+    "chip",
+    "chip-row",
+    "container",
+    "features-grid",
+    "field",
+    "footer-dark",
+    "hero-actions",
+    "hero-grid",
+    "icon",
+    "stack-3",
+    "stack-4"
+  ],
+  "elements": [
+    "a",
+    "article",
+    "aside",
+    "body",
+    "button",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "head",
+    "html",
+    "input",
+    "label",
+    "main",
+    "meta",
+    "p",
+    "path",
+    "section",
+    "style",
+    "svg",
+    "title"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        ".btn",
+        ".btn-black",
+        ".btn-black:hover",
+        ".btn-white",
+        ".btn-white:hover",
+        ".btn:focus-visible"
+      ],
+      "classes": [
+        "btn",
+        "btn-black",
+        "btn-white"
+      ],
+      "elements": [
+        "button"
+      ],
+      "tokenReferences": [
+        "--accent-on",
+        "--bg",
+        "--border-soft",
+        "--ease-standard",
+        "--fg",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base"
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        ".field",
+        ".field input",
+        ".field input::placeholder",
+        ".field input:focus",
+        ".field label"
+      ],
+      "classes": [
+        "field"
+      ],
+      "elements": [
+        "input",
+        "label"
+      ],
+      "tokenReferences": [
+        "--meta",
+        "--muted",
+        "--text-sm"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".card",
+        ".card-featured"
+      ],
+      "classes": [
+        "card",
+        "card-featured"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--radius-lg"
+      ]
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": true,
+      "selectors": [
+        ".chip",
+        ".chip-row",
+        ".chip:hover",
+        ".chip.active"
+      ],
+      "classes": [
+        "chip",
+        "chip-row"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--accent-on",
+        "--ease-standard",
+        "--fg",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--text-sm"
+      ]
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": true,
+      "selectors": [],
+      "classes": [],
+      "elements": [
+        "a"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": true,
+      "selectors": [
+        ".icon"
+      ],
+      "classes": [
+        "icon"
+      ],
+      "elements": [
+        "svg"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        ".body-muted",
+        ".body-sm",
+        "h1",
+        "h2",
+        "h3"
+      ],
+      "classes": [
+        "body-muted",
+        "body-sm"
+      ],
+      "elements": [
+        "h1",
+        "h2",
+        "h3",
+        "p"
+      ],
+      "tokenReferences": [
+        "--fg",
+        "--font-display",
+        "--leading-tight",
+        "--text-3xl",
+        "--text-sm"
+      ]
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        ".container",
+        ".stack-3 > * + *",
+        ".stack-4 > * + *",
+        ".stack-6 > * + *",
+        "section",
+        "section + section"
+      ],
+      "classes": [
+        "container",
+        "features-grid",
+        "hero-grid",
+        "stack-3",
+        "stack-4"
+      ],
+      "elements": [
+        "main",
+        "section"
+      ],
+      "tokenReferences": [
+        "--border-soft",
+        "--container-gutter-desktop",
+        "--container-gutter-phone",
+        "--container-gutter-tablet",
+        "--container-max",
+        "--space-4"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 4,
+    "pixelValues": 17,
+    "hardcodedFontFamilies": 5
+  }
+}

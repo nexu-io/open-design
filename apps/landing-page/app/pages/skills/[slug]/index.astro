@@ -2,16 +2,12 @@
 /*
  * /skills/<slug>/ — a detail page per skill.
  *
- * Two flavours render slightly differently:
- *   - `template` skills get a click-to-expand iframe of their
- *     `example.html` demo and stay deliberately brief — the demo is the
- *     content, the README is one click away on GitHub.
- *   - `instruction` skills (no runnable demo) instead render the full
- *     SKILL.md body inline, so the page reads like a brief: what the
- *     skill does, when it triggers, how to use it. Otherwise the page
- *     would be a one-line description and a row of CTAs.
+ * Mostly a structured read-out of SKILL.md frontmatter (description,
+ * triggers, mode/scenario/platform, featured rank) plus deep links
+ * to the GitHub source. We deliberately don't render the full
+ * SKILL.md body to avoid duplicating the README and to keep the page
+ * scan-friendly for both humans and search engines.
  */
-import { getEntry, render } from 'astro:content';
 import Layout from '../../../_components/sub-page-layout.astro';
 import LazyImg from '../../../_components/lazy-img.astro';
 import { getSkillRecords, type SkillRecord } from '../../../_lib/catalog';
@@ -27,7 +23,7 @@ import {
  * keyword "open-source Claude Design alternative" stays in English
  * because that's the canonical search query Google associates with
  * the domain — translating it would split the entity claim. The
- * surrounding sentence ("I'm using X from @opendesignai") translates
+ * surrounding sentence ("I'm using X from @OpenDesignHQ") translates
  * per locale so the message reads as one coherent voice instead of
  * mixing two scripts in a single share post.
  *
@@ -36,75 +32,75 @@ import {
  */
 type ShareTemplate = (vars: { name: string; description: string; url: string }) => string;
 const SHARE_COPY: Record<LandingLocaleCode, ShareTemplate> = {
-  en:      ({ name, description, url }) => `🎨 Just discovered ${name} on @opendesignai — the open-source Claude Design alternative.
+  en:      ({ name, description, url }) => `🎨 Just discovered ${name} on @OpenDesignHQ — the open-source Claude Design alternative.
 ✨ Local-first · BYOK · your agent does the design.
 
 → ${url}`,
-  zh:      ({ name, description, url }) => `🎨 安利一个：@opendesignai 上的 ${name} —— Claude Design 的开源替代品。
+  zh:      ({ name, description, url }) => `🎨 安利一个：@OpenDesignHQ 上的 ${name} —— Claude Design 的开源替代品。
 ✨ 本地优先 · 自带模型 · 让你自己的 agent 做设计。
 
 → ${url}`,
-  'zh-tw': ({ name, description, url }) => `🎨 推薦一個：@opendesignai 上的 ${name} —— Claude Design 的開源替代品。
+  'zh-tw': ({ name, description, url }) => `🎨 推薦一個：@OpenDesignHQ 上的 ${name} —— Claude Design 的開源替代品。
 ✨ 本地優先 · 自帶模型 · 讓你自己的 agent 做設計。
 
 → ${url}`,
-  ja:      ({ name, description, url }) => `🎨 @opendesignai で ${name} を発見 —— オープンソースの Claude Design 代替。
+  ja:      ({ name, description, url }) => `🎨 @OpenDesignHQ で ${name} を発見 —— オープンソースの Claude Design 代替。
 ✨ ローカル優先 · BYOK · あなたのエージェントが設計する。
 
 → ${url}`,
-  ko:      ({ name, description, url }) => `🎨 @opendesignai에서 ${name} 발견 —— 오픈 소스 Claude Design 대안.
+  ko:      ({ name, description, url }) => `🎨 @OpenDesignHQ에서 ${name} 발견 —— 오픈 소스 Claude Design 대안.
 ✨ 로컬 우선 · BYOK · 에이전트가 디자인합니다.
 
 → ${url}`,
-  de:      ({ name, description, url }) => `🎨 Gerade entdeckt: ${name} auf @opendesignai — die Open-Source-Alternative zu Claude Design.
+  de:      ({ name, description, url }) => `🎨 Gerade entdeckt: ${name} auf @OpenDesignHQ — die Open-Source-Alternative zu Claude Design.
 ✨ Local-first · BYOK · dein Agent designt.
 
 → ${url}`,
-  fr:      ({ name, description, url }) => `🎨 Découvert : ${name} sur @opendesignai — l'alternative open-source à Claude Design.
+  fr:      ({ name, description, url }) => `🎨 Découvert : ${name} sur @OpenDesignHQ — l'alternative open-source à Claude Design.
 ✨ Local-first · BYOK · votre agent fait le design.
 
 → ${url}`,
-  ru:      ({ name, description, url }) => `🎨 Нашёл ${name} на @opendesignai — open-source альтернативу Claude Design.
+  ru:      ({ name, description, url }) => `🎨 Нашёл ${name} на @OpenDesignHQ — open-source альтернативу Claude Design.
 ✨ Локально · BYOK · агент сам делает дизайн.
 
 → ${url}`,
-  es:      ({ name, description, url }) => `🎨 Acabo de descubrir ${name} en @opendesignai — la alternativa open-source a Claude Design.
+  es:      ({ name, description, url }) => `🎨 Acabo de descubrir ${name} en @OpenDesignHQ — la alternativa open-source a Claude Design.
 ✨ Local-first · BYOK · tu agente diseña.
 
 → ${url}`,
-  'pt-br': ({ name, description, url }) => `🎨 Acabei de descobrir ${name} no @opendesignai — a alternativa open-source ao Claude Design.
+  'pt-br': ({ name, description, url }) => `🎨 Acabei de descobrir ${name} no @OpenDesignHQ — a alternativa open-source ao Claude Design.
 ✨ Local-first · BYOK · seu agente faz o design.
 
 → ${url}`,
-  it:      ({ name, description, url }) => `🎨 Ho appena scoperto ${name} su @opendesignai — l'alternativa open-source a Claude Design.
+  it:      ({ name, description, url }) => `🎨 Ho appena scoperto ${name} su @OpenDesignHQ — l'alternativa open-source a Claude Design.
 ✨ Local-first · BYOK · il tuo agente progetta.
 
 → ${url}`,
-  vi:      ({ name, description, url }) => `🎨 Vừa khám phá ${name} trên @opendesignai — giải pháp mã nguồn mở thay thế Claude Design.
+  vi:      ({ name, description, url }) => `🎨 Vừa khám phá ${name} trên @OpenDesignHQ — giải pháp mã nguồn mở thay thế Claude Design.
 ✨ Ưu tiên local · BYOK · agent của bạn thiết kế.
 
 → ${url}`,
-  pl:      ({ name, description, url }) => `🎨 Właśnie odkryłem ${name} na @opendesignai — open-source'ową alternatywę dla Claude Design.
+  pl:      ({ name, description, url }) => `🎨 Właśnie odkryłem ${name} na @OpenDesignHQ — open-source'ową alternatywę dla Claude Design.
 ✨ Local-first · BYOK · twój agent projektuje.
 
 → ${url}`,
-  id:      ({ name, description, url }) => `🎨 Baru nemu ${name} di @opendesignai — alternatif open-source untuk Claude Design.
+  id:      ({ name, description, url }) => `🎨 Baru nemu ${name} di @OpenDesignHQ — alternatif open-source untuk Claude Design.
 ✨ Local-first · BYOK · agent kamu yang nge-desain.
 
 → ${url}`,
-  nl:      ({ name, description, url }) => `🎨 Net ontdekt: ${name} op @opendesignai — het open-source alternatief voor Claude Design.
+  nl:      ({ name, description, url }) => `🎨 Net ontdekt: ${name} op @OpenDesignHQ — het open-source alternatief voor Claude Design.
 ✨ Local-first · BYOK · jouw agent ontwerpt.
 
 → ${url}`,
-  ar:      ({ name, description, url }) => `🎨 اكتشفت للتو ${name} على @opendesignai — البديل مفتوح المصدر لـ Claude Design.
+  ar:      ({ name, description, url }) => `🎨 اكتشفت للتو ${name} على @OpenDesignHQ — البديل مفتوح المصدر لـ Claude Design.
 ✨ محلي أولًا · BYOK · وكيلك يصمّم.
 
 → ${url}`,
-  tr:      ({ name, description, url }) => `🎨 Yeni keşfettim: ${name} (@opendesignai) — Claude Design'a açık kaynaklı alternatif.
+  tr:      ({ name, description, url }) => `🎨 Yeni keşfettim: ${name} (@OpenDesignHQ) — Claude Design'a açık kaynaklı alternatif.
 ✨ Local-first · BYOK · ajanın tasarlıyor.
 
 → ${url}`,
-  uk:      ({ name, description, url }) => `🎨 Щойно знайшов ${name} на @opendesignai — open-source альтернативу Claude Design.
+  uk:      ({ name, description, url }) => `🎨 Щойно знайшов ${name} на @OpenDesignHQ — open-source альтернативу Claude Design.
 ✨ Local-first · BYOK · ваш агент робить дизайн.
 
 → ${url}`,
@@ -170,22 +166,6 @@ const related = all
   .filter((s) => s.slug !== skill.slug)
   .filter((s) => s.mode === skill.mode || s.scenario === skill.scenario)
   .slice(0, 4);
-
-/*
- * Instruction skills don't have a runnable demo to iframe — to avoid
- * a near-empty detail page, render the SKILL.md prose inline so the
- * page reads like a brief. Template skills keep the page deliberately
- * brief because their demo is the content; their full SKILL.md is one
- * "Find on GitHub" click away.
- *
- * Astro 6 exposes the markdown pipeline through a top-level
- * `render(entry)` helper rather than the legacy `entry.render()`
- * method. The output (heading anchors, smart-typography, GFM
- * tables) styles cleanly with the existing `.detail-md` rules.
- */
-const skillEntry =
-  skill.kind === 'instruction' ? await getEntry('skills', `${skill.slug}/SKILL`) : null;
-const SkillBody = skillEntry ? (await render(skillEntry)).Content : null;
 
 const jsonLd = [
   {
@@ -271,16 +251,16 @@ const jsonLd = [
       </div>
     </header>
 
-    {skill.kind === 'template' && skill.previewUrl && (
+    {skill.previewUrl && (
       <figure class="detail-preview">
         {/*
-          Click-to-expand interactive preview. Only template-kind skills
-          ship a runnable example.html, so this block is gated on kind
-          rather than just `previewUrl` — instruction skills now have a
-          synthesized cover thumbnail too, but no iframe target. The
-          thumb is the summary of a `<details>` element: clicking opens
+          Click-to-expand interactive preview. The thumb itself is the
+          summary of a `<details>` element — clicking the image opens
           the live iframe, replacing the thumb with the canonical
-          `<slug>/example.html` rendered inside a sandboxed frame.
+          `<slug>/example.html` rendered inside a sandboxed frame. A
+          hover overlay on the thumb hints "Click for live preview ↗"
+          so the affordance is discoverable. The iframe loads lazily,
+          only fetching once the user actually expands.
         */}
         <details class="detail-preview-live">
           <summary class="detail-preview-thumb-trigger" aria-label={`Open interactive preview for ${skill.name}`}>
@@ -439,13 +419,6 @@ const jsonLd = [
       <section class="detail-block">
         <h2>{ui.catalog.skills.examplePrompt}</h2>
         <pre class="example-prompt">{skill.examplePrompt}</pre>
-      </section>
-    )}
-
-    {SkillBody && (
-      <section class="detail-block detail-md">
-        <h2>About this skill</h2>
-        <SkillBody />
       </section>
     )}
 

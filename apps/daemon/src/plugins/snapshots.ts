@@ -51,6 +51,7 @@ export interface CreateSnapshotInput {
   taskKind: AppliedPluginSnapshot['taskKind'];
   inputs: Record<string, string | number | boolean>;
   resolvedContext: ResolvedContext;
+  craftRequires?: string[] | undefined;
   pipeline?: PluginPipeline | undefined;
   genuiSurfaces?: GenUISurfaceSpec[] | undefined;
   capabilitiesGranted: string[];
@@ -81,13 +82,13 @@ export function createSnapshot(db: SqliteDb, input: CreateSnapshotInput): Applie
       manifest_source_digest, source_marketplace_id, source_marketplace_entry_name,
       source_marketplace_entry_version, marketplace_trust, resolved_source,
       resolved_ref, archive_integrity, pinned_ref, task_kind,
-      inputs_json, resolved_context_json, pipeline_json, genui_surfaces_json,
+      inputs_json, resolved_context_json, craft_requires_json, pipeline_json, genui_surfaces_json,
       capabilities_granted, capabilities_required, assets_staged_json,
       connectors_required_json, connectors_resolved_json, mcp_servers_json,
       plugin_title, plugin_description, query_text,
       status, applied_at, expires_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fresh', ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fresh', ?, ?)
   `).run(
     id,
     input.projectId,
@@ -108,6 +109,7 @@ export function createSnapshot(db: SqliteDb, input: CreateSnapshotInput): Applie
     input.taskKind,
     JSON.stringify(input.inputs),
     JSON.stringify(input.resolvedContext),
+    JSON.stringify(input.craftRequires ?? []),
     input.pipeline ? JSON.stringify(input.pipeline) : null,
     JSON.stringify(input.genuiSurfaces ?? []),
     JSON.stringify(input.capabilitiesGranted),
@@ -352,6 +354,7 @@ function buildSnapshot(args: {
     pinnedRef:            input.pinnedRef ?? undefined,
     inputs:               input.inputs,
     resolvedContext:      input.resolvedContext,
+    craftRequires:        input.craftRequires ?? [],
     capabilitiesGranted:  input.capabilitiesGranted,
     capabilitiesRequired: input.capabilitiesRequired,
     assetsStaged:         input.assetsStaged,
@@ -388,6 +391,7 @@ export function rowToSnapshot(row: DbRow): AppliedPluginSnapshot {
     pinnedRef:            row['pinned_ref'] != null ? String(row['pinned_ref']) : undefined,
     inputs:               parseJsonOr<Record<string, string | number | boolean>>(row['inputs_json'], {}),
     resolvedContext:      parseJsonOr<ResolvedContext>(row['resolved_context_json'], { items: [] }),
+    craftRequires:        parseJsonOr<string[]>(row['craft_requires_json'], []),
     capabilitiesGranted:  parseJsonOr<string[]>(row['capabilities_granted'], []),
     capabilitiesRequired: parseJsonOr<string[]>(row['capabilities_required'], []),
     assetsStaged:         parseJsonOr<PluginAssetRef[]>(row['assets_staged_json'], []),

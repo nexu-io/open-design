@@ -24,6 +24,14 @@ import {
   localizeTaxonomyValue,
   localizeTemplateText,
 } from '../content-i18n';
+import { getBundledPlugins } from './bundled-plugins';
+import { SYSTEM_TAGLINE_L10N, SYSTEM_CATEGORY_L10N } from './system-l10n';
+import {
+  bundledRecordOf,
+  categorizePlugin,
+  PLUGIN_CATEGORIES,
+  type PluginCategorySlug,
+} from './plugin-facets';
 
 // ---------------------------------------------------------------------------
 // Preview imagery lookup
@@ -425,17 +433,34 @@ export function shapeSystem(
     fallbackTagline: localized?.tagline ?? tagline,
     fallbackAtmosphere: localized?.atmosphere ?? atmosphere,
   });
+  // Prefer the curated, UNIQUE localized card tagline / category over the
+  // generic `systemTagline` template (and the CJK English-name fallback) when
+  // we have one for this system+locale. English uses the DESIGN.md source.
+  const taglineL10n = SYSTEM_TAGLINE_L10N[slug]?.[locale];
+  const categoryL10n = SYSTEM_CATEGORY_L10N[rawCategory]?.[locale];
   return {
     slug,
     name,
     category: rawCategory,
-    categoryLabel: localizedText.category,
-    tagline: localizedText.tagline,
+    categoryLabel: categoryL10n ?? localizedText.category,
+    tagline: taglineL10n ?? localizedText.tagline,
     atmosphere: localizedText.atmosphere,
     palette,
     source: `${REPO_TREE}/design-systems/${slug}`,
     body,
   };
+}
+
+/**
+ * True for the canonical English `DESIGN.md` entry (id `<slug>/DESIGN`), false
+ * for localized `DESIGN.<locale>.md` bodies (id `<slug>/DESIGN.<locale>`). The
+ * catalog/card grid must only see one record per system, so it filters to the
+ * English entries; the localized bodies are picked up only by the detail page.
+ */
+function isEnglishSystemEntry(id: string): boolean {
+  // Astro lowercases glob ids: `DESIGN.md` → `<slug>/design`, while a localized
+  // body `DESIGN-<locale>.md` → `<slug>/design-<locale>`.
+  return (id.split('/')[1] ?? '') === 'design';
 }
 
 export async function getSystemRecords(
@@ -444,6 +469,7 @@ export async function getSystemRecords(
   if (!SHOULD_CACHE_CATALOG) {
     const entries = await getCollection('systems');
     return entries
+      .filter((entry) => isEnglishSystemEntry(entry.id))
       .map((entry) => shapeSystem(entry, locale))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -456,6 +482,7 @@ export async function getSystemRecords(
   const promise = (async () => {
     const entries = await getCollection('systems');
     return entries
+      .filter((entry) => isEnglishSystemEntry(entry.id))
       .map((entry) => shapeSystem(entry, locale))
       .sort((a, b) => a.name.localeCompare(b.name));
   })();
@@ -850,6 +877,41 @@ export interface CatalogCounts {
   byMode: Readonly<Record<string, number>>;
   /** SKILL.md `od.platform` → count. Lowercase keys (e.g. `mobile`, `desktop`). */
   byPlatform: Readonly<Record<string, number>>;
+  /**
+   * Live `PLUGIN_CATEGORIES` breakdown for the `/plugins/templates/`
+   * library, computed with the same `categorizePlugin` rule the
+   * templates page uses so the homepage Labs pills never drift from
+   * the real catalog. Ordered by count descending, zero-count
+   * categories dropped; `total` is the count of all categorized
+   * templates (the "All" pill).
+   */
+  templateCategories: {
+    total: number;
+    byCategory: ReadonlyArray<{ slug: PluginCategorySlug; count: number }>;
+  };
+}
+
+// Templates view = bundled plugins that land in one of the
+// PLUGIN_CATEGORIES artifact kinds (categorizePlugin !== null). Mirrors
+// the count the `/plugins/templates/` page derives so the homepage Labs
+// pills stay in lockstep with the library. Locale-independent (counts
+// don't vary by language), so it ignores the locale arg.
+function computeTemplateCategories(): CatalogCounts['templateCategories'] {
+  const counts = new Map<PluginCategorySlug, number>();
+  let total = 0;
+  for (const record of getBundledPlugins()) {
+    const category = categorizePlugin(bundledRecordOf(record));
+    if (!category) continue;
+    total += 1;
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  const byCategory = PLUGIN_CATEGORIES.map((cat) => ({
+    slug: cat.slug,
+    count: counts.get(cat.slug) ?? 0,
+  }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count);
+  return { total, byCategory };
 }
 
 const catalogCountsCache = new Map<LandingLocaleCode, Promise<CatalogCounts>>();
@@ -881,6 +943,7 @@ export async function getCatalogCounts(
       craft: craft.length,
       byMode: tallyKey(skills.map((s) => s.mode)),
       byPlatform: tallyKey(skills.map((s) => s.platform)),
+      templateCategories: computeTemplateCategories(),
     };
   }
 
@@ -903,6 +966,7 @@ export async function getCatalogCounts(
       craft: craft.length,
       byMode: tallyKey(skills.map((s) => s.mode)),
       byPlatform: tallyKey(skills.map((s) => s.platform)),
+      templateCategories: computeTemplateCategories(),
     };
   })();
 

@@ -4,11 +4,11 @@ This file is the single source of truth for agents entering this repository. Rea
 
 ## Core documentation index
 
-- Product and onboarding: `README.md`, `README.zh-CN.md`, `QUICKSTART.md`.
-- Contribution and environment: `CONTRIBUTING.md`, `CONTRIBUTING.zh-CN.md`.
+- Product and onboarding: `README.md`, `docs/i18n/README.zh-CN.md`, `QUICKSTART.md`.
+- Contribution and environment: `CONTRIBUTING.md`, `docs/i18n/CONTRIBUTING.zh-CN.md`.
 - Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
-- Directory-level agent guidance: `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+- Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
 
 ## Workspace directories
@@ -29,7 +29,7 @@ This file is the single source of truth for agents entering this repository. Rea
 ## Inactive or placeholder directories
 
 - `apps/nextjs` and `packages/shared` have been removed; do not recreate or reference them.
-- `.od/`, `.tmp/`, Playwright reports, and agent scratch directories are local runtime data and must stay out of git.
+- Local runtime data, `.tmp/`, Playwright reports, and agent scratch directories must stay out of git. For daemon-managed data paths, read and follow **Daemon data directory contract** below; do not restate or improvise path conventions elsewhere.
 
 # Development workflow
 
@@ -55,11 +55,97 @@ This file is the single source of truth for agents entering this repository. Rea
 - Ports are governed by `tools-dev` flags: `--daemon-port` and `--web-port`.
 - `tools-dev` exports `OD_PORT` for the web proxy target and `OD_WEB_PORT` for the web listener; do not use `NEXT_PORT`.
 
+## Daemon data directory contract
+
+This section is the only repository-wide source of truth for daemon-managed
+data paths. Every README, guide, deployment note, and operational handoff that
+mentions daemon data paths must point here instead of restating the rules.
+
+This boundary is strict. Do not introduce concrete filesystem examples for the
+daemon data directory, recommended data directory, shared data directory,
+deployment mount, or example data directory. If existing code exposes a legacy
+fallback, treat it as implementation detail or a known escape candidate, not as
+a documentation pattern to copy. If a change needs a data-path rule that is not
+covered here, request a core-maintainer decision in the PR instead of inventing
+a new convention.
+
+The daemon has one active data-root truth source:
+
+- On daemon startup, `apps/daemon/src/server.ts` resolves `OD_DATA_DIR` into
+  `RUNTIME_DATA_DIR`.
+- All daemon-owned data paths must derive from `RUNTIME_DATA_DIR` or from a
+  constant derived from it, such as `PROJECTS_DIR` or `ARTIFACTS_DIR`.
+- `PROJECTS_DIR` is the managed-project root. Imported-folder projects are the
+  explicit exception: they use `metadata.baseDir` for the user-selected
+  external workspace.
+- `ARTIFACTS_DIR`, SQLite, app config, memory, MCP config/tokens, automation
+  state, plugin state, connector credentials, generated files, logs owned by
+  sandbox mode, and agent runtime homes are daemon data and must remain under
+  the resolved daemon data root unless this file names a specific exception.
+- Agent subprocesses receive the resolved daemon data root as `OD_DATA_DIR`.
+  They must inherit the daemon's truth source instead of guessing their own
+  data path.
+
+Development propagation:
+
+- `tools-dev` owns sidecar runtime/log/ipc namespacing.
+- `tools-dev --namespace <name>` does not, by itself, define daemon data
+  isolation.
+- A development run that needs an isolated daemon data root must pass
+  `OD_DATA_DIR` into the daemon process environment. After that, the daemon
+  resolves it once and all daemon data paths flow from `RUNTIME_DATA_DIR`.
+
+Packaged propagation:
+
+- `tools-pack` / `apps/packaged` own packaged channel and namespace layout.
+- Packaged code resolves the final namespace-scoped daemon data root before
+  spawning the daemon.
+- The packaged daemon receives that final data root as `OD_DATA_DIR`; daemon
+  code must not infer packaged data paths from app names, Electron `userData`,
+  ports, channel names, or namespace names.
+
+Sanctioned exceptions:
+
+- `OD_MEDIA_CONFIG_DIR` is a narrow override for `media-config.json` only. It
+  is not a second daemon data root.
+- `OD_LEGACY_DATA_DIR` is a migration source for legacy data import only. It is
+  not an active daemon data root.
+- External tool homes such as `CODEX_HOME` are integration inputs, not daemon
+  data roots. The daemon must not describe them as Open Design runtime data.
+- Agent/project-cwd skill staging aliases are not daemon data roots.
+- Manifest metadata keys and CSS identifiers are semantic namespaces, not
+  filesystem path conventions.
+
+Known escape candidates that must not be reused:
+
+- Module-level defaults that point at a cwd-relative legacy data directory.
+- Helper defaults such as `defaultRegistryRoots()` that recompute a data root
+  from `process.env.OD_DATA_DIR` or a cwd fallback instead of receiving
+  `RUNTIME_DATA_DIR`.
+- `openDatabase(projectRoot)` calls that rely on its fallback instead of
+  passing the resolved data root.
+- Script help text or examples that suggest concrete legacy data directories.
+
+Do not extend these escape patterns. When a fix is obvious, route the path
+through `RUNTIME_DATA_DIR` or an explicit data-root argument. When it is not
+obvious, block the PR and request core-maintainer guidance.
+
 ## Root command boundary
 
 - Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-serve`.
 - Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
+
+## GitHub automation boundary
+
+Read `.github/AGENTS.md` before editing `.github/workflows/`, `.github/scripts/`, `.github/actions/`, PR follow-on automation, `workflow_run` trusted writes, CI handoff artifacts, or the workflow topology checks that guard those surfaces.
+
+CI-related GitHub automation uses a two-layer architecture:
+
+- Business layer workflows own product or validation decisions. `ci.yml` is the main low-privilege PR, merge-queue, and manual validation workflow. It detects scope, runs checks, and produces typed handoff artifacts.
+- Atomic capability workflows own reusable trusted operations. `comment.atom.yml` publishes pure text PR comments, `autofix.atom.yml` applies same-repository patches, and `report.atom.yml` materializes advanced comments that need trusted dependencies, secrets, or report generation before upsert.
+
+Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml` or `bar.autofix.atom.yml` without first trying to express the flow as a `ci.yml` producer plus the existing `comment`, `autofix`, or `report` capability. Keep artifact naming, storage layout, and parser behavior centralized in `.github/scripts/handoff.py`; do not let individual workflows invent parallel handoff conventions.
 
 ## Release channel model
 
@@ -130,18 +216,23 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## Agent runtime conventions
 
-- `RuntimeAgentDef.promptInputFormat` selects how the daemon writes the prompt to a child's stdin. The default `'text'` writes the composed prompt and ends stdin immediately. `'stream-json'` wraps the prompt as one JSONL `user` message and KEEPS stdin open so the daemon can stream further user messages back in mid-turn. Claude (`apps/daemon/src/runtimes/defs/claude.ts`) ships `'stream-json'` together with `--input-format stream-json` so the host can answer interactive tools like `AskUserQuestion` with a real `tool_result` block. Every other agent stays on `'text'`.
-- `apps/daemon/src/server.ts` tracks `run.pendingHostAnswers` (a Set of `tool_use_id` strings) and `run.stdinOpen` on the run object. The `claude-stream-json` event handler adds AskUserQuestion ids to the set and closes stdin only when both the set is empty AND a `turn_end` (or `usage`) event arrives with a non `tool_use` `stop_reason`. The `tool_use` stop reason means the model paused mid tool (waiting on claude-code's internal runner or on a host answer); closing stdin there would truncate the follow up response.
-- `claude-stream.ts` emits the `turn_end` event AFTER iterating the assistant message's content blocks, not before. When `--include-partial-messages` is unsupported, tool_use events surface only from the assistant wrapper, so emitting `turn_end` first would let the daemon close stdin before the host had registered any pending answers.
-- `POST /api/runs/:id/tool-result` is the daemon endpoint for feeding a `tool_result` block back into a still running stream-json child. Body shape: `{ toolUseId: string, content: string, isError?: boolean }`. Web callers use `submitChatRunToolResult` from `apps/web/src/providers/daemon.ts`. The daemon writes a JSONL `user` message containing one `tool_result` content block, removes the id from `pendingHostAnswers`, and lets the next `turn_end` decide when to close stdin.
-- AskUserQuestion specifically: Claude's system prompt section in `apps/daemon/src/prompts/system.ts` (Claude only block at the bottom of `composeSystemPrompt`) tells the model to use the tool for 2 to 4 finite choices, and to stop generating tokens after the tool call instead of also writing a markdown duplicate. `AssistantMessage.suppressAskUserQuestionFallbackText` is the belt and suspenders that hides any trailing markdown text in the same turn.
+- `RuntimeAgentDef.promptInputFormat` selects how the daemon writes the prompt to a child's stdin. The default `'text'` writes the composed prompt and ends stdin immediately. `'stream-json'` wraps the prompt as one JSONL `user` message and KEEPS stdin open so the daemon can stream further user messages back in mid-turn. Claude (`apps/daemon/src/runtimes/defs/claude.ts`) ships `'stream-json'` together with `--input-format stream-json` as generic mid-turn input infrastructure; the daemon closes stdin once the turn terminates cleanly. Every other agent stays on `'text'`.
+- `apps/daemon/src/server.ts` tracks `run.stdinOpen` on the run object. `applyClaudeStreamJsonRunBookkeeping` closes stdin (and records `turnCompletedCleanly`) when a `turn_end` (or `usage`) event arrives with a non `tool_use` `stop_reason`. The `tool_use` stop reason means the model paused mid tool (waiting on claude-code's internal runner); closing stdin there would truncate the follow up response.
+- `claude-stream.ts` emits the `turn_end` event AFTER iterating the assistant message's content blocks, not before, so the daemon sees the final `stop_reason` and every tool_use of the turn before deciding whether to close stdin.
+- The host asks the user clarifying questions through the `<question-form>` artifact (see "Asking the user questions" below), NOT through a stdin-injected `tool_result`. There is no `AskUserQuestion` tool wiring, no `/api/runs/:id/tool-result` endpoint, and no host-answer return path; the stream-json input skeleton is retained only as generic infrastructure.
+
+## Asking the user questions
+
+- There is exactly one mechanism for clarifying user intent: the `<question-form>` markdown artifact the model emits inline. The chat renders a `QuestionsBanner` entry point (`AssistantMessage.tsx`); the form itself renders in the right-hand Questions tab (`QuestionsPanel` + `QuestionFormView`), and answers flow back as the next user message (`formatFormAnswers` in `apps/web/src/artifacts/question-form.ts` → `POST /api/chat`). There is no inline interactive tool card.
+- `<question-form>` is valid on ANY turn, not just turn-1 discovery. Use it for turn-1 discovery briefs AND for mid-conversation clarification (e.g. an ambiguous annotation). The system-prompt guidance lives in `apps/daemon/src/prompts/system.ts` and `discovery.ts`; the API/BYOK-mode wording is mirrored through `packages/contracts/src/prompts/system.ts`.
+- `run-artifacts.ts:runAskedUserQuestion` powers the `run_finished.asked_user_question` analytics signal by scanning the run's streamed text for a `<question-form` marker (reassembled across `text_delta` chunks), not by detecting any tool call.
 
 ## Chat UI conventions
 
 - `apps/web/src/components/file-viewer-render-mode.ts` decides URL-load vs srcDoc for HTML previews. Bridges (deck, comment/inspect selection, palette, edit, tweaks) can ONLY inject through the srcDoc path. Add a new disqualifier to `UrlLoadDecision` whenever a feature needs a srcDoc-only bridge; pass it from `FileViewer.tsx` based on a source-content heuristic where appropriate (e.g. `hasTweaksTemplate`). The host keeps both iframes mounted simultaneously and swaps CSS visibility so toggling render mode does not cause an iframe reload flash; `iframeRef.current` stays aligned with the active iframe via `useEffect`. Receive filters use `isOurIframe(ev.source)` to accept messages from either iframe but signals that should ONLY come from the active iframe (e.g. `od:tweaks-available`) re-check `ev.source === iframeRef.current?.contentWindow`.
 - TodoWrite UI pins one canonical task list above the chat composer via `PinnedTodoSlot` in `ChatPane.tsx`. The slot reads the latest TodoWrite snapshot across the conversation through `latestTodoWriteInputFromMessages` (`apps/web/src/runtime/todos.ts`). `AssistantMessage.stripTodoToolGroups` removes any TodoWrite tool groups from per message rendering so there is exactly one TodoCard on screen. The progress count includes both `completed` and `in_progress` items (1/4 reads "one underway" not "zero finished"). Dismissal via the Done button is keyed on the snapshot's JSON, so a fresh TodoWrite from the agent automatically re shows the card. `PinnedTodoSlot` sits OUTSIDE the `.chat-log` scroll container, so auto-scroll requires explicit coverage: `ChatPane`'s `ResizeObserver` accepts a `containerRef` from `PinnedTodoSlot` and observes that element directly, and a pane-level `MutationObserver` (`childList: true` on the chat pane ancestor) re-syncs that observation whenever the slot mounts or unmounts as new TodoWrite snapshots arrive.
-- `AskUserQuestionCard` (in `ToolCard.tsx`) prefers the live `onAnswerToolUse(toolUseId, content)` route (POSTs to `/api/runs/:id/tool-result`) and falls back to the legacy `onSubmitForm(text)` path when the run has already terminated. Selected chips persist across reloads by parsing the stored `tool_result.content` back into the selections shape.
-- Tool group rendering uses `dedupeSnapshotToolRetries` to collapse identical `AskUserQuestion` retries (one card per unique input, keeping the latest tool_use_id) and `TodoWrite` snapshots (only the most recent call, since each call is a state replace).
+- Clarifying questions render through the `<question-form>` artifact and the Questions tab, not an inline tool card — see "Asking the user questions" above.
+- Tool group rendering uses `dedupeSnapshotToolRetries` to collapse `TodoWrite` snapshots (only the most recent call survives, since each call is a state replace). `SNAPSHOT_TOOL_NAMES` lists the snapshot-style tools; non-snapshot tools pass through untouched.
 
 ## Web CSS ownership
 
@@ -151,6 +242,14 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 - When touching an existing component with nearby global styles, prefer migrating that component's local selectors to a CSS Module as part of the change if it is small and testable. Do not mix a large mechanical move with behavior/styling changes in the same patch.
 - Keep global class names only for deliberate shared contracts: reusable primitives, theme hooks, third-party/content styling, cross-component layout, or selectors that rely on global cascade/specificity. Document any new global selector group with its owning feature.
 - CSS refactors must preserve cascade semantics. For mechanical splits, verify expanded import content/order matches the previous stylesheet; for CSS Module migrations, validate the affected UI path with `pnpm --filter @open-design/web typecheck` and a focused build/test or visual check when practical.
+
+## Web component reuse
+
+- New `apps/web` UI should reuse shared primitives from `@open-design/components` when one exists instead of styling plain HTML elements directly. For example, use `Button` for app buttons and `VisuallyHidden` for screen-reader-only text/status content.
+- Do not add new raw primitive classes such as `primary`, `primary-ghost`, `ghost`, `subtle`, `icon-btn`, or `sr-only` for new UI. Those classes are legacy compatibility surface for existing markup until it is migrated.
+- If a needed primitive is missing, prefer adding a small focused primitive to `packages/components` with colocated CSS Modules, then consume it from the app. Keep product-specific layout and workflow styling in the app, not in `packages/components`.
+- Keep semantic plain HTML when it is content markup or a specialized control that the shared package does not model yet; do not force a migration that would hide native behavior or make a custom widget harder to reason about.
+- `apps/web` transpiles `@open-design/components` from source during dev, so component and CSS Module edits should work through the normal web dev loop without rebuilding the package.
 
 ## i18n keys
 
@@ -171,6 +270,9 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 - Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. `nix/pnpm-deps.nix` is a generated lock artifact; use `pnpm nix:update-hash` only when intentionally maintaining Nix packaging, then re-run `nix flake check --print-build-logs --keep-going`. Contributors without Nix can rely on the PR `Validate workspace` gate, which now uploads or auto-applies the generated hash-only fix when possible.
 - Before marking regular work ready, run at least `pnpm guard` and `pnpm typecheck`, plus the package-scoped tests/builds that match the files changed. Do not use or add root `pnpm test`/`pnpm build` aliases.
 - For local web runtime loops, prefer `pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
+- For e2e tests that need a tools-dev daemon/web runtime, use the shared tools-dev harness under `e2e/lib/tools-dev/` and the framework suite adapters (`e2e/lib/playwright/suite.ts`, `e2e/lib/vitest/suite.ts`). Do not hand-spawn `tools-dev` from test cases or duplicate lifecycle helpers under framework-specific folders.
+- Playwright UI tests must import `test`/`expect` from `@/playwright/suite`, not directly from `@playwright/test`; type-only imports from `@playwright/test` remain fine. The suite owns one isolated tools-dev daemon/web/data root per Playwright worker. Do not add a shared-runtime fallback; set Playwright workers to `1` when constrained.
+- Playwright suite code must not own workspace prebuild policy. CI and callers keep the existing prebuild steps; `tools-dev` daemon freshness checks are only a fallback guard.
 - On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
 - Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
 - Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
@@ -252,15 +354,6 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 ## How are sidecar-proto, sidecar, and platform split?
 
 `@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
-
-## Where is data written?
-
-The daemon writes `.od/` by default: SQLite at `.od/app.sqlite`, agent CWDs under `.od/projects/<id>/`, saved renders under `.od/artifacts/`, and credentials at `.od/media-config.json`. Two env vars override the storage root, in order:
-
-1. `OD_DATA_DIR=<dir>` — relocates *all* daemon runtime data to `<dir>` (used by Playwright for test isolation, and by the packaged daemon and the Home Manager / NixOS modules to point the daemon at a writable directory when the install root is read-only). The path is resolved with `~/` expansion and relative paths anchored to `<projectRoot>`.
-2. `OD_MEDIA_CONFIG_DIR=<dir>` — narrower override that relocates *only* `media-config.json`. Same resolution semantics. Most installs do not need this; it exists for setups that want to keep API credentials in a different location from the rest of the runtime data.
-
-Default precedence is OD_MEDIA_CONFIG_DIR > OD_DATA_DIR > `<projectRoot>/.od`.
 
 ## When is `pnpm install` required?
 

@@ -32,9 +32,9 @@ export function buildPluginFolderAgentActionPrompt(
 //   - `--web` flag preserves the author's final review window (see
 //     `apps/daemon/src/plugins/publish.ts` "We never POST anywhere" — the
 //     author always sees the PR form before it lands).
-//   - Hard ban on `AskUserQuestion`: a previous run stalled for 600s when
-//     the agent paused mid-turn waiting for a host answer card that the
-//     user expected the plugin-folder buttons to satisfy.
+//   - Hard ban on mid-turn clarification forms: a previous run stalled for
+//     600s when the agent paused waiting for an answer the user expected the
+//     plugin-folder buttons to satisfy.
 function buildContributePrompt(folderPath: string): string {
   return [
     'Open a draft Pull Request that adds this generated plugin to the Open Design community catalog at `nexu-io/open-design`.',
@@ -51,7 +51,7 @@ function buildContributePrompt(folderPath: string): string {
     'Report the exact command, any structured CLI error, and the final PR URL printed by the CLI. Stop on failure; do not recreate the git/gh workflow manually.',
     '',
     '**Hard constraints.** Treat these as inviolable:',
-    '- Do NOT call the `AskUserQuestion` tool at any point in this turn. This flow is fire-and-forget; no mid-turn questions.',
+    '- Do NOT emit a `<question-form>` or any clarification UI that waits for the user. This flow is fire-and-forget; no mid-turn questions.',
     '- Do NOT try to install `gh`, `git`, or any other binary. Detect-and-instruct only.',
     '- Do NOT auto-submit the PR. The final Create click is the author\'s.',
     '- Do NOT retry a failed step. Report the error and stop.',
@@ -87,7 +87,7 @@ function buildPublishPrompt(folderPath: string): string {
     '',
     '**Hard constraints.** Treat these as inviolable:',
     '- Do NOT call `od plugin publish --to open-design` (or any `--to <catalog>` variant). That is the registry-submission flow, not the repository-publish flow.',
-    '- Do NOT call the `AskUserQuestion` tool at any point in this turn. Fire-and-forget.',
+    '- Do NOT emit a `<question-form>` or any clarification UI that waits for the user. Fire-and-forget.',
     '- Do NOT try to install `gh`, `git`, or any other binary. Detect-and-instruct only.',
     '- Do NOT force-push (`--force` / `--force-with-lease`) and do NOT overwrite an existing tag. Fail and report instead.',
     '- Do NOT retry a failed step. Report the error and stop.',

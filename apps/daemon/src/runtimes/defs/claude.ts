@@ -1,6 +1,17 @@
 import { agentCapabilities } from '../capabilities.js';
 import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { loadMmdRouteModels } from '../mmd-routes.js';
 import type { RuntimeAgentDef } from '../types.js';
+
+const CLAUDE_FALLBACK_MODELS = [
+  DEFAULT_MODEL_OPTION,
+  { id: 'sonnet', label: 'Sonnet (alias)' },
+  { id: 'opus', label: 'Opus (alias)' },
+  { id: 'haiku', label: 'Haiku (alias)' },
+  { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
+  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
+  { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+];
 
 export const claudeAgentDef = {
     id: 'claude',
@@ -12,6 +23,10 @@ export const claudeAgentDef = {
     // — issue #235) get auto-detected without writing wrapper scripts.
     fallbackBins: ['openclaude'],
     versionArgs: ['--version'],
+    authProbe: {
+      args: ['auth', 'status'],
+      timeoutMs: 5000,
+    },
     helpArgs: ['-p', '--help'],
     capabilityFlags: {
       // Flag string -> capability key. After probing `--help`, we set
@@ -22,19 +37,11 @@ export const claudeAgentDef = {
       '--include-partial-messages': 'partialMessages',
       '--add-dir': 'addDir',
     },
-    // `claude` has no list-models subcommand; the CLI accepts both short
-    // aliases (sonnet/opus/haiku) and the full ids, so we ship both as
-    // hints. Users who want a non-shipped model can paste it via the
-    // Settings dialog's custom-model input.
-    fallbackModels: [
-      DEFAULT_MODEL_OPTION,
-      { id: 'sonnet', label: 'Sonnet (alias)' },
-      { id: 'opus', label: 'Opus (alias)' },
-      { id: 'haiku', label: 'Haiku (alias)' },
-      { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
-      { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
-      { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
-    ],
+    // `claude` has no list-models subcommand. Prefer local mmd/MMS routes
+    // when present so proxy-backed Claude-compatible models appear in the
+    // picker, then keep the built-in aliases as fallback hints.
+    fallbackModels: CLAUDE_FALLBACK_MODELS,
+    fetchModels: async (_resolvedBin, env) => loadMmdRouteModels(env, CLAUDE_FALLBACK_MODELS),
     // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
     // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
     // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
@@ -42,15 +49,13 @@ export const claudeAgentDef = {
     // prompt reads the prompt from stdin under `--input-format text` (the
     // default), which has no length cap. Mirrors the codex/gemini/opencode/
     // cursor/qwen entries below.
-    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}, runtimeContext = {}) => {
       const caps = agentCapabilities.get('claude') || {};
       // `--input-format stream-json` lets the daemon stream multiple JSONL
-      // messages into stdin instead of closing it after the initial prompt.
-      // This is what lets us answer Claude's `AskUserQuestion` tool calls
-      // with a real `tool_result` block — without it claude-code auto errors
-      // the tool because it cannot prompt the user interactively in headless
-      // mode, and the model falls back to a markdown duplicate of the same
-      // options.
+      // messages into stdin instead of closing it after the initial prompt,
+      // keeping the turn open so the daemon can stream further user messages
+      // mid-conversation. Paired with `--output-format stream-json` so the
+      // adapter parses structured events (see claude-stream.ts).
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'];
       // `--include-partial-messages` lands richer streaming events but only
       // exists in newer Claude Code builds. Older installs reject it with
@@ -69,6 +74,16 @@ export const claudeAgentDef = {
       if (dirs.length > 0 && caps.addDir !== false) {
         args.push('--add-dir', ...dirs);
       }
+      // Continue Claude's own CLI session across turns so it keeps its
+      // working memory (files read, edits made, tool history) instead of
+      // re-deriving everything from the rendered transcript each turn.
+      // `--resume <id>` continues a stored session; `--session-id <uuid>`
+      // starts a new one with an id the daemon controls and persists.
+      if (typeof runtimeContext.resumeSessionId === 'string' && runtimeContext.resumeSessionId) {
+        args.push('--resume', runtimeContext.resumeSessionId);
+      } else if (typeof runtimeContext.newSessionId === 'string' && runtimeContext.newSessionId) {
+        args.push('--session-id', runtimeContext.newSessionId);
+      }
       args.push('--permission-mode', 'bypassPermissions');
       return args;
     },
@@ -79,4 +94,5 @@ export const claudeAgentDef = {
     // so the daemon writes the user's external MCP servers there before
     // launching (server.ts handles the cwd guard).
     externalMcpInjection: 'claude-mcp-json',
+    resumesSessionViaCli: true,
 } satisfies RuntimeAgentDef;

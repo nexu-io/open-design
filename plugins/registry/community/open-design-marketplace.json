@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "owner": {
     "name": "Open Design Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.1.1"
+    "version": "0.2.0"
   },
   "plugins": [
     {
@@ -56,6 +56,31 @@
         "marketplace"
       ],
       "description": "A portable community plugin used to verify folder, zip, GitHub subpath, and marketplace import flows."
+    },
+    {
+      "name": "community/hallmark",
+      "title": "Hallmark",
+      "version": "1.0.0",
+      "source": "github:nexu-io/open-design@main/plugins/community/hallmark",
+      "publisher": {
+        "id": "nutlope",
+        "github": "Nutlope",
+        "url": "https://github.com/Nutlope"
+      },
+      "homepage": "https://github.com/Nutlope/hallmark",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "tags": [
+        "community",
+        "design",
+        "frontend",
+        "audit",
+        "redesign",
+        "anti-ai-slop"
+      ],
+      "description": "Anti-AI-slop design skill for greenfield pages, audits, redesigns, and design extraction from URLs or screenshots."
     }
   ]
 }

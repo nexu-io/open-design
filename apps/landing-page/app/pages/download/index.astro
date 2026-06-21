@@ -1,0 +1,619 @@
+---
+/*
+ * /download/ — dedicated download center.
+ *
+ * Auto-reflects the latest GitHub release. The platform matrix is
+ * rendered at build time from `getLatestRelease()` (SEO-friendly, works
+ * without JS); an inline enhancer detects the visitor's OS, highlights
+ * the matching row, and refetches `releases/latest` to keep hrefs live
+ * between rebuilds. Asset-name conventions mirror header-enhancer.astro.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getLatestRelease, type ReleaseAsset } from '../../_lib/github';
+import { getInfoPageCopy } from '../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const page = copy.download;
+const common = copy.common;
+
+const release = await getLatestRelease();
+const m = release.matrix;
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const QUICKSTART_DOC = `${REPO}/blob/main/QUICKSTART.md`;
+
+const title = page.title;
+const description = page.description;
+
+function fmtSize(bytes: number): string | null {
+  if (!bytes || bytes <= 0) return null;
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(0)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+function fmtDate(iso: string | null): string | null {
+  if (!iso) return null;
+  // Stable, locale-agnostic YYYY-MM-DD (avoid build-host TZ drift).
+  return iso.slice(0, 10);
+}
+
+// One download line in a platform card.
+interface Row {
+  key: string; // data-dl key the enhancer targets
+  variant: string; // e.g. "DMG" / "ZIP" / "Installer"
+  asset: ReleaseAsset | null;
+}
+
+interface PlatformCard {
+  os: 'macOS' | 'Windows' | 'Linux';
+  osLabel: string;
+  arch?: string; // sub-label, e.g. "Apple Silicon"
+  matchKey: string; // ties to enhancer detectPlatform (recommend highlight)
+  rows: Row[];
+  note?: string;
+}
+
+const cards: PlatformCard[] = [
+  {
+    os: 'macOS',
+    osLabel: page.mac,
+    arch: page.macArm,
+    matchKey: 'mac-arm64',
+    // DMG only — the ZIP is a redundant second download for most users; the
+    // all-releases link below still exposes every artifact.
+    rows: [{ key: 'mac-arm64-dmg', variant: page.dmg, asset: m.macArm64Dmg }],
+  },
+  {
+    os: 'macOS',
+    osLabel: page.mac,
+    arch: page.macIntel,
+    matchKey: 'mac-x64',
+    rows: [{ key: 'mac-x64-dmg', variant: page.dmg, asset: m.macX64Dmg }],
+  },
+  {
+    os: 'Windows',
+    osLabel: page.windows,
+    matchKey: 'win',
+    // Installer only — portable zip stays available via the all-releases link.
+    rows: [{ key: 'win-setup', variant: page.windowsInstaller, asset: m.winSetup }],
+  },
+  {
+    os: 'Linux',
+    osLabel: page.linux,
+    matchKey: 'linux',
+    rows: m.linux
+      ? [{ key: 'linux-appimage', variant: 'AppImage', asset: m.linux }]
+      : [],
+    note: page.linuxBody,
+  },
+];
+
+const publishedLabel = fmtDate(release.publishedAt);
+
+// Platform glyphs for the centered cards (inline so they inherit currentColor
+// and ship no extra requests). macOS + macOS-Intel share the Apple mark.
+const ICON_APPLE =
+  '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M16.36 12.78c.02 2.5 2.19 3.33 2.22 3.34-.02.06-.35 1.2-1.15 2.37-.69 1.01-1.41 2.02-2.54 2.04-1.11.02-1.47-.66-2.74-.66s-1.66.64-2.71.68c-1.09.04-1.92-1.09-2.62-2.1-1.42-2.06-2.51-5.83-1.05-8.37.72-1.27 2.01-2.07 3.41-2.09 1.07-.02 2.08.72 2.74.72.65 0 1.88-.89 3.17-.76.54.02 2.06.22 3.03 1.64-.08.05-1.81 1.06-1.79 3.15M14.28 5.6c.58-.7.97-1.68.86-2.65-.83.03-1.84.55-2.44 1.25-.54.62-1.01 1.61-.88 2.56.93.07 1.87-.47 2.46-1.16"/></svg>';
+const ICON_WINDOWS =
+  '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.3H3zm0 13.8L10.4 20v-7.2H3zm8.2 1.2L21 21.3V12.8h-9.8zm0-16.2v7.4H21V2.7z"/></svg>';
+const ICON_LINUX =
+  '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 2c-2.2 0-3.3 1.9-3.3 4.1 0 1.4.5 2.3.5 3.4 0 1-.7 1.8-1.4 2.9C6.9 13.9 6 15.6 6 17.3c0 .9.3 1.5.9 1.9-.1.5 0 1 .3 1.3.6.6 1.7.6 2.5.3.5-.2.8-.6.9-1.1.3 0 .6-.1.9-.1s.6 0 .9.1c.1.5.4.9.9 1.1.8.3 1.9.3 2.5-.3.3-.3.4-.8.3-1.3.6-.4.9-1 .9-1.9 0-1.7-.9-3.4-1.8-4.9-.7-1.1-1.4-1.9-1.4-2.9 0-1.1.5-2 .5-3.4C15.3 3.9 14.2 2 12 2m-1.3 4.3c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9m2.6 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9"/></svg>';
+const PLATFORM_ICON: Record<'macOS' | 'Windows' | 'Linux', string> = {
+  macOS: ICON_APPLE,
+  Windows: ICON_WINDOWS,
+  Linux: ICON_LINUX,
+};
+const ICON_DOWNLOAD =
+  '↓';
+
+// Absolute URL for the current locale, so breadcrumb structured data matches
+// the route actually being indexed (e.g. /ja/download/ on the Japanese page,
+// not the canonical English URL on every localized variant).
+const absUrl = (path: string) => new URL(href(path), SITE).toString();
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: absUrl('/') },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: absUrl('/download/') },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Open Design',
+    applicationCategory: 'DesignApplication',
+    operatingSystem: 'macOS, Windows, Linux',
+    softwareVersion: release.version,
+    softwareHelp: { '@type': 'CreativeWork', url: QUICKSTART_DOC },
+    downloadUrl: m.macArm64Dmg?.url ?? release.releaseUrl,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  },
+];
+---
+
+<Layout title={title} description={description} active="download" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page dl-page" data-download-root>
+    <header class="dl-hero">
+      <div class="dl-hero-mark" aria-hidden="true">
+        <img src="/favicon.svg" alt="" width="48" height="48" />
+      </div>
+      <h1 class="dl-hero-heading">{page.heading}</h1>
+      <p class="dl-hero-lead">{page.lead}</p>
+
+      {/*
+       * Static fallback points at the neutral release page, not a specific
+       * asset: with JS disabled/blocked every platform (Windows, Linux, and
+       * Macs whose arch we can't sniff) should reach a usable page rather
+       * than be handed a macOS Apple Silicon DMG. The enhancer below swaps
+       * in the detected platform's direct installer once it runs; platforms
+       * with no single asset (Linux) intentionally keep this release-page href.
+       */}
+      <a
+        class="btn btn-primary dl-hero-cta"
+        href={release.releaseUrl}
+        data-dl-auto
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        <span data-dl-auto-label>{page.autoCtaFallback}</span>
+        <span class="dl-auto-os" data-dl-auto-os hidden></span>
+      </a>
+      <p class="dl-hero-meta">
+        <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
+          {release.versionLabel}
+        </a>
+        {publishedLabel && <span class="dl-version-date"> · {page.publishedPrefix} {publishedLabel}</span>}
+        <span> · </span>
+        <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">{page.releaseNotes}</a>
+      </p>
+    </header>
+
+    <section class="dl-platforms" id="platforms" aria-label={page.platformsTitle}>
+      <div class="dl-grid">
+        {cards.map((card) => (
+          <div class="dl-card" data-dl-card data-dl-match={card.matchKey}>
+            <span class="dl-rec" data-dl-rec hidden>{page.recommended}</span>
+            <span class="dl-card-icon" aria-hidden="true" set:html={PLATFORM_ICON[card.os]} />
+            <h2 class="dl-os">{card.osLabel}</h2>
+            <p class="dl-card-sub">
+              {card.arch && <span class="dl-arch">{card.arch}</span>}
+              <span class="dl-card-version">{release.versionLabel}</span>
+            </p>
+
+            {card.rows.length > 0 && (
+              <ul class="dl-rows">
+                {card.rows.map((row) => (
+                  <li class="dl-row">
+                    {row.asset ? (
+                      <>
+                        <a class="dl-link" href={row.asset.url} data-dl-key={row.key}>
+                          <span class="dl-dl-icon" aria-hidden="true">{ICON_DOWNLOAD}</span>
+                          {page.downloadVerb} <strong>{row.variant}</strong>
+                          {fmtSize(row.asset.size) && <span class="dl-size">{fmtSize(row.asset.size)}</span>}
+                        </a>
+                        {row.asset.sha256Url && (
+                          <a class="dl-sha" href={row.asset.sha256Url} target="_blank" rel="noreferrer noopener">{page.checksum}</a>
+                        )}
+                      </>
+                    ) : (
+                      <a class="dl-link dl-link-fallback" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
+                        <span class="dl-dl-icon" aria-hidden="true">{ICON_DOWNLOAD}</span>
+                        {row.variant} <span class="dl-size">→ Releases</span>
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/*
+             * Keep the platform note visible even when there are rows — e.g.
+             * Linux ships an AppImage row but still needs to surface the
+             * Docker / Podman Compose path the page copy advertises.
+             */}
+            {card.note && (
+              <p class="dl-note">
+                <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">{card.note}</a>
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <p class="dl-releases-link">
+        <a class="inline-link" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{page.allReleasesTitle} →</a>
+      </p>
+    </section>
+
+    <section class="dl-requirements" id="requirements" aria-label={page.requirementsTitle}>
+      <ul>
+        {page.requirements.map((item) => (
+          <li><strong>{item.label}</strong> — {item.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{page.ctaTitle}</h2>
+        <p>{page.ctaBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={href('/quickstart/')}>{common.quickstart}</a>
+        <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● {common.live}</span>
+        <span>{release.versionLabel} · Apache-2.0</span>
+        <span>{common.macWinLinux}</span>
+      </div>
+    </section>
+  </article>
+
+  <script is:inline define:vars={{ autoPrefix: page.autoCtaPrefix }}>
+    (() => {
+      // Download-intent analytics: capture clicks on the hero auto-CTA and on
+      // every platform card link so the /download/ funnel is measurable. PostHog
+      // is mounted by sub-page-layout; `__odTrack` is its shared capture wrapper
+      // (fall back to posthog.capture). Bound before any early return so it works
+      // regardless of platform detection.
+      (function trackDownloadClicks() {
+        const fire = (variant, el) => {
+          try {
+            const props = {
+              page_name: 'download',
+              variant: variant,
+              link_url: (el && (el.getAttribute('href') || el.href)) || '',
+            };
+            if (typeof window.__odTrack === 'function') window.__odTrack('download_click', props);
+            else if (window.posthog && window.posthog.capture) window.posthog.capture('download_click', props);
+          } catch (e) {}
+        };
+        document.addEventListener('click', function (event) {
+          const t = event.target;
+          if (!t || !t.closest) return;
+          const card = t.closest('[data-dl-key]');
+          if (card) { fire(card.getAttribute('data-dl-key') || 'unknown', card); return; }
+          const auto = t.closest('[data-dl-auto]');
+          if (auto) { fire('auto-detected', auto); return; }
+        });
+      })();
+
+      const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+
+      // Mirror header-enhancer.astro detection. Returns the matchKey used
+      // on each [data-dl-card] plus the asset-name matcher + os label.
+      const detect = () => {
+        const ua = (navigator.userAgent || '').toLowerCase();
+        const p = (
+          (navigator.userAgentData && navigator.userAgentData.platform) ||
+          navigator.platform || ''
+        ).toLowerCase();
+        const isWin = /win/.test(p) || /windows/.test(ua);
+        const isMac = /mac/.test(p) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
+        const isLinux = /linux/.test(p) || (/linux/.test(ua) && !/android/.test(ua));
+        if (isWin) return { matchKey: 'win', os: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
+        if (isMac) {
+          const intel = (() => {
+            try {
+              const gl = document.createElement('canvas').getContext('webgl');
+              const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+              const r = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+              return /intel|radeon|amd/i.test(r) && !/apple/i.test(r);
+            } catch { return false; }
+          })();
+          return intel
+            ? { matchKey: 'mac-x64', os: 'macOS (Intel)', match: (n) => n.endsWith('mac-x64.dmg') }
+            : { matchKey: 'mac-arm64', os: 'macOS', match: (n) => n.endsWith('mac-arm64.dmg') };
+        }
+        if (isLinux) return { matchKey: 'linux', os: 'Linux', match: () => false };
+        return null;
+      };
+
+      const platform = detect();
+      if (!platform) return;
+
+      // Highlight the recommended card + set the hero CTA OS label.
+      for (const card of document.querySelectorAll('[data-dl-card]')) {
+        if (card.getAttribute('data-dl-match') === platform.matchKey) {
+          card.setAttribute('data-dl-recommended', 'true');
+          const rec = card.querySelector('[data-dl-rec]');
+          if (rec) rec.hidden = false;
+        }
+      }
+      const osSlot = document.querySelector('[data-dl-auto-os]');
+      const labelSlot = document.querySelector('[data-dl-auto-label]');
+      if (osSlot) { osSlot.textContent = ` ${platform.os}`; osSlot.hidden = false; }
+      if (labelSlot) labelSlot.textContent = autoPrefix;
+
+      // Live refetch: keep the hero CTA + matrix links current between rebuilds.
+      fetch(`${REPO_API}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((release) => {
+          const assets = Array.isArray(release && release.assets) ? release.assets : [];
+          if (assets.length === 0) return;
+          const byName = (re) =>
+            assets.find((a) => a && typeof a.name === 'string' && typeof a.browser_download_url === 'string' && re(a.name));
+          const map = {
+            'mac-arm64-dmg': (n) => n.endsWith('mac-arm64.dmg'),
+            'mac-arm64-zip': (n) => n.endsWith('mac-arm64.zip'),
+            'mac-x64-dmg': (n) => n.endsWith('mac-x64.dmg'),
+            'mac-x64-zip': (n) => n.endsWith('mac-x64.zip'),
+            'win-setup': (n) => /win.*setup\.exe$/.test(n),
+            'win-portable': (n) => /win.*portable\.zip$/.test(n),
+            'linux-appimage': (n) => /\.appimage$/i.test(n),
+          };
+          for (const [key, re] of Object.entries(map)) {
+            const asset = byName(re);
+            if (!asset) continue;
+            for (const link of document.querySelectorAll(`[data-dl-key="${key}"]`)) {
+              link.href = asset.browser_download_url;
+            }
+          }
+          const heroAsset = byName(platform.match);
+          const hero = document.querySelector('[data-dl-auto]');
+          if (heroAsset && hero) {
+            hero.href = heroAsset.browser_download_url;
+            hero.removeAttribute('target');
+            hero.removeAttribute('rel');
+          }
+        })
+        .catch(() => {});
+    })();
+  </script>
+</Layout>
+
+<!--
+  Tighten the shared sub-page rhythm for the download page only. The shared
+  .info-page scale (56px head, 64px between sections, 56px CTA) is tuned for
+  long-form info pages; the download page is a short, scannable matrix and
+  reads as too sparse at that scale. Scoped to [data-download-root] so other
+  info pages keep their spacing. is:global because these elements are rendered
+  by the layout/sub-pages.css, not this page's scoped component tree.
+-->
+<style is:global>
+  /*
+   * The download page uses a centered, card-first layout (closer to a focused
+   * landing surface than the left-aligned long-form info pages). globals.css
+   * gives every <section> 130px padding and .info-page a wide measure; both
+   * are neutralized here, scoped to [data-download-root] so other info pages
+   * keep their rhythm. is:global because these elements come from the layout.
+   */
+  [data-download-root].info-page { max-width: none; }
+  [data-download-root].info-page > section { padding: 0; }
+  /* Match the CTA to the centered layout instead of the left-aligned
+     two-column grid the shared .info-cta ships with. */
+  [data-download-root].info-page .info-cta {
+    margin: 56px auto 0;
+    max-width: 640px;
+    padding-top: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 18px;
+  }
+  [data-download-root].info-page .info-cta h2 { margin: 0 0 8px; }
+  [data-download-root].info-page .info-cta-actions { justify-content: center; }
+  [data-download-root].info-page .info-cta-meta { justify-content: center; border-top: 0; padding-top: 0; margin-top: 0; }
+</style>
+
+<style>
+  /* ---- Centered hero ---- */
+  .dl-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-top: 24px;
+  }
+  .dl-hero-mark {
+    width: 76px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 20px;
+    background: var(--surface, rgba(255, 255, 255, 0.6));
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+    box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.4);
+  }
+  .dl-hero-heading {
+    font-family: var(--serif, Georgia, serif);
+    font-weight: 600;
+    font-size: clamp(28px, 4vw, 42px);
+    letter-spacing: -0.02em;
+    margin: 24px 0 0;
+  }
+  .dl-hero-lead {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink-soft, #555);
+    max-width: 48ch;
+    margin: 12px 0 0;
+  }
+  .dl-hero-cta {
+    margin-top: 28px;
+    font-size: 15px;
+    padding: 15px 30px;
+  }
+  .dl-auto-os { font-weight: 600; }
+  .dl-hero-meta {
+    margin: 16px 0 0;
+    font-size: 0.85rem;
+    color: var(--ink-soft, #666);
+  }
+  .dl-version-date { opacity: 0.85; }
+
+  /* ---- Platform cards ---- */
+  .dl-platforms { margin-top: 56px; }
+  .dl-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 920px;
+    margin: 0 auto;
+  }
+  @media (max-width: 860px) {
+    .dl-grid { grid-template-columns: repeat(2, 1fr); max-width: 480px; }
+  }
+  @media (max-width: 420px) {
+    .dl-grid { grid-template-columns: 1fr; max-width: 320px; }
+  }
+  .dl-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+    border-radius: 16px;
+    padding: 28px 20px 22px;
+    background: var(--surface, rgba(255, 255, 255, 0.5));
+    transition: border-color 160ms, box-shadow 160ms, transform 160ms;
+  }
+  .dl-card:hover { transform: translateY(-2px); }
+  .dl-card[data-dl-recommended='true'] {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1px var(--ink);
+  }
+  .dl-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    color: var(--ink);
+  }
+  .dl-os {
+    font-family: inherit;
+    font-weight: 650;
+    font-size: 1.05rem;
+    margin: 14px 0 0;
+  }
+  .dl-card-sub {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    min-height: 20px;
+  }
+  .dl-arch { font-size: 0.82rem; opacity: 0.65; }
+  .dl-card-version {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 0.08rem 0.42rem;
+    border-radius: 999px;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
+    opacity: 0.75;
+    white-space: nowrap;
+  }
+  .dl-rec {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    padding: 0.14rem 0.48rem;
+    border-radius: 999px;
+    background: var(--ink);
+    color: #fff;
+  }
+
+  /* ---- Download rows inside each card ---- */
+  .dl-rows {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 16px 0 0;
+    width: 100%;
+    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dl-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .dl-link {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    text-decoration: none;
+    font-size: 0.88rem;
+    white-space: nowrap;
+    color: var(--ink);
+  }
+  .dl-dl-icon { font-weight: 700; transition: transform 140ms; }
+  .dl-link strong { font-weight: 600; }
+  .dl-link { transition: color 140ms; }
+  /* Hover uses the deep brand text tone (#218c00) — the bright brand green
+     is too low-contrast for text on a light card per the skill color spec. */
+  .dl-link:hover { color: var(--olive); }
+  .dl-link:hover .dl-dl-icon { transform: translateY(2px); }
+  .dl-size { font-size: 0.74rem; opacity: 0.55; }
+  /* Skill link color (颜色.md 链接/信息) instead of the UA default blue. */
+  .dl-sha { font-size: 0.68rem; opacity: 0.5; text-decoration: none; color: #1a74ff; }
+  .dl-sha:hover { opacity: 1; text-decoration: underline; }
+  .dl-note {
+    font-size: 0.82rem;
+    opacity: 0.78;
+    margin: 16px 0 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+    width: 100%;
+  }
+
+  /* ---- Footer links under the grid ---- */
+  .dl-releases-link {
+    text-align: center;
+    margin: 28px 0 0;
+    font-size: 0.9rem;
+    /* `.info-page p` caps prose at 70ch and anchors it left; this row is a
+       centered module like everything else on the page, so lift the cap. */
+    max-width: none;
+  }
+
+  .dl-requirements {
+    margin-top: 40px;
+    text-align: center;
+  }
+  .dl-requirements ul {
+    list-style: none;
+    margin: 0 auto;
+    padding: 0;
+    max-width: 760px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 28px;
+    font-size: 0.82rem;
+    color: var(--ink-soft, #666);
+  }
+  .dl-requirements li { white-space: nowrap; }
+
+  @media (max-width: 640px) {
+    .dl-requirements ul { flex-direction: column; gap: 6px; }
+    .dl-requirements li { white-space: normal; }
+  }
+</style>

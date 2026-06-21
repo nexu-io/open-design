@@ -1,0 +1,37 @@
+{
+  "id": "vfx-text-cursor",
+  "surface": "hyperframes",
+  "title": "VFX Text Cursor",
+  "summary": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
+  "category": "Presentation",
+  "tags": [
+    "text",
+    "typewriter",
+    "cursor",
+    "terminal",
+    "code",
+    "reveal"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Code demo intro",
+    "Tech narrative",
+    "Terminal vibe"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/vfx-text-cursor",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io"
+  }
+}

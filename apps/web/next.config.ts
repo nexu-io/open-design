@@ -164,6 +164,7 @@ const nextConfig: NextConfig = {
   // to inject chunk IDs, upload to PostHog, and ALWAYS delete the .map files
   // before packaging so source never ships inside an installer.
   productionBrowserSourceMaps: true,
+  transpilePackages: ['@open-design/components'],
   turbopack: {
     root: WORKSPACE_ROOT,
   },

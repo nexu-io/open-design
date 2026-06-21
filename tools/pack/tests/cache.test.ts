@@ -122,4 +122,125 @@ describe("ToolPackCache", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("reuses stamped materialized targets until the cache key changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-cache-reuse-"));
+    const cacheRoot = join(root, "cache");
+    const out = join(root, "out", "payload");
+    let builds = 0;
+    const cache = new ToolPackCache(cacheRoot);
+    const createNode = (key: string) => ({
+      id: "test.reuse",
+      key,
+      outputs: ["payload"],
+      invalidate: async () => null,
+      build: async ({ entryRoot }: { entryRoot: string }) => {
+        builds += 1;
+        await mkdir(join(entryRoot, "payload"), { recursive: true });
+        await writeFile(join(entryRoot, "payload", "value.txt"), `build-${builds}\n`, "utf8");
+        return { builds };
+      },
+    });
+
+    try {
+      await cache.acquire({ materialize: [{ from: "payload", reuse: true, to: out }], node: createNode("key-1") });
+      await writeFile(join(out, "value.txt"), "mutated\n", "utf8");
+      await cache.acquire({ materialize: [{ from: "payload", reuse: true, to: out }], node: createNode("key-1") });
+
+      expect(await readFile(join(out, "value.txt"), "utf8")).toBe("mutated\n");
+      expect(cache.report().entries.at(-1)?.materialized[0]?.skipped).toBe(true);
+
+      await cache.acquire({ materialize: [{ from: "payload", reuse: true, to: out }], node: createNode("key-2") });
+
+      expect(await readFile(join(out, "value.txt"), "utf8")).toBe("build-2\n");
+      expect(cache.report().entries.at(-1)?.materialized[0]?.skipped).toBeUndefined();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("seeds a miss from an alias but still builds the exact entry", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-cache-seed-"));
+    const cacheRoot = join(root, "cache");
+    const out = join(root, "out", "payload");
+    let builds = 0;
+    const cache = new ToolPackCache(cacheRoot);
+    const createNode = (key: string) => ({
+      id: "test.seed",
+      key,
+      outputs: ["payload"],
+      invalidate: async () => null,
+      build: async ({ entryRoot }: { entryRoot: string }) => {
+        builds += 1;
+        const seed = await readFile(join(out, "value.txt"), "utf8").catch(() => "<none>\n");
+        await mkdir(join(entryRoot, "payload"), { recursive: true });
+        await writeFile(join(entryRoot, "payload", "value.txt"), `build-${builds};seed=${seed.trim()}\n`, "utf8");
+        return { builds };
+      },
+    });
+
+    try {
+      await cache.acquire({
+        aliases: ["family"],
+        materialize: [{ from: "payload", reuse: true, to: out }],
+        node: createNode("key-1"),
+      });
+      await rm(out, { force: true, recursive: true });
+      await cache.acquire({
+        aliases: ["family"],
+        materialize: [{ from: "payload", reuse: true, to: out }],
+        node: createNode("key-2"),
+        seedFrom: [{ aliasKey: "family", materialize: [{ from: "payload", to: out }] }],
+      });
+
+      expect(builds).toBe(2);
+      expect(await readFile(join(out, "value.txt"), "utf8")).toBe("build-2;seed=build-1;seed=<none>\n");
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss"]);
+      expect(cache.report().entries.at(-1)?.reason).toContain("seeded from alias");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("skips alias seeds that cannot materialize the requested source", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-cache-missing-seed-source-"));
+    const cacheRoot = join(root, "cache");
+    const out = join(root, "out", "payload");
+    let builds = 0;
+    const cache = new ToolPackCache(cacheRoot);
+    const createNode = (key: string) => ({
+      id: "test.missing-seed-source",
+      key,
+      outputs: ["payload"],
+      invalidate: async () => null,
+      build: async ({ entryRoot }: { entryRoot: string }) => {
+        builds += 1;
+        const seed = await readFile(join(out, "value.txt"), "utf8").catch(() => "<none>\n");
+        await mkdir(join(entryRoot, "payload"), { recursive: true });
+        await writeFile(join(entryRoot, "payload", "value.txt"), `build-${builds};seed=${seed.trim()}\n`, "utf8");
+        return { builds };
+      },
+    });
+
+    try {
+      await cache.acquire({
+        aliases: ["family"],
+        materialize: [{ from: "payload", to: out }],
+        node: createNode("key-1"),
+      });
+      await rm(out, { force: true, recursive: true });
+      await cache.acquire({
+        aliases: ["family"],
+        materialize: [{ from: "payload", to: out }],
+        node: createNode("key-2"),
+        seedFrom: [{ aliasKey: "family", materialize: [{ from: "missing", to: out }] }],
+      });
+
+      expect(builds).toBe(2);
+      expect(await readFile(join(out, "value.txt"), "utf8")).toBe("build-2;seed=<none>\n");
+      expect(cache.report().entries.at(-1)?.reason).not.toContain("seeded from alias");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });

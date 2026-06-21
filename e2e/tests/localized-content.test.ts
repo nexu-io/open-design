@@ -322,7 +322,7 @@ async function readPromptTemplateResources(): Promise<PromptTemplateResource[]> 
 }
 
 describe('localized display content coverage', () => {
-  it('derives displayable resources from discovered English fallback content', async () => {
+  it('[P2] derives displayable resources from discovered English fallback content', async () => {
     const [skills, designSystems, promptTemplates] = await Promise.all([
       readSkillResources(),
       readDesignSystemResources(),
@@ -369,7 +369,7 @@ describe('localized display content coverage', () => {
   });
 
   for (const locale of COVERAGE_LOCALES) {
-    it(`falls back to source design-system and prompt-template metadata for ${locale} when dictionary entries are missing`, () => {
+    it(`[P2] falls back to source design-system and prompt-template metadata for ${locale} when dictionary entries are missing`, () => {
       const localized = localizePromptTemplateSummary(locale, {
         id: 'missing-template-translation',
         category: 'Untranslated Category',

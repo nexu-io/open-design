@@ -95,6 +95,17 @@ describe('snapshots writer', () => {
     expect(fetched!.status).toBe('fresh');
   });
 
+  it('persists apply-time craft requirements on the immutable snapshot', () => {
+    db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
+    const snap = createSnapshot(db, baseInput({
+      craftRequires: ['typography', 'color', 'anti-ai-slop'],
+    }));
+
+    const fetched = getSnapshot(db, snap.snapshotId);
+
+    expect(fetched?.craftRequires).toEqual(['typography', 'color', 'anti-ai-slop']);
+  });
+
   it('linkSnapshotToRun pins expires_at to NULL', () => {
     db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run('project-1', 'Project 1');
     const snap = createSnapshot(db, baseInput());

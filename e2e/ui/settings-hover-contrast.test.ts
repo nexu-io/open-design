@@ -1,9 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 // WCAG AA threshold for normal text. We assert against this rather than AAA
 // because the codebase has historically targeted AA for muted-on-subtle
@@ -39,12 +38,7 @@ async function openSettings(page: Page, theme: Theme) {
 
   await page.emulateMedia({ colorScheme: theme });
   await page.goto('/');
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await openSettingsDialog(page);
 }
 
 /**
@@ -153,7 +147,7 @@ const THEMES: Theme[] = ['dark', 'light'];
 
 test.describe('Settings hover contrast (regression guard for #1795)', () => {
   for (const theme of THEMES) {
-    test(`Pets source tabs hover stays readable in ${theme} theme`, async ({ page }) => {
+    test(`[P2] Pets source tabs hover stays readable in ${theme} theme`, async ({ page }) => {
       await openSettings(page, theme);
       const petsNav = settingsNavItem(page, /^(Pets|Pet|宠物|寵物)$/i);
       await petsNav.click();
@@ -170,7 +164,7 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
       ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
     });
 
-    test(`seg-btn surfaces (BYOK / Appearance / Notifications) hover stays readable in ${theme} theme`, async ({
+    test(`[P2] seg-btn surfaces (BYOK / Appearance / Notifications) hover stays readable in ${theme} theme`, async ({
       page,
     }) => {
       await openSettings(page, theme);

@@ -11,7 +11,7 @@ triggers:
 od:
   mode: prototype
   category: documents
-  upstream: "https://github.com/anthropics/skills/tree/main/pdf"
+  upstream: "https://github.com/anthropics/skills/tree/main/skills/pdf"
 ---
 
 # pdf
@@ -24,7 +24,7 @@ Extract text, create PDFs, and handle forms. Useful for press releases, branded 
 
 ## Source
 
-- Upstream: https://github.com/anthropics/skills/tree/main/pdf
+- Upstream: https://github.com/anthropics/skills/tree/main/skills/pdf
 - Category: `documents`
 
 ## How to use
@@ -36,7 +36,7 @@ bundle into your active agent's skills directory:
 
 ```bash
 # Inspect the upstream README for exact paths
-open https://github.com/anthropics/skills/tree/main/pdf
+open https://github.com/anthropics/skills/tree/main/skills/pdf
 ```
 
 Then ask the agent to invoke this skill by name (`pdf`) or with

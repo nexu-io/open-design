@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-3d-creator-portfolio",
+  "title": "3D Creator Portfolio — Jack",
+  "title_i18n": {
+    "zh-CN": "3D 创作者作品集 — Jack",
+    "zh-TW": "3D 創作者作品集 — Jack",
+    "ja": "3D クリエイターポートフォリオ — Jack",
+    "ko": "3D 크리에이터 포트폴리오 — Jack",
+    "de": "3D-Creator-Portfolio — Jack",
+    "fr": "Portfolio de créateur 3D — Jack",
+    "ru": "Портфолио 3D-креатора — Jack",
+    "es": "Portafolio de creador 3D — Jack",
+    "pt-BR": "Portfólio de criador 3D — Jack",
+    "it": "Portfolio da creator 3D — Jack",
+    "vi": "Portfolio nhà sáng tạo 3D — Jack",
+    "pl": "Portfolio twórcy 3D — Jack",
+    "id": "Portofolio Kreator 3D — Jack",
+    "nl": "3D-creator-portfolio — Jack",
+    "ar": "معرض أعمال مصمم ثلاثي الأبعاد — Jack",
+    "tr": "3D Yaratıcı Portföyü — Jack",
+    "uk": "Портфоліо 3D-креатора — Jack",
+    "en": "3D Creator Portfolio — Jack"
+  },
+  "version": "0.1.0",
+  "description": "Dark, premium 3D-creator portfolio landing page: a full-viewport hero with gradient-text headline and a mouse-following magnetic 3D portrait, a scroll-driven horizontal image marquee, an About section with corner 3D decorations and character-by-character scroll-reveal text, a white Services list, and sticky-stacking project cards.",
+  "description_i18n": {
+    "zh-CN": "暗色高端 3D 创作者作品集落地页：全屏 Hero（渐变标题 + 鼠标磁吸 3D 人像）、随滚动横移的图片 marquee、带四角 3D 装饰与逐字揭示文案的 About、白底 Services 列表，以及滚动缩放堆叠的项目卡片。",
+    "zh-TW": "暗色高端 3D 創作者作品集著陸頁：全螢幕 Hero（漸層標題 + 滑鼠磁吸 3D 人像）、隨捲動橫移的圖片 marquee、帶四角 3D 裝飾與逐字揭示文案的 About、白底 Services 清單，以及捲動縮放堆疊的專案卡片。",
+    "ja": "ダークでプレミアムな 3D クリエイターのポートフォリオ LP：グラデーション見出しとマウス追従の磁石効果付き 3D ポートレートを備えた全画面ヒーロー、スクロール連動の横スクロール画像マーキー、四隅に 3D 装飾と一文字ずつ表示するテキストを備えた About セクション、白背景の Services 一覧、そしてスクロールで縮小しながら重なるプロジェクトカード。",
+    "ko": "다크하고 프리미엄한 3D 크리에이터 포트폴리오 랜딩 페이지: 그라데이션 헤드라인과 마우스를 따라가는 마그네틱 3D 인물 사진이 있는 전체 화면 히어로, 스크롤에 따라 가로로 흐르는 이미지 마키, 모서리 3D 장식과 글자별 스크롤 공개 텍스트가 있는 About 섹션, 흰색 Services 목록, 그리고 스크롤하며 축소·적층되는 프로젝트 카드.",
+    "de": "Dunkle, hochwertige Landingpage für ein 3D-Creator-Portfolio: ein bildschirmfüllender Hero mit Verlaufsüberschrift und einem mausfolgenden, magnetischen 3D-Porträt, eine scrollgesteuerte horizontale Bild-Marquee, ein About-Bereich mit 3D-Eckdekorationen und zeichenweise einblendendem Text, eine weiße Services-Liste sowie beim Scrollen gestapelte, schrumpfende Projektkarten.",
+    "fr": "Page de destination sombre et premium pour un portfolio de créateur 3D : un hero plein écran avec un titre en dégradé et un portrait 3D magnétique qui suit la souris, un marquee d'images horizontal piloté par le défilement, une section À propos avec des décorations 3D dans les coins et un texte révélé caractère par caractère au défilement, une liste de services sur fond blanc, et des cartes de projet qui s'empilent en rétrécissant au défilement.",
+    "ru": "Тёмная премиальная посадочная страница портфолио 3D-креатора: полноэкранный герой с градиентным заголовком и магнитным 3D-портретом, следящим за курсором, горизонтальная лента изображений, управляемая прокруткой, секция About с угловыми 3D-украшениями и текстом, проявляющимся посимвольно при прокрутке, светлый список услуг и проектные карточки, наслаивающиеся с уменьшением при прокрутке.",
+    "es": "Página de destino oscura y premium para un portafolio de creador 3D: un hero a pantalla completa con titular en degradado y un retrato 3D magnético que sigue al ratón, un marquee horizontal de imágenes impulsado por el scroll, una sección About con decoraciones 3D en las esquinas y texto que se revela carácter a carácter al desplazarse, una lista de servicios sobre fondo blanco y tarjetas de proyecto que se apilan reduciéndose al hacer scroll.",
+    "pt-BR": "Landing page escura e premium para um portfólio de criador 3D: um hero em tela cheia com título em gradiente e um retrato 3D magnético que segue o mouse, um marquee horizontal de imagens controlado pela rolagem, uma seção About com decorações 3D nos cantos e texto revelado caractere a caractere ao rolar, uma lista de serviços em fundo branco e cards de projeto que se empilham encolhendo conforme a rolagem.",
+    "it": "Landing page scura e premium per un portfolio da creator 3D: un hero a tutto schermo con titolo in gradiente e un ritratto 3D magnetico che segue il mouse, un marquee orizzontale di immagini guidato dallo scroll, una sezione About con decorazioni 3D agli angoli e testo rivelato carattere per carattere allo scroll, un elenco di servizi su sfondo bianco e card di progetto che si impilano rimpicciolendosi allo scroll.",
+    "vi": "Trang đích tối màu, cao cấp cho portfolio nhà sáng tạo 3D: hero toàn màn hình với tiêu đề gradient và chân dung 3D từ tính bám theo chuột, dải ảnh marquee ngang chạy theo cuộn trang, phần About có trang trí 3D ở các góc và văn bản hiện ra từng ký tự theo cuộn, danh sách Services nền trắng, cùng các thẻ dự án xếp chồng và thu nhỏ khi cuộn.",
+    "pl": "Ciemna, premium strona docelowa portfolio twórcy 3D: pełnoekranowy hero z gradientowym nagłówkiem i magnetycznym portretem 3D podążającym za myszą, poziomy marquee ze zdjęciami sterowany przewijaniem, sekcja About z narożnymi dekoracjami 3D i tekstem ujawnianym znak po znaku podczas przewijania, biała lista usług oraz karty projektów nakładające się i kurczące się podczas scrollowania.",
+    "id": "Halaman arahan gelap dan premium untuk portofolio kreator 3D: hero layar penuh dengan judul gradien dan potret 3D magnetik yang mengikuti kursor, marquee gambar horizontal yang digerakkan oleh scroll, bagian About dengan dekorasi 3D di sudut dan teks yang muncul karakter demi karakter saat di-scroll, daftar Services berlatar putih, serta kartu proyek yang menumpuk dan mengecil saat di-scroll.",
+    "nl": "Donkere, premium landingspagina voor een 3D-creator-portfolio: een schermvullende hero met verlooptitel en een magnetisch 3D-portret dat de muis volgt, een scrollgestuurde horizontale beeldmarquee, een About-sectie met 3D-decoraties in de hoeken en tekst die teken voor teken verschijnt bij het scrollen, een witte Services-lijst en projectkaarten die bij het scrollen stapelen en krimpen.",
+    "ar": "صفحة هبوط داكنة وفاخرة لمعرض أعمال مصمم ثلاثي الأبعاد: قسم بطل بملء الشاشة بعنوان متدرج اللون وصورة شخصية ثلاثية الأبعاد مغناطيسية تتبع المؤشر، وشريط صور أفقي متحرك يتحكم فيه التمرير، وقسم About بزخارف ثلاثية الأبعاد في الزوايا ونص يظهر حرفًا حرفًا مع التمرير، وقائمة خدمات بخلفية بيضاء، وبطاقات مشاريع تتراكم وتتقلص أثناء التمرير.",
+    "tr": "3D yaratıcı portföyü için koyu, premium bir açılış sayfası: gradyan başlıklı ve fareyi takip eden manyetik 3D portreli tam ekran hero, kaydırmayla hareket eden yatay görsel marquee, köşelerde 3D süslemeler ve kaydırdıkça harf harf beliren metin içeren About bölümü, beyaz zeminli Services listesi ve kaydırırken üst üste yığılıp küçülen proje kartları.",
+    "uk": "Темна преміальна посадкова сторінка портфоліо 3D-креатора: повноекранний герой із градієнтним заголовком і магнітним 3D-портретом, що стежить за курсором, горизонтальна стрічка зображень, керована прокруткою, секція About із кутовими 3D-прикрасами та текстом, що проявляється посимвольно під час прокрутки, світлий список послуг і картки проєктів, які накладаються й зменшуються під час прокрутки.",
+    "en": "Dark, premium 3D-creator portfolio landing page: a full-viewport hero with gradient-text headline and a mouse-following magnetic 3D portrait, a scroll-driven horizontal image marquee, an About section with corner 3D decorations and character-by-character scroll-reveal text, a white Services list, and sticky-stacking project cards."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/3d-creator-portfolio",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "portfolio",
+    "3d",
+    "creator",
+    "landing-page",
+    "dark",
+    "framer-motion"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a 3D Creator portfolio landing page for \"Jack\" using React, TypeScript, Tailwind CSS, Framer Motion, and Lucide React. The page has a dark theme (#0C0C0C background) with the font Kanit (Google Fonts, weights 300-900). The page title is \"Jack -- 3D Creator\".\n\nGLOBAL STYLES\nBackground: #0C0C0C on html, body, #root, and the main wrapper\nFont family: 'Kanit', sans-serif\nGlobal reset: box-sizing border-box, margin 0, padding 0\nCSS class .hero-heading: gradient text using background: linear-gradient(180deg, #646973 0%, #BBCCD7 100%) with -webkit-background-clip: text and -webkit-text-fill-color: transparent\nMain wrapper has overflowX: 'clip'\nSECTION ORDER\nHeroSection\nMarqueeSection\nAboutSection\nServicesSection\nProjectsSection\nContactSection (footer)\n1. HERO SECTION\nFull viewport height (h-screen), flex column layout with overflowX: clip.\n\nNavbar: Horizontal nav bar with 4 links -- \"About\", \"Price\", \"Projects\", \"Contact\" -- evenly spaced with justify-between. Text color #D7E2EA, font-medium, uppercase, tracking-wider. Sizes: text-sm md:text-lg lg:text-[1.4rem]. Padding: px-6 md:px-10 pt-6 md:pt-8. Hover: opacity 70% with 200ms transition. The four nav links map to in-page anchors that MUST all resolve: \"About\" -> #about, \"Price\" -> the Services section (id=\"price\"), \"Projects\" -> #projects, \"Contact\" -> the Contact footer (id=\"contact\"). Every link must have a real target in the output; no dead anchors.\n\nHero Heading: Massive h1 with text \"Hi, i'm jack\" (lowercase \"i\", curly apostrophe via &apos;). Uses the .hero-heading gradient text class. Font-black, uppercase, tracking-tight, leading-none, whitespace-nowrap, w-full. Font sizes: text-[14vw] sm:text-[15vw] md:text-[16vw] lg:text-[17.5vw]. Margin top: mt-6 sm:mt-4 md:-mt-5. Wrapped in overflow-hidden container.\n\nBottom bar: Flexbox justify-between items-end with pb-7 sm:pb-8 md:pb-10:\n\nLeft: paragraph text \"a 3d creator driven by crafting striking and unforgettable projects\", color #D7E2EA, font-light, uppercase, tracking-wide, leading-snug. Font size: clamp(0.75rem, 1.4vw, 1.5rem). Max-width: max-w-[160px] sm:max-w-[220px] md:max-w-[260px].\nRight: ContactButton component (see below)\nHero Portrait: Centered absolutely. Uses a Magnet component (mouse-following magnetic effect) wrapping an image. Image: reuse the inlined `data:image/webp;base64,…` portrait URI already embedded in `example.html` (do NOT fetch a remote URL — the original figma.site host 403s/rate-limits in the sandbox). Magnet settings: padding 150, strength 3, activeTransition \"transform 0.3s ease-out\", inactiveTransition \"transform 0.6s ease-in-out\". Positioning: absolute left-1/2 -translate-x-1/2 z-10. Width: w-[280px] sm:w-[360px] md:w-[440px] lg:w-[520px]. On mobile: top-1/2 -translate-y-1/2. On sm+: sm:top-auto sm:translate-y-0 sm:bottom-0.\n\nFadeIn animations: Navbar fades in with delay 0, y -20. Heading: delay 0.15, y 40. Left text: delay 0.35, y 20. Contact button: delay 0.5, y 20. Portrait: delay 0.6, y 30.\n\n2. MARQUEE SECTION\nTwo rows of images that scroll horizontally based on page scroll position. Background #0C0C0C. Padding: pt-24 sm:pt-32 md:pt-40 pb-10.\n\n21 GIF images from motionsites.ai (exact URLs):\n\n\nhttps://motionsites.ai/assets/hero-space-voyage-preview-eECLH3Yc.gif\nhttps://motionsites.ai/assets/hero-codenest-preview-Cgppc2qV.gif\nhttps://motionsites.ai/assets/hero-vex-ventures-preview-BczMFIiw.gif\nhttps://motionsites.ai/assets/hero-stellar-ai-v2-preview-DjvxjG3C.gif\nhttps://motionsites.ai/assets/hero-asme-preview-B_nGDnTP.gif\nhttps://motionsites.ai/assets/hero-transform-data-preview-Cx5OU29N.gif\nhttps://motionsites.ai/assets/hero-vitara-preview-Cjz2QYyU.gif\nhttps://motionsites.ai/assets/hero-terra-preview-BFjrCr7T.gif\nhttps://motionsites.ai/assets/hero-skyelite-preview-DHaZIgUv.gif\nhttps://motionsites.ai/assets/hero-aethera-preview-DknSlcTa.gif\nhttps://motionsites.ai/assets/hero-designpro-preview-D8c5_een.gif\nhttps://motionsites.ai/assets/hero-stellar-ai-preview-D3HL6bw1.gif\nhttps://motionsites.ai/assets/hero-xportfolio-preview-D4A8maiC.gif\nhttps://motionsites.ai/assets/hero-orbit-web3-preview-BXt4OttD.gif\nhttps://motionsites.ai/assets/hero-nexora-preview-cx5HmUgo.gif\nhttps://motionsites.ai/assets/hero-evr-ventures-preview-DZxeVFEX.gif\nhttps://motionsites.ai/assets/hero-planet-orbit-preview-DWAP8Z1P.gif\nhttps://motionsites.ai/assets/hero-new-era-preview-CocuDUm9.gif\nhttps://motionsites.ai/assets/hero-wealth-preview-B70idl_u.gif\nhttps://motionsites.ai/assets/hero-luminex-preview-CxOP7ce6.gif\nhttps://motionsites.ai/assets/hero-celestia-preview-0yO3jXO8.gif\nRow 1: first 11 images, tripled for seamless scrolling. Moves RIGHT on scroll (translateX(offset - 200)).\nRow 2: remaining 10 images, tripled. Moves LEFT on scroll (translateX(-(offset - 200))).\nScroll offset calculated as: (window.scrollY - sectionTop + window.innerHeight) * 0.3\nEach image tile: 420px x 270px, rounded-2xl, object-cover, lazy loaded.\nGap between tiles: gap-3. Gap between rows: gap-3.\nUses willChange: 'transform' for performance. Scroll listener is passive.\n3. ABOUT SECTION\nFull-height centered section with min-h-screen, padding px-5 sm:px-8 md:px-10 py-20.\n\nFour decorative 3D images positioned absolutely in corners:\n\nTop-left: Moon icon -- reuse the corresponding inlined `data:image/webp;base64,…` URI from `example.html` (not a remote URL) -- w-[120px] sm:w-[160px] md:w-[210px], positioned top-[4%] left-[1%] sm:left-[2%] md:left-[4%]. FadeIn: delay 0.1, x -80, y 0, duration 0.9.\nBottom-left: 3D object -- reuse the corresponding inlined `data:image/webp;base64,…` URI from `example.html` (not a remote URL) -- w-[100px] sm:w-[140px] md:w-[180px], positioned bottom-[8%] left-[3%] sm:left-[6%] md:left-[10%]. FadeIn: delay 0.25, x -80, y 0, duration 0.9.\nTop-right: Lego icon -- reuse the corresponding inlined `data:image/webp;base64,…` URI from `example.html` (not a remote URL) -- w-[120px] sm:w-[160px] md:w-[210px], positioned top-[4%] right-[1%] sm:right-[2%] md:right-[4%]. FadeIn: delay 0.15, x 80, y 0, duration 0.9.\nBottom-right: 3D group -- reuse the corresponding inlined `data:image/webp;base64,…` URI from `example.html` (not a remote URL) -- w-[130px] sm:w-[170px] md:w-[220px], positioned bottom-[8%] right-[3%] sm:right-[6%] md:right-[10%]. FadeIn: delay 0.3, x 80, y 0, duration 0.9.\nHeading: \"About me\" using .hero-heading gradient text, font-black, uppercase, leading-none, tracking-tight, centered. Font size: clamp(3rem, 12vw, 160px). FadeIn: delay 0, y 40.\n\nAnimated paragraph: Uses a character-by-character scroll-driven opacity animation. Text: \"With more than five years of experience in design, i focus on branding, web design, and user experience, i truly enjoy working with businesses that aim to stand out and present their best image. Let's build something incredible together!\" -- color #D7E2EA, font-medium, centered, leading-relaxed, max-w-[560px], font size clamp(1rem, 2vw, 1.35rem). Each character animates from opacity 0.2 to 1 based on scroll progress, with scroll offset ['start 0.8', 'end 0.2'].\n\nContact button below the text block. Gap between heading/text: gap-10 sm:gap-14 md:gap-16. Gap between text block and button: gap-16 sm:gap-20 md:gap-24.\n\n4. SERVICES SECTION\nWhite background (#FFFFFF), with rounded-t-[40px] sm:rounded-t-[50px] md:rounded-t-[60px] top corners. Padding: px-5 sm:px-8 md:px-10 py-20 sm:py-24 md:py-32.\n\nHeading: \"Services\" in #0C0C0C, font-black, uppercase, centered, font size clamp(3rem, 12vw, 160px). Margin bottom: mb-16 sm:mb-20 md:mb-28.\n\n5 service items in a vertical list, max-w-5xl, centered:\n\n01 - 3D Modeling: \"Creation of detailed objects, characters, or environments tailored to specific client needs, ideal for games, products, and visualizations.\"\n02 - Rendering: \"High-quality, photorealistic renders that showcase designs with custom lighting, textures, and materials to bring concepts to life.\"\n03 - Motion Design: \"Dynamic animations and motion graphics that add energy and storytelling to brands, products, and digital experiences.\"\n04 - Branding: \"Crafting cohesive visual identities -- from logos to full brand systems -- that communicate a clear and memorable presence.\"\n05 - Web Design: \"Designing clean, modern, and conversion-focused websites with attention to layout, typography, and user experience.\"\nEach item: horizontal layout with number (font-black, font size clamp(3rem, 10vw, 140px), color #0C0C0C) on the left and name + description stacked vertically on the right. Name: font-medium, uppercase, font size clamp(1rem, 2.2vw, 2.1rem). Description: font-light, leading-relaxed, max-w-2xl, font size clamp(0.85rem, 1.6vw, 1.25rem), opacity 0.6. Items separated by 1px borders (rgba(12, 12, 12, 0.15)). Padding: py-8 sm:py-10 md:py-12. Staggered FadeIn: each item delays by i * 0.1.\n\n5. PROJECTS SECTION\nDark background (#0C0C0C), rounded top corners rounded-t-[40px] sm:rounded-t-[50px] md:rounded-t-[60px], pulled up with -mt-10 sm:-mt-12 md:-mt-14, z-10.\n\nHeading: \"Project\" (singular) using .hero-heading gradient, same styling as other headings.\n\n3 sticky-stacking project cards that scale down as you scroll past them (card stacking effect using Framer Motion useScroll and useTransform). Each card is sticky top-24 md:top-32 inside an h-[85vh] container.\n\nScale calculation: targetScale = 1 - (totalCards - 1 - index) * 0.03. Each card offset by top: ${index * 28}px.\n\nEach card has: rounded-[40px] sm:rounded-[50px] md:rounded-[60px], border-2 border-[#D7E2EA], background #0C0C0C, padding p-4 sm:p-6 md:p-8.\n\nCard layout:\n\nTop row: Number (huge, same style as services), category label, project name, and a \"Live Project\" ghost button (rounded-full, border-2 #D7E2EA, uppercase, tracking-widest).\nBottom row: Two-column image grid -- left column (40% width) has 2 stacked images, right column (60%) has 1 tall image. All images have heavy border radius rounded-[40px] sm:rounded-[50px] md:rounded-[60px]. Left top image height: clamp(130px, 16vw, 230px). Left bottom image height: clamp(160px, 22vw, 340px).\nProject data with CloudFront image URLs:\n\nProject 01 - \"Nextlevel Studio\" (Client):\n\nCol1 image 1: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055344_5eff02e0-87a5-41ce-b64f-eb08da8f33db.png&w=1280&q=85\nCol1 image 2: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055431_11d841fd-8b41-46a5-82e4-b04f2407a7d8.png&w=1280&q=85\nCol2 image: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055451_e317bf2d-28d4-48cc-86b0-6f72f25b6327.png&w=1280&q=85\nProject 02 - \"Aura Brand Identity\" (Personal):\n\nCol1 image 1: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055654_911201c5-36d9-4bc6-bac7-331adfce159f.png&w=1280&q=85\nCol1 image 2: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055723_5ceda0b8-d9c2-4665-b2e3-83ba19ba76d1.png&w=1280&q=85\nCol2 image: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055753_adc5dcbd-a8e6-49c0-b43a-9b030d835cea.png&w=1280&q=85\nProject 03 - \"Solaris Digital\" (Client):\n\nCol1 image 1: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055759_963cfb0b-4bd1-4b0f-9d0a-09bd6cf95b2f.png&w=1280&q=85\nCol1 image 2: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_060108_438f781a-9846-4dcc-89ab-c4e6cb830f5b.png&w=1280&q=85\nCol2 image: https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260412_055818_9d062121-ad7e-46b9-999a-1a6a692ef1ee.png&w=1280&q=85\nCONTACT SECTION (footer)\nA closing footer with id=\"contact\" so the navbar's Contact link resolves. Dark background (#0C0C0C), centered column, generous padding (e.g. 80px 24px 120px). Contains a large gradient headline using the .hero-heading class (e.g. \"Let's talk\") and a ContactButton (\"Contact Me\"). Keep it minimal; its job is to be a real, scrollable anchor target for the nav, consistent with the bundled example.html.\n\nREUSABLE COMPONENTS\nContactButton: Rounded-full pill button with gradient background linear-gradient(123deg, #18011F 7%, #B600A8 37%, #7621B0 72%, #BE4C00 100%), inner box-shadow 0px 4px 4px rgba(181, 1, 167, 0.25), 4px 4px 12px #7721B1 inset, white 2px outline with -3px offset. Text: white, font-medium, uppercase, tracking-widest. Sizes: px-8 py-3 sm:px-10 sm:py-3.5 md:px-12 md:py-4, text text-xs sm:text-sm md:text-base. Label: \"Contact Me\".\n\nLiveProjectButton: Ghost/outline pill button. Rounded-full, border-2 border-[#D7E2EA], text color #D7E2EA, font-medium, uppercase, tracking-widest. Sizes: px-8 py-3 sm:px-10 sm:py-3.5, text text-sm sm:text-base. Hover: bg-[#D7E2EA]/10. Label: \"Live Project\".\n\nFadeIn: Framer Motion wrapper using whileInView with viewport={{ once: true, margin: \"50px\", amount: 0 }}. Accepts delay, duration (default 0.7), x (default 0), y (default 30). Easing: [0.25, 0.1, 0.25, 1]. Uses motion.create() for dynamic element types.\n\nMagnet: Mouse-following magnetic hover effect. Tracks mouse position relative to element center, applies translate3d transform divided by strength factor. Activates when cursor is within padding distance of element edge. Smooth transition in (0.3s ease-out) and out (0.6s ease-in-out). Uses willChange: 'transform'.\n\nAnimatedText: Character-by-character scroll-reveal text animation. Each character goes from opacity 0.2 to 1 based on its position in the text relative to scroll progress. Uses Framer Motion useScroll targeting the paragraph element with offset ['start 0.8', 'end 0.2']. Each character uses invisible placeholder + absolute positioned animated span.\n\nKEY DEPENDENCIES\nreact, react-dom (^18.3.1)\nframer-motion (^12.38.0)\nlucide-react (^0.344.0)\ntailwindcss (^3.4.1)\nvite, typescript\nRESPONSIVE BREAKPOINTS\nAll sections use Tailwind's default breakpoints (sm: 640px, md: 768px, lg: 1024px) with mobile-first approach. Heavy use of clamp() for fluid typography. The entire design scales gracefully from mobile to ultra-wide screens.\n\n---\n\n**Inlined images (critical):** a complete single-file reference implementation ships beside this plugin at `example.html` — start from it and match its tokens, gradient text, magnetic hero portrait, scroll marquee, character-reveal text, sticky-stacking project cards, and responsive behavior. The hero portrait and the four About-section corner 3D decorations are shipped as inlined `data:image/webp;base64,…` URIs inside example.html — reuse those inline data URIs as-is and do NOT swap them back for the original `shrug-person-78902957.figma.site/...` URLs: that host rate-limits / 403s inside the preview sandbox and renders as broken images. The 21 motionsites.ai marquee GIFs and the 9 higgs.ai/cloudfront project images stay as remote URLs (large stable CDNs).",
+        "zh-CN": "为「Jack」生成一个暗色高端的 3D 创作者作品集落地页（React + TypeScript + Tailwind + Framer Motion + lucide-react）：全屏 Hero（渐变文字标题 + 鼠标磁吸 3D 人像）、随滚动横向移动的图片 marquee、带四角 3D 装饰和逐字滚动揭示文案的 About、白底 Services 列表、滚动时缩放堆叠的项目卡片。完整构建规格、锁定的颜色/渐变/尺寸/图片地址，以及人像与装饰图必须复用 example.html 中内联的 data URI（不要换回 figma.site 远程地址）等全部细节，以英文 query (`en`) 为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Jack — 3D Creator Portfolio"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

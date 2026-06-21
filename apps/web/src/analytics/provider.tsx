@@ -24,8 +24,10 @@ import {
   capture,
   getAnalyticsClient,
   getResolvedAnonymousId,
+  setAnalyticsUserId,
   setConfigureGlobals,
 } from './client';
+import { patchExceptionTrackingAppVersion } from './error-tracking';
 import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
   detectClientType,
@@ -58,6 +60,10 @@ interface AnalyticsContextValue {
   // App.tsx whenever the user's execution-mode config changes (mode
   // switch, agent select, BYOK save, CLI rescan).
   setConfigureGlobals: (next: AnalyticsConfigureGlobals) => void;
+  // Register / unregister the AMR account id as the `user_id` public
+  // param. Called from App.tsx whenever the AMR login status resolves;
+  // null on logout so later events drop the stale id.
+  setUserId: (userId: string | null) => void;
   anonymousId: string;
   sessionId: string;
   newRequestId: () => string;
@@ -85,29 +91,62 @@ function isSameOriginApiCall(url: unknown): boolean {
   }
 }
 
+const APP_VERSION_PLACEHOLDER = '0.0.0';
+let runtimeAppVersion: string | null = null;
+let runtimeAppVersionPromise: Promise<string | null> | null = null;
+
+// Shared single-flight fetch of the daemon-pinned version. Cached at module
+// scope so the hook, the capture paths, and repeated calls all settle on one
+// /api/version round-trip and the same resolved value.
+async function loadRuntimeAppVersion(): Promise<string | null> {
+  if (runtimeAppVersion) return runtimeAppVersion;
+  if (!runtimeAppVersionPromise) {
+    runtimeAppVersionPromise = (async () => {
+      try {
+        const res = await fetch('/api/version');
+        if (!res.ok) return null;
+        const body = (await res.json()) as { version?: { version?: string } };
+        const next = body?.version?.version;
+        if (!next) return null;
+        runtimeAppVersion = next;
+        return next;
+      } catch {
+        return null;
+      } finally {
+        // Allow a retry on the next call when the fetch yielded nothing.
+        if (!runtimeAppVersion) runtimeAppVersionPromise = null;
+      }
+    })();
+  }
+  return runtimeAppVersionPromise;
+}
+
+// Capture paths call this before emitting so an event never ships with the
+// placeholder once the real version is knowable. When the caller already has
+// a real version (state resolved) it returns immediately; otherwise it awaits
+// the shared fetch. This closes the race where high-frequency early events
+// (page_view in particular) fired before the version-resolving effect re-ran
+// and re-registered the PostHog super-property, permanently stamping them
+// with app_version='0.0.0'.
+export async function resolveAppVersionForCapture(current: string): Promise<string> {
+  if (current && current !== APP_VERSION_PLACEHOLDER) return current;
+  return (await loadRuntimeAppVersion()) ?? current;
+}
+
 // App version is read from a runtime endpoint rather than at build time so
 // the same web bundle reports the daemon-pinned version even when running
-// against a newer/older daemon during dev. Falls back to '0.0.0' until the
-// fetch resolves, then the resolved value flows through state so every
-// downstream effect that depends on `appVersion` re-runs and re-registers
-// the PostHog super-property with the real version. Earlier `useRef` shape
-// silently broke this: ref writes don't trigger re-renders, so every event
-// shipped with `app_version='0.0.0'`.
+// against a newer/older daemon during dev. The hook exposes the placeholder
+// for first paint, but capture() paths call resolveAppVersionForCapture() so
+// early events wait for the real value instead of permanently shipping with
+// app_version='0.0.0'. Earlier `useRef` shape silently broke even the hook:
+// ref writes don't trigger re-renders, so every event shipped with '0.0.0'.
 export function useAppVersion(): string {
-  const [version, setVersion] = useState('0.0.0');
+  const [version, setVersion] = useState(APP_VERSION_PLACEHOLDER);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await fetch('/api/version');
-        if (!res.ok) return;
-        const body = (await res.json()) as { version?: { version?: string } };
-        if (cancelled) return;
-        const next = body?.version?.version;
-        if (next) setVersion(next);
-      } catch {
-        // Best-effort.
-      }
+      const next = await loadRuntimeAppVersion();
+      if (!cancelled && next) setVersion(next);
     })();
     return () => {
       cancelled = true;
@@ -138,28 +177,31 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const [resolvedAnonId, setResolvedAnonId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    // Bridge the always-on error tracker to /api/analytics/config so any
-    // exceptions buffered since module load (see client-app.tsx) can flush
-    // to PostHog. This runs regardless of the user's analytics consent
-    // toggle — error reports are intentionally not gated by it.
-    void bootstrapExceptionTracking({
-      anonymousId: identity.anonymousId,
-      sessionId: identity.sessionId,
-      clientType: identity.clientType,
-      locale,
-      appVersion,
-    });
-    void getAnalyticsClient({
-      anonymousId: identity.anonymousId,
-      sessionId: identity.sessionId,
-      clientType: identity.clientType,
-      locale,
-      appVersion,
-    }).then(() => {
+    void (async () => {
+      const resolvedAppVersion = await resolveAppVersionForCapture(appVersion);
+      patchExceptionTrackingAppVersion(resolvedAppVersion);
+      // Bridge the always-on error tracker to /api/analytics/config so any
+      // exceptions buffered since module load (see client-app.tsx) can flush
+      // to PostHog. This runs regardless of the user's analytics consent
+      // toggle — error reports are intentionally not gated by it.
+      void bootstrapExceptionTracking({
+        anonymousId: identity.anonymousId,
+        sessionId: identity.sessionId,
+        clientType: identity.clientType,
+        locale,
+        appVersion: resolvedAppVersion,
+      });
+      await getAnalyticsClient({
+        anonymousId: identity.anonymousId,
+        sessionId: identity.sessionId,
+        clientType: identity.clientType,
+        locale,
+        appVersion: resolvedAppVersion,
+      });
       if (cancelled) return;
       const resolved = getResolvedAnonymousId();
       if (resolved) setResolvedAnonId(resolved);
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -205,16 +247,21 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const resolvedAppVersion = await resolveAppVersionForCapture(appVersion);
       const client = await getAnalyticsClient({
         anonymousId: identity.anonymousId,
         sessionId: identity.sessionId,
         clientType: identity.clientType,
         locale: locale,
-        appVersion,
+        appVersion: resolvedAppVersion,
       });
       if (cancelled || !client) return;
       try {
-        client.register({ locale: locale, app_version: appVersion, ui_version: appVersion });
+        client.register({
+          locale: locale,
+          app_version: resolvedAppVersion,
+          ui_version: resolvedAppVersion,
+        });
       } catch {
         // Best-effort.
       }
@@ -258,14 +305,24 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         }
       }
       void (async () => {
+        const resolvedAppVersion = await resolveAppVersionForCapture(appVersion);
         const client = await getAnalyticsClient({
           anonymousId: identity.anonymousId,
           sessionId: identity.sessionId,
           clientType: identity.clientType,
           locale: locale,
-          appVersion,
+          appVersion: resolvedAppVersion,
         });
-        capture(client, { event, properties, insertId, requestId });
+        capture(client, {
+          event,
+          properties: {
+            ...properties,
+            app_version: resolvedAppVersion,
+            ui_version: resolvedAppVersion,
+          },
+          insertId,
+          requestId,
+        });
       })();
     },
     [identity, locale, appVersion],
@@ -287,16 +344,18 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
           // (client.ts) allows a fresh /api/analytics/config fetch when
           // the previous response was enabled=false. Resolved id propagates
           // into the wrapper via setResolvedAnonId below.
-          void getAnalyticsClient({
-            anonymousId: identity.anonymousId,
-            sessionId: identity.sessionId,
-            clientType: identity.clientType,
-            locale,
-            appVersion,
-          }).then(() => {
+          void (async () => {
+            const resolvedAppVersion = await resolveAppVersionForCapture(appVersion);
+            await getAnalyticsClient({
+              anonymousId: identity.anonymousId,
+              sessionId: identity.sessionId,
+              clientType: identity.clientType,
+              locale,
+              appVersion: resolvedAppVersion,
+            });
             const resolved = getResolvedAnonymousId();
             if (resolved) setResolvedAnonId(resolved);
-          });
+          })();
         }
       },
       setIdentity: (installationId: string | null) => {
@@ -307,6 +366,9 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
       },
       setConfigureGlobals: (next: AnalyticsConfigureGlobals) => {
         setConfigureGlobals(next);
+      },
+      setUserId: (userId: string | null) => {
+        setAnalyticsUserId(userId);
       },
       anonymousId: identity.anonymousId,
       sessionId: identity.sessionId,
@@ -329,6 +391,7 @@ export function useAnalytics(): AnalyticsContextValue {
       setConsent: () => undefined,
       setIdentity: () => undefined,
       setConfigureGlobals: () => undefined,
+      setUserId: () => undefined,
       anonymousId: 'unmounted',
       sessionId: 'unmounted',
       newRequestId: () => randomUUID(),

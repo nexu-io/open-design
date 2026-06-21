@@ -77,7 +77,7 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+<Layout title={title} description={description} jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
@@ -142,8 +142,8 @@ const jsonLd = [
     <section class="info-section" id="next">
       <h2>{page.nextTitle}</h2>
       <ul>
-        <li><a class="inline-link" href={href('/skills/')}>{page.nextItems[0].label}</a> — {page.nextItems[0].body}</li>
-        <li><a class="inline-link" href={href('/systems/')}>{page.nextItems[1].label}</a> — {page.nextItems[1].body}</li>
+        <li><a class="inline-link" href={href('/plugins/skills/')}>{page.nextItems[0].label}</a> — {page.nextItems[0].body}</li>
+        <li><a class="inline-link" href={href('/plugins/systems/')}>{page.nextItems[1].label}</a> — {page.nextItems[1].body}</li>
         <li><a class="inline-link" href={href('/compare/')}>{page.nextItems[2].label}</a> — {page.nextItems[2].body}</li>
         <li><a class="inline-link" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{page.nextItems[3].label}</a> — {page.nextItems[3].body}</li>
       </ul>

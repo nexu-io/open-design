@@ -64,7 +64,7 @@
   cursor: pointer;
   text-align: left;
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .recent-projects__card:hover {
   border-color: var(--border-strong);

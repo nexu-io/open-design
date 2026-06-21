@@ -35,24 +35,52 @@ export function imageAssetSrcset(
     .join(', ');
 }
 
-export const heroImage = imageAsset('hero.png', { width: 1280, quality: 82 });
+// Homepage hero art, served as local assets straight from the site origin.
+//
+// `heroImage` is the PNG kept ONLY for `og:image` / `twitter:image`: social
+// crawlers (Facebook, Twitter, LinkedIn, …) have spotty WebP support, so the
+// share card must stay a PNG.
+export const heroImage = '/hero-home.png?v=2';
+export const labStageImage = '/lab-stage-bg.webp';
+
+// The visible full-bleed hero backdrop renders from responsive WebP variants
+// instead — the source 2880px PNG was a 326KB single file served to every
+// device (mobile included); these range 33KB (960w) → 110KB (2880w) at q90, so
+// each viewport downloads only what it paints. `heroBgImage` is the default
+// `src` fallback for browsers that ignore `srcset`.
+export const heroBgImage = '/hero-home-1440.webp?v=3';
+export const heroBgSrcset = [
+  '/hero-home-960.webp?v=3 960w',
+  '/hero-home-1440.webp?v=3 1440w',
+  '/hero-home-1920.webp?v=3 1920w',
+  '/hero-home-2880.webp?v=3 2880w',
+].join(', ');
+
+// Hero product screenshot — responsive WebP so phones don't pull the 2508px
+// retina master. Largest variant is the pristine original (no re-encode).
+export const heroProductImage = '/hero-product-1280.webp?v=3';
+export const heroProductSrcset = [
+  '/hero-product-800.webp?v=3 800w',
+  '/hero-product-1280.webp?v=3 1280w',
+  '/hero-product-1920.webp?v=3 1920w',
+  '/hero-product-2508.webp?v=3 2508w',
+].join(', ');
 
 /**
- * Responsive srcset for the homepage hero. Widths cover phones (768),
- * laptops at 1x (1280), retina laptops (1920) and 4K / 2x retina (2560).
+ * Default Open Graph card image — the purpose-built 1200×630 brand plate
+ * (light paper, lime highlight, "official open-source Claude Design
+ * alternative" headline). Used site-wide by every page that doesn't
+ * supply its own card. Referenced as the raw R2 object (not via the
+ * `cdn-cgi/image` resizer) so social crawlers always receive a real PNG
+ * at exactly 1200×630 — `format=auto` would hand some of them WebP.
+ *
+ * Source of truth for the artwork is the `/og/` route (`pages/og.astro`):
+ * render it at viewport 1200×630, screenshot, then upload the PNG to
+ * R2 at `landing/assets/og-card.png`.
  */
-export const heroImageSrcset = imageAssetSrcset(
-  'hero.png',
-  [768, 1280, 1920, 2560],
-);
-
-/**
- * Default Open Graph card image. Used by every page that doesn't supply
- * its own hero (most blog posts in the v1 layout). 1200 wide is what most
- * social platforms render at; aspect ratio is whatever hero.png ships with
- * — we omit explicit og:image:width/height so platforms can resolve it.
- */
-export const ogDefaultImage = imageAsset('hero.png', { width: 1200, quality: 86 });
+export const ogDefaultImage = r2Asset('og-card.png');
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
 
 /**
  * 1×1 transparent SVG used as the initial `src` for precise-lazyloaded

@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
+  findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
 } from '../../src/components/ProjectView';
+import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 import type { ChatMessage } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -21,6 +23,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
 const saveMessage = vi.fn();
@@ -47,6 +50,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -151,6 +155,28 @@ describe('computeProducedFiles', () => {
     expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
   });
 
+  it('excludes user sketch files from turn output attribution', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 2, mtime: 2, kind: 'sketch', mime: 'application/json' },
+      { name: 'new.pptx', path: '/p/new.pptx', size: 3, mtime: 3, kind: 'pdf', mime: 'application/pdf' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
+  });
+
+  it('keeps generated svg files even when they are classified as sketches', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'diagram.svg', path: '/p/diagram.svg', size: 2, mtime: 2, kind: 'sketch', mime: 'image/svg+xml' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 3, mtime: 3, kind: 'sketch', mime: 'application/json' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['diagram.svg']);
+  });
+
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
   });
@@ -176,11 +202,172 @@ describe('mergeRecoveredArtifact', () => {
   });
 });
 
+describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
+  const html = '<!doctype html><html><head><title>Demo</title></head><body><main><h1>Demo</h1></main></body></html>';
+
+  it('returns the same-turn HTML file when fallback content matches a Write output', async () => {
+    const indexFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: html.length,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const readProjectHtml = vi.fn(async (name: string) =>
+      name === 'index.html' ? `\uFEFF${html}\r\n` : null,
+    );
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: `\n${html}\n`,
+      producedFiles: [indexFile] as never,
+      readProjectHtml,
+    })).resolves.toBe(indexFile);
+  });
+
+  // #4308: agent-agnostic recovery is the *normalized exact content match* —
+  // it already binds for any filesystem-backed CLI (not just Claude) when the
+  // written file and the echoed artifact are the same document. We deliberately
+  // do NOT bind on a content *mismatch*: a same-turn HTML file whose content
+  // differs from the echo is a genuinely different document and must persist on
+  // its own. (A blind single-file bind also mis-fired across queued runs, where
+  // a prior run's artifact is still reported as "produced this turn" — the
+  // app-restoration regression that motivated dropping it.)
+  it('does not bind a single same-turn HTML file whose content differs from the echo', async () => {
+    const indexFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: html.length,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: vi.fn(async () => html.replace('Demo</h1>', 'Other</h1>')),
+    })).resolves.toBeNull();
+  });
+
+  // ...and never bind when several same-turn HTML files all differ from the
+  // echo — binding the wrong one could clobber the user's other in-flight work.
+  it('avoids selection when multiple same-turn HTML files differ from the echo', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'a.html' ? html.replace('Demo', 'AAA') : html.replace('Demo', 'BBB'),
+      ),
+    })).resolves.toBeNull();
+  });
+
+  // When multiple same-turn HTML files exist, bind the one whose normalized
+  // content matches the echo — unambiguous regardless of which agent ran.
+  it('binds the exact normalized match among multiple same-turn HTML files', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'b.html' ? `﻿${html}\r\n` : html.replace('Demo', 'AAA'),
+      ),
+    })).resolves.toBe(b);
+  });
+
+  it('ignores non-HTML same-turn files', async () => {
+    const readProjectHtml = vi.fn(async () => html);
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [{ name: 'notes.md', path: 'notes.md', kind: 'text' }] as never,
+      readProjectHtml,
+    })).resolves.toBeNull();
+    expect(readProjectHtml).not.toHaveBeenCalled();
+  });
+});
+
+// #4318: when the model emits a prose-only <artifact> next to a complete
+// same-turn <html> document, the call site must resolve the persisted HTML
+// (recovering the preceding document) BEFORE the dedup lookup. Feeding the raw
+// prose summary makes the normalized exact-match miss the same-turn Write file
+// and the recovered document persists a second time as a duplicate artifact.
+describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
+  const realHtml = '<!doctype html><html><head><title>Recovered</title></head><body><main><h1>Recovered</h1></main></body></html>';
+  const proseSummary = '(The complete document above is the delivered artifact.)';
+  const sourceText = `${realHtml}\n<artifact identifier="page" type="text/html">${proseSummary}</artifact>`;
+  const indexFile = { name: 'index.html', path: 'index.html', kind: 'html', mime: 'text/html' };
+  const readProjectHtml = () =>
+    vi.fn(async (name: string) => (name === 'index.html' ? realHtml : null));
+
+  it('binds the same-turn HTML write once the persisted HTML is resolved', async () => {
+    const persistedHtml = resolvePersistedArtifactHtml({
+      artifactHtml: proseSummary,
+      identifier: 'page',
+      sourceText,
+    });
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: persistedHtml,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBe(indexFile);
+  });
+
+  it('misses the match when fed the raw prose summary (the pre-fix regression)', async () => {
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: proseSummary,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBeNull();
+  });
+});
+
 describe('ProjectView daemon reattach restore', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
     window.sessionStorage.clear();
+  });
+
+  it('does not replay a terminal succeeded row just because produced files are missing', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-done',
+        role: 'assistant',
+        content: 'All done!',
+        createdAt: startedAt,
+        startedAt,
+        runStatus: 'succeeded',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+
+    renderProjectView();
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+    expect(listActiveChatRuns).not.toHaveBeenCalled();
+    expect(listProjectRuns).not.toHaveBeenCalled();
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(
+      saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .some((m) => m?.id === 'msg-done' && m.runStatus === 'failed'),
+    ).toBe(false);
   });
 
   it('populates producedFiles on the persisted message after reattach completes', async () => {

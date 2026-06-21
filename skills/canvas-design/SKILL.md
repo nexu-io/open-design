@@ -13,7 +13,7 @@ triggers:
 od:
   mode: image
   category: image-generation
-  upstream: "https://github.com/anthropics/skills/tree/main/canvas-design"
+  upstream: "https://github.com/anthropics/skills/tree/main/skills/canvas-design"
 ---
 
 # canvas-design
@@ -26,7 +26,7 @@ Create beautiful visual art in PNG and PDF documents using design philosophy and
 
 ## Source
 
-- Upstream: https://github.com/anthropics/skills/tree/main/canvas-design
+- Upstream: https://github.com/anthropics/skills/tree/main/skills/canvas-design
 - Category: `image-generation`
 
 ## How to use
@@ -38,7 +38,7 @@ bundle into your active agent's skills directory:
 
 ```bash
 # Inspect the upstream README for exact paths
-open https://github.com/anthropics/skills/tree/main/canvas-design
+open https://github.com/anthropics/skills/tree/main/skills/canvas-design
 ```
 
 Then ask the agent to invoke this skill by name (`canvas-design`) or with

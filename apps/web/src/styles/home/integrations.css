@@ -40,7 +40,7 @@
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
@@ -77,7 +77,7 @@
   color: var(--text-muted);
   cursor: pointer;
   text-align: left;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 .integrations-view__tab:hover {

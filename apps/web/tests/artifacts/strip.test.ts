@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { stripArtifact } from '../../src/artifacts/strip';
+import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from '../../src/artifacts/strip';
+
+const completeHtml = '<!doctype html><html><head><title>X</title></head><body><h1>X</h1></body></html>';
 
 describe('stripArtifact', () => {
   it('removes a real artifact tag and its body from prose', () => {
@@ -127,5 +129,99 @@ describe('stripArtifact', () => {
       '```',
     ].join('\n');
     expect(stripArtifact(input)).toBe(input);
+  });
+});
+
+describe('splitStreamingArtifact', () => {
+  it('surfaces an open-but-unclosed html artifact as a live box', () => {
+    const input = 'Building it.\n<artifact identifier="page" type="text/html" title="Landing">\n<h1>Hi';
+    const { head, live } = splitStreamingArtifact(input);
+    expect(head).toBe('Building it.');
+    expect(live).not.toBeNull();
+    expect(live?.artifactType).toBe('text/html');
+    expect(live?.title).toBe('Landing');
+    expect(live?.identifier).toBe('page');
+    expect(live?.content).toBe('\n<h1>Hi');
+  });
+
+  it('defers a completed artifact to stripArtifact (no live box)', () => {
+    const input = 'Done.\n<artifact identifier="x" type="text/html" title="X">\n<h1>x</h1>\n</artifact>';
+    const { head, live } = splitStreamingArtifact(input);
+    expect(head).toBe(input);
+    expect(live).toBeNull();
+  });
+
+  it('returns no live box for a non-text/html artifact type', () => {
+    const input = 'Generating.\n<artifact identifier="img" type="image/svg+xml" title="Logo"><svg>';
+    const { head, live } = splitStreamingArtifact(input);
+    expect(head).toBe(input);
+    expect(live).toBeNull();
+  });
+
+  it('treats an unknown/omitted type as code-eligible', () => {
+    const input = 'Writing.\n<artifact identifier="x" title="X">\nsome text';
+    const { live } = splitStreamingArtifact(input);
+    expect(live).not.toBeNull();
+    expect(live?.artifactType).toBe('');
+  });
+
+  it('ignores a literal <artifact …> recited inside a code fence', () => {
+    const input = [
+      'Example:',
+      '```html',
+      '<artifact identifier="demo" type="text/html" title="Demo">',
+      '<h1>Demo</h1>',
+    ].join('\n');
+    const { head, live } = splitStreamingArtifact(input);
+    expect(head).toBe(input);
+    expect(live).toBeNull();
+  });
+
+  it('shows an empty live box when the open tag attributes are still streaming', () => {
+    const input = 'Almost there.\n<artifact identifier="x" type="text/htm';
+    const { head, live } = splitStreamingArtifact(input);
+    expect(head).toBe('Almost there.');
+    expect(live).not.toBeNull();
+    expect(live?.content).toBe('');
+  });
+
+  it('returns content unchanged when there is no artifact at all', () => {
+    const input = 'Just prose, still streaming.';
+    const { head, live } = splitStreamingArtifact(input);
+    expect(head).toBe(input);
+    expect(live).toBeNull();
+  });
+});
+
+describe('stripRecoveredHtmlFallbackForDisplay', () => {
+  it('removes a standalone complete HTML response for display only', () => {
+    expect(stripRecoveredHtmlFallbackForDisplay(`\n${completeHtml}\n`)).toBe('');
+  });
+
+  it('removes a single complete html fence while preserving prose', () => {
+    const input = ['Done — saved as an artifact.', '', '```html', completeHtml, '```'].join('\n');
+    expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe('Done — saved as an artifact.');
+  });
+
+  it('removes a recovered preceding HTML document using original artifact context', () => {
+    const original = [
+      'Done — saved as an artifact.',
+      '',
+      completeHtml,
+      '<artifact identifier="demo" type="text/html" title="Demo">summary only</artifact>',
+    ].join('\n');
+    const stripped = stripArtifact(original);
+
+    expect(stripRecoveredHtmlFallbackForDisplay(stripped, original)).toBe('Done — saved as an artifact.');
+  });
+
+  it('leaves partial snippets unchanged', () => {
+    const input = '```html\n<main><h1>Snippet</h1></main>\n```';
+    expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe(input);
+  });
+
+  it('leaves multiple complete html fences unchanged instead of guessing', () => {
+    const input = ['```html', completeHtml, '```', '```html', completeHtml, '```'].join('\n');
+    expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe(input);
   });
 });

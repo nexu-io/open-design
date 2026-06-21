@@ -73,3 +73,7 @@
 # Share function records a click and 302s — must not be cached.
 /share/*
   Cache-Control: no-store
+
+# Newsletter subscribe function writes to KV — must not be cached.
+/subscribe
+  Cache-Control: no-store

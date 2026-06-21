@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MemorySection } from '../../src/components/MemorySection';
+import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import { I18nProvider } from '../../src/i18n';
 
 const originalFetch = globalThis.fetch;
@@ -1010,6 +1011,117 @@ describe('MemorySection', () => {
     expect(within(remountedGithubRow).getByText('Finish authorization in your browser, then return here')).toBeTruthy();
     expect(within(remountedGithubRow).queryByText('Select')).toBeNull();
     expect((within(remountedGithubRow).getByRole('button', { name: 'Connect GitHub' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('broadcasts connector changes when pending connector authorization completes', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    let connected = false;
+    const authWindow = {
+      document: {
+        title: '',
+        body: { innerHTML: '' },
+      },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    };
+    vi.spyOn(window, 'open').mockReturnValue(authWindow as unknown as Window);
+    const onConnectorsChanged = vi.fn();
+    window.addEventListener(CONNECTORS_CHANGED_EVENT, onConnectorsChanged);
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/connectors/discovery?hydrateTools=false') {
+        return new Response(JSON.stringify({
+          connectors: [
+            {
+              id: 'github',
+              name: 'GitHub',
+              provider: 'composio',
+              category: 'Developer',
+              status: 'available',
+              tools: [],
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/status') {
+        return new Response(JSON.stringify({
+          statuses: {
+            github: connected
+              ? { status: 'connected', accountLabel: 'octo@example.test' }
+              : { status: 'available' },
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/auth-configs/prepare' && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          results: {
+            github: { status: 'ready', authConfigId: 'ac_github' },
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/github/connect' && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          connector: {
+            id: 'github',
+            name: 'GitHub',
+            provider: 'composio',
+            category: 'Developer',
+            status: 'available',
+            tools: [],
+          },
+          auth: {
+            kind: 'redirect_required',
+            redirectUrl: 'https://example.com/github-oauth',
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      renderMemorySection();
+      fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
+      const githubRow = await waitFor(() => {
+        const row = document.querySelector('[data-memory-connector-id="github"]');
+        expect(row).toBeTruthy();
+        return row as HTMLElement;
+      });
+
+      fireEvent.click(within(githubRow).getByRole('button', { name: 'Connect GitHub' }));
+
+      await waitFor(() => {
+        expect(authWindow.location.replace).toHaveBeenCalledWith('https://example.com/github-oauth');
+      });
+      expect(onConnectorsChanged).not.toHaveBeenCalled();
+
+      connected = true;
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'open-design:connector-connected' },
+      }));
+
+      await waitFor(() => expect(onConnectorsChanged).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(within(githubRow).getByText('octo@example.test')).toBeTruthy());
+      expect(within(githubRow).getByText('Select')).toBeTruthy();
+    } finally {
+      window.removeEventListener(CONNECTORS_CHANGED_EVENT, onConnectorsChanged);
+    }
   });
 
   it('shows reconnect guidance for memory connectors with stale authorization', async () => {

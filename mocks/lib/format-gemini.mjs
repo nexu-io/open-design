@@ -1,15 +1,12 @@
 // OD-faithful gemini renderer.
 //
 // Matches the JSONL shape OD's `json-event-stream.ts:handleGeminiEvent`
-// parser accepts. The parser only recognizes THREE event types:
-//   {"type":"init","model":"..."}                        → status:initializing
-//   {"type":"message","role":"assistant","content":"…"}  → text_delta
-//   {"type":"result","stats":{...}}                      → usage
-//
-// Notably ABSENT: any tool-call event shape. OD's gemini surface doesn't
-// render tool calls in the UI — they're stripped at the parser layer.
-// So our renderer only emits the final assistant text wrapped in the
-// init/message/result envelope. Tool calls in the recording are ignored.
+// parser accepts:
+//   {"type":"init","model":"..."}                         → status:initializing
+//   {"type":"message","role":"assistant","content":"..."}  → text_delta
+//   {"type":"tool_use","tool_name":"...","tool_id":"..."}  → tool_use
+//   {"type":"tool_result","tool_id":"...","output":"..."}  → tool_result
+//   {"type":"result","stats":{...}}                       → usage
 
 import { writeFile } from 'node:fs/promises';
 
@@ -19,6 +16,8 @@ export async function renderAsGemini(events, opts = {}) {
   const emit = opts.emit ?? (s => process.stdout.write(s));
   const maxSleep = opts.maxSleepMs ?? 2000;
   const meta = events.find(e => e.type === 'meta');
+  const results = new Map();
+  for (const e of events) if (e.type === 'tool_result') results.set(e.obs_id, e);
 
   emit(JSON.stringify({
     type: 'init',
@@ -30,7 +29,21 @@ export async function renderAsGemini(events, opts = {}) {
   // gemini parser accepts multi-chunk too (each emits as text_delta).
   if (!opts.noDelay) await sleep(Math.min(maxSleep, 200));
   for (const e of events) {
-    if (e.type === 'report') {
+    if (e.type === 'tool_call') {
+      const result = results.get(e.obs_id);
+      emit(JSON.stringify({
+        type: 'tool_use',
+        tool_name: e.name,
+        tool_id: e.obs_id,
+        parameters: e.input ?? null,
+      }) + '\n');
+      emit(JSON.stringify({
+        type: 'tool_result',
+        tool_id: e.obs_id,
+        status: result?.status === 'error' ? 'error' : 'success',
+        output: result?.output ?? '',
+      }) + '\n');
+    } else if (e.type === 'report') {
       emit(JSON.stringify({
         type: 'message',
         role: 'assistant',

@@ -265,7 +265,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'pour une intelligence',
       titleSuffix: 'créative',
       lead:
-        'Nous relions le goût humain à l’agent que vous utilisez déjà pour livrer des interfaces, des decks et des pages éditoriales intentionnels, expressifs et vivants.',
+        'Brief → Modèle → Direction visuelle → Artifact → Mémoire',
       cards: [
         { tag: 'Skills', title: 'Des skills,\npas des plugins', body: (skills) => `${skills} bundles fondés sur SKILL.md. Déposez un dossier, redémarrez le daemon et il apparaît dans le sélecteur.`, aria: 'Voir tous les skills sur GitHub' },
         { tag: 'Systèmes', title: 'Systèmes de design\nen Markdown', body: (_skills, systems) => `${systems} systèmes DESIGN.md portables. Linear, Vercel, Stripe, Apple, Cursor, Figma et plus encore.`, aria: 'Voir tous les systèmes de design sur GitHub' },
@@ -352,7 +352,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'et',
       titleVisual: 'visuellement fort',
       titleSuffix: '',
-      lead: 'Mettez une Star sur GitHub, ouvrez une issue ou lancez pnpm tools-dev ce soir. Trois commandes et la boucle est à vous.',
+      lead: 'Open · Local · Agent-native',
       star: 'Mettre une Star sur GitHub',
       issue: 'Ouvrir une issue',
       live: 'En ligne',
@@ -420,7 +420,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'для творческого',
       titleSuffix: 'интеллекта',
       lead:
-        'Мы соединяем человеческий вкус с агентом, которому вы уже доверяете, чтобы выпускать осмысленные, выразительные и живые интерфейсы, decks и редакционные страницы.',
+        'Бриф → Шаблон → Визуальное направление → Artifact → Память',
       cards: [
         { tag: 'Skills', title: 'Skills,\nне plugins', body: (skills) => `${skills} файловых bundle на SKILL.md. Положите папку, перезапустите daemon — и он появится в picker.`, aria: 'Посмотреть все skills на GitHub' },
         { tag: 'Системы', title: 'Дизайн-системы\nкак Markdown', body: (_skills, systems) => `${systems} переносимых DESIGN.md-систем: Linear, Vercel, Stripe, Apple, Cursor, Figma и другие.`, aria: 'Посмотреть все дизайн-системы на GitHub' },
@@ -507,7 +507,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'и',
       titleVisual: 'визуально сильное',
       titleSuffix: '',
-      lead: 'Поставьте Star на GitHub, откройте issue или запустите pnpm tools-dev сегодня вечером. Три команды — и цикл у вас.',
+      lead: 'Open · Local · Agent-native',
       star: 'Поставить Star на GitHub',
       issue: 'Открыть issue',
       live: 'В сети',
@@ -575,7 +575,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'para inteligencia',
       titleSuffix: 'creativa',
       lead:
-        'Combinamos criterio humano con el agente que ya usas para entregar interfaces, decks y páginas editoriales con intención, expresión y vida.',
+        'Brief → Plantilla → Dirección visual → Artifact → Memoria',
       cards: [
         { tag: 'Skills', title: 'Skills,\nno plugins', body: (skills) => `${skills} bundles basados en SKILL.md. Suelta una carpeta, reinicia el daemon y aparece en el selector.`, aria: 'Ver todos los skills en GitHub' },
         { tag: 'Sistemas', title: 'Sistemas de diseño\nen Markdown', body: (_skills, systems) => `${systems} sistemas DESIGN.md portables. Linear, Vercel, Stripe, Apple, Cursor, Figma y más.`, aria: 'Ver todos los sistemas de diseño en GitHub' },
@@ -662,7 +662,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'y',
       titleVisual: 'visualmente fuerte',
       titleSuffix: '',
-      lead: 'Danos una Star en GitHub, abre una issue o ejecuta pnpm tools-dev esta noche. Tres comandos y el bucle es tuyo.',
+      lead: 'Open · Local · Agent-native',
       star: 'Dar Star en GitHub',
       issue: 'Abrir issue',
       live: 'En línea',
@@ -730,7 +730,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'para inteligência',
       titleSuffix: 'criativa',
       lead:
-        'Combinamos gosto humano com o agente que você já usa para entregar interfaces, decks e páginas editoriais intencionais, expressivas e vivas.',
+        'Brief → Template → Direção visual → Artifact → Memória',
       cards: [
         { tag: 'Skills', title: 'Skills,\nnão plugins', body: (skills) => `${skills} bundles baseados em SKILL.md. Coloque uma pasta, reinicie o daemon e ela aparece no seletor.`, aria: 'Ver todos os skills no GitHub' },
         { tag: 'Sistemas', title: 'Sistemas de design\nem Markdown', body: (_skills, systems) => `${systems} sistemas DESIGN.md portáteis. Linear, Vercel, Stripe, Apple, Cursor, Figma e mais.`, aria: 'Ver todos os sistemas de design no GitHub' },
@@ -817,7 +817,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'e',
       titleVisual: 'visualmente forte',
       titleSuffix: '',
-      lead: 'Dê Star no GitHub, abra uma issue ou execute pnpm tools-dev hoje à noite. Três comandos e o loop é seu.',
+      lead: 'Open · Local · Agent-native',
       star: 'Dar Star no GitHub',
       issue: 'Abrir issue',
       live: 'No ar',
@@ -885,7 +885,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'per intelligenza',
       titleSuffix: 'creativa',
       lead:
-        'Uniamo gusto umano e agente che già usi per consegnare interfacce, deck e pagine editoriali intenzionali, espressive e vive.',
+        'Brief → Template → Direzione visiva → Artifact → Memoria',
       cards: [
         { tag: 'Skill', title: 'Skill,\nnon plugin', body: (skills) => `${skills} bundle basati su SKILL.md. Aggiungi una cartella, riavvia il daemon e compare nel selettore.`, aria: 'Vedi tutte le skill su GitHub' },
         { tag: 'Sistemi', title: 'Sistemi di design\nin Markdown', body: (_skills, systems) => `${systems} sistemi DESIGN.md portabili. Linear, Vercel, Stripe, Apple, Cursor, Figma e altro.`, aria: 'Vedi tutti i sistemi di design su GitHub' },
@@ -972,7 +972,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'e',
       titleVisual: 'visivamente forte',
       titleSuffix: '',
-      lead: 'Metti una Star su GitHub, apri una issue o esegui pnpm tools-dev stasera. Tre comandi e il loop è tuo.',
+      lead: 'Open · Local · Agent-native',
       star: 'Metti Star su GitHub',
       issue: 'Apri issue',
       live: 'Online',
@@ -1040,7 +1040,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'cho trí tuệ',
       titleSuffix: 'sáng tạo',
       lead:
-        'Chúng tôi kết hợp gu của con người với agent bạn đã tin dùng để giao interface, deck và trang biên tập có chủ đích, giàu biểu đạt và sống động.',
+        'Brief → Mẫu → Hướng hình ảnh → Artifact → Ký ức',
       cards: [
         { tag: 'Skill', title: 'Skill,\nkhông phải plugin', body: (skills) => `${skills} bundle dựa trên SKILL.md. Thả thư mục vào, khởi động lại daemon, nó sẽ xuất hiện trong picker.`, aria: 'Xem tất cả skill trên GitHub' },
         { tag: 'Hệ thống', title: 'Hệ thiết kế\nbằng Markdown', body: (_skills, systems) => `${systems} hệ DESIGN.md di động. Linear, Vercel, Stripe, Apple, Cursor, Figma và nhiều hơn nữa.`, aria: 'Xem tất cả hệ thiết kế trên GitHub' },
@@ -1127,7 +1127,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'và',
       titleVisual: 'mạnh về thị giác',
       titleSuffix: '',
-      lead: 'Star trên GitHub, mở issue hoặc chạy pnpm tools-dev tối nay. Ba lệnh và vòng lặp thuộc về bạn.',
+      lead: 'Open · Local · Agent-native',
       star: 'Star trên GitHub',
       issue: 'Mở issue',
       live: 'Đang chạy',
@@ -1195,7 +1195,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'dla kreatywnej',
       titleSuffix: 'inteligencji',
       lead:
-        'Łączymy ludzki gust z agentem, któremu już ufasz, aby dostarczać interfejsy, decki i strony redakcyjne z intencją, ekspresją i życiem.',
+        'Brief → Szablon → Kierunek wizualny → Artifact → Pamięć',
       cards: [
         { tag: 'Skills', title: 'Skills,\nnie pluginy', body: (skills) => `${skills} pakietów opartych o SKILL.md. Wrzuć folder, uruchom daemon ponownie i pojawi się w wyborze.`, aria: 'Zobacz wszystkie skills na GitHubie' },
         { tag: 'Systemy', title: 'Systemy designu\nw Markdown', body: (_skills, systems) => `${systems} przenośnych systemów DESIGN.md. Linear, Vercel, Stripe, Apple, Cursor, Figma i więcej.`, aria: 'Zobacz wszystkie systemy designu na GitHubie' },
@@ -1282,7 +1282,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'i',
       titleVisual: 'mocnego wizualnie',
       titleSuffix: '',
-      lead: 'Daj Star na GitHubie, otwórz issue albo uruchom pnpm tools-dev dziś wieczorem. Trzy komendy i pętla jest Twoja.',
+      lead: 'Open · Local · Agent-native',
       star: 'Daj Star na GitHubie',
       issue: 'Otwórz issue',
       live: 'Online',
@@ -1350,7 +1350,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'untuk kecerdasan',
       titleSuffix: 'kreatif',
       lead:
-        'Kami menggabungkan selera manusia dengan agent yang sudah Anda percaya untuk mengirim interface, deck, dan halaman editorial yang punya niat, ekspresi, dan hidup.',
+        'Brief → Template → Arah visual → Artifact → Memori',
       cards: [
         { tag: 'Skill', title: 'Skill,\nbukan plugin', body: (skills) => `${skills} bundle berbasis SKILL.md. Letakkan folder, restart daemon, lalu muncul di picker.`, aria: 'Lihat semua skill di GitHub' },
         { tag: 'Sistem', title: 'Sistem desain\ndalam Markdown', body: (_skills, systems) => `${systems} sistem DESIGN.md portabel. Linear, Vercel, Stripe, Apple, Cursor, Figma, dan lainnya.`, aria: 'Lihat semua sistem desain di GitHub' },
@@ -1437,7 +1437,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'dan',
       titleVisual: 'kuat secara visual',
       titleSuffix: '',
-      lead: 'Beri Star di GitHub, buka issue, atau jalankan pnpm tools-dev malam ini. Tiga perintah dan loop menjadi milik Anda.',
+      lead: 'Open · Local · Agent-native',
       star: 'Beri Star di GitHub',
       issue: 'Buka issue',
       live: 'Aktif',
@@ -1505,7 +1505,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'voor creatieve',
       titleSuffix: 'intelligentie',
       lead:
-        'We combineren menselijke smaak met de agent die je al vertrouwt om interfaces, decks en redactionele pagina’s met intentie, expressie en leven te leveren.',
+        'Brief → Template → Visuele richting → Artifact → Geheugen',
       cards: [
         { tag: 'Skills', title: 'Skills,\ngeen plugins', body: (skills) => `${skills} SKILL.md-bundles. Plaats een map, herstart de daemon en hij verschijnt in de picker.`, aria: 'Bekijk alle skills op GitHub' },
         { tag: 'Systemen', title: 'Designsystemen\nin Markdown', body: (_skills, systems) => `${systems} draagbare DESIGN.md-systemen. Linear, Vercel, Stripe, Apple, Cursor, Figma en meer.`, aria: 'Bekijk alle designsystemen op GitHub' },
@@ -1592,7 +1592,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'en',
       titleVisual: 'visueel sterks',
       titleSuffix: 'bouwen',
-      lead: 'Geef ons een Star op GitHub, open een issue of draai vanavond pnpm tools-dev. Drie commando’s en de loop is van jou.',
+      lead: 'Open · Local · Agent-native',
       star: 'Geef een Star op GitHub',
       issue: 'Open issue',
       live: 'Live',
@@ -1660,7 +1660,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'للذكاء',
       titleSuffix: 'الإبداعي',
       lead:
-        'نربط الذائقة البشرية بالـ agent الذي تثق به أصلاً لتسليم واجهات وdecks وصفحات تحريرية ذات قصد وتعبير وحياة.',
+        'Brief → قالب → اتجاه بصري → Artifact → ذاكرة',
       cards: [
         { tag: 'Skills', title: 'Skills،\nليست plugins', body: (skills) => `${skills} حزمة قائمة على SKILL.md. ضع المجلد، أعد تشغيل daemon، وستظهر في picker.`, aria: 'عرض كل skills على GitHub' },
         { tag: 'أنظمة', title: 'أنظمة التصميم\nبصيغة Markdown', body: (_skills, systems) => `${systems} أنظمة DESIGN.md قابلة للنقل. Linear وVercel وStripe وApple وCursor وFigma وغيرها.`, aria: 'عرض كل أنظمة التصميم على GitHub' },
@@ -1747,7 +1747,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'و',
       titleVisual: 'قوياً بصرياً',
       titleSuffix: '',
-      lead: 'ضع Star على GitHub، افتح issue، أو شغّل pnpm tools-dev الليلة. ثلاثة أوامر والحلقة لك.',
+      lead: 'Open · Local · Agent-native',
       star: 'ضع Star على GitHub',
       issue: 'افتح issue',
       live: 'مباشر',
@@ -1815,7 +1815,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'yaratıcı',
       titleSuffix: 'zekâ için',
       lead:
-        'İnsan zevkini zaten güvendiğin agentla birleştirerek niyetli, ifadeli ve canlı interface, deck ve editoryal sayfalar teslim ederiz.',
+        'Brief → Şablon → Görsel yön → Artifact → Bellek',
       cards: [
         { tag: 'Skill', title: 'Skill,\nplugin değil', body: (skills) => `${skills} SKILL.md tabanlı bundle. Klasörü bırak, daemonı yeniden başlat, pickerda görünür.`, aria: 'Tüm skillleri GitHub’da gör' },
         { tag: 'Sistem', title: 'Tasarım sistemleri\nMarkdown olarak', body: (_skills, systems) => `${systems} taşınabilir DESIGN.md sistemi. Linear, Vercel, Stripe, Apple, Cursor, Figma ve daha fazlası.`, aria: 'Tüm tasarım sistemlerini GitHub’da gör' },
@@ -1902,7 +1902,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 've',
       titleVisual: 'görsel olarak güçlü',
       titleSuffix: 'bir şey üretelim',
-      lead: 'GitHub’da Star ver, issue aç veya bu gece pnpm tools-dev çalıştır. Üç komut ve döngü senin.',
+      lead: 'Open · Local · Agent-native',
       star: 'GitHub’da Star ver',
       issue: 'Issue aç',
       live: 'Canlı',
@@ -1970,7 +1970,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleEmphasis: 'для творчого',
       titleSuffix: 'інтелекту',
       lead:
-        'Ми поєднуємо людський смак з агентом, якому ви вже довіряєте, щоб доставляти осмислені, виразні та живі інтерфейси, decks і редакційні сторінки.',
+        'Бриф → Шаблон → Візуальний напрям → Artifact → Памʼять',
       cards: [
         { tag: 'Skills', title: 'Skills,\nне plugins', body: (skills) => `${skills} файлових bundle на SKILL.md. Покладіть папку, перезапустіть daemon — і вона з’явиться в picker.`, aria: 'Переглянути всі skills на GitHub' },
         { tag: 'Системи', title: 'Дизайн-системи\nяк Markdown', body: (_skills, systems) => `${systems} переносних DESIGN.md systems. Linear, Vercel, Stripe, Apple, Cursor, Figma та інші.`, aria: 'Переглянути всі дизайн-системи на GitHub' },
@@ -2057,7 +2057,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       titleMiddle: 'і',
       titleVisual: 'візуально сильне',
       titleSuffix: '',
-      lead: 'Поставте Star на GitHub, відкрийте issue або запустіть pnpm tools-dev сьогодні ввечері. Три команди — і цикл ваш.',
+      lead: 'Open · Local · Agent-native',
       star: 'Поставити Star на GitHub',
       issue: 'Відкрити issue',
       live: 'Онлайн',

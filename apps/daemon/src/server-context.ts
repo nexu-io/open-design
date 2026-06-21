@@ -1,10 +1,11 @@
 import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
-import type { DesignSystemSummary } from './design-systems.js';
-import type { RoutineRoutesService } from './routine-routes.js';
+import type { DesignSystemSummary } from './design-systems/index.js';
+import type { RoutineRoutesService } from './routes/routine.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
+  getPublicBaseUrl?: (...args: any[]) => string;
   isLocalSameOrigin: (...args: any[]) => boolean;
   requireLocalDaemonRequest: (...args: any[]) => any;
   resolvedPortRef: { current: number };
@@ -16,6 +17,7 @@ export interface HttpDeps {
 export interface PathDeps {
   ARTIFACTS_DIR: string;
   BUNDLED_PETS_DIR: string;
+  CRAFT_DIR: string;
   DESIGN_SYSTEMS_DIR: string;
   // Bundled rendering catalogue (see specs/current/skills-and-design-templates.md).
   // Distinct from SKILLS_DIR so the EntryView Templates surface and the
@@ -36,6 +38,7 @@ export interface PathDeps {
 }
 
 export interface ResourceDeps {
+  FIRST_PARTY_ATOMS?: Array<any>;
   listAllDesignSystems: () => Promise<Array<DesignSystemSummary & { source?: string }>>;
   listAllSkills: () => Promise<Array<SkillInfo & { source?: string }>>;
   // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates
@@ -53,8 +56,22 @@ export interface RoutineDeps {
   routineService: RoutineRoutesService;
 }
 
+export interface ProjectPreviewScopeDeps {
+  mint: (projectId: string) => string;
+  validate: (projectId: string, scope: string) => boolean;
+}
+
 export interface TelemetryDeps {
-  reportFinalizedMessage: (saved: any, body?: any) => void;
+  reportFinalizedMessage: (
+    saved: any,
+    body?: any,
+    options?: {
+      analyticsContext?: any;
+      projectId?: string;
+      conversationId?: string;
+      reportTrigger?: 'final_message' | 'terminal_fallback';
+    },
+  ) => void;
   /**
    * Best-effort Langfuse score emission for assistant-turn user ratings.
    * Returns the categorical outcome so the API surface in chat-routes can
@@ -101,6 +118,7 @@ export interface ServerContext {
   mcp: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
+  projectPreviewScopes: ProjectPreviewScopeDeps;
   telemetry?: TelemetryDeps;
   validation: any;
   finalize: any;

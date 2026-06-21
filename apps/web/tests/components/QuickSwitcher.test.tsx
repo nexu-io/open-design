@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,6 +28,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  cleanup();
 });
 
 function file(overrides: Partial<ProjectFile>): ProjectFile {
@@ -139,5 +143,34 @@ describe('QuickSwitcher render', () => {
     );
     expect(markup).toContain('class="qs-input"');
     expect(markup).toContain('placeholder=');
+  });
+
+  it('searches workspace tabs and opens the selected tab', () => {
+    const onOpenTab = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <QuickSwitcher
+        projectId="p1"
+        files={[file({ name: 'landing.html' })]}
+        workspaceContexts={[
+          {
+            id: 'browser:__browser__:1',
+            kind: 'browser',
+            label: 'Dribbble',
+            tabId: '__browser__:1',
+            url: 'https://dribbble.com/',
+          },
+        ]}
+        onOpenFile={vi.fn()}
+        onOpenTab={onOpenTab}
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'drib' } });
+    fireEvent.click(screen.getByText('Dribbble'));
+
+    expect(onOpenTab).toHaveBeenCalledWith('__browser__:1');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

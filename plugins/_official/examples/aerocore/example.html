@@ -1,0 +1,2136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="EngineTech designs and manufactures custom propulsion systems for aerospace programs."
+    />
+    <title>EngineTech | Custom Aerospace Engines</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@200;260;300;360;370;400;430;500;520;560;600;650;680;700;740;760&family=Inter:wght@200;300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+    <style>
+:root {
+  color-scheme: light;
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --geist-background: #ffffff;
+  --geist-foreground: #0a0a0a;
+  --geist-muted: #666666;
+  --hero-blue: #7191d0;
+  --hero-blue-soft: #aab8d5;
+  --hero-cloud: #ece9e6;
+  --hero-bg-bottom: linear-gradient(180deg, var(--hero-blue) 0%, var(--hero-blue-soft) 55%, var(--hero-cloud) 100%);
+  --hero-bg-top: linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.12));
+  --hero-max-width: 1820px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--geist-background);
+  color: var(--geist-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.mission {
+  position: relative;
+  z-index: 40;
+  min-height: 100vh;
+  margin-top: -12vh;
+  background: #ffffff;
+  color: #161616;
+}
+
+.mission__inner {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.95fr) minmax(0, 2fr);
+  grid-template-rows: auto minmax(360px, 1fr);
+  column-gap: clamp(56px, 8vw, 170px);
+  row-gap: clamp(76px, 5vw, 104px);
+  width: min(100% - 96px, var(--hero-max-width));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(34px, 3vw, 54px) 0 clamp(32px, 4vw, 62px);
+}
+
+.mission__eyebrow {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  margin: 0;
+  color: #202020;
+  font-size: clamp(13px, 0.9vw, 16.8px);
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: 0;
+}
+
+.mission__statement {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  max-width: 1180px;
+}
+
+.mission__statement h2 {
+  margin: 0;
+  color: #141414;
+  font-size: clamp(29px, 1.95vw, 41.3px);
+  font-weight: 260;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.mission__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: clamp(46px, 3.3vw, 72px);
+  color: #171717;
+  font-size: clamp(13.8px, 1vw, 18.3px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mission__button span:last-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: clamp(58px, 3.65vw, 72px);
+  padding: 0 clamp(18px, 1.35vw, 26px);
+  border: 1px solid #c6c6c6;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.04);
+}
+
+.mission__button-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: clamp(58px, 3.65vw, 72px);
+  aspect-ratio: 1;
+  border-radius: 5px;
+  background: #d8e8ff;
+  transition:
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.mission__button-icon .ph {
+  font-size: clamp(22px, 1.5vw, 28px);
+  color: currentColor;
+  display: block;
+}
+
+.mission__button:hover .mission__button-icon {
+  background: #c7dcfb;
+  transform: translate(2px, 2px);
+}
+
+.mission__support {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  max-width: 520px;
+  margin: 0;
+  color: #5f5f5f;
+  font-size: clamp(23.7px, 1.56vw, 30.6px);
+  font-weight: 370;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.mission__media {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: transparent;
+}
+
+.hero {
+  position: relative;
+  height: 180vh;
+  min-height: 1238px;
+  overflow: clip;
+  background: var(--hero-blue);
+}
+
+.hero__background {
+  position: sticky;
+  top: 0;
+  z-index: 0;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      var(--hero-top, #7191d0) 0%,
+      var(--hero-mid, #aab8d5) 55%,
+      var(--hero-bottom, #ece9e6) 100%
+    );
+}
+
+.hero__bg-layer {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
+}
+
+.hero__bg-layer--bottom {
+  background:
+    radial-gradient(circle at 52% 26%, rgb(255 255 255 / 0.22), transparent 35%),
+    linear-gradient(180deg, rgb(70 100 170 / 0.14), rgb(255 255 255 / 0));
+}
+
+.hero__bg-layer--top {
+  z-index: 1;
+  background: var(--hero-bg-top);
+  mix-blend-mode: screen;
+}
+
+.hero__stars {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  height: 210px;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle, rgb(255 255 255 / 0.78) 0 1px, transparent 1.8px),
+    radial-gradient(circle, rgb(255 255 255 / 0.58) 0 1px, transparent 1.6px),
+    radial-gradient(circle, rgb(255 255 255 / 0.68) 0 1px, transparent 1.7px);
+  background-position:
+    10% 24%,
+    38% 16%,
+    76% 32%;
+  background-size:
+    180px 94px,
+    260px 120px,
+    340px 150px;
+  opacity: 0.45;
+  animation: hero-stars-twinkle 4.8s ease-in-out infinite alternate;
+}
+
+@keyframes hero-stars-twinkle {
+  0% { opacity: 0.18; filter: brightness(0.92); }
+  50% { opacity: 0.58; filter: brightness(1.12); }
+  100% { opacity: 0.34; filter: brightness(1); }
+}
+
+.hero__nav {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 32px;
+  width: min(100% - 96px, var(--hero-max-width));
+  margin: 0;
+  padding: 27px 16px 16px;
+  color: #ffffff;
+  transform: translate3d(-50%, 0, 0);
+  transition:
+    background-color 300ms ease,
+    color 300ms ease,
+    transform 300ms ease,
+    box-shadow 300ms ease,
+    border-color 300ms ease,
+    padding 300ms ease,
+    top 300ms ease;
+  border: 1px solid transparent;
+  border-radius: 0;
+}
+
+.hero__nav.nav--scroll-down {
+  transform: translate3d(-50%, 16px, 0);
+  background-color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #111111;
+  padding: 14px 24px;
+  border-radius: 40px;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 12px 30px -10px rgba(0, 0, 0, 0.08),
+    0 4px 12px -5px rgba(0, 0, 0, 0.03);
+}
+
+.hero__nav.nav--scroll-down .brand__name { color: #111111; }
+.hero__nav.nav--scroll-down .brand__mark { background: #111111; }
+.hero__nav.nav--scroll-down .hero__links { color: rgba(17, 17, 17, 0.8); }
+.hero__nav.nav--scroll-down .hero__links a { color: inherit; }
+.hero__nav.nav--scroll-down .hero__links a:hover { color: #111111; }
+.hero__nav.nav--scroll-down .hero__cta { background: #111111; color: #ffffff; box-shadow: none; }
+
+.hero__nav.nav--scroll-up {
+  transform: translate3d(-50%, -100px, 0);
+  pointer-events: none;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.brand__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 29px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: background-color 300ms ease;
+}
+
+.brand__mark::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  background: var(--hero-blue);
+  clip-path: polygon(0 20%, 100% 8%, 100% 19%, 0 31%, 0 43%, 100% 31%, 100% 42%, 0 54%, 0 66%, 100% 54%, 100% 65%, 0 77%);
+}
+
+.brand__mark span { display: none; }
+
+.brand__name {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 560;
+  line-height: 1;
+  letter-spacing: 0;
+  transition: color 300ms ease;
+}
+
+.hero__links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(22px, 2.55vw, 44px);
+  color: rgb(255 255 255 / 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+  transition: color 300ms ease;
+}
+
+.hero__links a { transition: color 160ms ease; }
+.hero__links a:hover { color: #ffffff; }
+
+.hero__cta {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 122px;
+  min-height: 46px;
+  padding: 0 17px;
+  border-radius: 6px;
+  background: rgb(233 240 255 / 0.9);
+  color: #111111;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.42);
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    color 160ms ease;
+}
+
+.hero__cta:hover { background: #ffffff; transform: translateY(-1px); }
+
+.hero__content {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  width: min(100%, var(--hero-max-width));
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+.hero__title {
+  position: fixed;
+  top: calc(50% - 56px - clamp(82px, 8vw, 126px));
+  left: 4%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0;
+  width: 96vw;
+  color: #ffffff;
+  font-weight: 200;
+  letter-spacing: 0;
+  line-height: 0.88;
+  pointer-events: none;
+  transform: translate3d(0, var(--scroll-y, 0px), 0);
+  will-change: transform, opacity;
+}
+
+.hero__title-line {
+  display: block;
+  font-size: clamp(144px, 18vw, 285px);
+  white-space: nowrap;
+}
+
+.hero__title-line--one { position: relative; z-index: 10; }
+
+.hero__title-row {
+  position: fixed;
+  top: calc(50% - 56px + clamp(50px, 4.5vw, 90px));
+  left: 4%;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: clamp(112px, 12vw, 224px);
+  color: #ffffff;
+  font-weight: 200;
+  pointer-events: none;
+  transform: translate3d(15vw, var(--scroll-y, 0px), 0);
+  will-change: transform, opacity;
+}
+
+.hero__title-line--two,
+.hero__title-line--three { position: relative; }
+.hero__title-line--three { transform: translateX(112px); }
+
+.engine-visual {
+  position: fixed;
+  z-index: 3;
+  left: 50%;
+  top: -15px;
+  width: auto;
+  height: calc((100% + 15px) * 1.4);
+  max-width: calc(100vw - 96px);
+  max-height: 1023px;
+  aspect-ratio: 2 / 3;
+  transform: translate3d(-50%, var(--scroll-y, 0px), 0);
+  will-change: transform, opacity;
+  filter: drop-shadow(0 28px 34px rgb(26 31 42 / 0.22));
+}
+
+.engine-visual__asset {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+.hero__caption {
+  position: fixed;
+  z-index: 4;
+  left: clamp(24px, 3.85vw, 78px);
+  bottom: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  max-width: min(170px, calc(50vw - 112px));
+  margin: 0;
+  color: rgb(42 42 42 / 0.58);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 22px;
+  letter-spacing: 0;
+  transform: translate3d(0, var(--scroll-y, 0px), 0);
+  will-change: transform, opacity;
+}
+
+.hero__caption::before {
+  content: "";
+  display: block;
+  width: 1px;
+  height: 44px;
+  background: rgb(42 42 42 / 0.32);
+}
+
+.hero.is-past .hero__title,
+.hero.is-past .hero__title-row,
+.hero.is-past .hero__caption,
+.hero.is-past .engine-visual {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1180px) {
+  .mission__inner {
+    grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.7fr);
+    column-gap: clamp(36px, 5vw, 72px);
+    width: min(100% - 48px, var(--hero-max-width));
+  }
+  .mission__statement h2 { font-size: clamp(26px, 3.37vw, 38.2px); }
+  .mission__support { font-size: clamp(20.6px, 2.3vw, 26px); }
+  .hero__nav {
+    grid-template-columns: auto 1fr auto;
+    width: min(100% - 48px, var(--hero-max-width));
+  }
+  .hero__links { gap: 20px; font-size: 14px; }
+  .brand__name { font-size: 22px; }
+  .hero__cta { min-width: 122px; min-height: 46px; font-size: 14px; }
+}
+
+@media (max-width: 860px) {
+  .mission { margin-top: -8vh; }
+  .mission__inner {
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+    width: min(100% - 48px, var(--hero-max-width));
+    min-height: auto;
+    padding: 34px 0 40px;
+  }
+  .mission__statement { max-width: none; }
+  .mission__statement h2 { font-size: clamp(26px, 7.65vw, 39.8px); line-height: 1.1; }
+  .mission__button { margin-top: 34px; font-size: 13.8px; }
+  .mission__button-icon { width: 56px; }
+  .mission__support { max-width: 640px; margin: 52px 0 0; font-size: clamp(19.9px, 5.35vw, 26px); }
+  .mission__media { margin-top: 8px; }
+  .hero { height: 180vh; min-height: 1238px; }
+  .hero__nav { grid-template-columns: 1fr auto; padding-top: 22px; }
+  .hero__links { display: none; }
+  .hero__content { height: 100vh; }
+  .hero__title-line { font-size: clamp(102px, 31.5vw, 192px); }
+  .hero__title { top: calc(50% - 56px - clamp(58px, 14vw, 90px)); left: 5%; }
+  .hero__title-row { top: calc(50% - 56px + clamp(32px, 9vw, 63px)); left: 5%; transform: translate3d(10vw, var(--scroll-y, 0px), 0); }
+  .engine-visual { top: -19px; height: calc((100% + 19px) * 1.4); max-height: 868px; }
+  .hero__caption { right: 24px; bottom: 24px; max-width: min(170px, calc(100vw - 48px)); font-size: 16px; line-height: 22px; }
+}
+
+@media (max-width: 560px) {
+  .mission__inner { width: min(100% - 32px, var(--hero-max-width)); }
+  .mission__eyebrow { max-width: 240px; font-size: 12.2px; }
+  .mission__statement h2 { font-size: clamp(23.7px, 7.19vw, 32.1px); }
+  .mission__support { font-size: clamp(18.3px, 5.97vw, 23.7px); }
+  .mission__media { aspect-ratio: 4 / 3; }
+  .hero__nav { width: min(100% - 32px, var(--hero-max-width)); gap: 16px; }
+  .brand__mark { width: 24px; }
+  .brand__name { font-size: 17px; }
+  .hero__cta { min-width: auto; min-height: 38px; padding: 0 12px; font-size: 13px; }
+  .hero__title-line { font-size: clamp(111px, 38.4vw, 185px); }
+  .hero__title-row { gap: clamp(72px, 20vw, 128px); transform: translate3d(10vw, var(--scroll-y, 0px), 0); }
+  .hero__caption { display: none; }
+}
+
+.showcase-film {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  z-index: 45;
+  overflow: hidden;
+  background: #d7dde4;
+  opacity: 0;
+  pointer-events: none;
+  will-change: top, left, width, height, border-radius, opacity;
+}
+
+.showcase-film__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.showcase-film__overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.showcase {
+  position: relative;
+  z-index: 50;
+  height: 600vh;
+}
+
+.showcase__sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: transparent;
+  overflow: visible;
+}
+
+.showcase__ui {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  padding: clamp(32px, 4vw, 72px) clamp(32px, 4.5vw, 80px);
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.showcase__panels {
+  grid-column: 1;
+  position: relative;
+  min-height: clamp(200px, 30vh, 400px);
+  max-width: 640px;
+}
+
+.showcase__panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 460ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 460ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.showcase__panel.is-active { opacity: 1; transform: none; pointer-events: auto; }
+
+.showcase__panel-num {
+  display: block;
+  margin: 0 0 clamp(12px, 1.1vw, 22px);
+  color: rgb(255 255 255 / 0.42);
+  font-size: clamp(11px, 0.78vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.showcase__panel-title {
+  margin: 0 0 clamp(14px, 1.3vw, 26px);
+  color: #ffffff;
+  font-size: clamp(38px, 4.4vw, 80px);
+  font-weight: 200;
+  line-height: 1.07;
+  letter-spacing: -0.022em;
+}
+
+.showcase__panel-desc {
+  max-width: 490px;
+  margin: 0;
+  color: rgb(255 255 255 / 0.58);
+  font-size: clamp(14px, 1.05vw, 18px);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.showcase__tabs-nav {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: clamp(10px, 0.9vw, 20px);
+  padding-left: clamp(36px, 5vw, 120px);
+  pointer-events: auto;
+}
+
+.showcase__tab {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 0.7vw, 14px);
+  color: rgb(255 255 255 / 0.28);
+  font-size: clamp(12px, 0.82vw, 15px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  transition: color 320ms ease;
+}
+
+.showcase__tab.is-active { color: #ffffff; }
+
+.showcase__tab-bar {
+  display: block;
+  flex-shrink: 0;
+  width: 1px;
+  height: 14px;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 320ms ease;
+}
+
+.showcase__tab.is-active .showcase__tab-bar { opacity: 1; }
+.showcase__tab-name { transition: color 320ms ease; }
+
+.showcase__tab-num {
+  font-weight: 600;
+  font-size: clamp(11px, 0.72vw, 13px);
+  color: rgb(255 255 255 / 0.38);
+  transition: color 320ms ease;
+}
+
+.showcase__tab.is-active .showcase__tab-num { color: rgb(255 255 255 / 0.65); }
+
+@media (max-width: 860px) {
+  .showcase__ui { grid-template-columns: 1fr; }
+  .showcase__tabs-nav { display: none; }
+  .showcase__panel-title { font-size: clamp(30px, 8vw, 54px); }
+}
+
+@media (max-width: 560px) {
+  .showcase__ui { padding: 28px 24px; }
+  .showcase__panel-title { font-size: clamp(26px, 9vw, 42px); }
+  .showcase__panel-desc { font-size: 14px; }
+}
+
+.capabilities {
+  position: relative;
+  z-index: 70;
+  min-height: 100vh;
+  padding: clamp(34px, 4vw, 72px) clamp(16px, 3.8vw, 72px);
+  background: #f7f8f8;
+  color: #111111;
+}
+
+.capabilities__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  max-width: var(--hero-max-width);
+  margin: 0 auto clamp(24px, 3vw, 42px);
+}
+
+.capabilities__intro { max-width: 860px; }
+
+.capabilities__intro h2 {
+  max-width: 920px;
+  margin: 0;
+  color: #111111;
+  font-size: clamp(29px, 3.2vw, 54px);
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.capabilities__intro p {
+  max-width: 760px;
+  margin: 18px 0 0;
+  color: #677070;
+  font-size: clamp(14px, 1vw, 17px);
+  font-weight: 400;
+  line-height: 1.62;
+}
+
+.capabilities__button {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid rgb(17 17 17 / 0.1);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.78);
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    0 18px 44px rgb(31 44 44 / 0.08);
+}
+
+.capabilities__button .ph { font-size: 18px; }
+
+.capabilities__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(14px, 1.25vw, 22px);
+  max-width: var(--hero-max-width);
+  min-height: clamp(620px, 72vh, 780px);
+  margin: 0 auto;
+}
+
+.capabilities__stack {
+  display: grid;
+  grid-template-rows: minmax(210px, 0.74fr) minmax(270px, 1fr);
+  gap: clamp(14px, 1.25vw, 22px);
+  min-width: 0;
+}
+
+.capabilities__stack--systems { grid-template-rows: minmax(420px, 1.45fr) auto; }
+
+.cap-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(18 35 35 / 0.09);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgb(21 34 34 / 0.08);
+}
+
+.cap-card--tall, .cap-card--metric, .cap-card--tools { min-height: 0; }
+.cap-card--media, .cap-card--metric { color: #ffffff; background: #dce3e3; }
+
+.cap-card__video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transform: scale(1.02);
+}
+
+.cap-card__shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgb(5 12 14 / 0.3), transparent 34%),
+    linear-gradient(0deg, rgb(5 12 14 / 0.78), transparent 48%);
+}
+
+.cap-card__light {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.45), rgb(255 255 255 / 0.34)),
+    linear-gradient(0deg, rgb(247 248 248 / 0.36), transparent 62%);
+}
+
+.cap-card__label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: rgb(255 255 255 / 0.78);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.cap-card__label--left { justify-content: flex-start; padding: 0; color: #758080; }
+
+.cap-card__timeline {
+  position: absolute;
+  z-index: 1;
+  right: 20px;
+  bottom: 20px;
+  left: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.cap-card__timeline div {
+  display: grid;
+  grid-template-columns: 58px 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: rgb(255 255 255 / 0.76);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.cap-card__timeline b { display: block; width: 5px; height: 5px; border-radius: 50%; background: rgb(255 255 255 / 0.62); }
+.cap-card__timeline strong { min-width: 0; color: #ffffff; font-size: clamp(13px, 0.95vw, 15px); font-weight: 650; }
+.cap-card__timeline em { color: rgb(255 255 255 / 0.58); font-style: normal; white-space: nowrap; }
+
+.cap-card--quote,
+.cap-card--contact {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.72), rgb(238 244 244 / 0.86)),
+    #edf2f2;
+}
+
+.cap-card--video-panel > :not(.cap-card__video, .cap-card__light, .cap-card__shade) { position: relative; z-index: 1; }
+
+.cap-card--quote blockquote { margin: clamp(22px, 2.4vw, 34px) 0 20px; color: #263030; font-size: clamp(15px, 1vw, 18px); line-height: 1.62; }
+.cap-card--quote p, .cap-card--contact p { margin: 0; color: #6b7676; font-size: 14px; line-height: 1.5; }
+.cap-card--quote strong { display: block; color: #111111; font-size: 15px; }
+
+.cap-card--metric { display: block; min-height: 320px; }
+
+.cap-card__metric {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  text-shadow: 0 12px 32px rgb(0 0 0 / 0.3);
+}
+
+.cap-card__metric strong {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-size: clamp(82px, 7.4vw, 134px);
+  font-weight: 220;
+  letter-spacing: 0;
+  line-height: 0.9;
+  transform: translate(-50%, -50%);
+}
+
+.cap-card__metric span {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  left: 24px;
+  color: rgb(255 255 255 / 0.82);
+  font-size: clamp(14px, 1.05vw, 18px);
+  line-height: 1.4;
+}
+
+.cap-card--tools {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0 0 clamp(20px, 2vw, 28px);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.72), rgb(231 238 238 / 0.9)),
+    #eef3f3;
+}
+
+.cap-card--tools .cap-card__label { color: #758080; }
+.cap-card--tools-media { min-height: 420px; padding-bottom: 0; background: transparent; }
+.cap-card--tools-media .cap-card__label { color: rgb(255 255 255 / 0.82); }
+.cap-card--tools-media .cap-card__shade {
+  background:
+    linear-gradient(180deg, rgb(5 12 14 / 0.18), transparent 34%),
+    linear-gradient(0deg, rgb(5 12 14 / 0.32), transparent 56%);
+}
+
+.tool-marquee {
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  padding: 26px 0 8px;
+  mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+}
+
+.tool-marquee__row { display: flex; width: max-content; gap: 12px; }
+
+.tool-marquee__row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 0 16px;
+  border: 1px solid rgb(34 52 52 / 0.1);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.78);
+  color: #2c3838;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9);
+}
+
+.cap-card--tools-media .tool-marquee__row span {
+  border-color: rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.18);
+  color: #ffffff;
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.24);
+}
+
+.tool-marquee__row .ph { font-size: 20px; }
+.tool-marquee__row--left { animation: marquee-left 24s linear infinite; }
+.tool-marquee__row--right { animation: marquee-right 28s linear infinite; }
+
+@keyframes marquee-left { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes marquee-right { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+
+.cap-card--contact {
+  min-height: 118px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 76px 20px 24px;
+}
+
+.cap-card--contact a:not(.cap-card__icon-button) {
+  display: inline-block;
+  margin: 14px 0 6px;
+  color: #111111;
+  font-size: clamp(18px, 1.45vw, 24px);
+  font-weight: 360;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.cap-card__icon-button {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgb(17 17 17 / 0.1);
+  border-radius: 50%;
+  background: #111111;
+  color: #ffffff;
+  transform: translateY(-50%);
+}
+
+.cap-card__icon-button .ph { font-size: 19px; }
+
+@media (max-width: 1080px) {
+  .capabilities__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: auto; }
+  .cap-card--tall { min-height: 620px; }
+  .capabilities__stack:last-child { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(260px, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .capabilities__header { flex-direction: column; }
+  .capabilities__button { width: 100%; }
+  .capabilities__grid, .capabilities__stack, .capabilities__stack:last-child { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .cap-card--tall { min-height: 560px; }
+  .cap-card__timeline div { grid-template-columns: 52px 14px minmax(0, 1fr); }
+  .cap-card__timeline em { grid-column: 3; white-space: normal; }
+}
+
+.stats {
+  position: relative;
+  z-index: 80;
+  min-height: 100vh;
+  padding: clamp(44px, 5vw, 86px) clamp(16px, 3.8vw, 72px) clamp(54px, 5vw, 90px);
+  background:
+    radial-gradient(circle at 78% 18%, rgb(113 145 208 / 0.18), transparent 34%),
+    radial-gradient(circle at 18% 88%, rgb(170 184 213 / 0.11), transparent 28%),
+    linear-gradient(180deg, #111414 0%, #171a1a 100%);
+  color: #f7f8f8;
+}
+
+.stats__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.72fr);
+  gap: clamp(32px, 6vw, 120px);
+  max-width: var(--hero-max-width);
+  margin: 0 auto clamp(34px, 4.5vw, 72px);
+}
+
+.stats__title-wrap h2 {
+  max-width: 920px;
+  margin: 0;
+  color: #f7f8f8;
+  font-size: clamp(29px, 3.2vw, 54px);
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.stats__summary {
+  align-self: start;
+  margin: 0;
+  color: rgb(247 248 248 / 0.8);
+  font-size: clamp(18px, 1.65vw, 28px);
+  font-weight: 360;
+  line-height: 1.34;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 420ms ease, transform 420ms ease;
+}
+
+.stats__summary.is-visible { opacity: 1; transform: none; }
+
+.stats__tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  max-width: var(--hero-max-width);
+  margin: 0 auto;
+  border-bottom: 1px solid rgb(255 255 255 / 0.14);
+}
+
+.stats__tab {
+  position: relative;
+  min-height: 58px;
+  padding: 0 20px 18px 0;
+  border: 0;
+  background: transparent;
+  color: rgb(247 248 248 / 0.5);
+  font: inherit;
+  font-size: clamp(14px, 1.22vw, 22px);
+  font-weight: 430;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: color 220ms ease;
+}
+
+.stats__tab::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: -1px;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--hero-blue), #aab8d5);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.stats__tab.is-active { color: #ffffff; }
+.stats__tab.is-active::after { transform: scaleX(1); }
+
+.stats__chart {
+  position: relative;
+  max-width: var(--hero-max-width);
+  min-height: clamp(520px, 58vh, 680px);
+  margin: clamp(28px, 3vw, 48px) auto 0;
+  padding: 0 0 22px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 20px;
+  background-color: rgb(255 255 255 / 0.025);
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(10% - 1px),
+      rgb(255 255 255 / 0.07) calc(10% - 1px),
+      rgb(255 255 255 / 0.07) 10%
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 24px 70px rgb(0 0 0 / 0.18);
+}
+
+.stats__chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: clamp(18px, 2vw, 28px);
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.025);
+}
+
+.stats__chart-head span, .stats__chart-head strong { font-size: clamp(12px, 0.86vw, 14px); line-height: 1; text-transform: uppercase; }
+.stats__chart-head span { color: #ffffff; font-weight: 760; letter-spacing: 0.16em; }
+.stats__chart-head strong { color: rgb(247 248 248 / 0.48); font-weight: 620; letter-spacing: 0.12em; }
+
+.stats__axis {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.27fr) minmax(0, 1fr);
+  gap: clamp(18px, 2vw, 34px);
+  padding: 14px clamp(24px, 2.4vw, 42px) 0;
+  color: rgb(247 248 248 / 0.42);
+  font-size: clamp(11px, 0.84vw, 14px);
+}
+
+.stats__axis div { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); }
+.stats__axis div span { text-align: left; }
+.stats__axis div span:last-child { text-align: right; }
+
+.stats__bars { display: grid; gap: clamp(16px, 2vh, 26px); padding: clamp(26px, 3vw, 48px) clamp(24px, 2.4vw, 42px) 0; }
+
+.stats__bar-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.27fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(18px, 2vw, 34px);
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.stats__chart.is-ready .stats__bar-row { animation: stats-row-in 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards; animation-delay: var(--bar-delay); }
+
+.stats__bar-label strong, .stats__bar-label span { display: block; }
+.stats__bar-label strong { color: #ffffff; font-size: clamp(15px, 1.1vw, 19px); font-weight: 680; line-height: 1.2; }
+.stats__bar-label span { margin-top: 5px; color: rgb(247 248 248 / 0.48); font-size: clamp(12px, 0.86vw, 14px); line-height: 1.35; }
+
+.stats__track {
+  position: relative;
+  height: clamp(48px, 5.4vh, 64px);
+  overflow: hidden;
+  border-radius: 0;
+  background: rgb(255 255 255 / 0.055);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.075), 0 12px 32px rgb(0 0 0 / 0.16);
+}
+
+.stats__range {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: var(--range-start);
+  width: var(--range-width);
+  border: 1px solid rgb(170 184 213 / 0.22);
+  background: linear-gradient(90deg, rgb(113 145 208 / 0.05), rgb(170 184 213 / 0.14), rgb(113 145 208 / 0.05));
+  opacity: 0;
+  transform: scaleX(0.6);
+  transform-origin: left;
+}
+
+.stats__chart.is-ready .stats__range { animation: stats-range-in 620ms cubic-bezier(0.22, 1, 0.36, 1) forwards; animation-delay: calc(var(--bar-delay) + 60ms); }
+
+.stats__bar {
+  position: relative;
+  z-index: 1;
+  width: var(--bar-value);
+  height: 100%;
+  background: linear-gradient(90deg, rgb(113 145 208 / 0.62) 0%, #8fb0ef 62%, #d6e3ff 100%);
+  box-shadow: 0 0 34px rgb(113 145 208 / 0.24);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.stats__chart.is-ready .stats__bar { animation: stats-fill 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards; animation-delay: calc(var(--bar-delay) + 110ms); }
+
+.stats__value { position: absolute; z-index: 3; top: 50%; right: 18px; color: #ffffff; font-size: clamp(14px, 1vw, 18px); font-weight: 740; transform: translateY(-50%); }
+
+.stats__trace { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+
+.stats__trace i {
+  position: absolute;
+  top: var(--point-y);
+  left: var(--point-x);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / 0.95) 0 8%, rgb(214 227 255 / 0.42) 9% 22%, transparent 58%);
+  filter: blur(0.1px);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.2);
+}
+
+.stats__trace i::before, .stats__trace i::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.72), transparent);
+  transform: translate(-50%, -50%) rotate(var(--spark-rotate, 0deg));
+}
+
+.stats__trace i::before { width: 24px; height: 1px; }
+.stats__trace i::after { width: 1px; height: 18px; background: linear-gradient(180deg, transparent, rgb(170 184 213 / 0.62), transparent); }
+
+.stats__spark--1 { --spark-rotate: 22deg; width: 14px; height: 14px; }
+.stats__spark--2 { --spark-rotate: -18deg; width: 11px; height: 11px; }
+
+.stats__chart.is-ready .stats__trace i { animation: stats-point-in 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards; animation-delay: calc(var(--bar-delay) + 260ms + var(--point-delay)); }
+
+@keyframes stats-row-in { to { opacity: 1; transform: none; } }
+@keyframes stats-fill { to { transform: scaleX(1); } }
+@keyframes stats-range-in { to { opacity: 1; transform: scaleX(1); } }
+@keyframes stats-point-in { to { opacity: 0.86; transform: translate(-50%, -50%) scale(1); } }
+
+@media (max-width: 980px) {
+  .stats__header { grid-template-columns: 1fr; }
+  .stats__tabs { display: flex; overflow-x: auto; }
+  .stats__tab { flex: 0 0 min(260px, 76vw); }
+  .stats__bar-row { grid-template-columns: 1fr; gap: 10px; }
+  .stats__axis { grid-template-columns: 1fr; }
+  .stats__axis > span { display: none; }
+}
+
+@media (max-width: 620px) {
+  .stats__title-wrap h2 { font-size: clamp(26px, 8vw, 42px); }
+  .stats__chart { min-height: auto; padding-bottom: 46px; }
+  .stats__axis div { grid-template-columns: repeat(6, 1fr); }
+  .stats__axis div span:nth-child(even) { display: none; }
+}
+
+.video-stories {
+  position: relative;
+  z-index: 90;
+  min-height: 100vh;
+  padding: clamp(46px, 5vw, 88px) 0 clamp(44px, 4vw, 74px);
+  overflow: hidden;
+  background: #f7f8f8;
+  color: #111111;
+}
+
+.video-stories__header { width: min(100% - 96px, 900px); margin: 0 auto clamp(38px, 4vw, 74px); }
+.video-stories__header h2 { margin: 0; color: #111111; font-size: clamp(38px, 4.4vw, 76px); font-weight: 300; letter-spacing: 0; line-height: 1.08; }
+.video-stories__header p { max-width: 720px; margin: 22px 0 0; color: #697272; font-size: clamp(16px, 1.25vw, 21px); font-weight: 420; line-height: 1.55; }
+
+.video-stories__rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(520px, 34vw);
+  gap: clamp(28px, 3vw, 54px);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  padding: 0 max(48px, calc((100vw - var(--hero-max-width)) / 2 + 48px)) 36px;
+  scrollbar-width: none;
+}
+
+.video-stories__rail::-webkit-scrollbar { display: none; }
+
+.story-card {
+  scroll-snap-align: center;
+  min-width: 0;
+  opacity: 0.54;
+  transform: translateY(10px);
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.story-card:hover, .story-card:focus-within { opacity: 1; transform: none; }
+
+.story-card__media {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: #dfe5e6;
+  object-fit: cover;
+  object-position: center;
+  box-shadow: 0 18px 48px rgb(21 34 34 / 0.1);
+}
+
+.story-card__content { padding: 24px 28px 0; }
+.story-card__content p { margin: 0 0 12px; color: #111111; font-size: 15px; font-weight: 760; line-height: 1; }
+.story-card__content h3 { max-width: 680px; margin: 0; color: #252b2b; font-size: clamp(18px, 1.22vw, 24px); font-weight: 520; letter-spacing: 0; line-height: 1.38; }
+.story-card__content span { display: block; margin-top: 14px; color: #858d8d; font-size: 14px; line-height: 1.4; }
+
+.video-stories__footer { display: flex; align-items: center; gap: 8px; width: min(100% - 96px, 900px); margin: 28px auto 0; }
+.video-stories__footer span { display: block; width: 56px; height: 4px; border-radius: 999px; background: #cfd4d4; }
+.video-stories__footer span:nth-child(3) { width: 320px; background: #111111; }
+.video-stories__footer strong { margin-left: 18px; color: #7a8282; font-size: 14px; font-weight: 650; letter-spacing: 0.02em; }
+
+@media (max-width: 860px) {
+  .video-stories__header, .video-stories__footer { width: min(100% - 48px, 900px); }
+  .video-stories__rail { grid-auto-columns: minmax(320px, 82vw); padding: 0 24px 30px; }
+  .story-card { opacity: 1; transform: none; }
+}
+
+@media (max-width: 560px) {
+  .video-stories__header, .video-stories__footer { width: min(100% - 32px, 900px); }
+  .story-card__content { padding: 18px 4px 0; }
+  .video-stories__footer span:nth-child(3) { width: 150px; }
+}
+
+.site-footer { position: relative; z-index: 100; overflow: hidden; background: #000000; color: #ffffff; }
+
+.footer-dots { position: relative; height: 120px; overflow: hidden; background: #000000; }
+
+.footer-dots__line {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 200%;
+  height: 70px;
+  opacity: 0.75;
+  background-image:
+    radial-gradient(circle, rgb(255 255 255 / 0.55) 1.5px, transparent 2px),
+    radial-gradient(circle, rgb(255 255 255 / 0.35) 1px, transparent 1.5px),
+    radial-gradient(circle, rgb(255 255 255 / 0.45) 1.2px, transparent 1.8px);
+  background-position: 0 8px, 24px 22px, 48px 14px;
+  background-size: 72px 38px, 110px 44px, 160px 52px;
+  animation: footerDotsMove 18s linear infinite;
+  transform: translateY(-50%);
+}
+
+@keyframes footerDotsMove { from { transform: translate3d(0, -50%, 0); } to { transform: translate3d(-50%, -50%, 0); } }
+
+.site-footer__inner { width: min(100% - 96px, var(--hero-max-width)); margin: 0 auto; padding: clamp(34px, 4vw, 66px) 0 clamp(18px, 2vw, 34px); }
+
+.site-footer__top {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.25fr) repeat(3, minmax(150px, 0.42fr));
+  gap: clamp(28px, 4vw, 76px);
+  min-height: clamp(220px, 24vw, 330px);
+}
+
+.site-footer__top h2 { max-width: 680px; margin: 0; color: #ffffff; font-size: clamp(34px, 3.5vw, 62px); font-weight: 220; letter-spacing: 0; line-height: 1.06; }
+
+.site-footer__nav { display: flex; flex-direction: column; align-items: flex-start; gap: clamp(14px, 1.35vw, 22px); }
+.site-footer__nav a { color: rgb(255 255 255 / 0.88); font-size: 16px; font-weight: 650; line-height: 1.1; transition: color 180ms ease, transform 180ms ease; }
+.site-footer__nav a:hover { color: #ffffff; transform: translateX(3px); }
+
+.site-footer__brand-row { width: 100%; margin-top: clamp(18px, 3vw, 46px); }
+.site-footer__brand { display: flex; align-items: center; width: 100%; min-width: 0; color: #ffffff; }
+
+.site-footer__mark {
+  position: relative;
+  flex: 0 0 clamp(58px, 6.1vw, 118px);
+  aspect-ratio: 1;
+  margin-right: clamp(14px, 1.6vw, 28px);
+  overflow: hidden;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.site-footer__mark::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  background: #000000;
+  clip-path: polygon(0 20%, 100% 8%, 100% 19%, 0 31%, 0 43%, 100% 31%, 100% 42%, 0 54%, 0 66%, 100% 54%, 100% 65%, 0 77%);
+}
+
+.site-footer__brand span:last-child { display: block; flex: 1 1 auto; min-width: 0; font-size: clamp(58px, 11.1vw, 214px); font-weight: 760; letter-spacing: -0.055em; line-height: 0.78; white-space: nowrap; }
+
+.site-footer__legal { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px 18px; margin-top: clamp(14px, 1.4vw, 24px); color: rgb(255 255 255 / 0.52); font-size: 9px; line-height: 1.35; }
+.site-footer__legal p { margin: 0; }
+.site-footer__legal a { color: inherit; }
+.site-footer__legal a:hover { color: #ffffff; }
+
+@media (max-width: 980px) {
+  .site-footer__inner { width: min(100% - 48px, var(--hero-max-width)); }
+  .site-footer__top { grid-template-columns: 1fr 1fr; }
+  .site-footer__top h2 { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .site-footer__inner { width: min(100% - 32px, var(--hero-max-width)); }
+  .site-footer__top { grid-template-columns: 1fr; min-height: auto; }
+  .site-footer__nav a { font-size: 15px; }
+  .site-footer__mark { flex-basis: clamp(38px, 12vw, 58px); }
+  .site-footer__brand span:last-child { font-size: clamp(45px, 18vw, 84px); }
+}
+    </style>
+  </head>
+  <body>
+    <main>
+      <engine-hero></engine-hero>
+
+      <section class="mission" id="company" aria-labelledby="mission-title" data-section="mission">
+        <div class="mission__inner">
+          <p class="mission__eyebrow">The Name Reflects Our Mission</p>
+
+          <div class="mission__statement">
+            <h2 id="mission-title">
+              Demand for resilient propulsion is rising as aerospace programs move faster, fly farther,
+              and require engines built with absolute precision.
+            </h2>
+
+            <a class="mission__button" href="#technology">
+              <span class="mission__button-icon" aria-hidden="true">
+                <i class="ph ph-arrow-elbow-down-right"></i>
+              </span>
+              <span>Discover Our Story</span>
+            </a>
+          </div>
+
+          <p class="mission__support">
+            Our name, EngineTech, reflects our commitment to moving advanced aircraft and spacecraft from
+            ambitious concepts to dependable flight-ready power.
+          </p>
+
+          <div class="mission__media" aria-label="EngineTech propulsion systems in motion"></div>
+        </div>
+      </section>
+
+      <section class="showcase" id="technology" aria-label="Technology highlights"></section>
+
+      <section class="capabilities" id="solutions" aria-labelledby="capabilities-title">
+        <div class="capabilities__header">
+          <div class="capabilities__intro">
+            <h2 id="capabilities-title">Propulsion programs need a partner that can move from concept to certified hardware.</h2>
+            <p>
+              EngineTech combines precision manufacturing, hot-fire validation, materials engineering, and mission support
+              for aircraft and spacecraft programs that cannot afford uncertainty.
+            </p>
+          </div>
+
+          <a class="capabilities__button" href="#contact">
+            <span>Start a Program</span>
+            <i class="ph ph-arrow-up-right" aria-hidden="true"></i>
+          </a>
+        </div>
+
+        <div class="capabilities__grid" aria-label="EngineTech capabilities and proof points">
+          <article class="cap-card cap-card--tall cap-card--media">
+            <video class="cap-card__video" autoplay muted loop playsinline>
+              <source src="https://plugin-assets.open-design.ai/plugins/aerocore/45229-720-74e6d9.mp4" type="video/mp4" />
+            </video>
+            <div class="cap-card__shade" aria-hidden="true"></div>
+
+            <div class="cap-card__label">
+              <span>Program Background</span>
+            </div>
+
+            <div class="cap-card__timeline">
+              <div><span>2026</span><b aria-hidden="true"></b><strong>Reusable upper-stage demonstrator</strong><em>Thermal qualification</em></div>
+              <div><span>2025</span><b aria-hidden="true"></b><strong>Hybrid-electric aircraft platform</strong><em>Combustor redesign</em></div>
+              <div><span>2024</span><b aria-hidden="true"></b><strong>Orbital transfer vehicle</strong><em>Flight article delivery</em></div>
+            </div>
+          </article>
+
+          <div class="capabilities__stack">
+            <article class="cap-card cap-card--quote">
+              <div class="cap-card__label cap-card__label--left">
+                <span>Mission Voice</span>
+              </div>
+              <blockquote>
+                "EngineTech brought the discipline we needed: clear design reviews, repeatable test data, and hardware
+                that arrived ready for integration."
+              </blockquote>
+              <p><strong>Dr. Lena Morris</strong> Propulsion Lead, Orbital Systems Group</p>
+            </article>
+
+            <article class="cap-card cap-card--metric cap-card--video-panel">
+              <video class="cap-card__video" autoplay muted loop playsinline>
+                <source src="https://plugin-assets.open-design.ai/plugins/aerocore/23211-720-e83442.mp4" type="video/mp4" />
+              </video>
+              <div class="cap-card__shade" aria-hidden="true"></div>
+              <div class="cap-card__metric">
+                <strong>2K</strong>
+                <span>Highly Qualified Engineers</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="capabilities__stack capabilities__stack--systems">
+            <article class="cap-card cap-card--tools cap-card--tools-media cap-card--video-panel">
+              <video class="cap-card__video" autoplay muted loop playsinline>
+                <source src="https://plugin-assets.open-design.ai/plugins/aerocore/23843-720-35899f.mp4" type="video/mp4" />
+              </video>
+              <div class="cap-card__shade" aria-hidden="true"></div>
+
+              <div class="cap-card__label">
+                <span>Core Systems</span>
+              </div>
+
+              <div class="tool-marquee" aria-hidden="true">
+                <div class="tool-marquee__row tool-marquee__row--left">
+                  <span><i class="ph ph-gear-six"></i> Turbopumps</span>
+                  <span><i class="ph ph-fire"></i> Hot-fire</span>
+                  <span><i class="ph ph-gauge"></i> Telemetry</span>
+                  <span><i class="ph ph-atom"></i> Alloys</span>
+                  <span><i class="ph ph-wrench"></i> Assembly</span>
+                  <span><i class="ph ph-gear-six"></i> Turbopumps</span>
+                  <span><i class="ph ph-fire"></i> Hot-fire</span>
+                  <span><i class="ph ph-gauge"></i> Telemetry</span>
+                  <span><i class="ph ph-atom"></i> Alloys</span>
+                  <span><i class="ph ph-wrench"></i> Assembly</span>
+                </div>
+                <div class="tool-marquee__row tool-marquee__row--right">
+                  <span><i class="ph ph-cpu"></i> Controls</span>
+                  <span><i class="ph ph-wave-sine"></i> Vibration</span>
+                  <span><i class="ph ph-shield-check"></i> Certification</span>
+                  <span><i class="ph ph-rocket-launch"></i> Launch</span>
+                  <span><i class="ph ph-chart-line-up"></i> Analysis</span>
+                  <span><i class="ph ph-cpu"></i> Controls</span>
+                  <span><i class="ph ph-wave-sine"></i> Vibration</span>
+                  <span><i class="ph ph-shield-check"></i> Certification</span>
+                  <span><i class="ph ph-rocket-launch"></i> Launch</span>
+                  <span><i class="ph ph-chart-line-up"></i> Analysis</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="cap-card cap-card--contact" id="contact">
+              <div>
+                <div class="cap-card__label cap-card__label--left">
+                  <span>Reach Engineering</span>
+                </div>
+                <a href="mailto:programs@enginetech.com">programs@enginetech.com</a>
+                <p>+1 415 018 4270</p>
+              </div>
+              <a class="cap-card__icon-button" href="mailto:programs@enginetech.com" aria-label="Email EngineTech">
+                <i class="ph ph-arrow-up-right" aria-hidden="true"></i>
+              </a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats" id="our-edge" aria-labelledby="stats-title">
+        <div class="stats__header">
+          <div class="stats__title-wrap">
+            <h2 id="stats-title">Unmatched propulsion data across every flight-critical layer.</h2>
+          </div>
+          <p class="stats__summary" data-stats-summary>
+            EngineTech maps thermal limits, production capacity, upstream readiness, and hydrogen pathways into
+            clear decisions for ambitious aerospace programs.
+          </p>
+        </div>
+
+        <div class="stats__tabs" role="tablist" aria-label="Statistics categories">
+          <button class="stats__tab is-active" type="button" role="tab" aria-selected="true" data-stats-tab="cities">
+            Cities &amp; Infrastructure
+          </button>
+          <button class="stats__tab" type="button" role="tab" aria-selected="false" data-stats-tab="materials">
+            Materials &amp; Manufacturing
+          </button>
+          <button class="stats__tab" type="button" role="tab" aria-selected="false" data-stats-tab="fuels">
+            Fuels &amp; Upstream
+          </button>
+          <button class="stats__tab" type="button" role="tab" aria-selected="false" data-stats-tab="hydrogen">
+            H2 Hydrogen
+          </button>
+        </div>
+
+        <div class="stats__chart" data-stats-chart aria-live="polite"></div>
+      </section>
+
+      <section class="video-stories" id="our-team" aria-labelledby="video-stories-title">
+        <div class="video-stories__header">
+          <h2 id="video-stories-title">Program stories from the people building flight-ready power.</h2>
+          <p>
+            Short field notes from integration leads, test engineers, and manufacturing teams moving advanced
+            propulsion systems from requirement reviews to repeatable flight hardware.
+          </p>
+        </div>
+
+        <div class="video-stories__rail" aria-label="EngineTech video previews">
+          <article class="story-card">
+            <video class="story-card__media" autoplay muted loop playsinline>
+              <source src="https://plugin-assets.open-design.ai/plugins/aerocore/hf_20260324_032431_5e054107-51c0-4162-9f0f-3a40054761ef-424242.mp4" type="video/mp4" />
+            </video>
+            <div class="story-card__content">
+              <p>Integration Review</p>
+              <h3>How a reusable upper-stage program moved from thermal risk to stable qualification.</h3>
+              <span>Reusable systems · 04:20</span>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <video class="story-card__media" autoplay muted loop playsinline>
+              <source src="https://plugin-assets.open-design.ai/plugins/aerocore/hf_20260324_032535_4ccc152e-0cc8-4ee5-a698-e1a98cea8a1e-866873.mp4" type="video/mp4" />
+            </video>
+            <div class="story-card__content">
+              <p>Hot-Fire Campaign</p>
+              <h3>Inside the test cell where telemetry, vibration, and injector response converge.</h3>
+              <span>Validation · 03:45</span>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <video class="story-card__media" autoplay muted loop playsinline>
+              <source src="https://plugin-assets.open-design.ai/plugins/aerocore/hf_20260324_033707_b842a2ea-f223-4804-96d0-737ab67510fc-80dd35.mp4" type="video/mp4" />
+            </video>
+            <div class="story-card__content">
+              <p>Manufacturing Floor</p>
+              <h3>Why sub-micron inspection changes the way aerospace teams plan reliability.</h3>
+              <span>Precision build · 05:10</span>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <video class="story-card__media" autoplay muted loop playsinline>
+              <source src="https://plugin-assets.open-design.ai/plugins/aerocore/hf_20260324_032431_5e054107-51c0-4162-9f0f-3a40054761ef-424242.mp4" type="video/mp4" />
+            </video>
+            <div class="story-card__content">
+              <p>Hydrogen Pathway</p>
+              <h3>Designing feed systems and ignition envelopes for hydrogen-ready propulsion.</h3>
+              <span>H2 systems · 04:55</span>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <video class="story-card__media" autoplay muted loop playsinline>
+              <source src="https://plugin-assets.open-design.ai/plugins/aerocore/hf_20260324_032535_4ccc152e-0cc8-4ee5-a698-e1a98cea8a1e-866873.mp4" type="video/mp4" />
+            </video>
+            <div class="story-card__content">
+              <p>Mission Support</p>
+              <h3>The operational cadence behind launch-window support and post-test analysis.</h3>
+              <span>Field readiness · 03:30</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="video-stories__footer" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <strong>05 / 05</strong>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-dots" aria-hidden="true">
+        <div class="footer-dots__line"></div>
+      </div>
+
+      <div class="site-footer__inner">
+        <div class="site-footer__top">
+          <h2>Proven Advanced Propulsion Technology</h2>
+
+          <nav class="site-footer__nav" aria-label="Footer navigation">
+            <a href="#company">Company</a>
+            <a href="#technology">Technology</a>
+            <a href="#solutions">Solutions</a>
+            <a href="#our-edge">Our Edge</a>
+            <a href="#investors">Investors</a>
+          </nav>
+
+          <nav class="site-footer__nav" aria-label="Company links">
+            <a href="#our-team">Our Team</a>
+            <a href="#news">News</a>
+            <a href="#careers">Careers</a>
+            <a href="#contact">Contact Us</a>
+          </nav>
+
+          <nav class="site-footer__nav" aria-label="Social links">
+            <a href="https://www.linkedin.com" target="_blank" rel="noreferrer">LinkedIn</a>
+            <a href="https://x.com" target="_blank" rel="noreferrer">Follow Us on X</a>
+          </nav>
+        </div>
+
+        <div class="site-footer__brand-row">
+          <a class="site-footer__brand" href="/" aria-label="EngineTech home">
+            <span class="site-footer__mark" aria-hidden="true"></span>
+            <span>EngineTech</span>
+          </a>
+        </div>
+
+        <div class="site-footer__legal">
+          <p>© 2026 EngineTech. All rights reserved.</p>
+          <a href="#privacy">Privacy Policy</a>
+          <a href="#terms">Terms of Use</a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+// === Hero Section ===
+const navItems = ["Company", "Technology", "Solutions", "Our Edge", "Our Team", "Investors", "News"];
+
+class EngineHero extends HTMLElement {
+  scrollFrame = 0;
+  lastScrollY = 0;
+
+  connectedCallback() {
+    this.innerHTML = `
+      <section class="hero" id="heroScroll" aria-labelledby="hero-title">
+        <div class="hero__background" aria-hidden="true">
+          <div class="hero__bg-layer hero__bg-layer--bottom"></div>
+          <div class="hero__stars"></div>
+          <div class="hero__bg-layer hero__bg-layer--top"></div>
+        </div>
+
+        <header class="hero__nav">
+          <a class="brand" href="/" aria-label="EngineTech home">
+            <span class="brand__mark" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </span>
+            <span class="brand__name">EngineTech</span>
+          </a>
+
+          <nav class="hero__links" aria-label="Primary navigation">
+            ${navItems.map((item) => `<a href="#${item.toLowerCase().replaceAll(" ", "-")}">${item}</a>`).join("")}
+          </nav>
+
+          <a class="hero__cta" href="#contact">Get In Touch</a>
+        </header>
+
+        <div class="hero__content">
+          <h1 id="hero-title" class="hero__title" aria-label="Powering the Ship">
+            <span class="hero__title-line hero__title-line--one">Powering</span>
+          </h1>
+
+          <div class="hero__title-row" aria-hidden="true">
+            <span class="hero__title-line hero__title-line--two">the</span>
+            <span class="hero__title-line hero__title-line--three">Ship</span>
+          </div>
+
+          <div class="engine-visual" aria-hidden="true">
+            <img class="engine-visual__asset" src="https://plugin-assets.open-design.ai/plugins/aerocore/hero-engine_isebcf-b0bfea.webp" alt="" />
+          </div>
+        </div>
+
+        <p class="hero__caption">
+          Precision engines for orbital-class vehicles.
+        </p>
+      </section>
+    `;
+
+    this.initScrollHero();
+  }
+
+  initScrollHero() {
+    const hero = this.querySelector(".hero");
+    const bg = this.querySelector(".hero__background");
+    const title = this.querySelector(".hero__title");
+    const titleRow = this.querySelector(".hero__title-row");
+    const caption = this.querySelector(".hero__caption");
+    const object = this.querySelector(".engine-visual");
+    if (!hero || !bg || !title || !titleRow || !caption || !object) return;
+
+    const lerp = (a, b, progress) => a + (b - a) * progress;
+    const colors = {
+      start: { top: [113, 145, 208], mid: [170, 184, 213], bottom: [236, 233, 230] },
+      end: { top: [240, 232, 220], mid: [238, 229, 216], bottom: [236, 226, 210] },
+    };
+
+    const mixColor = (from, to, progress) => {
+      const r = Math.round(lerp(from[0], to[0], progress));
+      const g = Math.round(lerp(from[1], to[1], progress));
+      const b = Math.round(lerp(from[2], to[2], progress));
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+
+    const animate = () => {
+      const rect = hero.getBoundingClientRect();
+      const scrollLength = Math.max(hero.offsetHeight - window.innerHeight, 1);
+      const progress = Math.min(Math.max(Math.abs(rect.top) / scrollLength, 0), 1);
+      const scrollProgress = Math.max(Math.abs(rect.top) / scrollLength, 0);
+
+      const scrollY = Math.abs(rect.top);
+      const fadeStart = 0.9 * window.innerHeight;
+      const fadeEnd = 1.35 * window.innerHeight;
+      let fade = 1;
+      if (scrollY > fadeStart) {
+        fade = 1 - Math.min((scrollY - fadeStart) / (fadeEnd - fadeStart), 1);
+      }
+
+      const nav = this.querySelector(".hero__nav");
+      if (nav) {
+        if (scrollY === 0) {
+          nav.classList.add("nav--at-top");
+          nav.classList.remove("nav--scroll-down", "nav--scroll-up");
+        } else if (scrollY > this.lastScrollY) {
+          nav.classList.add("nav--scroll-down");
+          nav.classList.remove("nav--at-top", "nav--scroll-up");
+        } else if (scrollY < this.lastScrollY) {
+          nav.classList.add("nav--scroll-up");
+          nav.classList.remove("nav--at-top", "nav--scroll-down");
+        }
+      }
+      this.lastScrollY = scrollY;
+
+      bg.style.setProperty("--hero-top", mixColor(colors.start.top, colors.end.top, progress));
+      bg.style.setProperty("--hero-mid", mixColor(colors.start.mid, colors.end.mid, progress));
+      bg.style.setProperty("--hero-bottom", mixColor(colors.start.bottom, colors.end.bottom, progress));
+
+      title.style.setProperty("--scroll-y", `${(scrollProgress * -120).toFixed(2)}px`);
+      titleRow.style.setProperty("--scroll-y", `${(scrollProgress * -120).toFixed(2)}px`);
+      caption.style.setProperty("--scroll-y", `${(scrollProgress * -60).toFixed(2)}px`);
+      object.style.setProperty("--scroll-y", `${(scrollProgress * -250).toFixed(2)}px`);
+
+      title.style.opacity = fade;
+      titleRow.style.opacity = fade;
+      caption.style.opacity = fade;
+      object.style.opacity = fade;
+
+      hero.classList.toggle("is-past", rect.bottom <= 0);
+
+      this.scrollFrame = requestAnimationFrame(animate);
+    };
+
+    animate();
+  }
+
+  disconnectedCallback() {
+    cancelAnimationFrame(this.scrollFrame);
+  }
+}
+
+customElements.define("engine-hero", EngineHero);
+
+// === Showcase Section ===
+const TABS = [
+  { num: "01", label: "Precision Manufacturing", title: "Built to Sub-Micron<br>Tolerances", desc: "Every component is machined and inspected in our ISO-certified facility, achieving tolerances that exceed aerospace standards by a factor of four." },
+  { num: "02", label: "Advanced Materials", title: "Engineered for<br>Extreme Environments", desc: "Proprietary titanium and nickel superalloys withstand operating temperatures exceeding 1,600°C while maintaining structural integrity across millions of thermal cycles." },
+  { num: "03", label: "Thermal Testing", title: "10,000 Cycles<br>Before First Flight", desc: "Each engine variant undergoes a rigorous qualification program simulating the full range of flight conditions, from sea-level ignition to orbital thermal cycling." },
+  { num: "04", label: "Mission Certified", title: "Flight-Proven<br>Propulsion", desc: "Our engines have powered missions across low-Earth orbit, polar orbit, and deep-space trajectories — delivering zero in-flight anomalies across 47 consecutive launches." },
+];
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+class ShowcaseSection {
+  frame = 0;
+  startRect = null;
+  isStartLocked = false;
+  expandStartScrollY = 0;
+
+  constructor() {
+    this.el = document.querySelector(".showcase");
+    this.missionMedia = document.querySelector(".mission__media");
+    if (!this.el) return;
+    this.createFilm();
+    this.renderUI();
+    this.loop();
+  }
+
+  createFilm() {
+    this.film = document.createElement("div");
+    this.film.className = "showcase-film";
+    this.film.innerHTML = `
+      <video class="showcase-film__video" autoplay muted loop playsinline poster="https://plugin-assets.open-design.ai/plugins/aerocore/hero-engine_isebcf-b0bfea.webp">
+        <source src="https://plugin-assets.open-design.ai/plugins/aerocore/6853-720-41905c.mp4" type="video/mp4" />
+      </video>
+      <div class="showcase-film__overlay"></div>
+    `;
+    document.body.appendChild(this.film);
+    this.filmOverlay = this.film.querySelector(".showcase-film__overlay");
+  }
+
+  renderUI() {
+    this.el.innerHTML = `
+      <div class="showcase__sticky">
+        <div class="showcase__ui" aria-live="polite">
+          <div class="showcase__panels">
+            ${TABS.map((t, i) => `
+              <div class="showcase__panel${i === 0 ? " is-active" : ""}" data-index="${i}" aria-hidden="${i !== 0}">
+                <span class="showcase__panel-num">${t.num}</span>
+                <h2 class="showcase__panel-title">${t.title}</h2>
+                <p class="showcase__panel-desc">${t.desc}</p>
+              </div>`).join("")}
+          </div>
+          <nav class="showcase__tabs-nav" aria-label="Technology sections">
+            ${TABS.map((t, i) => `
+              <div class="showcase__tab${i === 0 ? " is-active" : ""}" data-index="${i}" role="tab" aria-selected="${i === 0}">
+                <span class="showcase__tab-bar" aria-hidden="true"></span>
+                <span class="showcase__tab-name">${t.label}</span>
+                <span class="showcase__tab-num">${t.num}</span>
+              </div>`).join("")}
+          </nav>
+        </div>
+      </div>
+    `;
+    this.ui = this.el.querySelector(".showcase__ui");
+    this.panels = this.el.querySelectorAll(".showcase__panel");
+    this.tabs = this.el.querySelectorAll(".showcase__tab");
+  }
+
+  cardToRect(mr) { return { top: mr.top, left: mr.left, width: mr.width, height: mr.height, radius: 0 }; }
+
+  applyRect(r) {
+    this.film.style.top = `${r.top.toFixed(2)}px`;
+    this.film.style.left = `${r.left.toFixed(2)}px`;
+    this.film.style.width = `${r.width.toFixed(2)}px`;
+    this.film.style.height = `${r.height.toFixed(2)}px`;
+    this.film.style.borderRadius = `${r.radius.toFixed(2)}px`;
+  }
+
+  loop = () => {
+    const { el, missionMedia, film, filmOverlay, ui, panels, tabs } = this;
+    const vh = window.innerHeight;
+    const rect = el.getBoundingClientRect();
+    const scrolled = -rect.top;
+    const totalScroll = Math.max(el.offsetHeight - vh, 1);
+    let missionMediaVisible = false;
+    let missionMediaPending = false;
+
+    if (rect.bottom <= 0) {
+      film.style.opacity = "0";
+      filmOverlay.style.opacity = "0";
+      ui.style.opacity = "0";
+      this.frame = requestAnimationFrame(this.loop);
+      return;
+    }
+
+    if (missionMedia) {
+      const mr = missionMedia.getBoundingClientRect();
+      missionMediaVisible = mr.width > 0 && mr.height > 0 && mr.bottom > 0 && mr.top < vh;
+      missionMediaPending = mr.width > 0 && mr.height > 0 && mr.top >= vh;
+
+      if (missionMediaVisible && scrolled <= 0) {
+        const mediaCenterY = mr.top + mr.height / 2;
+        if (mediaCenterY > vh / 2) { this.isStartLocked = false; this.expandStartScrollY = 0; }
+        if (mediaCenterY <= vh / 2 || this.isStartLocked) {
+          if (!this.isStartLocked) { this.expandStartScrollY = window.scrollY; }
+          this.isStartLocked = true;
+          this.startRect = this.cardToRect(mr);
+        } else {
+          this.startRect = this.cardToRect(mr);
+        }
+      }
+    }
+
+    if (!this.isStartLocked) {
+      if (missionMediaPending) { this.startRect = null; this.expandStartScrollY = 0; }
+      if (this.startRect) { this.applyRect(this.startRect); }
+      film.style.opacity = this.startRect ? "1" : "0";
+      filmOverlay.style.opacity = "0";
+      ui.style.opacity = "0";
+      this.frame = requestAnimationFrame(this.loop);
+      return;
+    }
+
+    const expandP = clamp((window.scrollY - this.expandStartScrollY) / vh, 0, 1);
+    const eased = easeOutCubic(expandP);
+    film.style.opacity = "1";
+
+    const sr = this.startRect || { top: vh * 0.21, left: window.innerWidth * 0.38, width: window.innerWidth * 0.58, height: vh * 0.58, radius: 0 };
+    this.applyRect({
+      top: lerp(sr.top, 0, eased),
+      left: lerp(sr.left, 0, eased),
+      width: lerp(sr.width, window.innerWidth, eased),
+      height: lerp(sr.height, vh, eased),
+      radius: lerp(sr.radius, 0, eased),
+    });
+
+    filmOverlay.style.opacity = String((eased * 0.22).toFixed(3));
+
+    if (expandP < 1) { ui.style.opacity = "0"; this.frame = requestAnimationFrame(this.loop); return; }
+
+    const progress = clamp(scrolled / totalScroll, 0, 1);
+    const uiP = clamp(progress / 0.08, 0, 1);
+    ui.style.opacity = String(easeInOutCubic(uiP).toFixed(3));
+
+    const TAB_START = 0.08;
+    const tabP = clamp((progress - TAB_START) / (1 - TAB_START), 0, 1);
+    const activeTab = clamp(Math.floor(tabP * TABS.length), 0, TABS.length - 1);
+
+    panels.forEach((p, i) => { const active = i === activeTab; p.classList.toggle("is-active", active); p.setAttribute("aria-hidden", String(!active)); });
+    tabs.forEach((t, i) => { const active = i === activeTab; t.classList.toggle("is-active", active); t.setAttribute("aria-selected", String(active)); });
+
+    this.frame = requestAnimationFrame(this.loop);
+  };
+
+  destroy() { cancelAnimationFrame(this.frame); this.film?.remove(); }
+}
+
+new ShowcaseSection();
+
+// === Stats Section ===
+const DATASETS = {
+  cities: {
+    title: "Cities & Infrastructure",
+    summary: "Distributed aerospace infrastructure needs engines that can test, relight, and recover across dense launch corridors and remote operating bases.",
+    bars: [
+      { label: "Mobile integration bays", value: 82, target: 88, rangeStart: 58, rangeEnd: 91, unit: "%", note: "deployment coverage", trace: [28, 42, 57, 63, 74, 82] },
+      { label: "Airport-adjacent service cells", value: 68, target: 74, rangeStart: 44, rangeEnd: 79, unit: "%", note: "qualified workflows", trace: [18, 36, 41, 55, 61, 68] },
+      { label: "Remote launch support", value: 54, target: 63, rangeStart: 30, rangeEnd: 70, unit: "%", note: "field readiness", trace: [14, 24, 39, 43, 48, 54] },
+      { label: "Thermal recovery loops", value: 76, target: 81, rangeStart: 50, rangeEnd: 84, unit: "%", note: "heat reuse potential", trace: [26, 38, 49, 66, 72, 76] },
+    ],
+  },
+  materials: {
+    title: "Materials & Manufacturing",
+    summary: "EngineTech combines high-temperature alloys, additive tooling, and inspection data to compress the path from design lock to certified hardware.",
+    bars: [
+      { label: "Nickel superalloy margin", value: 91, target: 94, rangeStart: 68, rangeEnd: 96, unit: "%", note: "thermal headroom", trace: [44, 61, 70, 79, 86, 91] },
+      { label: "Additive chamber tooling", value: 72, target: 80, rangeStart: 48, rangeEnd: 86, unit: "%", note: "lead-time reduction", trace: [19, 34, 48, 53, 67, 72] },
+      { label: "Sub-micron inspection yield", value: 96, target: 97, rangeStart: 82, rangeEnd: 99, unit: "%", note: "accepted components", trace: [71, 77, 84, 89, 94, 96] },
+      { label: "Reusable test article cycles", value: 84, target: 88, rangeStart: 62, rangeEnd: 91, unit: "%", note: "qualification depth", trace: [36, 52, 64, 71, 79, 84] },
+    ],
+  },
+  fuels: {
+    title: "Fuels & Upstream",
+    summary: "Fuel-path analysis links propellant availability, storage constraints, and injector behavior before a program commits to flight architecture.",
+    bars: [
+      { label: "Methane supply compatibility", value: 78, target: 83, rangeStart: 52, rangeEnd: 88, unit: "%", note: "regional availability", trace: [22, 31, 46, 58, 69, 78] },
+      { label: "Kerosene retrofit readiness", value: 64, target: 70, rangeStart: 40, rangeEnd: 74, unit: "%", note: "legacy platforms", trace: [28, 35, 39, 52, 57, 64] },
+      { label: "Cryogenic storage stability", value: 88, target: 92, rangeStart: 66, rangeEnd: 95, unit: "%", note: "validated envelopes", trace: [45, 56, 68, 74, 83, 88] },
+      { label: "Injector response confidence", value: 92, target: 94, rangeStart: 70, rangeEnd: 97, unit: "%", note: "hot-fire data", trace: [48, 62, 73, 85, 89, 92] },
+    ],
+  },
+  hydrogen: {
+    title: "H2 Hydrogen",
+    summary: "Hydrogen programs require tight coordination between tankage, feed systems, ignition stability, and ultra-low-temperature operations.",
+    bars: [
+      { label: "Hydrogen-ready turbopumps", value: 86, target: 90, rangeStart: 62, rangeEnd: 93, unit: "%", note: "design maturity", trace: [30, 46, 60, 71, 79, 86] },
+      { label: "LH2 feedline conditioning", value: 74, target: 82, rangeStart: 47, rangeEnd: 86, unit: "%", note: "ground systems", trace: [18, 29, 44, 58, 66, 74] },
+      { label: "Ignition stability range", value: 93, target: 95, rangeStart: 72, rangeEnd: 98, unit: "%", note: "transient control", trace: [54, 68, 75, 84, 90, 93] },
+      { label: "Zero-carbon flight pathway", value: 81, target: 87, rangeStart: 56, rangeEnd: 90, unit: "%", note: "program fit", trace: [24, 39, 55, 68, 76, 81] },
+    ],
+  },
+};
+
+class StatsSection {
+  activeKey = "cities";
+
+  constructor() {
+    this.el = document.querySelector(".stats");
+    if (!this.el) return;
+    this.tabs = this.el.querySelectorAll("[data-stats-tab]");
+    this.summary = this.el.querySelector("[data-stats-summary]");
+    this.chart = this.el.querySelector("[data-stats-chart]");
+    this.tabs.forEach((tab) => { tab.addEventListener("click", () => this.setActive(tab.dataset.statsTab)); });
+    this.render();
+  }
+
+  setActive(key) {
+    if (!DATASETS[key] || key === this.activeKey) return;
+    this.activeKey = key;
+    this.tabs.forEach((tab) => { const active = tab.dataset.statsTab === key; tab.classList.toggle("is-active", active); tab.setAttribute("aria-selected", String(active)); });
+    this.render();
+  }
+
+  render() {
+    const data = DATASETS[this.activeKey];
+    this.summary.classList.remove("is-visible");
+    this.chart.classList.remove("is-ready");
+
+    window.setTimeout(() => {
+      this.summary.textContent = data.summary;
+      this.chart.innerHTML = `
+        <div class="stats__chart-head">
+          <span>${data.title}</span>
+          <strong>Operating envelope</strong>
+        </div>
+        <div class="stats__bars">
+          ${data.bars.map((bar, index) => `
+            <article class="stats__bar-row" style="--bar-value: ${bar.value}%; --range-start: ${bar.rangeStart}%; --range-width: ${bar.rangeEnd - bar.rangeStart}%; --bar-delay: ${index * 90}ms;">
+              <div class="stats__bar-label">
+                <strong>${bar.label}</strong>
+                <span>${bar.note}</span>
+              </div>
+              <div class="stats__track" aria-hidden="true">
+                <div class="stats__range"></div>
+                <div class="stats__bar"></div>
+                <span class="stats__value">${bar.value}${bar.unit}</span>
+                <div class="stats__trace">
+                  ${bar.trace.map((point, pointIndex) => `<i class="stats__spark stats__spark--${pointIndex % 3}" style="--point-x: ${Math.min(point, bar.value - 3)}%; --point-y: ${pointIndex % 2 === 0 ? 34 : 62}%; --point-delay: ${pointIndex * 70}ms"></i>`).join("")}
+                </div>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+        <div class="stats__axis" aria-hidden="true">
+          <span></span>
+          <div>${Array.from({ length: 11 }, (_, i) => `<span>${i * 10}</span>`).join("")}</div>
+        </div>
+      `;
+
+      requestAnimationFrame(() => {
+        this.summary.classList.add("is-visible");
+        this.chart.classList.add("is-ready");
+      });
+    }, 140);
+  }
+}
+
+new StatsSection();
+    </script>
+  </body>
+</html>

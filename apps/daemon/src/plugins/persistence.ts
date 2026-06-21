@@ -74,6 +74,7 @@ export function migratePlugins(db: SqliteDb): void {
       task_kind                TEXT NOT NULL,
       inputs_json              TEXT NOT NULL,
       resolved_context_json    TEXT NOT NULL,
+      craft_requires_json      TEXT NOT NULL DEFAULT '[]',
       pipeline_json            TEXT,
       genui_surfaces_json      TEXT NOT NULL DEFAULT '[]',
       capabilities_granted     TEXT NOT NULL,
@@ -201,6 +202,7 @@ export function migratePlugins(db: SqliteDb): void {
     ['resolved_source', `ALTER TABLE applied_plugin_snapshots ADD COLUMN resolved_source TEXT`],
     ['resolved_ref', `ALTER TABLE applied_plugin_snapshots ADD COLUMN resolved_ref TEXT`],
     ['archive_integrity', `ALTER TABLE applied_plugin_snapshots ADD COLUMN archive_integrity TEXT`],
+    ['craft_requires_json', `ALTER TABLE applied_plugin_snapshots ADD COLUMN craft_requires_json TEXT NOT NULL DEFAULT '[]'`],
   ] as const) {
     if (!snapshotCols.some((c) => c['name'] === name)) db.exec(ddl);
   }

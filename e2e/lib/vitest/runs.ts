@@ -13,6 +13,9 @@ export type ChatRunCreateBody = {
   projectId: string;
   reasoning?: string | null;
   skillId?: string | null;
+  toolBundle?: {
+    mcpServers?: Array<Record<string, unknown>>;
+  };
 };
 
 export type ChatRunStatusBody = {

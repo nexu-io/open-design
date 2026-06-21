@@ -36,7 +36,7 @@ import { describe, expect, test } from 'vitest';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
 import { startRun, waitForRunStatus } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 type ProjectResponse = {
   conversationId: string;
@@ -46,7 +46,9 @@ type ProjectResponse = {
 // Inline fake `vela` binary. Handles the two argv shapes Open Design's
 // daemon ever spawns:
 //
-//   `vela models`                       — print the live link model catalog.
+//   `vela models`                       — legacy catalog probe compatibility.
+//   `vela model preset --format json`   — print the fast preset catalog.
+//   `vela model list --format json`     — print the live link model catalog.
 //   `vela login`                        — write ~/.amr/config.json and exit 0.
 //   `vela agent run --runtime opencode` — ACP stdio runtime (initialize →
 //                                          session/new → session/set_model →
@@ -64,6 +66,8 @@ import { argv, stdin, stdout, env, exit } from 'node:process';
 const ASSISTANT_TEXT = env.FAKE_VELA_TEXT || 'Hello from the e2e fake vela.';
 const SESSION_ID = 'fake-amr-session-1';
 const LIVE_MODEL_ID = 'glm-5';
+const PRESET_MODELS_JSON = JSON.stringify({ source: 'preset', data: [{ id: LIVE_MODEL_ID }] });
+const REMOTE_MODELS_JSON = JSON.stringify({ source: 'remote', data: [{ id: LIVE_MODEL_ID }] });
 
 function writeMessage(obj) {
   stdout.write(JSON.stringify(obj) + '\\n');
@@ -84,8 +88,8 @@ if (argv[2] === 'login') {
       [profile]: {
         runtimeKey: 'fake-runtime-key-0000000000000000000000',
         controlKey: 'fake-control-key-0000000000000000000000',
-        apiUrl: 'http://localhost:18080',
-        linkUrl: 'http://localhost:18081',
+        apiUrl: env.FAKE_VELA_API_URL || 'http://localhost:18080',
+        linkUrl: env.FAKE_VELA_LINK_URL || 'http://localhost:18081',
         user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
       },
     },
@@ -95,6 +99,16 @@ if (argv[2] === 'login') {
 
 if (argv[2] === 'models') {
   stdout.write('public_model_glm_5    vela\\n');
+  exit(0);
+}
+
+if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && argv[5] === 'json') {
+  stdout.write(PRESET_MODELS_JSON + '\\n');
+  exit(0);
+}
+
+if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
+  stdout.write(REMOTE_MODELS_JSON + '\\n');
   exit(0);
 }
 
@@ -203,8 +217,8 @@ describe('AMR chat-run end-to-end', () => {
               local: {
                 runtimeKey: 'fake-runtime-key',
                 controlKey: 'fake-control-key',
-                apiUrl: 'http://localhost:18080',
-                linkUrl: 'http://localhost:18081',
+                apiUrl: suite.amr.apiUrl,
+                linkUrl: suite.amr.linkUrl,
                 user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
               },
             },
@@ -221,9 +235,10 @@ describe('AMR chat-run end-to-end', () => {
         body: {
           agentCliEnv: {
             amr: {
+              FAKE_VELA_API_URL: suite.amr.apiUrl,
+              FAKE_VELA_LINK_URL: suite.amr.linkUrl,
               VELA_BIN: velaBin,
-              VELA_LINK_URL: 'http://localhost:18081',
-              VELA_RUNTIME_KEY: 'fake-runtime-key',
+              ...suite.amr.runtimeEnv(),
             },
           },
           agentId: 'amr',

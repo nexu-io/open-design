@@ -272,16 +272,58 @@ function injectPrintStylesheet(doc: string, css: string): string {
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
   await window.webContents.executeJavaScript(
-    `Promise.all([
-      document.fonts && document.fonts.ready ? document.fonts.ready.catch(function(){}) : Promise.resolve(),
-      Promise.all(Array.from(document.images || []).map(function(img) {
-        if (img.complete) return Promise.resolve();
-        return new Promise(function(resolve) {
-          img.addEventListener('load', resolve, { once: true });
-          img.addEventListener('error', resolve, { once: true });
+    `(function() {
+      function waitForImages() {
+        return Promise.all(Array.from(document.images || []).map(function(img) {
+          if (img.complete) return Promise.resolve();
+          return new Promise(function(resolve) {
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+          });
+        }));
+      }
+
+      function cssUrlValues(value) {
+        var urls = [];
+        if (!value || value === 'none') return urls;
+        value.replace(/url\\((['"]?)(.*?)\\1\\)/g, function(_, _quote, rawUrl) {
+          if (rawUrl && !/^data:/i.test(rawUrl)) urls.push(rawUrl);
+          return '';
         });
-      }))
-    ]).then(function(){ return true; })`,
+        return urls;
+      }
+
+      function waitForCssBackgroundImages() {
+        var urls = new Set();
+        Array.from(document.querySelectorAll('*')).forEach(function(el) {
+          var style = window.getComputedStyle(el);
+          cssUrlValues(style.backgroundImage).forEach(function(url) { urls.add(url); });
+          cssUrlValues(style.borderImageSource).forEach(function(url) { urls.add(url); });
+          cssUrlValues(style.listStyleImage).forEach(function(url) { urls.add(url); });
+        });
+        return Promise.all(Array.from(urls).map(function(url) {
+          return new Promise(function(resolve) {
+            var img = new Image();
+            img.onload = resolve;
+            img.onerror = resolve;
+            img.src = url;
+          });
+        }));
+      }
+
+      function nextFrame() {
+        return new Promise(function(resolve) { requestAnimationFrame(function() { resolve(true); }); });
+      }
+
+      return Promise.all([
+        document.fonts && document.fonts.ready ? document.fonts.ready.catch(function(){}) : Promise.resolve(),
+        waitForImages(),
+        waitForCssBackgroundImages()
+      ])
+        .then(nextFrame)
+        .then(nextFrame)
+        .then(function(){ return true; });
+    })()`,
     true,
   );
 }
@@ -320,9 +362,27 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
   await Promise.race([handshake, timeout]);
 }
 
-async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
+export async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
   const size = await window.webContents.executeJavaScript(
+    // Prefer the content size the artifact reported through the print-ready
+    // handshake (window.__odPrintSize, cached by injectParentPrintReadyCache
+    // in apps/web/src/runtime/exports.ts). For the sandboxed-preview export
+    // path the loaded document is a wrapper whose <body> is `overflow:hidden`
+    // around a 100%x100% sandboxed <iframe>, so measuring the wrapper here only
+    // ever yields the window viewport — never the artifact's true dimensions —
+    // which sizes the page to a single viewport and clips (or blanks, when the
+    // visible content sits below the fold) taller artifacts. The iframe is
+    // `sandbox="allow-scripts"` with no `allow-same-origin`, so the wrapper
+    // cannot read iframe.contentDocument; the size must come from inside the
+    // artifact, which is exactly what the handshake reports. Fall back to the
+    // direct measurement for the daemon-backed exportPdfFromHtml() path, where
+    // the artifact itself is the loaded document and no handshake runs.
     `(() => {
+      const reported = window.__odPrintSize;
+      if (reported && Number.isFinite(reported.width) && Number.isFinite(reported.height)
+        && reported.width > 0 && reported.height > 0) {
+        return { width: reported.width, height: reported.height };
+      }
       const de = document.documentElement;
       const body = document.body || de;
       return {

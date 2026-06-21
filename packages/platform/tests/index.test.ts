@@ -635,6 +635,74 @@ describe("createCommandInvocation", () => {
   });
 });
 
+describe("wellKnownUserToolchainBins Windows fnm node discovery", () => {
+  // Issue #3517: a GUI-launched packaged app on Windows inherits a stripped
+  // PATH and never sees fnm-managed Node. fnm on Windows keeps its installs
+  // under %APPDATA%\fnm\node-versions\<version>\installation, with node.exe
+  // directly in `installation` (no POSIX-style `bin` subdir). The toolchain
+  // bin list only probed ~/.fnm and ~/.local/share/fnm with [installation,
+  // bin] segments, so Windows fnm Node was silently undetected.
+  const originalPlatform = process.platform;
+  function setPlatform(value: NodeJS.Platform): void {
+    Object.defineProperty(process, "platform", { configurable: true, value });
+  }
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
+  });
+
+  it("surfaces the Windows fnm installation dir under %APPDATA%\\fnm", () => {
+    const home = mkdtempSync(join(tmpdir(), "od-fnm-home-"));
+    const appData = mkdtempSync(join(tmpdir(), "od-fnm-appdata-"));
+    const installDir = join(appData, "fnm", "node-versions", "v22.13.1", "installation");
+    mkdirSync(installDir, { recursive: true });
+    setPlatform("win32");
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: { APPDATA: appData } });
+      expect(dirs).toContain(installDir);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(appData, { recursive: true, force: true });
+    }
+  });
+
+  it("honors FNM_DIR over %APPDATA% for the Windows fnm root", () => {
+    const home = mkdtempSync(join(tmpdir(), "od-fnm-home-"));
+    const fnmDir = mkdtempSync(join(tmpdir(), "od-fnm-dir-"));
+    const installDir = join(fnmDir, "node-versions", "v20.11.0", "installation");
+    mkdirSync(installDir, { recursive: true });
+    setPlatform("win32");
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { APPDATA: join(home, "AppData", "Roaming"), FNM_DIR: fnmDir },
+      });
+      expect(dirs).toContain(installDir);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(fnmDir, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces the Windows fnm installation dir under %LOCALAPPDATA%\\fnm", () => {
+    // fnm on Windows can keep its root under %LOCALAPPDATA%\fnm (not only
+    // %APPDATA%\fnm). A globally `npm i -g`'d CLI (e.g. Codex) lands in the
+    // node install's `installation` dir, so probing this root makes that CLI
+    // discoverable from a GUI launch. See issue #3062.
+    const home = mkdtempSync(join(tmpdir(), "od-fnm-home-"));
+    const localAppData = mkdtempSync(join(tmpdir(), "od-fnm-localappdata-"));
+    const installDir = join(localAppData, "fnm", "node-versions", "v22.13.1", "installation");
+    mkdirSync(installDir, { recursive: true });
+    setPlatform("win32");
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: { LOCALAPPDATA: localAppData } });
+      expect(dirs).toContain(installDir);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(localAppData, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("createPackageManagerInvocation", () => {
   const originalPlatform = process.platform;
   function setPlatform(value: NodeJS.Platform): void {
@@ -693,13 +761,13 @@ describe("createPackageManagerInvocation", () => {
     ]);
   });
 
-  it("returns plain pnpm invocation on POSIX without npm_execpath", () => {
+  it("returns corepack pnpm invocation on POSIX without npm_execpath", () => {
     setPlatform("linux");
     const invocation = createPackageManagerInvocation(["install"], {} as NodeJS.ProcessEnv);
-    expect(invocation).toEqual({ args: ["install"], command: "pnpm" });
+    expect(invocation).toEqual({ args: ["pnpm", "install"], command: "corepack" });
   });
 
-  it("wraps pnpm through cmd.exe with verbatim arguments on Windows", () => {
+  it("wraps corepack pnpm through cmd.exe with verbatim arguments on Windows", () => {
     setPlatform("win32");
     const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], {
       ComSpec: "cmd.exe",
@@ -710,7 +778,7 @@ describe("createPackageManagerInvocation", () => {
       "/d",
       "/s",
       "/c",
-      '"pnpm --filter @open-design/desktop build"',
+      '"corepack pnpm --filter @open-design/desktop build"',
     ]);
   });
 });
@@ -724,12 +792,28 @@ describe("wellKnownUserToolchainBins", () => {
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
       expect(dirs).toContain(join(home, ".local", "bin"));
+      expect(dirs).toContain(join(home, ".kimi-code", "bin"));
       expect(dirs).toContain(join(home, ".opencode", "bin"));
       expect(dirs).toContain(join(home, ".bun", "bin"));
       expect(dirs).toContain(join(home, ".volta", "bin"));
       expect(dirs).toContain(join(home, ".asdf", "shims"));
       expect(dirs).toContain(join(home, "Library", "pnpm"));
       expect(dirs).toContain(join(home, ".cargo", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Non-Node user toolchains that still ship agent CLIs (or their deps):
+  // Deno's install root, Go's default GOBIN, and pyenv's shim dir. GUI
+  // launches inherit a stripped PATH, so these must be searched explicitly.
+  it("includes Deno, Go, and pyenv user toolchain dirs", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-extra-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".deno", "bin"));
+      expect(dirs).toContain(join(home, "go", "bin"));
+      expect(dirs).toContain(join(home, ".pyenv", "shims"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -786,6 +870,93 @@ describe("wellKnownUserToolchainBins", () => {
       });
       expect(dirs).toContain(join(customPrefix, "bin"));
     } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  // Windows: npm installs global binaries directly into the prefix root, not
+  // a <prefix>/bin subdirectory. The helper must surface BOTH the canonical
+  // Unix <prefix>/bin (cross-platform parity, no regression) AND the Windows
+  // prefix root so `npm i -g`'d CLIs like `pi` resolve under GUI launchers.
+  it("adds the npm prefix root alongside <prefix>/bin on Windows", () => {
+    const originalPlatform = process.platform;
+    const home = mkdtempSync(join(tmpdir(), "wkutb-win-prefix-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-win-custom-"));
+    try {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "win32",
+      });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      // <prefix>/bin is preserved (contract unchanged) AND the root is added.
+      expect(dirs).toContain(join(customPrefix, "bin"));
+      expect(dirs).toContain(customPrefix);
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  // Regression for #3691. NPM_CONFIG_PREFIX / npm_config_prefix are npm-internal
+  // env vars usually absent in Electron child processes, so the env-driven block
+  // no-ops for most Windows users. %APPDATA%\npm (npm's default global prefix)
+  // must still be surfaced so globally-installed agent CLIs are detected.
+  it("always adds %APPDATA%\\npm as a fallback on Windows even without a prefix env var", () => {
+    const originalPlatform = process.platform;
+    const home = mkdtempSync(join(tmpdir(), "wkutb-win-appdata-"));
+    try {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "win32",
+      });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: {},
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(home, "AppData", "Roaming", "npm"));
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Guards the no-regression promise: the Windows-only additions must never
+  // leak onto POSIX hosts, where <prefix>/bin is the only correct entry.
+  it("does not add the npm prefix root or %APPDATA%\\npm on POSIX", () => {
+    const originalPlatform = process.platform;
+    const home = mkdtempSync(join(tmpdir(), "wkutb-posix-prefix-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-posix-custom-"));
+    try {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "linux",
+      });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(customPrefix, "bin"));
+      expect(dirs).not.toContain(customPrefix);
+      expect(dirs).not.toContain(join(home, "AppData", "Roaming", "npm"));
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
       rmSync(home, { recursive: true, force: true });
       rmSync(customPrefix, { recursive: true, force: true });
     }

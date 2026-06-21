@@ -30,12 +30,13 @@ jobs:
       - name: Refresh cache bust date
         run: |
           DATE="$(date -u +%F)"
-          MATCHES="$(perl -0ne '$count += () = /cache_bust=\d{4}-\d{2}-\d{2}/g; END { print $count + 0 }' README*.md)"
+          README_FILES=(README.md docs/i18n/README.*.md)
+          MATCHES="$(perl -0ne '$count += () = /cache_bust=\d{4}-\d{2}-\d{2}/g; END { print $count + 0 }' "${README_FILES[@]}")"
           if [ "$MATCHES" -eq 0 ]; then
             echo "Warning: No cache_bust patterns found. README format may have changed."
             exit 1
           fi
-          perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" README*.md
+          perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" "${README_FILES[@]}"
 
       - name: Generate Open Design bot token
         id: open-design-bot-token
@@ -52,7 +53,9 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ steps.open-design-bot-token.outputs.token }}
-          add-paths: 'README*.md'
+          add-paths: |
+            README.md
+            docs/i18n/README.*.md
           branch: automation/refresh-contributors-wall
           delete-branch: true
           commit-message: 'docs(readme): refresh contributors wall'

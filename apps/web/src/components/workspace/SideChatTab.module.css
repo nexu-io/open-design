@@ -1,0 +1,41 @@
+/* Side Chat workspace tab: a ChatPane mounted in `.ws-body` with a context
+   banner pinned above it. Fills the body so the pane scrolls internally. */
+
+.sideChat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+}
+
+.bannerIcon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ChatPane renders its own `.pane` shell; let it fill the remaining space. */
+.pane > :global(.pane) {
+  flex: 1 1 auto;
+  min-height: 0;
+}

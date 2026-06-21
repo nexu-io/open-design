@@ -4,6 +4,12 @@ import path from 'node:path';
 import { resolveProjectRelativePath } from './home-expansion.js';
 
 export const SANDBOX_MODE_ENV = 'OD_SANDBOX_MODE';
+export const SANDBOX_IMPORT_ALLOWED_ROOTS_ENV = 'OD_SANDBOX_IMPORT_ALLOWED_ROOTS';
+export const SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE =
+  `Imported-folder projects are not available in ${SANDBOX_MODE_ENV} unless ` +
+  `their root is under ${SANDBOX_IMPORT_ALLOWED_ROOTS_ENV}.`;
+export const SANDBOX_IMPORT_ALLOWED_ROOTS_INVALID_MESSAGE =
+  `${SANDBOX_IMPORT_ALLOWED_ROOTS_ENV} entries must be absolute paths.`;
 
 export interface SandboxRuntimeRoots {
   agentHomeDir: string;
@@ -40,6 +46,61 @@ export function isSandboxModeEnabled(
     `${SANDBOX_MODE_ENV} must be one of ${Array.from(TRUTHY_VALUES).join(', ')} ` +
       `or ${Array.from(FALSY_VALUES).join(', ')}`,
   );
+}
+
+function configuredSandboxImportRoots(
+  env: Record<string, string | undefined>,
+): string[] {
+  const raw = env[SANDBOX_IMPORT_ALLOWED_ROOTS_ENV];
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  const roots = raw
+    .split(path.delimiter)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const relativeRoot = roots.find((root) => !path.isAbsolute(path.normalize(root)));
+  if (relativeRoot) {
+    throw new Error(`${SANDBOX_IMPORT_ALLOWED_ROOTS_INVALID_MESSAGE} Got: ${relativeRoot}`);
+  }
+  return roots;
+}
+
+function canonicalizePathForContainment(value: string): string {
+  const resolved = path.normalize(value);
+  try {
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+function isPathInsideDir(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+export function sandboxImportAllowedRoots(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  return configuredSandboxImportRoots(env).map(canonicalizePathForContainment);
+}
+
+export function isSandboxImportedProjectRootAllowed(
+  projectRoot: string,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (!isSandboxModeEnabled(env)) return true;
+  const candidate = canonicalizePathForContainment(projectRoot);
+  return sandboxImportAllowedRoots(env).some((root) => isPathInsideDir(root, candidate));
+}
+
+export function sandboxImportedProjectRootUnavailableReason(
+  projectRoot: string,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  if (!isSandboxModeEnabled(env)) return null;
+  return isSandboxImportedProjectRootAllowed(projectRoot, env)
+    ? null
+    : SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE;
 }
 
 export function resolveSandboxRuntimeConfig(

@@ -48,6 +48,10 @@ export function codexNeedsDangerFullAccessSandbox(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
+  // Operator override for deployments where Codex cannot create its
+  // workspace-write sandbox, for example unprivileged Linux containers.
+  // Only danger-full-access is accepted; unknown values keep the default path.
+  if (env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access') return true;
   if (platform === 'win32') return true;
   // WSL reports `linux` but Codex still hits the Windows read-only
   // workspace-write sandbox path when launched from there (#2834).
@@ -64,6 +68,10 @@ export const codexAgentDef = {
     listModels: {
       args: ['debug', 'models'],
       parse: parseCodexDebugModels,
+      timeoutMs: 5000,
+    },
+    authProbe: {
+      args: ['login', 'status'],
       timeoutMs: 5000,
     },
     fallbackModels: [
@@ -120,9 +128,6 @@ export const codexAgentDef = {
             '-c',
             'sandbox_workspace_write.network_access=true',
           ];
-      // Newer Codex builds honor permissions config over legacy sandbox
-      // flags; without this, Windows/WSL launches can stay read-only (#2834).
-      args.push('-c', 'default_permissions=":workspace"');
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }

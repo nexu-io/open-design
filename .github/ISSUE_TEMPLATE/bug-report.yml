@@ -1,5 +1,6 @@
 name: 🐛 Bug report
 description: Something isn't working as expected in Open Design.
+title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
@@ -9,12 +10,23 @@ body:
 
         Before you submit:
         - Check whether the issue is already reported in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue).
+        - Replace example text with your actual bug details. Placeholder reports like `testing` or `0.0.0` are not actionable.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched existing issues and confirmed this is not a duplicate.
+          required: true
+        - label: I replaced the example text with the real behavior, reproduction steps, expected result, and version from the app's About menu or `od --version`.
+          required: true
 
   - type: textarea
     id: description
     attributes:
       label: What happened?
-      description: A clear and concise description of the bug.
+      description: Describe the real bug you hit, not example or placeholder text.
       placeholder: When I do X, I expected Y but I see Z.
     validations:
       required: true
@@ -44,7 +56,7 @@ body:
     attributes:
       label: Open Design version
       description: Find this in the app's About menu, or run `od --version`.
-      placeholder: e.g. 0.7.0
+      placeholder: e.g. 0.8.0 or 0.8.0-preview.2
     validations:
       required: true
 

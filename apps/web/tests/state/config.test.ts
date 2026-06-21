@@ -104,7 +104,7 @@ describe('syncConfigToDaemon', () => {
     });
   });
 
-  it('syncs proxy API key env values to daemon app config while localStorage strips them', async () => {
+  it('syncs CLI API key env values and intent to daemon app config while localStorage strips them', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -114,6 +114,10 @@ describe('syncConfigToDaemon', () => {
         claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
         codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
       },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
+      },
     });
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -121,6 +125,10 @@ describe('syncConfigToDaemon', () => {
       agentCliEnv: {
         claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
         codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
+      },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
       },
     });
   });
@@ -201,6 +209,26 @@ describe('mergeDaemonConfig', () => {
     });
   });
 
+  it('uses daemon CLI env intent instead of merging with stale local entries', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnvIntent: {
+          claude: { apiKeyOverride: true },
+        },
+      },
+      {
+        agentCliEnvIntent: {
+          codex: { apiKeyOverride: true },
+        },
+      },
+    );
+
+    expect(merged.agentCliEnvIntent).toEqual({
+      codex: { apiKeyOverride: true },
+    });
+  });
+
   it('copies privacyDecisionAt from daemon config', () => {
     const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
       installationId: 'install-1',
@@ -221,6 +249,44 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.installationId).toBe('install-1');
     expect(typeof merged.privacyDecisionAt).toBe('number');
+  });
+
+  it('defaults reporting on and mints an installationId when the install never opted out', () => {
+    // Brand-new install: the daemon has no privacy state at all. The product
+    // default telemetry channels (metrics + content) are on and an anonymous
+    // id is assigned so events have a stable distinct id. This mirrors the
+    // first-run banner's "I get it" opt-in payload; artifactManifest stays
+    // off, matching that surface.
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {});
+
+    expect(merged.telemetry?.metrics).toBe(true);
+    expect(merged.telemetry?.content).toBe(true);
+    expect(merged.telemetry?.artifactManifest).toBe(false);
+    expect(typeof merged.installationId).toBe('string');
+    expect(merged.installationId).toBeTruthy();
+  });
+
+  it('mints an installationId for a reporting install that somehow has none', () => {
+    // The "on but no id" state that surfaces as "Opted out" in Settings:
+    // metrics is on but no anonymous id was ever assigned.
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      installationId: null,
+    });
+
+    expect(merged.telemetry?.metrics).toBe(true);
+    expect(merged.installationId).toBeTruthy();
+  });
+
+  it('preserves an explicit opt-out and never re-mints an id', () => {
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      installationId: null,
+      privacyDecisionAt: 1778244000000,
+    });
+
+    expect(merged.telemetry?.metrics).toBe(false);
+    expect(merged.installationId == null).toBe(true);
   });
 });
 
@@ -790,6 +856,46 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(1);
   });
 
+  it('backfills the fixed-origin base URL for AIHubMix when persisted empty', () => {
+    // AIHubMix hides the Base URL field, so older configs persisted an empty
+    // baseUrl. An empty base URL blocks the live model-list fetch, so loadConfig
+    // must resolve it to the canonical origin.
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'aihubmix',
+      apiKey: 'sk-test',
+      baseUrl: '',
+      model: 'claude-opus-4-8',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('aihubmix');
+    expect(config.baseUrl).toBe('https://aihubmix.com/v1');
+  });
+
+  it('leaves a non-gateway protocol base URL untouched', () => {
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-4o',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    expect(loadConfig().baseUrl).toBe('https://api.example.com/v1');
+  });
+
   it('migrates legacy Anthropic API configs to an explicit apiProtocol', () => {
     const legacyConfig: Partial<AppConfig> = {
       mode: 'api',
@@ -987,12 +1093,13 @@ describe('saveConfig', () => {
     expect(saved.telemetry).toBeUndefined();
   });
 
-  it('keeps proxy API key env values out of localStorage while preserving non-secret env', () => {
+  it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {
     saveConfig({
       ...DEFAULT_CONFIG,
       agentCliEnv: {
         claude: {
           ANTHROPIC_API_KEY: 'sk-anthropic',
+          ANTHROPIC_AUTH_TOKEN: 'sk-auth-token',
           ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
           CLAUDE_CONFIG_DIR: '~/.claude-2',
         },
@@ -1002,6 +1109,10 @@ describe('saveConfig', () => {
           OPENAI_BASE_URL: 'https://proxy.example/openai',
           CODEX_HOME: '~/.codex-alt',
         },
+      },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
       },
     });
 
@@ -1013,6 +1124,10 @@ describe('saveConfig', () => {
     expect(saved.agentCliEnv.codex).toEqual({
       OPENAI_BASE_URL: 'https://proxy.example/openai',
       CODEX_HOME: '~/.codex-alt',
+    });
+    expect(saved.agentCliEnvIntent).toEqual({
+      claude: { apiKeyOverride: true },
+      codex: { apiKeyOverride: true },
     });
   });
 });

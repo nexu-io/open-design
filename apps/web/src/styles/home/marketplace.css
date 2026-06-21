@@ -1,0 +1,195 @@
+/* ============================================================
+   Marketplace catalog view (/marketplace → MarketplaceView).
+
+   The view shipped with only hover/animation rules (in
+   entrance.css) and no layout, so the plugin cards fell back to
+   bare <button> defaults — centered text, no card chrome, and a
+   meta row whose spans collided ("v0.1.0trust: bundledbundled").
+   This file gives the view the same container, filter, and card
+   grammar as its sibling entry views (automations, plugins-home)
+   so it reads as one product, not an unstyled page.
+   ============================================================ */
+
+.marketplace-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 16px 4px 96px;
+}
+
+/* ---------- Header + filters ---------- */
+.marketplace-view__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.marketplace-view__header h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.marketplace-view__filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-soft);
+}
+.marketplace-view__filters button {
+  appearance: none;
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+.marketplace-view__filters button:hover:not([data-active='true']) {
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+}
+.marketplace-view__filters button[data-active='true'] {
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ---------- Card grid ---------- */
+.marketplace-view__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.marketplace-view__card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  text-align: left;
+  padding: 14px 16px;
+  min-height: 120px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: inherit;
+  cursor: pointer;
+}
+
+.marketplace-view__card-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.marketplace-view__card-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.marketplace-view__card-meta {
+  margin-top: auto;
+  padding-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.marketplace-view__card-meta > span + span::before {
+  content: '·';
+  margin: 0 6px;
+  color: var(--text-faint);
+}
+
+/* ---------- Loading / empty ---------- */
+.marketplace-view__loading,
+.marketplace-view__empty {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+/* The empty state renders inside the auto-fill grid, so it must span every
+   column — otherwise it sits in a single 240px track and reads off-center. */
+.marketplace-view__grid > .marketplace-view__empty {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Configured catalogs ---------- */
+.marketplace-view__catalogs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.marketplace-view__catalogs h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+.marketplace-view__catalogs > div {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.marketplace-view__catalogs ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.marketplace-view__catalogs li {
+  padding: 8px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.marketplace-view__catalogs li strong {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.marketplace-view__catalogs a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.marketplace-view__catalogs a:hover {
+  text-decoration: underline;
+}
+.marketplace-view__catalog-trust {
+  color: var(--text-faint);
+}

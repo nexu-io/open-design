@@ -1,4 +1,8 @@
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+import {
+  SIDECAR_DEFAULTS,
+  resolveWindowsReleaseNamespaceToken,
+  resolveWindowsUninstallRegistryKey,
+} from "@open-design/sidecar-proto";
 
 import type { ToolPackConfig } from "../config.js";
 import { PRODUCT_NAME } from "./constants.js";
@@ -41,12 +45,8 @@ function displayNameForChannel(channel: ReleaseChannelIdentity): string {
   return PRODUCT_NAME;
 }
 
-function sanitizeNamespace(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, "-");
-}
-
 export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "appVersion">): WinInstallIdentity {
-  const namespaceToken = sanitizeNamespace(config.namespace);
+  const namespaceToken = resolveWindowsReleaseNamespaceToken(config.namespace);
   const channel = channelFromVersion(config.appVersion) ?? channelFromNamespace(config.namespace);
   const displayName = channel == null ? `${PRODUCT_NAME} ${namespaceToken}` : displayNameForChannel(channel);
 
@@ -54,7 +54,7 @@ export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespac
     appPathsKey: `Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${displayName}.exe`,
     displayName,
     exeName: `${PRODUCT_NAME}.exe`,
-    registryKey: `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${PRODUCT_NAME}-${namespaceToken}`,
+    registryKey: resolveWindowsUninstallRegistryKey(config.namespace),
     shortcutName: `${displayName}.lnk`,
     uninstallerName: `Uninstall ${displayName}.exe`,
   };

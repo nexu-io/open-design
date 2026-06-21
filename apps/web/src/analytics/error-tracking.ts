@@ -41,6 +41,7 @@ interface ExceptionTrackingContext {
   distinctId: string;
   appVersion?: string;
   sessionId?: string;
+  telemetryEnv?: string;
 }
 
 interface BufferedSafetyEvent {
@@ -74,6 +75,15 @@ export function clearExceptionTrackingContext(): void {
   // until the page unloads — no key, nowhere to send them, but also
   // nothing leaks.
   context = null;
+}
+
+// Patches only the appVersion field on an existing context. Safe to call
+// mid-session when the real version arrives after boot (e.g. /api/version
+// resolves after the initial '0.0.0' placeholder). No-op if context hasn't
+// been set yet.
+export function patchExceptionTrackingAppVersion(version: string): void {
+  if (!context || !version) return;
+  context = { ...context, appVersion: version };
 }
 
 // Called once at app boot. Idempotent — repeated calls are no-ops.
@@ -177,6 +187,7 @@ function dispatch(item: BufferedSafetyEvent): void {
     properties: {
       ...item.body.properties,
       $lib: 'web/error-tracking',
+      ...(context.telemetryEnv ? { env: context.telemetryEnv } : {}),
       ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
       ...(context.sessionId ? { session_id: context.sessionId } : {}),
     },

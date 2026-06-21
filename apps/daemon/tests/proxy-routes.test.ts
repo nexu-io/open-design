@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
 import { startServer } from '../src/server.js';
+import { AIHUBMIX_APP_CODE } from '../src/integrations/aihubmix.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -1163,6 +1164,316 @@ describe('API proxy routes', () => {
       type: 'function',
       function: { name: 'generate_image' },
     });
+  });
+
+  it('routes AIHubMix to /v1/chat/completions with tools + APP-Code header', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse([
+        'data: {"choices":[{"delta":{"content":"ok"}}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n')));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/aihubmix/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://aihubmix.com/v1',
+        apiKey: 'ah-test',
+        projectId: 'test-project',
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+
+    const upstreamCall = fetchMock.mock.calls.find(([input]) =>
+      !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCall).toBeDefined();
+    expect(String(upstreamCall![0])).toBe('https://aihubmix.com/v1/chat/completions');
+    const init = upstreamCall![1] as FetchInit;
+    const body = JSON.parse(String(init?.body));
+    expect(body.tools[0]).toMatchObject({
+      type: 'function',
+      function: { name: 'generate_image' },
+    });
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization ?? headers.authorization).toBe('Bearer ah-test');
+    // APP-Code is injected only when the fixed code is configured; the test
+    // stays green either way so an unfilled integrator constant doesn't fail CI.
+    if (AIHUBMIX_APP_CODE) {
+      expect(headers['APP-Code']).toBe(AIHUBMIX_APP_CODE);
+    }
+  });
+
+  it('routes AIHubMix claude* models to the Anthropic /v1/messages wire', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse([
+        'event: message_stop',
+        'data: {"type":"message_stop"}',
+        '',
+      ].join('\n')));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/aihubmix/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://aihubmix.com/v1',
+        apiKey: 'ah-test',
+        projectId: 'test-project',
+        model: 'claude-opus-4-8',
+        systemPrompt: 'be brief',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+
+    const upstreamCall = fetchMock.mock.calls.find(([input]) =>
+      !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCall).toBeDefined();
+    // Anthropic native endpoint on the AIHubMix origin, not /v1/chat/completions.
+    expect(String(upstreamCall![0])).toBe('https://aihubmix.com/v1/messages');
+    const init = upstreamCall![1] as FetchInit;
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(headers['x-api-key']).toBe('ah-test');
+    expect(headers['anthropic-version']).toBe('2023-06-01');
+    const body = JSON.parse(String(init?.body));
+    expect(body.system).toBe('be brief'); // Anthropic-shaped (not OpenAI messages[system])
+    // Media tools are now injected on the claude route too, in the Anthropic
+    // `input_schema` shape, so an aihubmix claude chat model can run the same
+    // in-chat generate_image/video/speech tool loop the OpenAI family has.
+    expect(Array.isArray(body.tools)).toBe(true);
+    expect(body.tools.map((t: any) => t.name)).toContain('generate_image');
+    expect(body.tools[0]).toHaveProperty('input_schema');
+    expect(body.tool_choice).toEqual({ type: 'auto' });
+    if (AIHUBMIX_APP_CODE) {
+      expect(headers['APP-Code']).toBe(AIHUBMIX_APP_CODE);
+    }
+  });
+
+  it('routes AIHubMix gemini* models to the Gemini streamGenerateContent wire', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse([
+        'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}',
+        '',
+      ].join('\n')));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/aihubmix/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://aihubmix.com/v1',
+        apiKey: 'ah-test',
+        projectId: 'test-project',
+        model: 'gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+
+    const upstreamCall = fetchMock.mock.calls.find(([input]) =>
+      !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCall).toBeDefined();
+    // Gemini native endpoint under the /gemini sub-path of the AIHubMix origin.
+    expect(String(upstreamCall![0])).toBe(
+      'https://aihubmix.com/gemini/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
+    );
+    const init = upstreamCall![1] as FetchInit;
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(headers['x-goog-api-key']).toBe('ah-test');
+    const body = JSON.parse(String(init?.body));
+    expect(Array.isArray(body.contents)).toBe(true); // Gemini-shaped
+    // functionDeclarations injected so gemini chat models get media tools too.
+    expect(Array.isArray(body.tools)).toBe(true);
+    expect(
+      body.tools[0].functionDeclarations.map((f: any) => f.name),
+    ).toContain('generate_image');
+    if (AIHUBMIX_APP_CODE) {
+      expect(headers['APP-Code']).toBe(AIHUBMIX_APP_CODE);
+    }
+  });
+
+  it('runs the BYOK media tool loop on the AIHubMix claude (Anthropic) route', async () => {
+    const upstreamMsgBodies: any[] = [];
+    let msgCallIndex = 0;
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+
+      // generate_image tool → OpenAI images endpoint on the AIHubMix origin.
+      if (url === 'https://aihubmix.com/v1/images/generations') {
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: 'iVBORw0KGgo=' }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+
+      // Anthropic native chat wire.
+      if (url === 'https://aihubmix.com/v1/messages') {
+        upstreamMsgBodies.push(JSON.parse(String(init?.body || '{}')));
+        msgCallIndex++;
+        if (msgCallIndex === 1) {
+          // First turn: a tool_use content block, then stop_reason=tool_use.
+          return sseResponse([
+            'event: content_block_start',
+            'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"generate_image"}}',
+            '',
+            'event: content_block_delta',
+            'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"prompt\\":\\"a cat\\"}"}}',
+            '',
+            'event: content_block_stop',
+            'data: {"type":"content_block_stop","index":0}',
+            '',
+            'event: message_delta',
+            'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}',
+            '',
+            'event: message_stop',
+            'data: {"type":"message_stop"}',
+            '',
+          ].join('\n'));
+        }
+        // Second turn: model summarises with text.
+        return sseResponse([
+          'event: content_block_delta',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Here is your cat"}}',
+          '',
+          'event: message_delta',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}',
+          '',
+          'event: message_stop',
+          'data: {"type":"message_stop"}',
+          '',
+        ].join('\n'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/aihubmix/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://aihubmix.com/v1',
+        apiKey: 'ah-test',
+        projectId: 'test-project',
+        model: 'claude-opus-4-8',
+        messages: [{ role: 'user', content: 'draw a cat' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('event: delta');
+    expect(body).toContain('Here is your cat');
+    expect(body).toContain('event: end');
+
+    // Two /v1/messages turns: tool_use → tool_result → text.
+    expect(upstreamMsgBodies).toHaveLength(2);
+    expect(upstreamMsgBodies[0].tools.map((t: any) => t.name)).toContain('generate_image');
+    // Second turn threads the assistant tool_use + a user tool_result block.
+    const secondMessages = upstreamMsgBodies[1].messages;
+    const assistantTurn = secondMessages.find((m: any) => m.role === 'assistant');
+    expect(assistantTurn.content[0]).toMatchObject({
+      type: 'tool_use',
+      id: 'toolu_1',
+      name: 'generate_image',
+    });
+    const toolResultTurn = secondMessages.find(
+      (m: any) =>
+        m.role === 'user' && Array.isArray(m.content) && m.content[0]?.type === 'tool_result',
+    );
+    expect(toolResultTurn.content[0]).toMatchObject({
+      type: 'tool_result',
+      tool_use_id: 'toolu_1',
+    });
+    expect(toolResultTurn.content[0].content).toMatch(
+      /Image generated successfully\. URL: \/api\/projects\/test-project\/files\/byok-[a-z0-9-]+\.png/,
+    );
+  });
+
+  it('runs the BYOK media tool loop on the AIHubMix gemini route', async () => {
+    const upstreamBodies: any[] = [];
+    let callIndex = 0;
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+
+      if (url === 'https://aihubmix.com/v1/images/generations') {
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: 'iVBORw0KGgo=' }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+
+      if (url.startsWith('https://aihubmix.com/gemini/')) {
+        upstreamBodies.push(JSON.parse(String(init?.body || '{}')));
+        callIndex++;
+        if (callIndex === 1) {
+          // First turn: a functionCall part (arrives whole in one chunk). Gemini
+          // 3.x attaches a thoughtSignature to the part; it MUST be echoed back
+          // verbatim in the model turn or the follow-up request 400s.
+          return sseResponse([
+            'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"generate_image","args":{"prompt":"a dog"}},"thoughtSignature":"sig-xyz"}]}}]}',
+            '',
+          ].join('\n'));
+        }
+        // Second turn: text.
+        return sseResponse([
+          'data: {"candidates":[{"content":{"parts":[{"text":"Here is your dog"}]}}]}',
+          '',
+        ].join('\n'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/aihubmix/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://aihubmix.com/v1',
+        apiKey: 'ah-test',
+        projectId: 'test-project',
+        model: 'gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'draw a dog' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('Here is your dog');
+    expect(body).toContain('event: end');
+
+    expect(upstreamBodies).toHaveLength(2);
+    expect(
+      upstreamBodies[0].tools[0].functionDeclarations.map((f: any) => f.name),
+    ).toContain('generate_image');
+    // Second turn threads the model functionCall + a user functionResponse.
+    const contents = upstreamBodies[1].contents;
+    const modelTurn = contents.find(
+      (c: any) => c.role === 'model' && c.parts?.[0]?.functionCall,
+    );
+    expect(modelTurn.parts[0].functionCall).toMatchObject({ name: 'generate_image' });
+    // The thoughtSignature is echoed back verbatim (Gemini 3.x requirement).
+    expect(modelTurn.parts[0].thoughtSignature).toBe('sig-xyz');
+    const responseTurn = contents.find((c: any) => c.parts?.[0]?.functionResponse);
+    expect(responseTurn.parts[0].functionResponse.name).toBe('generate_image');
+    expect(responseTurn.parts[0].functionResponse.response.result).toMatch(
+      /Image generated successfully\. URL: \/api\/projects\/test-project\/files\/byok-[a-z0-9-]+\.png/,
+    );
   });
 
   it('runs the BYOK image tool loop end-to-end', async () => {

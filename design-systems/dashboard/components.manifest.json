@@ -1,0 +1,418 @@
+{
+  "schemaVersion": 1,
+  "brandId": "dashboard",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "Dashboard - reference components",
+    "description": "Reference fixture for design-systems/dashboard: analytics dashboard with compact cards, cool surfaces, and status-first information design.",
+    "styleBlockCount": 1,
+    "selectorCount": 48,
+    "classCount": 26,
+    "elementCount": 19
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--ease-standard",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display"
+    ],
+    "unusedDeclared": [
+      "--accent-active",
+      "--danger",
+      "--elev-flat",
+      "--motion-base",
+      "--space-1",
+      "--space-12",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".actions",
+    ".btn",
+    ".btn-primary",
+    ".btn-primary:hover",
+    ".btn-secondary",
+    ".btn-secondary:hover",
+    ".btn:focus-visible",
+    ".card-row",
+    ".container",
+    ".eyebrow",
+    ".field",
+    ".hero",
+    ".lead",
+    ".lower",
+    ".metric",
+    ".metric span",
+    ".metric strong",
+    ".metric-grid",
+    ".metric:last-child",
+    ".mini-card",
+    ".mini-card p",
+    ".page",
+    ".panel",
+    ".panel-head",
+    ".stack > * + *",
+    ".status",
+    ".status::before",
+    ".swatch",
+    ".swatch.accent",
+    ".swatch.fg",
+    ".swatch.surface",
+    ".swatch.warm",
+    ".swatches",
+    ".tile",
+    ".tile p",
+    "*",
+    "*::after",
+    "*::before",
+    "body",
+    "h1",
+    "h2",
+    "h3",
+    "html",
+    "input",
+    "input:focus",
+    "label",
+    "p",
+    "section"
+  ],
+  "classes": [
+    "accent",
+    "actions",
+    "btn",
+    "btn-primary",
+    "btn-secondary",
+    "card-row",
+    "container",
+    "eyebrow",
+    "fg",
+    "field",
+    "hero",
+    "lead",
+    "lower",
+    "metric",
+    "metric-grid",
+    "mini-card",
+    "page",
+    "panel",
+    "panel-head",
+    "stack",
+    "status",
+    "surface",
+    "swatch",
+    "swatches",
+    "tile",
+    "warm"
+  ],
+  "elements": [
+    "a",
+    "article",
+    "body",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "head",
+    "html",
+    "input",
+    "label",
+    "main",
+    "meta",
+    "p",
+    "section",
+    "span",
+    "strong",
+    "style",
+    "title"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        ".btn",
+        ".btn-primary",
+        ".btn-primary:hover",
+        ".btn-secondary",
+        ".btn-secondary:hover",
+        ".btn:focus-visible"
+      ],
+      "classes": [
+        "btn",
+        "btn-primary",
+        "btn-secondary"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--accent",
+        "--accent-on",
+        "--border",
+        "--ease-standard",
+        "--elev-ring",
+        "--fg",
+        "--font-body",
+        "--motion-fast",
+        "--radius-md",
+        "--space-5",
+        "--surface",
+        "--text-sm"
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        ".field",
+        "input",
+        "input:focus",
+        "label"
+      ],
+      "classes": [
+        "field"
+      ],
+      "elements": [
+        "input",
+        "label"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--fg",
+        "--radius-sm",
+        "--space-2",
+        "--space-4",
+        "--space-5",
+        "--surface"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".card-row",
+        ".panel",
+        ".panel-head",
+        ".tile",
+        ".tile p"
+      ],
+      "classes": [
+        "card-row",
+        "panel",
+        "panel-head",
+        "tile"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--border",
+        "--elev-raised",
+        "--radius-lg",
+        "--surface"
+      ]
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": true,
+      "selectors": [],
+      "classes": [
+        "status"
+      ],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": true,
+      "selectors": [],
+      "classes": [],
+      "elements": [
+        "a"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        ".eyebrow",
+        ".lead",
+        "h1",
+        "h2",
+        "h3"
+      ],
+      "classes": [
+        "eyebrow",
+        "lead"
+      ],
+      "elements": [
+        "h1",
+        "h2",
+        "h3",
+        "p"
+      ],
+      "tokenReferences": [
+        "--fg-2",
+        "--text-4xl",
+        "--text-lg",
+        "--text-xl"
+      ]
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        ".container",
+        "section"
+      ],
+      "classes": [
+        "container",
+        "metric-grid"
+      ],
+      "elements": [
+        "main",
+        "section"
+      ],
+      "tokenReferences": [
+        "--container-gutter-phone",
+        "--container-gutter-tablet",
+        "--section-y-desktop"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 3,
+    "pixelValues": 24,
+    "hardcodedFontFamilies": 4
+  }
+}

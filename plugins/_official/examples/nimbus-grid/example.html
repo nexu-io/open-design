@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#17130d" />
+  <title>Nimbus Grid — Secure cloud storage capacity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #17130d;
+      --ink: #fff4d5;
+      --muted: #dacaa1;
+      --line: rgba(255,240,199,0.28);
+      --glass: rgba(255,239,199,0.16);
+      --glass-strong: rgba(255,239,199,0.24);
+      --accent: #ead09a;
+      --accent-2: #ffd879;
+      --deep: #4d3f24;
+      --radius: 8px;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(255,216,121,0.18), transparent 28rem), var(--bg);
+      color: var(--ink);
+      font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.375;
+      letter-spacing: 0.0175rem;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    a { color: inherit; text-decoration: none; }
+    .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+    .wrap { width: 100%; max-width: 1320px; margin: 0 auto; padding: 0 clamp(18px, 4vw, 48px); }
+    h1, h2 { font-weight: 400; margin: 0; }
+    p { margin: 0; }
+
+    .glass-pill {
+      background: var(--glass);
+      border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(18px) saturate(1.35);
+      backdrop-filter: blur(18px) saturate(1.35);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 24px rgba(0,0,0,0.28);
+      border-radius: 100px;
+    }
+
+    /* ───────── SECTION 1 — HERO ───────── */
+    .hero {
+      position: relative;
+      min-height: 100svh;
+      overflow: hidden;
+      padding: 22px clamp(18px, 4vw, 48px) 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .shader-fallback {
+      position: absolute; inset: 0; z-index: -4;
+      background:
+        radial-gradient(circle at 30% 20%, #fff2be, transparent 55%),
+        linear-gradient(135deg, #846f43, #f0d27c 55%, #fff2be);
+    }
+    .shader-bg {
+      position: absolute; top: 50%; left: 50%;
+      width: 1422px; height: 800px; border: 0;
+      transform: translate(-50%, -50%) scale(var(--shader-scale, 5));
+      z-index: -3; pointer-events: none;
+    }
+    .site-header {
+      display: flex; align-items: center; gap: 16px;
+      min-height: 42px; flex-wrap: wrap;
+    }
+    .brand {
+      padding: 9px 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.06rem;
+    }
+    .site-nav {
+      margin-left: auto; display: flex; gap: 22px; align-items: center;
+    }
+    .site-nav a {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04rem;
+      color: rgba(255,244,213,0.66); transition: color 0.18s ease;
+    }
+    .site-nav a:hover { color: var(--ink); }
+    .header-cta {
+      padding: 9px 14px; font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04rem;
+      color: var(--ink); cursor: pointer;
+      transition: transform 0.18s ease, filter 0.18s ease;
+    }
+    .header-cta:hover { transform: translateY(-1px); filter: brightness(1.12); }
+
+    .hero-body {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 24px;
+      padding: 36px 0 56px;
+    }
+    .console-card {
+      width: min(396px, 42vw);
+      background: rgba(13,16,19,0.88);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      overflow: hidden;
+    }
+    .console-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 77px)) 1fr auto;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding: 0 10px;
+    }
+    .console-tabs .ctab {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem;
+      color: rgba(255,244,213,0.55);
+      padding: 11px 6px; cursor: pointer; text-align: center;
+      border-bottom: 2px solid transparent; transition: color 0.18s ease;
+    }
+    .console-tabs .ctab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .win-controls { display: flex; gap: 6px; justify-self: end; padding-right: 4px; }
+    .win-controls .sq { width: 10px; height: 10px; border-radius: 2px; background: rgba(255,244,213,0.22); }
+    .win-controls .bar { width: 22px; height: 10px; border-radius: 3px; background: rgba(255,244,213,0.16); }
+    .console-panes { padding: 16px; }
+    .console-pane { display: none; min-height: 153px; }
+    .console-pane.active { display: block; }
+    .console-pane pre, .console-pane .line {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; line-height: 1.7; color: rgba(255,244,213,0.82);
+      white-space: pre-wrap; margin: 0;
+    }
+    .acc { color: var(--accent); }
+    .typed-line { position: relative; }
+    .typed-line::after {
+      content: ''; display: inline-block; width: 1px; height: 1em;
+      background: var(--accent); margin-left: 1px; vertical-align: -2px;
+      animation: cursor-blink 1s steps(2, start) infinite;
+    }
+    @keyframes cursor-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+    .console-input {
+      height: 33px; display: flex; align-items: center; gap: 8px;
+      padding: 0 10px; margin-bottom: 8px;
+      border: 1px solid var(--line); border-radius: 4px;
+      background: rgba(0,0,0,0.3);
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+      color: rgba(255,244,213,0.85);
+    }
+    .console-input .lbl { color: rgba(255,244,213,0.5); }
+    .console-input.select { justify-content: space-between; }
+    .console-input.select::after { content: '▾'; color: var(--accent); }
+    .console-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .console-row2 .console-input { margin-bottom: 0; }
+
+    .hero-copy { position: relative; align-self: end; max-width: 760px; }
+    .hero-copy::before {
+      content: ''; position: absolute; inset: -30px -40px;
+      background: radial-gradient(ellipse at 30% 50%, rgba(8,7,4,0.7), transparent 70%);
+      filter: blur(26px); z-index: -1;
+    }
+    .hero h1 {
+      font-size: clamp(29px, 3.5vw, 56px); line-height: 1; max-width: 18ch;
+      letter-spacing: -0.01em;
+    }
+    .hero-copy p {
+      margin-top: 20px; font-size: clamp(12px, 1.125vw, 16.5px);
+      color: var(--ink); max-width: 720px;
+    }
+
+    /* ───────── SECTION 2 — PLATFORM ACCORDION ───────── */
+    #platform {
+      position: relative; min-height: 420svh;
+      background: radial-gradient(circle at top right, rgba(234,208,154,0.1), transparent 30rem), #050604;
+    }
+    .accordion-inner {
+      position: sticky; top: 0; height: 100vh; height: 100svh;
+      display: grid; grid-template-columns: 0.22fr 0.78fr;
+      gap: clamp(20px, 3vw, 48px);
+      align-items: center;
+      padding: 0 clamp(18px, 4vw, 48px);
+      max-width: 1320px; margin: 0 auto;
+    }
+    .accordion-nav { display: flex; flex-direction: column; gap: 14px; }
+    .accordion-nav button {
+      display: flex; align-items: center; gap: 9px;
+      background: none; border: 0; cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem;
+      color: rgba(255,244,213,0.55); text-align: left;
+      transition: color 0.2s ease, transform 0.2s ease;
+    }
+    .accordion-nav button .dot { width: 7px; height: 7px; background: currentColor; flex: none; }
+    .accordion-nav button.active { color: var(--accent); transform: translateX(2px); }
+    .accordion-stack { position: relative; height: min(80svh, 820px); }
+    .accordion-card {
+      position: absolute; inset: 0;
+      display: grid; grid-template-columns: 0.46fr 0.54fr;
+      gap: clamp(16px, 2vw, 28px);
+      background: #000; border-top: 1px solid var(--line);
+      border-radius: var(--radius); overflow: hidden;
+      padding: clamp(22px, 3vw, 40px);
+      transform: translateY(var(--card-y, 100%));
+      clip-path: inset(0 0 var(--card-clip-bottom, 0%) 0 round var(--radius));
+      will-change: transform;
+    }
+    .accordion-card .ac-copy { display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .accordion-card .ac-eyebrow {
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06rem; color: var(--accent);
+    }
+    .accordion-card h3 { font-weight: 400; font-size: clamp(22px, 2.6vw, 38px); margin: 0; line-height: 1.05; }
+    .accordion-card .ac-copy p { color: var(--muted); font-size: 14px; max-width: 38ch; }
+    .ac-visual {
+      position: relative; border-radius: var(--radius); overflow: hidden;
+      display: grid; place-items: center; min-height: 220px;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(255,242,200,0.5), transparent 60%),
+        linear-gradient(135deg, rgba(234,208,154,0.92), rgba(106,91,52,0.68));
+    }
+    .code-window {
+      width: min(80%, 360px);
+      background: rgba(8,9,7,0.92); border: 1px solid rgba(0,0,0,0.4);
+      border-radius: var(--radius); box-shadow: 0 24px 50px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+    .code-window .cw-bar { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .code-window .cw-bar span { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,244,213,0.3); }
+    .code-window pre {
+      margin: 0; padding: 14px 16px;
+      font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; line-height: 1.75;
+      color: rgba(255,244,213,0.85); white-space: pre-wrap;
+    }
+    .code-window pre .num { color: rgba(255,244,213,0.35); }
+
+    /* ───────── SECTION 3 — PRICING ───────── */
+    #pricing {
+      position: relative; padding: clamp(80px, 12vw, 140px) 0 0;
+      background:
+        linear-gradient(180deg, rgba(255,244,213,0.05), transparent 30%),
+        radial-gradient(circle at top left, rgba(151,211,235,0.14), transparent 28rem),
+        #11120f;
+      overflow: hidden;
+    }
+    .pricing-top { display: grid; grid-template-columns: 0.38fr 0.62fr; gap: clamp(28px, 5vw, 72px); align-items: start; }
+    .eyebrow {
+      font-family: 'IBM Plex Mono', monospace; font-size: 16px;
+      text-transform: uppercase; letter-spacing: 0.04rem; color: var(--accent);
+    }
+    .pricing-top h2 { font-size: clamp(34px, 4vw, 68px); line-height: 1; margin: 16px 0 0; }
+    .pricing-top .lead { margin-top: 22px; color: var(--muted); max-width: 50ch; }
+    .pricing-table { border-top: 1px solid var(--line); }
+    .pt-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; }
+    .pt-head .pt-title { font-family: 'IBM Plex Mono', monospace; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04rem; }
+    .billing-toggle { display: flex; gap: 4px; padding: 4px; }
+    .billing-toggle button {
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.04rem;
+      padding: 6px 12px; border: 0; border-radius: 100px; cursor: pointer;
+      background: none; color: rgba(255,244,213,0.55);
+    }
+    .billing-toggle button.active { background: var(--accent); color: #241d0f; }
+    .pt-row { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); }
+    .pt-row .pt-name { font-size: 14px; }
+    .pt-row .pt-val { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--accent); }
+
+    .pricing-bars {
+      width: 100vw; margin-left: calc(50% - 50vw);
+      display: grid; grid-template-columns: repeat(12, 1fr);
+      align-items: end; height: 480px; margin-top: clamp(60px, 8vw, 110px);
+      position: relative;
+    }
+    .pricing-bars::before {
+      content: ''; position: absolute; inset: 0 0 auto 0; height: 120px;
+      background: linear-gradient(180deg, #11120f, transparent); z-index: 2; pointer-events: none;
+    }
+    .pbar {
+      min-height: 120px;
+      height: calc(var(--bar-height) + var(--bar-morph, 0px));
+      background: linear-gradient(180deg, var(--accent-2), var(--deep));
+      transition: height 80ms linear;
+    }
+    .pbar.muted { background: linear-gradient(180deg, var(--accent), #3a2f1b); opacity: 0.82; }
+
+    .plan-row {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(16px, 2vw, 24px);
+      padding: clamp(56px, 8vw, 96px) 0 clamp(70px, 10vw, 120px);
+    }
+    .plan-card {
+      max-width: 300px; border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 26px 24px; display: flex; flex-direction: column; gap: 14px;
+      background: rgba(255,239,199,0.04);
+    }
+    .plan-card h4 { margin: 0; font-weight: 500; font-size: 18px; }
+    .plan-card p { color: var(--muted); font-size: 14px; flex: 1; }
+    .pill-cta {
+      height: 42px; display: inline-flex; align-items: center; justify-content: center;
+      padding: 0 18px; font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04rem;
+      border: 1px solid var(--line); border-radius: 100px;
+      background: var(--glass); color: var(--ink); cursor: pointer;
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      transition: filter 0.18s ease, transform 0.18s ease;
+    }
+    .pill-cta:hover { filter: brightness(1.15); }
+
+    /* ───────── SECTION 4 — SECURITY ───────── */
+    #security {
+      padding: clamp(80px, 12vw, 140px) 0;
+      background:
+        radial-gradient(circle at top right, rgba(255,216,121,0.1), transparent 26rem),
+        radial-gradient(circle at bottom left, rgba(224,94,54,0.1), transparent 26rem),
+        #120f0a;
+    }
+    .sec-head { display: grid; grid-template-columns: 0.58fr 0.42fr; gap: clamp(24px, 4vw, 56px); align-items: end; margin-bottom: clamp(40px, 6vw, 64px); }
+    .sec-head h2 { font-size: clamp(28px, 3.4vw, 50px); line-height: 1.04; margin-top: 14px; }
+    .sec-head .sec-lead { color: var(--muted); font-size: 15px; }
+    .sec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(16px, 2vw, 22px); }
+    .sec-card {
+      position: relative; min-height: 464px; border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,244,213,0.05), transparent 24%), #0f0c08;
+      padding: 28px 26px; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .sec-card h3 { font-weight: 500; font-size: 19px; margin: 0 0 12px; }
+    .sec-card .sc-copy { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+    .api-window {
+      position: absolute; left: 24px; bottom: 24px; width: 58%;
+      background: #000; border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.5); overflow: hidden;
+    }
+    .api-window .aw-bar { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .api-window .aw-bar span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,244,213,0.3); }
+    .api-window pre, .api-spec pre {
+      margin: 0; padding: 12px 14px; font-family: 'IBM Plex Mono', monospace;
+      font-size: 10.5px; line-height: 1.7; color: rgba(255,244,213,0.82); white-space: pre-wrap;
+    }
+    .api-spec {
+      position: absolute; right: 22px; top: 84px; width: 52%;
+      background: rgba(64,52,30,0.86); border: 1px solid var(--accent);
+      border-radius: var(--radius); box-shadow: 0 18px 40px rgba(0,0,0,0.45); overflow: hidden;
+    }
+    .api-spec pre { color: var(--accent); }
+    .comp-rows { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+    .comp-row {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(48,39,23,0.84); border: 1px solid rgba(234,208,154,0.32);
+      border-radius: var(--radius); padding: 12px 14px;
+    }
+    .check-badge {
+      width: 24px; height: 24px; border-radius: 50%; background: var(--accent);
+      flex: none; position: relative;
+    }
+    .check-badge::before {
+      content: ''; position: absolute; left: 8px; top: 5px; width: 6px; height: 11px;
+      border-right: 2px solid #241d0f; border-bottom: 2px solid #241d0f; transform: rotate(40deg);
+    }
+    .comp-row .cr-label { font-size: 13px; }
+    .comp-row .cr-label b { font-weight: 500; }
+    .comp-row .cr-sub { color: var(--accent); font-size: 11.5px; }
+    .binary-map {
+      font-family: 'IBM Plex Mono', monospace; font-size: 9px; line-height: 1.15;
+      color: var(--accent); margin: 4px 0 18px; white-space: pre;
+      letter-spacing: 1px; opacity: 0.9;
+    }
+    .asset-table { margin-top: auto; display: flex; flex-direction: column; }
+    .asset-row { display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--line); }
+    .asset-row .ar-k { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem; color: rgba(255,244,213,0.5); }
+    .asset-row .ar-v { font-size: 13px; }
+
+    /* ───────── SECTION 5 — CONSOLE SHOWCASE ───────── */
+    #plans {
+      position: relative; padding: clamp(80px, 12vw, 140px) 0; overflow: hidden;
+      background: radial-gradient(circle at 70% 0%, rgba(151,211,235,0.12), transparent 28rem), #070a0b;
+    }
+    #plans::after {
+      content: ''; position: absolute; top: 40px; right: 0; width: 240px; height: 200px;
+      background: repeating-linear-gradient(45deg, rgba(151,211,235,0.08) 0 6px, transparent 6px 12px);
+      pointer-events: none;
+    }
+    .ds-head { display: grid; grid-template-columns: 1fr 0.8fr; gap: clamp(24px, 4vw, 56px); align-items: end; margin-bottom: 18px; }
+    .ds-head h2 { font-size: clamp(25px, 4vw, 52px); line-height: 1.04; color: #dff5ff; }
+    .ds-head .ds-lead { color: rgba(223,245,255,0.7); font-size: 15px; }
+    .fig-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.04rem; color: rgba(223,245,255,0.7);
+      border: 1px solid rgba(151,211,235,0.3); border-radius: 100px; padding: 6px 12px;
+      margin-bottom: 22px;
+    }
+    .dashboard-shell {
+      position: relative; width: 100%; border-radius: var(--radius);
+      border: 1px solid rgba(151,211,235,0.3); background: rgba(5,8,10,0.9);
+      box-shadow: 0 40px 90px rgba(0,0,0,0.55); overflow: hidden;
+      transform: perspective(1600px) rotateX(0deg) rotateY(0deg) translateY(0);
+      transition: transform 220ms ease, border-color 220ms ease;
+    }
+    .dashboard-shell:hover {
+      transform: perspective(1600px) rotateX(1deg) rotateY(-1.2deg) translateY(-8px);
+      border-color: rgba(151,211,235,0.6);
+    }
+    .ds-sheen {
+      content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      background: linear-gradient(105deg, transparent 38%, rgba(151,211,235,0.16) 50%, transparent 62%);
+      transform: translateX(-34%); opacity: 0;
+      transition: transform 520ms ease, opacity 520ms ease;
+    }
+    .dashboard-shell:hover .ds-sheen { transform: translateX(34%); opacity: 1; }
+    .ds-topbar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid rgba(151,211,235,0.18); }
+    .ds-topbar .dots { display: flex; gap: 6px; }
+    .ds-topbar .dots span { width: 9px; height: 9px; border-radius: 50%; background: rgba(223,245,255,0.3); }
+    .ds-topbar .ds-titlebar { flex: 1; height: 10px; border-radius: 100px; background: rgba(223,245,255,0.08); max-width: 280px; }
+    .ds-body { display: grid; grid-template-columns: 240px 1fr; min-height: 360px; }
+    .ds-side { border-right: 1px solid rgba(151,211,235,0.14); padding: 18px 14px; }
+    .ds-side .ds-vault { font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04rem; color: #97d3eb; margin-bottom: 16px; }
+    .ds-side nav { display: flex; flex-direction: column; gap: 4px; }
+    .ds-side nav a { font-size: 13px; color: rgba(223,245,255,0.7); padding: 9px 12px; border-radius: 6px; }
+    .ds-side nav a.active { background: rgba(151,211,235,0.12); color: #dff5ff; }
+    .ds-main { padding: 20px 22px; position: relative; }
+    .ds-main-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .ds-main-head h3 { margin: 0; font-weight: 500; font-size: 18px; color: #97d3eb; }
+    .ds-new {
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem;
+      padding: 8px 14px; border: 1px solid rgba(151,211,235,0.5); border-radius: 100px;
+      color: #97d3eb; background: none; cursor: pointer;
+    }
+    .ds-table { width: 100%; border-collapse: collapse; }
+    .ds-table th {
+      text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+      text-transform: uppercase; letter-spacing: 0.04rem; color: rgba(223,245,255,0.5);
+      padding: 10px 12px; border-bottom: 1px solid rgba(151,211,235,0.18); font-weight: 400;
+    }
+    .ds-table td { padding: 13px 12px; font-size: 13px; border-bottom: 1px solid rgba(151,211,235,0.08); color: rgba(223,245,255,0.85); }
+    .ds-table td.state { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem; color: #97d3eb; }
+    .ds-toast {
+      position: absolute; right: 20px; bottom: 18px; z-index: 5;
+      background: rgba(5,12,15,0.95); border: 1px solid rgba(151,211,235,0.4);
+      border-radius: var(--radius); padding: 12px 16px;
+    }
+    .ds-toast .tt { color: #97d3eb; font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04rem; }
+    .ds-toast .ts { color: rgba(223,245,255,0.7); font-size: 12px; margin-top: 2px; }
+
+    /* ───────── SECTION 6 — OPERATIONS CUBE ───────── */
+    #operations {
+      position: relative; padding: clamp(80px, 12vw, 140px) 0; overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(12,13,10,0.96), rgba(12,13,10,0.4)),
+        radial-gradient(circle at 80% 30%, rgba(151,211,235,0.12), transparent 26rem),
+        radial-gradient(circle at 10% 80%, rgba(255,216,121,0.12), transparent 26rem),
+        #0c0d0a;
+    }
+    .ops-grid { display: grid; grid-template-columns: 0.44fr 0.56fr; gap: clamp(28px, 5vw, 64px); align-items: center; }
+    .ops-copy h2 { font-size: clamp(34px, 4.4vw, 72px); line-height: 0.98; margin: 16px 0; }
+    .ops-copy p { color: var(--muted); max-width: 46ch; }
+    .ops-cta {
+      margin-top: 28px; height: 46px; display: inline-flex; align-items: center;
+      padding: 0 22px; border: 0; border-radius: 100px; cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.04rem;
+      background: var(--accent); color: #1b160d;
+      transition: background 0.16s ease, transform 0.16s ease;
+    }
+    .ops-cta:hover { background: var(--accent-2); transform: translateY(-2px); }
+    .ops-visual { display: grid; place-items: center; min-height: 420px; }
+    .modal-cube-shell {
+      --spread: 1; background: none; border: 0; cursor: pointer;
+      perspective: 1000px; display: grid; place-items: center; width: 100%; min-height: 420px;
+    }
+    .modal-cube-shell:focus-visible { outline: 1px solid var(--line); outline-offset: 10px; }
+    .operations-core-cube {
+      position: relative; width: clamp(142px, 18vw, 250px); height: clamp(142px, 18vw, 250px);
+      transform-style: preserve-3d;
+      animation: core-cube-float 6s ease-in-out infinite;
+      transition: transform 620ms cubic-bezier(0.17,0.78,0.18,1);
+    }
+    @keyframes core-cube-float {
+      0%, 100% { transform: translateY(0) rotateX(-18deg) rotateY(24deg); }
+      50% { transform: translateY(-14px) rotateX(-14deg) rotateY(30deg); }
+    }
+    .modal-cube-shell.is-exploded .operations-core-cube {
+      transform: scale(0.72) rotateX(-18deg) rotateY(24deg);
+      animation-play-state: paused;
+    }
+    .cube-face {
+      position: absolute; inset: 0; border-radius: 18px;
+      background:
+        radial-gradient(circle at 48% 44%, rgba(255,216,121,0.98), transparent 60%),
+        linear-gradient(135deg, rgba(151,211,235,0.85), rgba(234,208,154,0.9) 55%, rgba(20,16,9,0.9));
+      box-shadow: inset 0 2px 12px rgba(255,255,255,0.3), inset 0 -8px 20px rgba(0,0,0,0.4);
+      backface-visibility: hidden;
+    }
+    .cube-face.front  { transform: translateZ(calc(clamp(142px, 18vw, 250px) / 2)); }
+    .cube-face.back   { transform: rotateY(180deg) translateZ(calc(clamp(142px, 18vw, 250px) / 2)); }
+    .cube-face.right  { transform: rotateY(90deg) translateZ(calc(clamp(142px, 18vw, 250px) / 2)); }
+    .cube-face.left   { transform: rotateY(-90deg) translateZ(calc(clamp(142px, 18vw, 250px) / 2)); }
+    .cube-face.top    { transform: rotateX(90deg) translateZ(calc(clamp(142px, 18vw, 250px) / 2)); }
+    .cube-face.bottom { transform: rotateX(-90deg) translateZ(calc(clamp(142px, 18vw, 250px) / 2)); }
+    .cube-particle {
+      position: absolute; left: 50%; top: 50%;
+      width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 12px;
+      background:
+        radial-gradient(circle at 40% 36%, rgba(255,216,121,0.95), transparent 60%),
+        linear-gradient(135deg, rgba(151,211,235,0.8), rgba(234,208,154,0.85));
+      box-shadow: inset 0 2px 8px rgba(255,255,255,0.3), 0 10px 24px rgba(0,0,0,0.4);
+      opacity: 0; filter: blur(4px);
+      transform: translate3d(0,0,0) scale(0.4);
+      transition: transform 760ms cubic-bezier(0.17,0.78,0.18,1), opacity 420ms ease, filter 760ms ease;
+      transition-delay: var(--d, 0ms);
+    }
+    .cube-particle.dot { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; }
+    .modal-cube-shell.is-exploded .cube-particle {
+      opacity: 1; filter: blur(0);
+      transform:
+        translate3d(calc(var(--tx) * var(--spread)), calc(var(--ty) * var(--spread)), calc(var(--tz) * var(--spread)))
+        scale(var(--s)) rotate(var(--r));
+    }
+
+    /* ───────── RESPONSIVE ───────── */
+    @media (max-width: 820px) {
+      .site-header { flex-direction: column; align-items: stretch; }
+      .site-nav { margin-left: 0; flex-wrap: wrap; }
+      .header-cta { width: 100%; text-align: center; }
+      .hero-body { grid-template-rows: auto auto; }
+      .console-card { width: 100%; }
+      .console-tabs { grid-template-columns: repeat(3, 1fr) 0 0; }
+      .console-tabs .ctab { padding: 16px 6px; }
+      .win-controls { display: none; }
+      .console-pane { min-height: 200px; }
+      .console-line { display: none; }
+      .pricing-top, .plan-row, .sec-grid, .sec-head, .ds-head, .ops-grid { grid-template-columns: 1fr; }
+      .accordion-inner { grid-template-columns: 1fr; align-content: center; gap: 18px; }
+      .accordion-nav { display: grid; grid-template-columns: 1fr 1fr; }
+      .accordion-stack { height: 78svh; }
+      .accordion-card { grid-template-columns: 1fr; }
+      .ds-body { grid-template-columns: 1fr; }
+      .ds-side nav { display: grid; grid-template-columns: 1fr 1fr; }
+      .ds-table .col-policy, .ds-table .col-state { display: none; }
+      .ds-toast { position: static; margin-top: 14px; }
+      .modal-cube-shell { --spread: 0.72; }
+      .api-window, .api-spec { position: static; width: 100%; margin-top: 12px; }
+      .sec-card { min-height: auto; }
+    }
+    @media (max-width: 520px) {
+      .hero { padding: 22px 18px 0; }
+      .hero h1 { font-size: clamp(28px, 10vw, 48px); }
+      .hero-copy p { font-size: 15px; }
+      .accordion-nav { grid-template-columns: 1fr; }
+      .modal-cube-shell { --spread: 0.48; }
+      .ops-visual, .modal-cube-shell { min-height: 360px; }
+      .ds-main-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════ SECTION 1 — HERO ═══════════ -->
+  <section class="hero" id="top">
+    <div class="shader-fallback"></div>
+    <iframe class="shader-bg" src="https://fragcoord.xyz/embed/c6zisyc6?viewport=1422x800" allow="autoplay; fullscreen" referrerpolicy="no-referrer" title="shader"></iframe>
+
+    <header class="site-header wrap">
+      <span class="brand glass-pill mono">NIMBUS GRID</span>
+      <nav class="site-nav">
+        <a href="#platform">Technology</a>
+        <a href="#security">Security</a>
+        <a href="#pricing">Capacity</a>
+        <a href="#operations">Operations</a>
+      </nav>
+      <button class="header-cta glass-pill mono">Get Started</button>
+    </header>
+
+    <div class="hero-body wrap">
+      <div class="console-card">
+        <div class="console-tabs">
+          <div class="ctab active" data-pane="cli">CLI</div>
+          <div class="ctab" data-pane="api">API</div>
+          <div class="ctab" data-pane="console">Console</div>
+          <div></div>
+          <div class="win-controls"><span class="sq"></span><span class="bar"></span></div>
+        </div>
+        <div class="console-panes">
+          <div class="console-pane active" data-pane="cli">
+            <pre><span class="acc">$</span> nimbus storage create \
+  --workspace prod-web \
+  --tier encrypted-fast \
+  --region eu-central</pre>
+            <div class="line acc typed-line" data-typed="storage pool web-db-test queued"></div>
+          </div>
+          <div class="console-pane" data-pane="api">
+            <pre><span class="acc">POST</span> /v1/storage/pools
+{
+  name: "web-db-test",
+  tier: "encrypted-fast",
+  quota: "8 TiB"
+}</pre>
+            <div class="line acc typed-line" data-typed="202 accepted: provisioning policy attached"></div>
+          </div>
+          <div class="console-pane" data-pane="console">
+            <div class="console-input"><span class="lbl">Instance name</span><span class="typed-line" data-typed="web-db-test"></span></div>
+            <div class="console-input select"><span class="lbl">Image</span><span>ubuntu-24.04-noble</span></div>
+            <div class="console-row2">
+              <div class="console-input"><span class="lbl">Memory</span><span>8 GiB</span></div>
+              <div class="console-input"><span class="lbl">CPUs</span><span>2</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-copy">
+        <h1>Cloud space that scales with your business systems.</h1>
+        <p>Nimbus Grid sells secure cloud storage capacity for companies that need fast onboarding, predictable throughput, encrypted collaboration, and modern data residency controls.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECTION 2 — PLATFORM ACCORDION ═══════════ -->
+  <section id="platform">
+    <div class="accordion-inner">
+      <nav class="accordion-nav">
+        <button class="active" data-card="0"><span class="dot"></span>Programmable infra</button>
+        <button data-card="1"><span class="dot"></span>Data residency</button>
+        <button data-card="2"><span class="dot"></span>Elastic scaling</button>
+        <button data-card="3"><span class="dot"></span>Unified visibility</button>
+      </nav>
+      <div class="accordion-stack">
+        <article class="accordion-card" data-card="0">
+          <div class="ac-copy">
+            <span class="ac-eyebrow mono">01 / Infra</span>
+            <h3>Programmable infra</h3>
+            <p>Declare storage pools as code. Versioned policy, region pinning, and encrypted tiers ship with every workspace.</p>
+          </div>
+          <div class="ac-visual">
+            <div class="code-window">
+              <div class="cw-bar"><span></span><span></span><span></span></div>
+              <pre><span class="num">01</span> storage_pool = {
+<span class="num">02</span>   name   = "client-vault"
+<span class="num">03</span>   region = "eu-central"
+<span class="num">04</span>   quota  = "24 TiB"
+<span class="num">05</span>   policy = encrypted_fast
+<span class="num">06</span> }</pre>
+            </div>
+          </div>
+        </article>
+        <article class="accordion-card" data-card="1">
+          <div class="ac-copy">
+            <span class="ac-eyebrow mono">02 / Residency</span>
+            <h3>Data residency</h3>
+            <p>Lock data to a region, allow or review others, and keep retention windows explicit per policy.</p>
+          </div>
+          <div class="ac-visual">
+            <div class="code-window">
+              <div class="cw-bar"><span></span><span></span><span></span></div>
+              <pre>Region policy
+EU Central    locked
+US East       allowed
+AP Southeast  review
+Retention     7 years</pre>
+            </div>
+          </div>
+        </article>
+        <article class="accordion-card" data-card="2">
+          <div class="ac-copy">
+            <span class="ac-eyebrow mono">03 / Scaling</span>
+            <h3>Elastic scaling</h3>
+            <p>Forecast capacity before you hit a wall. Reserve, burst, and pre-approve the next tier from one view.</p>
+          </div>
+          <div class="ac-visual">
+            <div class="code-window">
+              <div class="cw-bar"><span></span><span></span><span></span></div>
+              <pre>Capacity forecast
+Used          18.4 TiB
+Reserved      24 TiB
+Burst         ready
+Next tier     approved</pre>
+            </div>
+          </div>
+        </article>
+        <article class="accordion-card" data-card="3">
+          <div class="ac-copy">
+            <span class="ac-eyebrow mono">04 / Visibility</span>
+            <h3>Unified visibility</h3>
+            <p>Sync health, cold-data share, policy drift, and audit exports in a single operational pane.</p>
+          </div>
+          <div class="ac-visual">
+            <div class="code-window">
+              <div class="cw-bar"><span></span><span></span><span></span></div>
+              <pre>Operations view
+Sync health   stable
+Cold data     14%
+Policy drift  0
+Audit export  live</pre>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECTION 3 — PRICING ═══════════ -->
+  <section id="pricing">
+    <div class="wrap pricing-top">
+      <div class="pricing-left">
+        <span class="eyebrow mono">Pricing</span>
+        <h2>Only pay for cloud storage your teams actually use.</h2>
+        <p class="lead">Scale capacity up for active projects and cool it down when workspaces go quiet. Nimbus Grid keeps storage, transfer, and policy costs visible before they become invoices.</p>
+      </div>
+      <div class="pricing-table">
+        <div class="pt-head">
+          <span class="pt-title mono">Storage costs</span>
+          <div class="billing-toggle glass-pill">
+            <button data-bill="month">Per month</button>
+            <button class="active" data-bill="gib">Per GiB</button>
+          </div>
+        </div>
+        <div class="pt-row"><span class="pt-name">Encrypted active storage</span><span class="pt-val mono">$0.021 / GiB / month</span></div>
+        <div class="pt-row"><span class="pt-name">Warm collaboration tier</span><span class="pt-val mono">$0.012 / GiB / month</span></div>
+        <div class="pt-row"><span class="pt-name">Cold retained archive</span><span class="pt-val mono">$0.004 / GiB / month</span></div>
+        <div class="pt-row"><span class="pt-name">Regional accelerated transfer</span><span class="pt-val mono">$0.018 / GiB moved</span></div>
+        <div class="pt-row"><span class="pt-name">Customer-managed key vault</span><span class="pt-val mono">included</span></div>
+      </div>
+    </div>
+
+    <div class="pricing-bars" id="pricing-bars"></div>
+
+    <div class="wrap plan-row">
+      <div class="plan-card">
+        <h4>Starter</h4>
+        <p>For small teams consolidating shared project files.</p>
+        <button class="pill-cta">Start small</button>
+      </div>
+      <div class="plan-card">
+        <h4>Team</h4>
+        <p>For departments scaling collaboration and regional transfer.</p>
+        <button class="pill-cta">Build team plan</button>
+      </div>
+      <div class="plan-card">
+        <h4>Enterprise</h4>
+        <p>For organizations prioritizing governance, residency, and support.</p>
+        <button class="pill-cta">Talk to sales</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECTION 4 — SECURITY ═══════════ -->
+  <section id="security">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <span class="eyebrow mono">Security</span>
+          <h2>Modern encryption and compliance controls without slowing the team down.</h2>
+        </div>
+        <p class="sec-lead">Role-based access, customer-managed keys, immutable retention, and regional storage policies give business clients a cloud layer that can satisfy procurement, IT, and legal from the first deployment.</p>
+      </div>
+
+      <div class="sec-grid">
+        <!-- API card -->
+        <article class="sec-card">
+          <h3>Full policy control</h3>
+          <p class="sc-copy">First-class API access for storage pools, keys, regions, and retention rules. No vendor lock-in to proprietary workflows.</p>
+          <div class="api-spec">
+            <pre>openapi: 3.0.0
+info:
+  title: Nimbus API
+paths:
+  /storage/pools:
+  /keys:
+  /regions:
+  /retention:</pre>
+          </div>
+          <div class="api-window">
+            <div class="aw-bar"><span></span><span></span><span></span></div>
+            <pre>-> nimbus auth login
+Enter code
+VAULT-9AMP
+-> policy attach
+workspace/client-vault</pre>
+          </div>
+        </article>
+
+        <!-- Compliance card -->
+        <article class="sec-card">
+          <h3>Full compliance</h3>
+          <p class="sc-copy">SOC 2, ISO 27001, and GDPR-ready controls help teams satisfy audits, procurement reviews, and data residency requirements.</p>
+          <div class="comp-rows">
+            <div class="comp-row"><span class="check-badge"></span><span class="cr-label"><b>SOC 2</b> <span class="cr-sub">Type II controls</span></span></div>
+            <div class="comp-row"><span class="check-badge"></span><span class="cr-label"><b>ISO 27001</b> <span class="cr-sub">Security management</span></span></div>
+            <div class="comp-row"><span class="check-badge"></span><span class="cr-label"><b>GDPR</b> <span class="cr-sub">Regional data policy</span></span></div>
+          </div>
+        </article>
+
+        <!-- Economics card -->
+        <article class="sec-card">
+          <h3>Ownership and predictable economics</h3>
+          <p class="sc-copy">Reserved capacity, clear transfer lanes, and audit-ready billing make storage spend easy to forecast across business units.</p>
+          <pre class="binary-map">0000000000000000000000000000
+0000000111111111111110000000
+0000001100000000000011000000
+0000110001111111110001100000
+0001100011000000011000110000
+0001100110000000001100110000
+0001100110000000001100110000
+0000110001100000011000110000
+0000001100011111100011000000
+0000000011111111111100000000</pre>
+          <div class="asset-table">
+            <div class="asset-row"><span class="ar-k mono">Reserved tier</span><span class="ar-v">24 TiB</span></div>
+            <div class="asset-row"><span class="ar-k mono">Transfer lane</span><span class="ar-v">EU Central</span></div>
+            <div class="asset-row"><span class="ar-k mono">Revision</span><span class="ar-v">Q603</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECTION 5 — CONSOLE SHOWCASE ═══════════ -->
+  <section id="plans">
+    <div class="wrap">
+      <div class="ds-head">
+        <h2>The biggest forward leap in business cloud storage operations.</h2>
+        <p class="ds-lead">A single control plane for provisioning storage pools, reviewing policy, watching growth, and shipping audit-ready reports without asking teams to change how they work.</p>
+      </div>
+      <span class="fig-label mono">Fig. 2&nbsp;&nbsp;Nimbus Grid web console</span>
+
+      <div class="dashboard-shell">
+        <div class="ds-sheen"></div>
+        <div class="ds-topbar">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <div class="ds-titlebar"></div>
+        </div>
+        <div class="ds-body">
+          <aside class="ds-side">
+            <div class="ds-vault mono">Client Vault</div>
+            <nav>
+              <a href="#plans">Workspaces</a>
+              <a href="#plans" class="active">Storage Pools</a>
+              <a href="#plans">Retention</a>
+              <a href="#plans">Access</a>
+              <a href="#plans">Transfers</a>
+              <a href="#plans">Reports</a>
+            </nav>
+          </aside>
+          <div class="ds-main">
+            <div class="ds-main-head">
+              <h3>Storage Pools</h3>
+              <button class="ds-new mono">New pool</button>
+            </div>
+            <table class="ds-table">
+              <thead>
+                <tr>
+                  <th>Name</th><th>Region</th><th>Used</th>
+                  <th class="col-policy">Policy</th><th class="col-state">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>finance-vault</td><td>EU Central</td><td>18.4 TiB</td><td class="col-policy">7 years</td><td class="state col-state">Healthy</td></tr>
+                <tr><td>design-assets</td><td>US East</td><td>9.8 TiB</td><td class="col-policy">Versioned</td><td class="state col-state">Syncing</td></tr>
+                <tr><td>legal-archive</td><td>EU Central</td><td>42.1 TiB</td><td class="col-policy">Immutable</td><td class="state col-state">Healthy</td></tr>
+                <tr><td>migration-lane</td><td>AP South</td><td>6.2 TiB</td><td class="col-policy">Temporary</td><td class="state col-state">Queued</td></tr>
+              </tbody>
+            </table>
+            <div class="ds-toast">
+              <div class="tt mono">Pool created</div>
+              <div class="ts">finance-vault ready</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECTION 6 — OPERATIONS CUBE ═══════════ -->
+  <section id="operations">
+    <div class="wrap ops-grid">
+      <div class="ops-copy">
+        <span class="eyebrow mono">Operations</span>
+        <h2>A control layer for every storage move your business makes.</h2>
+        <p>Route migrations, active workspaces, archives, and compliance exports through one operational grid. Nimbus Grid keeps capacity, policy, and transfer status visible before teams hit a limit.</p>
+        <button class="ops-cta mono">Plan operations</button>
+      </div>
+      <div class="ops-visual">
+        <button class="modal-cube-shell" id="cube-shell" aria-label="Explode operations cube">
+          <div class="operations-core-cube">
+            <div class="cube-face front"></div>
+            <div class="cube-face back"></div>
+            <div class="cube-face right"></div>
+            <div class="cube-face left"></div>
+            <div class="cube-face top"></div>
+            <div class="cube-face bottom"></div>
+          </div>
+          <!-- particles injected by JS -->
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // ───── Hero shader iframe resize ─────
+    (function () {
+      const frame = document.querySelector('.shader-bg');
+      if (!frame) return;
+      function recompute() {
+        const maxW = 1422, maxH = 800;
+        let w = Math.min(window.innerWidth, maxW);
+        let h = Math.min(window.innerHeight, maxH);
+        // keep aspect tied to window, capped
+        const winAspect = window.innerWidth / window.innerHeight;
+        if (w / h > winAspect) { w = Math.round(h * winAspect); } else { h = Math.round(w / winAspect); }
+        w = Math.min(w, maxW); h = Math.min(h, maxH);
+        frame.style.width = w + 'px';
+        frame.style.height = h + 'px';
+        const scale = Math.max(window.innerWidth / w, (window.innerHeight + 110) / h);
+        document.documentElement.style.setProperty('--shader-scale', scale.toFixed(3));
+      }
+      let t;
+      function debounced() { clearTimeout(t); t = setTimeout(recompute, 180); }
+      recompute();
+      window.addEventListener('resize', debounced);
+    })();
+
+    // ───── Console tabs + typewriter ─────
+    (function () {
+      const card = document.querySelector('.console-card');
+      if (!card) return;
+      const tabs = card.querySelectorAll('.ctab');
+      const panes = card.querySelectorAll('.console-pane');
+      const timers = [];
+
+      function clearTimers() { while (timers.length) clearTimeout(timers.pop()); }
+
+      function typePane(pane) {
+        clearTimers();
+        const targets = pane.querySelectorAll('[data-typed]');
+        targets.forEach(function (el) {
+          const full = el.getAttribute('data-typed');
+          el.textContent = '';
+          let i = 0;
+          (function step() {
+            if (i <= full.length) {
+              el.textContent = full.slice(0, i);
+              i++;
+              timers.push(setTimeout(step, 42));
+            }
+          })();
+        });
+      }
+
+      function activate(name) {
+        tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.pane === name); });
+        panes.forEach(function (p) { p.classList.toggle('active', p.dataset.pane === name); });
+        const active = card.querySelector('.console-pane.active');
+        if (active) typePane(active);
+      }
+
+      tabs.forEach(function (t) { t.addEventListener('click', function () { activate(t.dataset.pane); }); });
+      activate('cli');
+    })();
+
+    // ───── Platform accordion scroll ─────
+    (function () {
+      const section = document.getElementById('platform');
+      if (!section) return;
+      const cards = Array.prototype.slice.call(section.querySelectorAll('.accordion-card'));
+      const navBtns = Array.prototype.slice.call(section.querySelectorAll('.accordion-nav button'));
+      const count = cards.length;
+
+      function collapsedHeight() { return window.innerWidth <= 820 ? 96 : 84; }
+
+      function update() {
+        const rect = section.getBoundingClientRect();
+        const total = section.offsetHeight - window.innerHeight;
+        let progress = (-rect.top) / total;
+        progress = Math.max(0, Math.min(1, progress));
+        const stack = section.querySelector('.accordion-stack');
+        const stackH = stack ? stack.offsetHeight : 600;
+        const ch = collapsedHeight();
+        const active = Math.round(progress * (count - 1));
+
+        cards.forEach(function (card, i) {
+          const segStart = i / count;
+          const segEnd = (i + 1) / count;
+          let local = (progress - segStart) / (segEnd - segStart);
+          local = Math.max(0, Math.min(1, local));
+          const from = stackH + ch;
+          const to = i * ch;
+          let y;
+          if (progress < segStart) { y = from; }
+          else if (progress > segEnd) { y = to; }
+          else { y = from + (to - from) * local; }
+          card.style.setProperty('--card-y', y + 'px');
+          const clip = i < active ? Math.max(0, 100 - (ch / stackH) * 100) : 0;
+          card.style.setProperty('--card-clip-bottom', clip + '%');
+          card.style.zIndex = String(i + 1);
+        });
+
+        navBtns.forEach(function (b, i) { b.classList.toggle('active', i === active); });
+      }
+
+      navBtns.forEach(function (b, i) {
+        b.addEventListener('click', function () {
+          const total = section.offsetHeight - window.innerHeight;
+          const target = section.offsetTop + (i / (count - 1 || 1)) * total;
+          window.scrollTo({ top: target, behavior: 'smooth' });
+        });
+      });
+
+      update();
+      window.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+    })();
+
+    // ───── Pricing bars ─────
+    (function () {
+      const wrap = document.getElementById('pricing-bars');
+      if (!wrap) return;
+      const heights = [66, 58, 50, 62, 45, 54, 48, 64, 72, 70, 78, 82];
+      heights.forEach(function (h, i) {
+        const bar = document.createElement('div');
+        bar.className = 'pbar' + (i % 2 ? ' muted' : '');
+        bar.style.setProperty('--bar-height', h + '%');
+        wrap.appendChild(bar);
+      });
+      const bars = Array.prototype.slice.call(wrap.children);
+
+      function update() {
+        const rect = wrap.getBoundingClientRect();
+        const vp = window.innerHeight;
+        const progress = (vp - rect.top) / (vp + rect.height);
+        bars.forEach(function (bar, i) {
+          const morph = Math.sin(progress * Math.PI * 2 + i * 0.72) * 34 + Math.cos(progress * Math.PI + i * 0.34) * 14;
+          bar.style.setProperty('--bar-morph', morph.toFixed(1) + 'px');
+        });
+      }
+      update();
+      window.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+    })();
+
+    // ───── Operations cube explode ─────
+    (function () {
+      const shell = document.getElementById('cube-shell');
+      if (!shell) return;
+      const particles = [
+        { tx: -310, ty: -120, tz: 90,  s: 0.52, r: -42, d: 0 },
+        { tx: 300,  ty: -90,  tz: 120, s: 0.46, r: 38,  d: 30 },
+        { tx: -260, ty: 180,  tz: 60,  s: 0.40, r: 24,  d: 60 },
+        { tx: 330,  ty: 200,  tz: 150, s: 0.58, r: -28, d: 90 },
+        { tx: -180, ty: -250, tz: 110, s: 0.36, r: 52,  d: 120 },
+        { tx: 210,  ty: -210, tz: 180, s: 0.44, r: -34, d: 150 },
+        { tx: -330, ty: 40,   tz: 200, s: 0.30, r: 18,  d: 80 },
+        { tx: 280,  ty: 60,   tz: 30,  s: 0.50, r: -46, d: 110 },
+        { tx: -120, ty: 225,  tz: 170, s: 0.34, r: 30,  d: 140 },
+        { tx: 150,  ty: 150,  tz: 210, s: 0.42, r: -22, d: 40 },
+        { tx: -230, ty: -60,  tz: 60,  s: 0.18, r: 0,   d: 100, dot: true },
+        { tx: 240,  ty: -150, tz: 90,  s: 0.14, r: 0,   d: 70,  dot: true },
+        { tx: -90,  ty: 120,  tz: 140, s: 0.12, r: 0,   d: 160, dot: true },
+        { tx: 120,  ty: -40,  tz: 200, s: 0.09, r: 0,   d: 130, dot: true }
+      ];
+      particles.forEach(function (p) {
+        const el = document.createElement('div');
+        el.className = 'cube-particle' + (p.dot ? ' dot' : '');
+        el.style.setProperty('--tx', p.tx + 'px');
+        el.style.setProperty('--ty', p.ty + 'px');
+        el.style.setProperty('--tz', p.tz + 'px');
+        el.style.setProperty('--s', p.s);
+        el.style.setProperty('--r', p.r + 'deg');
+        el.style.setProperty('--d', p.d + 'ms');
+        shell.appendChild(el);
+      });
+      function toggle() { shell.classList.toggle('is-exploded'); }
+      shell.addEventListener('click', toggle);
+      shell.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    })();
+
+    // ───── Pricing billing toggle ─────
+    (function () {
+      const btns = document.querySelectorAll('.billing-toggle button');
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () {
+          btns.forEach(function (x) { x.classList.remove('active'); });
+          b.classList.add('active');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

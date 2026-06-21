@@ -4,7 +4,8 @@ import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from ".
 import { seedPackagedAppConfig } from "./app-config.js";
 import { finalizeMacArtifacts } from "./artifacts.js";
 import { resolveElectronBuilderTargets, runElectronBuilder } from "./builder.js";
-import { clearQuarantine } from "./fs.js";
+import { scrubMacExtendedAttributes } from "./fs.js";
+import { createMacLauncherPayloadArchive } from "./payload.js";
 import { resolveMacPaths } from "./paths.js";
 import { collectMacSizeReport } from "./report.js";
 import type { MacBuildOutput, MacPackResult, MacPackTiming } from "./types.js";
@@ -57,9 +58,10 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   await runPhase("electron-builder", async () => {
     await runElectronBuilder(config, paths, targets);
   });
-  await runPhase("quarantine", async () => {
-    await clearQuarantine(paths.appPath);
+  await runPhase("xattr-scrub", async () => {
+    await scrubMacExtendedAttributes(paths.appPath);
   });
+  const payloadPath = await runPhase("payload-artifact", async () => createMacLauncherPayloadArchive(config, paths));
   const artifacts = await runPhase("artifacts", async () => finalizeMacArtifacts(config, paths));
   const sizeReport = await runPhase("size-report", async () => collectMacSizeReport(config, paths, artifacts, targets));
 
@@ -69,6 +71,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     dmgPath: artifacts.dmgPath,
     latestMacYmlPath: artifacts.latestMacYmlPath,
     outputRoot: config.roots.output.namespaceRoot,
+    payloadPath,
     resourceRoot: paths.resourceRoot,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     sizeReport,

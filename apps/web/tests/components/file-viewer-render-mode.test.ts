@@ -20,12 +20,16 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true })).toBe(false);
   });
 
-  it('falls back to srcDoc when comment mode is active without an artifact-owned bridge', () => {
+  it('falls back to srcDoc when comment mode is active without a URL bridge', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true })).toBe(false);
   });
 
   it('keeps URL-load when comment mode is active and the artifact owns the bridge', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true })).toBe(true);
+  });
+
+  it('keeps URL-load when comment mode is active and the raw route injects the comment bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlCommentBridge: true })).toBe(true);
   });
 
   it('falls back to srcDoc when direct edit mode is active without an artifact-owned bridge', () => {

@@ -24,7 +24,7 @@
     "en": "X Research"
   },
   "version": "0.1.0",
-  "description": "X/Twitter public sentiment research for recent market, company, product, or\ncommunity discourse. Use when the brief asks what people are saying on X,\nTwitter sentiment, CT sentiment, public opinion, expert posts, or social\nreaction around a stock, sector, company, product, or market event.",
+  "description": "X/Twitter public sentiment research for recent market, company, product, or community discourse. Use when the brief asks what people are saying on X, Twitter sentiment, CT sentiment, public opinion, expert posts, or social reaction around a stock, sector, company, product, or market event.",
   "description_i18n": {
     "zh-CN": "针对市场、公司、产品或社区话题进行 X/Twitter 公众情绪研究。当需要了解 X 或 Twitter 上的舆论、加密社区情绪、专家观点或股票、行业、公司、产品、市场事件的社交反应时使用。",
     "zh-TW": "針對市場、公司、產品或社群議題進行 X/Twitter 公眾情緒研究。當需要了解 X 或 Twitter 上的輿論、加密社群情緒、專家觀點或股票、產業、公司、產品、市場事件的社群反應時使用。",
@@ -43,7 +43,7 @@
     "ar": "بحث معنويات الجمهور على X/Twitter حول الأسواق والشركات والمنتجات أو المجتمعات. استخدمه لمعرفة الرأي العام ومنشورات الخبراء أو ردود الفعل الاجتماعية حول الأسهم والقطاعات والشركات والمنتجات أو أحداث السوق.",
     "tr": "Piyasalar, şirketler, ürünler veya topluluklar hakkında X/Twitter kamuoyu duygu araştırması. Hisse senetleri, sektörler, şirketler, ürünler veya piyasa olayları hakkındaki kamuoyu, uzman gönderileri veya sosyal tepkileri anlamak için kullanın.",
     "uk": "Дослідження громадських настроїв у X/Twitter щодо ринків, компаній, продуктів або спільнот. Використовуйте для аналізу суспільної думки, експертних публікацій або соціальних реакцій на акції, сектори, компанії, продукти або ринкові події.",
-    "en": "X/Twitter public sentiment research for recent market, company, product, or\ncommunity discourse. Use when the brief asks what people are saying on X,\nTwitter sentiment, CT sentiment, public opinion, expert posts, or social\nreaction around a stock, sector, company, product, or market event."
+    "en": "X/Twitter public sentiment research for recent market, company, product, or community discourse. Use when the brief asks what people are saying on X, Twitter sentiment, CT sentiment, public opinion, expert posts, or social reaction around a stock, sector, company, product, or market event."
   },
   "license": "MIT",
   "author": {

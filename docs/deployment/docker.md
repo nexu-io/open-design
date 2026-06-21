@@ -18,7 +18,32 @@ What this does:
 - Downloads the project
 - Moves into the folder that contains `docker-compose.yml`
 
-## Step 2: Start Open Design
+## Step 2: Create `.env` and choose an API auth mode
+
+Create `deploy/.env` from the tracked template:
+
+```bash
+cp .env.example .env
+```
+
+Generate a token if you want the default protected mode:
+
+```bash
+openssl rand -hex 32
+```
+
+Then edit `.env` and configure one of these before first start:
+
+- recommended default: paste the generated token into `OD_API_TOKEN=`
+- trusted authenticated reverse proxy only: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
+
+If you expose Open Design through a reverse proxy, also set:
+
+```bash
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+```
+
+## Step 3: Start Open Design
 
 ```bash
 docker-compose up -d
@@ -28,7 +53,7 @@ What to expect:
 - First run can take 1-2 minutes while Docker pulls the image
 - You should see container creation and startup messages
 
-## Step 3: Confirm Container Health
+## Step 4: Confirm Container Health
 
 ```bash
 docker-compose ps
@@ -42,7 +67,7 @@ Success looks like:
 ![Docker Desktop container running](../screenshots/deployment/docker/02-docker-desktop-container-running.png)
 ![docker-compose ps healthy output (sanitized)](../screenshots/deployment/docker/04-docker-compose-ps-healthy.png)
 
-## Step 4: Verify HTTP Response
+## Step 5: Verify HTTP Response
 
 ```bash
 curl -i http://127.0.0.1:7456/
@@ -53,7 +78,7 @@ Success looks like:
 
 ![curl HTTP 200 output (sanitized)](../screenshots/deployment/docker/05-curl-http-200-proof.png)
 
-## Step 5: Open Open Design in Your Browser
+## Step 6: Open Open Design in Your Browser
 
 Open:
 - `http://localhost:7456/`
@@ -68,3 +93,5 @@ You should see the Open Design interface.
 - `failed to connect to the docker API`: Docker Desktop is not running yet
 - `address already in use`: Port `7456` is occupied by another process
 - `curl: (7) Failed to connect`: container is still starting; wait 10-20 seconds and retry
+- reverse proxy + `OD_API_TOKEN`: either inject `Authorization: Bearer <OD_API_TOKEN>` at the proxy, or set `OPEN_DESIGN_DISABLE_API_AUTH=1` only when that proxy already authenticates every request and the daemon is not directly exposed.
+- `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.

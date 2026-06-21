@@ -134,6 +134,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSend,
     onRetry,
     error,
+    projectHeader,
   }: {
     messages: ChatMessage[];
     onSend: (
@@ -143,6 +144,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     ) => void;
     onRetry?: (assistantMessage: ChatMessage) => void;
     error?: string | null;
+    projectHeader?: ReactNode;
   }) => {
     const lastMessage = messages[messages.length - 1];
     const retryMessage = lastMessage?.role === 'assistant' && lastMessage.runStatus === 'failed'
@@ -150,6 +152,7 @@ vi.mock('../../src/components/ChatPane', () => ({
       : null;
     return (
       <div>
+        {projectHeader}
         {error ? <div>{error}</div> : null}
         {error && retryMessage && onRetry ? (
           <button type="button" onClick={() => onRetry(retryMessage)}>
@@ -470,6 +473,42 @@ describe('ProjectView API empty response handling', () => {
     expect(userMessage?.content).toContain('brief.docx');
     expect(userMessage?.content).toContain('Hello world');
     expect(userMessage?.content).toContain('Second line');
+  });
+
+  it('does not include saved project instructions in the BYOK system prompt', async () => {
+    let capturedSystemPrompt = '';
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      capturedSystemPrompt = system;
+      handlers.onDelta('ok');
+      handlers.onDone('ok');
+    });
+
+    renderProjectView({
+      ...project,
+      customInstructions: 'Use tabs for indentation and keep CTA copy terse.',
+    });
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(capturedSystemPrompt).not.toBe(''));
+    expect(capturedSystemPrompt).not.toContain('## Custom instructions (project-level)');
+    expect(capturedSystemPrompt).not.toContain('Use tabs for indentation and keep CTA copy terse.');
+  });
+
+  it('does not expose the project instructions editor from the project header', async () => {
+    const view = renderProjectView();
+
+    await screen.findByTestId('project-title');
+
+    expect(screen.queryByTestId('project-instructions-add')).toBeNull();
+    expect(view.container.querySelector('.project-instructions-chip')).toBeNull();
+    expect(view.container.querySelector('.project-instructions-modal-backdrop')).toBeNull();
   });
 
   it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {

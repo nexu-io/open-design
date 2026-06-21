@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   __forTestChatRunHandles,
   __forTestEmitLiveArtifactEvent,
+  applyClaudeStreamJsonRunBookkeeping,
   classifyChatRunCloseStatus,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -239,6 +240,8 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     signal: null as string | null,
     acpCleanCompletion: false,
     artifactQuietShutdownRequested: false,
+    turnCompletedCleanly: false,
+    artifactProducedThisRun: false,
   };
 
   it('returns canceled when cancelRequested wins regardless of other signals', () => {
@@ -269,6 +272,28 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
         acpCleanCompletion: true,
       }),
     ).toBe('succeeded');
+  });
+
+  it('returns succeeded on Vela ACP code 130 after clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on Vela ACP code 130 before clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: false,
+      }),
+    ).toBe('failed');
   });
 
   it('returns failed when ACP shutdown was via SIGKILL (not the narrow override)', () => {
@@ -333,10 +358,12 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('failed');
   });
 
-  it('returns failed on a non-zero exit code regardless of the quiet-period flag', () => {
-    // The quiet-period override is signal-only; a clean process exit
-    // that returned non-zero is a real failure (agent CLI bug, model
-    // error, etc.) and must propagate as such.
+  it('returns failed on a non-zero exit code when the turn never completed (regardless of the quiet-period flag)', () => {
+    // The quiet-period override is signal-only; a non-zero process exit
+    // *before the model emitted a clean terminal turn* is a real failure
+    // (agent CLI bug, model error, mid-turn crash) and must propagate as
+    // such. `turnCompletedCleanly` stays false here — this is the genuine
+    // failure case the post-completion carve-out below must NOT swallow.
     expect(
       classifyChatRunCloseStatus({
         ...base,
@@ -347,9 +374,231 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('failed');
   });
 
-  it('returns failed on the standard failure shape (non-zero exit, no special flags)', () => {
+  it('returns failed on the standard failure shape (non-zero exit, turn not completed, no special flags)', () => {
     expect(
       classifyChatRunCloseStatus({ ...base, code: 1, signal: null }),
     ).toBe('failed');
+  });
+
+  // Issue #3372: post-completion hook failure must not fail the run.
+  //
+  // Reproduction of the screenshot bug. The daemon spawns `claude`,
+  // the model emits a clean terminal `turn_end`/`usage` (so the daemon
+  // closes stdin and sets `turnCompletedCleanly`), and only THEN a
+  // SessionEnd hook (e.g. the Honcho memory plugin) exits non-zero,
+  // which makes the `claude` process itself exit with code 1. That
+  // post-result exit is a teardown artifact, not a generation failure —
+  // the deliverable was already produced. This is the same family as
+  // the `acpForcedShutdown` and `artifactQuietShutdown` carve-outs:
+  // "the work completed; the odd exit is teardown noise."
+  it('returns succeeded on a non-zero exit when the turn already completed cleanly (post-result hook failure)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        turnCompletedCleanly: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns succeeded on a signal death after a clean turn completion (hook killed during teardown)', () => {
+    // A SessionEnd hook that hangs past its own grace window can be
+    // SIGKILLed during teardown after the turn already completed. Same
+    // invariant: a clean terminal turn was emitted, so the late signal
+    // exit is teardown noise, not a generation failure.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        turnCompletedCleanly: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('still prefers canceled over a clean-completion non-zero exit when the user cancelled', () => {
+    // Cancel intent always wins; a post-cancel hook exit must not
+    // reclassify a user-cancelled run as succeeded.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        cancelRequested: true,
+        code: 1,
+        signal: null,
+        turnCompletedCleanly: true,
+      }),
+    ).toBe('canceled');
+  });
+
+  it('returns succeeded on a non-zero NORMAL exit that produced an artifact this run', () => {
+    // Reproduction of the project-card bug (project c92897e1): the CLI
+    // exited 1 during teardown AFTER the HTML artifact was written with a
+    // successful tool_result. The deliverable exists on disk, so the run
+    // must report succeeded — not a red `failed` card — even though the
+    // turn-completed signal was not captured for that run.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on a non-zero NORMAL exit with no artifact produced', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactProducedThisRun: false,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns failed on a signal kill even when an artifact was produced (no signal override)', () => {
+    // CRITICAL regression guard. The artifact carve-out is exit-code-only.
+    // An external kill / OOM / container shutdown after an artifact write
+    // (code === null, SIGKILL/SIGTERM, no daemon quiet-period flag) must
+    // stay failed — an artifact must NOT flip a signal kill to succeeded.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('failed');
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGTERM',
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('failed');
+  });
+});
+
+describe('applyClaudeStreamJsonRunBookkeeping', () => {
+  it('records clean completion without re-ending an already-closed stdin', () => {
+    const run = {
+      stdinOpen: false,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('closes stdin and records clean completion on a non-tool_use terminal turn', () => {
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
+  });
+
+  it('keeps stdin open when the turn ended on a tool_use stop reason', () => {
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'tool_use',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(false);
+    expect(run.stdinOpen).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('keeps stdin open when usage reports a tool_use stop reason', () => {
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'usage',
+      usage: { input_tokens: 6, output_tokens: 40831 },
+      stopReason: 'tool_use',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(false);
+    expect(run.stdinOpen).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('closes stdin and records clean completion after an AskUserQuestion tool_use followed by end_turn (#4273)', () => {
+    // Regression test: the dead AskUserQuestion detection branch used to add
+    // the tool_use id to pendingHostAnswers and return early, preventing stdin
+    // from ever closing when the subsequent turn_end arrived.
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'tool_use',
+      name: 'AskUserQuestion',
+      id: 'auq_123',
+    });
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
   });
 });

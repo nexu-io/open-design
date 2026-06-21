@@ -60,10 +60,13 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'gpt-4o-mini',
   ],
   google: [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
+    'gemini-3.5-flash',
+    'gemini-3.1-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
   ],
   senseaudio: [
     // SenseAudio is an OpenAI-compatible gateway that fronts both its own
@@ -80,6 +83,24 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'kimi-k2.6',
     'MiniMax-M2.7-highspeed',
     'MiniMax-M2.7',
+  ],
+  aihubmix: [
+    // AIHubMix is an OpenAI-compatible aggregator that routes to OpenAI /
+    // Anthropic / Gemini / DeepSeek by model name on its side. Listing the
+    // headline cross-vendor checkpoints keeps the picker useful without
+    // pretending to enumerate the full catalogue — users can type any id
+    // AIHubMix exposes (or fetch the full live list). gpt-5.5 leads as the
+    // default chat model (an OpenAI-family model keeps in-chat generate_image
+    // working through the OpenAI tool loop after protocol routing lands).
+    'gpt-5.5',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'claude-opus-4-8',
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'gemini-2.0-flash',
+    'deepseek-chat',
+    'deepseek-reasoner',
   ],
   ollama: [
     'cogito-2.1:671b',
@@ -132,7 +153,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   anthropic: 'claude-haiku-4-5',
   openai: 'gpt-4o-mini',
   azure: 'gpt-4o-mini',
-  google: 'gemini-2.0-flash',
+  google: 'gemini-3.5-flash',
   // Ollama Cloud doesn't have a clean "fast small model" default that
   // works for the LLM memory extractor — the catalog skews to large
   // open-weight checkpoints. Fall back to a small Gemma so the auto-
@@ -140,6 +161,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   // through the Memory model picker.
   ollama: 'gemma3:4b',
   senseaudio: 'senseaudio-s2-flash',
+  aihubmix: 'gpt-4o-mini',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
@@ -152,6 +174,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'google', title: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
+  { id: 'aihubmix', title: 'AIHubMix' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -161,15 +184,17 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
+  aihubmix: 'AIHubMix API',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   anthropic: 'sk-ant-...',
   openai: 'sk-...',
   azure: 'azure key',
-  google: 'AIza...',
+  google: 'AIza... or AQ....',
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
+  aihubmix: 'sk-...',
 };
 
 // Default base URL the daemon assumes when the user leaves the field
@@ -182,4 +207,30 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   google: 'https://generativelanguage.googleapis.com',
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
+  aihubmix: 'https://aihubmix.com/v1',
 };
+
+// Fixed-origin gateways: managed single-endpoint providers where the user only
+// supplies an API key — the Base URL is implied, so the Settings form hides the
+// field. Centralised here (not in a component) so config loading, the Settings
+// form, and the top-bar switcher all resolve the same origin. Add a protocol
+// here when it's such a gateway.
+export const FIXED_ORIGIN_GATEWAYS: ReadonlySet<ApiProtocol> = new Set<ApiProtocol>([
+  'aihubmix',
+]);
+
+export function isFixedOriginGateway(protocol: ApiProtocol): boolean {
+  return FIXED_ORIGIN_GATEWAYS.has(protocol);
+}
+
+// Resolve the effective base URL. Fixed-origin gateways always use their
+// canonical origin: the field is hidden, so an empty stored value must not leak
+// through and break URL-gated logic such as the live model-list fetch (which
+// requires a valid base URL and otherwise silently shows only the static list).
+// Idempotent for non-gateway protocols — returns their value unchanged.
+export function resolveFixedOriginBaseUrl(
+  protocol: ApiProtocol,
+  baseUrl: string,
+): string {
+  return isFixedOriginGateway(protocol) ? DEFAULT_BASE_URL_BY_PROTOCOL[protocol] : baseUrl;
+}

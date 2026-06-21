@@ -33,6 +33,10 @@ let configureGlobals: AnalyticsConfigureGlobals = {
   has_available_configure_cli: false,
   configure_type: 'unknown',
   configure_availability: 'unknown',
+  runtime_type: 'none',
+  cli_runnable: false,
+  byok_runnable: false,
+  amr_runnable: false,
 };
 // Snapshot of the super-property payload sent on the most recent `loaded()`
 // init. `reset()` clears posthog-js's persisted super-properties as well as
@@ -89,6 +93,39 @@ export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
   }
 }
 
+// AMR account id, registered as the `user_id` public param once sign-in
+// state is known. This is the only cross-project join key between the main
+// app's PostHog project and the AMR project (whose events carry the same
+// id as `app_user_id`), so it must survive reset()/identify() flows the
+// same way the configure globals do.
+let registeredUserId: string | null = null;
+
+// Called from the AnalyticsProvider when the AMR login status resolves
+// (boot fetch or a login/logout mid-session). Passing null unregisters the
+// param so events after a logout stop carrying a stale account id.
+export function setAnalyticsUserId(userId: string | null): void {
+  if (registeredUserId === userId) return;
+  registeredUserId = userId;
+  if (lastRegisterPayload) {
+    if (userId) {
+      lastRegisterPayload = { ...lastRegisterPayload, user_id: userId };
+    } else {
+      const { user_id: _dropped, ...rest } = lastRegisterPayload;
+      lastRegisterPayload = rest;
+    }
+  }
+  if (!client) return;
+  try {
+    if (userId) {
+      client.register({ user_id: userId });
+    } else {
+      client.unregister('user_id');
+    }
+  } catch {
+    // best-effort — capture should never throw out of this path.
+  }
+}
+
 // Fetches `/api/analytics/config` once and wires up the exception-tracking
 // module's context — independent of consent state. The error tracker
 // installs its `window.error` / `unhandledrejection` listeners at module
@@ -115,6 +152,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         clearExceptionTrackingContext();
         return;
       }
+      const telemetryEnv = cfg.env || 'unknown';
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
@@ -124,6 +162,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         distinctId,
         appVersion: context.appVersion,
         sessionId: context.sessionId,
+        telemetryEnv,
       });
     } catch {
       // Network failure / endpoint unavailable — leave the buffer in
@@ -151,6 +190,7 @@ export async function getAnalyticsClient(
       if (!res.ok) return null;
       const cfg = (await res.json()) as AnalyticsConfigResponse;
       if (!cfg.enabled || !cfg.key || !cfg.host) return null;
+      const telemetryEnv = cfg.env || 'unknown';
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
@@ -212,17 +252,47 @@ export async function getAnalyticsClient(
         //    on scrub.ts.
         before_send: scrubBeforeSend,
 
-        // --- Explicitly disabled --------------------------------------
+        // --- Session replay (privacy-masked) --------------------------
         // Session replay captures the user's entire screen. For a tool
         // where prompts, generated artifacts, and provider API keys are
-        // all visible in DOM, this needs an extensive mask catalogue
-        // before we can satisfy the CSV's no-prompt-content rule. Off
-        // until a dedicated consent surface ships.
-        disable_session_recording: true,
+        // all visible in DOM, recording the raw screen would violate the
+        // CSV's no-prompt-content rule. Rather than gate replay behind a
+        // separate consent surface, we record only layout + interaction
+        // and over-redact every content surface — the same
+        // "redact-by-default, single audit point" philosophy scrub.ts
+        // uses for events (see scrub.ts header). Replay stays gated by the
+        // existing Privacy → "Share usage data" consent: posthog-js's
+        // global opt_out_capturing() halts replay too (see applyConsent()).
+        //
+        // The three redaction layers, in order of how much they cover:
+        //   1. maskTextSelector '*' masks EVERY text node into asterisks,
+        //      so prompts, generated artifact text, provider/model names,
+        //      project titles, and any future text surface never appear in
+        //      a replay. A new sensitive surface is covered automatically.
+        //   2. maskAllInputs masks every <input>/<textarea> value, so the
+        //      prompt composer and BYOK provider-key fields are blanked
+        //      even though only the composer carries `ph-no-capture`.
+        //   3. blockSelector 'iframe' fully blocks every embedded frame.
+        //      The artifact/preview FileViewer iframes (and plugin embeds)
+        //      render generated HTML that can contain anything; rrweb would
+        //      otherwise serialize same-origin/srcDoc frame DOM into the
+        //      recording. They render as an inert placeholder instead.
+        // `ph-no-capture` remains posthog-js's default replay block class,
+        // so the composer subtree stays blocked as defense in depth.
+        disable_session_recording: false,
+        session_recording: {
+          maskAllInputs: true,
+          maskTextSelector: '*',
+          blockSelector: 'iframe',
+          // Don't reach into cross-origin frames either — belt and braces
+          // alongside blockSelector for the URL-load artifact iframe.
+          recordCrossOriginIframes: false,
+        },
 
         loaded: (instance) => {
           lastRegisterPayload = {
             event_schema_version: EVENT_SCHEMA_VERSION,
+            env: telemetryEnv,
             ui_version: context.appVersion,
             app_version: context.appVersion,
             client_type: context.clientType,
@@ -232,6 +302,9 @@ export async function getAnalyticsClient(
             // installationId / local-UUID fallback.
             device_id: distinctId,
             ...(configureGlobals as unknown as Record<string, unknown>),
+            // AMR sign-in can resolve before consent-gated init finishes;
+            // fold the already-known account id into the first register.
+            ...(registeredUserId ? { user_id: registeredUserId } : {}),
           };
           instance.register(lastRegisterPayload);
           // Re-bridge the error-tracking context once posthog-js is fully
@@ -245,6 +318,7 @@ export async function getAnalyticsClient(
             distinctId,
             appVersion: context.appVersion,
             sessionId: context.sessionId,
+            telemetryEnv,
           });
         },
       });

@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
 import { PluginDetailsModal } from '../../src/components/PluginDetailsModal';
+import { PluginMetaSections } from '../../src/components/plugin-details/PluginMetaSections';
 import { I18nProvider } from '../../src/i18n';
 
 interface MakeArgs {
@@ -73,10 +74,18 @@ function make(args: MakeArgs): InstalledPluginRecord {
   };
 }
 
-function render(record: InstalledPluginRecord): string {
+function render(
+  record: InstalledPluginRecord,
+  options: { hideUseAction?: boolean } = {},
+): string {
   return renderToStaticMarkup(
     <I18nProvider>
-      <PluginDetailsModal record={record} onClose={() => {}} onUse={() => {}} />
+      <PluginDetailsModal
+        record={record}
+        onClose={() => {}}
+        onUse={() => {}}
+        hideUseAction={options.hideUseAction}
+      />
     </I18nProvider>,
   );
 }
@@ -154,7 +163,24 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('ds-modal');
     expect(html).toContain('ds-modal-primary-action');
     expect(html).toContain('plugin-details-use-live-dashboard');
-    expect(html).toContain('plugin-share-live-dashboard');
+    // Share stays available via the unified template share menu; the
+    // redundant inline "More" plugin-share menu was removed.
+    expect(html).toContain('template-share-menu');
+    expect(html).not.toContain('plugin-share-live-dashboard');
+  });
+
+  it('can hide the use action for conversation-context plugin previews', () => {
+    const record = make({
+      id: 'chat-context-preview',
+      title: 'Chat Context Preview',
+      preview: { type: 'html', entry: './example.html' },
+    });
+
+    const html = render(record, { hideUseAction: true });
+
+    expect(html).toContain('ds-modal');
+    expect(html).not.toContain('plugin-details-use-chat-context-preview');
+    expect(html).not.toContain('Use plugin');
   });
 
   it('routes design-system plugins to the showcase + DESIGN.md surface (with share menu)', () => {
@@ -185,6 +211,46 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('data-detail-variant="scenario"');
     expect(html).toContain('plugin-details-modal__title');
     expect(html).toContain('plugin-share-plain-scenario');
+  });
+
+  it('keeps the use action by default outside conversation context', () => {
+    const html = render(
+      make({
+        id: 'outside-chat',
+        title: 'Outside Chat',
+        preview: { type: 'html', entry: './example.html' },
+      }),
+    );
+
+    expect(html).toContain('plugin-details-use-outside-chat');
+    expect(html).toContain('Use plugin');
+  });
+
+  it('offers the use/use-with-query split menu in the scenario fallback when the plugin has a query', () => {
+    // Regression (#3997 review): a text/scenario plugin with `od.useCase.query`
+    // must still offer "Use plugin only" vs "Replicate this content", same as the
+    // html/design/media variants — not a single plain `use` button.
+    const html = render(
+      make({
+        id: 'scenario-query',
+        title: 'Scenario With Query',
+        mode: 'prototype',
+        query: 'Draft a {{topic}} brief.',
+      }),
+    );
+    expect(html).toContain('data-detail-variant="scenario"');
+    expect(html).toContain('plugin-details-use-scenario-query');
+    // The caret that opens the use-with-query menu only exists in the split form.
+    expect(html).toContain('plugin-details-use-scenario-query-menu');
+  });
+
+  it('keeps a single use button in the scenario fallback when there is no query', () => {
+    const html = render(
+      make({ id: 'scenario-noquery', title: 'No Query', mode: 'prototype' }),
+    );
+    expect(html).toContain('data-detail-variant="scenario"');
+    expect(html).toContain('plugin-details-use-scenario-noquery');
+    expect(html).not.toContain('plugin-details-use-scenario-noquery-menu');
   });
 });
 
@@ -230,20 +296,44 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).toContain('/tmp');
   });
 
-  it('surfaces meta sections in the example variant via the sidebar', () => {
+  it('collapses the example variant sidebar by default so the preview owns the stage', () => {
     const html = render(
       pluginWithMeta({
         id: 'html-with-meta',
         preview: { type: 'html', entry: './ex.html' },
       }),
     );
-    expect(html).toContain('plugin-info-pane');
-    expect(html).toContain('plugin-meta-sections');
-    expect(html).toContain('plugin-meta-sections__heading');
-    expect(html).toMatch(/<h3[^>]*>Plugin info<\/h3>/);
-    expect(html).toContain('Workflow');
-    expect(html).toContain('Capabilities');
-    expect(html).toContain('mcp:invoke');
+    // Designer-first: the live preview is the hero. The manifest
+    // sidebar starts collapsed behind an expand handle instead of
+    // rendering its meta sections inline.
+    expect(html).toContain('ds-modal-stage-handle is-expand');
+    expect(html).not.toContain('plugin-meta-sections');
+  });
+
+  it('minimal meta variant keeps example query inline and tucks dev detail behind a disclosure', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider>
+        <PluginMetaSections
+          record={pluginWithMeta({
+            id: 'minimal-meta',
+            query: 'Generate a {style} hero for {brand}.',
+          })}
+          omit={{ description: true }}
+          compact
+          heading="Plugin info"
+          variant="minimal"
+        />
+      </I18nProvider>,
+    );
+    // Designer-relevant blocks render inline (above the disclosure).
+    expect(html).toContain('Example query');
+    expect(html).toContain('Generate a {style} hero for {brand}.');
+    // Developer manifest detail is collapsed inside the disclosure.
+    expect(html).toContain('plugin-meta-advanced');
+    expect(html).toContain('Developer details');
+    // Workflow / Capabilities / Source live after the disclosure opens.
+    expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Workflow'));
+    expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Capabilities'));
   });
 
   it('surfaces Plugin info first in the design-system sidebar, with DESIGN.md below', () => {

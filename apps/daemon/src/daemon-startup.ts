@@ -17,6 +17,68 @@ type DaemonRuntimeOptions = Omit<StartServerOptions, 'returnServer'> & {
   logListening?: boolean;
 };
 
+export type DaemonCliStartupConfig = {
+  host: string;
+  open: boolean;
+  port: number;
+};
+
+export type DaemonCliStartupParseResult =
+  | { ok: true; config: DaemonCliStartupConfig }
+  | { ok: false; kind: 'help' }
+  | { ok: false; kind: 'error'; message: string };
+
+export const DEFAULT_DAEMON_BIND_HOST = '127.0.0.1';
+
+export function normalizeDaemonBindHost(input: unknown): string {
+  const host = String(input ?? '').trim();
+  return host || DEFAULT_DAEMON_BIND_HOST;
+}
+
+function requiredOptionValue(flag: string, value: string | undefined, label: string): string | DaemonCliStartupParseResult {
+  if (value == null || value.startsWith('-')) {
+    return { ok: false, kind: 'error', message: `${flag} requires ${label}` };
+  }
+  return value;
+}
+
+export function parseDaemonCliStartupArgs(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): DaemonCliStartupParseResult {
+  let port = Number(env.OD_PORT) || 7456;
+  let host = normalizeDaemonBindHost(env.OD_BIND_HOST);
+  let open = true;
+
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a == null) continue;
+    if (a === '-p' || a === '--port') {
+      const next = requiredOptionValue(a, argv[++i], 'a port');
+      if (typeof next !== 'string') return next;
+      const parsedPort = Number(next);
+      if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+        return { ok: false, kind: 'error', message: `invalid port: ${next}` };
+      }
+      port = parsedPort;
+    } else if (a === '--host') {
+      const next = requiredOptionValue(a, argv[++i], 'an address');
+      if (typeof next !== 'string') return next;
+      host = normalizeDaemonBindHost(next);
+    } else if (a === '--no-open') {
+      open = false;
+    } else if (a === '-h' || a === '--help') {
+      return { ok: false, kind: 'help' };
+    } else if (a.startsWith('-')) {
+      return { ok: false, kind: 'error', message: `unknown option: ${a}` };
+    } else {
+      return { ok: false, kind: 'error', message: `unknown command: od ${a}` };
+    }
+  }
+
+  return { ok: true, config: { host, open, port } };
+}
+
 export async function closeHttpServer(
   server: Server,
   { closeTimeoutMs = 5_000, idleCloseMs = 1_000 } = {},
@@ -87,24 +149,17 @@ export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Pr
 }
 
 export async function runDaemonCliStartup(argv: string[], options: { printHelp?: () => void } = {}): Promise<void> {
-  let port = Number(process.env.OD_PORT) || 7456;
-  let host = process.env.OD_BIND_HOST || '127.0.0.1';
-  let open = true;
-
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '-p' || a === '--port') {
-      port = Number(argv[++i]);
-    } else if (a === '--host') {
-      const next = argv[++i];
-      if (next != null) host = next;
-    } else if (a === '--no-open') {
-      open = false;
-    } else if (a === '-h' || a === '--help') {
+  const parsed = parseDaemonCliStartupArgs(argv);
+  if (!parsed.ok) {
+    if (parsed.kind === 'error') {
+      console.error(parsed.message);
       options.printHelp?.();
-      return;
+      process.exit(2);
     }
+    options.printHelp?.();
+    return;
   }
+  const { host, open, port } = parsed.config;
 
   const runtime = await startDaemonRuntime({
     host,

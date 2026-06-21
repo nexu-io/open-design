@@ -275,8 +275,12 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: var(--chip-color, var(--accent));
+        background: var(--accent);
       }
+      .base-chip-product::before { background: #1b61c9; }
+      .base-chip-marketing::before { background: #f5a623; }
+      .base-chip-design::before { background: #ec4899; }
+      .base-chip-sales::before { background: #16a34a; }
 
       /* ─── Links ─────────────────────────────────────────────── */
       a { color: var(--accent); text-decoration: none; }
@@ -355,10 +359,10 @@
                 Your bases
               </p>
               <div class="base-chips">
-                <span class="base-chip" style="--chip-color: #1b61c9">Product</span>
-                <span class="base-chip" style="--chip-color: #f5a623">Marketing</span>
-                <span class="base-chip" style="--chip-color: #ec4899">Design</span>
-                <span class="base-chip" style="--chip-color: #16a34a">Sales</span>
+                <span class="base-chip base-chip-product">Product</span>
+                <span class="base-chip base-chip-marketing">Marketing</span>
+                <span class="base-chip base-chip-design">Design</span>
+                <span class="base-chip base-chip-sales">Sales</span>
               </div>
             </div>
             <p class="body-sm body-muted">

@@ -40,11 +40,14 @@ import type {
   MemoryExtractionProvider,
   MemoryListResponse,
 } from '@open-design/contracts';
-import type { ApiProtocol, ExecMode } from '../types';
+import type { AgentModelOption, ApiProtocol, ExecMode } from '../types';
 import {
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
-import { CUSTOM_MODEL_SENTINEL } from './modelOptions';
+import {
+  CUSTOM_MODEL_SENTINEL,
+  SearchableModelSelect,
+} from './modelOptions';
 
 interface Props {
   mode: ExecMode;
@@ -62,6 +65,12 @@ interface Props {
   // the dropdown options with the same model list the chat picker
   // shows for the selected agent.
   cliModelOptions?: readonly string[];
+  // Live model catalogue for the current BYOK protocol (the same merged
+  // fetched+suggested list the chat picker above uses). When provided in API
+  // mode, the memory picker offers this dynamic list instead of the static
+  // suggestions, so e.g. AIHubMix shows its full live catalogue as a
+  // searchable dropdown. Falls back to SUGGESTED_MODELS_BY_PROTOCOL when empty.
+  apiModelOptions?: readonly AgentModelOption[];
   // The currently-selected CLI agent id. Used to derive a chat
   // protocol family in CLI mode (claude → anthropic, codex → openai,
   // gemini → google, …) so the dropdown's "Same as chat" label can
@@ -179,6 +188,7 @@ export function MemoryModelInline({
   chatApiVersion,
   chatModel,
   cliModelOptions,
+  apiModelOptions,
   cliAgentId,
 }: Props) {
   const t = useT();
@@ -220,10 +230,26 @@ export function MemoryModelInline({
   const sameAsChatCliLabel =
     mode === 'daemon' ? cliAgentLabel(cliAgentId) : null;
 
-  const modelOptions = useMemo<readonly string[]>(() => {
-    if (mode === 'api') return SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
-    return cliModelOptions ?? [];
-  }, [mode, apiProtocol, cliModelOptions]);
+  // The {id,label} option list fed to the searchable dropdown. In API mode we
+  // prefer the live catalogue passed from the chat picker (e.g. AIHubMix's full
+  // fetched list) and fall back to the static suggestions; in CLI mode we use
+  // the agent's advertised models.
+  const pickerModels = useMemo<AgentModelOption[]>(() => {
+    if (mode === 'api') {
+      if (apiModelOptions && apiModelOptions.length > 0) {
+        return apiModelOptions.map((m) => ({ id: m.id, label: m.label }));
+      }
+      return SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol].map((id) => ({ id, label: id }));
+    }
+    return (cliModelOptions ?? []).map((id) => ({ id, label: id }));
+  }, [mode, apiProtocol, apiModelOptions, cliModelOptions]);
+
+  // Plain id list — drives the "is the saved model a known option vs a custom
+  // id" decision below.
+  const modelOptions = useMemo<readonly string[]>(
+    () => pickerModels.map((m) => m.id),
+    [pickerModels],
+  );
 
   const savedModel = config?.model ?? '';
   const savedInOptions =
@@ -375,12 +401,6 @@ export function MemoryModelInline({
     setCustomEditing(false);
   }, [customDraft, persist, buildOverride]);
 
-  // CLI mode with no models advertised by the agent — fall back to a
-  // simple "Same as chat" / "Custom..." pair so the picker is still
-  // usable. (Some CLIs don't expose a `models` command; the chat
-  // picker shows the same fallback there.)
-  const showSuggestedOptions = modelOptions.length > 0;
-
   // Stable unique id for the labelling span so multiple instances of
   // this picker (or instances rendered alongside other Memory pickers)
   // never collide on a global selector. The select uses
@@ -390,6 +410,27 @@ export function MemoryModelInline({
   // `getByLabel('API key' / 'Model')` on the surrounding chat form
   // can't accidentally cross-match the hint copy here.
   const labelId = useId();
+  const sameAsChatLabel = sameAsChatCliLabel
+    ? t('settings.memoryModelInlineSameAsChatWithModel', {
+        model: sameAsChatCliLabel,
+      })
+    : effectiveChatProtocol
+      ? t('settings.memoryModelInlineSameAsChatWithProvider', {
+          provider: effectiveChatProtocol,
+        })
+      : chatModel
+        ? t('settings.memoryModelInlineSameAsChatWithModel', {
+            model: chatModel,
+          })
+        : t('settings.memoryModelInlineSameAsChat');
+  const selectOptions = useMemo(
+    () => [
+      { id: SAME_AS_CHAT_SENTINEL, label: sameAsChatLabel },
+      ...modelOptions.map((model) => ({ id: model, label: model })),
+      { id: CUSTOM_MODEL_SENTINEL, label: t('settings.modelCustom') },
+    ],
+    [modelOptions, sameAsChatLabel, t],
+  );
 
   // The wrapper used to be a <label>, which made the select's
   // accessible name absorb every text descendant (the flash status,
@@ -419,38 +460,18 @@ export function MemoryModelInline({
           {flash}
         </span>
       ) : null}
-      <select
+      <SearchableModelSelect
         aria-labelledby={labelId}
+        className="inline-switcher__select settings-model-select settings-model-select--byok"
+        searchPlaceholder={t('designs.searchPlaceholder')}
+        searchInputTestId="memory-model-inline-search"
+        popoverTestId="memory-model-inline-popover"
+        popoverClassName="settings-byok-select-popover"
+        models={selectOptions}
         value={selectValue}
         disabled={busy}
-        onChange={(e) => void onSelectChange(e.target.value)}
-      >
-        <option value={SAME_AS_CHAT_SENTINEL}>
-          {sameAsChatCliLabel
-            ? t('settings.memoryModelInlineSameAsChatWithModel', {
-                model: sameAsChatCliLabel,
-              })
-            : effectiveChatProtocol
-            ? t('settings.memoryModelInlineSameAsChatWithProvider', {
-                provider: effectiveChatProtocol,
-              })
-            : chatModel
-              ? t('settings.memoryModelInlineSameAsChatWithModel', {
-                  model: chatModel,
-                })
-              : t('settings.memoryModelInlineSameAsChat')}
-        </option>
-        {showSuggestedOptions
-          ? modelOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))
-          : null}
-        <option value={CUSTOM_MODEL_SENTINEL}>
-          {t('settings.modelCustom')}
-        </option>
-      </select>
+        onChange={(value) => void onSelectChange(value)}
+      />
       {customActive ? (
         <div
           className="field-row"

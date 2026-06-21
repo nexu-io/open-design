@@ -411,7 +411,9 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * inline JSON string). The env-var path is what lets a launcher like the
  * Open Design daemon hand servers to a single `opencode run` invocation
  * without writing into the user's global config or leaving a temp file
- * around on crash.
+ * around on crash. We also use the same payload to grant `external_directory`
+ * access to daemon-selected absolute paths (project cwd, staged skill dirs,
+ * etc.) so headless OpenCode runs do not auto-reject them.
  *
  * Schema (verified against the dev branch of `sst/opencode`'s
  * `packages/opencode/src/config/config.ts` and the public docs at
@@ -445,12 +447,16 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * works the same way for OpenCode users without forcing them to
  * re-authenticate inside OpenCode.
  */
+export interface OpenCodeConfigBuildOptions {
+  allowedDirectories?: string[];
+}
+
 export function buildOpenCodeMcpConfigContent(
   servers: McpServerConfig[],
   tokens: Record<string, string> = {},
+  options: OpenCodeConfigBuildOptions = {},
 ): string | null {
   const enabled = servers.filter((s) => s.enabled);
-  if (enabled.length === 0) return null;
   const mcp: Record<string, Record<string, unknown>> = {};
   for (const s of enabled) {
     if (s.transport === 'stdio') {
@@ -481,8 +487,52 @@ export function buildOpenCodeMcpConfigContent(
       mcp[s.id] = entry;
     }
   }
-  if (Object.keys(mcp).length === 0) return null;
-  return JSON.stringify({ mcp });
+  const externalDirectory = buildOpenCodeExternalDirectoryAllowlist(
+    options.allowedDirectories,
+  );
+  if (Object.keys(mcp).length === 0 && !externalDirectory) return null;
+
+  const config: Record<string, unknown> = {};
+  if (Object.keys(mcp).length > 0) config.mcp = mcp;
+  if (externalDirectory) {
+    config.permission = {
+      external_directory: externalDirectory,
+    };
+  }
+  return JSON.stringify(config);
+}
+
+function buildOpenCodeExternalDirectoryAllowlist(
+  directories: string[] | undefined,
+): Record<string, 'allow'> | null {
+  const normalized = Array.from(
+    new Set(
+      (directories ?? [])
+        .filter((dir) => typeof dir === 'string' && dir.trim().length > 0)
+        .filter((dir) => path.isAbsolute(dir))
+        .map((dir) => normalizeAllowedDirectory(dir)),
+    ),
+  );
+  if (normalized.length === 0) return null;
+
+  const allowlist: Record<string, 'allow'> = {};
+  for (const dir of normalized) {
+    allowlist[dir] = 'allow';
+    allowlist[joinPermissionGlob(dir, '*')] = 'allow';
+    allowlist[joinPermissionGlob(dir, '**')] = 'allow';
+  }
+  return allowlist;
+}
+
+function normalizeAllowedDirectory(dir: string): string {
+  const resolved = path.resolve(dir);
+  const root = path.parse(resolved).root;
+  if (resolved === root) return root;
+  return resolved.replace(/[\\/]+$/, '');
+}
+
+function joinPermissionGlob(dir: string, suffix: '*' | '**'): string {
+  return dir.endsWith(path.sep) ? `${dir}${suffix}` : `${dir}${path.sep}${suffix}`;
 }
 
 // ───────────────────────────────────────────────────────────────────────

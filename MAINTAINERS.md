@@ -1,6 +1,6 @@
 # Maintainers
 
-<p align="center"><b>English</b> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <a href="MAINTAINERS.zh-CN.md">简体中文</a> · <a href="MAINTAINERS.ja-JP.md">日本語</a></p>
+<p align="center"><b>English</b> · <a href="docs/i18n/MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="docs/i18n/MAINTAINERS.de.md">Deutsch</a> · <a href="docs/i18n/MAINTAINERS.fr.md">Français</a> · <a href="docs/i18n/MAINTAINERS.zh-CN.md">简体中文</a> · <a href="docs/i18n/MAINTAINERS.ja-JP.md">日本語</a></p>
 
 This document defines the rules for becoming, serving as, and stepping down from
 a Maintainer of `nexu-io/open-design`. The Core Team's individual roster is

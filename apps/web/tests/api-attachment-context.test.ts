@@ -42,8 +42,48 @@ describe('historyWithApiAttachmentContext', () => {
 
     expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith('project-1', 'brief.docx');
     expect(history[0]?.content).toContain('<attached-project-files>');
+    expect(history[0]?.content).toContain('user-visible order');
+    expect(history[0]?.content).toContain('### Attachment 1: brief.docx');
     expect(history[0]?.content).toContain('Hello world');
     expect(history[0]?.content).toContain('Second line');
+  });
+
+  it('preserves uploaded attachment order with numbered headings', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Compare the first and second image', [
+          { path: 'uploads/first.png', name: 'image.png', kind: 'image' },
+          { path: 'uploads/second.png', name: 'image.png', kind: 'image' },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('uploads/first.png', 'image'), projectFile('uploads/second.png', 'image')],
+    );
+
+    const content = history[0]?.content ?? '';
+    expect(content.indexOf('### Attachment 1:')).toBeLessThan(content.indexOf('### Attachment 2:'));
+    expect(content).toContain('path: uploads/first.png');
+    expect(content).toContain('path: uploads/second.png');
+  });
+
+  it('uses the explicit user-visible order before numbering attachments', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Compare the first and second image', [
+          { path: 'uploads/second.png', name: 'second.png', kind: 'image', order: 1 },
+          { path: 'uploads/first.png', name: 'first.png', kind: 'image', order: 0 },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('uploads/first.png', 'image'), projectFile('uploads/second.png', 'image')],
+    );
+
+    const content = history[0]?.content ?? '';
+    expect(content.indexOf('### Attachment 1: first.png')).toBeLessThan(
+      content.indexOf('### Attachment 2: second.png'),
+    );
   });
 
   it('reads raw text attachments with a cache buster from file metadata', async () => {

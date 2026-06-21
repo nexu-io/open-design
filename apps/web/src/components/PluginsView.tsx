@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+  resolveLocalizedText,
   type ApplyResult,
   type InstalledPluginRecord,
   type PluginSourceKind,
@@ -8,6 +10,9 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackPageView,
+  trackPluginImportModalClick,
+  trackPluginImportModalSurfaceView,
+  trackPluginImportResult,
   trackPluginsAvailableTabClick,
   trackPluginsInstalledTabClick,
   trackPluginsSourcesTabClick,
@@ -38,8 +43,10 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { AnimatePresence } from 'motion/react';
 
 type PluginsTab = 'installed' | 'available' | 'sources' | 'team';
 
@@ -444,6 +451,16 @@ export function PluginsView({
               });
               setAvailableDetails(plugin);
             }}
+            onUseInstalled={(record) => {
+              trackPluginsAvailableTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'available_tab',
+                element: 'install',
+                plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+                plugin_type: record.marketplaceTrust ?? 'official',
+              });
+              void handleUsePlugin(record, 'use');
+            }}
             onInstall={(plugin) => {
               trackPluginsAvailableTabClick(analytics.track, {
                 page_name: 'plugins',
@@ -523,24 +540,29 @@ export function PluginsView({
         {activeTab === 'team' ? <TeamPanel t={t} /> : null}
       </div>
 
-      {detailsRecord ? (
-        <PluginDetailsModal
-          record={detailsRecord}
-          onClose={() => setDetailsRecord(null)}
-          onUse={(record) => void handleUsePlugin(record, 'use')}
-          isApplying={pendingApplyId === detailsRecord.id}
-        />
-      ) : null}
-      {availableDetails ? (
-        <AvailablePluginDetailsModal
-          plugin={availableDetails}
-          pending={pendingInstallEntry === availableDetails.key}
-          onClose={() => {
-            if (pendingInstallEntry !== availableDetails.key) setAvailableDetails(null);
-          }}
-          onInstall={(plugin) => void handleInstallAvailable(plugin)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {detailsRecord ? (
+          <PluginDetailsModal
+            record={detailsRecord}
+            onClose={() => setDetailsRecord(null)}
+            onUse={(record) => void handleUsePlugin(record, 'use')}
+            isApplying={pendingApplyId === detailsRecord.id}
+          />
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence>
+        {availableDetails ? (
+          <AvailablePluginDetailsModal
+            plugin={availableDetails}
+            pending={pendingInstallEntry === availableDetails.key}
+            onClose={() => {
+              if (pendingInstallEntry !== availableDetails.key) setAvailableDetails(null);
+            }}
+            onUseInstalled={(record) => void handleUsePlugin(record, 'use')}
+            onInstall={(plugin) => void handleInstallAvailable(plugin)}
+          />
+        ) : null}
+      </AnimatePresence>
       {shareConfirm ? (
         <PluginShareConfirmModal
           sourceRecord={shareConfirm.sourceRecord}
@@ -588,25 +610,23 @@ function PluginShareConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { locale } = useI18n();
   const details = PLUGIN_SHARE_DETAILS[action];
-  const actionTitle = actionRecord?.title ?? details.fallbackTitle;
+  const actionTitle = actionRecord ? localizePluginTitle(locale, actionRecord) : details.fallbackTitle;
   const actionDescription =
-    actionRecord?.manifest?.description ?? details.fallbackDescription;
+    (actionRecord ? localizePluginDescription(locale, actionRecord) : '') || details.fallbackDescription;
   const actionQuery = readLocalizedUseCaseQuery(actionRecord);
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
 
   return (
-    <div
-      className="plugin-details-modal-backdrop plugin-share-confirm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${actionTitle} for ${sourceRecord.title}`}
-      onClick={(event) => {
-        if (!pending && event.target === event.currentTarget) onClose();
-      }}
+    <Dialog
+      backdropClassName="plugin-details-modal-backdrop plugin-share-confirm"
+      className="plugin-details-modal plugin-share-confirm__panel"
+      includeChromeClassName={false}
+      ariaLabel={`${actionTitle} for ${sourceRecord.title}`}
+      onClose={pending ? undefined : onClose}
       data-testid="plugin-share-confirm-modal"
     >
-      <div className="plugin-details-modal plugin-share-confirm__panel">
         <header className="plugin-details-modal__head">
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
@@ -712,8 +732,7 @@ function PluginShareConfirmModal({
             {pending ? 'Starting…' : details.confirmLabel}
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -795,6 +814,7 @@ interface AvailableMarketplacePlugin {
   key: string;
   marketplace: PluginMarketplace;
   entry: PluginMarketplaceEntry;
+  installedRecord?: InstalledPluginRecord;
   installSource?: string;
 }
 
@@ -820,6 +840,7 @@ function AvailablePluginsPanel({
   plugins,
   pendingKey,
   onOpenDetails,
+  onUseInstalled,
   onInstall,
   onSearchInput,
   onSourceDropdown,
@@ -828,11 +849,13 @@ function AvailablePluginsPanel({
   plugins: AvailableMarketplacePlugin[];
   pendingKey: string | null;
   onOpenDetails: (plugin: AvailableMarketplacePlugin) => void;
+  onUseInstalled: (record: InstalledPluginRecord) => void;
   onInstall: (plugin: AvailableMarketplacePlugin) => void;
   onSearchInput?: () => void;
   onSourceDropdown?: () => void;
   t: ReturnType<typeof useI18n>['t'];
 }) {
+  const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const searchTrackedRef = useRef(false);
@@ -921,7 +944,9 @@ function AvailablePluginsPanel({
       ) : (
         <div className="plugins-view__available-list">
           {filteredPlugins.map((plugin) => {
-            const title = plugin.entry.title ?? plugin.entry.name;
+            const title = availablePluginTitle(plugin.entry, locale);
+            const installedRecord = plugin.installedRecord ?? null;
+            const description = availablePluginDescription(plugin.entry, locale);
             return (
               <article key={plugin.key} className="plugins-view__available-card">
                 <div className="plugins-view__available-main">
@@ -929,7 +954,7 @@ function AvailablePluginsPanel({
                     <span>{title}</span>
                     <TrustBadge trust={plugin.marketplace.trust} />
                   </div>
-                  {plugin.entry.description ? <p>{plugin.entry.description}</p> : null}
+                  {description ? <p>{description}</p> : null}
                   <div className="plugins-view__meta">
                     <span>{plugin.entry.name}</span>
                     {plugin.entry.version ? <span>v{plugin.entry.version}</span> : null}
@@ -951,11 +976,19 @@ function AvailablePluginsPanel({
                   <button
                     type="button"
                     className="plugins-view__primary"
-                    onClick={() => onInstall(plugin)}
-                    disabled={pendingKey === plugin.key}
+                    onClick={() =>
+                      installedRecord
+                        ? onUseInstalled(installedRecord)
+                        : onInstall(plugin)
+                    }
+                    disabled={!installedRecord && pendingKey === plugin.key}
                     data-testid={`plugins-available-install-${plugin.entry.name}`}
                   >
-                    {pendingKey === plugin.key ? t('pluginsView.installing') : t('pluginsView.install')}
+                    {installedRecord
+                      ? t('pluginCard.use')
+                      : pendingKey === plugin.key
+                        ? t('pluginsView.installing')
+                        : t('pluginsView.install')}
                   </button>
                 </div>
               </article>
@@ -971,14 +1004,16 @@ function AvailablePluginDetailsModal({
   plugin,
   pending,
   onClose,
+  onUseInstalled,
   onInstall,
 }: {
   plugin: AvailableMarketplacePlugin;
   pending: boolean;
   onClose: () => void;
+  onUseInstalled: (record: InstalledPluginRecord) => void;
   onInstall: (plugin: AvailableMarketplacePlugin) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const versions = useMemo(() => availablePluginVersions(plugin.entry), [plugin.entry]);
   const [selectedVersion, setSelectedVersion] = useState(
     () => versions[0]?.version ?? plugin.entry.version ?? 'latest',
@@ -986,7 +1021,7 @@ function AvailablePluginDetailsModal({
   const [copiedInstall, setCopiedInstall] = useState(false);
   const selectedVersionInfo =
     versions.find((version) => version.version === selectedVersion) ?? versions[0] ?? null;
-  const title = plugin.entry.title ?? plugin.entry.name;
+  const title = availablePluginTitle(plugin.entry, locale);
   const sourceName = plugin.marketplace.manifest.name ?? plugin.marketplace.url;
   const publisher = plugin.entry.publisher;
   const publisherLabel =
@@ -1004,6 +1039,7 @@ function AvailablePluginDetailsModal({
     version: selectedVersionInfo,
     t,
   });
+  const installedRecord = plugin.installedRecord ?? null;
 
   async function copyInstallCommand() {
     const ok = await copyToClipboard(installCommand);
@@ -1013,6 +1049,10 @@ function AvailablePluginDetailsModal({
   }
 
   function installSelectedVersion() {
+    if (installedRecord) {
+      onUseInstalled(installedRecord);
+      return;
+    }
     onInstall({
       ...plugin,
       key: `${plugin.key}:${selectedVersion}`,
@@ -1084,79 +1124,92 @@ function AvailablePluginDetailsModal({
               <h3 className="plugin-details-modal__section-title">About</h3>
             </div>
             <p className="plugin-details-modal__description">
-              {plugin.entry.description ?? 'No description provided.'}
+              {availablePluginDescription(plugin.entry, locale) ?? 'No description provided.'}
             </p>
           </section>
 
-          <section className="plugin-details-modal__section">
-            <div className="plugin-details-modal__section-head">
-              <h3 className="plugin-details-modal__section-title">
-                {t('plugins.availableDetails.install')}
-              </h3>
-            </div>
-            <div className="plugins-view__version-install">
-              <label className="plugins-view__version-select">
-                <span>{t('plugins.availableDetails.version')}</span>
-                <select
-                  aria-label={t('plugins.availableDetails.pluginVersion')}
-                  value={selectedVersion}
-                  onChange={(event) => {
-                    setSelectedVersion(event.target.value);
-                    setCopiedInstall(false);
-                  }}
-                >
-                  {versions.map((version) => (
-                    <option
-                      key={version.version}
-                      value={version.version}
-                      disabled={version.yanked}
-                    >
-                      {version.version}
-                      {version.deprecated
-                        ? t('plugins.availableDetails.versionDeprecatedSuffix')
-                        : ''}
-                      {version.yanked
-                        ? t('plugins.availableDetails.versionYankedSuffix')
-                        : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="plugins-view__install-command">
-                <code data-testid="plugins-available-install-command">
-                  {installCommand}
-                </code>
-                <button
-                  type="button"
-                  className="plugin-details-modal__chip-btn"
-                  onClick={() => void copyInstallCommand()}
-                >
-                  <Icon name="copy" size={12} />
-                  {copiedInstall
-                    ? t('plugins.availableDetails.copied')
-                    : t('plugins.availableDetails.copyInstallCommand')}
-                </button>
+          {installedRecord ? (
+            <section className="plugin-details-modal__section">
+              <div className="plugin-details-modal__section-head">
+                <h3 className="plugin-details-modal__section-title">
+                  Installed
+                </h3>
               </div>
-            </div>
-            {selectedVersionInfo?.deprecated ? (
               <p className="plugin-details-modal__section-hint">
-                {t('plugins.availableDetails.deprecatedPrefix', {
-                  message: selectedVersionInfo.deprecated === true
-                    ? t('plugins.availableDetails.deprecatedFallback')
-                    : selectedVersionInfo.deprecated,
-                })}
+                This official catalog entry is bundled with Open Design and is ready to use.
               </p>
-            ) : null}
-            {selectedVersionInfo?.yanked ? (
-              <p className="plugin-details-modal__section-hint">
-                {selectedVersionInfo.yankReason
-                  ? t('plugins.availableDetails.yankedWithReason', {
-                    reason: selectedVersionInfo.yankReason,
-                  })
-                  : t('plugins.availableDetails.yanked')}
-              </p>
-            ) : null}
-          </section>
+            </section>
+          ) : (
+            <section className="plugin-details-modal__section">
+              <div className="plugin-details-modal__section-head">
+                <h3 className="plugin-details-modal__section-title">
+                  {t('plugins.availableDetails.install')}
+                </h3>
+              </div>
+              <div className="plugins-view__version-install">
+                <label className="plugins-view__version-select">
+                  <span>{t('plugins.availableDetails.version')}</span>
+                  <select
+                    aria-label={t('plugins.availableDetails.pluginVersion')}
+                    value={selectedVersion}
+                    onChange={(event) => {
+                      setSelectedVersion(event.target.value);
+                      setCopiedInstall(false);
+                    }}
+                  >
+                    {versions.map((version) => (
+                      <option
+                        key={version.version}
+                        value={version.version}
+                        disabled={version.yanked}
+                      >
+                        {version.version}
+                        {version.deprecated
+                          ? t('plugins.availableDetails.versionDeprecatedSuffix')
+                          : ''}
+                        {version.yanked
+                          ? t('plugins.availableDetails.versionYankedSuffix')
+                          : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="plugins-view__install-command">
+                  <code data-testid="plugins-available-install-command">
+                    {installCommand}
+                  </code>
+                  <button
+                    type="button"
+                    className="plugin-details-modal__chip-btn"
+                    onClick={() => void copyInstallCommand()}
+                  >
+                    <Icon name="copy" size={12} />
+                    {copiedInstall
+                      ? t('plugins.availableDetails.copied')
+                      : t('plugins.availableDetails.copyInstallCommand')}
+                  </button>
+                </div>
+              </div>
+              {selectedVersionInfo?.deprecated ? (
+                <p className="plugin-details-modal__section-hint">
+                  {t('plugins.availableDetails.deprecatedPrefix', {
+                    message: selectedVersionInfo.deprecated === true
+                      ? t('plugins.availableDetails.deprecatedFallback')
+                      : selectedVersionInfo.deprecated,
+                  })}
+                </p>
+              ) : null}
+              {selectedVersionInfo?.yanked ? (
+                <p className="plugin-details-modal__section-hint">
+                  {selectedVersionInfo.yankReason
+                    ? t('plugins.availableDetails.yankedWithReason', {
+                      reason: selectedVersionInfo.yankReason,
+                    })
+                    : t('plugins.availableDetails.yanked')}
+                </p>
+              ) : null}
+            </section>
+          )}
 
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
@@ -1304,7 +1357,11 @@ function AvailablePluginDetailsModal({
             aria-busy={pending ? 'true' : undefined}
             data-testid={`plugins-available-details-install-${plugin.entry.name}`}
           >
-            {pending ? 'Installing...' : 'Install'}
+            {installedRecord
+              ? t('pluginCard.use')
+              : pending
+                ? t('pluginsView.installing')
+                : t('pluginsView.install')}
           </button>
         </footer>
       </div>
@@ -1458,22 +1515,58 @@ function PluginImportModal({
   onUploadZip: (file: File) => Promise<PluginInstallOutcome>;
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
 }) {
+  const analytics = useAnalytics();
+  const importModalViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (importModalViewFiredRef.current) return;
+    importModalViewFiredRef.current = true;
+    trackPluginImportModalSurfaceView(analytics.track, {
+      page_name: 'plugins',
+      area: 'import_modal',
+    });
+  }, [analytics.track]);
   const [kind, setKind] = useState<ImportKind>('github');
   const [source, setSource] = useState('');
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
 
+  function selectKind(next: ImportKind) {
+    trackPluginImportModalClick(analytics.track, {
+      page_name: 'plugins',
+      area: 'import_modal',
+      element: 'source_tab',
+      import_source: next,
+    });
+    setKind(next);
+  }
+
   async function runImport() {
+    trackPluginImportModalClick(analytics.track, {
+      page_name: 'plugins',
+      area: 'import_modal',
+      element: 'import',
+      import_source: kind,
+    });
     setWorking(true);
     try {
+      let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
         const trimmed = source.trim();
-        if (trimmed) await onInstallSource(trimmed);
+        if (trimmed) outcome = await onInstallSource(trimmed);
       } else if (kind === 'zip' && zipFile) {
-        await onUploadZip(zipFile);
+        outcome = await onUploadZip(zipFile);
       } else if (kind === 'folder' && folderFiles.length > 0) {
-        await onUploadFolder(folderFiles);
+        outcome = await onUploadFolder(folderFiles);
+      }
+      if (outcome) {
+        trackPluginImportResult(analytics.track, {
+          page_name: 'plugins',
+          area: 'import_modal',
+          import_source: kind,
+          result: outcome.ok ? 'success' : 'failed',
+          ...(outcome.ok ? {} : { error_code: outcome.message ?? 'unknown' }),
+        });
       }
     } finally {
       setWorking(false);
@@ -1515,21 +1608,21 @@ function PluginImportModal({
             icon="github"
             title="From GitHub"
             body="Install github:owner/repo paths."
-            onClick={() => setKind('github')}
+            onClick={() => selectKind('github')}
           />
           <ImportChoice
             active={kind === 'zip'}
             icon="upload"
             title="Upload zip"
             body="Upload a plugin archive."
-            onClick={() => setKind('zip')}
+            onClick={() => selectKind('zip')}
           />
           <ImportChoice
             active={kind === 'folder'}
             icon="folder"
             title="Upload folder"
             body="Upload a plugin directory."
-            onClick={() => setKind('folder')}
+            onClick={() => selectKind('folder')}
           />
         </nav>
 
@@ -1601,7 +1694,14 @@ function PluginImportModal({
           <button
             type="button"
             className="plugins-view__secondary"
-            onClick={onClose}
+            onClick={() => {
+              trackPluginImportModalClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'import_modal',
+                element: 'cancel',
+              });
+              onClose();
+            }}
           >
             Cancel
           </button>
@@ -1706,14 +1806,48 @@ function buildAvailablePlugins(
     const entries = marketplace.manifest.plugins ?? [];
     return entries.flatMap((entry) => {
       const installedPlugin = installedByName.get(normalizePluginName(entry.name)) ?? null;
-      if (installedPlugin) return [];
+      if (installedPlugin && installedPlugin.sourceKind !== 'bundled') return [];
+      const installedRecord = installedPlugin && bundledPluginMatchesMarketplaceEntry(
+        installedPlugin,
+        marketplace,
+        entry,
+      )
+        ? installedPlugin
+        : null;
       return [{
         key: `${marketplace.id}:${entry.name}:${entry.version ?? ''}`,
         marketplace,
         entry,
+        ...(installedRecord ? { installedRecord } : {}),
       }];
     });
   });
+}
+
+function bundledPluginMatchesMarketplaceEntry(
+  plugin: InstalledPluginRecord,
+  marketplace: PluginMarketplace,
+  entry: PluginMarketplaceEntry,
+): boolean {
+  return plugin.sourceKind === 'bundled'
+    && plugin.sourceMarketplaceId === marketplace.id
+    && normalizePluginName(plugin.sourceMarketplaceEntryName ?? '') === normalizePluginName(entry.name);
+}
+
+function availablePluginTitle(entry: PluginMarketplaceEntry, locale?: string): string {
+  return (
+    resolveLocalizedText(entry.title_i18n, locale) ||
+    entry.title ||
+    entry.name
+  );
+}
+
+function availablePluginDescription(entry: PluginMarketplaceEntry, locale?: string): string | null {
+  return (
+    resolveLocalizedText(entry.description_i18n, locale) ||
+    entry.description ||
+    null
+  );
 }
 
 function availablePluginVersions(entry: PluginMarketplaceEntry): AvailablePluginVersion[] {
@@ -1878,7 +2012,9 @@ function availablePluginSearchText(plugin: AvailableMarketplacePlugin): string {
   const parts = [
     entry.name,
     entry.title,
+    ...localizedValues(entry.title_i18n),
     entry.description,
+    ...localizedValues(entry.description_i18n),
     entry.source,
     entry.version,
     entry.homepage,
@@ -1894,6 +2030,11 @@ function availablePluginSearchText(plugin: AvailableMarketplacePlugin): string {
     ...(entry.capabilitiesSummary ?? []),
   ];
   return parts.filter((part): part is string => typeof part === 'string').join(' ').toLowerCase();
+}
+
+function localizedValues(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.values(value).filter((part): part is string => typeof part === 'string');
 }
 
 function pluginLookupKeys(plugin: InstalledPluginRecord): string[] {

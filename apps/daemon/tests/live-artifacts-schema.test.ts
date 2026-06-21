@@ -268,6 +268,180 @@ describe('live artifact schema validation', () => {
     }
   });
 
+  it('rejects project_files.read_json sources whose input names no file to read', () => {
+    const daemonTool = validateLiveArtifactCreateInput({
+      ...validCreateInput(),
+      document: {
+        ...validCreateInput().document,
+        sourceJson: {
+          type: 'daemon_tool',
+          toolName: 'project_files.read_json',
+          input: { query: 'launch' },
+          refreshPermission: 'manual_refresh_granted_for_read_only',
+        },
+      },
+    });
+    const localFile = validateLiveArtifactCreateInput({
+      ...validCreateInput(),
+      document: {
+        ...validCreateInput().document,
+        sourceJson: {
+          type: 'local_file',
+          input: {},
+          refreshPermission: 'manual_refresh_granted_for_read_only',
+        },
+      },
+    });
+
+    expect(daemonTool.ok).toBe(false);
+    if (!daemonTool.ok) {
+      expect(daemonTool.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: 'input.document.sourceJson.input.path' }),
+      ]));
+    }
+    expect(localFile.ok).toBe(false);
+    if (!localFile.ok) {
+      expect(localFile.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: 'input.document.sourceJson.input.path' }),
+      ]));
+    }
+  });
+
+  it('accepts project_files.read_json sources that name a file via path, file, or name', () => {
+    for (const input of [{ path: 'reports/data.json' }, { file: 'reports/data.json' }, { name: 'data.json' }]) {
+      const result = validateLiveArtifactCreateInput({
+        ...validCreateInput(),
+        document: {
+          ...validCreateInput().document,
+          sourceJson: {
+            type: 'local_file',
+            toolName: 'project_files.read_json',
+            input,
+            refreshPermission: 'manual_refresh_granted_for_read_only',
+          },
+        },
+      });
+
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('rejects traversal and absolute project_files.read_json name selectors', () => {
+    for (const name of ['../secrets.json', '/etc/passwd', 'C:\\secrets.json', '\\etc\\passwd']) {
+      const result = validateLiveArtifactCreateInput({
+        ...validCreateInput(),
+        document: {
+          ...validCreateInput().document,
+          sourceJson: {
+            type: 'local_file',
+            toolName: 'project_files.read_json',
+            input: { name },
+            refreshPermission: 'manual_refresh_granted_for_read_only',
+          },
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues).toEqual(expect.arrayContaining([
+          expect.objectContaining({ path: 'input.document.sourceJson.input.name' }),
+        ]));
+      }
+    }
+  });
+
+  it('rejects an invalid earlier read_json alias even when a later alias is valid', () => {
+    // selectJsonPath resolves path → file → name through `??`; a present-but-invalid
+    // path/file is a hard error there and never falls through, so it must be rejected
+    // at creation rather than persisting an artifact that only fails on refresh.
+    const cases = [
+      { input: { path: 123, file: 'reports/data.json' }, expectedPath: 'input.document.sourceJson.input.path' },
+      { input: { path: '', file: 'reports/data.json' }, expectedPath: 'input.document.sourceJson.input.path' },
+      { input: { path: '   ', name: 'data.json' }, expectedPath: 'input.document.sourceJson.input.path' },
+      { input: { file: 42, name: 'data.json' }, expectedPath: 'input.document.sourceJson.input.file' },
+    ];
+    for (const { input, expectedPath } of cases) {
+      const result = validateLiveArtifactCreateInput({
+        ...validCreateInput(),
+        document: {
+          ...validCreateInput().document,
+          sourceJson: {
+            type: 'local_file',
+            toolName: 'project_files.read_json',
+            input,
+            refreshPermission: 'manual_refresh_granted_for_read_only',
+          },
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues).toEqual(expect.arrayContaining([
+          expect.objectContaining({ path: expectedPath }),
+        ]));
+      }
+    }
+  });
+
+  it('rejects single-dot and reserved-path read_json selectors across every alias', () => {
+    // validateProjectPath (refresh.ts → projects.ts) rejects '.' segments and the
+    // reserved '.live-artifacts' segment; the executor also requires a .json file.
+    // Schema acceptance must stay a subset of that, or the source persists yet
+    // fails every refresh with "invalid file name" / "reserved project path".
+    const badValues = ['./report.json', '.live-artifacts/cache.json', 'nested/./report.json', 'reports/notes.txt'];
+    for (const alias of ['path', 'file', 'name'] as const) {
+      for (const value of badValues) {
+        const result = validateLiveArtifactCreateInput({
+          ...validCreateInput(),
+          document: {
+            ...validCreateInput().document,
+            sourceJson: {
+              type: 'local_file',
+              toolName: 'project_files.read_json',
+              input: { [alias]: value },
+              refreshPermission: 'manual_refresh_granted_for_read_only',
+            },
+          },
+        });
+
+        expect(result.ok, `${alias}=${value} should be rejected`).toBe(false);
+        if (!result.ok) {
+          expect(result.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ path: `input.document.sourceJson.input.${alias}` }),
+          ]));
+        }
+      }
+    }
+  });
+
+  it('rejects uppercase or mixed-case .JSON read_json selectors across every alias', () => {
+    // executeProjectFilesReadJson does a case-sensitive endsWith('.json'); schema
+    // must match or a `DATA.JSON` source persists yet fails every refresh.
+    for (const alias of ['path', 'file', 'name'] as const) {
+      for (const value of ['reports/DATA.JSON', 'reports/data.Json']) {
+        const result = validateLiveArtifactCreateInput({
+          ...validCreateInput(),
+          document: {
+            ...validCreateInput().document,
+            sourceJson: {
+              type: 'local_file',
+              toolName: 'project_files.read_json',
+              input: { [alias]: value },
+              refreshPermission: 'manual_refresh_granted_for_read_only',
+            },
+          },
+        });
+
+        expect(result.ok, `${alias}=${value} should be rejected`).toBe(false);
+        if (!result.ok) {
+          expect(result.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ path: `input.document.sourceJson.input.${alias}` }),
+          ]));
+        }
+      }
+    }
+  });
+
   it('rejects oversized bounded JSON payloads', () => {
     const oversized = Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`field${index}`, 'x'.repeat(3_000)]));
     const result = validateBoundedJsonObject(oversized, 'data');

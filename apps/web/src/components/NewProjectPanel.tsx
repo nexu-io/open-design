@@ -1,10 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
-import {
-  isOpenDesignHostAvailable,
-  pickAndImportHostProject,
-  type OpenDesignHostProjectImportSuccess,
-} from '@open-design/host';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemApplyResult,
@@ -21,7 +20,7 @@ import type {
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { fetchPromptTemplate } from '../providers/registry';
+import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
 import { isMediaProviderPickerReady } from '../media/provider-readiness';
 import type {
@@ -49,10 +48,17 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import {
+  mergeAihubmixModels,
+  useAIHubMixImageModels,
+  useAIHubMixVideoModels,
+  useAIHubMixAudioModels,
+} from '../media/aihubmix-image-models';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
+import { useOpenFolderImport } from './useOpenFolderImport';
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -113,6 +119,7 @@ export interface CreateInput {
   skillId: string | null;
   designSystemId: string | null;
   metadata: ProjectMetadata;
+  userWorkingDirToken?: string;
 }
 
 export type ImportClaudeDesignOutcome =
@@ -130,10 +137,8 @@ interface Props {
   onImportClaudeDesign?: (
     file: File,
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
-  // Web fallback: the user types an absolute baseDir into the manual
-  // input and the renderer POSTs `/api/import/folder` itself. Browser
-  // builds have no `shell.openPath` surface, so the renderer naming a
-  // path here cannot escalate (PR #974 trust model).
+  // Local-server flow: the daemon-owned native folder picker returns the
+  // selected baseDir, then the renderer POSTs `/api/import/folder`.
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   // Host flow: the desktop main process owns the picker dialog and
   // the import call atomically (`pickAndImport` IPC). The renderer
@@ -229,9 +234,13 @@ export function defaultDesignSystemSelection(
   designSystems: DesignSystemSummary[],
 ): string[] {
   if (!defaultDesignSystemId) return [];
-  return designSystems.some((d) => d.id === defaultDesignSystemId)
+  return designSystems.some((d) => d.id === defaultDesignSystemId && (d.status ?? 'published') !== 'draft')
     ? [defaultDesignSystemId]
     : [];
+}
+
+function isSelectableProjectDesignSystem(system: DesignSystemSummary): boolean {
+  return system.status !== 'draft';
 }
 
 export function buildDesignSystemCreateSelection(
@@ -271,14 +280,10 @@ export function NewProjectPanel({
   const [importZipError, setImportZipError] = useState<
     { message: string; details?: string } | null
   >(null);
-  const [baseDir, setBaseDir] = useState('');
-  const [importingFolder, setImportingFolder] = useState(false);
-  // PR #974 round-4 (mrcfps): pickAndImport now returns structured
-  // failure shapes (`desktop auth secret not registered`, `web sidecar
-  // URL not available`, `daemon returned HTTP X`) — surfacing them
-  // gives the user a recovery hint instead of a silent no-op.
-  // Shape: `{ message, details? }`. `null` means no toast.
-  const [importFolderError, setImportFolderError] = useState<
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
+  const [workingDirPicking, setWorkingDirPicking] = useState(false);
+  const [workingDirError, setWorkingDirError] = useState<
     { message: string; details?: string } | null
   >(null);
   const [tab, setTab] = useState<CreateTab>(initialTab);
@@ -307,9 +312,13 @@ export function NewProjectPanel({
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
   // duplicating state. Single-select coerces to length 0/1.
+  const selectableDesignSystems = useMemo(
+    () => designSystems.filter(isSelectableProjectDesignSystem),
+    [designSystems],
+  );
   const initialDefaultDsSelection = useMemo(
-    () => defaultDesignSystemSelection(defaultDesignSystemId, designSystems),
-    [defaultDesignSystemId, designSystems],
+    () => defaultDesignSystemSelection(defaultDesignSystemId, selectableDesignSystems),
+    [defaultDesignSystemId, selectableDesignSystems],
   );
   const [selectedDsIds, setSelectedDsIds] = useState<string[]>(
     () => initialDefaultDsSelection,
@@ -407,7 +416,7 @@ export function NewProjectPanel({
     if (!primary) return;
     if (autoSelectFiredForRef.current === primary) return;
     autoSelectFiredForRef.current = primary;
-    const picked = designSystems.find((d) => d.id === primary);
+    const picked = selectableDesignSystems.find((d) => d.id === primary);
     trackDesignSystemApplyResult(analytics.track, {
       page_name: 'home',
       area: 'design_system_picker',
@@ -426,9 +435,9 @@ export function NewProjectPanel({
     });
   }, [
     analytics.track,
-    designSystems,
     dsSelectionTouched,
     initialDefaultDsSelection,
+    selectableDesignSystems,
     showDesignSystemPicker,
     tab,
   ]);
@@ -504,7 +513,9 @@ export function NewProjectPanel({
   function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
     setImagePromptTemplate(pick);
     const m = pick?.summary.model;
-    if (m && IMAGE_MODELS.some((x) => x.id === m)) setImageModel(m);
+    // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
+    // which renders dynamically and won't appear in the static IMAGE_MODELS.
+    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
       setImageAspect(a as MediaAspect);
@@ -707,9 +718,39 @@ export function NewProjectPanel({
       metadata: {
         ...metadata,
         nameSource: trimmedName ? 'user' : 'generated',
+        ...(workingDir ? { userWorkingDir: workingDir } : {}),
       },
+      ...(workingDirToken ? { userWorkingDirToken: workingDirToken } : {}),
       requestId,
     });
+  }
+
+  async function handlePickWorkingDir() {
+    if (workingDirPicking) return;
+    setWorkingDirPicking(true);
+    setWorkingDirError(null);
+    try {
+      if (isOpenDesignHostAvailable()) {
+        const result = await pickHostWorkingDir();
+        if (result.ok) {
+          setWorkingDir(result.baseDir);
+          setWorkingDirToken(result.token);
+          return;
+        }
+        if ('canceled' in result && result.canceled) return;
+        setWorkingDirError({
+          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+        });
+        return;
+      }
+      const picked = await openFolderDialog();
+      if (picked) {
+        setWorkingDir(picked);
+        setWorkingDirToken(null);
+      }
+    } finally {
+      setWorkingDirPicking(false);
+    }
   }
 
   async function handleImportPicked(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -735,60 +776,11 @@ export function NewProjectPanel({
     }
   }
 
-  // PR #974: the host bridge does not expose raw folder paths to the
-  // renderer. The desktop flow uses `pickAndImport`, which performs the
-  // picker + the HMAC-gated import atomically in the main process and
-  // returns host-owned project identifiers.
-  // The web fallback continues to use the manual baseDir input —
-  // browser builds have no `shell.openPath` surface so a renderer-named
-  // path cannot escalate.
-  const hasHostPickAndImport = isOpenDesignHostAvailable();
-
-  async function handleOpenFolder() {
-    if (hasHostPickAndImport) {
-      if (!onImportFolderResponse) return;
-      setImportFolderError(null);
-      setImportingFolder(true);
-      try {
-        const result = await pickAndImportHostProject({
-          skillId: skillIdForTab,
-        });
-        if (!result) return;
-        if (result.ok === true) {
-          await onImportFolderResponse(result);
-          return;
-        }
-        // Round-4 (mrcfps #2): every non-OK shape used to fall through
-        // a silent `return`. Reserve silent for the explicit cancel
-        // case; surface the structured reason for everything else
-        // (auth-not-registered, web-sidecar-down, daemon HTTP errors,
-        // network errors). The pickAndImport handler already pre-shapes
-        // these into a `{ ok: false, reason, details? }` envelope.
-        if ('canceled' in result && result.canceled === true) return;
-        setImportFolderError(formatPickAndImportFailure(result));
-      } finally {
-        setImportingFolder(false);
-      }
-      return;
-    }
-    if (!onImportFolder) return;
-    const trimmed = baseDir.trim();
-    if (!trimmed) {
-      setImportFolderError({ message: 'Path cannot be empty' });
-      return;
-    }
-    setImportFolderError(null);
-    setImportingFolder(true);
-    try {
-      await onImportFolder(trimmed);
-    } catch (err) {
-      setImportFolderError({
-        message: err instanceof Error ? err.message : 'Failed to import folder',
-      });
-    } finally {
-      setImportingFolder(false);
-    }
-  }
+  const folderImport = useOpenFolderImport({
+    skillId: skillIdForTab,
+    onImportFolder,
+    onImportFolderResponse,
+  });
 
   return (
     <div className="newproj" data-testid="new-project-panel">
@@ -847,17 +839,52 @@ export function NewProjectPanel({
           ) : null}
         </h3>
 
-        <input
-          className="newproj-name"
-          data-testid="new-project-name"
-          placeholder={t('newproj.namePlaceholder')}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <div className="newproj-name-row">
+          <input
+            className="newproj-name"
+            data-testid="new-project-name"
+            placeholder={t('newproj.namePlaceholder')}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        <div className="newproj-working-dir-row">
+          <button
+            type="button"
+            className={`ghost newproj-working-dir od-tooltip${workingDir ? ' picked' : ''}`}
+            onClick={() => void handlePickWorkingDir()}
+            disabled={workingDirPicking}
+            title={workingDir ?? t('workingDirPicker.homeTitle')}
+            data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
+          >
+            <Icon name="folder" size={13} />
+            <span>
+              {workingDirPicking
+                ? t('workingDirPicker.processing')
+                : workingDir
+                  ? displayFolderName(workingDir)
+                  : t('workingDirPicker.select')}
+            </span>
+          </button>
+          {workingDir ? (
+            <button
+              type="button"
+              className="newproj-working-dir-clear"
+              onClick={() => {
+                setWorkingDir(null);
+                setWorkingDirToken(null);
+              }}
+              aria-label={t('workingDirPicker.clearAria')}
+            >
+              <Icon name="close" size={10} />
+            </button>
+          ) : null}
+        </div>
 
         {showDesignSystemPicker ? (
           <DesignSystemPicker
-            designSystems={designSystems}
+            designSystems={selectableDesignSystems}
             defaultDesignSystemId={defaultDesignSystemId}
             selectedIds={selectedDsIds}
             multi={dsMulti}
@@ -1050,27 +1077,16 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {(hasHostPickAndImport ? onImportFolderResponse : onImportFolder) ? (
+        {folderImport.available ? (
           <div className="newproj-open-folder">
-            {!hasHostPickAndImport ? (
-              <input
-                type="text"
-                className="newproj-folder-input"
-                placeholder="/path/to/project"
-                value={baseDir}
-                onChange={(e) => setBaseDir(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
-                disabled={importingFolder}
-              />
-            ) : null}
             <button
               type="button"
               className="ghost newproj-import"
-              disabled={(!hasHostPickAndImport && !baseDir.trim()) || importingFolder}
-              onClick={() => void handleOpenFolder()}
+              disabled={folderImport.importing}
+              onClick={() => void folderImport.openFolder()}
             >
               <Icon name="folder" size={13} />
-              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+              <span>{folderImport.importing ? 'Opening...' : 'Open folder'}</span>
             </button>
           </div>
         ) : null}
@@ -1084,16 +1100,28 @@ export function NewProjectPanel({
           onDismiss={() => setImportZipError(null)}
         />
       ) : null}
-      {importFolderError ? (
+      {folderImport.error ? (
         <Toast
-          message={importFolderError.message}
-          details={importFolderError.details ?? null}
+          message={folderImport.error.message}
+          details={folderImport.error.details ?? null}
           ttlMs={6000}
-          onDismiss={() => setImportFolderError(null)}
+          onDismiss={folderImport.clearError}
+        />
+      ) : null}
+      {workingDirError ? (
+        <Toast
+          message={workingDirError.message}
+          details={workingDirError.details ?? null}
+          ttlMs={6000}
+          onDismiss={() => setWorkingDirError(null)}
         />
       ) : null}
     </div>
   );
+}
+
+function displayFolderName(path: string): string {
+  return path.split(/[/\\]/).filter(Boolean).pop() ?? path;
 }
 
 function PlatformPicker({
@@ -1144,7 +1172,7 @@ function PlatformPicker({
 
   return (
     <div
-      className="newproj-section ds-picker platform-picker"
+      className={`newproj-section ds-picker platform-picker${open ? ' open' : ''}`}
       ref={wrapRef}
     >
       <label className="newproj-label">Target platforms</label>
@@ -1506,6 +1534,7 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const deleteTemplateTitleId = useId();
   const [confirmDelete, setConfirmDelete] = useState<
     { id: string; name: string } | null
   >(null);
@@ -1571,41 +1600,36 @@ function TemplatePicker({
         </div>
       )}
       {confirmDelete ? (
-        <div
-          className="modal-backdrop"
-          onClick={deleting ? undefined : closeConfirm}
+        <Dialog
+          className="modal-confirm"
+          role="alertdialog"
+          onClose={deleting ? undefined : closeConfirm}
+          ariaLabelledBy={deleteTemplateTitleId}
         >
-          <div
-            className="modal modal-confirm"
-            onClick={(e) => e.stopPropagation()}
-            role="alertdialog"
-            aria-modal="true"
-          >
-            <h2>{t('newproj.deleteTemplateTitle')}</h2>
-            <p className="modal-confirm-message">
-              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+          <DialogTitle id={deleteTemplateTitleId}>{t('newproj.deleteTemplateTitle')}</DialogTitle>
+          <DialogDescription className="modal-confirm-message">
+            {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+          </DialogDescription>
+          {deleteError ? (
+            <p className="modal-confirm-error" role="alert">
+              {t('newproj.deleteTemplateError')}
             </p>
-            {deleteError ? (
-              <p className="modal-confirm-error" role="alert">
-                {t('newproj.deleteTemplateError')}
-              </p>
-            ) : null}
-            <div className="row">
-              <button type="button" onClick={closeConfirm} disabled={deleting}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="primary danger"
-                autoFocus
-                disabled={deleting}
-                onClick={runDelete}
-              >
-                {t('newproj.deleteTemplateConfirmCta')}
-              </button>
-            </div>
-          </div>
-        </div>
+          ) : null}
+          <DialogFooter className="row">
+            <button type="button" onClick={closeConfirm} disabled={deleting}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="primary danger"
+              autoFocus
+              disabled={deleting}
+              onClick={runDelete}
+            >
+              {t('newproj.deleteTemplateConfirmCta')}
+            </button>
+          </DialogFooter>
+        </Dialog>
       ) : null}
     </div>
   );
@@ -1976,7 +2000,22 @@ function DesignSystemPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  // The open popover renders through a portal anchored to the trigger so it
+  // escapes the New Project modal's `.newproj-body { overflow-y: auto }` clip
+  // box. A plain `position: absolute` popover (the previous shape) was trapped
+  // inside that scroll container and got truncated when the trigger sat low in
+  // the body or the window was short (issue #4303). Mirrors the viewport-aware
+  // up/down placement of the shared DesignSystemPicker.
+  const [anchor, setAnchor] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
 
   const byId = useMemo(() => {
     const map = new Map<string, DesignSystemSummary>();
@@ -1993,7 +2032,7 @@ function DesignSystemPicker({
       .filter((d): d is DesignSystemSummary => Boolean(d));
     const pickedSet = new Set(picked.map((d) => d.id));
     const rest = designSystems
-      .filter((d) => !pickedSet.has(d.id))
+      .filter((d) => (d.status ?? 'published') !== 'draft' && !pickedSet.has(d.id))
       .sort((a, b) => {
         if (a.id === defaultDesignSystemId) return -1;
         if (b.id === defaultDesignSystemId) return 1;
@@ -2023,10 +2062,69 @@ function DesignSystemPicker({
     return () => window.clearTimeout(t);
   }, [open]);
 
+  // Anchor the portalled popover to the trigger, flipping above it when there
+  // isn't room below (e.g. the picker sits low in a short New Project modal).
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchor(null);
+      return undefined;
+    }
+    function updateAnchor() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewport = window.innerWidth;
+      const width = Math.max(280, rect.width);
+      const left = Math.max(8, Math.min(viewport - width - 8, rect.left));
+      const gap = 6;
+      const margin = 12;
+      const PREFERRED_MIN = 200;
+      const PREFERRED_MAX = 440;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+      const spaceAbove = rect.top - gap - margin;
+      // Open upward only when there's more room above and below is cramped.
+      // Either way the popover is sized to the room on the chosen side.
+      const openUp = spaceBelow < PREFERRED_MIN + 80 && spaceAbove > spaceBelow;
+      const available = openUp ? spaceAbove : spaceBelow;
+      // Clamp the fixed popover to the side's actual space. The PREFERRED_MIN
+      // is only honored when the side can fit it; when both sides are tighter
+      // than that (a very short window), forcing 200px here would push the
+      // popover past the viewport instead of letting the list scroll inside a
+      // smaller box. Floor at >= 0 so an off-screen trigger can't yield NaN.
+      const maxHeight = Math.max(0, Math.min(PREFERRED_MAX, available));
+      if (openUp) {
+        setAnchor({
+          bottom: window.innerHeight - rect.top + gap,
+          left,
+          width,
+          maxHeight,
+        });
+      } else {
+        setAnchor({
+          top: rect.bottom + gap,
+          left,
+          width,
+          maxHeight,
+        });
+      }
+    }
+    updateAnchor();
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    return () => {
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      // The popover is portalled outside `wrapRef`, so check it explicitly or
+      // every click inside the open list would dismiss the picker.
+      if (popoverRef.current?.contains(target)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2083,9 +2181,14 @@ function DesignSystemPicker({
   }
 
   return (
-    <div className="newproj-section ds-picker" data-testid="design-system-picker" ref={wrapRef}>
+    <div
+      className={`newproj-section ds-picker${open ? ' open' : ''}`}
+      data-testid="design-system-picker"
+      ref={wrapRef}
+    >
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2116,8 +2219,21 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && anchor && typeof document !== 'undefined'
+        ? createPortal(
+        <div
+          ref={popoverRef}
+          className="ds-picker-popover ds-picker-popover-portal"
+          role="listbox"
+          data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
+          style={{
+            top: anchor.top,
+            bottom: anchor.bottom,
+            left: anchor.left,
+            width: anchor.width,
+            maxHeight: anchor.maxHeight,
+          }}
+        >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2209,8 +2325,10 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>
-      ) : null}
+        </div>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }
@@ -2348,13 +2466,16 @@ function MediaProjectOptions(props:
     }
 ) {
   const t = useT();
+  const aihubmixImageModels = useAIHubMixImageModels();
+  const aihubmixVideoModels = useAIHubMixVideoModels();
+  const aihubmixAudioModels = useAIHubMixAudioModels();
 
   if (props.surface === 'image') {
     return (
       <div className="newproj-media-options">
         <MediaModelCards
           label={t('newproj.modelLabel')}
-          models={supportedModels('image', IMAGE_MODELS)}
+          models={supportedModels('image', mergeAihubmixModels(IMAGE_MODELS, aihubmixImageModels))}
           mediaProviders={props.mediaProviders}
           value={props.imageModel}
           onChange={props.onImageModel}
@@ -2373,7 +2494,7 @@ function MediaProjectOptions(props:
       <div className="newproj-media-options">
         <MediaModelCards
           label={t('newproj.modelLabel')}
-          models={supportedModels('video', VIDEO_MODELS)}
+          models={supportedModels('video', mergeAihubmixModels(VIDEO_MODELS, aihubmixVideoModels))}
           mediaProviders={props.mediaProviders}
           value={props.videoModel}
           onChange={props.onVideoModel}
@@ -2395,7 +2516,12 @@ function MediaProjectOptions(props:
     );
   }
 
-  const models = supportedModels('audio', AUDIO_MODELS_BY_KIND[props.audioKind]);
+  // AIHubMix's live catalogue is speech (TTS) only; music/sfx stay static.
+  const audioBase =
+    props.audioKind === 'speech'
+      ? mergeAihubmixModels(AUDIO_MODELS_BY_KIND.speech, aihubmixAudioModels)
+      : AUDIO_MODELS_BY_KIND[props.audioKind];
+  const models = supportedModels('audio', audioBase);
   const audioDurations = props.audioKind === 'sfx'
     ? SFX_AUDIO_DURATIONS_SEC
     : AUDIO_DURATIONS_SEC;
@@ -2441,9 +2567,9 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
-    video: new Set(['volcengine', 'hyperframes', 'grok']),
-    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']),
+    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
+    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
   return models.filter((model) => {
     const provider = findProvider(model.provider);
@@ -2478,6 +2604,8 @@ function MediaModelCards({
       providerId: string;
       providerLabel: string;
       status: 'configured' | 'integrated' | 'unsupported';
+      sortIndex: number;
+      sortPriority: number;
       models: MediaModel[];
     }> = [];
     for (const model of models) {
@@ -2485,9 +2613,7 @@ function MediaModelCards({
       const providerId = provider?.id ?? model.provider;
       if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
-      const configured =
-        provider?.credentialsRequired === false ||
-        isStoredMediaProviderEntryPresent(entry);
+      const configured = provider?.credentialsRequired !== false && isStoredMediaProviderEntryPresent(entry);
       let group = out.find((g) => g.providerId === providerId);
       if (!group) {
         group = {
@@ -2498,13 +2624,15 @@ function MediaModelCards({
             : provider?.integrated
               ? 'integrated'
               : 'unsupported',
+          sortIndex: out.length,
+          sortPriority: configured ? 0 : provider?.credentialsRequired === false ? 1 : 2,
           models: [],
         };
         out.push(group);
       }
       group.models.push(model);
     }
-    return out;
+    return out.sort((a, b) => a.sortPriority - b.sortPriority || a.sortIndex - b.sortIndex);
   }, [models, mediaProviders]);
 
   const selected = useMemo(() => {

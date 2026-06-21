@@ -6,6 +6,7 @@ import {
   trackRunFailedToastSurfaceView,
 } from '../analytics/events';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import { recordAmrEntry, type TrackingAmrEntrySource } from '../analytics/amr-attribution';
 
 export interface AmrGuidanceProps {
   errorCode: string;
@@ -14,6 +15,8 @@ export interface AmrGuidanceProps {
   conversationId: string | null;
   assistantMessageId: string;
   runId: string | null;
+  sourceDetail: TrackingAmrEntrySource;
+  metricsConsent?: boolean;
   // Switch the run to AMR and retry. The `ui_click` analytics event is fired
   // here first; the host performs the switch + arms the auto-retry.
   onActivate: () => void;
@@ -32,6 +35,8 @@ export function AmrGuidance({
   conversationId,
   assistantMessageId,
   runId,
+  sourceDetail,
+  metricsConsent = false,
   onActivate,
 }: AmrGuidanceProps) {
   const t = useT();
@@ -84,6 +89,9 @@ export function AmrGuidance({
               page_name: 'chat_panel',
               area: 'chat_panel',
               element: 'go_amr',
+            });
+            recordAmrEntry(analytics.track, sourceDetail, new Date(), {
+              metricsConsent,
             });
             onActivate();
           }}

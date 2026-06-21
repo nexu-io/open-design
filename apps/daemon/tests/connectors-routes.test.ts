@@ -631,13 +631,13 @@ describe('connector routes', () => {
     });
   });
 
-  it('surfaces nested Composio auth config creation errors', async () => {
+  it('returns custom auth guidance when preparing an unsupported managed Composio auth config', async () => {
     await closeServer();
     mockComposioFetch({
       authConfigs: [],
       createAuthConfigResponse: composioJson({
         error: {
-          message: 'Default auth config not found for toolkit "canvas".',
+          message: 'Default auth config not found for toolkit "twitter". Composio does not have managed credentials for this toolkit.',
           suggested_fix: 'Use type "use_custom_auth" with your own credentials.',
         },
       }, 400),
@@ -652,10 +652,102 @@ describe('connector routes', () => {
       body: JSON.stringify({ apiKey: 'cmp_test' }),
     });
 
-    const connect = await jsonFetch(`${baseUrl}/api/connectors/canvas/connect`, { method: 'POST' });
+    const prepare = await jsonFetch(`${baseUrl}/api/connectors/auth-configs/prepare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectorIds: ['twitter'] }),
+    });
 
-    expect(connect.status).toBe(502);
-    expect(connect.body.error.message).toBe('Default auth config not found for toolkit "canvas".');
+    expect(prepare.status).toBe(200);
+    expect(prepare.body.results.twitter).toEqual({
+      status: 'custom_required',
+      message: 'Twitter requires a custom Composio auth config. Create or enable a Twitter auth config in Composio with your own OAuth credentials, then retry this connection.',
+    });
+  });
+
+  it('rediscovers externally-created Composio auth configs after managed auth is unavailable', async () => {
+    await closeServer();
+    const authConfigs: JsonObject[] = [];
+    mockComposioFetch({
+      authConfigs,
+      createAuthConfigResponse: composioJson({
+        error: {
+          message: 'Default auth config not found for toolkit "twitter". Composio does not have managed credentials for this toolkit.',
+          suggested_fix: 'Use type "use_custom_auth" with your own credentials.',
+        },
+      }, 400),
+      linkResponse: { connected_account_id: 'ca_twitter', status: 'PENDING' },
+    });
+    composioConnectorProvider.clearDiscoveryCache();
+    const started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    server = started.server;
+    baseUrl = started.url;
+    await jsonFetch(`${baseUrl}/api/connectors/composio/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'cmp_test' }),
+    });
+
+    const firstPrepare = await jsonFetch(`${baseUrl}/api/connectors/auth-configs/prepare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectorIds: ['twitter'] }),
+    });
+    authConfigs.push({ id: 'ac_twitter_custom', status: 'ENABLED', toolkit: { slug: 'twitter' } });
+    const secondPrepare = await jsonFetch(`${baseUrl}/api/connectors/auth-configs/prepare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectorIds: ['twitter'] }),
+    });
+    const connect = await jsonFetch(`${baseUrl}/api/connectors/twitter/connect`, { method: 'POST' });
+
+    expect(firstPrepare.status).toBe(200);
+    expect(firstPrepare.body.results.twitter).toEqual({
+      status: 'custom_required',
+      message: 'Twitter requires a custom Composio auth config. Create or enable a Twitter auth config in Composio with your own OAuth credentials, then retry this connection.',
+    });
+    expect(secondPrepare.status).toBe(200);
+    expect(secondPrepare.body.results.twitter).toEqual({ status: 'ready', authConfigId: 'ac_twitter_custom' });
+    expect(connect.status).toBe(200);
+    expect(connect.body).toMatchObject({ auth: { kind: 'pending', providerConnectionId: 'ca_twitter' } });
+    expect(connect.body.connector).toMatchObject({ id: 'twitter', auth: { configured: true } });
+    expect(readComposioConfig().authConfigIds.twitter).toBe('ac_twitter_custom');
+    expect(lastComposioLinkRequest).toMatchObject({ auth_config_id: 'ac_twitter_custom' });
+    expect(composioDiscoveryRequestCounts).toEqual({ authConfigs: 2, createdAuthConfigs: 1, toolkits: 0, tools: 0 });
+  });
+
+  it('explains when a Composio connector requires a custom auth config', async () => {
+    await closeServer();
+    mockComposioFetch({
+      authConfigs: [],
+      createAuthConfigResponse: composioJson({
+        error: {
+          message: 'Default auth config not found for toolkit "twitter". Composio does not have managed credentials for this toolkit.',
+          suggested_fix: 'Use type "use_custom_auth" with your own credentials.',
+        },
+      }, 400),
+    });
+    composioConnectorProvider.clearDiscoveryCache();
+    const started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    server = started.server;
+    baseUrl = started.url;
+    await jsonFetch(`${baseUrl}/api/connectors/composio/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'cmp_test' }),
+    });
+
+    const connect = await jsonFetch(`${baseUrl}/api/connectors/twitter/connect`, { method: 'POST' });
+
+    expect(connect.status).toBe(409);
+    expect(connect.body.error.code).toBe('CONNECTOR_AUTH_CONFIG_REQUIRED');
+    expect(connect.body.error.message).toBe('Twitter requires a custom Composio auth config. Create or enable a Twitter auth config in Composio with your own OAuth credentials, then retry this connection.');
+    expect(connect.body.error.details).toMatchObject({
+      connectorId: 'twitter',
+      provider: 'composio',
+      reason: 'managed_auth_unavailable',
+      upstreamMessage: 'Default auth config not found for toolkit "twitter". Composio does not have managed credentials for this toolkit.',
+    });
   });
 
   it('rejects immediate Composio connections when account validation does not match the connector', async () => {

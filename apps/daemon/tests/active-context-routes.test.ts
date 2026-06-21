@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getActiveRoute, postActiveRoute } from '../src/active-context-routes.js';
+import { getActiveRoute, postActiveRoute } from '../src/routes/active-context.js';
 import { ACTIVE_CONTEXT_TTL_MS } from '../src/constants.js';
 
 interface MockStore {

@@ -137,10 +137,10 @@
       }
 
       /* ─── Typography ────────────────────────────────────────────
-       * Three-font hierarchy: display uses ABC Favorit (var(--font-
-       * display)) with aggressive negative tracking; body uses
-       * Inter (var(--font-body)); code uses Commit Mono (var(--font-
-       * mono)). Hierarchy comes from size + tracking, not weight —
+       * Three-font hierarchy: display uses ABC Favorit via the display
+       * font token with aggressive negative tracking; body uses Inter
+       * via the body font token; code uses Commit Mono via the mono
+       * font token. Hierarchy comes from size + tracking, not weight —
        * DESIGN.md §3 keeps weight at 400 / 500 / 600 only. */
       h1, h2, h3, h4 {
         font-family: var(--font-display);

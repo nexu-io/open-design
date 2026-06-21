@@ -9,7 +9,7 @@
 import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseFrontmatter } from "./frontmatter.js";
+import { parseFrontmatter } from "./design-systems/frontmatter.js";
 import type { SkillCritiquePolicy } from "./critique/rollout.js";
 import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 
@@ -24,6 +24,7 @@ import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 export const SKILL_ID_ALIASES = Object.freeze({
   "editorial-collage": "open-design-landing",
   "editorial-collage-deck": "open-design-landing-deck",
+  "taste-skill": "design-taste-frontend",
 });
 
 type SkillMode = "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";

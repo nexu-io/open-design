@@ -3,7 +3,10 @@
 @import './styles/design-system-flow.css';
 @import './styles/tokens.css';
 @import './styles/base.css';
+@import '../../../packages/components/src/styles.css';
 @import './styles/primitives.css';
+@import './styles/social-share.css';
+@import './styles/workspace/terminal.css';
 @import './styles/shell.css';
 @import './styles/chat.css';
 @import './styles/workspace/mention-home.css';
@@ -11,6 +14,7 @@
 @import './styles/workspace/connectors.css';
 @import './styles/workspace/drawer.css';
 @import './styles/workspace/design-files.css';
+@import './styles/workspace/design-browser.css';
 @import './styles/viewer/core.css';
 @import './styles/viewer/code.css';
 @import './styles/viewer/tools.css';
@@ -23,3 +27,5 @@
 @import './styles/viewer/plugin-rail.css';
 @import './styles/viewer/plugin-inputs.css';
 @import './styles/viewer/routines.css';
+@import './styles/modal-window-drag.css';
+@import './styles/entrance.css';

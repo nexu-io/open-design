@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { linuxRemovalStatusMessage } from "../lib/linux-helpers.js";
 
 describe("linux e2e helpers", () => {
-  it("delegates user-home resolution to node os.homedir", async () => {
+  it("[P1] delegates user-home resolution to node os.homedir", async () => {
     vi.resetModules();
     vi.doMock("node:os", () => ({ homedir: () => "/tmp/open-design-test-home" }));
 
@@ -16,7 +16,7 @@ describe("linux e2e helpers", () => {
     }
   });
 
-  it("surfaces skipped-process-running as a lifecycle cleanup diagnostic", () => {
+  it("[P1] surfaces skipped-process-running as a lifecycle cleanup diagnostic", () => {
     expect(linuxRemovalStatusMessage("appImage", "skipped-process-running")).toContain(
       "process remained running before removal",
     );

@@ -129,6 +129,41 @@ describe('deck bridge — nested slide markup (#1530)', () => {
     expect(state).toMatchObject({ active: 1, count: 3 });
   });
 
+  it('does not double-advance decks that listen for keyboard navigation on both window and document', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <section class="slide active">One</section>
+      <section class="slide">Two</section>
+      <section class="slide">Three</section>
+      <section class="slide">Four</section>
+    `);
+    const slides = Array.from(win.document.querySelectorAll('.slide'));
+    let active = 0;
+    function paint() {
+      slides.forEach((slide, index) => {
+        slide.classList.toggle('active', index === active);
+      });
+    }
+    function go(index: number) {
+      active = Math.max(0, Math.min(slides.length - 1, index));
+      paint();
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'ArrowRight') go(active + 1);
+      else if (event.key === 'ArrowLeft') go(active - 1);
+    }
+    win.addEventListener('keydown', onKey, true);
+    win.document.addEventListener('keydown', onKey, true);
+    paint();
+
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    const activeSlide = Array.from(win.document.querySelectorAll('.slide'))
+      .findIndex((slide) => slide.classList.contains('active'));
+    expect(activeSlide).toBe(1);
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 4 });
+  });
+
   it('scrolls documentElement when body looks horizontally scrollable in a sandboxed Simple Deck', async () => {
     const { win, parentPostMessage } = setupDeckBridge(`
       <style>

@@ -24,12 +24,46 @@ type StackEntry = {
 
 export function parseFrontmatter(src: string): { data: FrontmatterObject; body: string } {
   const text = src.replace(/^﻿/, '');
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
-  if (!match) return { data: {}, body: text };
-  const yaml = match[1] ?? '';
-  const body = match[2] ?? '';
+
+  let markerStart = -1;
+  if (text.startsWith('---\n')) {
+    markerStart = 4;
+  } else if (text.startsWith('---\r\n')) {
+    markerStart = 5;
+  } else {
+    return { data: {}, body: text };
+  }
+
+  let closeIndex = markerStart - 1;
+  while (true) {
+    closeIndex = text.indexOf('\n---', closeIndex + 1);
+    if (closeIndex === -1) {
+      return { data: {}, body: text };
+    }
+    const nextChar = text[closeIndex + 4];
+    if (nextChar === undefined || nextChar === '\n' || nextChar === '\r') {
+      break;
+    }
+  }
+
+  const hasCrBeforeDelimiter = text[closeIndex - 1] === '\r';
+  const yamlEnd = hasCrBeforeDelimiter ? closeIndex - 1 : closeIndex;
+  const yamlRaw = text.slice(markerStart, yamlEnd);
+  const yaml = yamlRaw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  let bodyStart = closeIndex + 4;
+  if (bodyStart < text.length) {
+    if (text.startsWith('\r\n', bodyStart)) {
+      bodyStart += 2;
+    } else if (text[bodyStart] === '\n' || text[bodyStart] === '\r') {
+      bodyStart += 1;
+    }
+  }
+
+  const body = text.slice(bodyStart);
   return { data: parseYamlSubset(yaml), body };
 }
+
 
 function parseYamlSubset(src: string): FrontmatterObject {
   const lines = src.split(/\r?\n/);
@@ -152,12 +186,19 @@ function parseYamlSubset(src: string): FrontmatterObject {
 function coerce(raw: string | undefined): FrontmatterValue {
   if (raw === undefined) return '';
   const v = raw.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+  // Require at least two characters so a lone quote (`"`), whose first and
+  // last char are the same, isn't mistaken for an empty quoted string.
+  if (
+    v.length >= 2 &&
+    ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+  ) {
     return v.slice(1, -1);
   }
   if (v === 'true') return true;
   if (v === 'false') return false;
   if (v === 'null' || v === '~') return null;
+  // Coerce base-10 numeric scalars to Number, matching the YAML 1.2 core-schema
+  // int/float resolution (including leading-zero decimals like `01234`).
   if (/^-?\d+$/.test(v)) return Number(v);
   if (/^-?\d*\.\d+$/.test(v)) return Number(v);
   return v;

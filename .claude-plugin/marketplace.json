@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/marketplace.json",
+  "name": "open-design",
+  "owner": {
+    "name": "nexu-io",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "description": "Open Design — local-first design app exposed to coding agents over MCP. Install once with your agent's plugin command and projects/files/skills are reachable through stdio.",
+  "plugins": [
+    {
+      "name": "open-design",
+      "source": "./plugins/open-design",
+      "description": "Open Design MCP server (stdio). 139 skills + projects/files/preview tools, served by your local `od` daemon. Requires `od` on PATH (brew / npm / DMG)."
+    }
+  ]
+}

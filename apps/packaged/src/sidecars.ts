@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, mkdir, open, type FileHandle } from "node:fs/promises";
+import { access, appendFile, mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -73,6 +73,7 @@ type ManagedSidecarChild = {
   child: ChildProcess;
   ipcPath: string;
   logHandle: FileHandle;
+  logPath: string;
 };
 
 type PackagedDaemonManagedPathEnv = {
@@ -372,7 +373,8 @@ async function spawnSidecarChild(options: {
     namespace: options.runtime.namespace,
     source: options.runtime.source,
   } satisfies SidecarStamp;
-  const logHandle = await openLog(logPathFor(options.paths, options.app));
+  const logPath = logPathFor(options.paths, options.app);
+  const logHandle = await openLog(logPath);
   const childEnv = createSidecarLaunchEnv({
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -407,10 +409,14 @@ async function spawnSidecarChild(options: {
     child.once("spawn", resolveSpawn);
   });
 
-  return { app: options.app, child, ipcPath, logHandle };
+  return { app: options.app, child, ipcPath, logHandle, logPath };
 }
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+  const appendLifecycleLog = async (message: string): Promise<void> => {
+    await appendFile(child.logPath, `${message}\n`, "utf8").catch(() => undefined);
+  };
+  await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
   try {
     await requestJsonIpc(child.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1200 });
   } catch {
@@ -418,9 +424,11 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   }
 
   if (!(await waitForProcessExit(child.child.pid, 5000))) {
+    await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
     await stopProcesses([child.child.pid]);
   }
 
+  await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
   await child.logHandle.close().catch(() => undefined);
 }
 
@@ -449,6 +457,15 @@ export async function startPackagedSidecars(
     webSidecarEntry: string | null;
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
+    /**
+     * Boot-progress hook, fired at each sidecar bring-up boundary: the
+     * `"-spawning"` edge just before a child is spawned, and the `"-ready"`
+     * edge once it reports a usable URL. The Electron entry forwards these to
+     * the splash status line so a slow cold boot shows which phase is underway
+     * (and visibly advances the step counter the moment each long native wait
+     * clears) instead of a frozen frame; headless callers omit it.
+     */
+    onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
   },
 ): Promise<PackagedSidecarHandle> {
   await mkdir(paths.namespaceRoot, { recursive: true });
@@ -464,6 +481,7 @@ export async function startPackagedSidecars(
   const children: ManagedSidecarChild[] = [];
 
   try {
+    options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
       entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
@@ -494,7 +512,9 @@ export async function startPackagedSidecars(
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    options.onPhase?.("daemon-ready");
 
+    options.onPhase?.("web-spawning");
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
       entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
@@ -515,6 +535,7 @@ export async function startPackagedSidecars(
       (status) => status.url != null,
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");
+    options.onPhase?.("web-ready");
 
     return {
       daemon: daemonStatus,

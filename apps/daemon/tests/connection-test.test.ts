@@ -6,6 +6,7 @@ import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
@@ -21,8 +22,9 @@ import {
   validateBaseUrlResolved,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
-import { listProviderModels } from '../src/providerModels.js';
+import { listProviderModels } from '../src/integrations/provider-models.js';
 import { startServer } from '../src/server.js';
+import { rememberLiveModels } from '../src/runtimes/models.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -35,6 +37,7 @@ interface StartedServer {
 const realFetch = globalThis.fetch;
 let baseUrl: string;
 let server: http.Server;
+const FAKE_VELA_FIXTURE = path.resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -86,12 +89,52 @@ async function withFakeAgent<T>(
   }
 }
 
+async function withOnlyFakeAgent<T>(
+  binName: string,
+  script: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-bin-'));
+  const oldPath = process.env.PATH;
+  const oldAgentHome = process.env.OD_AGENT_HOME;
+  const oldClaudeBin = process.env.CLAUDE_BIN;
+  try {
+    if (process.platform === 'win32') {
+      const runner = path.join(dir, `${binName}-test-runner.cjs`);
+      await fsp.writeFile(runner, script);
+      await fsp.writeFile(
+        path.join(dir, `${binName}.cmd`),
+        `@echo off\r\nnode "${runner}" %*\r\n`,
+      );
+    } else {
+      const bin = path.join(dir, binName);
+      await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+      await fsp.chmod(bin, 0o755);
+    }
+    process.env.PATH = dir;
+    process.env.OD_AGENT_HOME = dir;
+    delete process.env.CLAUDE_BIN;
+    return await run();
+  } finally {
+    process.env.PATH = oldPath;
+    if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+    else process.env.OD_AGENT_HOME = oldAgentHome;
+    if (oldClaudeBin === undefined) delete process.env.CLAUDE_BIN;
+    else process.env.CLAUDE_BIN = oldClaudeBin;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function withFakeCodex<T>(script: string, run: () => Promise<T>): Promise<T> {
   return withFakeAgent('codex', script, run);
 }
 
 async function withFakeClaude<T>(script: string, run: () => Promise<T>): Promise<T> {
   return withFakeAgent('claude', script, run);
+}
+
+async function withOnlyFakeOpenClaude<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withOnlyFakeAgent('openclaude', script, run);
 }
 
 async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promise<T> {
@@ -104,6 +147,10 @@ async function withFakeCursorAgent<T>(script: string, run: () => Promise<T>): Pr
 
 async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promise<T> {
   return withFakeAgent('deepseek', script, run);
+}
+
+async function withFakeKimi<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('kimi', script, run);
 }
 
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
@@ -1571,6 +1618,55 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('reports a helpful base URL error when Google Gemini is tested against Anthropic', async () => {
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'goog-key',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('invalid_base_url');
+    expect(String(body.detail ?? '')).toContain('generativelanguage.googleapis.com');
+  });
+
+  it('maps Google API key failures on HTTP 400 to auth_failed', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse(
+        {
+          error: {
+            code: 400,
+            message: 'API key not valid. Please pass a valid API key.',
+            status: 'INVALID_ARGUMENT',
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AQ.TestKeyForUnitTests01234567890123456789012',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('auth_failed');
+  });
+
   it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
@@ -1945,6 +2041,65 @@ describe('POST /api/test/connection provider mode', () => {
 });
 
 describe('POST /api/test/connection agent mode', () => {
+  it('uses the AMR profile-scoped remembered model during connection tests when no explicit model is selected', async () => {
+    rememberLiveModels('amr', [{ id: 'local-scoped-model', label: 'local-scoped-model' }], 'local');
+
+    await withFakeAgent(
+      'vela',
+      `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'amr',
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+            },
+          },
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'AMR',
+          sample: 'Hello from fake vela.',
+        });
+      },
+    );
+  });
+
+  it('resolves the AMR connection-test scope from the merged launch env', async () => {
+    rememberLiveModels('amr', [{ id: 'local-env-model', label: 'local-env-model' }], 'local');
+    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+    process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
+
+    try {
+      await withFakeAgent(
+        'vela',
+        `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'amr',
+            agentCliEnv: {
+              amr: {
+                VELA_BIN: '/tmp/fake-vela-bin',
+              },
+            },
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'AMR',
+            sample: 'Hello from fake vela.',
+          });
+        },
+      );
+    } finally {
+      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
+      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
+    }
+  });
+
   it('reports success for a fake Codex agent response', async () => {
     await withFakeCodex(
       `
@@ -1986,11 +2141,9 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // CODEX_API_KEY only flows through when the user has also
-          // configured a custom OPENAI_BASE_URL — i.e. they intend to
-          // authenticate Codex CLI against a third-party gateway. Without
-          // the base URL, spawnEnvForAgent strips the credential so Codex
-          // CLI's own `codex login` wins (issue #2420).
+          // Settings -> Local CLI -> Advanced is an explicit low-level CLI
+          // env override. API keys configured there are passed to the child,
+          // while unrelated env keys remain filtered by app-config allowlists.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -2031,11 +2184,15 @@ setImmediate(() => process.exit(0));
     }
   });
 
-  it('strips stale Codex API keys when no custom OPENAI_BASE_URL is configured', async () => {
+  it('preserves inherited Codex API keys during connection tests', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-strip-'));
     const envFile = path.join(markerDir, 'env.json');
     const codexHome = path.join(markerDir, 'codex-home');
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    const previousCodexKey = process.env.CODEX_API_KEY;
     try {
+      process.env.OPENAI_API_KEY = 'sk-inherited-openai';
+      process.env.CODEX_API_KEY = 'sk-inherited-codex';
       await withFakeCodex(
         `
 const fs = require('node:fs');
@@ -2048,12 +2205,8 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // Simulates the user flow that triggered issue #2420: a stale
-          // BYOK OPENAI_API_KEY sat in agentCliEnv.codex from a previous
-          // session, the user cleared the BYOK dialog (which doesn't
-          // touch agentCliEnv) and switched back to Local CLI. Without
-          // an OPENAI_BASE_URL the daemon must keep the secret out of
-          // the spawn so Codex CLI's own `codex login` wins.
+          // These keys come from the process environment, not Open Design
+          // BYOK/agentCliEnv. Preserve them so local CLI API-key auth works.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -2063,8 +2216,6 @@ setImmediate(() => process.exit(0));
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
-                  OPENAI_API_KEY: 'sk-stale-byok',
-                  CODEX_API_KEY: 'sk-stale-byok',
                 },
               },
             }),
@@ -2078,13 +2229,150 @@ setImmediate(() => process.exit(0));
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
-              OPENAI_API_KEY: null,
-              CODEX_API_KEY: null,
+              OPENAI_API_KEY: 'sk-inherited-openai',
+              CODEX_API_KEY: 'sk-inherited-codex',
             }),
           );
         },
       );
     } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+      if (previousCodexKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = previousCodexKey;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets configured Codex API credentials override inherited auth during connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-api-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    const previousCodexKey = process.env.CODEX_API_KEY;
+    try {
+      process.env.OPENAI_API_KEY = 'sk-inherited-openai';
+      process.env.CODEX_API_KEY = 'sk-inherited-codex';
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
+}));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              agentCliEnv: {
+                codex: {
+                  OPENAI_API_KEY: 'sk-configured-openai',
+                  CODEX_API_KEY: 'sk-configured-codex',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              OPENAI_API_KEY: 'sk-configured-openai',
+              CODEX_API_KEY: 'sk-configured-codex',
+              OPENAI_BASE_URL: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+      if (previousCodexKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = previousCodexKey;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets configured Claude API credentials override inherited auth during connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-claude-api-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const previousKey = process.env.ANTHROPIC_API_KEY;
+    const previousToken = process.env.ANTHROPIC_AUTH_TOKEN;
+    try {
+      process.env.ANTHROPIC_API_KEY = 'sk-inherited-stale';
+      process.env.ANTHROPIC_AUTH_TOKEN = 'sk-inherited-token';
+      await withFakeClaude(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || null,
+  ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || null,
+  ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || null,
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'claude',
+              agentCliEnv: {
+                claude: {
+                  ANTHROPIC_API_KEY: 'sk-configured',
+                  ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Claude Code',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              ANTHROPIC_API_KEY: 'sk-configured',
+              ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
+              ANTHROPIC_BASE_URL: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previousKey;
+      if (previousToken === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+      else process.env.ANTHROPIC_AUTH_TOKEN = previousToken;
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });
@@ -2197,6 +2485,225 @@ process.stdin.on('end', () => {
         });
       },
     );
+  });
+
+  it('accepts Claude smoke tests that completed cleanly before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: 'ok',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when a successful result is followed by a different termination', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: 'ok',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(137);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(137);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when assistant end_turn is followed by exit 1 without a result frame', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when the result frame reports an error before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'tool failed',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when the result subtype reports an execution error before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  result: 'tool failed',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('preserves ANTHROPIC_API_KEY when Claude adapter launches the OpenClaude fallback', async () => {
+    const envFile = path.join(os.tmpdir(), `od-openclaude-env-${Date.now()}-${Math.random()}.json`);
+    const previousKey = process.env.ANTHROPIC_API_KEY;
+    try {
+      process.env.ANTHROPIC_API_KEY = 'sk-openclaude-test';
+      await withOnlyFakeOpenClaude(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || null,
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+        async () => {
+          const result = await testAgentConnection({ agentId: 'claude' });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Claude Code',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({ ANTHROPIC_API_KEY: 'sk-openclaude-test' }),
+          );
+          expect(result.diagnostics?.binaryPath ?? '').toMatch(/openclaude/i);
+        },
+      );
+    } finally {
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previousKey;
+      await fsp.rm(envFile, { force: true });
+    }
   });
 
   it('returns Claude /login guidance when the spawned CLI cannot authenticate', async () => {
@@ -2522,6 +3029,71 @@ setTimeout(() => process.exit(0), 50);
     );
   });
 
+  it('reports outdated OpenCode CLI argument failures with update guidance', async () => {
+    const expectedDetail =
+      'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.error('opencode');
+console.error('Usage: opencode [options] [command]');
+console.error('Options:');
+console.error('  --help  Show help');
+console.error('incompatible opencode args');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+          detail: expectedDetail,
+        });
+      },
+    );
+  });
+
+  it('preserves unrelated OpenCode missing-required failures', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.error('missing required environment variable OPENAI_API_KEY');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json() as { detail?: string };
+        expect(body).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+        });
+        expect(body.detail).toContain('missing required environment variable OPENAI_API_KEY');
+        expect(body.detail).not.toContain('OpenCode CLI appears to be outdated');
+      },
+    );
+  });
+
   it('launches OpenCode connection tests with 1.3-compatible JSON stdin args', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
@@ -2575,6 +3147,9 @@ process.stdin.on('end', () => {
               'json',
               '-m',
               'github-copilot/gpt-4o',
+              '--pure',
+              '--title',
+              'Connection test',
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
@@ -2582,6 +3157,110 @@ process.stdin.on('end', () => {
       );
     } finally {
       await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('launches Kimi connection tests without the legacy acp positional arg', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    try {
+      await withFakeKimi(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+if (args.includes('acp')) {
+  console.error('error: too many arguments. Expected 0 arguments but got 1.');
+  process.exit(1);
+}
+const promptIndex = args.indexOf('-p');
+if (promptIndex === -1 || args[promptIndex + 1] !== 'Reply with only: ok') {
+  console.error('missing connection-test prompt');
+  process.exit(1);
+}
+const outputFormatIndex = args.indexOf('--output-format');
+if (outputFormatIndex === -1 || args[outputFormatIndex + 1] !== 'stream-json') {
+  console.error('missing --output-format stream-json');
+  process.exit(1);
+}
+console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'kimi',
+              model: 'moonshot-v1-32k',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Kimi CLI',
+            model: 'moonshot-v1-32k',
+            sample: 'ok',
+          });
+
+          await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
+            JSON.stringify([
+              '-p',
+              'Reply with only: ok',
+              '--output-format',
+              'stream-json',
+              '--model',
+              'moonshot-v1-32k',
+            ]),
+          );
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
+    const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
+    const oldPath = process.env.PATH;
+    try {
+      if (process.platform === 'win32') {
+        await fsp.writeFile(path.join(gitDir, 'git.cmd'), '@echo off\r\nexit /b 1\r\n');
+      } else {
+        const gitBin = path.join(gitDir, 'git');
+        await fsp.writeFile(gitBin, '#!/bin/sh\nexit 1\n');
+        await fsp.chmod(gitBin, 0o755);
+      }
+      process.env.PATH = `${gitDir}${path.delimiter}${oldPath ?? ''}`;
+
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+            sample: 'ok',
+          });
+        },
+      );
+    } finally {
+      process.env.PATH = oldPath;
+      await fsp.rm(gitDir, { recursive: true, force: true });
     }
   });
 
@@ -2844,6 +3523,18 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
       await withFakeCodex(
         `
 const fs = require('node:fs');
+if (process.argv[2] === '--version') {
+  console.log('codex-cli 9.9.9');
+  process.exit(0);
+}
+if (process.argv[2] === 'debug' && process.argv[3] === 'models') {
+  console.log(JSON.stringify({ models: [] }));
+  process.exit(0);
+}
+if (process.argv[2] === 'login' && process.argv[3] === 'status') {
+  console.log('Logged in using ChatGPT');
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.on('SIGTERM', () => {
   fs.writeFileSync(${JSON.stringify(termFile)}, 'term');

@@ -151,6 +151,32 @@
 2. `filters user design systems by draft and published status in the manager`
 3. `deleting the active design system falls back to another user system`
 
+### 10. main 最新功能回归补测
+
+文件：
+- [e2e/ui/project-management-flows.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/project-management-flows.test.ts)
+- [e2e/ui/amr-onboarding.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/amr-onboarding.test.ts)
+- [e2e/ui/app-manual-edit.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/app-manual-edit.test.ts)
+- [e2e/ui/settings-api-protocol.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/settings-api-protocol.test.ts)
+
+新增用例：
+
+1. `projects empty state create action opens the new project flow`
+   - 覆盖空项目页 CTA 能正确拉起创建流程
+
+2. `project header keeps the settings, handoff, and avatar controls pinned on compact desktop widths`
+   - 覆盖紧凑桌面宽度下项目头部右侧控制区不被挤掉
+
+3. `onboarding AMR card lets the user pick a live runtime model before continuing`
+   - 覆盖 onboarding 场景下 AMR 运行时卡片、模型选择与持久化
+
+4. `simple deck keeps the active slide stable across preview mode switches`
+   - 覆盖 Simple Deck 在 Preview / Code 切换后的导航状态稳定性
+
+5. `BYOK fetched models are searchable inside the Settings model dropdown`
+   - 覆盖大模型目录下 BYOK 模型下拉内搜索
+   - 直接锁住 #3262 的高风险交互面
+
 ## 当前覆盖对应的产品结论
 
 这批用例重点拦住的是下面这些历史高频回归：
@@ -214,6 +240,25 @@ pnpm exec playwright test -c playwright.config.ts ui/diagnostics-export.test.ts
 pnpm exec playwright test -c playwright.config.ts ui/automations-page.test.ts --grep "places a newly created automation at the top of the list and highlights it|keeps saved automations ordered by newest createdAt first|renders the routine target and last-run status in the row summary"
 ```
 
+
+### main 最新功能回归补测
+
+```bash
+pnpm exec playwright test -c playwright.config.ts ui/project-management-flows.test.ts --grep "projects empty state create action opens the new project flow|project header keeps the settings, handoff, and avatar controls pinned on compact desktop widths"
+```
+
+```bash
+pnpm exec playwright test -c playwright.config.ts ui/amr-onboarding.test.ts --grep "onboarding AMR card lets the user pick a live runtime model before continuing"
+```
+
+```bash
+pnpm exec playwright test -c playwright.config.ts ui/app-manual-edit.test.ts --grep "simple deck keeps the active slide stable across preview mode switches"
+```
+
+```bash
+pnpm exec playwright test -c playwright.config.ts ui/settings-api-protocol.test.ts --grep "BYOK fetched models are searchable inside the Settings model dropdown"
+```
+
 ### Connectors：happy path + recovery
 
 ```bash
@@ -275,7 +320,7 @@ pnpm exec playwright test -c playwright.config.ts ui/design-systems-manager.test
 
 ## 新增 daemon 契约回归
 
-这批 launch review 补测不只停留在 Playwright。对于前端 E2E 无法替代的契约层问题，当前已补 5 条 daemon 定向回归。
+这批 launch review 补测不只停留在 Playwright。对于前端 E2E 无法替代的契约层问题，当前已补 10 条 daemon 定向回归。
 
 ### 1. Diagnostics 导出路径与缺失日志清单
 
@@ -347,6 +392,86 @@ pnpm exec playwright test -c playwright.config.ts ui/design-systems-manager.test
      - `generated-plugin/SKILL.md`
    - daemon 会把本轮转成 `failed`，而不是错误地保留 `succeeded`
 
+2. `allows plugin authoring to succeed when the requested generated-plugin artifacts exist before close`
+   - 覆盖同一条 guard 的对称路径：只要关键插件产物已经落地，就不会被误伤成失败
+   - 锁住 daemon 的判断是“缺少目标产物才失败”，而不是“只要文本看起来像计划句就失败”
+
+
+### 6. Grok Build prompt inline argv 契约
+
+文件：
+- [apps/daemon/tests/runtimes/agent-args.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/tests/runtimes/agent-args.test.ts)
+- [apps/daemon/src/runtimes/defs/grok-build.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/src/runtimes/defs/grok-build.ts)
+
+新增覆盖：
+
+1. `grok-build inlines the prompt as -p <value> and never falls back to stdin sentinels`
+   - 覆盖近期 `grok-build` 适配器从 stdin 路径切到 `-p <PROMPT>` 的真实契约
+   - 明确要求：
+     - `promptViaStdin = false`
+     - argv 中必须带 `-p` 与 prompt 正文
+     - 不能出现旧的 `-` stdin 哨兵
+   - 防止后续 refactor 把 Grok Build 又错误退回到 stdin / 占位符路径
+
+### 7. AMR login/status 同源配置契约
+
+文件：
+- [apps/daemon/tests/integrations/vela.routes.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/tests/integrations/vela.routes.test.ts)
+
+新增覆盖：
+
+1. `uses the same Settings-configured AMR env for login and subsequent status reads`
+   - 覆盖 `/api/integrations/vela/login` 与 `/api/integrations/vela/status` 都必须使用同一份 `agentCliEnv.amr`
+   - 避免终端里的 `vela` 已登录，但 Open Design 因配置源不一致读成未登录
+
+### 8. queued run 取消的终态语义
+
+文件：
+- [apps/daemon/tests/runs.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/tests/runs.test.ts)
+
+新增覆盖：
+
+1. `cancels a queued run immediately without waiting for child process shutdown`
+   - 覆盖 queued run 在尚未启动子进程时被取消的路径
+   - 要求 run 立即进入 `canceled` 终态、发出 `end` 事件并解析 waiter，而不是悬挂在 active 状态
+
+### 9. /api/agents 的 AMR live model discovery 不得回退假默认
+
+文件：
+- [apps/daemon/tests/runtimes/env-and-detection.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/tests/runtimes/env-and-detection.test.ts)
+
+新增覆盖：
+
+1. `detectAgents prefers configured AMR live models over stale fallback defaults`
+   - 覆盖 `detectAgents({ amr: { VELA_BIN, VELA_OPENCODE_BIN } })` 走真实 live catalog
+   - 要求 `modelsSource = live` 且返回归一化后的可运行模型 id
+   - 明确禁止回退到 `default` / 旧的 `gpt-5.4-mini` 伪默认模型
+
+### 10. retry 复用已有 assistant message 行而不是复制新行
+
+文件：
+- [apps/daemon/tests/chat-route.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/tests/chat-route.test.ts)
+
+新增覆盖：
+
+1. `reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied`
+   - 覆盖 retry / 续跑场景下显式传入 `assistantMessageId` 时，daemon 会复用原有 assistant message 行
+   - 要求同一 `conversation_id` 下该 assistant message 仍然只有一条记录
+   - 新输出会回填到原行，而不是额外插入一条新的 assistant message
+
+### 已覆盖的 artifact quiet-period / watchdog 收尾
+
+文件：
+- [apps/daemon/tests/chat-run-artifact-quiet-period.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon/tests/chat-run-artifact-quiet-period.test.ts)
+
+现有覆盖已经锁住：
+
+- `returns succeeded when the watchdog-initiated quiet-period SIGTERM fires`
+- `returns succeeded when the watchdog quiet-period escalates to SIGKILL`
+- `returns failed when SIGTERM/SIGKILL arrive but no quiet-period shutdown was requested`
+
+这部分本轮没有重复补新测试，避免和现有专用回归重叠。
+
 ### daemon 定向运行命令
 
 仓库根目录：
@@ -356,7 +481,19 @@ cd /Users/mac/open-design/open-design-amr-runtime-acp/apps/daemon
 ```
 
 ```bash
-pnpm exec vitest run tests/chat-route.test.ts tests/diagnostics-export.test.ts tests/projects-routes.test.ts tests/runs.test.ts tests/amr-acp-integration.test.ts tests/runtimes/env-and-detection.test.ts tests/runtimes/resolve-model.test.ts
+pnpm exec vitest run tests/chat-route.test.ts tests/diagnostics-export.test.ts tests/projects-routes.test.ts tests/runs.test.ts tests/amr-acp-integration.test.ts tests/runtimes/env-and-detection.test.ts tests/runtimes/resolve-model.test.ts tests/runtimes/agent-args.test.ts --testNamePattern "grok-build inlines the prompt as -p <value> and never falls back to stdin sentinels"
+```
+
+```bash
+pnpm exec vitest run tests/integrations/vela.routes.test.ts tests/runs.test.ts --testNamePattern "uses the same Settings-configured AMR env for login and subsequent status reads|cancels a queued run immediately without waiting for child process shutdown"
+```
+
+```bash
+pnpm exec vitest run tests/chat-run-artifact-quiet-period.test.ts tests/runtimes/env-and-detection.test.ts --testNamePattern "detectAgents prefers configured AMR live models over stale fallback defaults|returns succeeded when the watchdog-initiated quiet-period SIGTERM fires|returns failed when SIGTERM/SIGKILL arrive but no quiet-period shutdown was requested"
+```
+
+```bash
+pnpm exec vitest run tests/chat-route.test.ts --testNamePattern "reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied"
 ```
 
 ## 这批 daemon 补测当前没有覆盖的点
@@ -364,13 +501,13 @@ pnpm exec vitest run tests/chat-route.test.ts tests/diagnostics-export.test.ts t
 下面这些仍然值得继续补，但这轮没有为了追求数量硬塞进去：
 
 1. AMR / agent 运行结束态收敛
-   - 例如“工作完成但没有 terminal event，最后被 watchdog 打成 failed”
-   - 例如“有有效产物但收尾阶段卡住”的 terminal-state 修正
+   - quiet-period / watchdog 的 close-status 分流已经有专用测试文件锁住
+   - 更深一层仍可继续补“真实 HTTP live-artifact create 后收尾成功”的整链回归
 
 2. AMR auth / model discovery 的更完整契约
-   - 例如 auth probe 与真实 launch path / env 必须同源
-   - 例如 live models 成功时不能回退到假默认模型
+   - 已补 login/status 同源配置，以及 `/api/agents` 的 live catalog 不回退假默认
+   - 更深一层仍可继续补 live model discovery 与运行时 launch path 的完全同源
 
-3. queued / retry 的持久化语义
-   - 前端行为已覆盖
-   - daemon 侧仍可继续锁住 message 关联和队列启动顺序
+3. queued / retry 的更深层持久化语义
+   - 前端行为已覆盖，daemon 侧已补 queued run 取消终态
+   - 仍可继续锁住 retry 的 message 关联和队列启动顺序

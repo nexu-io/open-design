@@ -11,7 +11,7 @@
 **中文文档:** [README.zh-CN.md](README.zh-CN.md)
 **English:** [README.md](README.md)
 
-![html-ppt — capa com previews ao vivo](docs/readme/hero.gif)
+![html-ppt — capa com previews ao vivo](https://repo-assets.open-design.ai/resources/images/design-templates/html-ppt/hero.gif)
 
 > Um comando instala **36 temas × 20 canvas FX × 31 layouts × 15 decks completos + modo apresentador**. Cada preview acima é um iframe ao vivo de um arquivo de template real renderizando dentro do deck — sem screenshots, sem mock-ups.
 

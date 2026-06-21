@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@open-design/components';
 
 import { Icon } from './Icon';
 
@@ -69,14 +70,14 @@ export function MissingBrandFontsBanner({
       </span>
       <div className="ds-warning-card-actions">
         {onUploadAssets ? (
-          <button type="button" className="ghost compact" onClick={onUploadAssets}>
+          <Button variant="ghost" className="compact" onClick={onUploadAssets}>
             <Icon name="upload" size={13} />
             Upload fonts
-          </button>
+          </Button>
         ) : null}
-        <button type="button" className="ghost compact" onClick={useSystemFonts}>
+        <Button variant="ghost" className="compact" onClick={useSystemFonts}>
           Use system fonts
-        </button>
+        </Button>
       </div>
     </div>
   );

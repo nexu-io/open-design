@@ -55,7 +55,12 @@
             "entry":  { "type": "string" },
             "poster": { "type": "string" },
             "video":  { "type": "string" },
-            "gif":    { "type": "string" }
+            "gif":    { "type": "string" },
+            "motion": {
+              "type": "string",
+              "enum": ["scroll", "deck", "static"],
+              "description": "How the gallery should capture this HTML preview's hover clip: 'scroll' = vertical-scroll landing page (pan top->bottom), 'deck' = horizontal slideshow (walk slides), 'static' = single fixed screen (hold its in-place animation). Omit to auto-detect from the page's scroll height."
+            }
           },
           "additionalProperties": true
         },

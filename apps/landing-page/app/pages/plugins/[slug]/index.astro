@@ -13,7 +13,11 @@
  * not the folder name. Manifest ids are globally unique within the
  * registry so there's no risk of collision across buckets.
  */
+import { getCollection, render } from 'astro:content';
 import Layout from '../../../_components/sub-page-layout.astro';
+import SystemPreview from '../../../_components/system-preview.astro';
+import SystemCard from '../../../_components/system-card.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import {
   getDetailPlugins,
   resolveBundledDescription,
@@ -21,7 +25,10 @@ import {
   type BundledPluginRecord,
 } from '../../../_lib/bundled-plugins';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
-import { localeFromPath, localizedHref } from '../../../i18n';
+import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
+import { getSystemRecords, type SystemRecord } from '../../../_lib/catalog';
+import { getSystemTokens, type SystemTokens } from '../../../_lib/system-tokens';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
   return getDetailPlugins().map((plugin) => ({
@@ -44,13 +51,6 @@ const pcopy = getPluginsCopy(locale);
 // the per-locale lookup happens here.
 const pluginTitle = resolveBundledTitle(plugin, locale);
 const pluginDescription = resolveBundledDescription(plugin, locale);
-// `community` plugins carry a non-localized label: the i18n bucket map only
-// covers the _official buckets, so narrow before indexing it.
-const bucketLabel =
-  plugin.bucket === 'community'
-    ? 'Community'
-    : pcopy.detailBucketLabel[plugin.bucket];
-
 /*
  * Author normalisation. First-party manifests authored by Open Design
  * point at the org URL (`https://github.com/nexu-io`) — fine for the
@@ -67,8 +67,128 @@ const authorUrl = plugin.authorUrl
   ? (ORG_TO_REPO[plugin.authorUrl.replace(/\/$/, '')] ?? plugin.authorUrl)
   : undefined;
 
-const title = `${pluginTitle} · Open Design plugin`;
-const description = pluginDescription;
+/*
+ * Design-system detail pages target the "[brand] design system" search
+ * cluster (e.g. "stripe design system", "vercel design system" — low KD,
+ * long-tail across the ~142 systems). Their manifest title is the bare
+ * brand name ("Stripe"), so weave the category keyword into the SEO title
+ * + H1; every other bucket keeps the generic plugin framing.
+ */
+const isDesignSystem = plugin.bucket === 'design-systems';
+const headingTitle = isDesignSystem
+  ? `${pluginTitle} ${pcopy.detailSystemLabel}`
+  : pluginTitle;
+const title = isDesignSystem
+  ? `${pluginTitle} ${pcopy.detailSystemLabel} — ${pcopy.detailSystemTitleSuffix}`
+  : `${pluginTitle} · Open Design plugin`;
+// Lead the meta description with the keyword ("<Brand> design system —") then
+// the system's own unique tagline, so every page stays distinct AND on-keyword.
+const description = isDesignSystem
+  ? `${pluginTitle} ${pcopy.detailSystemLabel} — ${pluginDescription}`
+  : pluginDescription;
+const keywords = isDesignSystem ? pcopy.detailSystemKeywords(pluginTitle) : undefined;
+
+const ui = getLandingUiCopy(locale);
+/*
+ * For design-system plugins, pull the DESIGN.md-derived SystemRecord so
+ * the detail page carries real brand substance — palette swatches, the
+ * visual theme, and related systems. The manifest alone (a one-line
+ * tagline + poster) is too thin to be the "last click" for a
+ * "[brand] design system" search. Matched by shared folder slug; reuse
+ * the same copy keys the legacy /systems/<slug>/ page used so every
+ * locale is already covered.
+ */
+const allSystems: ReadonlyArray<SystemRecord> = isDesignSystem
+  ? await getSystemRecords(locale)
+  : [];
+const systemRecord: SystemRecord | null = isDesignSystem
+  ? (allSystems.find((s) => s.slug === plugin.slug) ?? null)
+  : null;
+const relatedSystems: ReadonlyArray<SystemRecord> = systemRecord
+  ? allSystems
+      .filter(
+        (s) => s.slug !== systemRecord.slug && s.category === systemRecord.category,
+      )
+      .slice(0, 4)
+  : [];
+
+/*
+ * Structured design tokens. Each bundled design system ships a
+ * `design-tokens.json` conforming to the canonical TOKEN_SCHEMA contract
+ * (packages/contracts/src/design-systems/token-schema.ts) — the same shape
+ * the in-product brand kit (PR #4260's Brand) and the agent's theming layer
+ * read. The detail page previously ignored it and only showed regex-scraped
+ * hex values; here we render the real grouped token spec sheet.
+ */
+const systemTokens: SystemTokens | null = systemRecord
+  ? getSystemTokens(systemRecord.slug)
+  : null;
+
+const hasPreview = !!(systemRecord && systemRecord.palette.length > 0);
+
+/*
+ * Render the full DESIGN.md body for design-system pages. The manifest
+ * carries only a one-line tagline; the real substance (color roles,
+ * typography, components, layout, do's & don'ts, agent prompt guide)
+ * lives in the DESIGN.md content collection. Matched by the same folder
+ * slug the SystemRecord uses (`entry.id` is `<slug>/DESIGN`). The
+ * leading `# ...` heading is hidden via CSS so the page keeps a single
+ * H1 (the brand "<X> design system" title above).
+ */
+/*
+ * Prefer the localized body `DESIGN-<locale>.md` for the curated subset that
+ * ships one, and fall back to the English `DESIGN.md` for every other
+ * system/locale. English pages always use the canonical entry.
+ *
+ * Astro's glob loader lowercases ids and drops dots, so `DESIGN.md` →
+ * `<slug>/design` and `DESIGN-zh.md` → `<slug>/design-zh` (the hyphen
+ * survives — hence the hyphen convention rather than `DESIGN.<locale>.md`).
+ */
+const systemEntries = isDesignSystem ? await getCollection('systems') : [];
+const enEntryId = `${plugin.slug}/design`;
+const localeEntryId = `${plugin.slug}/design-${locale}`;
+const systemEntry = isDesignSystem
+  ? (locale !== 'en'
+      ? systemEntries.find((e) => e.id === localeEntryId)
+      : undefined) ?? systemEntries.find((e) => e.id === enEntryId)
+  : undefined;
+const SystemContent = systemEntry ? (await render(systemEntry)).Content : null;
+
+/*
+ * In-page anchor nav for the (long, dense) design-system detail page.
+ * Only emits anchors for sections that actually render, so the nav never
+ * points at a missing target.
+ */
+const detailToc: ReadonlyArray<{ id: string; label: string }> = isDesignSystem
+  ? [
+      hasPreview ? { id: 'preview', label: pcopy.detailTocPreview } : null,
+      systemTokens ? { id: 'tokens', label: pcopy.detailTocTokens } : null,
+      SystemContent ? { id: 'guide', label: pcopy.detailTocGuide } : null,
+      relatedSystems.length > 0 ? { id: 'related', label: pcopy.detailTocRelated } : null,
+    ].filter((x): x is { id: string; label: string } => x !== null)
+  : [];
+
+/*
+ * Hierarchical breadcrumb (Plugin library › <category> › <item>). The
+ * middle crumb is the real catalog the item lives in, so every level is
+ * clickable back up the tree — design systems → /plugins/systems/,
+ * templates (categorize !== null) → /plugins/templates/, instruction
+ * skills (categorize === null) → /plugins/skills/. This replaces both
+ * the old standalone back link and the redundant small-caps eyebrow.
+ */
+const category = isDesignSystem
+  ? null
+  : categorizePlugin(bundledRecordOf(plugin));
+const crumbHref = isDesignSystem
+  ? '/plugins/systems/'
+  : category
+    ? '/plugins/templates/'
+    : '/plugins/skills/';
+const crumbLabel = isDesignSystem
+  ? pcopy.tileSystems
+  : category
+    ? pcopy.tileTemplates
+    : pcopy.tileSkills;
 
 /*
  * Share-dialog copy. The English template stays as a fallback inside
@@ -104,21 +224,38 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pluginTitle}</span>
-  </nav>
-
-  <article class="detail">
+<Layout
+  title={title}
+  description={description}
+  active="plugins"
+  jsonLd={jsonLd}
+  keywords={keywords}
+  localeCanonicalOnly={!isDesignSystem}
+  suppressLocaleAutoRedirect={isDesignSystem}
+>
+  <article class:list={['detail', isDesignSystem && 'detail-ds']}>
+    {isDesignSystem && detailToc.length > 1 && (
+      <aside class="detail-rail">
+        <nav aria-label={pcopy.detailTocLabel}>
+          <span class="detail-rail-label">{pcopy.detailTocLabel}</span>
+          <ul>
+            {detailToc.map((t) => (
+              <li><a href={`#${t.id}`}>{t.label}</a></li>
+            ))}
+          </ul>
+        </nav>
+      </aside>
+    )}
+    <div class="detail-main">
     <header class="detail-head">
-      <span class="label">
-        {pcopy.hubLabel} · {bucketLabel}
-      </span>
-      <h1 class="display">{pluginTitle}<span class="dot">.</span></h1>
+      <nav class="label detail-crumb" aria-label={pcopy.breadcrumbLabel}>
+        <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+        <span class="crumb-sep" aria-hidden="true">·</span>
+        <a href={href(crumbHref)}>{crumbLabel}</a>
+        <span class="crumb-sep" aria-hidden="true">·</span>
+        <span aria-current="page">{pluginTitle}</span>
+      </nav>
+      <h1 class="display">{headingTitle}<span class="dot">.</span></h1>
       <p class="lead">{description}</p>
       <div class="detail-actions">
         <a class="btn btn-primary" href="https://github.com/nexu-io/open-design/releases" target="_blank" rel="noopener">
@@ -128,27 +265,43 @@ const jsonLd = [
           {pcopy.detailFindOnGithub}
         </a>
         {/*
-         * The Homepage CTA was removed per product feedback: surfacing the
-         * upstream / author homepage on a marketing detail page led visitors
-         * away from Open Design before they explored the plugin in-app. The
-         * `plugin.homepage` field stays in the manifest reader so other
-         * surfaces (the in-app catalog, JSON-LD, future authored bios) can
-         * still consume it; the marketing CTA is the only call site that
-         * removed it. The unused `pcopy.detailHomepage` i18n key stays for
-         * the same reason — it's `Partial<>` everywhere and removing it
-         * would touch 18 locale blocks for no functional gain.
+         * Homepage CTA intentionally omitted (it led visitors off-site before
+         * exploring the plugin). Share is an icon-only utility button so the
+         * header keeps just two text actions — Use + Source.
          */}
         <button
           type="button"
-          class="btn btn-ghost detail-share-trigger"
+          class="btn btn-ghost btn-icon detail-share-trigger"
           data-share-open={`plugin:${plugin.manifestId}`}
+          aria-label={pcopy.shareOpen}
+          title={pcopy.shareOpen}
         >
-          {pcopy.shareOpen}
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" />
+          </svg>
         </button>
       </div>
     </header>
 
-    {plugin.previewPoster && (
+    {hasPreview && systemRecord && (
+      <section class="detail-block scenario-showcase" id="preview">
+        <h2>{pcopy.scenariosHead}</h2>
+        <p class="block-lead">{pcopy.scenariosLead}</p>
+        <div class="scenario-hero">
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="web" caption={pcopy.scenarioLabels.web} />
+        </div>
+        <div class="scenario-wide">
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="slides" caption={pcopy.scenarioLabels.slides} />
+        </div>
+        <div class="scenario-pair">
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="app" caption={pcopy.scenarioLabels.app} />
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="poster" caption={pcopy.scenarioLabels.poster} />
+        </div>
+      </section>
+    )}
+
+    {plugin.previewPoster && !isDesignSystem && (
       <figure class="detail-preview">
         {plugin.previewType === 'video' && plugin.previewVideo ? (
           /*
@@ -295,6 +448,63 @@ const jsonLd = [
       </form>
     </dialog>
 
+    {systemRecord && systemRecord.palette.length > 0 && !systemTokens && (
+      <section class="detail-block">
+        <h2>{ui.catalog.systems.paletteSample}</h2>
+        <p class="block-lead">{ui.catalog.systems.paletteLead(systemRecord.palette.length)}</p>
+        <div class="palette-row">
+          {systemRecord.palette.map((hex) => (
+            <div class="palette-cell">
+              <span class="swatch" style={`background:${hex}`} />
+              <code>{hex}</code>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {systemTokens && (
+      <section class="detail-block design-tokens" id="tokens">
+        <h2>{pcopy.tokensHead}</h2>
+        <p class="block-lead">{pcopy.tokensLead(systemTokens.total)}</p>
+        <div class="token-groups">
+          {systemTokens.groups.map((group) => (
+            <div class="token-group">
+              <h3 class="token-group-head">{pcopy.tokenGroupLabels[group.id] ?? group.id}</h3>
+              <ul class="token-list">
+                {group.tokens.map((tok) => (
+                  <li class="token-row">
+                    {tok.type === 'color' && (
+                      <span class="token-viz token-viz-color" style={`background:${tok.value}`} aria-hidden="true" />
+                    )}
+                    {tok.type === 'dimension' && tok.name.includes('radius') && (
+                      <span
+                        class="token-viz token-viz-radius"
+                        style={`border-radius:${tok.value === '9999px' ? '999px' : tok.value}`}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <code class="token-name">{tok.name}</code>
+                    {tok.type === 'fontFamily' ? (
+                      <span class="token-value token-value-font" style={`font-family:${tok.value}`}>{tok.value}</span>
+                    ) : (
+                      <code class="token-value">{tok.value}</code>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {SystemContent && (
+      <section class="detail-block designmd-body" id="guide">
+        <SystemContent />
+      </section>
+    )}
+
     <dl class="detail-meta">
       {plugin.mode && (
         <Fragment>
@@ -344,10 +554,78 @@ const jsonLd = [
         </ul>
       </section>
     )}
+
+    {relatedSystems.length > 0 && (
+      <section class="detail-block related-systems" id="related">
+        <h2>{ui.catalog.systems.related(systemRecord?.categoryLabel ?? '')}</h2>
+        <div class="catalog-grid systems-grid">
+          <ul>
+            {relatedSystems.map((r) => <SystemCard system={r} />)}
+          </ul>
+        </div>
+      </section>
+    )}
+
+    <PluginContribute />
+    </div>
   </article>
 </Layout>
 
 <style>
+  /* Compact icon-only utility button (Share) — keeps the header to two text
+     actions so the top doesn't read as a wall of buttons. */
+  .btn-icon {
+    padding: 0;
+    width: 40px;
+    justify-content: center;
+  }
+  .detail-crumb a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .detail-crumb a:hover {
+    color: var(--ink, #262626);
+    text-decoration: underline;
+  }
+  .detail-crumb .crumb-sep {
+    margin: 0 0.45em;
+    opacity: 0.55;
+  }
+  /* Full DESIGN.md render. Hide the file's own title H1 so the page
+     keeps one visible H1 (the "<Brand> design system" title in the
+     header). DESIGN.md files carry exactly one H1 (the title); all other
+     headings are H2/H3. */
+  .designmd-body :global(h1) {
+    display: none;
+  }
+  .designmd-body :global(h2) {
+    margin-top: 1.8em;
+  }
+  .designmd-body :global(h3) {
+    margin-top: 1.3em;
+  }
+  .designmd-body :global(ul),
+  .designmd-body :global(ol) {
+    padding-left: 1.4em;
+  }
+  .designmd-body :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  .designmd-body :global(th),
+  .designmd-body :global(td) {
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .designmd-body :global(pre) {
+    overflow-x: auto;
+    padding: 12px;
+    background: var(--paper-warm, #f5f5f5);
+    border: 1px solid var(--line);
+  }
   .detail-preview-static {
     width: 100%;
     height: auto;
@@ -361,5 +639,183 @@ const jsonLd = [
     display: block;
     border: 1px solid var(--line);
     background: #000;
+  }
+  /* Scenario showcase — system tokens applied across artifact kinds, each at
+     its true form factor: website + slide are landscape (full width), the
+     phone app + poster are portrait (paired). */
+  .scenario-hero,
+  .scenario-wide {
+    margin-bottom: 18px;
+  }
+  .scenario-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    align-items: start;
+  }
+  .scenario-pair :global(.pv-app) {
+    width: 100%;
+  }
+  @media (max-width: 560px) {
+    .scenario-pair {
+      grid-template-columns: 1fr;
+    }
+  }
+  /* Two-column layout for the dense design-system detail page: a wider track
+     than the default 880px reading column so a right-hand section-nav rail can
+     sit beside the content without squeezing it. */
+  .detail-ds {
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 196px;
+    column-gap: 56px;
+    align-items: start;
+  }
+  .detail-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+  /* Right-hand section nav — reflects the page's schema (its sections) and
+     sticks alongside the content as you scroll. */
+  .detail-rail {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 96px;
+    align-self: start;
+  }
+  .detail-rail-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #595959);
+    margin-bottom: 12px;
+  }
+  .detail-rail ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-left: 1px solid var(--line);
+  }
+  .detail-rail li { margin: 0; }
+  .detail-rail a {
+    display: block;
+    padding: 6px 0 6px 14px;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    font-size: 0.82rem;
+    color: var(--ink-soft, #434343);
+    text-decoration: none;
+  }
+  .detail-rail a:hover {
+    color: var(--coral);
+    border-left-color: var(--coral);
+  }
+  /* Tighten section rhythm so the dense page doesn't read as empty. */
+  .detail-ds .detail-block {
+    margin-bottom: 32px;
+  }
+  .detail-ds .detail-meta {
+    margin-bottom: 28px;
+  }
+  /* Related systems: the narrower content column squeezed the 3-up catalog
+     grid, so design-system detail pages show comfier 2-up cards. */
+  .detail-ds .related-systems :global(.systems-grid ul) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 980px) {
+    .detail-ds {
+      grid-template-columns: 1fr;
+    }
+    .detail-rail {
+      position: static;
+      margin-bottom: 24px;
+    }
+    .detail-rail ul {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      border-left: 0;
+    }
+    .detail-rail a {
+      padding: 4px 0;
+      margin-left: 0;
+      border-left: 0;
+      border-bottom: 1px solid transparent;
+    }
+    .detail-rail a:hover {
+      border-bottom-color: var(--coral);
+    }
+  }
+  /* Structured design-token spec sheet (design-tokens.json). Multi-column so
+     groups of uneven height pack tightly (no big grid-row gaps); each row =
+     type-appropriate visual + name + value. */
+  .token-groups {
+    columns: 280px 3;
+    column-gap: 32px;
+    margin-top: 16px;
+  }
+  .token-group {
+    break-inside: avoid;
+    margin-bottom: 22px;
+  }
+  .token-group-head {
+    margin: 0 0 8px;
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #595959);
+  }
+  .token-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .token-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .token-viz {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--line);
+  }
+  .token-viz-color {
+    border-radius: 4px;
+  }
+  .token-viz-radius {
+    background: var(--ink, #262626);
+    border-color: transparent;
+  }
+  .token-name {
+    flex: none;
+    font-size: 0.78rem;
+    color: var(--ink, #262626);
+  }
+  .token-value {
+    margin-left: auto;
+    font-size: 0.74rem;
+    color: var(--ink-mute, #595959);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .token-value-font {
+    font-size: 0.85rem;
+    color: var(--ink-soft, #434343);
+    text-align: right;
   }
 </style>

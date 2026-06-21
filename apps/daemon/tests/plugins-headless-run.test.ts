@@ -533,7 +533,11 @@ let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
-  fs.writeFileSync(process.env.OD_PROMPT_CAPTURE, input);
+  const capturePath = process.env.OD_PROMPT_CAPTURE;
+  fs.appendFileSync(capturePath + '.all', '--- prompt ---\\n' + input + '\\n');
+  if (input.includes('# Headless Local Skill') || input.includes('## Active plugin')) {
+    fs.writeFileSync(capturePath, input);
+  }
   console.log(JSON.stringify({ type: 'text', part: { text: 'headless-ok' } }));
 });
 `,
@@ -631,10 +635,10 @@ process.stdin.on('end', () => {
 
     const projectId = `pipeline-${Date.now()}`;
     // The fixture declares od.pipeline.stages and is installed under
-    // sourceKind='local' (default trust='restricted'). The required
-    // capabilities therefore include pipeline:*; the test grants it
-    // ephemerally via the resolver so the snapshot is created without
-    // re-asking the user.
+    // sourceKind='local', which is trusted by default (trust.ts
+    // defaultTrustForRecord). The trusted default grant therefore already
+    // includes pipeline:*, so the snapshot is created without any ephemeral
+    // grantCaps — exercising the stored/default grant path directly.
     const createResp = await fetch(`${baseUrl}/api/projects`, {
       method:  'POST',
       headers: { 'content-type': 'application/json' },
@@ -643,7 +647,6 @@ process.stdin.on('end', () => {
         name:         'Pipeline e2e-3',
         pluginId:     'pipeline-plugin',
         pluginInputs: { topic: 'agentic design' },
-        grantCaps:    ['pipeline:*'],
       }),
     });
     expect(createResp.status).toBe(200);
@@ -661,7 +664,6 @@ process.stdin.on('end', () => {
         projectId,
         pluginId:                'pipeline-plugin',
         appliedPluginSnapshotId: createBody.appliedPluginSnapshotId,
-        grantCaps:               ['pipeline:*'],
       }),
     });
     expect(runResp.status).toBe(202);

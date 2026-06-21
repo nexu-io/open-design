@@ -14,7 +14,7 @@ const WINDOWS_FOLDER_DIALOG_SCRIPT = [
   '$owner.Height = 1;',
   '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog;',
   "$dialog.Description = 'Select a code folder to link';",
-  '$dialog.ShowNewFolderButton = $false;',
+  '$dialog.ShowNewFolderButton = $true;',
   'try {',
   '  if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }',
   '} finally {',

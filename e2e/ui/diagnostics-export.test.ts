@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 
 const execFileAsync = promisify(execFile);
@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 });
 
-test('diagnostics export zip includes the primary daemon, web, and desktop logs', async ({ page }) => {
+test('[P1] diagnostics export zip includes the primary daemon, web, and desktop logs', async ({ page }) => {
   await gotoEntryHome(page);
 
   const response = await page.request.get('/api/diagnostics/export');
@@ -77,7 +77,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }

@@ -49,6 +49,7 @@ describe('GET /api/daemon/status', () => {
     expect(typeof body.version === 'string' || typeof body.version === 'object').toBe(true);
     expect(typeof body.bindHost).toBe('string');
     expect(typeof body.port).toBe('number');
+    expect(body.port).toBe(Number(new URL(baseUrl).port));
     expect(typeof body.pid).toBe('number');
     expect(typeof body.installedPlugins).toBe('number');
     expect(body.sandboxMode).toBe(false);

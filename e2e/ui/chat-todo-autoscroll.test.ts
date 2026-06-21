@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
+import { routeAgents } from '@/playwright/mock-factory';
 
 // Verifies that the chat-log stays pinned to the bottom when the PinnedTodoSlot
 // grows (scenario A) and that a deliberate scroll-up is not overridden by a
@@ -54,22 +55,16 @@ async function seedAppConfig(page: Page) {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 }
 
 // Seed a project + conversation + messages via the daemon HTTP API, then
@@ -259,7 +254,7 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
     await seedAppConfig(page);
   });
 
-  test('scenario A: pinned user stays at bottom after PinnedTodoCard grows', async ({
+  test('[P2] scenario A: pinned user stays at bottom after PinnedTodoCard grows', async ({
     page,
   }) => {
     const { projectId, conversationId } = await seedProjectWithTodos(page, {
@@ -323,7 +318,7 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
     ).toBeLessThan(20);
   });
 
-  test('scenario B: user scroll-up is preserved when PinnedTodoCard grows', async ({
+  test('[P2] scenario B: user scroll-up is preserved when PinnedTodoCard grows', async ({
     page,
   }) => {
     const { projectId, conversationId } = await seedProjectWithTodos(page, {

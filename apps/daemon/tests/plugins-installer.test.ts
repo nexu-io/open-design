@@ -72,7 +72,9 @@ describe('installFromLocalFolder', () => {
     expect(list).toHaveLength(1);
     expect(list[0]?.id).toBe('sample-plugin');
     expect(list[0]?.sourceKind).toBe('local');
-    expect(list[0]?.trust).toBe('restricted');
+    // Local installs are implicitly trusted (the user copied the folder here
+    // themselves) — see trust.ts defaultTrustForRecord / resolvePluginFolder.
+    expect(list[0]?.trust).toBe('trusted');
     expect(list[0]?.fsPath).toBe(path.join(pluginsRoot, 'sample-plugin'));
   });
 

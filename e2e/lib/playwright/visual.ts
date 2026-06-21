@@ -1,14 +1,32 @@
 import { expect } from '@playwright/test';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { fulfillAgentsRoute } from './mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const GITHUB_STARS_STORAGE_KEY = 'open-design:gh-stars';
+const VISUAL_STABILITY_STORAGE_KEY = 'open-design:visual-stability';
 const VISUAL_STYLE_ID = 'od-visual-stability-style';
 // Keep this exact-route mock narrow so unrelated GitHub UI still behaves normally.
 const VISUAL_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 const VISUAL_GITHUB_STARS = 40_000;
+
+type VisualConfig = {
+  mode: 'daemon' | 'api';
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  apiProtocol?: 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio' | 'aihubmix';
+  agentId: string | null;
+  skillId: string | null;
+  designSystemId: string | null;
+  onboardingCompleted: boolean;
+  agentModels: Record<string, { model?: string; reasoning?: string }>;
+  agentCliEnv?: Record<string, Record<string, string>>;
+  privacyDecisionAt: number | null;
+  telemetry: { metrics?: boolean; content?: boolean; artifactManifest?: boolean };
+};
 
 const VISUAL_CONFIG = {
   mode: 'daemon',
@@ -22,7 +40,16 @@ const VISUAL_CONFIG = {
   agentModels: {},
   privacyDecisionAt: 1,
   telemetry: { metrics: false, content: false, artifactManifest: false },
-} as const;
+} satisfies VisualConfig;
+
+const visualStableTimeoutMs = 10_000;
+const visualStableFrameCount = 3;
+
+function waitForVisualTimeout(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, visualStableTimeoutMs);
+  });
+}
 
 const MOCK_AGENT = {
   id: 'mock',
@@ -31,6 +58,55 @@ const MOCK_AGENT = {
   available: true,
   version: 'test',
   models: [{ id: 'default', label: 'Default' }],
+} as const;
+
+export const VISUAL_CLI_AGENTS = [
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    bin: 'claude',
+    available: true,
+    version: '2.1.31',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'sonnet-alias', label: 'Sonnet (alias)' },
+      { id: 'opus-alias', label: 'Opus (alias)' },
+      { id: 'haiku-alias', label: 'Haiku (alias)' },
+      { id: 'sonnet-nightly', label: 'Sonnet Nightly' },
+      { id: 'opus-nightly', label: 'Opus Nightly' },
+      { id: 'sonnet-4.5', label: 'Sonnet 4.5' },
+      { id: 'opus-4.5', label: 'Opus 4.5' },
+    ],
+  },
+  {
+    id: 'codex',
+    name: 'Codex CLI',
+    bin: 'codex',
+    available: true,
+    version: '0.134.0',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.4', label: 'GPT-5.4' },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4-Mini' },
+      { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3-Codex-Spark' },
+      { id: 'gpt-5.3', label: 'GPT-5.3' },
+      { id: 'gpt-5.2', label: 'GPT-5.2' },
+    ],
+  },
+] as const;
+
+export const VISUAL_AMR_AGENT = {
+  id: 'amr',
+  name: 'Open Design AMR',
+  bin: 'vela',
+  available: true,
+  version: '0.1.0',
+  models: [
+    { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'deepseek-v3.2', label: 'DeepSeek V3.2' },
+    { id: 'glm-5.1', label: 'GLM 5.1' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  ],
 } as const;
 
 const VISUAL_PROJECTS = [
@@ -58,8 +134,39 @@ const VISUAL_PROJECTS = [
 
 type VisualProject = (typeof VISUAL_PROJECTS)[number];
 
+const VISUAL_PROJECT_FILE_HTML =
+  '<!doctype html><html><body><main><h1>Visual CSS Smoke</h1><p>Workspace preview remains framed.</p></main></body></html>';
+
+const VISUAL_PROJECT_FILES = [
+  {
+    name: 'index.html',
+    path: 'index.html',
+    type: 'file',
+    size: VISUAL_PROJECT_FILE_HTML.length,
+    mtime: 1_700_000_200_000,
+    kind: 'html',
+    mime: 'text/html; charset=utf-8',
+    artifactKind: 'html',
+    artifactManifest: {
+      version: 1,
+      kind: 'html',
+      title: 'Visual CSS Smoke',
+      entry: 'index.html',
+      renderer: 'html',
+      status: 'complete',
+      exports: ['html', 'pdf', 'zip'],
+      primary: true,
+      createdAt: '2026-06-15T00:00:00.000Z',
+      updatedAt: '2026-06-15T00:00:00.000Z',
+      metadata: { identifier: 'visual-css-smoke', artifactType: 'text/html', inferred: false },
+    },
+  },
+] as const;
+
 type VisualPageOptions = {
   projects?: readonly VisualProject[];
+  config?: Partial<VisualConfig>;
+  agents?: readonly unknown[];
 };
 
 const VISUAL_PLUGINS = [
@@ -132,21 +239,85 @@ const VISUAL_DESIGN_SYSTEMS = [
 
 export async function configureVisualPage(page: Page, options: VisualPageOptions = {}): Promise<void> {
   const projects = options.projects ?? VISUAL_PROJECTS;
+  const config = { ...VISUAL_CONFIG, ...(options.config ?? {}) };
+  const agents = options.agents ?? [MOCK_AGENT];
 
-  await page.addInitScript(([key, config, githubStarsKey, githubStarsCount]) => {
+  await page.addInitScript(([key, config, githubStarsKey, githubStarsCount, visualStabilityKey]) => {
     window.localStorage.setItem(key, JSON.stringify(config));
     window.localStorage.setItem(
       githubStarsKey,
       JSON.stringify({ count: githubStarsCount, ts: Date.now() }),
     );
-  }, [STORAGE_KEY, VISUAL_CONFIG, GITHUB_STARS_STORAGE_KEY, VISUAL_GITHUB_STARS] as const);
+    window.localStorage.setItem(visualStabilityKey, '1');
+  }, [STORAGE_KEY, config, GITHUB_STARS_STORAGE_KEY, VISUAL_GITHUB_STARS, VISUAL_STABILITY_STORAGE_KEY] as const);
 
   await page.route('**/api/app-config', async (route) => {
-    await fulfillGet(route, { config: VISUAL_CONFIG });
+    await fulfillGet(route, { config });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await fulfillGet(route, { agents: [MOCK_AGENT] });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, agents);
+  });
+
+  await page.route('**/api/test/connection', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 1,
+        model: config.model,
+        sample: 'Visual connection check.',
+      },
+    });
+  });
+
+  await page.route('**/api/provider/models', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 1,
+        models: [
+          { id: 'gpt-4o', label: 'GPT-4o' },
+          { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+          { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+        ],
+      },
+    });
+  });
+
+  await page.route('**/api/health', async (route) => {
+    await fulfillGet(route, { ok: true });
+  });
+
+  await page.route('**/api/community/discord', async (route) => {
+    await fulfillGet(route, {
+      onlineCount: 0,
+      memberCount: 0,
+    });
+  });
+
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await fulfillGet(route, {
+      loggedIn: false,
+      profile: 'local',
+      configPath: '/tmp/.amr/config.json',
+      user: null,
+    });
+  });
+
+  await page.route('**/api/media/providers/aihubmix/models**', async (route) => {
+    await fulfillGet(route, { models: [] });
   });
 
   await page.route(VISUAL_GITHUB_REPO_API, async (route) => {
@@ -162,6 +333,44 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects', async (route) => {
     await fulfillGet(route, { projects });
+  });
+
+  await page.route('**/api/projects/*/files', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await fulfillGet(route, { files: VISUAL_PROJECT_FILES });
+  });
+
+  await page.route('**/api/projects/*/raw/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: VISUAL_PROJECT_FILE_HTML,
+    });
+  });
+
+  await page.route('**/api/projects/*/upload', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        files: [
+          {
+            name: 'visual-reference.txt',
+            originalName: 'visual-reference.txt',
+            path: 'visual-reference.txt',
+            size: 55,
+          },
+        ],
+      },
+    });
   });
 
   await page.route('**/api/routines', async (route) => {
@@ -189,6 +398,45 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await route.fulfill({
       contentType: 'text/html',
       body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} preview</h1></main></body></html>`,
+    });
+  });
+
+  await page.route('**/api/plugins/*/apply', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'plugin');
+    await route.fulfill({
+      json: {
+        ok: true,
+        query: `Design a ${id} concept.`,
+        contextItems: [],
+        inputs: [],
+        assets: [],
+        mcpServers: [],
+        projectMetadata: {},
+        trust: 'trusted',
+        capabilitiesGranted: ['prompt:inject'],
+        capabilitiesRequired: ['prompt:inject'],
+        appliedPlugin: {
+          snapshotId: `visual-snapshot-${id}`,
+          pluginId: id,
+          pluginVersion: '1.0.0',
+          manifestSourceDigest: 'a'.repeat(64),
+          inputs: {},
+          resolvedContext: { items: [] },
+          capabilitiesGranted: ['prompt:inject'],
+          capabilitiesRequired: ['prompt:inject'],
+          assetsStaged: [],
+          taskKind: 'new-generation',
+          appliedAt: 0,
+          connectorsRequired: [],
+          connectorsResolved: [],
+          mcpServers: [],
+          status: 'fresh',
+        },
+      },
     });
   });
 
@@ -254,17 +502,24 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   });
 
   await page.addInitScript(([styleId]) => {
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
+    const installStabilityStyle = () => {
+      if (document.getElementById(styleId) != null) return;
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
       *, *::before, *::after {
         animation: none !important;
         transition: none !important;
         caret-color: transparent !important;
         scroll-behavior: auto !important;
+        overflow-anchor: none !important;
       }
     `;
-    document.head.appendChild(style);
+      (document.head ?? document.documentElement).appendChild(style);
+    };
+
+    installStabilityStyle();
+    document.addEventListener('DOMContentLoaded', installStabilityStyle, { once: true });
   }, [VISUAL_STYLE_ID] as const);
 }
 
@@ -291,6 +546,31 @@ export async function gotoVisualHome(page: Page): Promise<void> {
   await waitForVisualReady(page);
 }
 
+export async function gotoVisualWorkspace(page: Page): Promise<void> {
+  await page
+    .getByTestId('recent-projects-strip')
+    .locator('[data-project-id="visual-project-launchpad"]')
+    .click();
+  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+}
+
+export async function openAvatarMenu(page: Page): Promise<Locator> {
+  await page.locator('.avatar-menu .avatar-agent-trigger').click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+export async function openSettingsDetailsFromHeader(page: Page): Promise<Locator> {
+  await page.locator('.settings-icon-btn').click();
+  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 export async function waitForVisualFonts(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -302,8 +582,134 @@ export async function captureVisual(page: Page, name: string): Promise<string> {
   const safeName = sanitizeVisualName(name);
   const outputPath = path.join(outputDir, `${safeName}.png`);
   await mkdir(outputDir, { recursive: true });
+  await waitForVisualStable(page);
   await page.screenshot({ path: outputPath, animations: 'disabled', caret: 'hide' });
   return outputPath;
+}
+
+export async function scrollVisualLocatorIntoStableView(
+  page: Page,
+  locator: Locator,
+  options: { containerSelector?: string; topOffset?: number } = {},
+): Promise<void> {
+  await locator.evaluate(
+    (element, { containerSelector, topOffset }) => {
+      const target = element as HTMLElement;
+      const container = target.closest(containerSelector) as HTMLElement | null;
+      if (container != null) {
+        const targetRect = target.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        container.scrollTop = Math.max(
+          0,
+          container.scrollTop + targetRect.top - containerRect.top - topOffset,
+        );
+        return;
+      }
+
+      const scrollRoot = document.scrollingElement;
+      if (scrollRoot == null) return;
+      window.scrollTo({
+        top: Math.max(0, window.scrollY + target.getBoundingClientRect().top - topOffset),
+        behavior: 'instant',
+      });
+    },
+    {
+      containerSelector: options.containerSelector ?? '.entry-main--scroll',
+      topOffset: options.topOffset ?? 56,
+    },
+  );
+  await waitForVisualStable(page);
+}
+
+export async function waitForVisualStable(page: Page): Promise<void> {
+  // The app shell owns long-lived SSE channels such as /api/memory/events, so
+  // Playwright's networkidle state never represents visual readiness here.
+  await waitForVisualFrameAssets(page);
+  await waitForVisualLayoutStable(page);
+}
+
+async function waitForVisualFrameAssets(page: Page): Promise<void> {
+  await Promise.all(
+    page.frames().map((frame) =>
+      Promise.race([
+        frame.evaluate(async () => {
+          await document.fonts.ready;
+          await Promise.all(
+            Array.from(document.images, async (image) => {
+              if (image.complete && image.naturalWidth > 0) return;
+              await image.decode().catch(() => {});
+            }),
+          );
+        }),
+        waitForVisualTimeout(),
+      ]).catch(() => {}),
+    ),
+  );
+}
+
+async function waitForVisualLayoutStable(page: Page): Promise<void> {
+  await page.waitForFunction(
+    (requiredStableFrames) => new Promise<boolean>((resolve) => {
+      let previousSignature = '';
+      let stableFrames = 0;
+
+      const sample = () => {
+        const body = document.body;
+        const root = document.documentElement;
+        const visibleRects = Array.from(document.querySelectorAll('body *'))
+          .filter((element) => {
+            const style = window.getComputedStyle(element);
+            if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) {
+              return false;
+            }
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          })
+          .slice(0, 600)
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return [
+              element.tagName,
+              Math.round(rect.x * 10) / 10,
+              Math.round(rect.y * 10) / 10,
+              Math.round(rect.width * 10) / 10,
+              Math.round(rect.height * 10) / 10,
+            ].join(':');
+          })
+          .join('|');
+
+        const signature = [
+          root.clientWidth,
+          root.clientHeight,
+          root.scrollWidth,
+          root.scrollHeight,
+          body?.scrollWidth ?? 0,
+          body?.scrollHeight ?? 0,
+          window.scrollX,
+          window.scrollY,
+          visibleRects,
+        ].join('~');
+
+        if (signature === previousSignature) {
+          stableFrames += 1;
+        } else {
+          previousSignature = signature;
+          stableFrames = 0;
+        }
+
+        if (stableFrames >= requiredStableFrames) {
+          resolve(true);
+          return;
+        }
+
+        window.requestAnimationFrame(sample);
+      };
+
+      window.requestAnimationFrame(sample);
+    }),
+    visualStableFrameCount,
+    { timeout: visualStableTimeoutMs },
+  ).catch(() => {});
 }
 
 function sanitizeVisualName(name: string): string {

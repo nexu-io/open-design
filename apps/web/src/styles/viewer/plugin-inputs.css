@@ -27,11 +27,11 @@
   justify-content: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-faint);
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .settings-skills .skills-row-actions .icon-btn:hover {
   background: var(--bg-panel);
@@ -48,7 +48,7 @@
 .settings-skills .skills-delete-confirm .btn {
   padding: 4px 10px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .settings-skills .skills-row-detail {
@@ -79,7 +79,7 @@
   overflow: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 10px 12px;
   font-size: 12.5px;
   line-height: 1.55;
@@ -94,7 +94,7 @@
   max-height: 240px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 8px 10px;
 }
 .settings-skills .skills-file-entry {
@@ -172,9 +172,9 @@
   cursor: pointer;
 
   transition:
-    color 120ms ease,
-    background 120ms ease,
-    box-shadow 120ms ease;
+    color 120ms var(--ease-out),
+    background 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
 }
 
 .mcp-json-helper-toggle:hover {
@@ -313,7 +313,7 @@
 	align-items: center;
 	justify-content: center;
 
-	border-radius: 999px;
+	border-radius: var(--radius-pill);
 
 	background: var(--accent-tint);
 

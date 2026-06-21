@@ -75,8 +75,8 @@
     "surface": "video",
     "preview": {
       "type": "video",
-      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/video/video-seedance-three-kingdoms-guanyu-slaying-yanliang-poster.jpg",
-      "video": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/video/video-seedance-three-kingdoms-guanyu-slaying-yanliang.mp4"
+      "poster": "https://repo-assets.open-design.ai/resources/images/prompt-templates/video-seedance-three-kingdoms-guanyu-slaying-yanliang-poster.jpg",
+      "video": "https://repo-assets.open-design.ai/resources/videos/prompt-templates/video-seedance-three-kingdoms-guanyu-slaying-yanliang.mp4"
     },
     "useCase": {
       "query": {

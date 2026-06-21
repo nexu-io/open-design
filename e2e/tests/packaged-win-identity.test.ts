@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from "@/vitest/packaged-win-identity";
 
 describe("packaged windows smoke identity", () => {
-  it("lets a nightly release version override the stable release namespace", () => {
+  it("[P2] lets a nightly release version override the stable release namespace", () => {
     expect(resolvePackagedWinInstallIdentity({
       namespace: "release-stable-win",
       releaseVersion: "0.8.0.nightly.2",
@@ -14,7 +14,7 @@ describe("packaged windows smoke identity", () => {
     expect(releaseAppVersionArgs("0.8.0.nightly.2")).toEqual(["--app-version", "0.8.0.nightly.2"]);
   });
 
-  it("keeps stable release namespaces on the canonical display identity", () => {
+  it("[P2] keeps stable release namespaces on the canonical display identity", () => {
     expect(resolvePackagedWinInstallIdentity({
       namespace: "release-stable-win",
       releaseVersion: "0.8.0",
@@ -31,7 +31,7 @@ describe("packaged windows smoke identity", () => {
     });
   });
 
-  it("matches first-class preview and beta release identities", () => {
+  it("[P2] matches first-class preview and beta release identities", () => {
     expect(resolvePackagedWinInstallIdentity({
       namespace: "release-stable-win",
       releaseVersion: "0.8.0-preview.1",
@@ -42,7 +42,7 @@ describe("packaged windows smoke identity", () => {
     }).displayName).toBe("Open Design Beta");
   });
 
-  it("keeps ad hoc namespaces isolated from release channel identities", () => {
+  it("[P2] keeps ad hoc namespaces isolated from release channel identities", () => {
     expect(resolvePackagedWinInstallIdentity({
       namespace: "beta-local-flow",
       releaseVersion: undefined,

@@ -15,22 +15,32 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
-import { useT } from '../../i18n';
+import { useI18n } from '../../i18n';
+import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchDesignSystemPreview,
   fetchDesignSystemShowcase,
   fetchPluginAssetText,
 } from '../../providers/registry';
 import { DesignSpecView } from '../DesignSpecView';
-import { PreviewModal, type PreviewView } from '../PreviewModal';
+import {
+  PreviewModal,
+  type PreviewSharePopoverItem,
+  type PreviewView,
+} from '../PreviewModal';
 import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
+import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
+  // Analytics — forwarded to PreviewModal's share popover.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 interface ContextRef {
@@ -63,8 +73,12 @@ export function PluginDesignSystemDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
+  onSharePopoverItemClick,
 }: Props) {
-  const t = useT();
+  const { t, locale } = useI18n();
+  const localizedTitle = localizePluginTitle(locale, record);
+  const localizedDescription = localizePluginDescription(locale, record);
   const dsRef = designSystemRef(record);
   const assetPath = specAssetPath(record);
 
@@ -125,15 +139,15 @@ export function PluginDesignSystemDetail({
 
   return (
     <PreviewModal
-      title={record.title}
-      subtitle={record.manifest?.description || dsRef || undefined}
+      title={localizedTitle}
+      subtitle={localizedDescription || dsRef || undefined}
       views={views}
       initialViewId={dsRef ? 'showcase' : 'spec'}
       onView={handleView}
-      exportTitleFor={(viewId) => `${record.title} — ${viewId}`}
+      exportTitleFor={(viewId) => `${localizedTitle} — ${viewId}`}
       shareTarget={{
-        title: record.title,
-        description: record.manifest?.description || dsRef || undefined,
+        title: localizedTitle,
+        description: localizedDescription || dsRef || undefined,
         url: buildPluginShareUrl(record),
       }}
       onClose={onClose}
@@ -168,14 +182,18 @@ export function PluginDesignSystemDetail({
           </div>
         ),
       }}
-      primaryAction={{
-        label: 'Use plugin',
-        onClick: () => onUse(record),
-        busy: !!isApplying,
-        busyLabel: 'Applying…',
-        testId: `plugin-details-use-${record.id}`,
-      }}
+      primaryAction={hideUseAction
+        ? undefined
+        : {
+            label: pluginUsePrimaryAction(record, t).label,
+            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
+            busy: !!isApplying,
+            busyLabel: 'Applying…',
+            testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
+          }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
+      onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );
 }

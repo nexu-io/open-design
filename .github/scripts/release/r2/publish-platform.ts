@@ -1,6 +1,15 @@
-import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, sep } from "node:path";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, relative, sep } from "node:path";
+import { uploadS3Object } from "./s3-upload.ts";
+
+type AssetEntry = {
+  contentType: string;
+  name: string;
+  sha256Url?: string;
+  size: number;
+  url: string;
+};
 
 function required(name) {
   const value = process.env[name];
@@ -42,37 +51,28 @@ function contentType(name) {
   return "application/octet-stream";
 }
 
-function upload(filePath, objectKey, type, cacheControl) {
+async function upload(filePath, objectKey, type, cacheControl) {
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     throw new Error(`expected upload file not found: ${filePath}`);
   }
-  execFileSync(
-    "aws",
-    [
-      "--endpoint-url",
-      endpointUrl,
-      "s3api",
-      "put-object",
-      "--bucket",
-      bucket,
-      "--key",
-      objectKey,
-      "--body",
-      filePath,
-      "--content-type",
-      type,
-      "--cache-control",
-      cacheControl,
-      "--no-cli-pager",
-    ],
-    { stdio: "inherit" },
-  );
+  await uploadS3Object({
+    accessKeyId,
+    bodyPath: filePath,
+    bucket,
+    cacheControl,
+    contentType: type,
+    endpointUrl,
+    objectKey,
+    region,
+    secretAccessKey,
+    sessionToken,
+  });
 }
 
-function fileEntry(name, type) {
+function fileEntry(name, type): AssetEntry {
   const filePath = join(releaseRoot, name);
   const size = statSync(filePath).size;
-  const entry = {
+  const entry: AssetEntry = {
     contentType: type,
     name,
     size,
@@ -85,8 +85,8 @@ function fileEntry(name, type) {
   return entry;
 }
 
-function uploadAsset(name) {
-  upload(join(releaseRoot, name), `${versionPrefix}/${name}`, contentType(name), "public, max-age=31536000, immutable");
+async function uploadAsset(name) {
+  await upload(join(releaseRoot, name), `${versionPrefix}/${name}`, contentType(name), "public, max-age=31536000, immutable");
 }
 
 function listFiles(root) {
@@ -107,7 +107,7 @@ function listFiles(root) {
   return files;
 }
 
-function uploadReport(reportDirectory) {
+async function uploadReport(reportDirectory) {
   const files = listFiles(reportRoot);
   if (files.length === 0) {
     throw new Error(`expected ${platform} release report files in ${reportRoot}`);
@@ -115,13 +115,49 @@ function uploadReport(reportDirectory) {
   const reportPrefix = `${versionPrefix}/report/${reportDirectory}`;
   for (const file of files) {
     const relativePath = normalizePath(relative(reportRoot, file));
-    upload(file, `${reportPrefix}/${relativePath}`, contentType(file), "public, max-age=31536000, immutable");
+    await upload(file, `${reportPrefix}/${relativePath}`, contentType(file), "public, max-age=31536000, immutable");
   }
+  createReportZip(reportRoot, reportZipPath);
+  await upload(reportZipPath, `${reportPrefix}/report.zip`, "application/zip", "public, max-age=31536000, immutable");
+  const reportJsonPath = join(reportRoot, "report.json");
+  const reportJson = existsSync(reportJsonPath) && statSync(reportJsonPath).isFile()
+    ? {
+        contentType: "application/json; charset=utf-8",
+        name: "report.json",
+        size: statSync(reportJsonPath).size,
+        url: `${publicOrigin}/${reportPrefix}/report.json`,
+      }
+    : null;
+  const zip = {
+    contentType: "application/zip",
+    name: "report.zip",
+    size: statSync(reportZipPath).size,
+    url: `${publicOrigin}/${reportPrefix}/report.zip`,
+  };
   return {
     fileCount: files.length,
+    json: reportJson,
+    jsonUrl: reportJson?.url ?? null,
     type: "directory",
     url: `${publicOrigin}/${reportPrefix}/`,
+    zip,
+    zipUrl: zip.url,
   };
+}
+
+function createReportZip(root, zipPath) {
+  mkdirSync(dirname(zipPath), { recursive: true });
+  rmSync(zipPath, { force: true });
+  const result = spawnSync("zip", ["-qr", zipPath, "."], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  if (result.error != null) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`zip failed with exit code ${result.status}`);
+  }
 }
 
 function setOutput(name, value) {
@@ -133,10 +169,14 @@ function setOutput(name, value) {
 const platform = required("RELEASE_PLATFORM");
 const releaseChannel = required("RELEASE_CHANNEL");
 const releaseVersion = required("RELEASE_VERSION");
+const accessKeyId = required("AWS_ACCESS_KEY_ID");
 const bucket = required("CLOUDFLARE_R2_RELEASES_BUCKET");
 const endpointUrl = required("CLOUDFLARE_R2_RELEASES_URL").replace(/\/+$/, "");
 const publicOrigin = required("CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN").replace(/\/+$/, "");
+const region = required("AWS_DEFAULT_REGION");
 const runnerTemp = required("RUNNER_TEMP");
+const secretAccessKey = required("AWS_SECRET_ACCESS_KEY");
+const sessionToken = optional("AWS_SESSION_TOKEN");
 const assetVersionSuffix = optional("ASSET_VERSION_SUFFIX");
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 const latestPrefix = `${releaseChannel}/latest`;
@@ -149,7 +189,7 @@ if (platform === "mac") {
   const dmg = `open-design-${releaseVersion}${suffix}-mac-arm64.dmg`;
   const zip = `open-design-${releaseVersion}${suffix}-mac-arm64.zip`;
   const artifactMode = optional("MAC_ARTIFACT_MODE", "dmg-and-zip");
-  const artifacts = { dmg: fileEntry(dmg, contentType(dmg)) };
+  const artifacts: Record<string, AssetEntry> = { dmg: fileEntry(dmg, contentType(dmg)) };
   const assetNames = [dmg, `${dmg}.sha256`];
   let feed = null;
   if (artifactMode !== "dmg-only") {
@@ -177,7 +217,7 @@ if (platform === "mac") {
   const installer = `open-design-${releaseVersion}${suffix}-win-x64-setup.exe`;
   const portableZip = `open-design-${releaseVersion}${suffix}-win-x64-portable.zip`;
   const includeZip = optional("WIN_INCLUDE_ZIP", "true") !== "false";
-  const artifacts = { installer: fileEntry(installer, contentType(installer)) };
+  const artifacts: Record<string, AssetEntry> = { installer: fileEntry(installer, contentType(installer)) };
   const assetNames = [installer, `${installer}.sha256`, "latest.yml"];
   if (includeZip) {
     artifacts.portableZip = fileEntry(portableZip, contentType(portableZip));
@@ -235,15 +275,19 @@ const reportRoot = optional(
   "REPORT_ROOT",
   config.reportDirectory == null ? join(runnerTemp, "release-report", config.key) : join(runnerTemp, "release-report", config.reportDirectory),
 );
+const reportZipPath = optional(
+  "REPORT_ZIP_PATH",
+  config.reportDirectory == null ? join(runnerTemp, "release-report", `${config.key}-report.zip`) : join(runnerTemp, "release-report", `${config.reportDirectory}-report.zip`),
+);
 
 for (const name of config.assetNames) {
-  uploadAsset(name);
+  await uploadAsset(name);
   if (name === "latest.yml" || name === "latest-mac.yml") {
-    upload(join(releaseRoot, name), `${latestPrefix}/${name}`, contentType(name), "public, max-age=60, must-revalidate");
+    await upload(join(releaseRoot, name), `${latestPrefix}/${name}`, contentType(name), "public, max-age=60, must-revalidate");
   }
 }
 
-const report = config.reportDirectory == null ? null : uploadReport(config.reportDirectory);
+const report = config.reportDirectory == null ? null : await uploadReport(config.reportDirectory);
 const now = new Date().toISOString();
 const versionManifestUrl = publicUrl(versionPrefix, `platforms/${config.key}.json`);
 const latestManifestUrl = publicUrl(latestPrefix, `platforms/${config.key}.json`);
@@ -282,12 +326,12 @@ const manifest = {
 mkdirSync(manifestRoot, { recursive: true });
 const manifestPath = join(manifestRoot, `${config.key}.json`);
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-upload(manifestPath, `${versionPrefix}/platforms/${config.key}.json`, "application/json; charset=utf-8", "public, max-age=31536000, immutable");
-upload(manifestPath, `${latestPrefix}/platforms/${config.key}.json`, "application/json; charset=utf-8", "public, max-age=60, must-revalidate");
+await upload(manifestPath, `${versionPrefix}/platforms/${config.key}.json`, "application/json; charset=utf-8", "public, max-age=31536000, immutable");
+await upload(manifestPath, `${latestPrefix}/platforms/${config.key}.json`, "application/json; charset=utf-8", "public, max-age=60, must-revalidate");
 
 setOutput("platform_manifest_url", versionManifestUrl);
 setOutput("platform_latest_manifest_url", latestManifestUrl);
-for (const [artifactName, artifact] of Object.entries(config.artifacts)) {
+for (const [artifactName, artifact] of Object.entries(config.artifacts as Record<string, AssetEntry>)) {
   setOutput(`${artifactName}_url`, artifact.url);
 }
 if (config.feed != null) {

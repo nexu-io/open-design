@@ -51,6 +51,7 @@ describe("desktop updater host boundary", () => {
     const installHandler = runtime.slice(installStart, installEnd);
     expect(installHandler).toContain("installUpdate()");
     expect(installHandler).not.toContain("quit");
+    expect(installHandler).not.toContain("relaunch");
     expect(installHandler).not.toContain("process.exit");
     expect(installHandler).not.toContain("shutdown");
   });
@@ -64,6 +65,7 @@ describe("desktop updater host boundary", () => {
     const quitHandler = runtime.slice(quitStart, quitEnd);
     expect(quitHandler).toContain("status.installResult == null");
     expect(quitHandler).toContain("requestQuit");
+    expect(quitHandler).not.toContain("app.relaunch()");
     expect(quitHandler).not.toContain("installUpdate()");
   });
 });

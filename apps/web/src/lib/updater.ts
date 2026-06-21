@@ -30,6 +30,7 @@ export type UpdaterActionResult =
 export type UpdaterModel = {
   availableVersion: string | null;
   busy: boolean;
+  canApplyInPlace: boolean;
   canCheck: boolean;
   canDownload: boolean;
   canOpenInstaller: boolean;
@@ -41,7 +42,9 @@ export type UpdaterModel = {
   errorMessage: string | null;
   hasDownloadedInstaller: boolean;
   installerOpened: boolean;
+  updateKind: 'installer' | 'payload' | 'unknown';
   promptKey: string | null;
+  requiresManualInstall: boolean;
   upToDate: boolean;
   shouldShowControl: boolean;
   shouldPrompt: boolean;
@@ -100,11 +103,20 @@ export function deriveUpdaterModel(
     status.supported &&
     status.capabilities.canOpenInstaller,
   );
+  const canApplyInPlace = Boolean(
+    hostAvailable &&
+    status?.enabled &&
+    status.supported &&
+    status.capabilities.canApplyInPlace,
+  );
+  const canInstallUpdate = canOpenInstaller || canApplyInPlace;
   const hasDownloadedInstaller = Boolean(
     state === OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADED &&
     status?.downloadPath,
   );
   const installerOpened = status?.installResult != null;
+  const artifactType = status?.artifact?.type ?? status?.incoming?.artifact?.type;
+  const updateKind = artifactType === 'payload' ? 'payload' : artifactType === 'dmg' || artifactType === 'installer' ? 'installer' : 'unknown';
   const availableVersion = status?.availableVersion ?? null;
   const currentVersion = status?.currentVersion ?? null;
   const downloadProgress = downloadProgressFromStatus(status);
@@ -119,11 +131,11 @@ export function deriveUpdaterModel(
           status.downloadPath ?? status.artifactUrl ?? status.artifact?.url ?? 'unknown-artifact',
         ].join(':');
   const canQuitAfterInstallerOpen = hostAvailable && installerOpened;
-  const shouldShowControl = Boolean(canOpenInstaller && hasDownloadedInstaller && !installerOpened);
 
   return {
     availableVersion,
     busy,
+    canApplyInPlace,
     canCheck: hostAvailable && Boolean(status?.enabled) && !busy,
     canDownload: hostAvailable && Boolean(status?.enabled && status.capabilities.canDownload) && !busy,
     canOpenInstaller,
@@ -135,10 +147,12 @@ export function deriveUpdaterModel(
     errorMessage: status?.error?.message ?? null,
     hasDownloadedInstaller,
     installerOpened,
+    updateKind,
     promptKey,
+    requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
     upToDate,
-    shouldShowControl,
-    shouldPrompt: canOpenInstaller && hasDownloadedInstaller && !installerOpened,
+    shouldShowControl: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
+    shouldPrompt: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
     status,
     supported: Boolean(status?.supported),
   };

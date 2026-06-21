@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clean colors</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      h1 { margin: 0 0 var(--space-6); font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-4); }
+      .swatch { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; box-shadow: var(--elev-ring); }
+      .color { height: 88px; background: var(--value); }
+      .meta { padding: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
+      strong { display: block; margin-bottom: var(--space-1); color: var(--fg); }
+    
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Color roles</h1>
+
+      <section class="grid">
+        <article class="swatch" style="--value: var(--bg)"><div class="color"></div><div class="meta"><strong>Background</strong>--bg</div></article>
+        <article class="swatch" style="--value: var(--surface)"><div class="color"></div><div class="meta"><strong>Surface</strong>--surface</div></article>
+        <article class="swatch" style="--value: var(--fg)"><div class="color"></div><div class="meta"><strong>Foreground</strong>--fg</div></article>
+        <article class="swatch" style="--value: var(--muted)"><div class="color"></div><div class="meta"><strong>Muted</strong>--muted</div></article>
+        <article class="swatch" style="--value: var(--border)"><div class="color"></div><div class="meta"><strong>Border</strong>--border</div></article>
+        <article class="swatch" style="--value: var(--accent)"><div class="color"></div><div class="meta"><strong>Accent</strong>--accent</div></article>
+        <article class="swatch" style="--value: var(--success)"><div class="color"></div><div class="meta"><strong>Success</strong>--success</div></article>
+        <article class="swatch" style="--value: var(--warn)"><div class="color"></div><div class="meta"><strong>Warning</strong>--warn</div></article>
+        <article class="swatch" style="--value: var(--danger)"><div class="color"></div><div class="meta"><strong>Danger</strong>--danger</div></article>
+      </section>
+    
+    </main>
+  </body>
+</html>

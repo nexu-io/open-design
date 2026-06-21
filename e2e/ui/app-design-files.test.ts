@@ -1,10 +1,14 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
+import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
+const TINY_PNG_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -56,25 +60,28 @@ const designFileFlows = new Set([
   'uploaded-image-renders-in-preview',
   'python-source-preview',
 ]);
+const CRITICAL_DESIGN_FILE_SCENARIO_IDS = new Set([
+  'design-files-upload',
+  'design-files-delete',
+  'design-files-tab-persistence',
+]);
+
+async function routeMockAgents(page: Page) {
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+}
 
 for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.has(scenario.flow ?? ''))) {
-  test(`${entry.id}: ${entry.title}`, async ({ page }) => {
-    await page.route('**/api/agents', async (route) => {
-      await route.fulfill({
-        json: {
-          agents: [
-            {
-              id: 'mock',
-              name: 'Mock Agent',
-              bin: 'mock-agent',
-              available: true,
-              version: 'test',
-              models: [{ id: 'default', label: 'Default' }],
-            },
-          ],
-        },
-      });
-    });
+  test(`[${designFileScenarioPriority(entry)}]${criticalDesignFileScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
+    await routeMockAgents(page);
 
     await gotoEntryHome(page);
     await createProject(page, entry);
@@ -120,7 +127,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -128,6 +135,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
@@ -278,6 +286,16 @@ async function expectProjectFilesToIncludeSuffixes(
     .toBe(true);
 }
 
+async function clickDesignFilePreviewOpen(page: Page) {
+  const preview = page.getByTestId('design-file-preview');
+  await expect(preview).toBeVisible();
+  await expect(async () => {
+    const openButton = preview.getByRole('button', { name: /^Open$/ });
+    await expect(openButton).toBeVisible({ timeout: 1_000 });
+    await openButton.click({ timeout: 1_000 });
+  }).toPass({ timeout: T.medium });
+}
+
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
   if (await preview.isVisible()) return;
@@ -288,8 +306,13 @@ async function openDesignFile(page: Page, fileName: string) {
     return;
   }
 
-  await page.getByRole('button', { name: new RegExp(fileName.replace(/\./g, '\\.')) }).click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  await page.getByTestId('design-files-tab').click();
+  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: fileName,
+  });
+  await expect(fileRow).toBeVisible();
+  await fileRow.getByRole('button').first().click();
+  await clickDesignFilePreviewOpen(page);
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -350,8 +373,11 @@ async function runDesignFilesUploadFlow(page: Page) {
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
+  await expect(preview.getByText(/Image/i)).toBeVisible();
+  await expect(preview.getByText(/1 KB|1024 B|67 B|68 B/i)).toBeVisible();
+  await expect(preview.getByRole('link', { name: /Download/i })).toHaveAttribute('download', /moodboard\.png$/);
 
-  await nameBtn.dblclick();
+  await preview.getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['moodboard.png']);
 }
@@ -408,6 +434,87 @@ async function runDesignFilesDeleteFlow(page: Page) {
     .toBe(true);
 }
 
+test('[P1] design files page keeps the current single-file actions and context hint copy', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Design files current surface');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await page.getByTestId('design-files-tab').click();
+
+  await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
+  await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /paste/i })).toBeVisible();
+
+  await expect(page.getByRole('button', { name: /filter by kind/i })).toHaveCount(0);
+  await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
+
+  const fileRow = page.getByTestId('design-file-row-alpha.html');
+  await expect(fileRow).toBeVisible();
+  await fileRow.hover();
+  await page.getByTestId('design-file-menu-alpha.html').click();
+
+  const menu = page.getByTestId('design-file-menu-popover');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('button', { name: /open in tab/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /rename/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /download/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
+
+  await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
+});
+
+test('[P0] @critical file workspace restores HTML preview after switching through a source file', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('File workspace preview restore');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'dashboard.html',
+    '<!doctype html><html><body><main><h1>Risk Dashboard</h1><p>Preview survives file switches.</p></main></body></html>',
+  );
+  await seedProjectFile(page, projectId, 'logic.ts', 'export const riskScore = 17.3;\n');
+  await page.reload();
+  await expectWorkspaceReady(page);
+
+  await openDesignFile(page, 'dashboard.html');
+  await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    name: 'Risk Dashboard',
+  })).toBeVisible();
+
+  await page.getByTestId('design-files-tab').click();
+  const sourceRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: 'logic.ts',
+  });
+  await expect(sourceRow).toBeVisible();
+  await sourceRow.getByRole('button').first().click();
+  await clickDesignFilePreviewOpen(page);
+  await expect(page.getByRole('tab', { name: /logic\.ts/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.code-viewer')).toContainText('riskScore');
+
+  await page.getByRole('tab', { name: /dashboard\.html/i }).click();
+  await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    name: 'Risk Dashboard',
+  })).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+});
+
 async function runDesignFilesTabPersistenceFlow(page: Page) {
   const { projectId } = await getCurrentProjectContext(page);
   const pngBytes = Buffer.from(
@@ -442,17 +549,25 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   await expect(restoredFirstTab).toBeVisible();
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'true');
 
-  // The refreshed workspace restores the active file tab, while other project files
-  // remain available from the Design Files list until the user reopens them.
-  await page.getByTestId('design-files-tab').click();
-  const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'second-tab.png',
-  });
-  await expect(secondFileRow).toBeVisible();
-  await secondFileRow.getByRole('button').first().click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
-
   const restoredSecondTab = page.getByRole('tab', { name: /second-tab\.png/i });
+  const secondTabAlreadyRestored = await restoredSecondTab
+    .waitFor({ state: 'visible', timeout: 3_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (secondTabAlreadyRestored) {
+    await restoredSecondTab.click();
+  } else {
+    // Depending on restoration timing, inactive files can either be restored as
+    // tabs already or remain available from the Design Files list.
+    await page.getByTestId('design-files-tab').click();
+    const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
+      hasText: 'second-tab.png',
+    });
+    await expect(secondFileRow).toBeVisible();
+    await secondFileRow.getByRole('button').first().click();
+    await clickDesignFilePreviewOpen(page);
+  }
+
   await expect(restoredSecondTab).toBeVisible();
   await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'true');
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'false');
@@ -463,4 +578,21 @@ function homeDesignCard(page: Page, name: string): Locator {
   return page.locator('.design-card', {
     has: page.locator('.design-card-name', { hasText: name }),
   });
+}
+
+function designFileScenarioPriority(entry: UiScenario): 'P0' | 'P1' {
+  switch (entry.flow) {
+    case 'design-files-upload':
+    case 'design-files-delete':
+    case 'design-files-tab-persistence':
+      return 'P0';
+    case 'uploaded-image-renders-in-preview':
+    case 'python-source-preview':
+    default:
+      return 'P1';
+  }
+}
+
+function criticalDesignFileScenarioTag(entry: UiScenario): string {
+  return CRITICAL_DESIGN_FILE_SCENARIO_IDS.has(entry.id) ? ' @critical' : '';
 }

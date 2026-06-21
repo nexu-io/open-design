@@ -21,6 +21,7 @@ export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/daemon",
   "@open-design/desktop",
+  "@open-design/launcher-proto",
   "@open-design/packaged",
   "@open-design/sidecar",
   "@open-design/sidecar-proto",

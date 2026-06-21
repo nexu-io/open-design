@@ -85,4 +85,21 @@ describe("resolveWinInstallIdentity", () => {
       silentCheck.indexOf("Call DetectRunningInstances"),
     );
   });
+
+  it("syncs launcher runtime metadata after a successful Windows install", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain("Function SyncLauncherRuntime");
+    expect(source).toContain("buildInitialLauncherRuntimeDescriptor(config, packagedVersion)");
+    expect(source).toContain('Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"');
+    expect(source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"')).toBeLessThan(
+      source.indexOf("Call SyncLauncherRuntime"),
+    );
+    expect(source.indexOf("Call SyncLauncherRuntime")).toBeLessThan(source.indexOf('Push "install section done"'));
+  });
+
+  it("keeps installer diagnostic log events ASCII-only for silent overwrite", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain('Push "existing installation found; silent install will overwrite it"');
+    expect(source).not.toContain('Push "$(ExistingInstallSilentOverwrite)"');
+  });
 });

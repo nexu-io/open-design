@@ -46,7 +46,13 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
     setAttributes(el, patch.attributes);
   } else if (patch.kind === 'set-outer-html') {
     const replaced = replaceOuterHtml(doc, el, patch.html);
-    if (!replaced.ok) return { ok: false, source, error: replaced.error };
+    if (!replaced.ok) {
+      return {
+        ok: false,
+        source,
+        error: 'error' in replaced ? replaced.error : 'Could not replace element HTML.',
+      };
+    }
   } else if (patch.kind === 'remove-element') {
     if (!el.parentElement) {
       return { ok: false, source, error: 'Cannot remove the root element.' };

@@ -11,6 +11,7 @@ import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -47,6 +48,15 @@ describe('HandoffButton i18n', () => {
     expect(css).toContain('width: 24px;');
   });
 
+  it('makes the selected CLI framework visibly distinct', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain('.app .handoff-framework-chip.active');
+    expect(css).toContain('color: var(--accent-strong);');
+    expect(css).toContain('font-weight: 700;');
+    expect(css).toContain('box-shadow:');
+  });
+
   it('localizes the primary handoff label', async () => {
     stubEditors([{ id: 'finder', label: 'Finder', available: true }]);
 
@@ -55,6 +65,22 @@ describe('HandoffButton i18n', () => {
     const trigger = await screen.findByTestId('handoff-trigger');
     expect(trigger.getAttribute('title')).toBe('Open in Finder');
     expect(trigger.querySelector('.handoff-trigger-label')?.classList.contains('sr-only')).toBe(true);
+  });
+
+  it('does not show the preferred editor row as selected', async () => {
+    window.localStorage.setItem('open-design:preferred-editor', 'cursor');
+    stubEditors([
+      { id: 'cursor', label: 'Cursor', available: true },
+      { id: 'finder', label: 'Finder', available: true },
+    ]);
+
+    renderLocalized('en');
+
+    fireEvent.click(await screen.findByTestId('handoff-caret'));
+    const cursorRow = await screen.findByTestId('handoff-menu-item-cursor');
+
+    expect(cursorRow.className).not.toContain('active');
+    expect(cursorRow.getAttribute('aria-current')).toBeNull();
   });
 
   it('localizes the unavailable editor section', async () => {
@@ -67,7 +93,8 @@ describe('HandoffButton i18n', () => {
 
     fireEvent.click(await screen.findByTestId('handoff-caret'));
 
-    expect(await screen.findByText('未安装')).toBeTruthy();
+    expect(await screen.findAllByText('未安装')).toHaveLength(1);
+    expect(screen.getByTestId('handoff-menu-item-cursor').textContent).toBe('Cursor');
     expect(screen.getByTestId('handoff-menu-item-cursor').getAttribute('title'))
       .toBe('Cursor - 未在 $PATH 中检测到');
   });

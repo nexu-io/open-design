@@ -68,6 +68,13 @@
     "taskKind": "new-generation",
     "scenario": "new-generation",
     "mode": "scenario",
+    "context": {
+      "craft": [
+        "typography",
+        "color",
+        "anti-ai-slop"
+      ]
+    },
     "pipeline": {
       "stages": [
         {

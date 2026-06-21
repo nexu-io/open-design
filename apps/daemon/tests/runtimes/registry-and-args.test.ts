@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
@@ -60,6 +60,7 @@ test('local agent profiles inherit a base adapter and can pin the default model'
         ZCODE_ROUTE: 'design',
         RETRIES: '2',
       });
+      assert.equal(profile.authProbe, undefined);
 
       const defaultArgs = profile.buildArgs('', [], [], {});
       assert.deepEqual(defaultArgs.slice(0, 2), ['run', '-p']);
@@ -128,33 +129,35 @@ test('sandbox mode ignores implicit and host explicit local agent profiles', asy
 });
 
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
-  process.env.OD_CODEX_DISABLE_PLUGINS = '1';
+  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    process.env.OD_CODEX_DISABLE_PLUGINS = '1';
+    delete process.env.OD_CODEX_SANDBOX;
 
-  withPlatform('darwin', () => {
-    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+    withPlatform('darwin', () => {
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-    assert.deepEqual(args.slice(0, 11), [
-      'exec',
-      '--json',
-      '--skip-git-repo-check',
-      '--sandbox',
-      'workspace-write',
-      '-c',
-      'sandbox_workspace_write.network_access=true',
-      '-c',
-      'default_permissions=":workspace"',
-      '--disable',
-      'plugins',
-    ]);
+      assert.deepEqual(args.slice(0, 9), [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'workspace-write',
+        '-c',
+        'sandbox_workspace_write.network_access=true',
+        '--disable',
+        'plugins',
+      ]);
+    });
   });
 });
 
 test('codex args use workspace-write sandbox on macOS and Linux', () => {
-  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
 
-  for (const platform of ['darwin', 'linux'] as const) {
-    withPlatform(platform, () => {
-      withEnvSnapshot(['WSL_DISTRO_NAME'], () => {
+    for (const platform of ['darwin', 'linux'] as const) {
+      withPlatform(platform, () => {
         delete process.env.WSL_DISTRO_NAME;
         const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
         assert.equal(args.includes('--full-auto'), false);
@@ -169,20 +172,17 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
           args.includes('-c'),
           true,
         );
-        assert.equal(
-          args.includes('default_permissions=":workspace"'),
-          true,
-        );
+        assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
       });
-    });
-  }
+    }
+  });
 });
 
 test('codex args use danger-full-access sandbox on WSL because workspace-write stays read-only', () => {
-  delete process.env.OD_CODEX_DISABLE_PLUGINS;
-
   withPlatform('linux', () => {
-    withEnvSnapshot(['WSL_DISTRO_NAME'], () => {
+    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.OD_CODEX_DISABLE_PLUGINS;
+      delete process.env.OD_CODEX_SANDBOX;
       process.env.WSL_DISTRO_NAME = 'Ubuntu';
       assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), true);
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
@@ -193,7 +193,51 @@ test('codex args use danger-full-access sandbox on WSL because workspace-write s
         '--sandbox',
         'danger-full-access',
       ]);
-      assert.equal(args.includes('default_permissions=":workspace"'), true);
+      assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
+    });
+  });
+});
+
+test('codex args allow OD_CODEX_SANDBOX danger-full-access override on Linux', () => {
+  withPlatform('linux', () => {
+    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.OD_CODEX_DISABLE_PLUGINS;
+      process.env.OD_CODEX_SANDBOX = 'danger-full-access';
+      delete process.env.WSL_DISTRO_NAME;
+
+      assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), true);
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+      assert.deepEqual(args.slice(0, 5), [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'danger-full-access',
+      ]);
+      assert.equal(
+        args.includes('sandbox_workspace_write.network_access=true'),
+        false,
+      );
+    });
+  });
+});
+
+test('codex args ignore unknown OD_CODEX_SANDBOX values', () => {
+  withPlatform('linux', () => {
+    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.OD_CODEX_DISABLE_PLUGINS;
+      process.env.OD_CODEX_SANDBOX = 'workspace-write';
+      delete process.env.WSL_DISTRO_NAME;
+
+      assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), false);
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+      assert.deepEqual(args.slice(0, 5), [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'workspace-write',
+      ]);
     });
   });
 });
@@ -205,48 +249,57 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
   // The agent cannot list files or run any shell-backed tool under that
   // policy. danger-full-access is Codex CLI's documented Windows-compatible
   // mode (issue #1721).
-  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
 
-  withPlatform('win32', () => {
-    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+    withPlatform('win32', () => {
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-    assert.deepEqual(args.slice(0, 5), [
-      'exec',
-      '--json',
-      '--skip-git-repo-check',
-      '--sandbox',
-      'danger-full-access',
-    ]);
-    // The workspace-write-scoped network override is meaningless under
-    // danger-full-access and must not appear on Windows.
-    assert.equal(args.includes('workspace-write'), false);
-    assert.equal(
-      args.includes('sandbox_workspace_write.network_access=true'),
-      false,
-    );
-    assert.equal(args.includes('default_permissions=":workspace"'), true);
+      assert.deepEqual(args.slice(0, 5), [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'danger-full-access',
+      ]);
+      // The workspace-write-scoped network override is meaningless under
+      // danger-full-access and must not appear on Windows.
+      assert.equal(args.includes('workspace-write'), false);
+      assert.equal(
+        args.includes('sandbox_workspace_write.network_access=true'),
+        false,
+      );
+      assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
+    });
   });
 });
 
 test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', () => {
-  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
 
-  withPlatform('darwin', () => {
-    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+    withPlatform('darwin', () => {
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-    assert.equal(args.includes('--disable'), false);
-    assert.equal(args.includes('plugins'), false);
+      assert.equal(args.includes('--disable'), false);
+      assert.equal(args.includes('plugins'), false);
+    });
   });
 });
 
 test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', () => {
-  process.env.OD_CODEX_DISABLE_PLUGINS = 'true';
+  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    process.env.OD_CODEX_DISABLE_PLUGINS = 'true';
+    delete process.env.OD_CODEX_SANDBOX;
 
-  withPlatform('darwin', () => {
-    const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+    withPlatform('darwin', () => {
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-    assert.equal(args.includes('--disable'), false);
-    assert.equal(args.includes('plugins'), false);
+      assert.equal(args.includes('--disable'), false);
+      assert.equal(args.includes('plugins'), false);
+    });
   });
 });
 
@@ -314,6 +367,141 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   }
 });
 
+test('claude probes auth status so rescans reflect CLI auth changes', async () => {
+  assert.deepEqual(claude.authProbe, {
+    args: ['auth', 'status'],
+    timeoutMs: 5000,
+  });
+
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-auth-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN'], async () => {
+      const claudeBin = join(dir, 'claude');
+      writeFileSync(
+        claudeBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
+if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":true,"source":"claude.ai"}'; exit 0; fi
+exit 0
+`,
+      );
+      chmodSync(claudeBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      delete process.env.CLAUDE_BIN;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'claude');
+
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.authStatus, 'ok');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('claude API key env satisfies auth probe without requiring local login', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-api-key-auth-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN', 'ANTHROPIC_API_KEY'], async () => {
+      const claudeBin = join(dir, 'claude');
+      writeFileSync(
+        claudeBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
+if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":false}'; exit 1; fi
+exit 0
+`,
+      );
+      chmodSync(claudeBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      process.env.ANTHROPIC_API_KEY = 'sk-anthropic';
+      delete process.env.CLAUDE_BIN;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'claude');
+
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.authStatus, 'ok');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex probes login status so rescans reflect CLI auth changes', async () => {
+  assert.deepEqual(codex.authProbe, {
+    args: ['login', 'status'],
+    timeoutMs: 5000,
+  });
+
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-auth-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
+exit 0
+`,
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      delete process.env.CODEX_BIN;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
+
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.authStatus, 'ok');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex API key env satisfies auth probe without requiring local login', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-api-key-auth-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN', 'CODEX_API_KEY'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
+if [ "$1" = "debug" ] && [ "$2" = "models" ]; then echo '{"models":[]}'; exit 0; fi
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Not logged in"; exit 1; fi
+exit 0
+`,
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      process.env.CODEX_API_KEY = 'sk-codex';
+      delete process.env.CODEX_BIN;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
+
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.authStatus, 'ok');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('codex parses live model catalog from debug models JSON', () => {
   assert.ok(codex.listModels, 'codex must define live model discovery');
   const parsed = codex.listModels.parse(JSON.stringify({
@@ -356,6 +544,7 @@ if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
   printf '%s\\n' '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}'
   exit 0
 fi
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
 exit 2
 `,
       );
@@ -401,6 +590,26 @@ test('cursor-agent parses live model ids separately from display labels', () => 
     { id: 'auto', label: 'Auto' },
     { id: 'composer-2.5', label: 'Composer 2.5 (current)' },
     { id: 'grok-4.3', label: 'Grok 4.3 1M' },
+  ]);
+});
+
+test('grok-build filters login headers from live model discovery output', () => {
+  assert.ok(grokBuild.listModels, 'grok-build must define live model discovery');
+  const parsed = grokBuild.listModels.parse([
+    'You are logged in with grok.com.',
+    '',
+    'Default model: grok-build',
+    '',
+    'Available models:',
+    '',
+    '- grok-composer-2.5-fast',
+    '* grok-build (default)',
+  ].join('\n'));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'grok-composer-2.5-fast', label: 'grok-composer-2.5-fast' },
+    { id: 'grok-build', label: 'grok-build' },
   ]);
 });
 
@@ -458,4 +667,29 @@ test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', (
     args.filter((arg, index) => arg === '--add-dir' || args[index - 1] === '--add-dir'),
     ['--add-dir', '/repo/skills', '--add-dir', '/tmp/codex/generated_images'],
   );
+});
+
+test('amp uses headless execute mode with the Claude-compatible stream parser', () => {
+  assert.equal(amp.streamFormat, 'claude-stream-json');
+  assert.equal(amp.promptViaStdin, true);
+  // Plain-text stdin (default): the daemon writes the composed prompt and
+  // closes stdin for a clean one-shot turn. We must NOT opt into
+  // stream-json input mode (that keeps stdin open for tool_result loops).
+  assert.notEqual(amp.promptInputFormat, 'stream-json');
+  assert.equal(amp.supportsCustomModel, false);
+
+  const base = amp.buildArgs('', [], [], {});
+  assert.deepEqual(base, ['-x', '--stream-json', '--dangerously-allow-all']);
+
+  // The synthetic 'default' model must not leak a flag.
+  const def = amp.buildArgs('', [], [], { model: 'default' });
+  assert.equal(def.includes('--mode'), false);
+
+  // A known mode maps onto Amp's `--mode`.
+  const smart = amp.buildArgs('', [], [], { model: 'smart' });
+  assert.deepEqual(smart, ['-x', '--stream-json', '--dangerously-allow-all', '--mode', 'smart']);
+
+  // An unknown model id is ignored rather than passed as a bogus mode.
+  const bogus = amp.buildArgs('', [], [], { model: 'gpt-5' });
+  assert.equal(bogus.includes('--mode'), false);
 });

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-product-promo",
+  "title": "Product Promo",
+  "title_i18n": {
+    "en": "Product Promo",
+    "zh-CN": "产品宣传"
+  },
+  "version": "0.1.0",
+  "description": "Multi-scene product showcase with SVG assets",
+  "description_i18n": {
+    "en": "Multi-scene product showcase with SVG assets",
+    "zh-CN": "多镜头产品宣传动效合成，场景依次切换，适合功能展示与发布短片。"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-product-promo",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "product",
+    "promo",
+    "multi-scene",
+    "showcase",
+    "svg",
+    "product-demo"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-product-promo/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-product-promo/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Product Promo HyperFrames template to create a 20s product-demo video. Replace the sample copy with real content, preserve the template's motion signature, and render to MP4.",
+        "zh-CN": "使用「产品宣传」HyperFrames 模板创建一段约 20 秒的product-demo动效视频。把示例文案替换为真实内容，保留模板的动效签名，并渲染为 MP4。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 20
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "attribution": [
+      {
+        "name": "hyperframes registry/examples/product-promo",
+        "license": "Apache-2.0",
+        "author": "heygen-com / Hyperframes",
+        "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/product-promo"
+      }
+    ]
+  }
+}

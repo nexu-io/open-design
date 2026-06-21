@@ -126,7 +126,6 @@ export const playwrightUiScenarios: UiScenario[] = [
     prompt: 'Create a launch poster image prompt',
     expectedProjectMetadata: {
       kind: 'image',
-      imageModel: 'gpt-image-2',
     },
     notes: [
       'Keeps this smoke focused on create-time routing and metadata, not downstream image generation providers.',
@@ -148,7 +147,7 @@ export const playwrightUiScenarios: UiScenario[] = [
     prompt: 'Create a short product teaser video prompt',
     expectedProjectMetadata: {
       kind: 'video',
-      videoModel: 'doubao-seedance-2-0-260128',
+      videoModel: 'hyperframes-html',
       videoAspect: '16:9',
       videoLength: 5,
     },
@@ -174,7 +173,6 @@ export const playwrightUiScenarios: UiScenario[] = [
     expectedProjectMetadata: {
       kind: 'audio',
       audioKind: 'sfx',
-      audioModel: 'elevenlabs-sfx',
     },
     notes: [
       'Verifies the media audio branch still saves SFX-specific metadata without depending on provider execution.',

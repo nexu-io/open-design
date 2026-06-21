@@ -137,8 +137,28 @@ if (process.stdin.isTTY || agentId === 'deepseek') {
 async function emitRun(promptText) {
   if (emitted) return;
   emitted = true;
+  if (promptText.includes('Hold the daemon run open until canceled')) {
+    // Stay running (busy) without ever emitting a terminal result, so a test
+    // can queue a follow-up turn and interrupt it via send-now. Keep the event
+    // loop alive indefinitely; the daemon kills this child (SIGTERM) when the
+    // run is canceled.
+    setInterval(() => {}, 1 << 30);
+    return;
+  }
   if (promptText.includes('Return an intentional daemon smoke failure')) {
     emitFailure();
+    return;
+  }
+  if (promptText.includes('Return a daemon 429 service failure')) {
+    emitServiceFailure(429);
+    return;
+  }
+  if (promptText.includes('Return a daemon 503 service failure')) {
+    emitServiceFailure(503);
+    return;
+  }
+  if (promptText.includes('Return a daemon socket-drop failure')) {
+    emitSocketDropFailure();
     return;
   }
   if (promptText.includes('Return an empty daemon smoke response')) {
@@ -152,6 +172,7 @@ async function emitRun(promptText) {
     await emitPluginAuthoringRun();
     return;
   }
+  const isSlowReload = promptText.includes('Create a slow reload deterministic smoke artifact');
   const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
   const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
   const isFollowUp = promptText.includes('Create a follow-up deterministic smoke artifact');
@@ -163,18 +184,23 @@ async function emitRun(promptText) {
   }
   const isRuntime = promptText.match(/Fake runtime smoke for ([a-z0-9-]+)/i);
   const runtimeId = isRuntime ? isRuntime[1] : agentId;
-  const heading = isDelayed ? 'Delayed Daemon Smoke' : isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
-  const identifier = isDelayed ? 'delayed-daemon-smoke' : isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
-  const text = isDelayed ? 'Generated after a delayed daemon turn.' : isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
+  const heading = isSlowReload ? 'Slow Reload Daemon Smoke' : isDelayed ? 'Delayed Daemon Smoke' : isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
+  const identifier = isSlowReload ? 'slow-reload-daemon-smoke' : isDelayed ? 'delayed-daemon-smoke' : isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
+  const text = isSlowReload ? 'Generated after a reload while the daemon run was active.' : isDelayed ? 'Generated after a delayed daemon turn.' : isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
   const html = '<!doctype html><html><body><main><h1>' + heading + '</h1><p>' + text + '</p></main></body></html>';
   const artifact = '<artifact identifier="' + identifier + '" type="text/html" title="' + heading + '">' + html + '</artifact>';
-  const assistantText = isDelayed
+  const assistantText = isSlowReload
+    ? 'I stayed attached after the reload and will persist the artifact now.\\n\\n' + artifact
+    : isDelayed
     ? 'I recovered the delayed reasoning path and will persist the artifact now.\\n\\n' + artifact
     : artifact;
+  if (isSlowReload) {
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
   if (isDelayed) {
     await new Promise((resolve) => setTimeout(resolve, 1200));
   }
-  emitSuccess(assistantText, isChunked, isDelayed);
+  emitSuccess(assistantText, isChunked, isDelayed || isSlowReload);
   process.exitCode = 0;
   exitSoon(0);
 }
@@ -380,6 +406,82 @@ function emitFailure() {
       process.exitCode = 1;
       exitSoon(1);
   }
+}
+
+function emitServiceFailure(statusCode) {
+  const message =
+    statusCode === 429
+      ? 'HTTP 429 Too Many Requests: rate limit exceeded for the current provider.'
+      : 'HTTP 503 Service Unavailable: upstream model provider is temporarily unavailable.';
+  switch (agentId) {
+    case 'codex':
+      writeJson({ type: 'thread.started' });
+      writeJson({ type: 'turn.started' });
+      writeJson({ type: 'turn.failed', error: { message } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    case 'opencode':
+      writeJson({ type: 'error', error: { data: { message } } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    default:
+      process.stderr.write(message + '\\n');
+      process.exitCode = 1;
+      exitSoon(1);
+  }
+}
+
+// Reproduces a connection that dropped mid-response. This shape is NOT guessed:
+// it was captured by pointing the real Claude Code CLI (2.1.168) at a fake
+// Anthropic endpoint that accepts the request, starts streaming, then destroys
+// the TCP socket. The real CLI exhausts its internal retries and then, on
+// STDOUT (not stderr), emits the SDK error as a synthetic assistant text block
+// plus a result frame carrying is_error:true with subtype "success", and exits
+// 1. The daemon's claude diagnostic reads the stdout tail and classifies it as
+// a retryable connection drop.
+//
+// Only claude is modeled here: the daemon connection-drop diagnostic is
+// claude-specific, and the real Codex CLI fails this class differently (it
+// streams "Reconnecting... N/5" and a turn.failed event over its own
+// transport), so a faithful Codex case belongs with Codex-specific handling,
+// not this claude reproduction.
+function emitSocketDropFailure() {
+  const sdkError =
+    'API Error: The socket connection was closed unexpectedly. For more information, pass \`verbose: true\` in the second argument to fetch()';
+  if (agentId === 'claude') {
+    writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+    writeJson({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        model: '<synthetic>',
+        role: 'assistant',
+        stop_reason: 'stop_sequence',
+        content: [{ type: 'text', text: sdkError }],
+      },
+      error: 'unknown',
+    });
+    writeJson({
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      result: sdkError,
+      stop_reason: 'stop_sequence',
+      duration_ms: 1,
+      total_cost_usd: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    });
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
+  // Other runtimes are not the subject of the claude connection diagnostic;
+  // surface a generic non-zero exit carrying the same SDK error text.
+  process.stderr.write(sdkError + '\\n');
+  process.exitCode = 1;
+  exitSoon(1);
 }
 
 function emitEmptySuccess() {

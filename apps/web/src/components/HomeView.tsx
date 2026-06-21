@@ -7,9 +7,11 @@
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
 import type {
   ApplyResult,
+  ChatSessionMode,
   ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
@@ -21,8 +23,12 @@ import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackCommunityGalleryClick,
   trackHomeChatComposerClick,
   trackPageView,
+  trackPluginDetailModalClick,
+  trackPluginDetailModalSharePopoverClick,
+  trackPluginDetailModalSurfaceView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
   trackPluginReplacementResult,
@@ -35,23 +41,30 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
-import { useI18n } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import {
   localizeSkillName,
   localizeSkillPrompt,
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { IMAGE_MODELS } from '../media/models';
+import {
+  mergeAihubmixImageModels,
+  useAIHubMixImageModels,
+} from '../media/aihubmix-image-models';
+import { openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from '../providers/registry';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
   Project,
-  ProjectFile,
   ProjectMetadata,
   PromptTemplateSummary,
   SkillSummary,
 } from '../types';
-import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
+import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
+import { smoothScrollToTop } from '../utils/smoothScrollToTop';
+import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
+import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -68,13 +81,17 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
+import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import type { FacetSelection } from './plugins-home/facets';
+import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
+import { localizePluginDescription } from './plugins-home/localization';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { AnimatePresence } from 'motion/react';
 
-interface ActivePlugin {
+export interface ActivePlugin {
   record: InstalledPluginRecord;
   // `result` is `null` during the optimistic window — set on chip
   // click before applyPlugin's roundtrip finishes — and is filled in
@@ -86,6 +103,11 @@ interface ActivePlugin {
   inputFields: InputFieldSpec[];
   inputsValid: boolean;
   queryTemplate: string | null;
+  // True when `queryTemplate` covers only a suffix of the prompt (the plugin
+  // query appended after a user-owned draft), so input extraction must allow
+  // an arbitrary mutable prefix instead of anchoring at the start. Set by the
+  // use-with-query route.
+  queryTemplateAllowsPrefix?: boolean;
   lastRenderedPrompt: string | null;
   // Stage B of plugin-driven-flow-plan: when the user applied this
   // plugin through the Home chip rail, the chip carries the project
@@ -108,18 +130,35 @@ interface ActivePlugin {
   // would back-fill the textarea, defeating the suppression that
   // the chip click set up.
   suppressPromptSync: boolean;
+  // True when the user explicitly picked THIS plugin — an example-prompt preset
+  // card or a Community card / detail modal — rather than a type chip binding
+  // its default plugin. Drives the active chip's clear (×) affordance. Persisted
+  // rather than re-derived from id equality, because a preset's plugin can
+  // legitimately equal the chip's default plugin id (e.g. the prototype rail's
+  // `example-web-prototype`).
+  explicitPick: boolean;
 }
 
+// `inlineBacked` distinguishes a context inserted as an inline `@mention` pill
+// (added through the mention picker / plus menu, which writes a token into the
+// prompt) from a context-only selection made through the plain `Use` action
+// (which stages the context without touching the prompt). Inline-backed
+// contexts are dropped once their `@` token is deleted; context-only ones stay
+// selected until explicitly removed. Conflating the two drops plain `Use`
+// selections from the submit payload because they never carry a token.
 interface SelectedPluginContext {
   record: InstalledPluginRecord;
+  inlineBacked: boolean;
 }
 
 interface SelectedMcpContext {
   server: McpServerConfig;
+  inlineBacked: boolean;
 }
 
 interface SelectedConnectorContext {
   connector: ConnectorDetail;
+  inlineBacked: boolean;
 }
 
 interface PendingReplacement {
@@ -150,30 +189,22 @@ const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
   topic: 'packaging a reusable workflow as an Open Design plugin',
 };
 
-type HomeDesignSystemOption = {
-  id: string;
-  title: string;
-  isDefault: boolean;
-  auto?: boolean;
-  group?: 'Personal' | 'Official preset' | 'Enterprise';
-  category?: string;
-  summary?: string;
-  swatches?: string[];
-  logoUrl?: string;
-};
-
-const AUTO_DESIGN_SYSTEM_OPTION_ID = '__auto-design-system__';
-const LEGACY_AUTO_DESIGN_SYSTEM_TITLES = new Set(['自动选择风格参考']);
 
 interface Props {
+  isActive?: boolean;
   projects: Project[];
   projectsLoading?: boolean;
   designSystems?: DesignSystemSummary[];
   defaultDesignSystemId?: string | null;
-  onSubmit: (payload: PluginLoopSubmit) => void;
+  // Resolves false when the project/conversation creation was rejected —
+  // the composer uses that to leave the sending state and let the user
+  // retry (#4082). Plain-void handlers keep working (treated as accepted).
+  onSubmit: (payload: PluginLoopSubmit) => Promise<boolean> | boolean | void;
   onOpenProject: (id: string) => void;
   onViewAllProjects: () => void;
   onBrowseRegistry?: () => void;
+  onOpenIntegrations?: () => void;
+  onOpenMcp?: () => void;
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
@@ -183,6 +214,7 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  executionSwitcher?: ReactNode;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -191,6 +223,7 @@ const EMPTY_CONNECTORS: ConnectorDetail[] = [];
 const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 
 export function HomeView({
+  isActive = true,
   projects,
   projectsLoading,
   designSystems = EMPTY_DESIGN_SYSTEMS,
@@ -199,12 +232,15 @@ export function HomeView({
   onOpenProject,
   onViewAllProjects,
   onBrowseRegistry,
+  onOpenIntegrations,
+  onOpenMcp,
   onOpenNewProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  executionSwitcher,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -231,19 +267,59 @@ export function HomeView({
   const [fallbackProjectMetadata, setFallbackProjectMetadata] =
     useState<ProjectMetadata | null>(null);
   const [active, setActive] = useState<ActivePlugin | null>(null);
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  // Token paired with `workingDir` when picked through the desktop host's
+  // native dialog. Spent on the post-creation working-dir POST so the
+  // daemon's desktop-auth gate accepts the path. Null for web picks.
+  const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
+  // Global most-recently-used working directories, surfaced in the picker's
+  // "Recent folders" submenu. Loaded from the daemon's app-config and bumped
+  // whenever the user picks a folder.
+  const [recentDirs, setRecentDirs] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRecentLinkedDirs().then((dirs) => {
+      if (!cancelled) setRecentDirs(dirs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const rememberRecentDir = useCallback(async (dir: string) => {
+    // Optimistically promote the dir to the front so the submenu updates
+    // immediately; the daemon also trims/de-dupes/caps the persisted list.
+    setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 5));
+    const persisted = await pushRecentLinkedDir(dir);
+    setRecentDirs(persisted);
+  }, []);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [promptEditedByUser, setPromptEditedByUser] = useState(false);
+  const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
+  const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
+    examplePromptInfoRef.current = info;
+  }, []);
   const [error, setError] = useState<string | null>(null);
-  const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
+  // In-flight window between Send and the run starting (or failing) — the
+  // project-creation roundtrip happens upstream of this component, so the
+  // submit handler's promise is the only signal that it settled (#4082).
+  const [sending, setSending] = useState(false);
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
+  // Live AIHubMix image catalogue merged into the home media composer's model
+  // picker (replaces the static aihubmix seeds when the fetch resolves).
+  const aihubmixImageModels = useAIHubMixImageModels();
+  const composerImageModels = useMemo(
+    () => mergeAihubmixImageModels(IMAGE_MODELS, aihubmixImageModels),
+    [aihubmixImageModels],
+  );
   const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
@@ -265,11 +341,45 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Community gallery analytics. Opening a tile fires both a ui_click on
+  // the card (the funnel's denominator) and a surface_view on the detail
+  // modal it reveals (the numerator); the ↗ that jumps straight to the
+  // real example page is its own ui_click so "go to the finished thing"
+  // stays distinct from "open the detail modal". plugin_id / plugin_type
+  // mirror PluginsView so the two surfaces join on the same keys.
+  const handleCommunityOpenDetails = useCallback(
+    (record: InstalledPluginRecord) => {
+      const pluginId = record.sourceMarketplaceEntryName ?? record.id;
+      const pluginType = record.marketplaceTrust ?? 'official';
+      trackCommunityGalleryClick(analytics.track, {
+        page_name: 'home',
+        area: 'community_gallery',
+        element: 'card',
+        plugin_id: pluginId,
+        plugin_type: pluginType,
+      });
+      trackPluginDetailModalSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'plugin_detail_modal',
+        plugin_id: pluginId,
+        plugin_type: pluginType,
+      });
+      setDetailsRecord(record);
+    },
+    [analytics.track],
+  );
+  const inputRef = useRef<HomeHeroHandle | null>(null);
+  const homeViewRef = useRef<HTMLDivElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
-
+  const scrollHomeToTop = useCallback(() => {
+    requestAnimationFrame(() => {
+      const scrollContainer = homeViewRef.current?.closest('.entry-main--scroll');
+      if (!(scrollContainer instanceof HTMLElement)) return;
+      smoothScrollToTop(scrollContainer);
+    });
+  }, []);
   useEffect(() => {
     let cancelled = false;
     const load = () => {
@@ -349,6 +459,7 @@ export function HomeView({
       {
         elevenLabsVoiceWarning,
         elevenLabsVoicesLoading,
+        imageModels: composerImageModels,
       },
     );
     const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
@@ -380,17 +491,12 @@ export function HomeView({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading]);
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels]);
 
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
     pendingPromptFocusEndRef.current = false;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    const position = input.value.length;
-    input.setSelectionRange(position, position);
-    input.scrollTop = input.scrollHeight;
+    inputRef.current?.focusEnd();
   }, [prompt]);
 
   useEffect(() => {
@@ -406,6 +512,7 @@ export function HomeView({
       if (promptHandoff.focus) {
         focusPromptAtEnd();
       }
+      scrollHomeToTop();
       return;
     }
 
@@ -425,7 +532,8 @@ export function HomeView({
     setPendingAuthoringInputs(promptHandoff.inputs);
     setPendingAuthoringChipId('create-plugin');
     setPendingChipId('create-plugin');
-  }, [promptHandoff]);
+    scrollHomeToTop();
+  }, [promptHandoff, scrollHomeToTop]);
 
   const activeContextItemCount = useMemo(
     () =>
@@ -435,52 +543,63 @@ export function HomeView({
         : 0,
     [active],
   );
-  const contextItemCount = useMemo(
-    () =>
+  // Inline-backed contexts are already represented in the composer as `@mention`
+  // pills, so they must NOT also drive the active context row — otherwise
+  // selecting only an inline-mentioned connector mounts an empty row (count
+  // label, no visible children) above the editor. Context-only `Use` selections
+  // have no inline representation, so they are the only ones the row should
+  // surface (and count).
+  const contextItemCount = useMemo(() => {
+    const contextOnlyPlugins = selectedPluginContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyMcp = selectedMcpContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyConnectors = selectedConnectorContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    return (
       activeContextItemCount +
-      selectedPluginContexts.length +
-      selectedMcpContexts.length +
-      selectedConnectorContexts.length +
-      stagedFiles.length,
-    [
-      activeContextItemCount,
-      selectedConnectorContexts.length,
-      selectedMcpContexts.length,
-      selectedPluginContexts.length,
-      stagedFiles.length,
-    ],
-  );
-
-  // The Home chip rail and the Community grid share a mental
-  // model — "Prototype" up top is the same artifact intent as the
-  // `prototype` slice down below. When the user picks a chip,
-  // we drive the starters' FacetSelection from it so they get a
-  // pre-filtered shelf of templates for the same intent without having
-  // to scroll and re-pick. `pendingChipId` (set on click, before apply
-  // resolves) is preferred over `active?.chipId` so the filter snaps on
-  // the same frame as the click.
-  const presetStartersSelection = useMemo<FacetSelection | null>(() => {
-    const chipId = pendingChipId ?? active?.chipId ?? null;
-    if (!chipId) return null;
-    return facetSelectionForChip(chipId);
-  }, [pendingChipId, active?.chipId]);
+      contextOnlyPlugins +
+      contextOnlyMcp +
+      contextOnlyConnectors +
+      stagedFiles.length
+    );
+  }, [
+    activeContextItemCount,
+    selectedConnectorContexts,
+    selectedMcpContexts,
+    selectedPluginContexts,
+    stagedFiles.length,
+  ]);
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
   // record title (e.g. "New generation (default scenario)"). Several
   // chips share od-new-generation, so surfacing the raw plugin title
   // would mislabel what the user actually picked.
-  const activeBadgeTitle = useMemo(() => {
-    if (!active) return null;
-    if (active.chipId) {
+  const activeBadge = useMemo(() => {
+    if (!active) return { title: null as string | null, isExplicitPlugin: false };
+    // A type-chip's default-plugin binding stands in for the task chip: show the
+    // chip label and defer clearing to the footer ActiveTypeChip. An explicit
+    // pick (example-prompt preset / Community card / detail modal) always shows
+    // its own plugin title and owns the clear (×) button — even when the
+    // preset's plugin id equals the chip's default plugin.
+    if (!active.explicitPick && active.chipId) {
       const defaultPluginId = defaultPluginIdForChip(active.chipId);
       const chip = findChip(active.chipId);
       if (chip && (defaultPluginId === null || defaultPluginId === active.record.id)) {
-        return homeHeroChipLabelForId(chip.id, t);
+        return { title: homeHeroChipLabelForId(chip.id, t), isExplicitPlugin: false };
       }
     }
-    return active.record.title;
-  }, [active, t]);
+    return {
+      title: localizePluginTitle(locale, active.record),
+      isExplicitPlugin: true,
+    };
+  }, [active, locale, t]);
+  const activeBadgeTitle = activeBadge.title;
+  const activePluginIsExplicit = activeBadge.isExplicitPlugin;
   const showActivePluginChip = useMemo(
     () => shouldShowActivePluginChip(active),
     [active],
@@ -496,56 +615,18 @@ export function HomeView({
     [mcpServers],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const personalSystems = designSystems.filter((system) => (
-      system.projectId &&
-      designSystemOptionGroup(system) === 'Personal' &&
-      (system.status ?? 'draft') === 'published'
-    ));
-    if (personalSystems.length === 0) {
-      setDesignSystemLogoById((current) => (
-        Object.keys(current).length === 0 ? current : {}
-      ));
-      return;
-    }
-
-    void Promise.all(
-      personalSystems.map(async (system) => {
-        const projectId = system.projectId;
-        if (!projectId) return [system.id, null] as const;
-        const files = await fetchProjectFiles(projectId);
-        const logo = findDesignSystemLogoFile(files);
-        if (!logo) return [system.id, null] as const;
-        return [system.id, projectFileUrl(projectId, logo.path ?? logo.name)] as const;
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      const next: Record<string, string> = {};
-      for (const [id, logoUrl] of entries) {
-        if (logoUrl) next[id] = logoUrl;
-      }
-      setDesignSystemLogoById(next);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [designSystems]);
-
-  const designSystemOptions = useMemo(
-    () => designSystemOptionsForHome(designSystems, defaultDesignSystemId, designSystemLogoById, t),
-    [defaultDesignSystemId, designSystemLogoById, designSystems, t],
+  const designSystemPickerSystems = useMemo(
+    () => selectableHomeDesignSystems(designSystems, defaultDesignSystemId),
+    [defaultDesignSystemId, designSystems],
+  );
+  const defaultDesignSystemTitle = useMemo(
+    () => homeDefaultDesignSystemTitle(designSystems, defaultDesignSystemId, t),
+    [defaultDesignSystemId, designSystems, t],
   );
 
   function focusPromptAtEnd() {
     requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (!input) return;
-      input.focus();
-      const position = input.value.length;
-      input.setSelectionRange(position, position);
-      input.scrollTop = input.scrollHeight;
+      inputRef.current?.focusEnd();
     });
   }
 
@@ -571,12 +652,24 @@ export function HomeView({
       // Slide deck binds the plugin context, leaving the user's draft
       // alone.
       suppressPromptUpdate?: boolean;
+      // When true, `queryTemplate` only covers the trailing plugin-query
+      // segment (use-with-query appends it after a mutable user draft), so
+      // input extraction must allow an arbitrary prefix instead of anchoring
+      // the whole prompt.
+      queryTemplateAllowsPrefix?: boolean;
       // Type chips are a mode switch, not a commitment to run. Keeping
       // their apply deferred makes Prototype <-> Deck <-> Media changes
       // feel instant; submit() still resolves the snapshot before sending.
       deferApply?: boolean;
+      // True when the user explicitly picked this plugin (example-prompt preset
+      // or Community card / detail modal) rather than a type chip's default
+      // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
+      explicitPick?: boolean;
     },
-  ) {
+    // Resolves true when the bound plugin left the composer submittable
+    // (inputs valid, apply not failed/superseded) — callers use this to
+    // decide whether the Send cue should fire.
+  ): Promise<boolean> {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
     setActiveSkill(null);
@@ -584,7 +677,7 @@ export function HomeView({
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(
       inputFields,
-      withHomeDesignSystemDefault(options?.inputs, inputFields, designSystemOptions),
+      withHomeDesignSystemDefault(options?.inputs, inputFields, defaultDesignSystemTitle),
     );
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
@@ -617,6 +710,7 @@ export function HomeView({
       inputFields,
       inputsValid,
       queryTemplate,
+      queryTemplateAllowsPrefix: options?.queryTemplateAllowsPrefix === true,
       // When prompt updates are suppressed we leave lastRenderedPrompt
       // null so the inline pattern-extraction in handlePromptChange
       // doesn't claim ownership of the user's typed text.
@@ -632,6 +726,7 @@ export function HomeView({
       editableInputNames: options?.editableInputNames ?? [],
       preserveInputFields: options?.preserveInputFields === true,
       suppressPromptSync: suppressPromptUpdate,
+      explicitPick: options?.explicitPick === true,
     });
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
@@ -644,12 +739,14 @@ export function HomeView({
 
     if (!inputsValid) {
       setPendingChipId(null);
-      return;
+      // Required inputs without defaults: the inputs form is the next step,
+      // not Send.
+      return false;
     }
-    if (!shouldResolveImmediately) return;
+    if (!shouldResolveImmediately) return true;
 
     const result = await resolveActivePlugin(record, optimisticInputs, applyRequestId);
-    if (activePluginApplyRequestRef.current !== applyRequestId) return;
+    if (activePluginApplyRequestRef.current !== applyRequestId) return false;
     if (!result) {
       // Roll back the optimistic active so submit can't fire against a
       // plugin that never bound. Only clear when the in-flight apply
@@ -657,7 +754,7 @@ export function HomeView({
       // would otherwise stomp a successful later apply.
       setActive((prev) => (prev?.record.id === record.id ? { ...prev, inputsValid: false } : prev));
       setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
-      return;
+      return false;
     }
     const reconciledInputs: Record<string, unknown> = { ...optimisticInputs };
     for (const field of result.inputs ?? []) {
@@ -665,6 +762,10 @@ export function HomeView({
         reconciledInputs[field.name] = field.default;
       }
     }
+    const reconciledInputsValid = pluginInputsAreValid(
+      options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
+      reconciledInputs,
+    );
     setActive((prev) =>
       prev && prev.record.id === record.id
         ? {
@@ -672,10 +773,7 @@ export function HomeView({
             result,
             inputs: reconciledInputs,
             inputFields: options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-            inputsValid: pluginInputsAreValid(
-              options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-              reconciledInputs,
-            ),
+            inputsValid: reconciledInputsValid,
             projectMetadata: homeCreateProjectMetadata(
               prev.projectKind,
               reconciledInputs,
@@ -712,6 +810,7 @@ export function HomeView({
         }
       }
     }
+    return reconciledInputsValid;
   }
 
   async function resolveActivePlugin(
@@ -747,11 +846,11 @@ export function HomeView({
     },
   ) {
     const replacement = previewPluginReplacement(record, nextPrompt, {
-      inputs: withHomeDesignSystemDefault(options?.inputs, options?.inputFields ?? record.manifest?.od?.inputs ?? [], designSystemOptions),
+      inputs: withHomeDesignSystemDefault(options?.inputs, options?.inputFields ?? record.manifest?.od?.inputs ?? [], defaultDesignSystemTitle),
       inputFields: options?.inputFields,
       queryTemplate: options?.queryTemplate,
     });
-    const confirm = () => usePlugin(record, nextPrompt, options);
+    const confirm = async () => { await usePlugin(record, nextPrompt, options); };
     if (options?.replaceWithoutConfirmation) {
       void confirm();
       return;
@@ -762,28 +861,95 @@ export function HomeView({
     });
   }
 
-  function requestPluginContextUse(
+  // Picking "Use" on a plugin (from the library hand-off, the Home plugin
+  // section, or the details modal) should make that plugin the routed
+  // driver of the next run — i.e. set it as the active plugin so its own
+  // pipeline + SKILL.md/asset context are applied — rather than only
+  // attaching it as background context. Without this, the submit path
+  // falls back to the hidden od-default scenario and the plugin's design
+  // brief never reaches the agent.
+  //
+  // Prompt handling preserves the legacy context-use semantics:
+  //   - `use-with-query` APPENDS the rendered plugin query to whatever the
+  //     user has already typed (never replaces it), then routes the plugin
+  //     with that combined prompt as the explicit seed.
+  //   - plain `use` leaves the current draft untouched (suppressPromptUpdate)
+  //     while still routing the plugin as the active driver.
+  async function routePluginUse(
     record: InstalledPluginRecord,
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
-    let shouldFocusOnly = true;
-    setSelectedPluginContexts((prev) => {
-      if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+    trackCommunityGalleryClick(analytics.track, {
+      page_name: 'home',
+      area: 'community_gallery',
+      element: 'use_plugin',
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+      action: action === 'use-with-query' ? 'use_with_query' : 'use',
     });
     if (action === 'use-with-query') {
-      const queryPrompt = renderPluginContextPrompt(record, inputs);
-      if (queryPrompt) {
-        shouldFocusOnly = false;
-        pendingPromptFocusEndRef.current = true;
-        setPromptEditedByUser(true);
-        setPrompt((current) => appendPromptQuery(current, queryPrompt));
+      // "Replicate this content" seeds the composer with the SAME human-friendly
+      // text the Home example-prompt cards use (examplePresetSeedPrompt), NOT the
+      // raw `od.useCase.query` — which for many plugins is a generator-facing
+      // meta-instruction ("follow the en field verbatim; start from example.html")
+      // that reads as gibberish in the textarea. Fallback: plugin description /
+      // title (the Home cards inject their richer structured-preview fallback).
+      const seed = examplePresetSeedPrompt(
+        record,
+        locale,
+        () => localizePluginDescription(locale, record).trim() || record.title,
+      );
+      const trimmedSeed = seed.text.trim();
+      const currentDraft = prompt.trim();
+      // Append, don't replace: keep the user's draft and add the seed below it.
+      const combined = !trimmedSeed
+        ? prompt
+        : !currentDraft
+          ? trimmedSeed
+          : `${prompt.trimEnd()}\n\n${trimmedSeed}`;
+      // Preserve placeholder write-back ONLY when the seed IS the rendered
+      // plugin query (a human-friendly, non-meta-instruction query): keep the
+      // raw `{{...}}`-bearing template so editing a hydrated value in the
+      // composer still flows back into `active.inputs` and submit resolves the
+      // snapshot from what the user sees. When we fell back to a description /
+      // meta-instruction seed there are no placeholders to extract, so null the
+      // template (mirrors the example-prompt card path).
+      const rawQueryTemplate = seed.fromRenderedQuery
+        ? resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null
+        : null;
+      const hasTemplate = Boolean(rawQueryTemplate && trimmedSeed);
+      const submittable = await usePlugin(record, combined, {
+        ...(inputs ? { inputs } : {}),
+        queryTemplate: hasTemplate ? rawQueryTemplate : null,
+        // Allow an arbitrary prefix whenever we track the query template, so the
+        // placeholder extractor matches the query as a suffix even when the user
+        // PREPENDS an intro AFTER the seed was inserted (the empty-draft → add
+        // prefix → edit placeholder case). Suffix matching is equally correct
+        // when there is no prefix at all.
+        queryTemplateAllowsPrefix: hasTemplate,
+        explicitPick: true,
+      });
+      scrollHomeToTop();
+      // Plugins with required inputs and no defaults land on the inputs
+      // form, not Send — only cue Send when submit is actually unlocked.
+      if (submittable) {
+        inputRef.current?.pulseSend();
       }
+      return;
     }
-    setError(null);
-    setDetailsRecord(null);
-    if (shouldFocusOnly) focusPromptAtEnd();
+    const submittable = await usePlugin(record, undefined, {
+      ...(inputs ? { inputs } : {}),
+      suppressPromptUpdate: true,
+      explicitPick: true,
+    });
+    scrollHomeToTop();
+    // Plain Use doesn't seed the composer; with no draft and no staged
+    // files (or with required inputs still missing) the send button stays
+    // disabled, and flashing a disabled button points at a dead end.
+    if (submittable && (prompt.trim().length > 0 || stagedFiles.length > 0)) {
+      inputRef.current?.pulseSend();
+    }
   }
 
   function runWithReplacementConfirmation(
@@ -828,18 +994,6 @@ export function HomeView({
     return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
   }
 
-  function renderPluginContextPrompt(
-    record: InstalledPluginRecord,
-    inputs?: Record<string, unknown>,
-  ): string | null {
-    const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
-    if (!query) return null;
-    return renderPluginBriefTemplate(
-      query,
-      hydratePluginInputs(record.manifest?.od?.inputs ?? [], inputs),
-    );
-  }
-
   useEffect(() => {
     if (!pendingPluginUseHandoff || pluginsLoading) return;
     const record = plugins.find((plugin) => plugin.id === pendingPluginUseHandoff.pluginId);
@@ -850,7 +1004,7 @@ export function HomeView({
       );
       return;
     }
-    requestPluginContextUse(
+    void routePluginUse(
       record,
       pendingPluginUseHandoff.action,
       pendingPluginUseHandoff.inputs,
@@ -861,17 +1015,33 @@ export function HomeView({
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: true }];
     });
     if (nextPrompt !== null) setPrompt(nextPrompt);
     setError(null);
     focusPromptAtEnd();
   }
 
-  function useExamplePlugin(_record: InstalledPluginRecord, _chipId: string, promptText: string) {
+  function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
     setError(null);
-    setPrompt(promptText);
-    setPromptEditedByUser(false);
+    // Picking a preset card *binds* the plugin (not just a textarea fill):
+    // active switches to this exact preset so submit resolves its snapshot and
+    // injects the plugin's SKILL.md + example.html as generation context — the
+    // output faithfully recreates the reference. `promptText` is the short,
+    // editable seed; the full build spec rides along in the plugin context.
+    // deferApply mirrors the chip rail: bind now, resolve the snapshot on
+    // submit (submit() already re-resolves), so a preset click stays instant
+    // and doesn't fire an /apply roundtrip per card. The chip is already
+    // active when preset cards are visible, so reuse its project kind/metadata.
+    void usePlugin(record, promptText, {
+      chipId,
+      projectKind: active?.projectKind ?? undefined,
+      projectMetadata: active?.projectMetadata ?? null,
+      deferApply: true,
+      explicitPick: true,
+    }).then((submittable) => {
+      if (submittable) inputRef.current?.pulseSend();
+    });
     focusPromptAtEnd();
   }
 
@@ -892,11 +1062,12 @@ export function HomeView({
       active.queryTemplate,
       nextPrompt,
       active.inputFields,
+      { allowPrefix: active.queryTemplateAllowsPrefix === true },
     );
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
     const normalizedInputs = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices)
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels)
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
@@ -926,15 +1097,52 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  async function handlePickWorkingDir() {
+    // On desktop the working-dir POST is gated behind a host-minted token, so
+    // pick through the host bridge to capture { baseDir, token } together.
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        setWorkingDir(result.baseDir);
+        setWorkingDirToken(result.token);
+        void rememberRecentDir(result.baseDir);
+        return;
+      }
+      // The user explicitly cancelled the host picker — respect that and do
+      // not pop a second dialog.
+      if ('canceled' in result && result.canceled) return;
+      // The host is present but could not service the pick (mixed-version
+      // upgrade where the preload lacks `project.pickWorkingDir`, or a host
+      // error). We must NOT fall back to openFolderDialog() here: the browser
+      // dialog yields a raw path with no host-minted token, so the later
+      // POST /api/projects/:id/working-dir would be rejected by the desktop
+      // auth gate and surface as a confusing late create-time failure.
+      // Surface the host error instead and keep the existing working dir.
+      setError(
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+      );
+      return;
+    }
+    // Pure web path: no desktop host, so there is no token gate — the raw
+    // browser folder path is the expected, working input.
+    const picked = await openFolderDialog();
+    if (picked) {
+      setWorkingDir(picked);
+      setWorkingDirToken(null);
+      void rememberRecentDir(picked);
+    }
+  }
+
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices)
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels)
       : next;
     const mediaComposer = active.mediaSurface
       ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
           elevenLabsVoiceWarning,
           elevenLabsVoicesLoading,
+          imageModels: composerImageModels,
         })
       : null;
     const inputFields = mediaComposer?.fields ?? active.inputFields;
@@ -1013,23 +1221,47 @@ export function HomeView({
     setSelectedMcpContexts((current) => (
       current.some((item) => item.server.id === _server.id)
         ? current
-        : [...current, { server: _server }]
+        : [...current, { server: _server, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setError(null);
     focusPromptAtEnd();
   }
 
+  function removeMcpContext(serverId: string) {
+    const server = selectedMcpContexts.find((item) => item.server.id === serverId)?.server ?? null;
+    setSelectedMcpContexts((current) => current.filter((item) => item.server.id !== serverId));
+    if (server) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        server.label || server.id,
+        server.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
+  }
+
   function useConnector(connector: ConnectorDetail, nextPrompt: string) {
     setSelectedConnectorContexts((current) => (
       current.some((item) => item.connector.id === connector.id)
         ? current
-        : [...current, { connector }]
+        : [...current, { connector, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setPromptEditedByUser(false);
     setError(null);
     focusPromptAtEnd();
+  }
+
+  function removeConnectorContext(connectorId: string) {
+    const connector = selectedConnectorContexts.find((item) => item.connector.id === connectorId)?.connector ?? null;
+    setSelectedConnectorContexts((current) => current.filter((item) => item.connector.id !== connectorId));
+    if (connector) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        connector.name,
+        connector.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
   }
 
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
@@ -1120,6 +1352,7 @@ export function HomeView({
             {
               elevenLabsVoiceWarning,
               elevenLabsVoicesLoading,
+              imageModels: composerImageModels,
             },
           );
           requestActivePlugin(record, undefined, {
@@ -1133,9 +1366,10 @@ export function HomeView({
             editableInputNames: composer.editableFieldNames,
             preserveInputFields: true,
             // Media chips are a mode switch, just like Prototype and
-            // Slide deck: keep their inline model/ratio/duration options
-            // visible, but leave the textarea alone until the user picks
-            // a concrete template/preset or types their own prompt.
+            // Slide deck: they no longer surface inline model/ratio/duration
+            // settings (the agent asks for those during the run), and they
+            // leave the textarea alone until the user picks a concrete
+            // template/preset or types their own prompt.
             suppressPromptUpdate: true,
             replaceWithoutConfirmation: true,
           });
@@ -1181,6 +1415,9 @@ export function HomeView({
   }
 
   async function submit() {
+    // The send button disables itself while sending, but the Enter-to-send
+    // path lands here directly — swallow re-entry during the in-flight window.
+    if (sending) return;
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
     // P0 ui_click area=chat_composer element=send_button. Fires before the
@@ -1194,94 +1431,172 @@ export function HomeView({
     });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
-      setError('Fill the required plugin parameters before running.');
+      const missing = missingRequiredInputs(
+        submittedActive.inputFields,
+        submittedActive.inputs,
+      );
+      setError(
+        missing.length > 0
+          ? `Fill the required plugin ${missing.length === 1 ? 'parameter' : 'parameters'} before running: ${missing.join(', ')}.`
+          : 'Fill the required plugin parameters before running.',
+      );
       return;
     }
-    const defaultInputs = { prompt: trimmed };
-    const submittedDesignSystemSelection = homeDesignSystemSelectionForInputs(
-      submittedActive?.inputs ?? null,
-      designSystemOptions,
-      trimmed,
-    );
-    const submittedPluginInputs = submittedActive
-      ? applyHomeDesignSystemSelectionToInputs(
-          submittedActive.inputs,
-          submittedDesignSystemSelection,
-          designSystemOptions,
-        )
-      : defaultInputs;
-    const activeInputsChangedForSubmit = submittedActive
-      ? !inputsEqual(submittedActive.inputs, submittedPluginInputs)
-      : false;
-    if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
-      const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
-      if (!result) {
-        setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
+    setError(null);
+    // Sending covers the whole async tail — a pending plugin apply (when one
+    // must resolve first) and the project-creation roundtrip are both windows
+    // a second click could otherwise re-enter.
+    setSending(true);
+    try {
+      const defaultInputs = { prompt: trimmed };
+      const submittedDesignSystemId = homeDesignSystemSelectionForInputs(
+        submittedActive?.inputs ?? null,
+        designSystemPickerSystems,
+        t('designSystemPicker.noneTitle'),
+      );
+      // Composer inputs are forwarded as-is; the deferred footer/media fields are
+      // stripped from this set just below to form the run-facing inputs.
+      const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
+      // Inputs forwarded to the run AND used to build the run-facing snapshot:
+      // drop every now-hidden footer/media setting so the first-turn
+      // question-form flow collects them instead of inheriting a baked-in
+      // default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …). The
+      // snapshot is resolved from these stripped inputs too — the daemon renders
+      // `## Plugin inputs` from `snapshot.inputs` and tells the agent not to
+      // re-ask about anything listed there, so leaving the deferred defaults in
+      // the snapshot would suppress the discovery flow even though
+      // `onSubmit.pluginInputs` was stripped. Stripping only removes non-required
+      // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
+      // od-media-generation apply still validates.
+      const submittedPluginInputs = submittedActive
+        ? stripArtifactFooterInputs(submittedApplyInputs)
+        : defaultInputs;
+      const activeInputsChangedForSubmit = submittedActive
+        ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
+        : false;
+      if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
+        const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
+        if (!result) {
+          setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
+          return;
+        }
+        submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
+        setActive(submittedActive);
+      }
+      // Reconcile each selected context against the serialized prompt text before
+      // forwarding it. Inline-backed contexts (inserted as `@mention` pills) are
+      // only sent while their token survives in the prompt — the Lexical composer
+      // lets users delete a mention pill (backspace, edit), and when they do that
+      // plugin/MCP/connector should stop being sent. Context-only `Use`
+      // selections never carry a token, so they stay in the payload until the
+      // user explicitly clears them.
+      const contextPlugins = selectedPluginContexts
+        .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.record.title))
+        .map((item) => ({
+          id: item.record.id,
+          title: item.record.title,
+          ...(item.record.manifest?.description
+            ? { description: item.record.manifest.description }
+            : {}),
+        }));
+      const contextMcpServers = selectedMcpContexts
+        .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.server.label || item.server.id))
+        .map((item) => ({
+          id: item.server.id,
+          ...(item.server.label ? { label: item.server.label } : {}),
+          ...(item.server.transport ? { transport: item.server.transport } : {}),
+          ...(item.server.url ? { url: item.server.url } : {}),
+          ...(item.server.command ? { command: item.server.command } : {}),
+        }));
+      const contextConnectors = selectedConnectorContexts
+        .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.connector.name))
+        .map((item) => ({
+          id: item.connector.id,
+          name: item.connector.name,
+          provider: item.connector.provider,
+          category: item.connector.category,
+          status: item.connector.status,
+          ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+        }));
+      const submittedProjectKind =
+        submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
+      const submittedProjectMetadata = submittedActive?.mediaSurface
+        ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
+        : homeCreateProjectMetadata(
+            submittedProjectKind,
+            submittedActive?.inputs ?? null,
+            submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
+          );
+      // Scenario plugins (chips / preset cards) and explicit skill picks are
+      // mutually exclusive routing sources — never send both (#2972).
+      const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
+      const routedPluginId =
+        sessionMode === 'design'
+          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          : submittedActive?.record.id ?? null;
+      // The example-prompt override is a one-shot marker. Decide whether to
+      // send it now, but defer spending the marker until the create is
+      // accepted — a rejected attempt stays retryable and must resend it.
+      const examplePromptKey = 'od:example-prompt-used';
+      const examplePromptToSend =
+        examplePromptInfoRef.current != null && localStorage.getItem(examplePromptKey) == null
+          ? examplePromptInfoRef.current
+          : null;
+      const accepted = await onSubmit({
+        prompt: trimmed,
+        pluginId: routedPluginId,
+        pluginType: submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
+        skillId: resolvedSkillId,
+        appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
+        pluginTitle: submittedActive?.record.title ?? null,
+        taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
+        pluginInputs: submittedPluginInputs,
+        projectKind: submittedProjectKind,
+        projectMetadata: submittedProjectMetadata,
+        designSystemId: submittedDesignSystemId,
+        contextPlugins,
+        contextMcpServers,
+        contextConnectors,
+        attachments: stagedFiles,
+        ...(workingDir ? { workingDir } : {}),
+        ...(workingDirToken ? { workingDirToken } : {}),
+        conversationMode: sessionMode,
+        ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
+      });
+      if (accepted === false) {
+        setError('Failed to start the run. Make sure the daemon is reachable, then try again.');
         return;
       }
-      submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
-      setActive(submittedActive);
+      // Create accepted — now it is safe to spend the one-shot marker.
+      if (examplePromptToSend) localStorage.setItem(examplePromptKey, '1');
+      // Only drop the staged contexts once the run actually started — a
+      // rejected creation keeps them so the retry sends the same payload.
+      setSelectedPluginContexts([]);
+      setSelectedMcpContexts([]);
+      setSelectedConnectorContexts([]);
+    } catch (err) {
+      // A submit handler that throws (instead of resolving false) lands on
+      // the same recovery path as a rejected creation.
+      console.warn('Home composer submit failed', err);
+      setError('Failed to start the run. Make sure the daemon is reachable, then try again.');
+    } finally {
+      setSending(false);
     }
-    const contextPlugins = selectedPluginContexts.map((item) => ({
-      id: item.record.id,
-      title: item.record.title,
-      ...(item.record.manifest?.description
-        ? { description: item.record.manifest.description }
-        : {}),
-    }));
-    const contextMcpServers = selectedMcpContexts.map((item) => ({
-      id: item.server.id,
-      ...(item.server.label ? { label: item.server.label } : {}),
-      ...(item.server.transport ? { transport: item.server.transport } : {}),
-      ...(item.server.url ? { url: item.server.url } : {}),
-      ...(item.server.command ? { command: item.server.command } : {}),
-    }));
-    const contextConnectors = selectedConnectorContexts.map((item) => ({
-      id: item.connector.id,
-      name: item.connector.name,
-      provider: item.connector.provider,
-      category: item.connector.category,
-      status: item.connector.status,
-      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
-    }));
-    const submittedProjectKind =
-      submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
-    const submittedProjectMetadata = submittedActive?.mediaSurface
-      ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
-      : homeCreateProjectMetadata(
-          submittedProjectKind,
-          submittedActive?.inputs ?? null,
-          submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
-        );
-    // Scenario plugins (chips / preset cards) and explicit skill picks are
-    // mutually exclusive routing sources — never send both (#2972).
-    const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
-    onSubmit({
-      prompt: trimmed,
-      pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
-      skillId: resolvedSkillId,
-      appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
-      pluginTitle: submittedActive?.record.title ?? null,
-      taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
-      pluginInputs: submittedPluginInputs,
-      projectKind: submittedProjectKind,
-      projectMetadata: submittedProjectMetadata,
-      designSystemId: submittedDesignSystemSelection?.id ?? null,
-      contextPlugins,
-      contextMcpServers,
-      contextConnectors,
-      attachments: stagedFiles,
-    });
   }
 
   return (
-    <div className="home-view" data-testid="home-view">
+    <div className="home-view" data-testid="home-view" ref={homeViewRef}>
       <HomeHero
         ref={inputRef}
+        active={isActive}
+        firstRunGuide={projectsLoading ? undefined : projects.length === 0}
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         activePluginTitle={activeBadgeTitle}
+        activePluginIsExplicit={activePluginIsExplicit}
         activePluginRecord={active?.record ?? null}
         activeSkillId={activeSkill?.id ?? null}
         activeSkillTitle={activeSkill ? localizeSkillName(locale, activeSkill) : null}
@@ -1291,20 +1606,27 @@ export function HomeView({
         onClearActiveChip={clearActiveChipSelection}
         onClearActiveSkill={() => setActiveSkill(null)}
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
+        selectedMcpContexts={selectedMcpContexts.map((item) => item.server)}
+        selectedConnectorContexts={selectedConnectorContexts.map((item) => item.connector)}
+        contextOnlyPlugins={selectedPluginContexts.filter((item) => !item.inlineBacked).map((item) => item.record)}
+        contextOnlyMcpServers={selectedMcpContexts.filter((item) => !item.inlineBacked).map((item) => item.server)}
+        contextOnlyConnectors={selectedConnectorContexts.filter((item) => !item.inlineBacked).map((item) => item.connector)}
         onRemovePluginContext={removePluginContext}
+        onRemoveMcpContext={removeMcpContext}
+        onRemoveConnectorContext={removeConnectorContext}
+        onAddPlugin={onBrowseRegistry}
+        onAddConnector={onOpenIntegrations}
+        onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
-        pluginInputFields={active?.inputFields ?? []}
+        pluginInputFields={(active?.inputFields ?? []).filter(
+          (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
+        )}
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
-        designSystemOptions={designSystemOptions}
-        onPluginInputValidityChange={(valid) => {
-          setActive((prev) => (
-            prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev
-          ));
-        }}
+        designSystems={designSystemPickerSystems}
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}
@@ -1322,6 +1644,7 @@ export function HomeView({
           Boolean(pendingAuthoringChipId) ||
           Boolean(active && !active.inputsValid)
         }
+        submitting={sending}
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickExamplePlugin={useExamplePlugin}
         onPickSkill={useSkill}
@@ -1330,6 +1653,22 @@ export function HomeView({
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
+        workingDir={workingDir}
+        recentDirs={recentDirs}
+        onPickWorkingDir={handlePickWorkingDir}
+        onSelectRecentWorkingDir={(dir) => {
+          setWorkingDir(dir);
+          // Recents come from the browser-side picker only; they carry no
+          // desktop trust token (and linkedDirs don't need one).
+          setWorkingDirToken(null);
+          void rememberRecentDir(dir);
+        }}
+        onClearWorkingDir={() => {
+          setWorkingDir(null);
+          setWorkingDirToken(null);
+        }}
+        onExamplePromptStatusChange={handleExamplePromptStatusChange}
+        executionSwitcher={executionSwitcher}
       />
 
       <RecentProjectsStrip
@@ -1341,7 +1680,7 @@ export function HomeView({
           // before navigation so the event isn't lost when the host
           // re-renders into the project view.
           const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindToTracking(project?.metadata?.kind);
+          const projectKind = projectKindToTracking(project?.metadata?.kind, project?.metadata?.videoModel);
           trackRecentProjectsClick(analytics.track, {
             page_name: 'home',
             area: 'recent_projects',
@@ -1361,39 +1700,76 @@ export function HomeView({
         }}
       />
 
-      <PluginsHomeSection
-        plugins={plugins}
-        loading={pluginsLoading}
-        activePluginId={active?.record.id ?? null}
-        pendingApplyId={pendingApplyId}
-        onUse={(record, action) => requestPluginContextUse(record, action)}
-        onOpenDetails={setDetailsRecord}
-        onBrowseRegistry={onBrowseRegistry}
-        preferDefaultFacet={false}
-        presetSelection={presetStartersSelection}
-      />
-
-      {detailsRecord ? (
-        <PluginDetailsModal
-          record={detailsRecord}
-          onClose={() => setDetailsRecord(null)}
-          onUse={(record) => requestPluginContextUse(record, 'use')}
-          isApplying={pendingApplyId === detailsRecord.id}
+      <HomeTemplatesReveal
+        enabled={!projectsLoading && projects.length === 0}
+      >
+        <PluginsHomeSection
+          plugins={plugins}
+          loading={pluginsLoading}
+          activePluginId={active?.record.id ?? null}
+          pendingApplyId={pendingApplyId}
+          onUse={(record, action) => void routePluginUse(record, action)}
+          onOpenDetails={handleCommunityOpenDetails}
+          onBrowseRegistry={onBrowseRegistry}
+          preferDefaultFacet={false}
+          cardLayout="gallery"
         />
-      ) : null}
+      </HomeTemplatesReveal>
+
+      <AnimatePresence>
+        {detailsRecord ? (
+          <PluginDetailsModal
+            record={detailsRecord}
+            onClose={() => {
+              // Covers the close button, Esc and the backdrop — every
+              // variant funnels dismissal through this single onClose.
+              trackPluginDetailModalClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_modal',
+                element: 'close',
+                plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
+                plugin_type: detailsRecord.marketplaceTrust ?? 'official',
+              });
+              setDetailsRecord(null);
+            }}
+            onUse={(record, action) => {
+              // Track here (not inside routePluginUse) so the gallery's
+              // own onUse keeps its community_gallery attribution; the
+              // kebab 'use-with-query' action maps to the dropdown face.
+              trackPluginDetailModalClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_modal',
+                element: action === 'use-with-query' ? 'use_plugin_dropdown' : 'use_plugin',
+                plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+                plugin_type: record.marketplaceTrust ?? 'official',
+              });
+              void routePluginUse(record, action);
+            }}
+            isApplying={pendingApplyId === detailsRecord.id}
+            onSharePopoverItemClick={(item) =>
+              trackPluginDetailModalSharePopoverClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_share_popover',
+                element: item,
+                plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
+                plugin_type: detailsRecord.marketplaceTrust ?? 'official',
+              })}
+          />
+        ) : null}
+      </AnimatePresence>
       {pendingReplacement ? (
-        <div className="home-hero-confirm__backdrop" role="presentation">
-          <div
-            className="home-hero-confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="home-hero-confirm-title"
-          >
-            <h2 id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</h2>
+        <Dialog
+          backdropClassName="home-hero-confirm__backdrop"
+          className="home-hero-confirm"
+          includeChromeClassName={false}
+          ariaLabelledBy="home-hero-confirm-title"
+          closeOnBackdrop={false}
+        >
+            <DialogTitle id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</DialogTitle>
             <p>
               {t('homeHero.confirmReplaceBody', { title: pendingReplacement.title })}
             </p>
-            <div className="home-hero-confirm__actions">
+            <DialogFooter className="home-hero-confirm__actions">
               <button
                 type="button"
                 className="home-hero-confirm__secondary"
@@ -1454,9 +1830,8 @@ export function HomeView({
               >
                 {t('homeHero.confirmReplace')}
               </button>
-            </div>
-          </div>
-        </div>
+            </DialogFooter>
+        </Dialog>
       ) : null}
     </div>
   );
@@ -1485,31 +1860,16 @@ function defaultPluginIdForChip(chipId: string | null): string | null {
   return null;
 }
 
-function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
+export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
   if (!active) return false;
+  // An explicit pick (example-prompt preset / Community card / detail modal)
+  // always surfaces its own plugin chip — even when the preset's plugin id
+  // equals the chip's default plugin.
+  if (active.explicitPick) return true;
   if (!active.chipId) return true;
+  // Otherwise a type chip whose default plugin IS this record stands in for the
+  // task chip and suppresses a separate plugin chip.
   return active.record.id !== defaultPluginIdForChip(active.chipId);
-}
-
-// Maps a Home hero chip id to the Community facet slice the
-// user most likely wants to browse next. The chip rail is intent
-// ("I want to design a slide deck"); the starters grid is the catalog
-// for that intent, so pinning the same `deck` slice lets the
-// user keep scanning examples without re-picking the same artifact
-// kind in a different control. The list mirrors the `apply-scenario`
-// and `apply-figma-migration` chip ids in `home-hero/chips.ts`; any
-// new chip there should add a row here too.
-function facetSelectionForChip(chipId: string): FacetSelection | null {
-  switch (chipId) {
-    case 'prototype': return { category: 'prototype', subcategory: null };
-    case 'live-artifact': return { category: 'live-artifact', subcategory: null };
-    case 'deck': return { category: 'deck', subcategory: null };
-    case 'image': return { category: 'image', subcategory: null };
-    case 'video': return { category: 'video', subcategory: null };
-    case 'hyperframes': return { category: 'hyperframes', subcategory: null };
-    case 'audio': return { category: 'audio', subcategory: null };
-    default: return null;
-  }
 }
 
 function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {
@@ -1528,114 +1888,124 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
   }
 }
 
+// Prototype/deck-specific settings (fidelity, slide count, speaker notes) are
+// no longer promoted into the home composer footer — the agent asks for those
+// via the first-turn discovery flow, so the prototype/deck footer keeps only
+// the design-system picker. Media surfaces (image/video/audio/hyperframes)
+// now defer the same way: image/video keep only the design-system picker and
+// audio/hyperframes keep nothing, with model / ratio / resolution / duration /
+// audio type collected by the agent via question-form during the run instead
+// of inline pre-flight controls.
+const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
+  'fidelity',
+  'slideCount',
+  'speakerNotes',
+  // Media surfaces (image/video/audio/hyperframes) defer the same way. These
+  // were dropped from the footer but `buildHomeMediaComposer` still seeds them
+  // (`model: gpt-image-2`, `ratio: 16:9`, `duration: 5`, `audioType: speech`,
+  // …) so they must be stripped before submission — otherwise the run arrives
+  // with baked-in defaults and the first-turn question-form flow has nothing
+  // left to ask. `subject` / `style` / `aspect` / `mediaKind` are intentionally
+  // NOT listed: the od-media-generation apply still validates against them.
+  'model',
+  'ratio',
+  'resolution',
+  'duration',
+  'audioType',
+  'voice',
+]);
+
+// The prototype/deck footer no longer exposes these settings, so any plugin
+// default for them must NOT be seeded into the Home composer's inputs — that
+// would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
+// instead of leaving it "unknown" for the first-turn discovery flow to ask.
+function stripArtifactFooterInputs(
+  inputs: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
+    return inputs;
+  }
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(inputs)) {
+    if (ARTIFACT_FOOTER_FIELD_NAMES.has(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
 function footerInputNamesForChip(chipId: string | null): string[] {
-  if (chipId === 'prototype') return ['designSystem', 'fidelity'];
-  if (chipId === 'deck') return ['designSystem', 'slideCount', 'speakerNotes'];
-  if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
-  if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
-  if (chipId === 'audio') return ['audioType', 'model', 'duration'];
-  if (chipId === 'hyperframes') return ['ratio', 'duration'];
+  if (chipId === 'prototype' || chipId === 'deck') return ['designSystem'];
+  if (chipId === 'image' || chipId === 'video') return ['designSystem'];
+  // hyperframes / audio surface no pre-flight settings — the agent asks for
+  // ratio / duration / model / audio kind via question-form during the run.
   return [];
 }
 
 function homeCreateProjectMetadata(
   projectKind: ProjectKind | null,
-  inputs: Record<string, unknown> | null,
+  _inputs: Record<string, unknown> | null,
   existing: ProjectMetadata | null,
 ): ProjectMetadata | null {
   const kind = projectKind ?? existing?.kind ?? null;
   if (!kind) return existing;
 
+  // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
+  // longer collected in the home composer; the agent asks for them via
+  // question-form, so we only seed `kind` here and let those fields stay
+  // unset (the system prompt then marks them "unknown — ask").
   const next: ProjectMetadata = {
     ...(existing ?? {}),
     kind,
   };
-  const fidelity = normalizeHomeFidelity(inputs?.fidelity);
-  if (fidelity) next.fidelity = fidelity;
-  const speakerNotes = normalizeHomeSpeakerNotes(inputs?.speakerNotes);
-  if (speakerNotes !== null) next.speakerNotes = speakerNotes;
-  const slideCount = normalizeHomeSlideCount(inputs?.slideCount);
-  if (slideCount) next.slideCount = slideCount;
   return next;
 }
 
-function normalizeHomeFidelity(value: unknown): ProjectMetadata['fidelity'] | null {
-  if (value === 'wireframe' || value === 'high-fidelity') return value;
-  return null;
-}
-
-function normalizeHomeSpeakerNotes(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return null;
-  if (
-    normalized === 'true' ||
-    normalized === 'yes' ||
-    normalized === 'include' ||
-    normalized.includes('include')
-  ) {
-    return true;
-  }
-  if (
-    normalized === 'false' ||
-    normalized === 'no' ||
-    normalized === 'none' ||
-    normalized.includes('no speaker')
-  ) {
-    return false;
-  }
-  return null;
-}
-
-function normalizeHomeSlideCount(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  const normalized = String(value).trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function designSystemOptionsForHome(
+// Selectable design systems for the home composer, sorted to match the picker:
+// a user-owned ("Personal") default first, then by group (Personal → Official
+// preset → Enterprise) and title. The shared DesignSystemPicker renders its own
+// "不指定 / No design system" row, so it is NOT included here.
+function selectableHomeDesignSystems(
   systems: DesignSystemSummary[],
   defaultDesignSystemId: string | null,
-  logoById: Record<string, string>,
-  t: ReturnType<typeof useI18n>['t'],
-): HomeDesignSystemOption[] {
+): DesignSystemSummary[] {
   const selectable = systems.filter((system) => {
     if (!system.title) return false;
     if (system.source === 'user' || system.isEditable === true) return (system.status ?? 'draft') === 'published';
     return true;
   });
-  const systemOptions = selectable
-    .map((system) => ({
-      id: system.id,
-      title: system.title,
-      isDefault: system.id === defaultDesignSystemId,
-      group: designSystemOptionGroup(system),
-      category: system.category,
-      summary: system.summary,
-      swatches: system.swatches,
-      logoUrl: logoById[system.id],
-    }))
-    .sort((a, b) => {
-      const groupDelta = designSystemGroupOrder(a.group) - designSystemGroupOrder(b.group);
-      if (groupDelta !== 0) return groupDelta;
-      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
-      return a.title.localeCompare(b.title);
-    });
-  const autoOption: HomeDesignSystemOption = {
-    id: AUTO_DESIGN_SYSTEM_OPTION_ID,
-    title: t('homeHero.footer.autoDesignSystem'),
-    isDefault: false,
-    auto: true,
-    summary: t('homeHero.footer.autoDesignSystemSummary'),
-  };
-  const defaultOption = systemOptions.find((option) => option.isDefault);
-  if (!defaultOption) return [autoOption, ...systemOptions];
-  return [
-    defaultOption,
-    autoOption,
-    ...systemOptions.filter((option) => option.id !== defaultOption.id),
-  ];
+  const sorted = [...selectable].sort((a, b) => {
+    const groupDelta =
+      designSystemGroupOrder(designSystemOptionGroup(a)) - designSystemGroupOrder(designSystemOptionGroup(b));
+    if (groupDelta !== 0) return groupDelta;
+    const aDefault = a.id === defaultDesignSystemId;
+    const bDefault = b.id === defaultDesignSystemId;
+    if (aDefault !== bDefault) return aDefault ? -1 : 1;
+    return a.title.localeCompare(b.title);
+  });
+  const defaultSystem = sorted.find(
+    (system) => system.id === defaultDesignSystemId && designSystemOptionGroup(system) === 'Personal',
+  );
+  if (!defaultSystem) return sorted;
+  return [defaultSystem, ...sorted.filter((system) => system.id !== defaultSystem.id)];
+}
+
+// The composer's default selection title. A user-owned ("Personal") default
+// design system stays pre-selected; otherwise the composer defaults to
+// "不指定 / No design system" so nothing is imposed implicitly and the project
+// opens with an empty Design system.
+function homeDefaultDesignSystemTitle(
+  systems: DesignSystemSummary[],
+  defaultDesignSystemId: string | null,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  const defaultSystem = systems.find(
+    (system) =>
+      system.id === defaultDesignSystemId &&
+      Boolean(system.title) &&
+      designSystemOptionGroup(system) === 'Personal' &&
+      (system.status ?? 'draft') === 'published',
+  );
+  return defaultSystem?.title ?? t('designSystemPicker.noneTitle');
 }
 
 function designSystemOptionGroup(
@@ -1652,24 +2022,12 @@ function designSystemGroupOrder(group: 'Personal' | 'Official preset' | 'Enterpr
   return 2;
 }
 
-function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
-  const logoCandidates = files
-    .filter((file) => file.type !== 'dir')
-    .filter((file) => {
-      const name = file.path ?? file.name;
-      return file.kind === 'image' || /\.(svg|png|jpe?g|webp|gif)$/iu.test(name);
-    });
-  return (
-    logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === 'assets/logo.svg') ??
-    logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
-    null
-  );
-}
-
+// Seed the composer's `designSystem` plugin input with the default selection
+// title when the plugin exposes the field and the user hasn't chosen one yet.
 function withHomeDesignSystemDefault(
   provided: Record<string, unknown> | undefined,
   fields: InputFieldSpec[],
-  designSystemOptions: HomeDesignSystemOption[],
+  defaultDesignSystemTitle: string,
 ): Record<string, unknown> | undefined {
   if (!fields.some((field) => field.name === 'designSystem')) return provided;
   const current = provided?.designSystem;
@@ -1677,124 +2035,29 @@ function withHomeDesignSystemDefault(
   if (currentText.length > 0 && currentText !== 'the active project design system') {
     return provided;
   }
-  const selected = designSystemOptions[0];
-  if (!selected) return provided;
   return {
     ...(provided ?? {}),
-    designSystem: selected.title,
+    designSystem: defaultDesignSystemTitle,
   };
 }
 
+// Resolve the composer's `designSystem` input (a title string) to the
+// designSystemId sent at submit. "不指定 / No design system" (or an unset
+// value) resolves to null so the project is created without a design system.
 function homeDesignSystemSelectionForInputs(
   inputs: Record<string, unknown> | null,
-  designSystemOptions: HomeDesignSystemOption[],
-  prompt: string,
-): HomeDesignSystemOption | null {
+  systems: DesignSystemSummary[],
+  noneTitle: string,
+): string | null {
   const value = inputs?.designSystem;
   if (typeof value !== 'string') return null;
   const selectedTitle = value.trim();
-  if (!selectedTitle || selectedTitle === 'the active project design system') return null;
-  const selected = designSystemOptions.find((option) => option.title === selectedTitle);
-  if (selected?.auto || isAutoDesignSystemTitle(selectedTitle, designSystemOptions)) {
-    return autoSelectHomeDesignSystem(prompt, designSystemOptions);
+  if (!selectedTitle || selectedTitle === noneTitle || selectedTitle === 'the active project design system') {
+    return null;
   }
-  return selected ?? null;
+  return systems.find((system) => system.title === selectedTitle)?.id ?? null;
 }
 
-function applyHomeDesignSystemSelectionToInputs(
-  inputs: Record<string, unknown>,
-  selected: HomeDesignSystemOption | null,
-  designSystemOptions: HomeDesignSystemOption[],
-): Record<string, unknown> {
-  if (!selected) return inputs;
-  const current = inputs.designSystem;
-  if (typeof current !== 'string' || !isAutoDesignSystemTitle(current, designSystemOptions)) return inputs;
-  return {
-    ...inputs,
-    designSystem: selected.title,
-  };
-}
-
-function isAutoDesignSystemTitle(
-  value: string,
-  designSystemOptions: HomeDesignSystemOption[],
-): boolean {
-  const title = value.trim();
-  if (LEGACY_AUTO_DESIGN_SYSTEM_TITLES.has(title)) return true;
-  return designSystemOptions.some((option) => option.auto && option.title === title);
-}
-
-function autoSelectHomeDesignSystem(
-  prompt: string,
-  designSystemOptions: HomeDesignSystemOption[],
-): HomeDesignSystemOption | null {
-  const candidates = designSystemOptions.filter((option) => !option.auto);
-  if (candidates.length === 0) return null;
-  const promptText = normalizeAutoDesignSystemText(prompt);
-  const promptTokens = autoDesignSystemTokens(promptText);
-  let best: { option: HomeDesignSystemOption; score: number } | null = null;
-  for (const option of candidates) {
-    const title = normalizeAutoDesignSystemText(option.title);
-    const category = normalizeAutoDesignSystemText(option.category ?? '');
-    const summary = normalizeAutoDesignSystemText(option.summary ?? '');
-    const haystack = `${title} ${category} ${summary}`;
-    let score = 0;
-    if (title && promptText.includes(title)) score += 18;
-    if (category && promptText.includes(category)) score += 8;
-    for (const token of promptTokens) {
-      if (title.includes(token)) score += 5;
-      if (category.includes(token)) score += 3;
-      if (summary.includes(token)) score += 2;
-      if (haystack.includes(token)) score += 1;
-    }
-    if (!best || score > best.score) best = { option, score };
-  }
-  if (best && best.score > 0) return best.option;
-  return candidates.find((option) => option.isDefault) ?? candidates[0] ?? null;
-}
-
-function normalizeAutoDesignSystemText(value: string): string {
-  return value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function autoDesignSystemTokens(value: string): string[] {
-  const seen = new Set<string>();
-  const tokens = value
-    .split(/[^a-z0-9\u4e00-\u9fff]+/iu)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2 && !AUTO_DESIGN_SYSTEM_STOP_WORDS.has(token));
-  return tokens.filter((token) => {
-    if (seen.has(token)) return false;
-    seen.add(token);
-    return true;
-  });
-}
-
-const AUTO_DESIGN_SYSTEM_STOP_WORDS = new Set([
-  'the',
-  'and',
-  'for',
-  'with',
-  'using',
-  'create',
-  'make',
-  'build',
-  'page',
-  'site',
-  'app',
-  'web',
-  'design',
-  'system',
-  'style',
-  '一个',
-  '这个',
-  '使用',
-  '生成',
-  '设计',
-  '页面',
-  '网站',
-  '应用',
-]);
 
 function estimatePluginContextItemCount(
   record: InstalledPluginRecord,
@@ -1822,28 +2085,23 @@ function hydratePluginInputs(
   return next;
 }
 
-function pluginInputsAreValid(
-  fields: InputFieldSpec[],
-  values: Record<string, unknown>,
-): boolean {
-  return fields.every((field) => {
-    if (!field.required) return true;
-    const value = values[field.name];
-    return value !== undefined && value !== null && value !== '';
-  });
-}
-
 const TEMPLATE_INPUT_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 
 function extractPluginInputsFromPrompt(
   template: string,
   prompt: string,
   fields: InputFieldSpec[],
+  options?: { allowPrefix?: boolean },
 ): Record<string, unknown> | null {
   TEMPLATE_INPUT_PATTERN.lastIndex = 0;
   const fieldByName = new Map(fields.map((field) => [field.name, field]));
   const keys: string[] = [];
-  let pattern = '^';
+  // `allowPrefix` matches the template as a suffix of the prompt with any
+  // leading text allowed. Used by use-with-query, where the plugin query is
+  // appended after a user-owned draft prefix: the prefix is mutable and must
+  // not be baked into the anchored template, otherwise editing it would break
+  // placeholder extraction and leave pluginInputs stale.
+  let pattern = options?.allowPrefix ? '[\\s\\S]*?' : '^';
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = TEMPLATE_INPUT_PATTERN.exec(template)) !== null) {
@@ -1901,12 +2159,17 @@ function removePluginMentionFromPrompt(prompt: string, record: InstalledPluginRe
     .trim();
 }
 
-function appendPromptQuery(current: string, query: string): string {
-  const next = query.trim();
-  if (!next) return current;
-  if (!current.trim()) return next;
-  return `${current.trimEnd()}\n\n${next}`;
+function removeContextMentionsFromPrompt(prompt: string, labels: string[]): string {
+  const uniqueLabels = Array.from(new Set(labels.filter(Boolean)));
+  return uniqueLabels.reduce((current, label) => {
+    const token = inlineMentionToken(label);
+    return current.replace(
+      new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+      '$1',
+    );
+  }, prompt);
 }
+
 
 function inputsEqual(
   left: Record<string, unknown> | undefined,

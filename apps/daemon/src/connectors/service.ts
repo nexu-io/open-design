@@ -94,6 +94,7 @@ function hasStoredComposioConnection(credential: ConnectorCredentialRecord | und
 
 export type ConnectorServiceErrorCode =
   | 'CONNECTOR_NOT_FOUND'
+  | 'CONNECTOR_AUTH_CONFIG_REQUIRED'
   | 'CONNECTOR_NOT_CONNECTED'
   | 'CONNECTOR_DISABLED'
   | 'CONNECTOR_TOOL_NOT_FOUND'

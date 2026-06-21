@@ -39,6 +39,7 @@ export function ManualEditPanel({
   onPickImage,
   pageStylesEnabled = true,
   floatingStyle,
+  floatingClassName,
   onFloatingPositionChange,
 }: {
   targets: ManualEditTarget[];
@@ -57,6 +58,7 @@ export function ManualEditPanel({
   onApplyPatch: (patch: ManualEditPatch, label: string) => void;
   onPickImage?: (file: File) => Promise<string | null>;
   floatingStyle?: CSSProperties;
+  floatingClassName?: string;
   onFloatingPositionChange?: (position: { left: number; top: number }) => void;
   onError: (message: string) => void;
   onClearSelection: () => void;
@@ -85,7 +87,7 @@ export function ManualEditPanel({
       layoutEnabled: targetForInspector.isLayoutContainer,
     });
     if (!normalized.ok) {
-      onError(normalized.error);
+      onError('error' in normalized ? normalized.error : 'Invalid style value.');
       onInvalidStyle?.(targetForInspector.id, [key]);
       return;
     }
@@ -128,7 +130,7 @@ export function ManualEditPanel({
 
   return (
     <aside
-      className={`manual-edit-right${floatingStyle ? ' manual-edit-floating' : ''}`}
+      className={`manual-edit-right${floatingStyle ? ' manual-edit-floating' : ''}${floatingClassName ? ` ${floatingClassName}` : ''}`}
       style={floatingStyle}
     >
       <section className="manual-edit-modal cc-panel">
@@ -171,7 +173,7 @@ export function ManualEditPanel({
               onStyleChange={(styles) => {
                 const normalized = normalizeManualEditStyles(styles, { layoutEnabled: true });
                 if (!normalized.ok) {
-                  onError(normalized.error);
+                  onError('error' in normalized ? normalized.error : 'Invalid style value.');
                   onInvalidStyle?.('__body__', Object.keys(styles) as Array<keyof ManualEditStyles>);
                   return;
                 }
@@ -230,10 +232,11 @@ export function ManualEditPanel({
               {targetForInspector ? (
                 confirmDelete ? (
                   <div className="manual-edit-delete-confirm">
-                    <span>{canUndo ? t('manualEdit.deleteElementConfirm') : t('manualEdit.deleteElement')}</span>
                     <button
                       type="button"
-                      className="manual-edit-footer-btn danger"
+                      className="manual-edit-delete-btn manual-edit-delete-confirm-action"
+                      aria-label={t('manualEdit.deleteElement')}
+                      title={canUndo ? t('manualEdit.deleteElementConfirm') : t('manualEdit.deleteElement')}
                       disabled={busy}
                       onClick={() => {
                         setConfirmDelete(false);
@@ -243,7 +246,7 @@ export function ManualEditPanel({
                         );
                       }}
                     >
-                      {t('manualEdit.deleteElement')}
+                      <Icon name="trash" size={15} />
                     </button>
                     <button
                       type="button"

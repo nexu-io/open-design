@@ -12,6 +12,7 @@ import type { ApplyResult, InstalledPluginRecord } from '@open-design/contracts'
 import { applyPlugin } from '../state/projects';
 import { navigate } from '../router';
 import { useI18n } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { useAnalytics } from '../analytics/provider';
 import { trackPluginDetailClick } from '../analytics/events';
 
@@ -71,6 +72,8 @@ export function PluginDetailView(props: Props) {
     );
   }
 
+  const localizedTitle = localizePluginTitle(locale, plugin);
+  const localizedDescription = localizePluginDescription(locale, plugin);
   const od = plugin.manifest?.od ?? {};
   const surfaces = od.genui?.surfaces ?? [];
   const required = od.connectors?.required ?? [];
@@ -115,7 +118,7 @@ export function PluginDetailView(props: Props) {
       </button>
 
       <header className="plugin-detail__header">
-        <h1>{plugin.title}</h1>
+        <h1>{localizedTitle}</h1>
         <div className="plugin-detail__meta">
           <span>v{plugin.version}</span>
           <span>trust: {plugin.trust}</span>
@@ -124,8 +127,8 @@ export function PluginDetailView(props: Props) {
         </div>
       </header>
 
-      {plugin.manifest?.description ? (
-        <p className="plugin-detail__description">{plugin.manifest.description}</p>
+      {localizedDescription ? (
+        <p className="plugin-detail__description">{localizedDescription}</p>
       ) : null}
 
       <section className="plugin-detail__capabilities">
@@ -179,7 +182,7 @@ export function PluginDetailView(props: Props) {
         <section className="plugin-detail__preview" data-testid="plugin-detail-preview-section">
           <h2>Preview</h2>
           <iframe
-            title={`${plugin.title} preview`}
+            title={`${localizedTitle} preview`}
             src={`/api/plugins/${encodeURIComponent(plugin.id)}/preview`}
             sandbox="allow-scripts"
             className="plugin-detail__preview-frame"

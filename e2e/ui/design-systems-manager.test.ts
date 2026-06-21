@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -56,7 +57,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }
@@ -215,7 +216,7 @@ async function routeDesignSystemsManager(
   return { persistedConfigs };
 }
 
-test('publishing a user design system promotes it to the default system in the manager', async ({ page }) => {
+test('[P1] publishing a user design system promotes it to the default system in the manager', async ({ page }) => {
   await seedEntryBase(page);
   const systems: UserSystem[] = [
     {
@@ -242,6 +243,7 @@ test('publishing a user design system promotes it to the default system in the m
   const { persistedConfigs } = await routeDesignSystemsManager(page, systems);
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();
@@ -258,7 +260,7 @@ test('publishing a user design system promotes it to the default system in the m
     .toBe('brand-alpha');
 });
 
-test('filters user design systems by draft and published status in the manager', async ({ page }) => {
+test('[P1] filters user design systems by draft and published status in the manager', async ({ page }) => {
   await seedEntryBase(page);
   const systems: UserSystem[] = [
     {
@@ -285,6 +287,7 @@ test('filters user design systems by draft and published status in the manager',
   await routeDesignSystemsManager(page, systems);
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();
@@ -301,7 +304,7 @@ test('filters user design systems by draft and published status in the manager',
   await expect(manager.getByText('Brand Beta')).toHaveCount(0);
 });
 
-test('deleting the active design system falls back to another user system', async ({ page }) => {
+test('[P1] deleting the active design system falls back to another user system', async ({ page }) => {
   await seedEntryBase(page, { designSystemId: 'brand-alpha' });
   const systems: UserSystem[] = [
     {
@@ -330,6 +333,7 @@ test('deleting the active design system falls back to another user system', asyn
   });
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();

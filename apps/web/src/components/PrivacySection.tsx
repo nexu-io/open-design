@@ -49,7 +49,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
       ...c,
       installationId: generateInstallationId(),
       privacyDecisionAt: Date.now(),
-      telemetry: { metrics: true, content: true, artifactManifest: false },
+      telemetry: { metrics: true, content: true },
     }));
   }
 
@@ -58,7 +58,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
       ...c,
       installationId: null,
       privacyDecisionAt: Date.now(),
-      telemetry: { metrics: false, content: false, artifactManifest: false },
+      telemetry: { metrics: false, content: false },
     }));
   }
 
@@ -67,7 +67,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
       ...c,
       installationId: generateInstallationId(),
       privacyDecisionAt: c.privacyDecisionAt ?? Date.now(),
-      telemetry: { metrics: false, content: false, artifactManifest: false },
+      telemetry: { metrics: false, content: false },
     }));
   }
 
@@ -104,20 +104,6 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
                   conversation_and_tool_content_status: v ? 'on' : 'off',
                 });
                 patchTelemetry({ content: v });
-              }}
-            />
-            <ToggleRow
-              label={t('settings.privacyArtifacts')}
-              hint={t('settings.privacyArtifactsHint')}
-              checked={telemetry.artifactManifest === true}
-              onChange={(v) => {
-                trackSettingsPrivacyClick(analytics.track, {
-                  page_name: 'settings',
-                  area: 'privacy',
-                  element: 'project_artifacts_manifest',
-                  project_artifacts_manifest_status: v ? 'on' : 'off',
-                });
-                patchTelemetry({ artifactManifest: v });
               }}
             />
           </div>

@@ -14,14 +14,28 @@
  * @see https://github.com/nexu-io/open-design/issues/895
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  appendDesktopLogLine,
+  createPackagedDesktopLogger,
   createFatalUncaughtExceptionHandler,
   createFatalUnhandledRejectionHandler,
   isHarmlessSocketOptionError,
   type PackagedDesktopLogger,
 } from '../src/logging.js';
+import type { PackagedNamespacePaths } from '../src/paths.js';
+
+const ORIGINAL_CONSOLE = {
+  error: console.error,
+  info: console.info,
+  log: console.log,
+  warn: console.warn,
+};
 
 function stubLogger(): PackagedDesktopLogger {
   return {
@@ -32,8 +46,33 @@ function stubLogger(): PackagedDesktopLogger {
 }
 
 afterEach(() => {
+  console.error = ORIGINAL_CONSOLE.error;
+  console.info = ORIGINAL_CONSOLE.info;
+  console.log = ORIGINAL_CONSOLE.log;
+  console.warn = ORIGINAL_CONSOLE.warn;
   vi.restoreAllMocks();
 });
+
+function makePaths(root: string, desktopLogPath = join(root, 'logs', 'desktop', 'latest.log')): PackagedNamespacePaths {
+  return {
+    cacheRoot: join(root, 'cache'),
+    desktopIdentityPath: join(root, 'runtime', 'desktop-root.json'),
+    desktopLogPath,
+    dataRoot: join(root, 'data'),
+    desktopLogsRoot: join(root, 'logs', 'desktop'),
+    electronSessionDataRoot: join(root, 'user-data', 'session'),
+    electronUserDataRoot: join(root, 'user-data'),
+    headlessIdentityPath: join(root, 'runtime', 'headless-root.json'),
+    installationRoot: root,
+    installerObservationRoot: join(root, 'data', 'observations', 'installer'),
+    logsRoot: join(root, 'logs'),
+    namespaceRoot: root,
+    resourceRoot: join(root, 'resources'),
+    runtimeRoot: join(root, 'runtime'),
+    updateRoot: join(root, 'updates'),
+    webIdentityPath: join(root, 'runtime', 'web-root.json'),
+  };
+}
 
 describe('isHarmlessSocketOptionError (issue #895)', () => {
   it('matches the canonical undici setTypeOfService EINVAL shape', () => {
@@ -104,6 +143,38 @@ describe('isHarmlessSocketOptionError (issue #895)', () => {
     const error = new Error('') as NodeJS.ErrnoException;
     error.code = 'EINVAL';
     expect(isHarmlessSocketOptionError(error)).toBe(false);
+  });
+});
+
+describe('createPackagedDesktopLogger log-write failures', () => {
+  it('drops descriptor-pressure append failures instead of throwing', () => {
+    const emfile = new Error('too many files') as NodeJS.ErrnoException;
+    emfile.code = 'EMFILE';
+    const append = vi.fn(() => {
+      throw emfile;
+    });
+
+    expect(appendDesktopLogLine('/tmp/latest.log', '{"level":"error"}\n', append)).toBe(false);
+    expect(append).toHaveBeenCalledWith('/tmp/latest.log', '{"level":"error"}\n', 'utf8');
+  });
+
+  it('does not let desktop log append failures escape through the logger', () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-log-'));
+    const previousEcho = process.env.OD_DESKTOP_LOG_ECHO;
+    process.env.OD_DESKTOP_LOG_ECHO = '0';
+    try {
+      const logger = createPackagedDesktopLogger(makePaths(root, root));
+
+      expect(() => logger.error('packaged desktop fatal uncaught exception')).not.toThrow();
+      expect(() => console.error('renderer fetch failed')).not.toThrow();
+    } finally {
+      if (previousEcho == null) {
+        delete process.env.OD_DESKTOP_LOG_ECHO;
+      } else {
+        process.env.OD_DESKTOP_LOG_ECHO = previousEcho;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

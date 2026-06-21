@@ -258,11 +258,11 @@ ALTER TABLE artifacts DROP COLUMN critique_score;
 | --- | --- | --- |
 | `critique_score` | `REAL` | Final composite. `NULL` for legacy artifacts. |
 | `critique_rounds_json` | `TEXT` | Compact summary per round: `[{n, composite, mustFix, decision}]`. Bounded; full transcript on disk. |
-| `critique_transcript_path` | `TEXT` | Relative path under `.od/artifacts/<artifactId>/`. The stored value is the relative path; absolute resolution is daemon-side only. |
+| `critique_transcript_path` | `TEXT` | Relative path under daemon-managed artifact storage. The stored value is the relative path; absolute resolution is daemon-side only. This spec MUST NOT define daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. |
 | `critique_status` | `TEXT` | Constrained by `CHECK` clause. `legacy` marks artifacts produced before the feature shipped. |
 | `critique_protocol_version` | `INTEGER` | Pin which `parsers/v{n}.ts` to use for replay. |
 
-Transcripts are written to `.od/artifacts/<artifactId>/transcript.ndjson` (one `PanelEvent` per line). Files larger than 256 KiB are gzipped to `transcript.ndjson.gz`. The orchestrator chooses the format at write time; the replay path detects the format by extension.
+Transcripts are written through daemon-managed artifact storage (one `PanelEvent` per line). Files larger than 256 KiB are gzipped. The orchestrator chooses the format at write time; the replay path detects the format by extension. This spec MUST NOT define daemon data paths.
 
 ## UI surface
 
@@ -490,7 +490,7 @@ A Grafana dashboard ships in `tools/dev/dashboards/critique.json` with three def
 | Surface | Threat | Mitigation |
 | --- | --- | --- |
 | `<ARTIFACT>` body | XSS in shipped HTML | Existing sandboxed iframe pattern with `sandbox` and CSP headers. No new surface. |
-| Transcript on disk | Path traversal via stored path | The SQLite column stores a relative path; the daemon resolves under `.od/artifacts/<artifactId>/`; no user-supplied component reaches the resolver. |
+| Transcript on disk | Path traversal via stored path | The SQLite column stores a relative path; the daemon resolves under daemon-managed artifact storage; no user-supplied component reaches the resolver. |
 | Brand `DESIGN.md` content in prompt | Prompt injection from a malicious system | DESIGN.md is wrapped in a `<BRAND_SOURCE>` block whose framing instructs the agent to treat it as data. Same defence as the existing skill loader. |
 | Score and must-fix from agent stdout | Log injection (newlines, ANSI) | Parser strips ANSI; logs JSON-encode every value; UI renders as text only. |
 | Pathological agent output | DoS via unbounded buffers | `parserMaxBlockBytes`, `perRoundTimeoutMs`, `totalTimeoutMs` are bounded and config-driven. Orchestrator enforces hard kill. |

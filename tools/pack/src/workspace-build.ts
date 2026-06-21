@@ -5,11 +5,14 @@ import { dirname, join, relative } from "node:path";
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
+import { readRuntimeAppVersion, versionFamilyForAppVersion } from "./versions.js";
 
 const WORKSPACE_BUILD_PACKAGES = [
+  { directory: "packages/components", name: "@open-design/components" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
+  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
   { directory: "packages/platform", name: "@open-design/platform" },
   { directory: "packages/download", name: "@open-design/download" },
@@ -24,9 +27,11 @@ const WORKSPACE_BUILD_PACKAGES = [
 ] as const;
 
 const BUILD_COMMANDS = [
+  { args: ["--filter", "@open-design/components", "build"] },
   { args: ["--filter", "@open-design/contracts", "build"] },
   { args: ["--filter", "@open-design/registry-protocol", "build"] },
   { args: ["--filter", "@open-design/sidecar-proto", "build"] },
+  { args: ["--filter", "@open-design/launcher-proto", "build"] },
   { args: ["--filter", "@open-design/sidecar", "build"] },
   { args: ["--filter", "@open-design/platform", "build"] },
   { args: ["--filter", "@open-design/download", "build"] },
@@ -48,8 +53,15 @@ type WorkspaceBuildMetadata = {
 
 type WorkspaceBuildArtifact = {
   cachePath: string;
+  requiredPathGroups: string[][];
   workspacePath: string;
 };
+
+async function resolveWorkspaceBuildVersionFamily(config: ToolPackConfig): Promise<string | null> {
+  if (config.platform !== "win") return null;
+  const appVersion = await readRuntimeAppVersion(config).catch(() => null);
+  return appVersion == null ? null : versionFamilyForAppVersion(appVersion);
+}
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -86,7 +98,7 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
     packageManager: await readPackageManager(config.workspaceRoot),
     platform: config.platform,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 6,
+    schemaVersion: 7,
     webOutputMode: config.webOutputMode,
   });
 }
@@ -97,12 +109,16 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "apps/web/.next/standalone/server.js",
   ];
   return [
+    "packages/components/dist/index.mjs",
+    "packages/components/dist/index.d.ts",
     "packages/contracts/dist/index.mjs",
     "packages/contracts/dist/index.d.ts",
     "packages/registry-protocol/dist/index.mjs",
     "packages/registry-protocol/dist/index.d.ts",
     "packages/sidecar-proto/dist/index.mjs",
     "packages/sidecar-proto/dist/index.d.ts",
+    "packages/launcher-proto/dist/index.mjs",
+    "packages/launcher-proto/dist/index.d.ts",
     "packages/sidecar/dist/index.mjs",
     "packages/sidecar/dist/index.d.ts",
     "packages/platform/dist/index.mjs",
@@ -132,9 +148,11 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
 
 function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact[] {
   const artifacts = [
+    "packages/components/dist",
     "packages/contracts/dist",
     "packages/registry-protocol/dist",
     "packages/sidecar-proto/dist",
+    "packages/launcher-proto/dist",
     "packages/sidecar/dist",
     "packages/platform/dist",
     "packages/download/dist",
@@ -152,10 +170,20 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
   } else {
     artifacts.push("apps/web/.next/BUILD_ID");
   }
-  return artifacts.map((workspacePath) => ({
-    cachePath: join("outputs", ...workspacePath.split("/")),
-    workspacePath,
-  }));
+  const outputFiles = workspaceBuildOutputFiles(config);
+  return artifacts.map((workspacePath) => {
+    const requiredPathGroups = outputFiles.flatMap((output) => {
+      const candidates = output.split("|")
+        .filter((candidate) => candidate === workspacePath || candidate.startsWith(`${workspacePath}/`))
+        .map((candidate) => relative(workspacePath, candidate));
+      return candidates.length === 0 ? [] : [candidates];
+    });
+    return {
+      cachePath: join("outputs", ...workspacePath.split("/")),
+      requiredPathGroups,
+      workspacePath,
+    };
+  });
 }
 
 async function stripBrokenSymlinks(rootPath: string): Promise<void> {
@@ -270,11 +298,27 @@ export async function ensureWorkspaceBuildArtifacts(
   const key = await createWorkspaceBuildCacheKey(config);
   const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts(config);
+  const versionFamily = await resolveWorkspaceBuildVersionFamily(config);
+  const versionFamilyAlias = versionFamily == null
+    ? null
+    : hashJson({
+        node: nodeId,
+        nodeVersion: process.version,
+        platform: config.platform,
+        schemaVersion: 1,
+        scope: "version-family",
+        versionFamily,
+        webOutputMode: config.webOutputMode,
+      });
+  const materialize = artifacts.map((artifact) => ({
+    from: artifact.cachePath,
+    reuse: true,
+    reuseRequiredPaths: artifact.requiredPathGroups,
+    to: join(config.workspaceRoot, artifact.workspacePath),
+  }));
   await cache.acquire<WorkspaceBuildMetadata>({
-    materialize: artifacts.map((artifact) => ({
-      from: artifact.cachePath,
-      to: join(config.workspaceRoot, artifact.workspacePath),
-    })),
+    aliases: versionFamilyAlias == null ? [] : [versionFamilyAlias],
+    materialize,
     node: {
       id: nodeId,
       key,
@@ -306,5 +350,6 @@ export async function ensureWorkspaceBuildArtifacts(
         return { builtAt: new Date().toISOString(), outputFiles };
       },
     },
+    seedFrom: versionFamilyAlias == null ? [] : [{ aliasKey: versionFamilyAlias, materialize }],
   });
 }

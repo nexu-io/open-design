@@ -20,6 +20,118 @@ import {
   RU_PROMPT_TEMPLATE_TAGS,
   RU_SKILL_COPY,
 } from './content.ru';
+import {
+  ZH_CN_DESIGN_SYSTEM_CATEGORIES,
+  ZH_CN_DESIGN_SYSTEM_SUMMARIES,
+  ZH_CN_PROMPT_TEMPLATE_CATEGORIES,
+  ZH_CN_PROMPT_TEMPLATE_COPY,
+  ZH_CN_PROMPT_TEMPLATE_TAGS,
+  ZH_CN_SKILL_COPY,
+} from './content.zh-CN';
+import {
+  JA_DESIGN_SYSTEM_CATEGORIES,
+  JA_DESIGN_SYSTEM_SUMMARIES,
+  JA_PROMPT_TEMPLATE_CATEGORIES,
+  JA_PROMPT_TEMPLATE_COPY,
+  JA_PROMPT_TEMPLATE_TAGS,
+  JA_SKILL_COPY,
+} from './content.ja';
+import {
+  ID_DESIGN_SYSTEM_CATEGORIES,
+  ID_DESIGN_SYSTEM_SUMMARIES,
+  ID_PROMPT_TEMPLATE_CATEGORIES,
+  ID_PROMPT_TEMPLATE_COPY,
+  ID_PROMPT_TEMPLATE_TAGS,
+  ID_SKILL_COPY,
+} from './content.id';
+import {
+  ES_ES_DESIGN_SYSTEM_CATEGORIES,
+  ES_ES_DESIGN_SYSTEM_SUMMARIES,
+  ES_ES_PROMPT_TEMPLATE_CATEGORIES,
+  ES_ES_PROMPT_TEMPLATE_COPY,
+  ES_ES_PROMPT_TEMPLATE_TAGS,
+  ES_ES_SKILL_COPY,
+} from './content.es-ES';
+import {
+  PT_BR_DESIGN_SYSTEM_CATEGORIES,
+  PT_BR_DESIGN_SYSTEM_SUMMARIES,
+  PT_BR_PROMPT_TEMPLATE_CATEGORIES,
+  PT_BR_PROMPT_TEMPLATE_COPY,
+  PT_BR_PROMPT_TEMPLATE_TAGS,
+  PT_BR_SKILL_COPY,
+} from './content.pt-BR';
+import {
+  AR_DESIGN_SYSTEM_CATEGORIES,
+  AR_DESIGN_SYSTEM_SUMMARIES,
+  AR_PROMPT_TEMPLATE_CATEGORIES,
+  AR_PROMPT_TEMPLATE_COPY,
+  AR_PROMPT_TEMPLATE_TAGS,
+  AR_SKILL_COPY,
+} from './content.ar';
+import {
+  FA_DESIGN_SYSTEM_CATEGORIES,
+  FA_DESIGN_SYSTEM_SUMMARIES,
+  FA_PROMPT_TEMPLATE_CATEGORIES,
+  FA_PROMPT_TEMPLATE_COPY,
+  FA_PROMPT_TEMPLATE_TAGS,
+  FA_SKILL_COPY,
+} from './content.fa';
+import {
+  KO_DESIGN_SYSTEM_CATEGORIES,
+  KO_DESIGN_SYSTEM_SUMMARIES,
+  KO_PROMPT_TEMPLATE_CATEGORIES,
+  KO_PROMPT_TEMPLATE_COPY,
+  KO_PROMPT_TEMPLATE_TAGS,
+  KO_SKILL_COPY,
+} from './content.ko';
+import {
+  PL_DESIGN_SYSTEM_CATEGORIES,
+  PL_DESIGN_SYSTEM_SUMMARIES,
+  PL_PROMPT_TEMPLATE_CATEGORIES,
+  PL_PROMPT_TEMPLATE_COPY,
+  PL_PROMPT_TEMPLATE_TAGS,
+  PL_SKILL_COPY,
+} from './content.pl';
+import {
+  HU_DESIGN_SYSTEM_CATEGORIES,
+  HU_DESIGN_SYSTEM_SUMMARIES,
+  HU_PROMPT_TEMPLATE_CATEGORIES,
+  HU_PROMPT_TEMPLATE_COPY,
+  HU_PROMPT_TEMPLATE_TAGS,
+  HU_SKILL_COPY,
+} from './content.hu';
+import {
+  UK_DESIGN_SYSTEM_CATEGORIES,
+  UK_DESIGN_SYSTEM_SUMMARIES,
+  UK_PROMPT_TEMPLATE_CATEGORIES,
+  UK_PROMPT_TEMPLATE_COPY,
+  UK_PROMPT_TEMPLATE_TAGS,
+  UK_SKILL_COPY,
+} from './content.uk';
+import {
+  TR_DESIGN_SYSTEM_CATEGORIES,
+  TR_DESIGN_SYSTEM_SUMMARIES,
+  TR_PROMPT_TEMPLATE_CATEGORIES,
+  TR_PROMPT_TEMPLATE_COPY,
+  TR_PROMPT_TEMPLATE_TAGS,
+  TR_SKILL_COPY,
+} from './content.tr';
+import {
+  TH_DESIGN_SYSTEM_CATEGORIES,
+  TH_DESIGN_SYSTEM_SUMMARIES,
+  TH_PROMPT_TEMPLATE_CATEGORIES,
+  TH_PROMPT_TEMPLATE_COPY,
+  TH_PROMPT_TEMPLATE_TAGS,
+  TH_SKILL_COPY,
+} from './content.th';
+import {
+  IT_DESIGN_SYSTEM_CATEGORIES,
+  IT_DESIGN_SYSTEM_SUMMARIES,
+  IT_PROMPT_TEMPLATE_CATEGORIES,
+  IT_PROMPT_TEMPLATE_COPY,
+  IT_PROMPT_TEMPLATE_TAGS,
+  IT_SKILL_COPY,
+} from './content.it';
 
 type LocalizedSkillCopy = { description?: string; examplePrompt?: string };
 type LocalizedPromptTemplateCopy = Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>;
@@ -124,7 +236,6 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   },
   'html-ppt': {},
   'html-ppt-course-module': {},
-  'html-ppt-dir-key-nav-minimal': {},
   'html-ppt-graphify-dark-graph': {},
   'html-ppt-hermes-cyber-terminal': {},
   'html-ppt-knowledge-arch-blueprint': {},
@@ -136,7 +247,6 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   'html-ppt-testing-safety-alert': {},
   'html-ppt-weekly-report': {},
   'html-ppt-xhs-pastel-card': {},
-  'html-ppt-xhs-post': {},
   'html-ppt-xhs-white-editorial': {},
   'hyperframes': {
     examplePrompt:
@@ -981,6 +1091,118 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
     promptTemplateTags: FR_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: FR_PROMPT_TEMPLATE_COPY,
   },
+  'zh-CN': {
+    skillCopy: ZH_CN_SKILL_COPY,
+    designSystemSummaries: ZH_CN_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: ZH_CN_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: ZH_CN_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: ZH_CN_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: ZH_CN_PROMPT_TEMPLATE_COPY,
+  },
+  ja: {
+    skillCopy: JA_SKILL_COPY,
+    designSystemSummaries: JA_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: JA_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: JA_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: JA_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: JA_PROMPT_TEMPLATE_COPY,
+  },
+  id: {
+    skillCopy: ID_SKILL_COPY,
+    designSystemSummaries: ID_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: ID_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: ID_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: ID_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: ID_PROMPT_TEMPLATE_COPY,
+  },
+  'es-ES': {
+    skillCopy: ES_ES_SKILL_COPY,
+    designSystemSummaries: ES_ES_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: ES_ES_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: ES_ES_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: ES_ES_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: ES_ES_PROMPT_TEMPLATE_COPY,
+  },
+  'pt-BR': {
+    skillCopy: PT_BR_SKILL_COPY,
+    designSystemSummaries: PT_BR_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: PT_BR_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: PT_BR_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: PT_BR_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: PT_BR_PROMPT_TEMPLATE_COPY,
+  },
+  ar: {
+    skillCopy: AR_SKILL_COPY,
+    designSystemSummaries: AR_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: AR_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: AR_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: AR_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: AR_PROMPT_TEMPLATE_COPY,
+  },
+  fa: {
+    skillCopy: FA_SKILL_COPY,
+    designSystemSummaries: FA_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: FA_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: FA_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: FA_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: FA_PROMPT_TEMPLATE_COPY,
+  },
+  ko: {
+    skillCopy: KO_SKILL_COPY,
+    designSystemSummaries: KO_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: KO_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: KO_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: KO_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: KO_PROMPT_TEMPLATE_COPY,
+  },
+  pl: {
+    skillCopy: PL_SKILL_COPY,
+    designSystemSummaries: PL_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: PL_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: PL_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: PL_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: PL_PROMPT_TEMPLATE_COPY,
+  },
+  hu: {
+    skillCopy: HU_SKILL_COPY,
+    designSystemSummaries: HU_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: HU_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: HU_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: HU_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: HU_PROMPT_TEMPLATE_COPY,
+  },
+  uk: {
+    skillCopy: UK_SKILL_COPY,
+    designSystemSummaries: UK_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: UK_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: UK_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: UK_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: UK_PROMPT_TEMPLATE_COPY,
+  },
+  tr: {
+    skillCopy: TR_SKILL_COPY,
+    designSystemSummaries: TR_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: TR_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: TR_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: TR_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: TR_PROMPT_TEMPLATE_COPY,
+  },
+  th: {
+    skillCopy: TH_SKILL_COPY,
+    designSystemSummaries: TH_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: TH_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: TH_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: TH_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: TH_PROMPT_TEMPLATE_COPY,
+  },
+  it: {
+    skillCopy: IT_SKILL_COPY,
+    designSystemSummaries: IT_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: IT_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: IT_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: IT_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: IT_PROMPT_TEMPLATE_COPY,
+  },
 };
 
 function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedContentIds {
@@ -1004,8 +1226,23 @@ export const GERMAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.de;
 export const RUSSIAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.ru;
 export const FRENCH_CONTENT_IDS = LOCALIZED_CONTENT_IDS.fr;
 
+// True when a locale resolves a built-in-content bundle — either its own
+// registered bundle or an intentional script fallback (zh-TW -> zh-CN). When
+// false, built-in skill / design-system / prompt-template copy renders in
+// English for that locale. Every supported non-English locale should be true.
+export function hasLocalizedContent(locale: Locale): boolean {
+  return getLocalizedContent(locale) !== undefined;
+}
+
 function getLocalizedContent(locale: Locale): LocalizedContentBundle | undefined {
-  return LOCALIZED_CONTENT[locale];
+  const direct = LOCALIZED_CONTENT[locale];
+  if (direct) return direct;
+  // Traditional Chinese reuses the Simplified Chinese content tables when no
+  // dedicated zh-TW bundle exists, matching the zh fallback in
+  // `localizedRecordValue` so built-in content stays Chinese instead of
+  // silently rendering English.
+  if (locale.startsWith('zh')) return LOCALIZED_CONTENT['zh-CN'];
+  return undefined;
 }
 
 function normalizeText(text: string): string {

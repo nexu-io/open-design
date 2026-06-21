@@ -1,6 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import path from 'node:path';
+import {
+  createDsmlArtifactTextSuppressor,
+  type ArtifactTextSuppressor,
+} from './artifacts/text-suppression.js';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -17,6 +21,13 @@ const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // `OD_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
 // ACP session on the next tick instead of disabling the watchdog.
 const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
+const ACP_ARTIFACT_OPEN_PATTERN = String.raw`<\s*(?:\|?\s*DSML[\s,]+artifact\b|artifact\b)`;
+const ACP_GENERATED_FILE_PREFIX_PATTERN =
+  String.raw`(?:here\s+is|here'?s)\s+the\s+generated\s+file\s*:?\s*(?:\r?\n|\s)*`;
+const ACP_ARTIFACT_ECHO_START_RE = new RegExp(
+  String.raw`^\s*(?:${ACP_ARTIFACT_OPEN_PATTERN}|${ACP_GENERATED_FILE_PREFIX_PATTERN}${ACP_ARTIFACT_OPEN_PATTERN})`,
+  'i',
+);
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;
@@ -34,6 +45,10 @@ export interface AcpMcpServerInput {
 
 interface AcpSessionOptions {
   mcpServers?: AcpMcpServerInput[];
+  // How the `env` field of each mcpServer entry is shaped.
+  // `'array'` (default) → `[{name, value}]` (Hermes, Kimi, …).
+  // `'map'`   → `{"KEY": "val"}` (reasonix 1.x Go, standard MCP).
+  envFormat?: 'array' | 'map';
 }
 
 export interface ModelOption {
@@ -67,6 +82,8 @@ interface AttachAcpSessionOptions {
   model?: string | null;
   imagePaths?: string[];
   mcpServers?: AcpMcpServerInput[];
+  // Passed through to buildAcpSessionNewParams — see AcpSessionOptions.
+  envFormat?: 'array' | 'map';
   send: (event: string, payload: unknown) => void;
   clientName?: string;
   clientVersion?: string;
@@ -88,22 +105,48 @@ function asObject(value: unknown): JsonObject | null {
   return value && typeof value === 'object' ? value as JsonObject : null;
 }
 
-export function buildAcpSessionNewParams(cwd: string, { mcpServers }: AcpSessionOptions = {}) {
+export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 'array' }: AcpSessionOptions = {}) {
   const servers = Array.isArray(mcpServers) ? mcpServers : [];
+  const wantsMap = envFormat === 'map';
   return {
     cwd: path.resolve(cwd),
     // MCP is an optional compatibility layer. Default to no MCP servers so ACP
     // agents can run through the skill + CLI path without MCP support. Do not
     // auto-install or mutate user/global MCP config; callers must pass an
     // explicit per-session MCP descriptor when a compatible agent supports it.
-    // Normalize to the ACP stdio server shape expected by Kimi/Hermes.
-    mcpServers: servers.map((s) => ({
-      type: typeof s?.type === 'string' ? s.type : 'stdio',
-      name: typeof s?.name === 'string' ? s.name : '',
-      command: typeof s?.command === 'string' ? s.command : '',
-      args: Array.isArray(s?.args) ? s.args : [],
-      env: Array.isArray(s?.env) ? s.env : [],
-    })),
+    mcpServers: servers.map((s) => {
+      const rawEnv = s?.env;
+      // Already a plain object — pass through in map mode, convert to
+      // array in array mode (e.g. live-artifacts MCP from
+      // buildLiveArtifactsMcpServersForAgent which already respects
+      // acpMcpEnvFormat).
+      const isPlainObject =
+        rawEnv && typeof rawEnv === 'object' && !Array.isArray(rawEnv);
+      if (wantsMap && isPlainObject) {
+        return {
+          type: typeof s?.type === 'string' ? s.type : 'stdio',
+          name: typeof s?.name === 'string' ? s.name : '',
+          command: typeof s?.command === 'string' ? s.command : '',
+          args: Array.isArray(s?.args) ? s.args : [],
+          env: rawEnv,
+        };
+      }
+      const envArr = Array.isArray(rawEnv) ? rawEnv : [];
+      const env = wantsMap
+        ? Object.fromEntries(envArr.map((e: any) => [e?.name ?? '', e?.value ?? '']))
+        : isPlainObject
+          ? Object.entries(rawEnv as Record<string, string>).map(
+              ([name, value]) => ({ name, value }),
+            )
+          : envArr;
+      return {
+        type: typeof s?.type === 'string' ? s.type : 'stdio',
+        name: typeof s?.name === 'string' ? s.name : '',
+        command: typeof s?.command === 'string' ? s.command : '',
+        args: Array.isArray(s?.args) ? s.args : [],
+        env,
+      };
+    }),
   };
 }
 
@@ -145,6 +188,44 @@ function rpcErrorMessage(raw: unknown): string {
   return typeof obj.id === 'number'
     ? `json-rpc id ${obj.id}: ${message}`
     : message;
+}
+
+function rpcErrorData(raw: unknown): unknown {
+  const obj = asObject(raw);
+  const error = asObject(obj?.error);
+  return error && 'data' in error ? error.data : undefined;
+}
+
+function rpcErrorRetryable(data: unknown): boolean | undefined {
+  const details = asObject(data);
+  return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
+}
+
+function promotedOpenCodeSessionErrorPayload(data: unknown, fallbackMessage: string) {
+  const details = asObject(data);
+  if (
+    details?.kind !== 'opencode_session_error' ||
+    details.source !== 'opencode' ||
+    details.code !== 'ROLE_MARKER_HALLUCINATION'
+  ) {
+    return null;
+  }
+  const message =
+    typeof details.message === 'string' && details.message.trim()
+      ? details.message.trim()
+      : fallbackMessage;
+  return {
+    message,
+    error: {
+      code: 'ROLE_MARKER_HALLUCINATION',
+      message,
+      retryable: typeof details.retryable === 'boolean' ? details.retryable : true,
+      details: {
+        ...details,
+        promoted_by: 'open_design_acp',
+      },
+    },
+  };
 }
 
 interface FormattedUsage {
@@ -286,34 +367,334 @@ function currentModelFromSessionResult(result: JsonObject): string | null {
     : null;
 }
 
+function acpUpdateStatus(update: JsonObject): string {
+  return typeof update.status === 'string'
+    ? update.status.trim().toLowerCase().replace(/[\s_-]+/g, '')
+    : '';
+}
+
+function isAcpCompletedStatus(update: JsonObject): boolean {
+  const status = acpUpdateStatus(update);
+  return status === 'completed' || status === 'complete' || status === 'succeeded' || status === 'success';
+}
+
+function isAcpTerminalFailureStatus(update: JsonObject): boolean {
+  const status = acpUpdateStatus(update);
+  return status === 'failed' || status === 'failure' || status === 'error' || status === 'cancelled' || status === 'canceled';
+}
+
+function acpToolCallId(update: JsonObject): string | null {
+  return typeof update.toolCallId === 'string' && update.toolCallId.trim()
+    ? update.toolCallId.trim()
+    : null;
+}
+
+function isAcpArtifactWriteLabel(update: JsonObject): boolean {
+  const label = [
+    typeof update.title === 'string' ? update.title : '',
+    typeof update.name === 'string' ? update.name : '',
+  ].join(' ');
+  return /\b(?:edit|write|create|update|save|patch|replace)\b/i.test(label);
+}
+
+function isAcpArtifactWriteUpdate(update: JsonObject, writeToolCallIds: Set<string>): boolean {
+  if (!isAcpCompletedStatus(update)) return false;
+  const toolCallId = acpToolCallId(update);
+  return isAcpArtifactWriteLabel(update) || (toolCallId ? writeToolCallIds.has(toolCallId) : false);
+}
+
+// Best-effort file path for an ACP artifact-write tool call. ACP can carry a
+// `locations: [{ path }]` array and/or `content: [{ type:'diff', path }]`
+// entries, but many agents omit both and send only a human `title` ("edit").
+// Returns null when no concrete path is present; the caller then falls back to
+// the toolCallId as a dedup key.
+function acpArtifactWritePath(update: JsonObject): string | null {
+  // 1. ACP `locations: [{ path }]` and `content: [{ path }]` (diff entries).
+  for (const field of [update.locations, update.content]) {
+    if (!Array.isArray(field)) continue;
+    for (const entry of field) {
+      const path = asObject(entry)?.path;
+      if (typeof path === 'string' && path.trim()) return path.trim();
+    }
+  }
+  // 2. Tool input echoed by some agents as `rawInput.{path,file_path,filename}`.
+  const rawInput = asObject(update.rawInput);
+  for (const key of ['path', 'file_path', 'filename']) {
+    const value = rawInput?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  // 3. A filename token embedded in the human title, e.g. "Write index.html".
+  // Keeping the real extension lets `isArtifactPath` correctly EXCLUDE
+  // non-artifact writes (e.g. "edit config.json"), matching the claude path.
+  const title = typeof update.title === 'string' ? update.title : '';
+  const match = title.match(/[\w./-]+\.[A-Za-z0-9]+/);
+  if (match?.[0]) return match[0];
+  return null;
+}
+
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
+  let pendingJson = '';
+  let pendingJsonLineCount = 0;
+
+  const emit = (candidate: string): boolean => {
+    try {
+      onMessage(JSON.parse(candidate), candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const startPendingJson = (line: string) => {
+    pendingJson = line;
+    pendingJsonLineCount = 1;
+  };
+
+  const resetPendingJson = () => {
+    pendingJson = '';
+    pendingJsonLineCount = 0;
+  };
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (pendingJson) {
+      const nextCandidate = `${pendingJson}\n${trimmed}`;
+      if (emit(nextCandidate)) {
+        resetPendingJson();
+        return;
+      }
+      pendingJsonLineCount += 1;
+      const state = classifyJsonCandidate(nextCandidate);
+      if (
+        state === 'incomplete' &&
+        nextCandidate.length <= 128_000 &&
+        pendingJsonLineCount <= 256
+      ) {
+        pendingJson = nextCandidate;
+        return;
+      }
+      resetPendingJson();
+      handleLine(trimmed);
+      return;
+    }
+    if (emit(trimmed)) return;
+    // ACP is line-delimited JSON-RPC, but a few bridges have emitted
+    // pretty-printed JSON during startup. Keep a bounded aggregate so an
+    // otherwise valid multiline initialize response does not get discarded
+    // line-by-line and leave the session stuck in spawn pending.
+    if (
+      (trimmed.startsWith('{') || trimmed.startsWith('[')) &&
+      classifyJsonCandidate(trimmed) === 'incomplete'
+    ) {
+      startPendingJson(trimmed);
+    }
+  };
+
   return {
     feed(chunk: string) {
       buffer += chunk;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          onMessage(JSON.parse(trimmed), trimmed);
-        } catch {
-          // Ignore non-JSON log lines on stdout.
-        }
+        handleLine(line);
       }
     },
     flush() {
       const trimmed = buffer.trim();
       buffer = '';
-      if (!trimmed) return;
-      try {
-        onMessage(JSON.parse(trimmed), trimmed);
-      } catch {
-        // Ignore trailing non-JSON log lines on stdout.
+      if (trimmed) {
+        handleLine(trimmed);
       }
+      if (pendingJson && emit(pendingJson)) {
+        pendingJson = '';
+      }
+      // Ignore trailing non-JSON log lines on stdout.
     },
   };
+}
+
+function classifyJsonCandidate(value: string): 'complete' | 'incomplete' | 'invalid' {
+  type Frame =
+    | { kind: 'object'; expect: 'keyOrEnd' | 'colon' | 'value' | 'commaOrEnd' }
+    | { kind: 'array'; expect: 'valueOrEnd' | 'commaOrEnd' };
+  const stack: Frame[] = [];
+  let rootComplete = false;
+
+  const afterValue = () => {
+    const parent = stack.at(-1);
+    if (!parent) {
+      rootComplete = true;
+      return;
+    }
+    parent.expect = 'commaOrEnd';
+  };
+
+  const closeFrame = (kind: 'object' | 'array'): boolean => {
+    const current = stack.pop();
+    if (!current || current.kind !== kind) return false;
+    afterValue();
+    return true;
+  };
+
+  const parseString = (start: number): number | null => {
+    for (let index = start + 1; index < value.length; index += 1) {
+      const char = value[index];
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === '"') return index;
+    }
+    return null;
+  };
+
+  const parseLiteral = (start: number, literal: string): number | null | false => {
+    for (let offset = 0; offset < literal.length; offset += 1) {
+      const char = value[start + offset];
+      if (char === undefined) return null;
+      if (char !== literal[offset]) return false;
+    }
+    return start + literal.length - 1;
+  };
+
+  const parseNumber = (start: number): number | false => {
+    let index = start;
+    if (value[index] === '-') index += 1;
+    if (value[index] === '0') {
+      index += 1;
+    } else if (/[1-9]/.test(value[index] ?? '')) {
+      while (/[0-9]/.test(value[index] ?? '')) index += 1;
+    } else {
+      return false;
+    }
+    if (value[index] === '.') {
+      index += 1;
+      if (!/[0-9]/.test(value[index] ?? '')) return false;
+      while (/[0-9]/.test(value[index] ?? '')) index += 1;
+    }
+    if (value[index] === 'e' || value[index] === 'E') {
+      index += 1;
+      if (value[index] === '+' || value[index] === '-') index += 1;
+      if (!/[0-9]/.test(value[index] ?? '')) return false;
+      while (/[0-9]/.test(value[index] ?? '')) index += 1;
+    }
+    return index - 1;
+  };
+
+  const parseValue = (index: number): number | null | false => {
+    const char = value[index];
+    if (char === '"') {
+      const end = parseString(index);
+      if (end === null) return null;
+      afterValue();
+      return end;
+    }
+    if (char === '{') {
+      stack.push({ kind: 'object', expect: 'keyOrEnd' });
+      return index;
+    }
+    if (char === '[') {
+      stack.push({ kind: 'array', expect: 'valueOrEnd' });
+      return index;
+    }
+    if (char === 't') {
+      const end = parseLiteral(index, 'true');
+      if (end === false || end === null) return end;
+      afterValue();
+      return end;
+    }
+    if (char === 'f') {
+      const end = parseLiteral(index, 'false');
+      if (end === false || end === null) return end;
+      afterValue();
+      return end;
+    }
+    if (char === 'n') {
+      const end = parseLiteral(index, 'null');
+      if (end === false || end === null) return end;
+      afterValue();
+      return end;
+    }
+    if (char === '-' || /[0-9]/.test(char ?? '')) {
+      const end = parseNumber(index);
+      if (end === false) return false;
+      afterValue();
+      return end;
+    }
+    return false;
+  };
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === undefined) break;
+    if (/\s/.test(char)) continue;
+
+    const current = stack.at(-1);
+    if (!current) {
+      if (rootComplete) return 'invalid';
+      const end = parseValue(index);
+      if (end === false) return 'invalid';
+      if (end === null) return 'incomplete';
+      index = end;
+      continue;
+    }
+
+    if (current.kind === 'object') {
+      if (current.expect === 'keyOrEnd') {
+        if (char === '}') {
+          if (!closeFrame('object')) return 'invalid';
+          continue;
+        }
+        if (char !== '"') return 'invalid';
+        const end = parseString(index);
+        if (end === null) return 'incomplete';
+        current.expect = 'colon';
+        index = end;
+        continue;
+      }
+      if (current.expect === 'colon') {
+        if (char !== ':') return 'invalid';
+        current.expect = 'value';
+        continue;
+      }
+      if (current.expect === 'value') {
+        const end = parseValue(index);
+        if (end === false) return 'invalid';
+        if (end === null) return 'incomplete';
+        index = end;
+        continue;
+      }
+      if (char === '}') {
+        if (!closeFrame('object')) return 'invalid';
+        continue;
+      }
+      if (char !== ',') return 'invalid';
+      current.expect = 'keyOrEnd';
+      continue;
+    }
+
+    if (current.expect === 'valueOrEnd') {
+      if (char === ']') {
+        if (!closeFrame('array')) return 'invalid';
+        continue;
+      }
+      const end = parseValue(index);
+      if (end === false) return 'invalid';
+      if (end === null) return 'incomplete';
+      index = end;
+      continue;
+    }
+    if (char === ']') {
+      if (!closeFrame('array')) return 'invalid';
+      continue;
+    }
+    if (char !== ',') return 'invalid';
+    current.expect = 'valueOrEnd';
+  }
+
+  return rootComplete && stack.length === 0 ? 'complete' : 'incomplete';
 }
 
 export async function detectAcpModels({
@@ -434,6 +815,7 @@ export function attachAcpSession({
   model,
   imagePaths = [],
   mcpServers,
+  envFormat = 'array',
   send,
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
@@ -457,11 +839,24 @@ export function attachAcpSession({
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let emittedTextChunk = false;
+  let emittedVisibleTextChunk = false;
+  let emittedToolCall = false;
   let emittedTextBuffer = '';
   let finished = false;
   let fatal = false;
   let aborted = false;
   let stageTimer: TimerHandle | null = null;
+  let dsmlArtifactSuppressor: ArtifactTextSuppressor | null = null;
+  let dsmlArtifactSuppressorToolCallId: string | null = null;
+  let dsmlArtifactSuppressorArmedAfterText = false;
+  let dsmlArtifactSuppressorSawIncrementalProse = false;
+  const acpArtifactWriteToolCallIds = new Set<string>();
+  // Per artifact-write tool call, accumulate the best concrete file path seen
+  // across its frames and whether we have already mirrored it into canonical
+  // tool_use/tool_result events. Emission is deferred to the terminal frame so
+  // a `locations`/`rawInput` path that ACP only sends on a later update is used
+  // for classification, instead of locking in a first-frame guess.
+  const acpArtifactRunEventState = new Map<string, { path: string | null; emitted: boolean }>();
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -502,9 +897,18 @@ export function attachAcpSession({
     );
   };
 
+  const failWithPayload = (payload: unknown) => {
+    if (finished) return;
+    finished = true;
+    fatal = true;
+    clearStageTimer();
+    send('error', payload);
+    if (!child.killed) child.kill('SIGTERM');
+  };
+
   const fail = (
     message: string,
-    options: { forceModelUnavailable?: boolean } = {},
+    options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
   ) => {
     if (finished) return;
     finished = true;
@@ -515,7 +919,19 @@ export function attachAcpSession({
       (options.forceModelUnavailable || isModelUnavailableError(message));
     send(
       'error',
-      useModelUnavailable ? amrModelUnavailablePayload(message) : { message },
+      useModelUnavailable
+        ? amrModelUnavailablePayload(message)
+        : options.details === undefined && options.retryable === undefined
+          ? { message }
+          : {
+              message,
+              error: {
+                code: 'AGENT_EXECUTION_FAILED',
+                message,
+                retryable: options.retryable ?? false,
+                ...(options.details === undefined ? {} : { details: options.details }),
+              },
+            },
     );
     if (!child.killed) child.kill('SIGTERM');
   };
@@ -541,7 +957,39 @@ export function attachAcpSession({
       },
       'session/prompt',
     );
+    send('agent', {
+      type: 'status',
+      label: 'waiting_for_first_output',
+      elapsedMs: Date.now() - runStartedAt,
+    });
     nextId += 1;
+  };
+
+  const finishCleanPrompt = (usageSource?: unknown) => {
+    if (finished) return;
+    const flushedText = dsmlArtifactSuppressor?.flush() ?? '';
+    if (flushedText) {
+      emittedVisibleTextChunk = true;
+      send('agent', { type: 'text_delta', delta: flushedText });
+    }
+    const usage = formatUsage(usageSource);
+    if (usage) {
+      send('agent', {
+        type: 'usage',
+        usage,
+        durationMs: Date.now() - runStartedAt,
+      });
+    }
+    finished = true;
+    clearStageTimer();
+    stdin.end();
+    // Some ACP agents keep the child process alive after stdin closes,
+    // waiting for another prompt. Each Open Design run owns one process per
+    // turn, so close it once this prompt is cleanly complete.
+    const cleanExitTimer = setTimeout(() => {
+      if (!child.killed) child.kill('SIGTERM');
+    }, 500);
+    child.once('close', () => clearTimeout(cleanExitTimer));
   };
 
   const replyPermission = (raw: JsonObject) => {
@@ -569,7 +1017,7 @@ export function attachAcpSession({
   };
 
   const parser = createJsonLineStream((raw, rawLine) => {
-    if (aborted) return;
+    if (aborted || finished) return;
     resetStageTimer('response');
     const obj = asObject(raw);
     if (!obj) return;
@@ -596,7 +1044,17 @@ export function attachAcpSession({
       if (error?.code === -32603 && obj.id !== expectedId) {
         return;
       }
-      fail(rpcErr);
+      const details = rpcErrorData(obj);
+      const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
+      if (promotedPayload) {
+        failWithPayload(promotedPayload);
+        return;
+      }
+      const retryable = rpcErrorRetryable(details);
+      fail(rpcErr, {
+        details,
+        ...(retryable === undefined ? {} : { retryable }),
+      });
       return;
     }
     if (obj.method === 'session/request_permission') {
@@ -605,6 +1063,13 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
+        send('agent', {
+          type: 'status',
+          label: String(update.sessionUpdate || 'session_update'),
+          elapsedMs: Date.now() - runStartedAt,
+        });
+      }
       if (update.sessionUpdate === 'agent_thought_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
@@ -619,7 +1084,8 @@ export function attachAcpSession({
       if (update.sessionUpdate === 'agent_message_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
-          const delta = text.startsWith(emittedTextBuffer)
+          const isCumulativeSnapshot = text.startsWith(emittedTextBuffer);
+          const delta = isCumulativeSnapshot
             ? text.slice(emittedTextBuffer.length)
             : text;
           if (delta.length > 0) {
@@ -633,7 +1099,126 @@ export function attachAcpSession({
                 ttftMs: Date.now() - runStartedAt,
               });
             }
-            send('agent', { type: 'text_delta', delta });
+            if (dsmlArtifactSuppressor) {
+              const wasSuppressingArtifact = dsmlArtifactSuppressor.isSuppressing();
+              const hadPendingArtifactCandidate = dsmlArtifactSuppressor.hasPendingCandidate();
+              const strippedDelta = dsmlArtifactSuppressor.strip(delta);
+              const hasOpenArtifactCandidate =
+                dsmlArtifactSuppressor.isSuppressing() || dsmlArtifactSuppressor.hasPendingCandidate();
+              const consumedArtifactText = wasSuppressingArtifact || strippedDelta !== delta;
+              const shouldPreserveIncrementalProse =
+                !isCumulativeSnapshot &&
+                !wasSuppressingArtifact &&
+                !hadPendingArtifactCandidate &&
+                !hasOpenArtifactCandidate &&
+                (
+                  strippedDelta === delta ||
+                  (
+                    !dsmlArtifactSuppressorArmedAfterText &&
+                    dsmlArtifactSuppressorSawIncrementalProse &&
+                    !ACP_ARTIFACT_ECHO_START_RE.test(delta)
+                  )
+                );
+              const outputDelta = shouldPreserveIncrementalProse ? delta : strippedDelta;
+              if (outputDelta) {
+                emittedVisibleTextChunk = true;
+                send('agent', { type: 'text_delta', delta: outputDelta });
+              }
+              if (
+                strippedDelta === delta &&
+                !wasSuppressingArtifact &&
+                !hadPendingArtifactCandidate &&
+                !hasOpenArtifactCandidate
+              ) {
+                dsmlArtifactSuppressorSawIncrementalProse = true;
+              }
+              if (consumedArtifactText && !hasOpenArtifactCandidate) {
+                dsmlArtifactSuppressor = null;
+                dsmlArtifactSuppressorToolCallId = null;
+                dsmlArtifactSuppressorArmedAfterText = false;
+                dsmlArtifactSuppressorSawIncrementalProse = false;
+              }
+            } else {
+              emittedVisibleTextChunk = true;
+              send('agent', { type: 'text_delta', delta });
+            }
+          }
+        }
+        return;
+      }
+      if (
+        update.sessionUpdate === 'tool_call' ||
+        update.sessionUpdate === 'tool_call_update'
+      ) {
+        // The turn did real work (a tool call / file edit), which is valid output even
+        // when the model emits no closing assistant text. Track it so the prompt-complete
+        // handler does not misreport such a turn as "no output / model unavailable".
+        emittedToolCall = true;
+        const toolCallId = acpToolCallId(update);
+        if (toolCallId && isAcpArtifactWriteLabel(update)) {
+          acpArtifactWriteToolCallIds.add(toolCallId);
+        }
+        // Mirror artifact-write tool calls into the daemon's canonical
+        // tool_use/tool_result event shape so `countNewArtifacts`
+        // (run-artifacts.ts) can see ACP file writes. Without this, every ACP
+        // agent (AMR, Hermes, Kilo, Kiro, Devin, Vibe, …) reported
+        // run_finished.artifact_count: 0 even when the run wrote artifacts,
+        // because the ACP adapter emitted only text/status/thinking events and
+        // never the tool_use/tool_result pair the counter scans for.
+        //
+        // This path only feeds the NO-PROJECT fallback (project runs use the
+        // filesystem snapshot). Two correctness rules, both learned the hard
+        // way in review:
+        //   1. Defer emission to the TERMINAL frame and accumulate the best
+        //      concrete path across frames — ACP often sends `locations` only
+        //      on the completing update, and emitting on the first frame would
+        //      lock in a wrong/empty guess that a later path can't correct.
+        //   2. Never fabricate an artifact extension. `isArtifactPath` is what
+        //      decides whether a write counts; feeding it a real path lets it
+        //      correctly EXCLUDE non-artifact edits (`config.json`, `README.md`)
+        //      and INCLUDE real artifacts. A write that never carries a concrete
+        //      path stays keyed on its (extension-less) toolCallId, so it is
+        //      simply not counted rather than inflating the metric with a
+        //      synthetic `.html` — under-counting a truly opaque write is
+        //      acceptable; a false-positive artifact is not.
+        if (toolCallId) {
+          const isWriteCall =
+            isAcpArtifactWriteLabel(update) || acpArtifactWriteToolCallIds.has(toolCallId);
+          if (isWriteCall) {
+            let st = acpArtifactRunEventState.get(toolCallId);
+            if (!st) {
+              st = { path: null, emitted: false };
+              acpArtifactRunEventState.set(toolCallId, st);
+            }
+            if (!st.path) st.path = acpArtifactWritePath(update);
+            const failed = isAcpTerminalFailureStatus(update);
+            if (!st.emitted && (failed || isAcpCompletedStatus(update))) {
+              st.emitted = true;
+              send('agent', {
+                type: 'tool_use',
+                id: toolCallId,
+                name: 'Write',
+                input: { file_path: st.path ?? toolCallId },
+              });
+              send('agent', { type: 'tool_result', toolUseId: toolCallId, isError: failed });
+            }
+          }
+        }
+        if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {
+          dsmlArtifactSuppressor = createDsmlArtifactTextSuppressor();
+          dsmlArtifactSuppressorToolCallId = toolCallId;
+          dsmlArtifactSuppressorArmedAfterText = emittedTextBuffer.length > 0;
+          dsmlArtifactSuppressorSawIncrementalProse = false;
+          if (toolCallId) acpArtifactWriteToolCallIds.delete(toolCallId);
+        } else if (toolCallId && isAcpTerminalFailureStatus(update)) {
+          const ownsPendingWriteSuppression = toolCallId === dsmlArtifactSuppressorToolCallId;
+          const ownsPendingWriteCall = acpArtifactWriteToolCallIds.has(toolCallId);
+          acpArtifactWriteToolCallIds.delete(toolCallId);
+          if (ownsPendingWriteSuppression || ownsPendingWriteCall) {
+            dsmlArtifactSuppressor = null;
+            dsmlArtifactSuppressorToolCallId = null;
+            dsmlArtifactSuppressorArmedAfterText = false;
+            dsmlArtifactSuppressorSawIncrementalProse = false;
           }
         }
         return;
@@ -650,7 +1235,7 @@ export function attachAcpSession({
         'session/new',
         buildAcpSessionNewParams(
           effectiveCwd,
-          mcpServers ? { mcpServers } : {},
+          mcpServers ? { mcpServers, envFormat } : { envFormat },
         ),
         'session/new',
       );
@@ -689,37 +1274,14 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
-      if (!emittedTextChunk && modelUnavailableErrorCode) {
+      if (!emittedTextChunk && !emittedToolCall && modelUnavailableErrorCode) {
         fail(
           'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
           { forceModelUnavailable: true },
         );
         return;
       }
-      const usage = formatUsage(result.usage);
-      if (usage) {
-        send('agent', {
-          type: 'usage',
-          usage,
-          durationMs: Date.now() - runStartedAt,
-        });
-      }
-      finished = true;
-      clearStageTimer();
-      stdin.end();
-      // Some ACP agents (e.g. Devin for Terminal) keep the child process
-      // alive after stdin closes, waiting for the next prompt. Each Open
-      // Design run spawns its own agent process per turn, so the child must
-      // terminate for `child.on('close')` to fire and the chat run to
-      // finalize — otherwise the chat stays stuck in the "working" state.
-      // Give the child a short grace period to exit on its own first; if it
-      // doesn't, SIGTERM forces it. This mirrors the pattern in
-      // detectAcpModels() which already kills the child after a clean
-      // model-discovery probe completes (see line ~270 in this file).
-      const cleanExitTimer = setTimeout(() => {
-        if (!child.killed) child.kill('SIGTERM');
-      }, 500);
-      child.once('close', () => clearTimeout(cleanExitTimer));
+      finishCleanPrompt(result.usage);
       return;
     }
     if (sessionId && model && model !== 'default' && obj.id === expectedId) {

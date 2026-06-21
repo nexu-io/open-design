@@ -1,0 +1,349 @@
+{
+  "schemaVersion": 1,
+  "sourceScope": "open-design-bundled-fixture",
+  "brandId": "stripe",
+  "files": [
+    "DESIGN.md",
+    "tokens.css",
+    "components.html"
+  ],
+  "generatedAt": "2026-06-06T00:00:00.000Z",
+  "tokens": [
+    {
+      "name": "--bg",
+      "value": "#ffffff",
+      "layer": "A1-identity",
+      "source": "tokens.css:78"
+    },
+    {
+      "name": "--surface",
+      "value": "#ffffff",
+      "layer": "A1-identity",
+      "source": "tokens.css:79"
+    },
+    {
+      "name": "--surface-warm",
+      "value": "#f6f9fc",
+      "layer": "B-slot",
+      "source": "tokens.css:80"
+    },
+    {
+      "name": "--fg",
+      "value": "#061b31",
+      "layer": "A1-identity",
+      "source": "tokens.css:92"
+    },
+    {
+      "name": "--fg-2",
+      "value": "#273951",
+      "layer": "B-slot",
+      "source": "tokens.css:93"
+    },
+    {
+      "name": "--muted",
+      "value": "#64748d",
+      "layer": "A1-identity",
+      "source": "tokens.css:94"
+    },
+    {
+      "name": "--meta",
+      "value": "var(--muted)",
+      "layer": "B-slot",
+      "source": "tokens.css:95"
+    },
+    {
+      "name": "--border",
+      "value": "#e5edf5",
+      "layer": "A1-identity",
+      "source": "tokens.css:103"
+    },
+    {
+      "name": "--border-soft",
+      "value": "var(--border)",
+      "layer": "B-slot",
+      "source": "tokens.css:104"
+    },
+    {
+      "name": "--accent",
+      "value": "#533afd",
+      "layer": "A1-identity",
+      "source": "tokens.css:111"
+    },
+    {
+      "name": "--accent-on",
+      "value": "#ffffff",
+      "layer": "A2",
+      "source": "tokens.css:112"
+    },
+    {
+      "name": "--accent-hover",
+      "value": "#4434d4",
+      "layer": "A2",
+      "source": "tokens.css:124"
+    },
+    {
+      "name": "--accent-active",
+      "value": "#2e2b8c",
+      "layer": "A2",
+      "source": "tokens.css:125"
+    },
+    {
+      "name": "--success",
+      "value": "#15be53",
+      "layer": "A2",
+      "source": "tokens.css:136"
+    },
+    {
+      "name": "--warn",
+      "value": "#9b6829",
+      "layer": "A2",
+      "source": "tokens.css:137"
+    },
+    {
+      "name": "--danger",
+      "value": "#ea2261",
+      "layer": "A2",
+      "source": "tokens.css:138"
+    },
+    {
+      "name": "--font-display",
+      "value": "\"sohne-var\", \"Söhne\", \"Sohne\", \"SF Pro Display\", -apple-system, BlinkMacSystemFont, system-ui, \"Helvetica Neue\", Arial, sans-serif",
+      "layer": "A1-identity",
+      "source": "tokens.css:151"
+    },
+    {
+      "name": "--font-body",
+      "value": "\"sohne-var\", \"Söhne\", \"Sohne\", \"SF Pro Display\", -apple-system, BlinkMacSystemFont, system-ui, \"Helvetica Neue\", Arial, sans-serif",
+      "layer": "A1-identity",
+      "source": "tokens.css:155"
+    },
+    {
+      "name": "--font-mono",
+      "value": "\"SourceCodePro\", \"Source Code Pro\", ui-monospace, \"SF Mono\", \"JetBrains Mono\", Menlo, Monaco, Consolas, monospace",
+      "layer": "A2",
+      "source": "tokens.css:159"
+    },
+    {
+      "name": "--text-xs",
+      "value": "12px",
+      "layer": "A1-structure",
+      "source": "tokens.css:173"
+    },
+    {
+      "name": "--text-sm",
+      "value": "14px",
+      "layer": "A1-structure",
+      "source": "tokens.css:174"
+    },
+    {
+      "name": "--text-base",
+      "value": "16px",
+      "layer": "A1-structure",
+      "source": "tokens.css:175"
+    },
+    {
+      "name": "--text-lg",
+      "value": "18px",
+      "layer": "A1-structure",
+      "source": "tokens.css:176"
+    },
+    {
+      "name": "--text-xl",
+      "value": "22px",
+      "layer": "A1-structure",
+      "source": "tokens.css:177"
+    },
+    {
+      "name": "--text-2xl",
+      "value": "32px",
+      "layer": "A1-structure",
+      "source": "tokens.css:178"
+    },
+    {
+      "name": "--text-3xl",
+      "value": "48px",
+      "layer": "A1-structure",
+      "source": "tokens.css:179"
+    },
+    {
+      "name": "--text-4xl",
+      "value": "56px",
+      "layer": "A1-structure",
+      "source": "tokens.css:180"
+    },
+    {
+      "name": "--leading-body",
+      "value": "1.40",
+      "layer": "A1-structure",
+      "source": "tokens.css:199"
+    },
+    {
+      "name": "--leading-tight",
+      "value": "1.10",
+      "layer": "A1-structure",
+      "source": "tokens.css:200"
+    },
+    {
+      "name": "--tracking-display",
+      "value": "-0.02em",
+      "layer": "A1-structure",
+      "source": "tokens.css:201"
+    },
+    {
+      "name": "--space-1",
+      "value": "4px",
+      "layer": "A2",
+      "source": "tokens.css:211"
+    },
+    {
+      "name": "--space-2",
+      "value": "8px",
+      "layer": "A2",
+      "source": "tokens.css:212"
+    },
+    {
+      "name": "--space-3",
+      "value": "12px",
+      "layer": "A2",
+      "source": "tokens.css:213"
+    },
+    {
+      "name": "--space-4",
+      "value": "16px",
+      "layer": "A2",
+      "source": "tokens.css:214"
+    },
+    {
+      "name": "--space-5",
+      "value": "20px",
+      "layer": "A2",
+      "source": "tokens.css:215"
+    },
+    {
+      "name": "--space-6",
+      "value": "24px",
+      "layer": "A2",
+      "source": "tokens.css:216"
+    },
+    {
+      "name": "--space-8",
+      "value": "32px",
+      "layer": "A2",
+      "source": "tokens.css:217"
+    },
+    {
+      "name": "--space-12",
+      "value": "48px",
+      "layer": "A2",
+      "source": "tokens.css:218"
+    },
+    {
+      "name": "--section-y-desktop",
+      "value": "96px",
+      "layer": "A1-structure",
+      "source": "tokens.css:225"
+    },
+    {
+      "name": "--section-y-tablet",
+      "value": "64px",
+      "layer": "A1-structure",
+      "source": "tokens.css:226"
+    },
+    {
+      "name": "--section-y-phone",
+      "value": "40px",
+      "layer": "A1-structure",
+      "source": "tokens.css:227"
+    },
+    {
+      "name": "--radius-sm",
+      "value": "4px",
+      "layer": "A2",
+      "source": "tokens.css:237"
+    },
+    {
+      "name": "--radius-md",
+      "value": "6px",
+      "layer": "A2",
+      "source": "tokens.css:238"
+    },
+    {
+      "name": "--radius-lg",
+      "value": "8px",
+      "layer": "A2",
+      "source": "tokens.css:239"
+    },
+    {
+      "name": "--radius-pill",
+      "value": "9999px",
+      "layer": "A2",
+      "source": "tokens.css:240"
+    },
+    {
+      "name": "--elev-flat",
+      "value": "none",
+      "layer": "A2",
+      "source": "tokens.css:257"
+    },
+    {
+      "name": "--elev-ring",
+      "value": "0 0 0 1px var(--border)",
+      "layer": "A2",
+      "source": "tokens.css:258"
+    },
+    {
+      "name": "--elev-raised",
+      "value": "rgba(50, 50, 93, 0.25) 0px 30px 45px -30px, rgba(0, 0, 0, 0.10) 0px 18px 36px -18px",
+      "layer": "A2",
+      "source": "tokens.css:259"
+    },
+    {
+      "name": "--focus-ring",
+      "value": "0 0 0 2px var(--accent), 0 0 0 5px color-mix(in oklab, var(--accent), transparent 75%)",
+      "layer": "A2",
+      "source": "tokens.css:272"
+    },
+    {
+      "name": "--motion-fast",
+      "value": "150ms",
+      "layer": "A2",
+      "source": "tokens.css:282"
+    },
+    {
+      "name": "--motion-base",
+      "value": "200ms",
+      "layer": "A2",
+      "source": "tokens.css:283"
+    },
+    {
+      "name": "--ease-standard",
+      "value": "cubic-bezier(0.2, 0, 0, 1)",
+      "layer": "A2",
+      "source": "tokens.css:284"
+    },
+    {
+      "name": "--container-max",
+      "value": "1080px",
+      "layer": "A1-structure",
+      "source": "tokens.css:291"
+    },
+    {
+      "name": "--container-gutter-desktop",
+      "value": "32px",
+      "layer": "A1-structure",
+      "source": "tokens.css:292"
+    },
+    {
+      "name": "--container-gutter-tablet",
+      "value": "24px",
+      "layer": "A1-structure",
+      "source": "tokens.css:293"
+    },
+    {
+      "name": "--container-gutter-phone",
+      "value": "16px",
+      "layer": "A1-structure",
+      "source": "tokens.css:294"
+    }
+  ]
+}

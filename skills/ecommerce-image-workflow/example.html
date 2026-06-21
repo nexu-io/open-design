@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ecommerce image workflow example</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --ink: #17191c;
+        --muted: #626b77;
+        --line: #d7dee8;
+        --panel: #ffffff;
+        --panel-2: #eef3f8;
+        --accent: #0f766e;
+        --accent-2: #c2410c;
+        --shadow: rgba(23, 25, 28, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      body {
+        padding: 34px;
+      }
+
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+      }
+
+      .topline {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-start;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 11px;
+        color: var(--accent);
+        margin: 0 0 12px;
+      }
+
+      h1 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(38px, 6vw, 76px);
+        line-height: 0.95;
+        letter-spacing: 0;
+        margin: 0;
+        max-width: 760px;
+        font-weight: 500;
+      }
+
+      .summary {
+        max-width: 330px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.5;
+        margin: 8px 0 0;
+      }
+
+      .meta-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border-bottom: 1px solid var(--line);
+      }
+
+      .meta {
+        padding: 18px 20px;
+        border-right: 1px solid var(--line);
+      }
+
+      .meta:last-child {
+        border-right: 0;
+      }
+
+      .meta span {
+        display: block;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .meta strong {
+        font-size: 18px;
+        font-weight: 650;
+      }
+
+      .workflow {
+        display: grid;
+        grid-template-columns: 1.05fr 1.8fr;
+        gap: 24px;
+        margin-top: 28px;
+      }
+
+      .reference,
+      .gallery-card,
+      .manifest {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 18px 45px var(--shadow);
+      }
+
+      .reference {
+        padding: 22px;
+      }
+
+      .label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .status {
+        color: var(--accent);
+      }
+
+      .product-stage {
+        margin-top: 22px;
+        min-height: 420px;
+        border: 1px solid var(--line);
+        background:
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0 48%,
+            rgba(15, 118, 110, 0.12) 48% 52%,
+            rgba(255, 255, 255, 0) 52%
+          ),
+          var(--panel-2);
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+
+      .product {
+        width: min(230px, 72%);
+        aspect-ratio: 0.76;
+        position: relative;
+        filter: drop-shadow(0 28px 26px rgba(23, 25, 28, 0.18));
+      }
+
+      .product::before {
+        content: "";
+        position: absolute;
+        inset: 11% 12% 9%;
+        background: #f8fafc;
+        border: 2px solid #17191c;
+        border-radius: 42% 42% 38% 38%;
+      }
+
+      .product::after {
+        content: "";
+        position: absolute;
+        left: 28%;
+        right: 28%;
+        top: 27%;
+        height: 12px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow:
+          0 32px 0 #22201c,
+          0 64px 0 #d7dee8;
+      }
+
+      .strap {
+        position: absolute;
+        top: 22%;
+        bottom: 18%;
+        width: 26%;
+        border: 2px solid #17191c;
+        border-radius: 999px;
+      }
+
+      .strap.left {
+        left: -4%;
+        border-right: 0;
+      }
+
+      .strap.right {
+        right: -4%;
+        border-left: 0;
+      }
+
+      .note-list {
+        margin: 20px 0 0;
+        padding: 0;
+        list-style: none;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .note-list li {
+        padding: 10px 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .gallery-card {
+        overflow: hidden;
+      }
+
+      .frame {
+        min-height: 292px;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        place-items: center;
+        position: relative;
+        background: #fbfcfe;
+      }
+
+      .frame.feature {
+        background:
+          linear-gradient(90deg, transparent 0 62%, rgba(15, 118, 110, 0.1) 62%),
+          #fbfcfe;
+      }
+
+      .frame.lifestyle {
+        background:
+          linear-gradient(180deg, #eef6ff 0 52%, #cbd5e1 52%),
+          #eef6ff;
+      }
+
+      .mini-product {
+        width: 42%;
+        aspect-ratio: 0.76;
+        position: relative;
+      }
+
+      .mini-product::before {
+        content: "";
+        position: absolute;
+        inset: 11% 12% 9%;
+        background: #f8fafc;
+        border: 2px solid #17191c;
+        border-radius: 42% 42% 38% 38%;
+      }
+
+      .mini-product::after {
+        content: "";
+        position: absolute;
+        left: 31%;
+        right: 31%;
+        top: 29%;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow:
+          0 24px 0 #22201c,
+          0 48px 0 #d7dee8;
+      }
+
+      .feature-line {
+        position: absolute;
+        right: 22px;
+        width: 25%;
+        height: 1px;
+        background: var(--accent);
+      }
+
+      .feature-line.one {
+        top: 94px;
+      }
+
+      .feature-line.two {
+        top: 148px;
+      }
+
+      .feature-line.three {
+        top: 202px;
+      }
+
+      .table {
+        position: absolute;
+        bottom: 46px;
+        left: 18%;
+        right: 18%;
+        height: 14px;
+        background: rgba(23, 25, 28, 0.16);
+        border-radius: 999px;
+      }
+
+      .card-copy {
+        padding: 18px;
+      }
+
+      .card-copy h2 {
+        margin: 0 0 8px;
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .card-copy p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .manifest {
+        margin-top: 18px;
+        padding: 18px 20px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 16px;
+        align-items: center;
+      }
+
+      .manifest-mark {
+        width: 42px;
+        height: 42px;
+        border: 1px solid var(--line);
+        display: grid;
+        place-items: center;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: var(--accent);
+        background: #fbfcfe;
+      }
+
+      .manifest h2 {
+        margin: 0 0 4px;
+        font-size: 17px;
+      }
+
+      .manifest p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .manifest code {
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: var(--ink);
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 20px;
+        }
+
+        .topline,
+        .workflow {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        .summary {
+          max-width: none;
+        }
+
+        .meta-row,
+        .gallery {
+          grid-template-columns: 1fr;
+        }
+
+        .meta {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .manifest {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topline">
+        <div>
+          <p class="eyebrow">Reference product workflow</p>
+          <h1>One product photo becomes a compact commerce image set.</h1>
+        </div>
+        <p class="summary">
+          V1 keeps the product locked to a real reference image, then generates
+          a main packshot, one feature highlight, and one lifestyle scene.
+        </p>
+      </header>
+
+      <section class="meta-row" aria-label="Workflow metadata">
+        <div class="meta">
+          <span>Mode</span>
+          <strong>reference-product</strong>
+        </div>
+        <div class="meta">
+          <span>Scope</span>
+          <strong>one product</strong>
+        </div>
+        <div class="meta">
+          <span>Outputs</span>
+          <strong>3 images + manifest</strong>
+        </div>
+      </section>
+
+      <section class="workflow" aria-label="Generated ecommerce image workflow">
+        <aside class="reference">
+          <div class="label">
+            <span>Uploaded reference</span>
+            <span class="status">identity locked</span>
+          </div>
+          <div class="product-stage" aria-label="Stylized product reference">
+            <div class="product">
+              <span class="strap left"></span>
+              <span class="strap right"></span>
+            </div>
+          </div>
+          <ul class="note-list">
+            <li>Preserve shape, color, material, construction, and proportions.</li>
+            <li>Do not invent claims, certificates, or measurements.</li>
+            <li>Final marketplace compliance and text overlays remain human review.</li>
+          </ul>
+        </aside>
+
+        <div>
+          <div class="gallery">
+            <article class="gallery-card">
+              <div class="frame">
+                <div class="mini-product"></div>
+              </div>
+              <div class="card-copy">
+                <h2>Main image</h2>
+                <p>Clean packshot on a white or soft neutral background.</p>
+              </div>
+            </article>
+
+            <article class="gallery-card">
+              <div class="frame feature">
+                <div class="mini-product"></div>
+                <span class="feature-line one"></span>
+                <span class="feature-line two"></span>
+                <span class="feature-line three"></span>
+              </div>
+              <div class="card-copy">
+                <h2>Feature image</h2>
+                <p>One verified selling point with space for designer-added labels.</p>
+              </div>
+            </article>
+
+            <article class="gallery-card">
+              <div class="frame lifestyle">
+                <div class="mini-product"></div>
+                <span class="table"></span>
+              </div>
+              <div class="card-copy">
+                <h2>Lifestyle image</h2>
+                <p>A plausible use context with the product still faithful.</p>
+              </div>
+            </article>
+          </div>
+
+          <section class="manifest" aria-label="Manifest output">
+            <div class="manifest-mark">{ }</div>
+            <div>
+              <h2>Manifest handoff</h2>
+              <p>
+                Each slot records role, aspect, output file, prompt summary, and
+                fidelity notes.
+              </p>
+            </div>
+            <code>image-manifest.json</code>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

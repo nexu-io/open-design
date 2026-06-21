@@ -39,4 +39,12 @@ describe('InlineModelSwitcher styles', () => {
       expect(ruleValue(block, 'white-space'), selector).toBe('nowrap');
     }
   });
+
+  it('hides the long status text in compact hero placement', () => {
+    const compactText = cssDeclarations(
+      '.inline-switcher--compact .inline-switcher__chip-text',
+    );
+
+    expect(ruleValue(compactText, 'display')).toBe('none');
+  });
 });

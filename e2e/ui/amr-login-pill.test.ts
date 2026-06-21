@@ -11,12 +11,13 @@
 // during manual demos: "Sign in" → "Signed in" → hover-only "Sign out"
 // label flip → "Sign in" again on logout.
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
+import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright/amr.js';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -29,31 +30,20 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
 
 async function openSettingsDialog(page: Page) {
-  await waitForLoadingToClear(page);
-  // The entry "Open settings" button may either:
-  //   (a) open a popover menu containing a "Settings" item that opens the
-  //       dialog (older UI), or
-  //   (b) open the Settings dialog directly (current UI as of this PR).
-  // Try the menu-first path, fall through to the direct dialog if no
-  // menu materialises within a short window.
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  if (await menu.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
-  return dialog;
+  return openEntrySettingsDialog(page);
 }
 
 interface VelaMockState {
   loggedIn: boolean;
+  loginRequests: number;
+  logoutRequests: number;
+  statusRequests: number;
 }
 
 async function wireDaemonMocks(page: Page, state: VelaMockState) {
@@ -61,32 +51,27 @@ async function wireDaemonMocks(page: Page, state: VelaMockState) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    // Only AMR present — keeps the card layout deterministic regardless
-    // of whatever else `runtimes/registry.ts` later adds.
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'amr',
-            name: 'AMR (vela)',
-            bin: 'vela',
-            versionArgs: ['--version'],
-            available: true,
-            authStatus: null,
-            modelsSource: 'fallback',
-            models: [
-              { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini (openrouter · default)' },
-            ],
-            path: '/usr/local/bin/vela',
-            version: null,
-          },
-        ],
-      },
-    });
-  });
+  // Only AMR present — keeps the card layout deterministic regardless
+  // of whatever else `runtimes/registry.ts` later adds.
+  await routeAgents(page, [
+    {
+      id: 'amr',
+      name: 'AMR (vela)',
+      bin: 'vela',
+      versionArgs: ['--version'],
+      available: true,
+      authStatus: null,
+      modelsSource: 'fallback',
+      models: [
+        { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini (openrouter · default)' },
+      ],
+      path: '/usr/local/bin/vela',
+      version: null,
+    },
+  ]);
 
   await page.route('**/api/integrations/vela/status', async (route) => {
+    state.statusRequests += 1;
     const body = state.loggedIn
       ? {
           loggedIn: true,
@@ -113,11 +98,13 @@ async function wireDaemonMocks(page: Page, state: VelaMockState) {
     // that shape and flip the in-memory state so the next status poll
     // sees a logged-in user — equivalent to vela CLI completing the
     // device-auth flow and writing ~/.amr/config.json.
+    state.loginRequests += 1;
     state.loggedIn = true;
     await route.fulfill({ status: 202, json: { pid: 4242, startedAt: new Date().toISOString(), profile: 'local' } });
   });
 
   await page.route('**/api/integrations/vela/logout', async (route) => {
+    state.logoutRequests += 1;
     state.loggedIn = false;
     await route.fulfill({ json: { ok: true } });
   });
@@ -138,8 +125,8 @@ function baseStorageConfig() {
   };
 }
 
-test('AMR card shows Sign in when logged out, flips to Signed in after the daemon writes config, and back to Sign in on Sign out', async ({ page }) => {
-  const state: VelaMockState = { loggedIn: false };
+test('[P1] AMR card authorizes through daemon login status and returns to authorize on Sign out', async ({ page }) => {
+  const state: VelaMockState = { loggedIn: false, loginRequests: 0, logoutRequests: 0, statusRequests: 0 };
   await wireDaemonMocks(page, state);
 
   await page.addInitScript(
@@ -152,24 +139,30 @@ test('AMR card shows Sign in when logged out, flips to Signed in after the daemo
   await gotoEntryHome(page);
   const dialog = await openSettingsDialog(page);
 
-  const amrCard = dialog.locator('.amr-agent-card, .agent-card-installed').filter({ hasText: /AMR \(vela\)/i }).first();
+  const amrCard = dialog
+    .locator('.amr-agent-card, .agent-card-installed')
+    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .first();
   await expect(amrCard).toBeVisible();
 
-  // ---- Initial state: logged out → "Sign in" button visible on the pill ----
-  const signInBtn = amrCard.getByRole('button', { name: /^Sign in$/ });
+  // Initial state: logged out -> the authorization button is visible on the pill.
+  await expect.poll(() => state.statusRequests).toBeGreaterThan(0);
+  const signInBtn = amrCard.getByRole('button', { name: /^(Authorize|Sign in)$/ });
   await expect(signInBtn).toBeVisible();
 
-  // ---- Click Sign in → daemon returns 202, status starts reporting loggedIn=true ----
+  // Click Sign in -> daemon returns 202 and status starts reporting loggedIn=true.
   await signInBtn.click();
+  await expect.poll(() => state.loginRequests).toBe(1);
 
   // The pill polls /status every 2s; allow up to 10s for the flip. The
   // pill button gets aria-label="Sign out" once logged in regardless of
   // the hover state, so we can target it by accessible name.
   const signedInPill = amrCard.getByRole('button', { name: /^Sign out$/ });
   await expect(signedInPill).toBeVisible({ timeout: 10_000 });
-  await expect(amrCard).toContainText('Signed in');
+  await expect(amrCard).toContainText('pill-test@example.com');
 
-  // ---- Click Sign out → status flips back to loggedIn=false ----
+  // Click Sign out -> status flips back to loggedIn=false.
   await signedInPill.click();
-  await expect(amrCard.getByRole('button', { name: /^Sign in$/ })).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => state.logoutRequests).toBe(1);
+  await expect(amrCard.getByRole('button', { name: /^(Authorize|Sign in)$/ })).toBeVisible({ timeout: 10_000 });
 });

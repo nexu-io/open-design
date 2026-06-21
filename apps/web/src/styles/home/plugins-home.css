@@ -56,10 +56,10 @@
   width: 200px;
   max-width: 100%;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
-  transition: border-color 120ms ease, background-color 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
 }
 .plugins-home__search:focus-within {
   border-color: var(--border-strong);
@@ -76,8 +76,8 @@
    focus box-shadow). We override every property the parent pill
    already provides so the focus halo only paints once, on the
    pill-shaped container, and the input renders flush inside it. */
-.plugins-home__search-input,
-.plugins-home__search-input:focus {
+.plugins-home__search .plugins-home__search-input,
+.plugins-home__search .plugins-home__search-input:focus {
   appearance: none;
   width: 100%;
   border: 0;
@@ -87,7 +87,7 @@
   color: var(--text);
   outline: none;
   box-shadow: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-family: inherit;
 }
 .plugins-home__search-input::placeholder {
@@ -98,10 +98,12 @@
   appearance: none;
   display: none;
 }
-/* Reset the global `button { ... }` defaults (padding 6/12, border,
-   radius-sm) so the 18×18 hit target actually fits the icon glyph
-   instead of clipping it down to zero. */
-.plugins-home__search-clear {
+/* Override the shared <Button> component's own padding (6/12) and sizing.
+   The reset must be scoped under `.plugins-home__search` so it out-specifies
+   the Button CSS-module class (`.button_button__…`); a bare
+   `.plugins-home__search-clear` only ties that class and loses, leaving the
+   24px horizontal padding to crush the X glyph down to zero width. */
+.plugins-home__search .plugins-home__search-clear {
   position: absolute;
   right: 5px;
   display: inline-flex;
@@ -109,20 +111,18 @@
   justify-content: center;
   width: 20px;
   height: 20px;
+  min-width: 0;
   padding: 0;
-  border: 0;
   border-radius: 50%;
-  background: var(--bg-subtle);
   color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.plugins-home__search-clear:hover {
+.plugins-home__search .plugins-home__search-clear:hover {
   background: var(--border-soft, var(--border));
   border-color: transparent;
   color: var(--text);
 }
-.plugins-home__search-clear:focus-visible {
+.plugins-home__search .plugins-home__search-clear:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -159,11 +159,9 @@
 }
 
 /* ============================================================
-   Faceted filter — a single combined bar. Saved / category
-   pills live on the left, the search field + result count +
-   clear-filters affordance live on the right. Folding the old
-   "mode strip + header search + category row" into one keeps the
-   eye on a single horizontal control surface.
+   Faceted filter — a single combined bar. An optional Saved chip
+   (rich layout only) + category pills live on the left, the search
+   field + clear-filters affordance live on the right.
    ============================================================ */
 .plugins-home__chip {
   appearance: none;
@@ -172,12 +170,12 @@
   gap: 5px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugins-home__chip:hover {
   border-color: var(--border-strong);
@@ -294,12 +292,12 @@
   gap: 5px;
   padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugins-home__pill:hover {
   border-color: var(--border-strong);
@@ -416,8 +414,8 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 160ms ease,
-    transform 160ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
   isolation: isolate;
   content-visibility: auto;
   contain: layout paint style;
@@ -434,6 +432,120 @@
 }
 .plugins-home__card.is-featured {
   border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+/* ============================================================
+   Gallery layout — a wall of live example.html previews. Each
+   card is a macOS-window-style bar (status dot + plugin name +
+   open-in-new-tab) over a fixed-height frame that renders the
+   plugin's real example page in a scaled-down sandboxed iframe.
+   ============================================================ */
+.plugins-home__grid--gallery {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+@media (min-width: 1400px) {
+  .plugins-home__grid--gallery {
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  }
+}
+.plugins-home__card--gallery {
+  cursor: pointer;
+  contain-intrinsic-size: 400px 340px;
+}
+.plugins-home__card--gallery:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.plugins-home__gallery-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  min-width: 0;
+}
+.plugins-home__gallery-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: #3ad29f;
+}
+.plugins-home__gallery-name {
+  flex: 1;
+  min-width: 0;
+  /* Reset the <button> chrome — this is the accessible "open details"
+     control but reads as the tile's plain title. */
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plugins-home__gallery-name:hover {
+  color: var(--accent);
+}
+.plugins-home__gallery-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.plugins-home__gallery-frame {
+  position: relative;
+  height: 300px;
+  background: #fff;
+  overflow: hidden;
+}
+/* PreviewSurface fills the fixed-height gallery frame instead of its
+   default 4/3 aspect box. */
+.plugins-home__card--gallery .plugins-home__preview {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  height: 100%;
+}
+.plugins-home__card--gallery .plugins-home__html-iframe {
+  width: 1440px;
+  height: 2200px;
+  transform: scale(0.32);
+  transition: top 6s linear;
+}
+/* Hover auto-pans the scaled preview down to reveal the rest of the
+   page. The iframe stays inert (pointer-events: none, inherited) so a
+   click anywhere on the tile — preview included — opens the detail
+   modal rather than being swallowed by the embedded page. */
+.plugins-home__card--gallery:hover .plugins-home__html-iframe {
+  top: -404px;
+}
+/* Decks ship a fixed 16:9 stage that scales itself to its viewport. The tall
+   scroll-preview viewport above would letterbox that stage, leaving a dark
+   --stage-bg band above/below the slide. Give deck tiles a 16:9 frame and let
+   the iframe fill it natively (no transform), so the stage fits edge-to-edge
+   with no band, and skip the scroll-pan (there is nothing below to reveal). */
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__gallery-frame {
+  /* Replace the fixed 300px scroll-preview frame with a 16:9 box so the deck
+     stage fills it exactly — no dark letterbox band, and no leftover white
+     strip below the slide. */
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-iframe,
+.plugins-home__card--gallery[data-od-mode="deck"]:hover .plugins-home__html-iframe {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  transition: none;
 }
 
 /* ---------- Hero preview surface ---------- */
@@ -494,21 +606,6 @@
   line-height: 1;
   opacity: 0.86;
 }
-.plugins-home__media-fallback-icon {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-panel) 74%, transparent);
-  color: var(--accent);
-  box-shadow: var(--shadow-xs);
-}
 @keyframes plugins-home-shimmer {
   to {
     background-position: -200% 0, 0 0;
@@ -547,7 +644,7 @@
 }
 .plugins-home__html-skeleton span {
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: linear-gradient(90deg, var(--bg-subtle), var(--border-soft), var(--bg-subtle));
   background-size: 200% 100%;
 }
@@ -733,7 +830,7 @@
     linear-gradient(180deg, rgba(0, 0, 0, 0.0) 0%, rgba(0, 0, 0, 0.42) 55%, rgba(0, 0, 0, 0.78) 100%);
   color: white;
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity 180ms var(--ease-out);
   pointer-events: none;
   z-index: 3;
 }
@@ -794,7 +891,7 @@
 .plugins-home__overlay-tag {
   font-size: 10.5px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.18);
   color: white;
   backdrop-filter: blur(6px);
@@ -846,8 +943,8 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .plugins-home__card-save:hover,
 .plugins-home__card-save:focus-visible {
@@ -890,8 +987,8 @@
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .plugins-home__action--compact {
   flex: 1;
@@ -993,5 +1090,133 @@ button.plugins-home__use-menu-item:focus-visible {
   .plugins-home__card-overlay {
     opacity: 1;
     pointer-events: auto;
+  }
+}
+
+/* ============================================================
+   New-user templates reveal (HomeTemplatesReveal)
+   Collapsed by default for users with no projects so the hero
+   composer owns the first screen; a bottom hint + upward scroll
+   gesture smoothly reveals the Community gallery.
+   ============================================================ */
+.home-templates-reveal {
+  display: flex;
+  flex-direction: column;
+}
+/* Collapsed: clip the gallery to zero height and fade it out. Uses the repo's
+   canonical auto-height pattern (grid-template-rows 0fr -> 1fr) so the expand
+   animates to the gallery's NATURAL height — a fixed max-height ceiling (was
+   6000px) clipped the last rows once the gallery outgrew it. The inner wrapper
+   owns overflow:hidden so the collapsed rows clip cleanly. */
+.home-templates-reveal__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 420ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-templates-reveal__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.home-templates-reveal.is-revealed .home-templates-reveal__body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.home-templates-reveal.is-revealed .home-templates-reveal__inner {
+  /* Leave room for the fixed collapse pill so it never covers the last row. */
+  padding-bottom: 64px;
+}
+
+/* Bottom hint — pinned to the very bottom of the viewport, intentionally
+   faint so it sits at the edge of attention. An up arrow bobs gently to
+   suggest the scroll-up gesture without pulling focus from the hero. */
+button.home-templates-reveal__hint {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  opacity: 0.7;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+button.home-templates-reveal__hint:hover {
+  background: transparent;
+  opacity: 1;
+  color: var(--text-muted);
+}
+button.home-templates-reveal__hint:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  opacity: 1;
+}
+.home-templates-reveal__hint-arrow {
+  animation: home-templates-bob 1.8s ease-in-out infinite;
+}
+/* Fade + lift the arrow on each cycle so the affordance reads clearly:
+   it rises and brightens, then settles and dims — a gentle "pull me up". */
+@keyframes home-templates-bob {
+  0% {
+    transform: translateY(3px);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(3px);
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-templates-reveal__hint-arrow,
+  .home-templates-reveal__collapse {
+    animation: none;
+  }
+  .home-templates-reveal__hint-arrow {
+    opacity: 0.85;
+  }
+  .home-templates-reveal__body {
+    transition: none;
+  }
+}
+
+/* Collapse control — pinned to the bottom of the viewport (mirroring the
+   hint slot) so it's always reachable while the gallery is open, instead of
+   being stranded far below the fold. Reversible: folds the gallery away. */
+button.home-templates-reveal__collapse {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 15px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  box-shadow: var(--shadow-sm, 0 4px 14px rgba(0, 0, 0, 0.08));
+  animation: home-templates-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes home-templates-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }

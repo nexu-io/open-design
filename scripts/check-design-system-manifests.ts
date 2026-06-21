@@ -16,7 +16,14 @@ import { fileURLToPath } from "node:url";
 
 import { parseDesignSystemProjectManifest } from "../design-systems/_schema/manifest.schema.ts";
 import type { DesignSystemProjectManifest } from "../design-systems/_schema/manifest.schema.ts";
+import { TOKEN_SCHEMA } from "../design-systems/_schema/tokens.schema.ts";
 import { extractComponentsManifest } from "../packages/contracts/src/design-systems/components-manifest.ts";
+import {
+  renderDesignTokensJson,
+  renderTailwindV4Css,
+  type DerivedDesignTokenBinding,
+  type DerivedDesignTokenReport,
+} from "../packages/contracts/src/design-systems/derived-token-outputs.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const designSystemsRoot = path.join(repoRoot, "design-systems");
@@ -38,6 +45,10 @@ async function exists(filePath: string): Promise<boolean> {
 
 async function readJson(filePath: string): Promise<unknown> {
   return JSON.parse(await readFile(filePath, "utf8")) as unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function discoverManifestPaths(): Promise<string[]> {
@@ -83,6 +94,8 @@ export async function checkDesignSystemManifests(): Promise<boolean> {
     const requiredFiles = [
       manifest.files.design,
       manifest.files.tokens,
+      ...(manifest.files.designTokens === undefined ? [] : [manifest.files.designTokens]),
+      ...(manifest.files.tailwind === undefined ? [] : [manifest.files.tailwind]),
       ...(manifest.files.components === undefined ? [] : [manifest.files.components]),
       ...(manifest.usage === undefined ? [] : [manifest.usage]),
       ...(manifest.componentsManifest === undefined ? [] : [manifest.componentsManifest]),
@@ -104,7 +117,22 @@ export async function checkDesignSystemManifests(): Promise<boolean> {
       violations.push(`${repositoryManifestPath}: preview.dir is declared but ${manifest.preview.dir}/ does not exist`);
     }
 
-    await validateDeclaredJsonFiles(violations, repositoryManifestPath, brandRoot, manifest.sourceFiles);
+    await validateDeclaredJsonFiles(violations, repositoryManifestPath, brandRoot, manifest);
+    await validateDesignTokensJson(
+      violations,
+      repositoryManifestPath,
+      brandRoot,
+      manifest.files.tokens,
+      manifest.files.designTokens,
+      manifest.sourceFiles?.report,
+    );
+    await validateTailwindV4Css(
+      violations,
+      repositoryManifestPath,
+      brandRoot,
+      manifest.files.tokens,
+      manifest.files.tailwind,
+    );
     await validateComponentsManifestCache(violations, repositoryManifestPath, brandRoot, folderSlug, manifest.componentsManifest);
   }
 
@@ -118,6 +146,270 @@ export async function checkDesignSystemManifests(): Promise<boolean> {
     `Design system manifest check passed: ${manifestPaths.length} project manifest${manifestPaths.length === 1 ? "" : "s"} valid; DESIGN.md-only systems skipped.`,
   );
   return true;
+}
+
+export async function validateDesignTokensJson(
+  violations: string[],
+  repositoryManifestPath: string,
+  brandRoot: string,
+  tokensPath: string,
+  designTokensPath: string | undefined,
+  reportPath: string | undefined,
+): Promise<void> {
+  if (designTokensPath === undefined) return;
+  const filePath = path.join(brandRoot, designTokensPath);
+  let actualText: string;
+  let parsed: unknown;
+  try {
+    actualText = await readFile(filePath, "utf8");
+    parsed = JSON.parse(actualText) as unknown;
+  } catch (error) {
+    violations.push(
+      `${repositoryManifestPath}: ${designTokensPath} could not be parsed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+  if (!isRecord(parsed)) {
+    violations.push(`${repositoryManifestPath}: ${designTokensPath} must be a JSON object`);
+    return;
+  }
+  if (parsed.format !== "od-design-tokens/v1") {
+    violations.push(`${repositoryManifestPath}: ${designTokensPath} format must be od-design-tokens/v1`);
+  }
+  if (parsed.contract !== "TOKEN_SCHEMA") {
+    violations.push(`${repositoryManifestPath}: ${designTokensPath} contract must be TOKEN_SCHEMA`);
+  }
+  if (!Array.isArray(parsed.tokens)) {
+    violations.push(`${repositoryManifestPath}: ${designTokensPath} tokens must be an array`);
+    return;
+  }
+  if (reportPath === undefined) {
+    violations.push(`${repositoryManifestPath}: ${designTokensPath} requires sourceFiles.report`);
+    return;
+  }
+  const reportFilePath = path.join(brandRoot, reportPath);
+  let reportJson: unknown;
+  try {
+    reportJson = await readJson(reportFilePath);
+  } catch (error) {
+    violations.push(
+      `${repositoryManifestPath}: ${reportPath} could not be parsed while validating ${designTokensPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+  const report = toDerivedDesignTokenReport(reportJson);
+  if (report === undefined) {
+    violations.push(`${repositoryManifestPath}: ${reportPath} must contain generatedAt, summary, and token contract bindings`);
+    return;
+  }
+  const expected = renderDesignTokensJson({
+    bindings: report.tokens,
+    report,
+  });
+  if (actualText !== expected) {
+    violations.push(`${repositoryManifestPath}: ${designTokensPath} is stale; regenerate it from ${reportPath}`);
+  }
+
+  const reportNames = new Set(report.tokens.map((token) => token.name));
+  for (const spec of TOKEN_SCHEMA) {
+    if (!reportNames.has(spec.name)) {
+      violations.push(`${repositoryManifestPath}: ${reportPath} is missing ${spec.name}`);
+    }
+  }
+
+  let tokensCss: string;
+  try {
+    tokensCss = await readFile(path.join(brandRoot, tokensPath), "utf8");
+  } catch (error) {
+    violations.push(
+      `${repositoryManifestPath}: ${tokensPath} could not be read while validating ${designTokensPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+  const tokenDeclarations = parseRootTokenDeclarationDetails(tokensCss);
+  for (const binding of report.tokens) {
+    const declared = tokenDeclarations.get(binding.name);
+    if (declared === undefined) {
+      violations.push(`${repositoryManifestPath}: ${reportPath} token ${binding.name} is missing from ${tokensPath}`);
+    } else if (declared.value !== normalizeTokenValue(binding.value)) {
+      violations.push(`${repositoryManifestPath}: ${reportPath} token ${binding.name} value does not match ${tokensPath}`);
+    }
+    validateTokenSourceReferences(violations, repositoryManifestPath, reportPath, tokensPath, tokenDeclarations, binding);
+  }
+}
+
+export async function validateTailwindV4Css(
+  violations: string[],
+  repositoryManifestPath: string,
+  brandRoot: string,
+  tokensPath: string,
+  tailwindPath: string | undefined,
+): Promise<void> {
+  if (tailwindPath === undefined) return;
+  let actualCss: string;
+  try {
+    actualCss = await readFile(path.join(brandRoot, tailwindPath), "utf8");
+  } catch (error) {
+    violations.push(
+      `${repositoryManifestPath}: ${tailwindPath} could not be read: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+  let tokensCss: string;
+  try {
+    tokensCss = await readFile(path.join(brandRoot, tokensPath), "utf8");
+  } catch (error) {
+    violations.push(
+      `${repositoryManifestPath}: ${tokensPath} could not be read while validating ${tailwindPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+  const expectedCss = renderTailwindV4Css(
+    Array.from(parseRootTokenDeclarations(tokensCss).keys(), (name) => ({ name })),
+  );
+  if (actualCss !== expectedCss) {
+    violations.push(`${repositoryManifestPath}: ${tailwindPath} is stale; regenerate it from ${tokensPath}`);
+  }
+}
+
+function toDerivedDesignTokenReport(value: unknown): (DerivedDesignTokenReport & {
+  tokens: DerivedDesignTokenBinding[];
+}) | undefined {
+  if (!isRecord(value) || typeof value.generatedAt !== "string" || !isRecord(value.summary) || !Array.isArray(value.tokens)) {
+    return undefined;
+  }
+  const tokens: DerivedDesignTokenBinding[] = [];
+  for (const token of value.tokens) {
+    const binding = toDerivedDesignTokenBinding(token);
+    if (binding === undefined) return undefined;
+    tokens.push(binding);
+  }
+  return {
+    generatedAt: value.generatedAt,
+    summary: value.summary,
+    tokens,
+  };
+}
+
+function toDerivedDesignTokenBinding(value: unknown): DerivedDesignTokenBinding | undefined {
+  if (
+    !isRecord(value)
+    || typeof value.name !== "string"
+    || typeof value.layer !== "string"
+    || typeof value.value !== "string"
+    || typeof value.confidence !== "string"
+    || typeof value.reason !== "string"
+    || !Array.isArray(value.sources)
+    || !value.sources.every((source): source is string => typeof source === "string")
+    || (value.sourceName !== undefined && typeof value.sourceName !== "string")
+  ) {
+    return undefined;
+  }
+  return {
+    name: value.name,
+    layer: value.layer,
+    value: value.value,
+    confidence: value.confidence,
+    reason: value.reason,
+    sources: value.sources,
+    ...(value.sourceName === undefined ? {} : { sourceName: value.sourceName }),
+  };
+}
+
+function parseRootTokenDeclarations(css: string): Map<string, string> {
+  return new Map(
+    Array.from(parseRootTokenDeclarationDetails(css), ([name, declaration]) => [name, declaration.value]),
+  );
+}
+
+type TokenDeclarationDetail = {
+  readonly value: string;
+  readonly line: number;
+};
+
+function parseRootTokenDeclarationDetails(css: string): Map<string, TokenDeclarationDetail> {
+  const declarations = new Map<string, TokenDeclarationDetail>();
+  const rootPattern = /:root(?!\[)\s*\{([\s\S]*?)\}/g;
+  let rootMatch: RegExpExecArray | null;
+  while ((rootMatch = rootPattern.exec(css)) !== null) {
+    const body = rootMatch[1]!;
+    const bodyStart = rootMatch.index + rootMatch[0].indexOf("{") + 1;
+    let segmentStart = 0;
+    for (const rawSegment of body.split(";")) {
+      const declarationStartInSegment = rawSegment.match(/(^|\n)[^\S\n]*--[A-Za-z0-9_-]+\s*:/);
+      if (declarationStartInSegment !== null && declarationStartInSegment.index !== undefined) {
+        const declarationStart = segmentStart + declarationStartInSegment.index + declarationStartInSegment[1]!.length;
+        const declaration = body.slice(declarationStart, segmentStart + rawSegment.length).trim();
+        const colonIndex = declaration.indexOf(":");
+        if (colonIndex !== -1) {
+          declarations.set(declaration.slice(0, colonIndex).trim(), {
+            value: normalizeTokenValue(declaration.slice(colonIndex + 1)),
+            line: lineNumberAtOffset(css, bodyStart + declarationStart),
+          });
+        }
+      }
+      segmentStart += rawSegment.length + 1;
+    }
+  }
+  return declarations;
+}
+
+function lineNumberAtOffset(text: string, offset: number): number {
+  let line = 1;
+  for (let index = 0; index < offset; index += 1) {
+    if (text.charCodeAt(index) === 10) line += 1;
+  }
+  return line;
+}
+
+function validateTokenSourceReferences(
+  violations: string[],
+  repositoryManifestPath: string,
+  reportPath: string,
+  tokensPath: string,
+  tokenDeclarations: ReadonlyMap<string, TokenDeclarationDetail>,
+  binding: DerivedDesignTokenBinding,
+): void {
+  const sourceName = binding.sourceName ?? binding.name;
+  const declared = tokenDeclarations.get(sourceName);
+  if (declared === undefined) return;
+  let hasTokensCssSource = false;
+  for (const source of binding.sources) {
+    const line = parseTokenSourceLine(source, tokensPath);
+    if (line === undefined) continue;
+    hasTokensCssSource = true;
+    if (line !== declared.line) {
+      violations.push(
+        `${repositoryManifestPath}: ${reportPath} token ${binding.name} source ${source} must point to ${tokensPath}:${declared.line}`,
+      );
+    }
+  }
+  if (!hasTokensCssSource) {
+    violations.push(
+      `${repositoryManifestPath}: ${reportPath} token ${binding.name} must cite a ${tokensPath}:<line> source`,
+    );
+  }
+}
+
+function parseTokenSourceLine(source: string, tokensPath: string): number | undefined {
+  const prefix = `${tokensPath}:`;
+  if (!source.startsWith(prefix)) return undefined;
+  const line = Number(source.slice(prefix.length));
+  return Number.isInteger(line) && line > 0 ? line : undefined;
+}
+
+function normalizeTokenValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
 }
 
 async function discoverCraftSlugs(): Promise<Set<string>> {
@@ -189,12 +481,13 @@ async function validateDeclaredJsonFiles(
   violations: string[],
   repositoryManifestPath: string,
   brandRoot: string,
-  sourceFiles: Record<string, string | undefined> | undefined,
+  manifest: DesignSystemProjectManifest,
 ): Promise<void> {
   const jsonPaths = [
-    sourceFiles?.scanned,
-    sourceFiles?.tokens,
-    sourceFiles?.snippets,
+    manifest.sourceFiles?.scanned,
+    manifest.sourceFiles?.tokens,
+    manifest.sourceFiles?.report,
+    manifest.sourceFiles?.snippets,
   ].filter((fileName): fileName is string => fileName !== undefined);
 
   for (const fileName of jsonPaths) {
@@ -210,7 +503,7 @@ async function validateDeclaredJsonFiles(
   }
 }
 
-async function validateComponentsManifestCache(
+export async function validateComponentsManifestCache(
   violations: string[],
   repositoryManifestPath: string,
   brandRoot: string,
@@ -234,6 +527,11 @@ async function validateComponentsManifestCache(
     if (!isDeepStrictEqual(cachedManifest, derivedManifest)) {
       violations.push(
         `${repositoryManifestPath}: ${toRepositoryPath(cachePath)} is stale; regenerate it from components.html + tokens.css`,
+      );
+    }
+    if (derivedManifest.tokens.undeclaredReferenced.length > 0) {
+      violations.push(
+        `${repositoryManifestPath}: ${toRepositoryPath(cachePath)} references undeclared component token(s): ${derivedManifest.tokens.undeclaredReferenced.join(", ")}`,
       );
     }
   } catch (error) {

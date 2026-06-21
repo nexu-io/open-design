@@ -6,6 +6,7 @@ import {
   exportAsImage,
   exportAsPdf,
   exportAsZip,
+  captureHostIframeSnapshot,
   openSandboxedPreviewInNewTab,
   requestPreviewSnapshot,
 } from '../runtime/exports';
@@ -77,6 +78,13 @@ export interface PreviewSidebar {
 // the whole modal layout. Stays optional so existing callers
 // (DesignSystemPreviewModal, ExamplesTab) can keep their current
 // chrome unchanged.
+export interface PreviewPrimaryActionMenuItem {
+  label: string;
+  description?: string;
+  onClick: () => void;
+  testId?: string;
+}
+
 export interface PreviewPrimaryAction {
   label: string;
   onClick: () => void;
@@ -84,6 +92,11 @@ export interface PreviewPrimaryAction {
   busyLabel?: string;
   disabled?: boolean;
   testId?: string;
+  // When present, the primary button becomes a split button: clicking the
+  // main face still runs `onClick`, while a caret toggle opens this menu of
+  // secondary variants (e.g. "Use plugin" vs "Use with query"). Mirrors the
+  // plugin-card use-menu so the modal offers the same affordance.
+  menu?: PreviewPrimaryActionMenuItem[];
 }
 
 export interface PreviewShareTarget {
@@ -99,6 +112,19 @@ type SocialSharePlatform =
   | 'linkedin'
   | 'instagram'
   | 'xiaohongshu';
+
+// Every clickable item inside the merged Share popover — social intents,
+// copy actions and file exports. Callers receive these verbatim as
+// analytics `element` values (already snake_case).
+export type PreviewSharePopoverItem =
+  | SocialSharePlatform
+  | 'copy_link'
+  | 'copy_share_text'
+  | 'pdf'
+  | 'zip'
+  | 'html'
+  | 'image'
+  | 'open_in_new_tab';
 
 const SOCIAL_SHARE_PLATFORMS: Array<{
   platform: SocialSharePlatform;
@@ -203,12 +229,15 @@ interface Props {
   onFullscreenClick?: () => void;
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
-  // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
-  // / "image" / "open_in_new_tab"). Used by callers that want to track popover-
-  // level clicks separately from the share trigger.
-  onSharePopoverItemClick?: (
-    item: 'pdf' | 'zip' | 'html' | 'image' | 'open_in_new_tab',
-  ) => void;
+  // Hide the header sidebar-toggle button (the plugin detail opens its
+  // collapsed info panel via the preview-edge handle instead). Other
+  // variants — design-system "DESIGN.md", media, scenario — keep it.
+  hideSidebarToggle?: boolean;
+  // Fires when the user picks any share-popover item — social platforms,
+  // "copy_link" / "copy_share_text" and the file exports ("pdf" / "zip" /
+  // "html" / "image" / "open_in_new_tab"). Used by callers that want to
+  // track popover-level clicks separately from the share trigger.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 // A full-screen overlay that renders an iframe of arbitrary HTML, with an
@@ -228,6 +257,7 @@ export function PreviewModal({
   primaryAction,
   headerExtras,
   shareTarget,
+  hideSidebarToggle = false,
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -239,6 +269,7 @@ export function PreviewModal({
     : views[0]?.id ?? '';
   const [activeId, setActiveId] = useState<string>(initial);
   const [templateShareOpen, setTemplateShareOpen] = useState(false);
+  const [primaryMenuOpen, setPrimaryMenuOpen] = useState(false);
   const [copyShareFeedback, setCopyShareFeedback] = useState<{
     key: string;
     ok: boolean;
@@ -248,6 +279,7 @@ export function PreviewModal({
     sidebar?.defaultOpen ?? false,
   );
   const templateShareRef = useRef<HTMLDivElement | null>(null);
+  const primaryMenuRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageFrameRef = useRef<HTMLDivElement | null>(null);
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -332,6 +364,28 @@ export function PreviewModal({
     };
   }, [templateShareOpen]);
 
+  // Same outside-click / Escape dismissal for the primary-action split menu.
+  useEffect(() => {
+    if (!primaryMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!primaryMenuRef.current?.contains(target)) {
+        setPrimaryMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPrimaryMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [primaryMenuOpen]);
+
   // Lock body scroll while open.
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -352,19 +406,47 @@ export function PreviewModal({
   useEffect(() => {
     const el = stageFrameRef.current;
     if (!el) return;
+    // Use layout box metrics (clientWidth/Height) rather than
+    // getBoundingClientRect: the modal animates in with a CSS
+    // `transform: scale()`, and rect width is transform-aware, so an
+    // early measure lands a few percent short and the scaler never
+    // catches up — leaving a white gutter. clientWidth ignores the
+    // ancestor transform and always reports the settled layout width.
     const measure = () => {
-      const r = el.getBoundingClientRect();
-      setStageSize({ w: r.width, h: r.height });
+      setStageSize({ w: el.clientWidth, h: el.clientHeight });
     };
     measure();
+    // The first synchronous measure can land before the modal's
+    // entrance/layout fully settles, leaving the scaler a few dozen px
+    // short of the stage and exposing a white gutter. Re-measure on the
+    // next frame so the scaled preview fills the stage edge-to-edge.
+    const raf = requestAnimationFrame(measure);
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(measure);
       ro.observe(el);
-      return () => ro.disconnect();
+      return () => {
+        cancelAnimationFrame(raf);
+        ro.disconnect();
+      };
     }
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', measure);
+    };
   }, []);
+
+  // Re-measure when the sidebar opens/closes (the stage width jumps) or
+  // the active view changes, so `scale` tracks the current stage width
+  // instead of a stale value left over from the previous layout.
+  useEffect(() => {
+    const el = stageFrameRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => {
+      setStageSize({ w: el.clientWidth, h: el.clientHeight });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sidebarOpen, activeId]);
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];
   const activeCustom = activeView?.custom ?? null;
@@ -402,11 +484,12 @@ export function PreviewModal({
     [previewShareText, previewShareUrl],
   );
 
-  // Only down-scale: when the stage is wider than the design viewport we
-  // render the iframe at native size instead of upscaling pixels.
-  const scale = stageSize.w > 0 ? Math.min(1, stageSize.w / designWidth) : 1;
+  // Always fit the design viewport to the full stage width — scaling up
+  // as well as down — so the preview fills the stage edge-to-edge with
+  // no letterbox gutter when the sidebar collapses and the stage widens.
+  const scale = stageSize.w > 0 ? stageSize.w / designWidth : 1;
   const scalerStyle = useMemo(() => {
-    if (scale >= 1 || stageSize.w === 0) {
+    if (stageSize.w === 0) {
       return {
         width: '100%',
         height: '100%',
@@ -469,8 +552,15 @@ export function PreviewModal({
   const canOpenTemplateShareMenu = canExportFiles || Boolean(previewShareUrl);
 
   return (
-    <div className="ds-modal-backdrop" role="dialog" aria-modal="true" aria-label={`${title} preview`}>
-      <div className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}>
+    <div
+      className="ds-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} preview`}
+    >
+      <div
+        className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}
+      >
         <header className="ds-modal-header">
           <div className="ds-modal-header-top">
             <div className="ds-modal-title-block">
@@ -479,17 +569,6 @@ export function PreviewModal({
                 <div className="ds-modal-subtitle">{subtitle}</div>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="ds-modal-close"
-              onClick={onClose}
-              title={t('preview.closeTitle')}
-              aria-label={t('common.close')}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </div>
-          <div className="ds-modal-header-toolbar">
             {showTabs ? (
               <div className="ds-modal-tabs" role="tablist">
                 {views.map((v) => (
@@ -507,24 +586,96 @@ export function PreviewModal({
             ) : null}
             <div className="ds-modal-actions">
               {primaryAction ? (
-                <button
-                  type="button"
-                  className="ds-modal-primary-action"
-                  onClick={primaryAction.onClick}
-                  disabled={primaryAction.disabled || primaryAction.busy}
-                  aria-busy={primaryAction.busy ? 'true' : undefined}
-                  {...(primaryAction.testId
-                    ? { 'data-testid': primaryAction.testId }
-                    : {})}
-                >
-                  {primaryAction.busy
-                    ? primaryAction.busyLabel ?? primaryAction.label
-                    : primaryAction.label}
-                </button>
+                primaryAction.menu && primaryAction.menu.length > 0 ? (
+                  <div
+                    className="ds-modal-primary-action-group"
+                    ref={primaryMenuRef}
+                  >
+                    <button
+                      type="button"
+                      className="ds-modal-primary-action ds-modal-primary-action--split"
+                      onClick={primaryAction.onClick}
+                      disabled={primaryAction.disabled || primaryAction.busy}
+                      aria-busy={primaryAction.busy ? 'true' : undefined}
+                      {...(primaryAction.testId
+                        ? { 'data-testid': primaryAction.testId }
+                        : {})}
+                    >
+                      {primaryAction.busy
+                        ? primaryAction.busyLabel ?? primaryAction.label
+                        : primaryAction.label}
+                    </button>
+                    <button
+                      type="button"
+                      className="ds-modal-primary-action ds-modal-primary-action-caret"
+                      onClick={() => setPrimaryMenuOpen((v) => !v)}
+                      disabled={primaryAction.disabled || primaryAction.busy}
+                      aria-haspopup="menu"
+                      aria-expanded={primaryMenuOpen}
+                      aria-label={`More ways to ${primaryAction.label}`}
+                      {...(primaryAction.testId
+                        ? { 'data-testid': `${primaryAction.testId}-menu` }
+                        : {})}
+                    >
+                      <Icon name="chevron-down" size={12} />
+                    </button>
+                    {primaryMenuOpen ? (
+                      <div
+                        className="share-menu-popover ds-modal-primary-action-popover"
+                        role="menu"
+                      >
+                        {primaryAction.menu.map((item, index) => (
+                          <button
+                            key={item.testId ?? `${item.label}-${index}`}
+                            type="button"
+                            role="menuitem"
+                            className="share-menu-item ds-modal-primary-action-option"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setPrimaryMenuOpen(false);
+                              item.onClick();
+                            }}
+                            {...(item.testId
+                              ? { 'data-testid': item.testId }
+                              : {})}
+                          >
+                            <span className="ds-modal-primary-action-option__body">
+                              <span className="ds-modal-primary-action-option__label">
+                                {item.label}
+                              </span>
+                              {item.description ? (
+                                <span className="ds-modal-primary-action-option__desc">
+                                  {item.description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="ds-modal-primary-action"
+                    onClick={primaryAction.onClick}
+                    disabled={primaryAction.disabled || primaryAction.busy}
+                    aria-busy={primaryAction.busy ? 'true' : undefined}
+                    {...(primaryAction.testId
+                      ? { 'data-testid': primaryAction.testId }
+                      : {})}
+                  >
+                    {primaryAction.busy
+                      ? primaryAction.busyLabel ?? primaryAction.label
+                      : primaryAction.label}
+                  </button>
+                )
               ) : null}
               {sidebar ? (
                 <button
-                  className={`ghost ${sidebarOpen ? 'is-active' : ''}`}
+                  className={`ghost ${sidebarOpen ? 'is-active' : ''}${
+                    hideSidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
+                  }`}
                   onClick={() => {
                     setSidebarOpen((v) => {
                       const next = !v;
@@ -538,21 +689,6 @@ export function PreviewModal({
                   {sidebar.label}
                 </button>
               ) : null}
-              <button
-                className="ghost"
-                onClick={() => {
-                  onFullscreenClick?.();
-                  if (fullscreen) exitFullscreen();
-                  else enterFullscreen();
-                }}
-                title={
-                  fullscreen
-                    ? t('common.exitFullscreen')
-                    : t('common.fullscreen')
-                }
-              >
-                {fullscreen ? t('preview.exit') : t('preview.fullscreen')}
-              </button>
               {showTemplateShareMenu ? (
                 <div className="share-menu template-share-menu" ref={templateShareRef}>
                   <button
@@ -602,6 +738,7 @@ export function PreviewModal({
                                       event.preventDefault();
                                       return;
                                     }
+                                    onSharePopoverItemClick?.(item.platform);
                                     if (item.mode === 'copy-open') {
                                       event.preventDefault();
                                       const shareWindow = window.open('about:blank', '_blank');
@@ -641,7 +778,10 @@ export function PreviewModal({
                               type="button"
                               className="share-menu-item"
                               role="menuitem"
-                              onClick={() => copyPreviewShare(previewShareUrl, 'link')}
+                              onClick={() => {
+                                onSharePopoverItemClick?.('copy_link');
+                                void copyPreviewShare(previewShareUrl, 'link');
+                              }}
                             >
                               <span className="share-menu-icon">
                                 <Icon
@@ -667,7 +807,10 @@ export function PreviewModal({
                               type="button"
                               className="share-menu-item"
                               role="menuitem"
-                              onClick={() => copyPreviewShare(previewShareCopy, 'text')}
+                              onClick={() => {
+                                onSharePopoverItemClick?.('copy_share_text');
+                                void copyPreviewShare(previewShareCopy, 'text');
+                              }}
                             >
                               <span className="share-menu-icon">
                                 <Icon
@@ -753,7 +896,9 @@ export function PreviewModal({
                               setTemplateShareOpen(false);
                               const iframe = previewIframeRef.current;
                               if (!iframe) return;
-                              const snap = await requestPreviewSnapshot(iframe);
+                              const snap =
+                                (await captureHostIframeSnapshot(iframe)) ??
+                                (await requestPreviewSnapshot(iframe));
                               try {
                                 if (snap) {
                                   exportAsImage(snap.dataUrl, exportTitle);
@@ -795,6 +940,15 @@ export function PreviewModal({
               ) : null}
               {headerExtras}
             </div>
+            <button
+              type="button"
+              className="ds-modal-close"
+              onClick={onClose}
+              title={t('preview.closeTitle')}
+              aria-label={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
           </div>
         </header>
         <div
@@ -802,6 +956,40 @@ export function PreviewModal({
           ref={stageRef}
         >
           <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
+            {/* Also render for custom-stage views (media players: image /
+                video / audio) — the header no longer carries fullscreen, so
+                this hover icon is their only fullscreen affordance. */}
+            {!activeUnavailable && !activeError ? (
+              <button
+                type="button"
+                className="ds-modal-stage-fullscreen"
+                onClick={() => {
+                  onFullscreenClick?.();
+                  if (fullscreen) exitFullscreen();
+                  else enterFullscreen();
+                }}
+                title={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
+                aria-label={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {fullscreen ? (
+                    <path d="M9 3v6H3M3 9l6-6M15 21v-6h6M21 15l-6 6" />
+                  ) : (
+                    <path d="M3 9V3h6M3 3l6 6M21 15v6h-6M21 21l-6-6" />
+                  )}
+                </svg>
+              </button>
+            ) : null}
             {isCustomView ? (
               // Caller-rendered ReactNode (e.g. plugin media player).
               // The modal still owns chrome (header, sidebar toggle,

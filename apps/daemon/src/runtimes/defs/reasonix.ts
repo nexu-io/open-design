@@ -54,6 +54,10 @@ export const reasonixAgentDef = {
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
+    // reasonix 1.x (Go rewrite) expects MCP env as `{"KEY":"val"}` map,
+    // not the `[{name, value}]` array shape that Hermes/Kimi/Vibe use.
+    // The 0.x TypeScript releases accepted the array form; ≥1.0 needs map.
+    acpMcpEnvFormat: 'map',
     // Inject design instructions into Reasonix's system prompt via env var.
     // Reasonix's ACP code reads REASONIX_ACP_SYSTEM_APPEND and appends it
     // to the code system prompt, so the model sees both coding + design rules.

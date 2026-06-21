@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-stellar-launch",
+  "title": "Stellar Launch — Launchex Awards",
+  "title_i18n": {
+    "zh-CN": "Stellar Launch — Launchex 创投大奖落地页",
+    "zh-TW": "Stellar Launch — Launchex 創投大獎落地頁",
+    "ja": "Stellar Launch — Launchex Awards",
+    "ko": "Stellar Launch — Launchex Awards",
+    "de": "Stellar Launch — Launchex Awards",
+    "fr": "Stellar Launch — Launchex Awards",
+    "ru": "Stellar Launch — Launchex Awards",
+    "es": "Stellar Launch — Launchex Awards",
+    "pt-BR": "Stellar Launch — Launchex Awards",
+    "it": "Stellar Launch — Launchex Awards",
+    "vi": "Stellar Launch — Launchex Awards",
+    "pl": "Stellar Launch — Launchex Awards",
+    "id": "Stellar Launch — Launchex Awards",
+    "nl": "Stellar Launch — Launchex Awards",
+    "ar": "Stellar Launch — Launchex Awards",
+    "tr": "Stellar Launch — Launchex Awards",
+    "uk": "Stellar Launch — Launchex Awards",
+    "en": "Stellar Launch — Launchex Awards"
+  },
+  "version": "0.1.0",
+  "description": "Premium awards / venture-prize landing page: an inset white card shell with rounded corners, a fullscreen video hero with chamfered clip-path CTA, a three-column submissions section with angular nomination cards around a square video, and an about-the-founders stats grid using plus-darker image cards and gradient-text figures.",
+  "description_i18n": {
+    "zh-CN": "高端创投大奖落地页：内嵌白色圆角卡片外壳、全屏视频 Hero 配斜切 clip-path CTA、围绕方形视频的三栏几何提名卡区，以及使用 plus-darker 图像卡和渐变文字数字的创始人统计网格。",
+    "zh-TW": "高端創投大獎落地頁：內嵌白色圓角卡片外殼、全螢幕影片 Hero 搭配斜切 clip-path CTA、環繞方形影片的三欄幾何提名卡區，以及使用 plus-darker 圖像卡與漸層文字數字的創辦人統計網格。",
+    "ja": "プレミアムなアワード／ベンチャー賞のランディングページ。角丸のインセット白カードシェル、面取り clip-path CTA を備えたフルスクリーン動画ヒーロー、正方形動画を囲む角張ったノミネートカードの3カラム応募セクション、そして plus-darker の画像カードとグラデーション文字の数字を用いた創業者紹介の統計グリッド。",
+    "ko": "프리미엄 어워드/벤처 프라이즈 랜딩 페이지. 둥근 모서리의 인셋 화이트 카드 셸, 모따기 clip-path CTA를 갖춘 풀스크린 비디오 히어로, 정사각형 비디오를 둘러싼 각진 노미네이션 카드의 3단 출품 섹션, 그리고 plus-darker 이미지 카드와 그라데이션 텍스트 숫자를 사용한 창업자 소개 통계 그리드.",
+    "de": "Premium-Landingpage für Awards bzw. Venture-Preise: eine eingelassene weiße Karten-Hülle mit abgerundeten Ecken, ein Vollbild-Video-Hero mit gefastem Clip-Path-CTA, ein dreispaltiger Einreichungsbereich mit kantigen Nominierungskarten rund um ein quadratisches Video sowie ein Statistik-Grid über die Gründer mit Plus-Darker-Bildkarten und Verlaufstext-Zahlen.",
+    "fr": "Landing page premium pour des prix / récompenses d'entreprises : une coque de carte blanche encastrée à coins arrondis, un hero vidéo plein écran avec CTA en clip-path chanfreiné, une section de candidatures à trois colonnes avec des cartes de nomination anguleuses autour d'une vidéo carrée, et une grille de statistiques sur les fondateurs avec des cartes-images en plus-darker et des chiffres en texte dégradé.",
+    "ru": "Премиальный лендинг для наград / венчурных премий: утопленная белая карточная оболочка со скруглёнными углами, полноэкранный видео-герой с CTA на основе скошенного clip-path, трёхколоночный раздел заявок с угловатыми карточками номинаций вокруг квадратного видео и сетка статистики об основателях с изображениями в режиме plus-darker и градиентными цифрами.",
+    "es": "Landing page premium para premios / galardones de venture: una carcasa de tarjeta blanca embutida con esquinas redondeadas, un hero de vídeo a pantalla completa con CTA de clip-path biselado, una sección de candidaturas a tres columnas con tarjetas de nominación angulares alrededor de un vídeo cuadrado y una cuadrícula de estadísticas sobre los fundadores con tarjetas de imagen plus-darker y cifras de texto en degradado.",
+    "pt-BR": "Landing page premium para prêmios / premiações de venture: um invólucro de cartão branco embutido com cantos arredondados, um hero de vídeo em tela cheia com CTA em clip-path chanfrado, uma seção de inscrições em três colunas com cartões de indicação angulares ao redor de um vídeo quadrado e uma grade de estatísticas sobre os fundadores usando cartões de imagem plus-darker e números em texto com gradiente.",
+    "it": "Landing page premium per premi / riconoscimenti venture: un guscio a card bianca incassata con angoli arrotondati, un hero video a tutto schermo con CTA in clip-path smussato, una sezione candidature a tre colonne con card di nomination angolari attorno a un video quadrato e una griglia di statistiche sui fondatori con card immagine plus-darker e numeri in testo sfumato.",
+    "vi": "Trang đích cao cấp cho giải thưởng / giải venture: lớp vỏ thẻ trắng lồng vào với góc bo tròn, hero video toàn màn hình với CTA dùng clip-path vát cạnh, khu vực đề cử ba cột với các thẻ đề cử góc cạnh bao quanh một video vuông, và lưới thống kê về các nhà sáng lập dùng thẻ hình plus-darker cùng các con số chữ gradient.",
+    "pl": "Premium landing page dla nagród / wyróżnień venture: osadzona biała karta-obudowa z zaokrąglonymi narożnikami, pełnoekranowy hero wideo z CTA opartym na sfazowanym clip-path, trzykolumnowa sekcja zgłoszeń z kanciastymi kartami nominacji wokół kwadratowego wideo oraz siatka statystyk o założycielach z kartami obrazkowymi plus-darker i liczbami w gradientowym tekście.",
+    "id": "Landing page premium untuk penghargaan / hadiah venture: cangkang kartu putih bertakuk dengan sudut membulat, hero video layar penuh dengan CTA clip-path bersudut serong, bagian pengajuan tiga kolom dengan kartu nominasi bersudut tajam mengelilingi video persegi, serta grid statistik tentang para pendiri yang memakai kartu gambar plus-darker dan angka teks gradien.",
+    "nl": "Premium landingspagina voor awards / venture-prijzen: een verzonken witte kaartschil met afgeronde hoeken, een schermvullende video-hero met afgeschuinde clip-path-CTA, een driekoloms inzendingssectie met hoekige nominatiekaarten rond een vierkante video, en een statistiekgrid over de oprichters met plus-darker beeldkaarten en gradient-tekstcijfers.",
+    "ar": "صفحة هبوط فاخرة لجوائز / جوائز المشاريع الناشئة: غلاف بطاقة أبيض غائر بزوايا دائرية، وقسم بطل (hero) بفيديو ملء الشاشة مع زر CTA بقصّ clip-path مشطوف الحواف، وقسم ترشيحات من ثلاثة أعمدة ببطاقات ترشيح زاويّة تحيط بفيديو مربّع، وشبكة إحصاءات عن المؤسسين تستخدم بطاقات صور بنمط plus-darker وأرقامًا بنص متدرّج الألوان.",
+    "tr": "Ödüller / girişim ödülleri için premium açılış sayfası: yuvarlatılmış köşeli, içe gömülü beyaz kart kabuğu, pahlanmış clip-path CTA'lı tam ekran video hero, kare bir videonun çevresinde köşeli aday kartlarıyla üç sütunlu başvuru bölümü ve plus-darker görsel kartları ile gradyan metinli rakamlar kullanan kurucu tanıtım istatistik ızgarası.",
+    "uk": "Преміальний лендинг для нагород / венчурних премій: утоплена біла карткова оболонка зі скругленими кутами, повноекранний відеогерой із CTA на основі скошеного clip-path, тристовпцевий розділ заявок із кутастими картками номінацій навколо квадратного відео та сітка статистики про засновників із зображеннями в режимі plus-darker і градієнтними цифрами.",
+    "en": "Premium awards / venture-prize landing page: an inset white card shell with rounded corners, a fullscreen video hero with chamfered clip-path CTA, a three-column submissions section with angular nomination cards around a square video, and an about-the-founders stats grid using plus-darker image cards and gradient-text figures."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "awards",
+    "landing-page",
+    "editorial",
+    "video-hero"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a Launchex Awards landing page using React + Vite + Tailwind CSS + TypeScript + lucide-react. The page has 3 sections plus persistent overlay navigation elements. Use the fonts \"Inter\" (body) and \"TT Firs Neue\" (display headings). The entire page lives inside a white container with 20px padding (p-3 on mobile, p-5 on desktop) creating an inset card effect with large rounded corners (28px mobile, 36px desktop). The scrollable content lives in an absolutely-positioned div inside this container with hidden scrollbars.\n\n---\n\n## FONTS\n\nLoad via `<link>` in index.html:\n- Google Fonts Inter: weights 300, 400, 500, 600, 700\n- TT Firs Neue from: `https://db.onlinewebfonts.com/c/69f2576e7ca287875bf8d089130e292c?family=TT+Firs+Neue`\n\nIn CSS define:`html, body {  font-family: 'Inter', system-ui, -apple-system, sans-serif;  -webkit-font-smoothing: antialiased;  background: #ffffff;}.font-firs {  font-family: 'TT Firs Neue', 'Inter', system-ui, sans-serif;}.no-scrollbar {  scrollbar-width: none;  -ms-overflow-style: none;}.no-scrollbar::-webkit-scrollbar {  display: none;}`\n\n---\n\n## COLOR PALETTE\n\n- Primary dark: `#154359`\n- Teal accent: `#066377`\n- Light background: `#F0F0F0` (nominations section)\n- Lighter background: `#F0F5F7` (about section)\n- Gradient text: `linear-gradient(294deg, #185B7B 20%, #4BBDF0)`\n- Nomination stroke: `rgba(6, 99, 119, 0.25)`\n\n---\n\n## OUTER SHELL STRUCTURE\n\n`div.h-screen.bg-white.p-3.sm:p-5  div.relative.w-full.h-full.overflow-hidden.rounded-[28px].sm:rounded-[36px].bg-white    div.absolute.inset-0.overflow-y-auto.overflow-x-hidden.no-scrollbar      [SECTIONS GO HERE]    [NAV BAR - absolute positioned]    [BOTTOM OVERLAYS - absolute positioned]`\n\n---\n\n## SECTION 1: HERO\n\n- Full viewport height: `min-height: calc(100vh - 40px)`\n- Background: autoplaying, looping, muted video filling the section with `object-cover`\n- Video URL: `https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260511_151648_2bdfbd1c-6bde-4f5d-a967-f57cbced97f6-fb3729.mp4`\n- Overlay gradient on the video: `bg-gradient-to-b from-black/10 via-transparent to-black/20`\n\nTop bar (z-20): flex row, justify-between, px-4 sm:px-10, pt-5 sm:pt-8\n- Left: Logo using lucide-react `Sparkles` icon (w-5 h-5 sm:w-6 sm:h-6, strokeWidth 1.5) + text \"launchex\" (14px sm:15px, font-semibold, tracking-tight) and \"awards\" below (10px sm:11px, font-light, opacity-90, -mt-0.5). All white.\n- Right: CTA button \"Send in your entry form\" (hidden on mobile, shows \"Enter\" on mobile). Teal background `#066377`, white text, 10px sm:11px, uppercase, tracking-[0.14em], font-medium. Has a chamfered/clipped shape using `clipPath: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)`. Includes `ArrowUpRight` icon (w-3.5 h-3.5) that moves on hover (translate-x-0.5, -translate-y-0.5). Button has `hover:brightness-125` transition.\n\nCenter content (z-10): flex-col, items-center, text-center, color `#154359`, pt-32 sm:pt-40, pb-24\n- Eyebrow: \"Prize for ventures\" - 11px sm:12px, uppercase, tracking-[0.3em], font-medium, mb-6, opacity-90\n- Heading: \"launchex prizes\" (two lines with `<br/>`), using `.font-firs`, font-normal, tracking-[-0.04em], leading-[0.9], sizes: 48px / 76px / 100px / 120px (responsive breakpoints)\n- Subtext: \"Bridging visions with reality, helping ventures soar up to the stars\" - 12px sm:14px, uppercase, tracking-[0.22em], font-medium, max-w-md, leading-[1.8], opacity-90, mt-8\n\n---\n\n## SECTION 2: SUBMISSIONS (NOMINATIONS)\n\n- Background: `#F0F0F0`\n- Padding: py-20 sm:py-28, px-6 sm:px-10\n- Overflow hidden, relative positioning\n\nLayout: 3-column on large (left nominations | center video | right nominations), stacked on mobile (center first, then left, then right). max-w-5xl, mx-auto, gap-10 lg:gap-12.\n\nCenter column:\n- Header text: \"[submissions]\" (12px, tracking-[0.24em], uppercase) and \"submissions\" below (font-firs, 44px sm:54px, font-semibold, tracking-tight, uppercase). Color `#154359`.\n- Video below (mt-6 sm:mt-8): 220px/380px/460px square (responsive), object-cover\n- URL: `https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_154120_b89bfedd-530d-4ebb-9eb7-42eeafe08667-c6b971.mp4`\n- autoPlay, loop, muted, playsInline\n\nLeft nominations (3 cards), pushed down with lg:mt-36:\n- \"Lead\" / \"AI venture for commerce\"\n- \"Emerging innovations\" / \"in food commerce\"\n- \"The finest innovations\" / \"for learners and young students\"\n\nRight nominations (3 cards), pushed down with lg:mt-36:\n- \"Innovations for advanced\" / \"career training\"\n- \"The finest innovations\" / \"in finance\"\n- \"Categories\" / \"coming soon\"\n\nNominationCard component:\n- `<a>` tag, max-w-[20em], h-[5em], hover:-translate-y-0.5 transition\n- Contains an SVG with a chamfered rectangle (polygon points=\"14,0 100,0 100,86 86,100 0,100 0,14\") as border - stroke `rgba(6, 99, 119, 0.25)`, strokeWidth 1, vectorEffect non-scaling-stroke, fill none, preserveAspectRatio=\"none\", viewBox=\"0 0 100 100\"\n- Text centered inside: title in 13px font-semibold, subtitle in 12px font-normal opacity-80. Color `#154359`.\n\nBottom fade gradient (pointer-events-none, absolute, bottom-0, full width, h-40 sm:h-56, z-10):\n- `linear-gradient(to bottom, rgba(240, 245, 247, 0) 0%, rgba(240, 245, 247, 0.7) 60%, #F0F5F7 100%)`\n\n---\n\n## SECTION 3: ABOUT THE FOUNDERS\n\n- Background: `#F0F5F7`\n- Padding: py-20 sm:py-28, px-6 sm:px-10\n- max-w-7xl mx-auto\n\nTop row: flex-col on mobile, flex-row on lg. Color `#154359`.\n- Left: Heading \"About the founders\" (two lines) - font-firs, 36px/48px/54px, font-semibold, uppercase, tracking-tight, leading-[0.95]\n- Right: max-w-xl column\n- Two paragraphs (17px sm:18px, leading-[1.5]):\n- \"Launchex.Hub is a platform that is part of a portfolio of companies Launchex, for sourcing and showcasing groundbreaking innovations.\"\n- \"Launchex.Hub's mission is to offer every local-language innovator the chance to reshape our world with their pioneering creation.\"\n- Link \"Launchex.Hub website\" with arrow icon (mt-6, 14px, font-medium). Arrow in a chamfered 32x32 box with border in `#154359`, clipPath `polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)`. Hover: -translate-y-0.5. Links to `https://base.launchex.vc/`\n\nStats grid (mt-14): 1 col / 2 col md / 3 col lg, gap-5. Three cards:\n\nCard 1: \"7+ years\" / \"Launchex has served the market, guiding ventures and their journeys\"\n- Image: `https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_154203_6c6f94dc-a07e-4ba5-8688-106f01ccd2c8-158c74.webp&w=1280&q=85`\n- No vertical offset\n- clipPath: `polygon(64px 0, calc(100% - 14px) 0, calc(100% - 4px) 4px, 100% 14px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 4px), calc(100% - 14px) 100%, 14px 100%, 4px calc(100% - 4px), 0 calc(100% - 14px), 0 64px)`\n- Text position: left-6 right-6 bottom-6\n\nCard 2: \"15000+\" / \"innovation ventures moved through the Launchex pipeline\"\n- Image: `https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_154151_45c62c60-3bcc-4f21-8f9d-03722ebb5df8-71cb96.webp&w=1280&q=85`\n- Offset: lg:mt-24 (pushed down on desktop)\n- clipPath: `polygon(0 14px, 4px 4px, 14px 0, calc(100% - 64px) 0, 100% 64px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 4px), calc(100% - 14px) 100%, 64px 100%, 0 calc(100% - 64px))`\n- Text position: left-6 bottom-20\n\nCard 3: \"120+\" / \"accelerator sessions delivered by Launchex across Eastern Europe\"\n- Image: `https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_152238_24ec8db4-d728-4739-bb30-e985533e9637-8b9102.webp&w=1280&q=85`\n- No vertical offset\n- clipPath: `polygon(0 14px, 4px 4px, 14px 0, calc(100% - 64px) 0, 100% 64px, 100% calc(100% - 64px), calc(100% - 64px) 100%, 14px 100%, 4px calc(100% - 4px), 0 calc(100% - 14px))`\n- Text position: left-6 right-28 bottom-6\n\nEach stat card structure:\n- Outer div: w-full, h-[280px] sm:h-[340px], backgroundColor `rgba(255, 255, 255, 0.8)`, padding `1.5px` (acts as border), clipPath applied\n- Inner div: w-full h-full, overflow-hidden, background-image set to the image URL, bg-cover bg-center, same clipPath applied, `mixBlendMode: 'plus-darker'`\n- Text overlay (absolute positioned): value in font-firs, font-semibold, uppercase, 36px sm:52px, gradient text (`linear-gradient(294deg, #185B7B 20%, #4BBDF0)` with background-clip text, color transparent). Description in 14px, leading-[1.4], color `#154359`, mt-3. Max-width 66%.\n\nBottom fade gradient (same as section 2):\n- `linear-gradient(to bottom, rgba(240, 245, 247, 0) 0%, rgba(240, 245, 247, 0.7) 60%, #F0F5F7 100%)`\n\n---\n\n## PERSISTENT OVERLAY ELEMENTS (inside the outer rounded container, outside the scrollable area)\n\nTop navigation bar:\n- Hidden on mobile (`hidden md:flex`), absolute, top-0, centered horizontally (left-1/2 -translate-x-1/2), z-40\n- White background, border-bottom-left-radius and border-bottom-right-radius: 28px\n- Padding: px-6 lg:px-10, py-4, gap-6 lg:gap-10\n- Links: \"About\", \"Submissions\", \"Venue\", \"Judges\", \"Connect\" - 11px, uppercase, tracking-[0.14em], font-medium, text-neutral-800, hover:text-neutral-500\n- Two decorative `<span>` elements on left (-left-6) and right (-right-6) that create inverted rounded corners using radial-gradient masks:\n- Left: `radial-gradient(circle at 0 100%, transparent 24px, black 25px)`\n- Right: `radial-gradient(circle at 100% 100%, transparent 24px, black 25px)`\n\nBottom-right page indicator:\n- pointer-events-none, absolute, bottom-4 sm:bottom-6, right-4 sm:right-8, z-40\n- \"01\" [line] \"05\" - flex, gap-3, text-white/80, 10px, font-medium, uppercase, tracking-[0.18em], mix-blend-difference\n- Line is a span: w-8 h-px bg-white/40\n\nBottom-left scroll indicator:\n- pointer-events-none, absolute, bottom-4 sm:bottom-6, left-4 sm:left-8, z-40\n- \"Scroll to discover\" - text-white/80, 10px, font-medium, uppercase, tracking-[0.18em], mix-blend-difference\n\n---\n\n## KEY IMPLEMENTATION DETAILS\n\n- All clip-paths use the `polygon()` function with pixel-based chamfers creating angular/geometric cut corners\n- The page is fully responsive with sm/md/lg breakpoints\n- Videos use autoPlay, loop, muted, playsInline attributes\n- Use lucide-react for Sparkles and ArrowUpRight icons only\n- The stat card images use `mix-blend-mode: plus-darker` for a deeper tonal effect\n- No scrollbar is visible (custom CSS utility)\n- All transitions are subtle: translate, color changes, brightness\n- The outer container clips all content with its rounded corners - the scroll happens inside",
+        "zh-CN": "构建 Launchex Awards 创投大奖落地页（内嵌圆角白卡外壳 + 全屏视频 Hero + 三栏提名区 + 创始人统计网格，全程斜切 clip-path 几何切角）。完整规格以 en 字段为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Stellar Launch — Launchex Awards"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

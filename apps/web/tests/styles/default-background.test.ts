@@ -24,4 +24,14 @@ describe('default app background colors', () => {
     expect(dark).toContain('--bg: #1a1917;');
     expect(dark).toContain('--bg-app: #1a1917;');
   });
+
+  it('prefers platform UI fonts over optional local app fonts', () => {
+    const root = cssBlock(':root');
+    const sans = /--sans:\s*([^;]+);/.exec(root)?.[1];
+
+    expect(sans).toBeDefined();
+    expect(sans).toContain("'Segoe UI'");
+    expect(sans).not.toContain("'Inter'");
+    expect(sans).toMatch(/'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans'/);
+  });
 });

@@ -4,17 +4,22 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
+import {
+  DESIGN_FILES_TAB,
+  FileWorkspace,
+  scrollWorkspaceTabsWithWheel,
+} from '../../src/components/FileWorkspace';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import { projectSplitClassName } from '../../src/components/ProjectView';
+import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
 import {
   fetchProjectFileText,
   uploadProjectFiles,
   writeProjectTextFile,
+  fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { ProjectFile } from '../../src/types';
+import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -25,6 +30,56 @@ vi.mock('../../src/providers/registry', async () => {
     fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
     writeProjectTextFile: vi.fn(),
+    fetchProjectFolders: vi.fn().mockResolvedValue([]),
+  };
+});
+
+vi.mock('../../src/components/DesignBrowserPanel', () => ({
+  DesignBrowserPanel: ({
+    initialIconUrl,
+    initialTitle,
+    initialUrl,
+  }: {
+    initialIconUrl?: string;
+    initialTitle?: string;
+    initialUrl?: string;
+  }) => (
+    <div
+      data-testid="design-browser-panel"
+      data-initial-icon-url={initialIconUrl ?? ''}
+      data-initial-title={initialTitle ?? ''}
+      data-initial-url={initialUrl ?? ''}
+    />
+  ),
+}));
+
+vi.mock('../../src/components/workspace/TerminalViewer', () => ({
+  TerminalViewer: ({ terminalId }: { terminalId: string }) => (
+    <div data-testid="terminal-viewer">{terminalId}</div>
+  ),
+}));
+
+// Records the `folders` prop DesignFilesPanel receives on EVERY render (still
+// renders the real component). Lets a test observe the first render after a
+// project switch — the pre-paint frame RTL's post-rerender DOM assertion can't
+// see — to prove no stale folders ever reach the new panel.
+const { designFilesPanelRenders } = vi.hoisted(() => ({
+  designFilesPanelRenders: [] as { projectId: string; folderCount: number }[],
+}));
+vi.mock('../../src/components/DesignFilesPanel', async () => {
+  const actual = await vi.importActual<typeof import('../../src/components/DesignFilesPanel')>(
+    '../../src/components/DesignFilesPanel',
+  );
+  const Real = actual.DesignFilesPanel;
+  return {
+    ...actual,
+    DesignFilesPanel: (props: Parameters<typeof Real>[0]) => {
+      designFilesPanelRenders.push({
+        projectId: props.projectId,
+        folderCount: props.folders?.length ?? 0,
+      });
+      return <Real {...props} />;
+    },
   };
 });
 
@@ -44,6 +99,10 @@ beforeAll(() => {
     disconnect() {}
     unobserve() {}
   };
+});
+
+beforeEach(() => {
+  mockedFetchProjectFileText.mockResolvedValue('');
 });
 
 afterEach(() => {
@@ -100,6 +159,10 @@ function getTabByName(container: HTMLElement, name: RegExp): HTMLElement {
   const tab = tabs.find((node) => name.test(node.textContent ?? ''));
   if (!tab) throw new Error(`Could not find tab matching ${name}`);
   return tab;
+}
+
+function renderedTabLabels(): string[] {
+  return screen.getAllByRole('tab').map((tab) => tab.textContent?.trim() ?? '');
 }
 
 function createDragDataTransfer() {
@@ -190,6 +253,174 @@ function unreadableDropDataTransfer(fallbackFiles: File[] = []) {
 }
 
 describe('FileWorkspace upload input', () => {
+  it('does not promote raw design-system assets into component review cards', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('tokens.css'),
+          workspaceFile('preview/logo.html'),
+          workspaceFile('ui_kits/website/index.html'),
+          baseFile({ name: 'assets/favicon.png', path: 'assets/favicon.png' }),
+          baseFile({ name: 'assets/site/avatar-1.png', path: 'assets/site/avatar-1.png' }),
+          baseFile({ name: 'assets/site/community.png', path: 'assets/site/community.png' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<strong>website</strong>');
+    expect(markup).not.toContain('<strong>favicon</strong>');
+    expect(markup).not.toContain('<strong>avatar-1</strong>');
+    expect(markup).not.toContain('<strong>community</strong>');
+  });
+
+  it('keeps image-based UI kit previews as component review cards', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          baseFile({ name: 'ui_kits/button.png', path: 'ui_kits/button.png' }),
+          baseFile({ name: 'src/components/card.svg', path: 'src/components/card.svg' }),
+          baseFile({ name: 'assets/site/avatar-1.png', path: 'assets/site/avatar-1.png' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<strong>button</strong><small>Reusable product interface examples</small>');
+    expect(markup).toContain('<strong>card</strong><small>Reusable product interface examples</small>');
+    expect(markup).not.toContain('<strong>avatar-1</strong>');
+  });
+
+  it('renders a design-system contents rail with review and edit actions', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('preview/logo.html'),
+          workspaceFile('ui_kits/website/index.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="design-system-review-toc"');
+    expect(markup).toContain('href="#design-system-section-');
+    expect(markup).toContain('Looks good');
+    expect(markup).toContain('Needs work...');
+    expect(markup).toContain('data-testid="design-system-review-edit-');
+    expect(markup).not.toContain('data-testid="design-system-review-open-');
+  });
+
+  it('opens the section preview file for editing from the design-system review card', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('ui_kits/website/index.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTitle('Edit ui_kits/website/index.html'));
+    });
+
+    expect(onTabsStateChange).toHaveBeenCalledWith(expect.objectContaining({
+      active: 'ui_kits/website/index.html',
+      tabs: ['ui_kits/website/index.html'],
+    }));
+  });
+
+  it('treats favicon previews as brand guidance', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('preview/favicon.html'),
+          baseFile({ name: 'assets/favicon.png', path: 'assets/favicon.png' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<strong>favicon</strong><small>Brand app icon and favicon</small>');
+    expect(markup).not.toContain('<strong>favicon</strong><small>Reusable product interface examples</small>');
+  });
+
   it('keeps the Design Files picker aligned with drag-and-drop file support', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
@@ -298,12 +529,149 @@ describe('FileWorkspace upload input', () => {
     });
   });
 
+  it('starts Design Files navigation fresh when switching projects', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [
+        workspaceFile('assets/logo.png'),
+        workspaceFile('top.html'),
+      ],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+
+    fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        projectId="project-b"
+        files={[
+          workspaceFile('beta-assets/logo.png'),
+          workspaceFile('home.html'),
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
+  });
+
+  it('drops the previous project folders when switching, before the new fetch resolves', async () => {
+    const folder = (path: string): ProjectFolder => ({
+      name: path.split('/').pop() ?? path,
+      path,
+      type: 'dir',
+      size: 0,
+      mtime: 1700000000,
+    });
+    const mockedFolders = vi.mocked(fetchProjectFolders);
+    // project-a has an empty persisted folder; project-b's fetch stays pending.
+    // (One-time values take precedence over the factory default `[]`; no reset,
+    // so later tests keep that default.)
+    mockedFolders.mockResolvedValueOnce([folder('assets')]);
+    mockedFolders.mockReturnValueOnce(new Promise<ProjectFolder[]>(() => {}));
+
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+    // project-a's empty folder shows once its fetch resolves.
+    await waitFor(() => {
+      expect(
+        [...container.querySelectorAll('.df-dir-row .df-row-name')].some(
+          (e) => e.textContent === 'assets',
+        ),
+      ).toBe(true);
+    });
+
+    // Switch to project-b; its folder fetch is still pending. The previous
+    // project's 'assets' folder must be gone immediately (reset synchronously),
+    // not linger and suppress the new project's empty state.
+    designFilesPanelRenders.length = 0;
+    rerender(<FileWorkspace {...baseProps} projectId="project-b" files={[]} />);
+    expect(
+      [...container.querySelectorAll('.df-dir-row .df-row-name')].some(
+        (e) => e.textContent === 'assets',
+      ),
+    ).toBe(false);
+
+    // The reset happens during render, not in an effect — so the new panel's
+    // FIRST render (and every render thereafter) already sees zero folders.
+    // An effect-based reset would let project-b's first render observe the
+    // stale 'assets' folder before the effect cleared it; RTL's post-rerender
+    // DOM check above can't catch that frame, this can.
+    const projectBRenders = designFilesPanelRenders.filter((r) => r.projectId === 'project-b');
+    expect(projectBRenders.length).toBeGreaterThan(0);
+    expect(projectBRenders.every((r) => r.folderCount === 0)).toBe(true);
+  });
+
+  it('clears a prior upload failure after a later successful upload', async () => {
+    mockedUploadProjectFiles
+      .mockRejectedValueOnce(new Error('storage offline'))
+      .mockResolvedValueOnce({
+        uploaded: [
+          {
+            path: 'retry.png',
+            name: 'retry.png',
+            kind: 'image',
+            size: 1024,
+          },
+        ],
+        failed: [],
+      });
+
+    const onRefreshFiles = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[baseFile({ name: 'retry.png', path: 'retry.png' })]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId('design-files-upload-input');
+    fireEvent.change(input, {
+      target: { files: [new File(['failed'], 'failed.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain('storage offline');
+    });
+
+    fireEvent.change(input, {
+      target: { files: [new File(['retry'], 'retry.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('upload-error-banner')).toBeNull());
+  });
+
   it('falls back to the browser file list when a dragged entry cannot be read', async () => {
     const fallbackFile = new File(['mock'], 'fallback.png', { type: 'image/png' });
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
 
-    fireEvent.drop(container.querySelector('.df-drop')!, {
+    fireEvent.drop(container.querySelector('.df-body')!, {
       dataTransfer: unreadableDropDataTransfer([fallbackFile]),
     });
 
@@ -315,7 +683,7 @@ describe('FileWorkspace upload input', () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
 
-    fireEvent.drop(container.querySelector('.df-drop')!, {
+    fireEvent.drop(container.querySelector('.df-body')!, {
       dataTransfer: unreadableDropDataTransfer(),
     });
 
@@ -373,6 +741,26 @@ describe('FileWorkspace upload input', () => {
     );
   });
 
+  it('keeps the Design Files tab as the first workspace tab before opened files', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('artifact.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['artifact.html'], active: 'artifact.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('class="ws-tabs-bar"');
+    expect(markup).toMatch(
+      /role="tablist"[\s\S]*data-testid="design-files-tab"[\s\S]*artifact\.html/,
+    );
+  });
+
   it('labels the same workspace control as chat restore while focused', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
@@ -390,6 +778,470 @@ describe('FileWorkspace upload input', () => {
     );
 
     expect(markup).toContain('Show chat');
+  });
+});
+
+describe('FileWorkspace launcher tab creation', () => {
+  it('does not report a Design Files context for an empty project', async () => {
+    // A brand-new project has no files, live artifacts, or folders. The
+    // composer must not auto-stage a "Design files" chip that points at
+    // nothing, so the active workspace context stays null.
+    const onActiveContextChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        resolvedDir="/tmp/open-design/project-1"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        onActiveContextChange={onActiveContextChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onActiveContextChange).toHaveBeenCalled();
+    });
+    expect(onActiveContextChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports the active Design Files tab as workspace context once files exist', async () => {
+    const onActiveContextChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        resolvedDir="/tmp/open-design/project-1"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        onActiveContextChange={onActiveContextChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onActiveContextChange).toHaveBeenLastCalledWith({
+        id: 'workspace:design-files',
+        kind: 'design-files',
+        label: 'Design Files',
+        tabId: '__design_files__',
+        absolutePath: '/tmp/open-design/project-1',
+      });
+    });
+  });
+
+  it('hides terminal creation while keeping browser creation available', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+
+    expect(screen.queryByRole('button', { name: /New Terminal/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /New Browser/i })).toBeTruthy();
+    expect(screen.getByText('Create new')).toBeTruthy();
+  });
+
+  it('renders terminal and side chat tabs after a Design Files-anchored browser tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['terminal:term-1', 'chat:conversation-1'],
+          active: 'chat:conversation-1',
+          browserTabs: [
+            {
+              id: '__browser__:1',
+              insertAfter: '__design_files__',
+              label: 'Browser',
+            },
+          ],
+        }}
+        conversations={[
+          {
+            id: 'conversation-1',
+            projectId: 'project-1',
+            title: null,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(renderedTabLabels()).toEqual([
+      'Design Files',
+      'Browser',
+      'New Terminal',
+      'Side chat',
+    ]);
+  });
+
+  it('anchors a new browser after the visible tab tail', async () => {
+    const onTabsStateChange = vi.fn();
+    const rootBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: '__design_files__',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['terminal:term-1'],
+          active: 'terminal:term-1',
+          browserTabs: [rootBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['terminal:term-1'],
+        active: '__browser__:2',
+        browserTabs: [
+          rootBrowserTab,
+          {
+            id: '__browser__:2',
+            insertAfter: 'terminal:term-1',
+            label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a file from the launcher', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /notes\.html/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'notes.html'],
+        active: 'notes.html',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
+          },
+        ],
+      });
+    });
+  });
+
+  it('opens the Design Files tab launcher with the browser new-tab shortcut', async () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const allowedDefault = fireEvent.keyDown(window, {
+      key: 't',
+      metaKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    expect(screen.getByTestId('workspace-add-tab').getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    expect(await screen.findByRole('dialog', { name: /New tab/i })).toBeTruthy();
+    expect(screen.getByTestId('tab-launcher-search')).toBe(document.activeElement);
+  });
+
+  it('closes the active Design Files workspace tab with the browser close-tab shortcut', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: 'notes.html' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const allowedDefault = fireEvent.keyDown(window, {
+      key: 'w',
+      ctrlKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html'],
+      active: 'analysis.html',
+    });
+  });
+
+  it('switches Design Files workspace tabs with browser-style next and previous shortcuts', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: 'analysis.html' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const nextAllowedDefault = fireEvent.keyDown(window, {
+      key: 'Tab',
+      ctrlKey: true,
+    });
+
+    expect(nextAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /notes\.html/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html', 'notes.html'],
+      active: 'notes.html',
+    });
+
+    const previousAllowedDefault = fireEvent.keyDown(window, {
+      key: 'Tab',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(previousAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /analysis\.html/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html', 'notes.html'],
+      active: 'analysis.html',
+    });
+  });
+
+  it('focuses a browser open request without adding it to file tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser 1',
+        title: 'Dribbble',
+        url: 'https://dribbble.com/',
+      },
+    ];
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: 'cover.html', browserTabs }}
+        openRequest={{ name: '__browser__:1', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:1',
+        browserTabs,
+      });
+    });
+  });
+
+  it('opens a share request without dropping existing browser tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser 1',
+        title: 'Dribbble',
+        url: 'https://dribbble.com/',
+      },
+    ];
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
+        shareRequest={{ name: 'landing.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'landing.html'],
+        active: 'landing.html',
+        browserTabs,
+      });
+    });
+  });
+
+  it('opens and activates the target file for a download request', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTabs = [
+      { id: '__browser__:1', label: 'Browser 1', title: 'Dribbble', url: 'https://dribbble.com/' },
+    ];
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
+        downloadRequest={{ name: 'landing.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'landing.html'],
+        active: 'landing.html',
+        browserTabs,
+      });
+    });
+  });
+
+  it('focuses the design-system workspace tab without adding it to file tabs', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: 'cover.html' }}
+        openRequest={{ name: '__design_system__', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={{
+          id: 'neutral-modern',
+          title: 'Neutral Modern',
+          category: 'Starter',
+          source: 'bundled',
+          updatedAt: 1,
+        } as never}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__design_system__',
+      });
+    });
+  });
+
+  it('focuses an already-open file tab without adding a duplicate tab', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('Web Prototype mutuals-v2.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['Web Prototype mutuals-v2.html'],
+          active: 'notes.html',
+        }}
+        openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['Web Prototype mutuals-v2.html'],
+        active: 'Web Prototype mutuals-v2.html',
+      });
+    });
   });
 });
 
@@ -600,10 +1452,92 @@ describe('FileWorkspace tab reordering', () => {
   });
 });
 
+describe('FileWorkspace Questions tab', () => {
+  const discoveryForm = {
+    id: 'discovery',
+    title: 'Quick brief',
+    questions: [
+      {
+        id: 'platform',
+        label: 'Platform',
+        type: 'radio' as const,
+        options: [
+          { label: 'Mobile', value: 'Mobile' },
+          { label: 'Desktop web', value: 'Desktop web' },
+        ],
+        required: true,
+      },
+    ],
+  };
+
+  it('shows the Questions tab while the form is unanswered', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        questionForm={discoveryForm}
+      />,
+    );
+
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+  });
+
+  it('closes the Questions preview after submit, then lets the answered form reopen', async () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+      questionForm: discoveryForm,
+      focusQuestionsRequest: { nonce: 1 },
+    };
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Quick brief')).toBeTruthy();
+    });
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        questionFormSubmittedAnswers={{ platform: 'Mobile' }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Quick brief')).toBeNull();
+    });
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('questions-tab'));
+    expect(screen.getByText('Quick brief')).toBeTruthy();
+    expect(screen.getByText('Mobile')).toBeTruthy();
+  });
+});
+
 describe('projectSplitClassName', () => {
   it('marks the project split as focused so the chat pane can collapse globally', () => {
     expect(projectSplitClassName(false)).toBe('split');
     expect(projectSplitClassName(true)).toBe('split split-focus');
+  });
+
+  it('uses CSS variables for split widths so pointer resize can update layout without rerendering workspace content', () => {
+    expect(projectSplitStyle(false, 512, 'minmax(420px, 1fr)')).toEqual({
+      '--project-chat-panel-width': '512px',
+      '--project-workspace-panel-track': 'minmax(420px, 1fr)',
+      gridTemplateColumns: '512px 8px minmax(420px, 1fr)',
+    });
+    expect(projectSplitStyle(true, 512, 'minmax(420px, 1fr)')).toBeUndefined();
   });
 });
 
@@ -829,4 +1763,255 @@ describe('FileWorkspace sketch save', () => {
     expect(btn.textContent).not.toBe('Saving…');
     expect(btn.querySelector('svg')).not.toBeNull();
   });
+});
+
+describe('FileWorkspace add-module menu', () => {
+  it('opens the add-module menu with Browser available and Terminal hidden', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const addButton = screen.getByTestId('workspace-add-tab');
+    expect(addButton.getAttribute('aria-expanded')).toBe('false');
+
+    act(() => {
+      fireEvent.click(addButton);
+    });
+
+    expect(addButton.getAttribute('aria-expanded')).toBe('true');
+    const browserItem = screen.getByRole('button', { name: /New Browser/ });
+    const menu = browserItem.closest('[data-testid="tab-launcher-menu"]');
+    expect(menu).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /New Terminal/ })).toBeNull();
+
+    // The tab strip is a horizontal scroll container that also clips
+    // vertically, so the "+" button lives outside it in `.ws-add-tab`
+    // and the launcher menu is portaled to <body> -- neither can be clipped
+    // by the scrolling bar.
+    const tabsBar = document.querySelector('.ws-tabs-bar');
+    expect(tabsBar).not.toBeNull();
+    expect(tabsBar!.contains(addButton)).toBe(false);
+    expect(tabsBar!.contains(menu)).toBe(false);
+    expect(addButton.closest('.ws-add-tab')).not.toBeNull();
+  });
+
+  it('orders launcher sections as create new, files, then tabs in one scroll body', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [
+            {
+              id: '__browser__:1',
+              label: 'Reference Browser',
+              title: 'Behance',
+              url: 'https://www.behance.net/',
+            },
+          ],
+        }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    });
+
+    const scrollBody = screen.getByTestId('tab-launcher-scroll-body');
+    const createHeader = screen.getByText('Create new');
+    const fileHeader = screen.getByText('Open a file');
+    const tabsHeader = screen.getByText('Open tabs');
+
+    expect(scrollBody.contains(createHeader)).toBe(true);
+    expect(scrollBody.contains(fileHeader)).toBe(true);
+    expect(scrollBody.contains(tabsHeader)).toBe(true);
+    expect(createHeader.compareDocumentPosition(fileHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fileHeader.compareDocumentPosition(tabsHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('adds a new browser tab every time the Browser module is selected', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const addButton = screen.getByTestId('workspace-add-tab');
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        fireEvent.click(addButton);
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: /New Browser/ }));
+      });
+    }
+
+    const browserTabs = screen
+      .getAllByRole('tab')
+      .filter((tab) => /Browser(?: \d+)?/.test(tab.textContent ?? ''));
+    expect(browserTabs).toHaveLength(3);
+    expect(browserTabs.map((tab) => tab.textContent?.trim())).toEqual([
+      'Browser',
+      'Browser 2',
+      'Browser 3',
+    ]);
+    expect(browserTabs[2]!.getAttribute('aria-selected')).toBe('true');
+
+    const browserPanels = screen
+      .getAllByTestId('design-browser-panel')
+      .map((panel) => panel.closest('.ws-browser-panel'));
+    expect(browserPanels).toHaveLength(3);
+    expect(browserPanels[0]!.className).not.toContain('active');
+    expect(browserPanels[1]!.className).not.toContain('active');
+    expect(browserPanels[2]!.className).toContain('active');
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: [],
+      active: '__browser__:3',
+      browserTabs: [
+        { id: '__browser__:1', insertAfter: '__design_files__', label: 'Browser' },
+        { id: '__browser__:2', insertAfter: '__browser__:1', label: 'Browser 2' },
+        { id: '__browser__:3', insertAfter: '__browser__:2', label: 'Browser 3' },
+      ],
+    });
+  });
+
+  it('restores persisted browser tabs with their active URL state', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:2',
+          browserTabs: [
+            {
+              id: '__browser__:2',
+              insertAfter: '__design_files__',
+              label: 'Browser 2',
+              title: 'SVG Repo',
+              url: 'https://www.svgrepo.com/',
+              iconUrl: 'https://www.svgrepo.com/favicon.ico',
+            },
+          ],
+        }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const restoredTab = screen.getByRole('tab', { name: /SVG Repo/ });
+    expect(restoredTab.getAttribute('aria-selected')).toBe('true');
+    const browserPanel = screen.getByTestId('design-browser-panel');
+    expect(browserPanel.dataset.initialUrl).toBe('https://www.svgrepo.com/');
+    expect(browserPanel.dataset.initialTitle).toBe('SVG Repo');
+    expect(browserPanel.dataset.initialIconUrl).toBe('https://www.svgrepo.com/favicon.ico');
+  });
+
+  it('persists browser-tab removal when a browser tab is closed', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:1',
+          browserTabs: [
+            { id: '__browser__:1', insertAfter: '__design_files__', label: 'Browser' },
+          ],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const restoredTab = screen.getByRole('tab', { name: /Browser/ });
+    const closeButton = restoredTab.querySelector<HTMLButtonElement>('.ws-tab-close');
+    expect(closeButton).not.toBeNull();
+    act(() => {
+      fireEvent.click(closeButton!);
+    });
+
+    expect(screen.queryByRole('tab', { name: /Browser/ })).toBeNull();
+    expect(screen.queryByTestId('design-browser-panel')).toBeNull();
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: [],
+      active: '__design_files__',
+    });
+  });
+
+});
+
+describe('FileWorkspace empty-project generation contract', () => {
+  function assistantMessage(runStatus: 'running' | 'failed'): ChatMessage {
+    return {
+      id: `msg-${runStatus}`,
+      role: 'assistant',
+      content: '',
+      createdAt: 1700000000,
+      startedAt: 1700000000,
+      runId: `run-${runStatus}`,
+      runStatus,
+      agentId: 'claude',
+      preTurnFileNames: [],
+      events: [{ kind: 'status', label: runStatus === 'failed' ? 'error' : 'thinking' }],
+    };
+  }
+
+  // The generation-preview card / transient `generating-tab` were removed: an
+  // empty project keeps the plain `design-files-empty` placeholder for running
+  // AND failed turns, with no card hijacking the surface.
+  it.each(['running', 'failed'] as const)(
+    'keeps the design-files empty placeholder and shows no generation card for a %s turn',
+    (runStatus) => {
+      render(
+        <FileWorkspace
+          projectId="project-1"
+          projectKind="prototype"
+          files={[]}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          isDeck={false}
+          streaming={runStatus === 'running'}
+          tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+          onTabsStateChange={vi.fn()}
+          messages={[assistantMessage(runStatus)]}
+        />,
+      );
+
+      expect(screen.queryByTestId('generating-tab')).toBeNull();
+      expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
+      expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    },
+  );
 });

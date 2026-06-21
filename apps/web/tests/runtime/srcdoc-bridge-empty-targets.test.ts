@@ -62,6 +62,40 @@ function markVisible(win: { document: Document }, selector: string): void {
   });
 }
 
+type PostedMessage = { type?: string; [key: string]: unknown };
+type ParentPostMessageSpy = {
+  mock: { calls: ReadonlyArray<ReadonlyArray<unknown>> };
+};
+
+function postedMessages(
+  parentPostMessage: ParentPostMessageSpy,
+  type: string,
+): PostedMessage[] {
+  return parentPostMessage.mock.calls
+    .map((call) => call[0])
+    .filter(
+      (message): message is PostedMessage =>
+        typeof message === 'object' &&
+        message !== null &&
+        (message as PostedMessage).type === type,
+    );
+}
+
+async function waitForPostedMessages(
+  win: Pick<Window, 'setTimeout'>,
+  parentPostMessage: ParentPostMessageSpy,
+  type: string,
+  expectedCount = 1,
+): Promise<PostedMessage[]> {
+  const deadline = Date.now() + 500;
+  let messages = postedMessages(parentPostMessage, type);
+  while (messages.length < expectedCount && Date.now() < deadline) {
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    messages = postedMessages(parentPostMessage, type);
+  }
+  return messages;
+}
+
 function setupBridgeDom(
   bodyHtml: string,
   mode: 'inspect' | 'comment',
@@ -166,6 +200,7 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<main data-od-id="hero"><h1 id="title">Hero</h1></main>',
       'inspect',
+      ['[data-od-id="hero"]'],
     );
 
     await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
@@ -190,6 +225,7 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<main data-od-id="hero">Hero</main>',
       'inspect',
+      ['[data-od-id="hero"]'],
     );
 
     await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
@@ -205,6 +241,42 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(clickMessages).toHaveLength(1);
     expect(clickMessages[0].elementId).toBe('hero');
     expect(clickMessages[0].clickedDescendant).toBeUndefined();
+  });
+
+  it('refreshes the active comment target when its text node mutates after picking it', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<main data-od-id="hero">Draft copy</main>',
+      'comment',
+      ['[data-od-id="hero"]'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+
+    const target = win.document.querySelector('[data-od-id="hero"]');
+    expect(target).not.toBeNull();
+    target!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    const clickMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-target');
+    expect(clickMessages).toHaveLength(1);
+    expect(clickMessages[0].text).toBe('Draft copy');
+
+    parentPostMessage.mockClear();
+    target!.firstChild!.textContent = 'Updated copy';
+    const updateMessages = await waitForPostedMessages(
+      win,
+      parentPostMessage,
+      'od:comment-active-target-update',
+    );
+    expect(updateMessages).toHaveLength(1);
+    expect(updateMessages[0]).toMatchObject({
+      elementId: 'hero',
+      text: 'Updated copy',
+    });
   });
 
   it('does not invent fallback targets in Inspect mode for unannotated elements', async () => {

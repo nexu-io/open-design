@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bentley — Beyond The Collection</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600&family=Great+Vibes&display=swap"
+  rel="stylesheet"
+/>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #000; }
+  body {
+    font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #fff;
+  }
+  .serif { font-family: "Instrument Serif", serif; }
+  .sans { font-family: "Manrope", ui-sans-serif, system-ui, sans-serif; }
+  .italic { font-style: italic; }
+  img { display: block; }
+  button { font: inherit; cursor: pointer; border: none; }
+
+  /* ===== Scroll stage ===== */
+  .stage {
+    position: relative;
+    width: 100%;
+    height: 600vh;
+    background: #000;
+  }
+  .sticky {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    color: #fff;
+  }
+  #bg-video {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover; z-index: 0;
+  }
+
+  /* logo top-left */
+  .hero-logo {
+    position: absolute; z-index: 10;
+    top: 120px; left: 96px;
+    display: flex; flex-direction: column; align-items: flex-start;
+    text-align: left; color: #000; user-select: none; line-height: 0.95;
+  }
+  .hero-logo .row { display: flex; align-items: baseline; }
+  .hero-logo .big { font-size: clamp(32px, 5vw, 64px); }
+  .hero-logo .big.it { font-style: italic; margin-left: 0.05em; }
+  .hero-logo .collection {
+    font-weight: 400; font-size: clamp(28px, 4.4vw, 56px);
+    letter-spacing: -0.01em; margin-top: 0.05em;
+  }
+
+  /* scroll hint */
+  .scroll-hint {
+    position: absolute; z-index: 10;
+    bottom: 40px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center;
+    color: #fff; user-select: none; pointer-events: none;
+  }
+  .scroll-hint .well { position: relative; width: 20px; height: 34px; overflow: hidden; }
+  @keyframes scrollArrow {
+    0%   { transform: translateY(-6px); opacity: 0; }
+    40%  { opacity: 1; }
+    100% { transform: translateY(10px); opacity: 0; }
+  }
+  .scroll-arrow { position: absolute; inset: 0; animation: scrollArrow 1.6s ease-in-out infinite; }
+
+  /* clip reveal */
+  .reveal {
+    position: absolute; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    width: 150vw; height: 150vh; left: -25vw; top: -25vh;
+    transform: rotate(-15deg);
+    clip-path: ellipse(0% 0% at 50% 50%);
+    will-change: clip-path;
+  }
+  .reveal-white { position: absolute; inset: 0; background: #fff; }
+  .reveal-inner {
+    position: relative;
+    width: 100vw; height: 100vh;
+    transform: rotate(15deg);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* orbit */
+  .orbit-frame {
+    position: relative;
+    width: 90vw; max-width: 1200px; aspect-ratio: 1 / 1;
+  }
+  .orbit-rotation {
+    position: absolute; inset: 0;
+    transform-origin: center center;
+    will-change: transform;
+  }
+  .orbit-item {
+    position: absolute; left: 50%; top: 50%;
+    will-change: transform;
+    user-select: none;
+  }
+  .orbit-item img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    transition: transform 0.3s ease;
+    cursor: pointer;
+  }
+  .orbit-item img:hover { transform: scale(1.2); }
+  .orbit-label {
+    position: absolute; left: 115%; top: 50%; transform: translateY(-50%);
+    width: min(360px, 95%); color: #000; pointer-events: none;
+  }
+  .orbit-label .lt {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(26px, 3vw, 40px);
+    line-height: 1.05; letter-spacing: -0.01em; margin-bottom: 14px;
+  }
+  .orbit-label .ld {
+    font-weight: 400; font-size: clamp(13px, 1vw, 15px);
+    line-height: 1.5; color: rgba(0,0,0,0.72);
+  }
+
+  /* text overlays */
+  .overlays { position: absolute; inset: 0; z-index: 60; pointer-events: none; }
+  .overlay-fade { will-change: opacity, filter, transform; }
+
+  .center-brand {
+    position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 50; pointer-events: none;
+  }
+  .center-brand .stack {
+    display: flex; flex-direction: column; align-items: center;
+    white-space: nowrap; pointer-events: auto;
+  }
+  .center-brand .row { display: flex; align-items: baseline; color: #000; line-height: 1; margin-bottom: 4px; }
+  .center-brand .row span { font-size: 45px; letter-spacing: -0.02em; color: #000; }
+  .center-brand .collection { font-size: 28px; letter-spacing: -0.02em; color: #000; margin-top: -5px; }
+
+  .info-tr {
+    position: absolute; top: 128px; right: 214px;
+    display: flex; flex-direction: column; align-items: flex-start;
+    text-align: left; pointer-events: auto;
+  }
+  .info-tr .num { font-size: 40px; line-height: 1; margin-bottom: 12px; color: #000; }
+  .info-tr .lbl { font-size: 16px; text-transform: uppercase; letter-spacing: 0.18em; color: #000; line-height: 20px; }
+
+  .info-bl {
+    position: absolute; bottom: 64px; left: 64px;
+    display: flex; flex-direction: column; align-items: flex-start; color: #000; pointer-events: auto;
+  }
+  .info-bl .num { font-size: 40px; line-height: 1; margin-bottom: 4px; color: #000; }
+  .info-bl .lbl { font-size: 16px; text-transform: uppercase; letter-spacing: 0.18em; color: #000; }
+
+  .cta-br {
+    position: absolute; bottom: 64px; right: 10vw;
+    display: flex; flex-direction: column; align-items: flex-start; z-index: 10; pointer-events: auto;
+  }
+  .cta-br p {
+    font-size: 16px; text-transform: uppercase; letter-spacing: 0.18em; color: #000;
+    line-height: 20px; margin: 0 0 24px; width: 240px; text-align: left;
+  }
+  .cta-row { display: flex; align-items: center; }
+  .btn-pill {
+    background: #000; color: #fff; border-radius: 40px;
+    padding: 14px 32px; letter-spacing: 0.1em; text-transform: uppercase;
+    font-family: "Instrument Serif", serif; font-size: 14px; z-index: 10;
+    transition: background 0.2s;
+  }
+  .btn-pill:hover { background: rgba(0,0,0,0.9); }
+  .btn-circle {
+    background: #000; color: #fff; width: 46px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; margin-left: -8px; z-index: 0;
+    transition: background 0.2s;
+  }
+  .btn-circle:hover { background: rgba(0,0,0,0.9); }
+
+  /* header */
+  .hero-header {
+    position: absolute; top: 0; left: 0; width: 100%;
+    padding: 24px 48px; display: flex; justify-content: space-between; align-items: center;
+    z-index: 100; pointer-events: none; will-change: opacity;
+  }
+  .brand-link {
+    display: flex; align-items: center; gap: 12px; color: #000;
+    user-select: none; pointer-events: auto; text-decoration: none;
+  }
+  .brand-link .name {
+    font-weight: 600; font-size: 14px; letter-spacing: 0.42em; text-transform: uppercase; color: #000;
+  }
+  .shop-pill {
+    pointer-events: auto; display: inline-flex; align-items: center; gap: 8px;
+    background: #000; color: #fff; border-radius: 100px;
+    padding: 8px 8px 8px 20px; text-decoration: none;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase;
+    transition: background 0.2s;
+  }
+  .shop-pill:hover { background: rgba(0,0,0,0.85); }
+  .shop-pill .arrowcap {
+    display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center;
+    border-radius: 50%; background: rgba(255,255,255,0.15);
+  }
+
+  /* ===== Stay section ===== */
+  .stay {
+    position: relative; width: 100%; overflow: hidden;
+    min-height: 100vh; background: #fff; color: #000;
+  }
+  .stay-bg {
+    position: absolute; left: 0; right: 0; bottom: 0; width: 100%;
+    pointer-events: none; user-select: none; object-fit: cover; object-position: center bottom;
+  }
+  .stay-wrap {
+    position: relative; max-width: 1480px; margin: 0 auto;
+    padding: 80px 32px; min-height: 100vh;
+    display: flex; flex-direction: column; gap: 32px;
+  }
+  .stay-title .l1 {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(60px, 11vw, 160px); line-height: 0.95; letter-spacing: -0.01em; color: #000;
+  }
+  .stay-title .l2 {
+    font-family: "Manrope", sans-serif; font-weight: 400;
+    line-height: 0.95; letter-spacing: -0.02em; color: #000; font-size: 64px;
+  }
+  .stay-form { max-width: 28rem; }
+  .stay-form p {
+    margin: 0 0 24px; font-size: 15px; line-height: 1.55; color: rgba(0,0,0,0.78);
+  }
+  .sub-form {
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid rgba(0,0,0,0.4); padding-bottom: 8px;
+  }
+  .sub-form input {
+    background: transparent; flex: 1; outline: none; border: none;
+    font-size: 15px; color: #000; font-family: "Manrope", sans-serif;
+  }
+  .sub-form button {
+    background: none; font-size: 11px; font-weight: 500; letter-spacing: 0.25em;
+    text-transform: uppercase; color: #000;
+  }
+
+  /* ===== Footer ===== */
+  .footer { position: relative; width: 100%; color: #000; overflow: hidden; background: #f4ecdc; }
+  .footer-wrap { position: relative; max-width: 1480px; margin: 0 auto; padding: 48px 32px; }
+  .footer-cols {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 48px; margin-bottom: 80px;
+  }
+  .footer-head {
+    margin-bottom: 20px; color: rgba(0,0,0,0.55);
+    font-size: 11px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase;
+  }
+  .footer-col ul { list-style: none; margin: 0; padding: 0; }
+  .footer-col li { margin-bottom: 12px; }
+  .footer-col a { font-size: 15px; font-weight: 400; color: rgba(0,0,0,0.85); text-decoration: none; }
+  .footer-col a:hover { text-decoration: underline; }
+  .footer-news p { margin: 0 0 20px; color: rgba(0,0,0,0.65); font-size: 14px; line-height: 1.5; }
+  .footer-bottom {
+    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+    gap: 24px; padding-top: 32px; border-top: 1px solid rgba(0,0,0,0.15);
+  }
+  .footer-meta {
+    color: rgba(0,0,0,0.55); font-size: 11px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase;
+  }
+  .footer-social { display: flex; align-items: center; gap: 20px; font-size: 11px; font-weight: 500; letter-spacing: 0.28em; text-transform: uppercase; }
+  .footer-social a { color: #000; text-decoration: none; }
+  .footer-social a:hover { text-decoration: underline; }
+  .footer-social .dot { color: rgba(0,0,0,0.3); }
+
+  /* blur-up reveal */
+  .blur-up { opacity: 0; transform: translateY(40px); filter: blur(20px); transition: opacity 1s ease, transform 1s ease, filter 1s ease; }
+  .blur-up.in { opacity: 1; transform: none; filter: blur(0); }
+
+  @media (min-width: 768px) {
+    .footer-cols { grid-template-columns: repeat(4, 1fr); gap: 40px; }
+  }
+  @media (max-width: 900px) {
+    .hero-logo { left: 32px; top: 88px; }
+    .info-tr { right: 6vw; top: 100px; }
+    .info-bl { left: 32px; bottom: 32px; }
+    .cta-br { right: 6vw; }
+    .stay-wrap { padding: 64px 24px; }
+  }
+</style>
+</head>
+<body>
+  <!-- ============ HERO / SCROLL STAGE ============ -->
+  <div class="stage" id="stage">
+    <div class="sticky">
+
+      <!-- Background video -->
+      <video id="bg-video" autoplay loop muted playsinline>
+        <source src="https://plugin-assets.open-design.ai/plugins/luxury-botanical/hf_20260520_114550_b72cc2b7-2267-4d9e-b19f-f3bb4b0c7084-e5c560.mp4" type="video/mp4" />
+      </video>
+
+      <!-- Top-left logo -->
+      <div class="hero-logo" id="hero-logo">
+        <div class="row">
+          <span class="serif big">Beyond</span>
+          <span class="serif big it">The</span>
+        </div>
+        <span class="sans collection">Collection</span>
+      </div>
+
+      <!-- Scroll hint -->
+      <div class="scroll-hint" id="scroll-hint">
+        <div class="well">
+          <svg class="scroll-arrow" width="20" height="34" viewBox="0 0 20 34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M10 4 V28 M3 21 L10 28 L17 21" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Clip-path reveal with orbit -->
+      <div class="reveal" id="reveal">
+        <div class="reveal-white"></div>
+        <div class="reveal-inner">
+          <div class="orbit-frame">
+            <div class="orbit-rotation" id="orbit-rotation"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text overlays -->
+      <div class="overlays">
+        <div class="center-brand">
+          <div class="stack overlay-fade" id="ov-center">
+            <div class="row">
+              <span class="serif">Beyond&nbsp;</span>
+              <span class="serif italic">The</span>
+            </div>
+            <span class="sans collection">Collection</span>
+          </div>
+        </div>
+
+        <div class="info-tr overlay-fade" id="ov-tr">
+          <span class="serif num">2K26</span>
+          <span class="serif lbl">JOIN AN EXCLUSIVE<br />COMMUNITY</span>
+        </div>
+
+        <div class="info-bl overlay-fade" id="ov-bl">
+          <span class="serif num">0651</span>
+          <span class="serif lbl">COLLECTION</span>
+        </div>
+
+        <div class="cta-br">
+          <p class="serif overlay-fade" id="ov-cta-p">JOIN AN EXCLUSIVE COMMUNITY OF SAILORS. WHETHER YOU CRAVE THE THRILL OF THE OPEN</p>
+          <div class="cta-row overlay-fade" id="ov-cta-row" style="pointer-events:auto;">
+            <button class="btn-pill">BUY COLLECTION</button>
+            <button class="btn-circle" aria-label="Buy">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px;">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <header class="hero-header" id="hero-header">
+        <a href="#" class="brand-link" aria-label="Bentley">
+          <svg width="54" height="40" viewBox="0 0 84 60" fill="none" aria-hidden="true">
+            <g fill="currentColor">
+              <path d="M42 22 C30 22 19 16 4 12 C9 26 18 33 30 33 L42 33 Z" />
+              <path d="M42 22 C54 22 65 16 80 12 C75 26 66 33 54 33 L42 33 Z" />
+              <path d="M34 25 C36 28 39 30 42 30 C45 30 48 28 50 25 L42 22 Z" opacity="0.7" />
+            </g>
+            <text x="42" y="52" text-anchor="middle" font-family="'Instrument Serif', serif" font-size="22" font-style="italic" fill="currentColor">B</text>
+          </svg>
+          <span class="name">Bentley</span>
+        </a>
+
+        <a href="#" class="shop-pill">
+          <span>Shop the collection</span>
+          <span class="arrowcap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </span>
+        </a>
+      </header>
+
+    </div>
+  </div>
+
+  <!-- ============ STAY SECTION ============ -->
+  <section class="stay">
+    <img class="stay-bg" src="https://plugin-assets.open-design.ai/plugins/luxury-botanical/pasted-1779282335552-1_gmztyi-eccf42.webp" alt="" aria-hidden="true" />
+    <div class="stay-wrap">
+      <div class="stay-title blur-up" data-reveal>
+        <div class="l1">Stay <span class="italic">in</span></div>
+        <div class="l2">the collection</div>
+      </div>
+      <div class="stay-form blur-up" data-reveal data-delay="200">
+        <p>Editions and invitations from the Bentley fragrance studio, sent twice a season.</p>
+        <form class="sub-form" onsubmit="return false;">
+          <input type="email" placeholder="your@email.com" />
+          <button type="submit">Subscribe →</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="footer">
+    <div class="footer-wrap">
+      <div class="footer-cols blur-up" data-reveal data-delay="150">
+        <div class="footer-col">
+          <div class="footer-head">Discover</div>
+          <ul>
+            <li><a href="#">All fragrances</a></li>
+            <li><a href="#">The bottle</a></li>
+            <li><a href="#">Sustainability</a></li>
+            <li><a href="#">Editions</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <div class="footer-head">Studio</div>
+          <ul>
+            <li><a href="#">Our story</a></li>
+            <li><a href="#">Perfumers</a></li>
+            <li><a href="#">Atelier visits</a></li>
+            <li><a href="#">Press</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <div class="footer-head">Contact</div>
+          <ul>
+            <li><a href="#">Boutiques</a></li>
+            <li><a href="#">Concierge</a></li>
+            <li><a href="#">Returns</a></li>
+            <li><a href="#">Care guide</a></li>
+          </ul>
+        </div>
+        <div class="footer-col footer-news">
+          <div class="footer-head">Newsletter</div>
+          <p>Editions and invitations, sent twice a season.</p>
+          <form class="sub-form" onsubmit="return false;">
+            <input type="email" placeholder="your@email.com" />
+            <button type="submit">Subscribe →</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="footer-bottom blur-up" data-reveal data-delay="250">
+        <div class="footer-meta">© 2026 Beyond The Collection</div>
+        <div class="footer-social">
+          <a href="#">Instagram</a>
+          <span class="dot">·</span>
+          <a href="#">TikTok</a>
+          <span class="dot">·</span>
+          <a href="#">Spotify</a>
+        </div>
+        <div class="footer-meta">EN · USD</div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // ---- Fragrance bottle data ----
+    var ORBIT = [
+      { src: "https://plugin-assets.open-design.ai/plugins/luxury-botanical/BL1996-Beyond_wild_vetiver_Flakon_100ml_300dpi_a55ie5-ad7edb.webp",
+        title: "Wild Vetiver",
+        desc: "Smoky vetiver wrapped in saffron and leather — a grounded, untamed signature." },
+      { src: "https://plugin-assets.open-design.ai/plugins/luxury-botanical/BL2156_BEYOND_RADIANT_OSMANTHUS_hoc3up-259f05.webp",
+        title: "Radiant Osmanthus",
+        desc: "Apricot-tinged osmanthus over soft musks. Quietly luminous, never loud." },
+      { src: "https://plugin-assets.open-design.ai/plugins/luxury-botanical/BL2157_BEYOND_VIBRANT_HIBISCUS_pgiehq-8c4cbc.webp",
+        title: "Vibrant Hibiscus",
+        desc: "Bright hibiscus and pink pepper resting on creamy sandalwood." },
+      { src: "https://plugin-assets.open-design.ai/plugins/luxury-botanical/BL2158_BEYOND_MELLOW_HELIOTROPE_agqych-36c451.webp",
+        title: "Mellow Heliotrope",
+        desc: "Almond, vanilla and heliotrope petals — a powdery, hushed warmth." },
+      { src: "https://plugin-assets.open-design.ai/plugins/luxury-botanical/BL2371-BL2372-BL2373-Magnetic-Amber_web_2_dbmtpy-e68423.webp",
+        title: "Magnetic Amber",
+        desc: "Resinous amber, oud and rich woods. The collection's deepest note." },
+      { src: "https://plugin-assets.open-design.ai/plugins/luxury-botanical/BL2156_BEYOND_RADIANT_OSMANTHUS_1_hlc4v1-572755.webp",
+        title: "Crystal Edition",
+        desc: "A limited cut of the bottle — etched facets, lavender pour, leather collar." }
+    ];
+
+    var TARGET_RADIUS = 650;
+    var BASE = 800;                 // design coordinate space
+    var FOCAL = 50;                 // focal point along the path (percent)
+
+    var rotationEl = document.getElementById("orbit-rotation");
+    var items = [];
+
+    // Build orbit items (each = wrapper + counter-rotated content holding img + label)
+    ORBIT.forEach(function (entry, i) {
+      var wrap = document.createElement("div");
+      wrap.className = "orbit-item";
+
+      var counter = document.createElement("div");
+      counter.style.width = "100%";
+      counter.style.height = "100%";
+      counter.style.position = "relative";
+
+      var img = document.createElement("img");
+      img.src = entry.src;
+      img.alt = entry.title;
+      img.draggable = false;
+      counter.appendChild(img);
+
+      var label = document.createElement("div");
+      label.className = "orbit-label";
+      label.innerHTML =
+        '<div class="lt">' + entry.title + "</div>" +
+        '<div class="ld">' + entry.desc + "</div>";
+      counter.appendChild(label);
+
+      wrap.appendChild(counter);
+      rotationEl.appendChild(wrap);
+
+      items.push({ wrap: wrap, counter: counter, label: label, offset: (i / ORBIT.length) * 100 });
+    });
+
+    // ---- helpers ----
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+    // piecewise-linear interpolation across keyframe stops (mirrors useTransform)
+    function track(p, stops, values) {
+      if (p <= stops[0]) return values[0];
+      var n = stops.length;
+      if (p >= stops[n - 1]) return values[n - 1];
+      for (var i = 0; i < n - 1; i++) {
+        if (p >= stops[i] && p <= stops[i + 1]) {
+          var t = (p - stops[i]) / (stops[i + 1] - stops[i]);
+          return lerp(values[i], values[i + 1], t);
+        }
+      }
+      return values[n - 1];
+    }
+
+    var stage = document.getElementById("stage");
+    var reveal = document.getElementById("reveal");
+    var heroLogo = document.getElementById("hero-logo");
+    var heroHeader = document.getElementById("hero-header");
+    var scrollHint = document.getElementById("scroll-hint");
+
+    var ovCenter = document.getElementById("ov-center");
+    var ovTr = document.getElementById("ov-tr");
+    var ovBl = document.getElementById("ov-bl");
+    var ovCtaP = document.getElementById("ov-cta-p");
+    var ovCtaRow = document.getElementById("ov-cta-row");
+
+    var orbitProgress = 0;
+    var prevScroll = 0;
+    var lastTime = 0;
+
+    function progressOfStage() {
+      var rect = stage.getBoundingClientRect();
+      var total = stage.offsetHeight - window.innerHeight;
+      if (total <= 0) return 0;
+      return clamp01(-rect.top / total);
+    }
+
+    function applyOverlays(p) {
+      // opacity / blur / y across the scroll arc
+      var oStops = [0.03, 0.08, 0.15, 0.22, 0.90, 0.98, 1];
+      var op = track(p, oStops, [0, 1, 1, 0, 0, 1, 1]);
+      var bl = track(p, oStops, [15, 0, 0, 15, 15, 0, 0]);
+      var ty = track(p, oStops, [20, 0, 0, 20, 20, 0, 0]);
+
+      // center brand: opacity + blur, no y shift
+      ovCenter.style.opacity = op;
+      ovCenter.style.filter = "blur(" + bl + "px)";
+
+      var fade = "blur(" + bl + "px)";
+      [ovTr, ovBl, ovCtaP, ovCtaRow].forEach(function (el) {
+        el.style.opacity = op;
+        el.style.filter = fade;
+        el.style.transform = "translateY(" + ty + "px)";
+      });
+    }
+
+    function applyHeroChrome(p) {
+      var hint = track(p, [0, 0.03, 0.08], [1, 1, 0]);
+      scrollHint.style.opacity = hint;
+      heroLogo.style.opacity = hint;
+      heroHeader.style.opacity = hint;
+    }
+
+    function applyReveal(p) {
+      // clip-path ellipse grows 0 -> 55% by p=0.08, then holds
+      var r = track(p, [0, 0.08, 1], [0, 55, 55]);
+      reveal.style.clipPath = "ellipse(" + r + "% " + r + "% at 50% 50%)";
+    }
+
+    function applyOrbit(p, advance) {
+      var stops = [0.15, 0.25, 0.85, 0.95, 1];
+      var itemSize = track(p, stops, [80, 360, 360, 80, 80]);
+      var rx = track(p, stops, [330, TARGET_RADIUS, TARGET_RADIUS, 330, 330]);
+      var ry = track(p, stops, [140, TARGET_RADIUS, TARGET_RADIUS, 140, 140]);
+      var rot = track(p, stops, [-15, 0, 0, -15, -15]);
+      var tx = track(p, stops, [0, -(TARGET_RADIUS + 200), -(TARGET_RADIUS + 200), 0, 0]);
+      var focus = track(p, stops, [0, 1, 1, 0, 0]);
+
+      // rotation wrapper transform (rotate around center, then translateX)
+      rotationEl.style.transform = "rotate(" + rot + "deg) translateX(" + tx + "px)";
+
+      // advance the carousel progress
+      var scrollDelta = p - prevScroll;
+      prevScroll = p;
+      var frameSpeed;
+      if (p > 0.15 && p < 0.85) {
+        frameSpeed = scrollDelta * 200;
+      } else {
+        frameSpeed = advance * 2.5;
+      }
+      orbitProgress += frameSpeed;
+
+      // design center, scaled by current frame width
+      var frameW = rotationEl.parentElement.clientWidth || BASE;
+      var scale = frameW / BASE;
+      var cx = BASE / 2, cy = BASE / 2;
+
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var pos = (((orbitProgress + it.offset) % 100) + 100) % 100; // 0..100
+
+        // position along ellipse (param angle), starting at left vertex like the M command
+        var ang = (pos / 100) * Math.PI * 2;
+        var ex = cx - rx * Math.cos(ang);
+        var ey = cy + ry * Math.sin(ang);
+
+        // scale: cosine falloff near focal point
+        var dist = Math.abs(pos - FOCAL);
+        if (dist > 50) dist = 100 - dist;
+        var targetScale = 0.4;
+        if (dist < 20) {
+          var ratio = dist / 20;
+          targetScale = 0.4 + ((Math.cos(ratio * Math.PI) + 1) / 2) * 0.6;
+        }
+        var itemScale = 1 - focus * (1 - targetScale);
+
+        var px = (ex - cx) * scale;
+        var py = (ey - cy) * scale;
+        var sz = itemSize * scale;
+
+        it.wrap.style.width = sz + "px";
+        it.wrap.style.height = sz + "px";
+        it.wrap.style.transform =
+          "translate(-50%, -50%) translate(" + px + "px, " + py + "px) scale(" + itemScale + ")";
+        it.wrap.style.zIndex = Math.round(itemScale * 100);
+        // counter-rotate content so it stays upright
+        it.counter.style.transform = "rotate(" + (-rot) + "deg)";
+        it.label.style.opacity = focus;
+      }
+    }
+
+    function frame(t) {
+      var advance = lastTime ? (t - lastTime) / 1000 : 0;
+      lastTime = t;
+      var p = progressOfStage();
+      applyHeroChrome(p);
+      applyReveal(p);
+      applyOverlays(p);
+      applyOrbit(p, advance);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    // ---- blur-up on scroll (IntersectionObserver -> Framer whileInView) ----
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          var el = en.target;
+          var delay = parseInt(el.getAttribute("data-delay") || "0", 10);
+          setTimeout(function () { el.classList.add("in"); }, delay);
+          io.unobserve(el);
+        }
+      });
+    }, { threshold: 0.3 });
+    document.querySelectorAll("[data-reveal]").forEach(function (el) { io.observe(el); });
+  })();
+  </script>
+</body>
+</html>

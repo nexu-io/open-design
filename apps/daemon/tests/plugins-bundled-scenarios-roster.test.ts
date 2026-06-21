@@ -35,6 +35,7 @@ const SIBLINGS = new Map<string, { taskKind: string }>([
   ['od-default',          { taskKind: 'new-generation' }],
   ['od-media-generation', { taskKind: 'new-generation' }],
   ['od-plugin-authoring', { taskKind: 'new-generation' }],
+  ['od-share-to-community', { taskKind: 'new-generation' }],
   ['od-design-refine',    { taskKind: 'tune-collab' }],
   ['od-react-export',     { taskKind: 'tune-collab' }],
   ['od-nextjs-export',    { taskKind: 'tune-collab' }],
@@ -87,6 +88,9 @@ describe('plugins/_official/scenarios roster', () => {
     const manifestPath = path.join(scenariosRoot, 'od-default', 'open-design.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     expect(manifest.od.hidden).toBe(true);
+    expect(manifest.od.context?.craft).toEqual(
+      expect.arrayContaining(['typography', 'color', 'anti-ai-slop']),
+    );
     expect(manifest.od.pipeline.stages[0].id).toBe('task-type');
     expect(manifest.od.genui.surfaces).toEqual(
       expect.arrayContaining([
@@ -96,6 +100,14 @@ describe('plugins/_official/scenarios roster', () => {
           trigger: expect.objectContaining({ stageId: 'task-type' }),
         }),
       ]),
+    );
+  });
+
+  it('od-new-generation declares the default craft rails for anti-slop HTML output', async () => {
+    const manifestPath = path.join(scenariosRoot, 'od-new-generation', 'open-design.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    expect(manifest.od.context?.craft).toEqual(
+      expect.arrayContaining(['typography', 'color', 'anti-ai-slop']),
     );
   });
 });

@@ -13,8 +13,13 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
-import { trackIntegrationsMcpTabClick } from '../analytics/events';
+import {
+  trackIntegrationsMcpTabClick,
+  trackSettingsExternalMcpClick,
+} from '../analytics/events';
+import type { TrackingExternalMcpElement } from '@open-design/contracts/analytics';
 import {
   disconnectMcpOAuth,
   fetchMcpOAuthStatus,
@@ -40,6 +45,10 @@ interface Props {
   // Surface the dirty/save state up to the dialog footer so a single
   // "Save" button can drive both the global config and this section.
   onDirtyChange?: (dirty: boolean) => void;
+  // This section renders on two surfaces: the Integrations MCP tab and the
+  // Settings -> External MCP panel. Defaults to 'integrations' so the
+  // IntegrationsView call site stays unchanged.
+  surface?: 'integrations' | 'settings';
 }
 
 // Imperative handle: lets the dialog footer Save button trigger this
@@ -298,9 +307,31 @@ function signature(rows: DraftRow[]): string {
 }
 
 export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
-  function McpClientSection({ onServersChanged, onDirtyChange }, ref) {
+  function McpClientSection({ onServersChanged, onDirtyChange, surface = 'integrations' }, ref) {
   const t = useT();
   const analytics = useAnalytics();
+  // Single dispatch point for every click in this section: routes to the
+  // payload matching the surface the section is rendered on.
+  const trackMcpClick = (
+    element: TrackingExternalMcpElement,
+    extra?: { template_id?: string },
+  ) => {
+    if (surface === 'settings') {
+      trackSettingsExternalMcpClick(analytics.track, {
+        page_name: 'settings',
+        area: 'external_mcp',
+        element,
+        ...extra,
+      });
+    } else {
+      trackIntegrationsMcpTabClick(analytics.track, {
+        page_name: 'integrations',
+        area: 'mcp_tab',
+        element,
+        ...extra,
+      });
+    }
+  };
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [savedSig, setSavedSig] = useState<string>('[]');
   const [templates, setTemplates] = useState<McpTemplate[]>([]);
@@ -377,11 +408,13 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   };
 
   const addFromTemplate = (tpl: McpTemplate) => {
+    trackMcpClick('pick_template', { template_id: tpl.id.replace(/-/g, '_') });
     setPickerOpen(false);
     setRows((curr) => [...curr, rowFromTemplate(tpl, new Set(curr.map((r) => r.id)))]);
   };
 
   const addBlank = () => {
+    trackMcpClick('pick_blank');
     setPickerOpen(false);
     setRows((curr) => [...curr, rowFromBlank(new Set(curr.map((r) => r.id)))]);
   };
@@ -441,11 +474,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
           type="button"
           className="primary mcp-add-btn"
           onClick={() => {
-            trackIntegrationsMcpTabClick(analytics.track, {
-              page_name: 'integrations',
-              area: 'mcp_tab',
-              element: 'add_server',
-            });
+            trackMcpClick('add_server');
             setPickerOpen((v) => !v);
           }}
           aria-expanded={pickerOpen}
@@ -493,7 +522,15 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
                   : undefined
               }
               onChange={(patch) => updateRow(idx, patch)}
-              onRemove={() => removeRow(idx)}
+              onRemove={() => {
+                trackMcpClick(
+                  'remove_server',
+                  row.templateId
+                    ? { template_id: row.templateId.replace(/-/g, '_') }
+                    : undefined,
+                );
+                removeRow(idx);
+              }}
               onMoveUp={idx > 0 ? () => moveRow(idx, -1) : undefined}
               onMoveDown={idx < rows.length - 1 ? () => moveRow(idx, 1) : undefined}
             />
@@ -506,11 +543,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
           type="button"
           className="primary"
           onClick={() => {
-            trackIntegrationsMcpTabClick(analytics.track, {
-              page_name: 'integrations',
-              area: 'mcp_tab',
-              element: 'saved',
-            });
+            trackMcpClick('saved');
             void save();
           }}
           disabled={saving || !dirty}
@@ -780,33 +813,32 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
         </span>
         <div className="mcp-row-actions">
           {onMoveUp ? (
-            <button type="button" className="icon-btn" onClick={onMoveUp} title="Move up">
+            <Button size="icon" onClick={onMoveUp} title="Move up">
               ↑
-            </button>
+            </Button>
           ) : null}
           {onMoveDown ? (
-            <button type="button" className="icon-btn" onClick={onMoveDown} title="Move down">
+            <Button size="icon" onClick={onMoveDown} title="Move down">
               ↓
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            className="icon-btn"
+          <Button
+            size="icon"
             onClick={onRemove}
             title="Remove this MCP server"
           >
             ×
-          </button>
-          <button
-            type="button"
-            className="icon-btn mcp-row-toggle-btn"
+          </Button>
+          <Button
+            size="icon"
+            className="mcp-row-toggle-btn"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
             aria-label={expanded ? 'Collapse this MCP server' : 'Expand this MCP server'}
             title={expanded ? 'Collapse' : 'Expand'}
           >
             <Icon name="chevron-down" size={13} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1381,6 +1413,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
  * Rendered above the picker so it is the first thing the user reads.
  */
 function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
+  const t = useT();
   // Empty payload = either still loading or daemon unreachable. Either
   // way, render nothing — the error banner below already covers the
   // "daemon unreachable" path and we don't want to flash an empty hint
@@ -1424,24 +1457,13 @@ function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
     <div className="mcp-agent-support">
       {supported.length > 0 ? (
         <p className="hint mcp-agent-support-line">
-          <strong>Forwarded to:</strong> {renderNames(supported)}.
-          {hasAcpSupported ? (
-            <>
-              {' '}
-              ACP adapters marked <em>stdio only</em> receive
-              <code>stdio</code> MCP servers from this list; HTTP and SSE
-              entries are dropped at spawn time.
-            </>
-          ) : null}
+          <strong>{t('mcpClient.forwardedToLabel')}</strong> {renderNames(supported)}.
+          {hasAcpSupported ? <> {t('mcpClient.forwardedAcpNote')}</> : null}
         </p>
       ) : null}
       {unsupported.length > 0 ? (
         <p className="hint mcp-agent-support-line mcp-agent-support-unsupported">
-          <strong>Not forwarded to:</strong> {renderNames(unsupported)}. For
-          those agents, configure MCP servers in the agent's own config file
-          (e.g.&nbsp;<code>~/.codex/config.toml</code>,&nbsp;
-          <code>~/.gemini/settings.json</code>); the servers below are
-          silently unused there.
+          <strong>{t('mcpClient.notForwardedToLabel')}</strong> {renderNames(unsupported)}. {t('mcpClient.notForwardedNote')}
         </p>
       ) : null}
     </div>

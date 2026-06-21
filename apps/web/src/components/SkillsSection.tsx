@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { Button } from '@open-design/components';
 import { useI18n, useT } from '../i18n';
 import {
   localizeSkillDescription,
@@ -78,7 +79,7 @@ function parseTriggers(raw: string): string[] {
 }
 
 export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [search, setSearch] = useState('');
@@ -169,12 +170,12 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
       if (categoryFilter !== 'all' && s.category !== categoryFilter)
         return false;
       if (!q) return true;
-      const hay = `${s.name}\n${s.description}\n${(s.triggers ?? []).join(
+      const hay = `${s.name}\n${localizeSkillName(locale, s)}\n${s.description}\n${localizeSkillDescription(locale, s)}\n${(s.triggers ?? []).join(
         ' ',
       )}\n${s.category ?? ''}`;
       return hay.toLowerCase().includes(q);
     });
-  }, [skills, modeFilter, sourceFilter, categoryFilter, search]);
+  }, [skills, modeFilter, sourceFilter, categoryFilter, search, locale]);
 
   const ensureBody = useCallback(
     async (id: string) => {
@@ -647,25 +648,23 @@ function SkillRow({
             </span>
           ) : (
             <>
-              <button
-                type="button"
-                className="icon-btn"
+              <Button
+                size="icon"
                 onClick={onStartEdit}
                 title={t('settings.skillsEdit')}
                 data-testid="skills-edit"
               >
                 <Icon name="edit" size={13} />
-              </button>
+              </Button>
               {canDelete ? (
-                <button
-                  type="button"
-                  className="icon-btn"
+                <Button
+                  size="icon"
                   onClick={onArmDelete}
                   title={t('settings.skillsDelete')}
                   data-testid="skills-delete"
                 >
                   <Icon name="close" size={13} />
-                </button>
+                </Button>
               ) : null}
             </>
           )}

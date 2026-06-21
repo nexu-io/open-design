@@ -1,12 +1,26 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
-test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
+// ---- Cursor Agent --trust capability (issue #4461) -------------------------
+// `--trust` is only honored in `-p`/headless mode and only exists on newer
+// cursor-agent builds. Older installs reject it with "unknown option
+// '--trust'" and exit 1, killing Test and task execution. The flag is gated
+// on the `--help` probe (capabilityFlags) like claude's --add-dir, so the
+// baseline (no probe / probe failed -> caps = {}) must omit it.
+
+test('cursor-agent omits --trust by default until the --help probe confirms support (issue #4461)', () => {
+  // Default state before any capability probe: agentCapabilities has no entry
+  // -> buildArgs gets `caps = {}` -> caps.trust is undefined -> falsy -> no
+  // --trust. This is also the "probe threw" case (timeout, binary missing,
+  // non-zero --help exit), which is exactly the older cursor-agent that
+  // rejects the flag. Omitting it keeps Test working there.
+  agentCapabilities.delete('cursor-agent');
   const args = cursorAgent.buildArgs(
     '',
     [],
@@ -21,16 +35,48 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
     'stream-json',
     '--stream-partial-output',
     '--force',
-    '--trust',
     '--workspace',
     '/tmp/od-project',
   ]);
+  assert.equal(args.includes('--trust'), false);
 });
 
-test('opencode args deliver prompts via stdin without passing a literal dash prompt', () => {
+test('cursor-agent passes --trust once the --help probe detects it', () => {
+  agentCapabilities.set('cursor-agent', { trust: true });
+  try {
+    const args = cursorAgent.buildArgs(
+      '',
+      [],
+      [],
+      {},
+      { cwd: '/tmp/od-project' },
+    );
+
+    assert.deepEqual(args, [
+      '--print',
+      '--output-format',
+      'stream-json',
+      '--stream-partial-output',
+      '--force',
+      '--trust',
+      '--workspace',
+      '/tmp/od-project',
+    ]);
+  } finally {
+    agentCapabilities.delete('cursor-agent');
+  }
+});
+
+test('cursor-agent declares the --trust capability probe (issue #4461 root cause)', () => {
+  assert.deepEqual(cursorAgent.helpArgs, ['--help']);
+  assert.equal(cursorAgent.capabilityFlags?.['--trust'], 'trust');
+});
+
+test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
+  assert.equal(opencode.reasoningOptions, undefined);
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -52,6 +98,18 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
+  const withReasoning = opencode.buildArgs(
+    prompt,
+    [],
+    [],
+    {
+      model: 'anthropic/claude-sonnet-4-5',
+      reasoning: 'high',
+    },
+  );
+  assert.equal(withReasoning.some((arg) => arg.includes('reason')), false);
+  assert.equal(withReasoning.includes('--thinking'), false);
+  assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
 });
@@ -469,6 +527,11 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
   assert.deepEqual(args, ['-p', '-']);
 
+  const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
+    agentLogFilePath: '/tmp/od-agy-test.log',
+  });
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
   // Pass a temp antigravitySettingsPath so buildArgs does not touch the
@@ -477,9 +540,12 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   try {
     const withModel = antigravity.buildArgs('hi', [], [], {
       model: 'Gemini 3.1 Pro (High)',
-    }, { antigravitySettingsPath: join(settingsDir, 'settings.json') });
+    }, {
+      agentLogFilePath: '/tmp/od-agy-test.log',
+      antigravitySettingsPath: join(settingsDir, 'settings.json'),
+    });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['-p', '-']);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -679,6 +745,32 @@ test('kilo args use acp subcommand for json-rpc streaming', () => {
   assert.equal(kilo.streamFormat, 'acp-json-rpc');
 });
 
+test('kimi args use prompt-mode JSONL instead of ACP', () => {
+  const prompt = 'design a page';
+  const args = kimi.buildArgs(prompt, [], [], {});
+
+  assert.deepEqual(args, ['-p', prompt, '--output-format', 'stream-json']);
+  assert.equal(args.includes('acp'), false);
+  assert.equal(args.includes('--yolo'), false);
+  assert.equal(kimi.streamFormat, 'json-event-stream');
+  assert.equal(kimi.eventParser, 'kimi');
+  assert.equal(kimi.mcpDiscovery, undefined);
+  assert.equal(kimi.externalMcpInjection, undefined);
+});
+
+test('kimi args pass explicit model selections through prompt mode', () => {
+  const args = kimi.buildArgs('hello', [], [], { model: 'moonshot-v1-32k' });
+
+  assert.deepEqual(args, [
+    '-p',
+    'hello',
+    '--output-format',
+    'stream-json',
+    '--model',
+    'moonshot-v1-32k',
+  ]);
+});
+
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {
   assert.ok(kilo.fetchModels, 'kilo must define fetchModels');
   const result = await kilo.fetchModels('/nonexistent/kilo', {}).catch(() => null);
@@ -753,6 +845,58 @@ test('codex buildArgs omits model_reasoning_effort when reasoning is "default"',
       (a) => typeof a === 'string' && a.startsWith('model_reasoning_effort='),
     ),
     false,
+  );
+});
+
+test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin', () => {
+  const prompt = 'summarize the current page layout';
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
+  const args = grokBuild.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'grok-4.3', reasoning: 'high' },
+    { cwd: '/tmp/od-project', promptFilePath },
+  );
+
+  assert.equal(grokBuild.promptViaFile, true);
+  assert.equal(grokBuild.promptViaStdin, false);
+  assert.deepEqual(args, [
+    '--prompt-file',
+    promptFilePath,
+    '--model',
+    'grok-4.3',
+  ]);
+  assert.equal(args.includes(prompt), false);
+  assert.equal(args.includes('-'), false);
+  assert.equal(args.includes('-p'), false);
+  assert.equal(args.includes('--single'), false);
+  assert.equal(args.filter((entry) => entry === '--prompt-file').length, 1);
+});
+
+test('grok-build omits effort for default/build models but keeps it for reasoning models', () => {
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
+  const defaultArgs = grokBuild.buildArgs('', [], [], { model: 'default', reasoning: 'high' }, { promptFilePath });
+  assert.equal(defaultArgs.includes('--effort'), false);
+
+  const buildArgs = grokBuild.buildArgs('', [], [], { model: 'grok-build', reasoning: 'high' }, { promptFilePath });
+  assert.equal(buildArgs.includes('--effort'), false);
+
+  const reasoningArgs = grokBuild.buildArgs('', [], [], { model: 'grok-4.20-reasoning', reasoning: 'high' }, { promptFilePath });
+  assert.deepEqual(reasoningArgs, [
+    '--prompt-file',
+    promptFilePath,
+    '--model',
+    'grok-4.20-reasoning',
+    '--effort',
+    'high',
+  ]);
+});
+
+test('grok-build requires a daemon-provided prompt file path', () => {
+  assert.throws(
+    () => grokBuild.buildArgs('hi', [], [], {}, { cwd: '/tmp/od-project' }),
+    /promptFilePath/,
   );
 });
 

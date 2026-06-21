@@ -150,3 +150,10 @@ Shapes are squircle-soft: 12–16px radii on cards, 8px on tabs, 9999px pills fo
 - **Duration**: 200ms for hover; 320ms for tab create/close; 480ms for "Little Arc" window expand.
 - **Easing**: `cubic-bezier(0.32, 0.72, 0, 1)` for window expand (Apple's spring-style).
 - **Tab swap**: 1px translate + opacity blend, no scale change.
+
+## 7. Usage Guardrails
+
+- Keep the sidebar-first layout recognizable; top-nav-only compositions should be avoided unless the artifact is a marketing page.
+- Use frosted surfaces and gradient warmth as atmosphere, not as decorative blobs or unrelated background ornaments.
+- Reserve the saturated theme gradient for the browser shell, primary CTA, or one clear focal panel.
+- Keep product UI sans-only; use the serif display voice only for marketing/editorial moments.

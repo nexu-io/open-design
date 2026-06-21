@@ -2,9 +2,16 @@ import type {
   MarketplaceTrust,
   TrustTier,
 } from '@open-design/contracts';
+import { useT } from '../i18n';
 
 type TrustBadgeTrust = TrustTier | MarketplaceTrust;
 type NormalizedTrustTier = 'official' | 'trusted' | 'restricted';
+
+const TRUST_LABEL_KEY = {
+  official: 'pluginsView.trust.official',
+  trusted: 'pluginsView.trust.trusted',
+  restricted: 'pluginsView.trust.restricted',
+} as const;
 
 interface Props {
   trust: TrustBadgeTrust;
@@ -13,33 +20,23 @@ interface Props {
   variant?: 'default' | 'overlay';
 }
 
-const TRUST_META: Record<
-  NormalizedTrustTier,
-  { label: string; description: string }
-> = {
-  official: {
-    label: 'Official',
-    description: 'Open Design official',
-  },
-  trusted: {
-    label: 'Trusted',
-    description: 'Community trusted',
-  },
-  restricted: {
-    label: 'Restricted',
-    description: 'Restricted source',
-  },
-};
-
 export function TrustBadge({
   trust,
   label,
   className,
   variant = 'default',
 }: Props) {
+  const t = useT();
   const tier = normalizeTrustTier(trust);
-  const meta = TRUST_META[tier];
-  const text = label ?? meta.label;
+  // The visible text, tooltip, and screen-reader text all resolve from the
+  // localized tier key, so non-English locales never see mixed-language
+  // accessibility text leaking through (the old hard-coded English
+  // descriptions did exactly that). When a contextual `label` is supplied the
+  // accessible text keeps the localized tier prefix so assistive tech still
+  // announces the trust level, e.g. "Official: Action plugin".
+  const tierLabel = t(TRUST_LABEL_KEY[tier]);
+  const text = label ?? tierLabel;
+  const accessibleText = label ? `${tierLabel}: ${label}` : tierLabel;
   const classes = [
     'plugin-trust-badge',
     `plugin-trust-badge--${tier}`,
@@ -54,8 +51,8 @@ export function TrustBadge({
       className={classes}
       data-trust-tier={tier}
       data-trust-source={trust}
-      title={meta.description}
-      aria-label={`${meta.description}: ${text}`}
+      title={accessibleText}
+      aria-label={accessibleText}
     >
       <span className="plugin-trust-badge__dot" aria-hidden />
       <span>{text}</span>

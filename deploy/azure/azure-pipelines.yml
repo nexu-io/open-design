@@ -1,0 +1,58 @@
+trigger: none
+
+parameters:
+  - name: azureServiceConnection
+    type: string
+    default: '<your-azure-service-connection>'
+
+variables:
+  vmImageName: ubuntu-latest
+  resourceGroupName: open-design-aci
+  deploymentName: open-design-aci
+  location: eastus
+  templateFile: deploy/azure/container-instance.bicep
+  openDesignImage: ghcr.io/nexu-io/od:latest
+  dnsNameLabel: open-design-$(Build.BuildId)
+  browserOrigin: https://od.example.com
+
+pool:
+  vmImage: $(vmImageName)
+
+steps:
+  - checkout: self
+
+  - task: AzureCLI@2
+    displayName: Deploy Open Design to Azure Container Instances
+    inputs:
+      azureSubscription: ${{ parameters.azureServiceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      useGlobalConfig: false
+      inlineScript: |
+        set -euo pipefail
+
+        if [ -z "${OD_API_TOKEN:-}" ]; then
+          echo "Set OD_API_TOKEN as a secret pipeline variable before running this pipeline." >&2
+          exit 1
+        fi
+
+        if [ "$(browserOrigin)" = "https://od.example.com" ]; then
+          echo "Set browserOrigin to the TLS origin served by your authenticated reverse proxy." >&2
+          exit 1
+        fi
+
+        az group create \
+          --name "$(resourceGroupName)" \
+          --location "$(location)"
+
+        az deployment group create \
+          --name "$(deploymentName)" \
+          --resource-group "$(resourceGroupName)" \
+          --template-file "$(templateFile)" \
+          --parameters \
+            odApiToken="$OD_API_TOKEN" \
+            image="$(openDesignImage)" \
+            dnsNameLabel="$(dnsNameLabel)" \
+            allowedOrigins="$(browserOrigin)"
+    env:
+      OD_API_TOKEN: $(OD_API_TOKEN)

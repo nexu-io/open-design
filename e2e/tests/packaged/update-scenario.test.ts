@@ -59,5 +59,22 @@ describe('packaged updater release scenario', () => {
     expect(env.OD_UPDATE_CURRENT_VERSION).toBeUndefined();
     expect(env.OD_UPDATE_METADATA_URL).toBe('http://127.0.0.1:1234/nightly/latest/metadata.json');
     expect(env.OD_UPDATE_AUTO_CHECK).toBe('1');
+    expect(env.OD_UPDATE_OPEN_DRY_RUN).toBe('1');
+  });
+
+  test('can disable open dry-run for full payload relaunch smoke', () => {
+    const env: NodeJS.ProcessEnv = {};
+
+    applyPackagedUpdateEnv(
+      env,
+      resolvePackagedUpdateScenario({
+        releaseChannel: 'beta',
+        releaseVersion: '0.8.0-beta.4',
+      }),
+      'http://127.0.0.1:1234/beta/latest/metadata.json',
+      { openDryRun: false },
+    );
+
+    expect(env.OD_UPDATE_OPEN_DRY_RUN).toBe('0');
   });
 });

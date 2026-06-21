@@ -68,6 +68,30 @@ describe('buildPersistedConfig', () => {
       ),
     ).toMatchObject({ onboardingCompleted: true });
   });
+
+  it('preserves a current privacy decision when settings autosaves a stale pre-consent snapshot', () => {
+    expect(
+      buildPersistedConfig(
+        {
+          ...baseConfig,
+          apiProtocol: 'google',
+          privacyDecisionAt: null,
+          telemetry: { metrics: true, content: true, artifactManifest: false },
+        },
+        {
+          ...baseConfig,
+          installationId: 'inst-current',
+          privacyDecisionAt: 12345,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        },
+      ),
+    ).toMatchObject({
+      apiProtocol: 'google',
+      installationId: 'inst-current',
+      privacyDecisionAt: 12345,
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+    });
+  });
 });
 
 describe('isAutosaveDraftOnlyChange', () => {

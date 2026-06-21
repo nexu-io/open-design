@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemsTemplatesModalClick,
@@ -99,7 +100,7 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
     setSpecBody(undefined);
   }, [system.id]);
 
-  return (
+  const detail = (
     <PreviewModal
       title={system.title}
       subtitle={system.summary || system.category}
@@ -163,4 +164,7 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
       }}
     />
   );
+
+  if (typeof document === 'undefined') return detail;
+  return createPortal(detail, document.body);
 }

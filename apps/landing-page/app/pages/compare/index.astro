@@ -12,7 +12,7 @@
  * adversarial and tank trust.
  */
 import Layout from '../../_components/sub-page-layout.astro';
-import { getInfoPageCopy } from '../../info-page-i18n';
+import { getInfoPageCopy, getAlternativeCopy } from '../../info-page-i18n';
 import { localeFromPath, localizedHref } from '../../i18n';
 
 // Derive SITE from Astro.site so preview/staging deploys produce JSON-LD
@@ -35,10 +35,31 @@ const description = page.description;
 // queries.
 const limitsFaq = page.limitsFaq.map(({ name, text }) => ({ q: name, a: text }));
 
-const comparisons = page.comparisons.map((comparison, idx) => ({
-  ...comparison,
-  href: idx === 0 ? href('/alternatives/claude-design/') : 'https://github.com/nexu-io/open-design',
-}));
+// Cards are derived from the six built `/alternatives/<slug>/` pages using
+// each page's own localized copy, so the hub is always in sync with the real
+// comparison pages and is localized for free. Add a slug here when a new
+// alternatives page lands. `cta` reuses the localized "read the full
+// comparison" label from the compare copy block.
+const COMPARE_SLUGS = ['claude-design', 'figma', 'lovable', 'bolt', 'v0', 'framer'];
+const NAMES: Record<string, string> = {
+  'claude-design': 'Claude Design',
+  figma: 'Figma',
+  lovable: 'Lovable',
+  bolt: 'Bolt',
+  v0: 'v0',
+  framer: 'Framer',
+};
+const ctaLabel = page.comparisons[0]?.cta ?? 'Read the full comparison ->';
+const comparisons = COMPARE_SLUGS.map((slug) => {
+  const alt = getAlternativeCopy(locale, slug);
+  return {
+    slug,
+    competitor: NAMES[slug],
+    summary: alt?.tldrBody ?? alt?.description ?? '',
+    cta: ctaLabel,
+    href: href(`/alternatives/${slug}/`),
+  };
+});
 
 const jsonLd = [
   {
@@ -70,15 +91,15 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+<Layout title={title} description={description} active="resources" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
 
-  <article class="info-page">
-    <header class="catalog-head">
+  <article class="info-page info-page-centered">
+    <header class="catalog-head compare-head">
       <span class="label">{page.label}</span>
       <h1 class="display">{page.heading}</h1>
       <p class="lead">{page.lead}</p>
@@ -86,30 +107,16 @@ const jsonLd = [
 
     <nav class="info-toc" aria-label={common.onThisPage}>
       <span>{common.onThisPage}</span>
-      <a href="#claude-design">{page.toc[0]}</a>
-      <a href="#figma-make">{page.toc[1]}</a>
-      <a href="#v0">{page.toc[2]}</a>
-      <a href="#lovable-bolt">{page.toc[3]}</a>
-      <a href="#open-codesign">{page.toc[4]}</a>
-      <a href="#limits">{page.toc[5]}</a>
+      {comparisons.map((c) => (<a href={`#${c.slug}`}>vs {c.competitor}</a>))}
+      <a href="#limits">{page.toc[page.toc.length - 1]}</a>
     </nav>
 
     <section class="info-section">
       <ul class="compare-grid">
         {comparisons.map((c) => {
-          const id =
-            c.competitor === 'Claude Design'
-              ? 'claude-design'
-              : c.competitor === 'Figma Make'
-              ? 'figma-make'
-              : c.competitor === 'v0 by Vercel'
-              ? 'v0'
-              : c.competitor === 'Lovable / Bolt'
-              ? 'lovable-bolt'
-              : 'open-codesign';
           const isInternal = c.href.startsWith('/');
           return (
-            <li class="compare-card" id={id}>
+            <li class="compare-card" id={c.slug}>
               <h3>Open Design vs <em>{c.competitor}</em></h3>
               <p>{c.summary}</p>
               <a

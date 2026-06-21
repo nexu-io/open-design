@@ -16,7 +16,7 @@ example_id: sample-swiss-international
 example_name: "Swiss International · 产品路线"
 example_format: markdown
 example_tagline: "Klein Blue IKB + 16 列网格"
-example_desc: "S01 Cover + S06 KPI Tower 两页预览, IKB 全屏标题 + 4 柱状 KPI"
+example_desc: "10 页完整示例: S01 Cover / S06 KPI Tower / S03 Statement / S19 Four Cards / S04 Six Cells / S11 Timeline / S08 Duo Compare / S14 Loop / S18 Why Now / S09 Closing, 全程 IKB 单 accent"
 example_source_url: "https://github.com/op7418/guizang-ppt-skill"
 example_source_label: "op7418/guizang-ppt-skill"
 od:

@@ -17,11 +17,11 @@ import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
 import {
   DEFAULT_LOCALE,
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
@@ -58,6 +58,7 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'tutorials',
     locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
   }),
 );
 
@@ -132,7 +133,6 @@ const tutorialCopy =
   <body>
     <div class='shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -225,6 +225,7 @@ const tutorialCopy =
       .tut-detail-shell {
         position: relative;
         z-index: 2;
+        padding-top: 140px;
       }
       .tut-detail-shell + .sub-footer {
         margin-top: 0;
@@ -473,6 +474,9 @@ const tutorialCopy =
         color: var(--coral);
       }
       @media (max-width: 760px) {
+        .tut-detail-shell {
+          padding-top: 120px;
+        }
         .tut-detail {
           padding: 36px 0 64px;
         }

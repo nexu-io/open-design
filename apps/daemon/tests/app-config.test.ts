@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
 import {
@@ -25,7 +25,6 @@ import { isLocalSameOrigin } from '../src/origin-validation.js';
 const DEFAULT_TELEMETRY = {
   metrics: true,
   content: true,
-  artifactManifest: false,
 } as const;
 
 describe('app-config', () => {
@@ -310,15 +309,20 @@ describe('app-config', () => {
         agentCliEnv: {
           claude: {
             CLAUDE_CONFIG_DIR: '  ~/.claude-2  ',
+            ANTHROPIC_BASE_URL: '  https://proxy.example/anthropic  ',
             ANTHROPIC_API_KEY: '  sk-proxy-anthropic  ',
+            ANTHROPIC_AUTH_TOKEN: '  sk-proxy-token  ',
+            MMD_MODEL_ROUTES_FILE: '  ~/.config/mms/model-routes.json  ',
           },
           codex: {
             CODEX_HOME: '~/.codex-alt',
             CODEX_BIN: '~/bin/codex-next',
+            OPENAI_BASE_URL: '  https://proxy.example/openai  ',
             OPENAI_API_KEY: '  sk-proxy-openai  ',
           },
           amr: {
             VELA_BIN: '~/bin/vela',
+            VELA_API_URL: '  https://custom-amr.example  ',
             OPEN_DESIGN_AMR_PROFILE: '  local  ',
             OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
             HOME: 'should-not-persist',
@@ -338,15 +342,116 @@ describe('app-config', () => {
       const cfg = await readAppConfig(dataDir);
 
       expect(cfg.agentCliEnv).toEqual({
-        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_API_KEY: 'sk-proxy-anthropic' },
-        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_API_KEY: 'sk-proxy-openai' },
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic', ANTHROPIC_API_KEY: 'sk-proxy-anthropic', ANTHROPIC_AUTH_TOKEN: 'sk-proxy-token', MMD_MODEL_ROUTES_FILE: '~/.config/mms/model-routes.json' },
+        codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_BASE_URL: 'https://proxy.example/openai', OPENAI_API_KEY: 'sk-proxy-openai' },
         amr: {
           VELA_BIN: '~/bin/vela',
+          VELA_API_URL: 'https://custom-amr.example',
           OPEN_DESIGN_AMR_PROFILE: 'local',
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
       });
+    });
+
+    it('drops legacy standalone Claude and Codex auth keys without base URLs or CLI intent', async () => {
+      await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+        agentCliEnv: {
+          claude: {
+            CLAUDE_CONFIG_DIR: '~/.claude-2',
+            ANTHROPIC_API_KEY: 'sk-legacy-anthropic',
+            ANTHROPIC_AUTH_TOKEN: 'sk-legacy-token',
+          },
+          codex: {
+            CODEX_HOME: '~/.codex-alt',
+            CODEX_API_KEY: 'sk-legacy-codex',
+            OPENAI_API_KEY: 'sk-legacy-openai',
+          },
+        },
+      }));
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      });
+      expect(cfg.agentCliEnvIntent).toBeUndefined();
+    });
+
+    it('keeps explicit CLI API key overrides without requiring base URLs', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          claude: { ANTHROPIC_API_KEY: 'sk-anthropic' },
+          codex: { CODEX_API_KEY: 'sk-codex', OPENAI_API_KEY: 'sk-openai' },
+        },
+        agentCliEnvIntent: {
+          claude: { apiKeyOverride: true },
+          codex: { apiKeyOverride: true },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { ANTHROPIC_API_KEY: 'sk-anthropic' },
+        codex: { CODEX_API_KEY: 'sk-codex', OPENAI_API_KEY: 'sk-openai' },
+      });
+      expect(cfg.agentCliEnvIntent).toEqual({
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
+      });
+    });
+
+    it('infers CLI API key override intent for explicit agentCliEnv writes', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          claude: { ANTHROPIC_AUTH_TOKEN: 'sk-anthropic-token' },
+          codex: { CODEX_API_KEY: 'sk-codex' },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { ANTHROPIC_AUTH_TOKEN: 'sk-anthropic-token' },
+        codex: { CODEX_API_KEY: 'sk-codex' },
+      });
+      expect(cfg.agentCliEnvIntent).toEqual({
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
+      });
+    });
+
+    it('does not infer CLI API key override intent when reading legacy disk config', async () => {
+      await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+        agentCliEnv: {
+          codex: { CODEX_API_KEY: 'sk-legacy-codex' },
+        },
+      }));
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toBeUndefined();
+      expect(cfg.agentCliEnvIntent).toBeUndefined();
+    });
+
+    it('drops orphan CLI env intent entries when the agent env is empty', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+        },
+        agentCliEnvIntent: {
+          codex: { apiKeyOverride: true },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentCliEnv).toEqual({
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+      });
+      expect(cfg.agentCliEnvIntent).toBeUndefined();
     });
 
     it('drops agentCliEnv entries that collide with Object.prototype keys', async () => {
@@ -620,6 +725,241 @@ describe('app-config telemetry prefs', () => {
     expect(cfg.agentId).toBe('claude');
     // telemetry is replaced (not deep-merged) — matches the agentModels semantics.
     expect(cfg.telemetry).toEqual({ content: true });
+  });
+});
+
+describe('app-config projectLocations', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-projectLocations-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('persists valid projectLocations and reads them back', async () => {
+    const locs = [
+      { id: 'ext-one', name: 'One', path: '/tmp/od-loc-one' },
+      { id: 'ext-two', name: 'Two', path: '/tmp/od-loc-two' },
+    ];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toEqual(locs);
+  });
+
+  it('normalizes ~/ paths via expandHomePrefix', async () => {
+    const home = homedir();
+    const locs = [{ id: 'home-loc', name: 'Home', path: '~/od-projects' }];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(1);
+    const first = cfg.projectLocations![0]!;
+    expect(first.path).toBe(path.join(home, 'od-projects'));
+    expect(path.isAbsolute(first.path)).toBe(true);
+  });
+
+  it('drops relative paths that cannot be resolved to absolute', async () => {
+    const locs = [
+      { id: 'good', name: 'Good', path: '/tmp/od-good' },
+      { id: 'bad-relative', name: 'Bad Rel', path: './relative/path' },
+    ];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(1);
+    const first = cfg.projectLocations![0]!;
+    expect(first.id).toBe('good');
+  });
+
+  it('drops entries without a string path', async () => {
+    const locs = [
+      { id: 'good', name: 'Good', path: '/tmp/od-good' },
+      { id: 'no-path', name: 'No Path' },
+    ];
+    await writeAppConfig(dataDir, { projectLocations: locs as any });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(1);
+    const first = cfg.projectLocations![0]!;
+    expect(first.id).toBe('good');
+  });
+
+  it('deduplicates paths (case-sensitive on unix)', async () => {
+    const locs = [
+      { id: 'first', name: 'First', path: '/tmp/od-same' },
+      { id: 'second', name: 'Second', path: '/tmp/od-same' },
+    ];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    // Single canonical entry, second deduplicated
+    expect(cfg.projectLocations).toHaveLength(1);
+    const first = cfg.projectLocations![0]!;
+    expect(first.path).toBe(path.normalize('/tmp/od-same'));
+  });
+
+  it('deduplicates by resolved path after normalization', async () => {
+    const locs = [
+      { id: 'first', name: 'First', path: '/tmp/od-dup/../od-dup' },
+      { id: 'second', name: 'Second', path: '/tmp/od-dup' },
+    ];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(1);
+    const first = cfg.projectLocations![0]!;
+    expect(first.path).toBe(path.normalize('/tmp/od-dup'));
+  });
+
+  it('rejects reserved id "default" and falls back to auto-generated id', async () => {
+    const locs = [{ id: 'default', name: 'Hijack', path: '/tmp/od-hijack' }];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(1);
+    // The stored id must NOT be 'default'
+    const first = cfg.projectLocations![0]!;
+    expect(first.id).not.toBe('default');
+    // The auto-generated id follows the hash-backed base64url pattern
+    expect(first.id).toMatch(/^loc_[A-Za-z0-9_-]{1,16}$/);
+    expect(first.path).toBe(path.normalize('/tmp/od-hijack'));
+  });
+
+  it('generates distinct ids for sibling paths with long shared prefixes', async () => {
+    const locs = [
+      { path: '/tmp/open-design-project-locations/shared-prefix-one' },
+      { path: '/tmp/open-design-project-locations/shared-prefix-two' },
+    ];
+    await writeAppConfig(dataDir, { projectLocations: locs });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(2);
+    const ids = cfg.projectLocations!.map((location) => location.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.every((id) => /^loc_[A-Za-z0-9_-]{1,16}$/.test(id))).toBe(true);
+  });
+
+  it('persists a defaultProjectLocationId preference', async () => {
+    await writeAppConfig(dataDir, {
+      projectLocations: [{ id: 'external-default', name: 'External', path: '/tmp/od-default-location' }],
+      defaultProjectLocationId: 'external-default',
+    });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.defaultProjectLocationId).toBe('external-default');
+  });
+
+  it('normalizes invalid defaultProjectLocationId values', async () => {
+    await writeAppConfig(dataDir, { defaultProjectLocationId: '../bad' });
+    let cfg = await readAppConfig(dataDir);
+    expect(cfg.defaultProjectLocationId).toBe('default');
+
+    await writeAppConfig(dataDir, { defaultProjectLocationId: null });
+    cfg = await readAppConfig(dataDir);
+    expect(cfg.defaultProjectLocationId).toBeNull();
+  });
+
+  it('drops invalid scalar projectLocations (not an array)', async () => {
+    await writeAppConfig(dataDir, { projectLocations: 'not-array' } as any);
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toBeUndefined();
+  });
+
+  it('clears projectLocations when empty array is sent', async () => {
+    await writeAppConfig(dataDir, {
+      projectLocations: [{ id: 'ext', name: 'ext', path: '/tmp/od-ext' }],
+      onboardingCompleted: true,
+    });
+    expect((await readAppConfig(dataDir)).projectLocations).toHaveLength(1);
+    await writeAppConfig(dataDir, { projectLocations: [] });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toEqual([]);
+    expect(cfg.onboardingCompleted).toBe(true);
+  });
+
+  it('clears projectLocations when null is sent', async () => {
+    await writeAppConfig(dataDir, {
+      projectLocations: [{ id: 'ext', name: 'ext', path: '/tmp/od-ext' }],
+      onboardingCompleted: true,
+    });
+    expect((await readAppConfig(dataDir)).projectLocations).toHaveLength(1);
+    await writeAppConfig(dataDir, { projectLocations: null as any });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toBeUndefined();
+    expect(cfg.onboardingCompleted).toBe(true);
+  });
+
+  it('validates projectLocations on read (filters corrupted stored data)', async () => {
+    // Write raw JSON with invalid entries
+    await writeFile(
+      path.join(dataDir, 'app-config.json'),
+      JSON.stringify({
+        projectLocations: [
+          { id: 'good', name: 'Good', path: '/tmp/od-good' },
+          { id: 'bad-relative', name: 'Bad', path: 'relative' },
+          { id: 'no-path', name: 'No Path' },
+          'not-an-object',
+          null,
+          { id: 'good2', name: 'Dup Path', path: '/tmp/od-good' },
+          { id: 'default', name: 'Reserved', path: '/tmp/od-reserved' },
+        ],
+      }),
+    );
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.projectLocations).toHaveLength(2);
+    const ids = cfg.projectLocations!.map((l) => l.id);
+    expect(ids).not.toContain('default');
+    expect(ids).not.toContain('bad-relative');
+    expect(ids).not.toContain('no-path');
+  });
+});
+
+describe('app-config recentLinkedDirs', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-recentdirs-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('persists a clean list of working directories', async () => {
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: ['/home/a/project', '/home/b/site'],
+    });
+    expect(cfg.recentLinkedDirs).toEqual(['/home/a/project', '/home/b/site']);
+    expect((await readAppConfig(dataDir)).recentLinkedDirs).toEqual([
+      '/home/a/project',
+      '/home/b/site',
+    ]);
+  });
+
+  it('trims, drops empty entries, and de-dupes preserving order', async () => {
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: ['  /home/a  ', '', '/home/a', '   ', '/home/b'],
+    });
+    expect(cfg.recentLinkedDirs).toEqual(['/home/a', '/home/b']);
+  });
+
+  it('caps the list at RECENT_LINKED_DIRS_MAX entries', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => `/home/dir${i}`);
+    const cfg = await writeAppConfig(dataDir, { recentLinkedDirs: many });
+    expect(cfg.recentLinkedDirs).toEqual(many.slice(0, 5));
+  });
+
+  it('ignores a non-array value without touching other prefs', async () => {
+    await writeAppConfig(dataDir, { onboardingCompleted: true });
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: 'not-an-array' as unknown as string[],
+    });
+    expect(cfg.recentLinkedDirs).toBeUndefined();
+    expect(cfg.onboardingCompleted).toBe(true);
+  });
+
+  it('updates recentLinkedDirs without clobbering unrelated prefs', async () => {
+    await writeAppConfig(dataDir, { skillId: 'keep-me' });
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: ['/home/a'],
+    });
+    expect(cfg.recentLinkedDirs).toEqual(['/home/a']);
+    expect(cfg.skillId).toBe('keep-me');
   });
 });
 

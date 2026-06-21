@@ -3,6 +3,7 @@ import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const AMR_MODELS_TIMEOUT_MS = 10_000;
 const AMR_MODELS_RETRY_DELAYS_MS = [250, 750] as const;
+export type VelaModelJsonSource = 'preset' | 'remote';
 
 const PREFERRED_AMR_CHAT_MODEL_ORDER = [
   'deepseek-v4-flash',
@@ -117,6 +118,41 @@ export function parseVelaModels(stdout: string): RuntimeModelOption[] {
   return orderAmrChatModels(models);
 }
 
+export function parseVelaModelJson(
+  stdout: string,
+  expectedSource: VelaModelJsonSource,
+): RuntimeModelOption[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(`Invalid vela model JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid vela model JSON: expected object');
+  }
+  const source = (parsed as { source?: unknown }).source;
+  if (source !== expectedSource) {
+    throw new Error(`Invalid vela model JSON source: expected ${expectedSource}, got ${String(source)}`);
+  }
+  const data = (parsed as { data?: unknown }).data;
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid vela model JSON: expected data array');
+  }
+  const seen = new Set<string>();
+  const models: RuntimeModelOption[] = [];
+  for (const item of data) {
+    const rawId = item && typeof item === 'object'
+      ? (item as { id?: unknown }).id
+      : null;
+    const id = typeof rawId === 'string' ? rawId.trim() : '';
+    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    seen.add(id);
+    models.push({ id, label: id });
+  }
+  return orderAmrChatModels(models);
+}
+
 function orderAmrChatModels(
   models: RuntimeModelOption[],
 ): RuntimeModelOption[] {
@@ -185,12 +221,51 @@ async function fetchVelaModelsWithRetry(
   throw lastError instanceof Error ? lastError : new Error(velaModelsErrorMessage(lastError));
 }
 
+export async function fetchVelaPresetModels(
+  resolvedBin: string,
+  env: NodeJS.ProcessEnv,
+): Promise<RuntimeModelOption[]> {
+  const { stdout } = await execAgentFile(resolvedBin, ['model', 'preset', '--format', 'json'], {
+    env,
+    timeout: AMR_MODELS_TIMEOUT_MS,
+    maxBuffer: 1024 * 1024,
+  });
+  return parseVelaModelJson(String(stdout), 'preset');
+}
+
+export async function fetchVelaRemoteModelsWithRetry(
+  resolvedBin: string,
+  env: NodeJS.ProcessEnv,
+): Promise<RuntimeModelOption[]> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= AMR_MODELS_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const { stdout } = await execAgentFile(resolvedBin, ['model', 'list', '--format', 'json'], {
+        env,
+        timeout: AMR_MODELS_TIMEOUT_MS,
+        maxBuffer: 1024 * 1024,
+      });
+      return parseVelaModelJson(String(stdout), 'remote');
+    } catch (error) {
+      lastError = error;
+      if (
+        attempt === AMR_MODELS_RETRY_DELAYS_MS.length ||
+        !isRetriableVelaModelsError(error)
+      ) {
+        throw error;
+      }
+      await sleep(AMR_MODELS_RETRY_DELAYS_MS[attempt] ?? 0);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(velaModelsErrorMessage(lastError));
+}
+
 export const amrAgentDef = {
   id: 'amr',
   name: 'AMR',
   bin: 'vela',
   versionArgs: ['--version'],
-  fetchModels: fetchVelaModelsWithRetry,
+  fetchModels: fetchVelaRemoteModelsWithRetry,
   // Fail closed when Vela's live catalog is unavailable. Stale static
   // fallbacks let users select models that link/opencode no longer accepts.
   fallbackModels: [] as RuntimeModelOption[],

@@ -13,20 +13,26 @@ export const DEFAULT_MODEL_OPTION: RuntimeModelOption = {
 const liveModelCache = new Map<string, Set<string>>();
 const liveModelOrder = new Map<string, string[]>();
 
-export function rememberLiveModels(agentId: string, models: RuntimeModelOption[]) {
+function liveModelCacheKey(agentId: string, scope?: string | null): string {
+  const trimmedScope = typeof scope === 'string' ? scope.trim() : '';
+  return trimmedScope ? `${agentId}\0${trimmedScope}` : agentId;
+}
+
+export function rememberLiveModels(agentId: string, models: RuntimeModelOption[], scope?: string | null) {
   if (!Array.isArray(models)) return;
   const ids = models
     .map((m) => m && m.id)
     .filter((id) => typeof id === 'string');
+  const key = liveModelCacheKey(agentId, scope);
   liveModelCache.set(
-    agentId,
+    key,
     new Set(ids),
   );
-  liveModelOrder.set(agentId, ids);
+  liveModelOrder.set(key, ids);
 }
 
-export function getRememberedLiveModels(agentId: string): RuntimeModelOption[] {
-  const ids = liveModelOrder.get(agentId) ?? [];
+export function getRememberedLiveModels(agentId: string, scope?: string | null): RuntimeModelOption[] {
+  const ids = liveModelOrder.get(liveModelCacheKey(agentId, scope)) ?? [];
   return ids.map((id) => ({ id, label: id }));
 }
 
@@ -37,9 +43,13 @@ export function preferFreshLiveModels(
   return freshModels.length > 0 ? freshModels : rememberedModels;
 }
 
-export function isKnownModel(def: RuntimeAgentDef, modelId: string | null | undefined) {
+export function isKnownModel(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  scope?: string | null,
+) {
   if (!modelId) return false;
-  const live = liveModelCache.get(def.id);
+  const live = liveModelCache.get(liveModelCacheKey(def.id, scope));
   if (live && live.has(modelId)) return true;
   if (Array.isArray(def.fallbackModels)) {
     return def.fallbackModels.some((m) => m.id === modelId);
@@ -59,6 +69,7 @@ export function resolveModelForAgent(
   def: RuntimeAgentDef,
   resolved: string | null,
   env: Record<string, string | undefined> = process.env,
+  liveModelScope?: string | null,
 ): string | null {
   if (resolved && resolved !== 'default') return resolved;
   // Daemon-process env override (e.g. VELA_DEFAULT_MODEL for AMR). Lets an
@@ -70,7 +81,7 @@ export function resolveModelForAgent(
   }
   const fallbacks = Array.isArray(def.fallbackModels) ? def.fallbackModels : [];
   if (fallbacks.some((m) => m.id === 'default')) return resolved;
-  const liveModels = liveModelOrder.get(def.id) ?? [];
+  const liveModels = liveModelOrder.get(liveModelCacheKey(def.id, liveModelScope)) ?? [];
   const firstLive = liveModels[0];
   if (firstLive) return firstLive;
   if (fallbacks.length === 0) return resolved;

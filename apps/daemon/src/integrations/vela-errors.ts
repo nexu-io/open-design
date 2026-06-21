@@ -7,7 +7,10 @@ export interface AmrAccountFailure {
   actionUrl?: string;
 }
 
-export const DEFAULT_AMR_RECHARGE_URL = 'https://open-design.ai/amr/wallet';
+// `source=open_design` tags the wallet landing page_view so vela analytics can
+// attribute the recharge visit to Open Design.
+export const DEFAULT_AMR_RECHARGE_URL =
+  'https://open-design.ai/amr/wallet?source=open_design';
 
 const AMR_AUTH_REQUIRED_MESSAGE =
   'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.';

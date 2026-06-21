@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useT } from '../i18n';
-import type { AppConfig, DesignSystemSummary } from '../types';
+import type { AppConfig, DesignSystemGenerationJob, DesignSystemSummary } from '../types';
 import {
   fetchDesignSystems,
   importGitHubDesignSystem,
   importLocalDesignSystem,
+  importShadcnDesignSystem,
   updateDesignSystemDraft,
 } from '../providers/registry';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
 import { orderDesignSystemGroups } from './design-system-group-order';
+import { AnimatePresence } from 'motion/react';
 
 // Sibling Settings section that hosts the design-systems registry.
 // Lifted out of the previous LibrarySection so each surface (functional
@@ -27,6 +30,7 @@ interface Props {
    * flow through here.
    */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
 }
 
 function toggleCraftSlug(current: string[], slug: string, enabled: boolean): string[] {
@@ -36,8 +40,14 @@ function toggleCraftSlug(current: string[], slug: string, enabled: boolean): str
   return Array.from(next);
 }
 
-export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Props) {
+export function DesignSystemsSection({
+  cfg,
+  setCfg,
+  onDesignSystemsChanged,
+  onDesignSystemImportRebuildJob,
+}: Props) {
   const t = useT();
+  const renameTitleId = useId();
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
   const [search, setSearch] = useState('');
@@ -52,7 +62,7 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
   // moved on cannot clobber a newer session's modal state.
   const renameSessionRef = useRef(0);
   const [importPath, setImportPath] = useState('');
-  const [importSource, setImportSource] = useState<'local' | 'github'>('local');
+  const [importSource, setImportSource] = useState<'local' | 'github' | 'shadcn'>('local');
   const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
   const [craftApplies, setCraftApplies] = useState<string[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -224,7 +234,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
     const result =
       importSource === 'github'
         ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions })
-        : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
+        : importSource === 'shadcn'
+          ? await importShadcnDesignSystem({ reference: importTarget, ...importOptions })
+          : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
     setImporting(false);
     if ('error' in result) {
       setImportError(result.error.message);
@@ -238,6 +250,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
     setImportPath('');
     setImportedDesignSystem(result.designSystem);
     setImportMessage(result.designSystem.title);
+    if (result.tokenContractRebuild?.job) {
+      onDesignSystemImportRebuildJob?.(result.designSystem.id, result.tokenContractRebuild.job);
+    }
     onDesignSystemsChanged?.(result.designSystem.id);
   }
 
@@ -324,6 +339,16 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
                   >
                     {t('settings.designSystemsSourceGithub')}
                   </button>
+                  <button
+                    type="button"
+                    className={importSource === 'shadcn' ? 'active' : ''}
+                    onClick={() => {
+                      setImportSource('shadcn');
+                      clearImportFeedback();
+                    }}
+                  >
+                    {t('settings.designSystemsSourceShadcn')}
+                  </button>
                 </div>
               </div>
               <div className="library-import-row">
@@ -389,13 +414,21 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
                 <span className="library-import-option-label">
                   {importSource === 'github'
                     ? t('settings.designSystemsGithubUrl')
-                    : t('settings.designSystemsProjectPath')}
+                    : importSource === 'shadcn'
+                      ? t('settings.designSystemsShadcnReference')
+                      : t('settings.designSystemsProjectPath')}
                 </span>
                 <div className="library-install-row">
                   <input
                     type="text"
                     className="library-import-input"
-                    placeholder={importSource === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
+                    placeholder={
+                      importSource === 'github'
+                        ? 'https://github.com/owner/repo'
+                        : importSource === 'shadcn'
+                          ? 'shadcn/ui/theme-zinc'
+                          : '/path/to/project'
+                    }
                     value={importPath}
                     onChange={(e) => {
                       setImportPath(e.target.value);
@@ -411,7 +444,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
                       ? t('settings.libraryLoading')
                       : importSource === 'github'
                         ? t('settings.designSystemsImportGithub')
-                        : t('settings.designSystemsImportProject')}
+                        : importSource === 'shadcn'
+                          ? t('settings.designSystemsImportShadcn')
+                          : t('settings.designSystemsImportProject')}
                   </button>
                 </div>
               </div>
@@ -562,57 +597,54 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
           </>
         )}
       </div>
-      {previewSystem ? (
-        <DesignSystemPreviewModal
-          system={previewSystem}
-          onClose={() => setPreviewSystem(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {previewSystem ? (
+          <DesignSystemPreviewModal
+            system={previewSystem}
+            onClose={() => setPreviewSystem(null)}
+          />
+        ) : null}
+      </AnimatePresence>
       {renameTarget ? (
-        <div className="modal-backdrop" onClick={cancelRename}>
-          <form
-            className="modal modal-rename"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void commitRename();
-            }}
-          >
-            <h2>{t('common.rename')}</h2>
-            <label>
-              <input
-                type="text"
-                value={renameInput}
-                autoFocus
-                aria-label={t('common.rename')}
-                onChange={(e) => setRenameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.preventDefault();
-                    cancelRename();
-                  }
-                }}
-              />
-            </label>
-            {renameError ? <p className="library-install-error">{renameError}</p> : null}
-            <div className="row">
-              <button type="button" onClick={cancelRename}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="submit"
-                className="primary"
-                disabled={
-                  renaming ||
-                  !renameInput.trim() ||
-                  renameInput.trim() === renameTarget.original
-                }
-              >
-                {t('common.save')}
-              </button>
-            </div>
-          </form>
-        </div>
+        <Dialog
+          as="form"
+          className="modal-rename"
+          onClose={cancelRename}
+          closeOnEscape
+          ariaLabelledBy={renameTitleId}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void commitRename();
+          }}
+        >
+          <DialogTitle id={renameTitleId}>{t('common.rename')}</DialogTitle>
+          <label>
+            <input
+              type="text"
+              value={renameInput}
+              autoFocus
+              aria-label={t('common.rename')}
+              onChange={(e) => setRenameInput(e.target.value)}
+            />
+          </label>
+          {renameError ? <p className="library-install-error">{renameError}</p> : null}
+          <DialogFooter className="row">
+            <button type="button" onClick={cancelRename}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              className="primary"
+              disabled={
+                renaming ||
+                !renameInput.trim() ||
+                renameInput.trim() === renameTarget.original
+              }
+            >
+              {t('common.save')}
+            </button>
+          </DialogFooter>
+        </Dialog>
       ) : null}
     </section>
   );

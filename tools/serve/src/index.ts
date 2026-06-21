@@ -1,13 +1,17 @@
 import { cac } from "cac";
 
+import { startReleaseStorageFixtureServer } from "./release-storage-fixture.js";
 import { startUpdaterFixtureServer } from "./updater-fixture.js";
 
 type CliOptions = {
+  artifactPath?: string;
   channel?: "stable" | "beta" | "nightly" | "preview";
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
   port?: string;
+  includePayload?: boolean;
+  payloadPath?: string;
   version?: string;
 };
 
@@ -31,11 +35,33 @@ function parsePlatform(value: string | undefined): "mac" | "win" {
 }
 
 async function start(service: string, options: CliOptions): Promise<void> {
+  if (service === "release-storage") {
+    const server = await startReleaseStorageFixtureServer({
+      host: options.host,
+      port: parsePort(options.port),
+    });
+    if (options.json === true) {
+      printJson(server.info);
+    } else {
+      process.stdout.write(`tools-serve release-storage: ${server.info.endpointUrl} bucket=${server.info.bucket}\n`);
+    }
+
+    const shutdown = () => {
+      void server.close().finally(() => process.exit(0));
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    return;
+  }
+
   if (service !== "updater") throw new Error(`unsupported tools-serve service: ${service}`);
   const server = await startUpdaterFixtureServer({
+    artifactPath: options.artifactPath,
     channel: options.channel,
     host: options.host,
     platform: parsePlatform(options.platform),
+    includePayload: options.includePayload,
+    payloadPath: options.payloadPath,
     port: parsePort(options.port),
     version: options.version,
   });
@@ -65,9 +91,12 @@ const cli = cac("tools-serve");
 
 cli
   .command("start <service>", "Start a local fixture service")
+  .option("--artifact-path <path>", "Serve a local update artifact file")
   .option("--channel <channel>", "Updater channel: stable|beta|nightly|preview", { default: "stable" })
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
+  .option("--include-payload", "Include launcher payload metadata")
+  .option("--payload-path <path>", "Serve launcher payload bytes from a real archive")
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--version <version>", "Fixture update version", { default: "99.0.0" })

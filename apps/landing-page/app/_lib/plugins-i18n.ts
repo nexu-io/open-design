@@ -28,6 +28,7 @@
  * either URL shape.
  */
 import type { LandingLocaleCode } from '../i18n';
+import { pluginDetailL10n } from './plugin-detail-l10n';
 const DEFAULT_LOCALE: LandingLocaleCode = 'en';
 
 export interface PluginCategoryCopy {
@@ -39,6 +40,9 @@ export interface PluginsCopy {
   hubLabel: string;
   hubHeading: (n: number) => string;
   hubLead: string;
+  /** Keyword-led <title> for the /plugins/ hub (targets "claude skills marketplace / directory"). EN baseline; zh-CN/zh-TW localized, rest fall back. */
+  hubMetaTitle: (n: number) => string;
+  hubMetaDescription: string;
 
   tileTemplates: string;
   tileSkills: string;
@@ -61,10 +65,80 @@ export interface PluginsCopy {
   skillsLabel: string;
   skillsHeading: (n: number) => string;
   skillsLead: string;
+  /** Keyword-led <title> for /plugins/skills/ (targets the "claude skills" cluster). EN baseline; zh-CN/zh-TW localized, rest fall back. */
+  skillsMetaTitle: (n: number) => string;
+  skillsMetaDescription: string;
 
   systemsLabel: string;
   systemsHeading: (n: number) => string;
   systemsLead: string;
+  systemsMetaTitle: (n: number) => string;
+  systemsMetaDescription: string;
+  systemsAboutHead: string;
+  systemsAboutBody: string;
+  /**
+   * "Every system is a DESIGN.md file" explainer — targets the emerging
+   * DESIGN.md / design.md keyword cluster (open markdown design-system
+   * format). English baseline; untranslated locales fall back via getPluginsCopy.
+   */
+  systemsMdHead: string;
+  systemsMdBody: ReadonlyArray<string>;
+  systemsMdSnippet: string;
+  systemsMdSnippetCaption: string;
+  systemsMdSteps: ReadonlyArray<{ title: string; body: string }>;
+  systemsMdSpecNote: string;
+  /** FAQ block + FAQPage schema on /plugins/systems/. */
+  systemsFaqHead: string;
+  systemsFaq: (n: number) => ReadonlyArray<{ q: string; a: string }>;
+  /**
+   * Design-token spec panel on a design-system detail page — renders the
+   * system's structured `design-tokens.json` (the canonical TOKEN_SCHEMA
+   * contract). `tokenGroupLabels` is keyed by the TokenGroupId ids from
+   * `_lib/system-tokens.ts` and deep-merged in getPluginsCopy for per-key
+   * fallback.
+   */
+  tokensHead: string;
+  tokensLead: (n: number) => string;
+  tokenGroupLabels: Record<string, string>;
+  /** In-page anchor-nav labels on a design-system detail page. */
+  detailTocLabel: string;
+  detailTocPreview: string;
+  detailTocTokens: string;
+  detailTocGuide: string;
+  detailTocRelated: string;
+  /**
+   * "See it in context" scenario showcase — the system's tokens applied to
+   * different artifact kinds (web / app / slides / poster). `scenarioLabels`
+   * is keyed by scenario id and deep-merged in getPluginsCopy.
+   */
+  scenariosHead: string;
+  scenariosLead: string;
+  scenarioLabels: Record<string, string>;
+  /** Lowercase category suffix appended to design-system detail titles/H1 (e.g. "design system"). */
+  detailSystemLabel: string;
+  /** Localized tail of the design-system detail <title> (after "<Brand> design system — "). */
+  detailSystemTitleSuffix: string;
+  /** Localized meta keywords for a design-system detail page. */
+  detailSystemKeywords: (name: string) => string;
+  /** Placeholder for the client-side catalog filter on templates / systems. */
+  searchPlaceholder: string;
+  /** Shown when a catalog filter matches nothing. */
+  searchNoResults: string;
+  /** Label on the templates search toggle / submit button. */
+  searchLabel: string;
+  /** Aria-label on the templates search clear (×) button. */
+  searchClear: string;
+  /** Caption under the design-system mock-UI live preview. */
+  systemPreviewCaption: (name: string) => string;
+  /** CTA on a system catalog card, drilling into the detail page. */
+  systemCardCta: string;
+  /** "Contribute a plugin" callout shown on every plugins page. */
+  contributeTitle: string;
+  contributeBody: string;
+  /** Primary CTA — open a pull request directly. */
+  contributeCta: string;
+  /** Secondary CTA — open an issue (lower barrier than a PR). */
+  contributeIssueCta: string;
 
   craftLabel: string;
   craftHeading: (n: number) => string;
@@ -148,9 +222,12 @@ export interface PluginsCopy {
 
 const en: PluginsCopy = {
   hubLabel: 'Plugin library',
-  hubHeading: (n) => `${n} composable pieces.`,
+  hubHeading: (n) => `${n} plugins for your coding agent`,
   hubLead:
     'Open Design is built around four kinds of plugin. Templates and Skills are what your agent runs; Systems and Craft are how it stays on-brand and accessible. Pick a section to drill in, or jump straight to a slug if you already know which one you want.',
+  hubMetaTitle: (n) => `Claude Skills Marketplace — ${n}+ Plugins | Open Design`,
+  hubMetaDescription:
+    'Browse the open-source Claude skills marketplace — design skills, systems, templates and craft your coding agent runs directly. Works with Claude, Codex, Cursor.',
 
   tileTemplates: 'Templates',
   tileSkills: 'Skills',
@@ -176,14 +253,135 @@ const en: PluginsCopy = {
     'Every template ships a working preview — the catalog row’s thumbnail comes straight from the manifest poster the agent uses inside the product. Browse all of them below, or jump to one of the seven artifact kinds.',
 
   skillsLabel: 'Plugins · Skills',
-  skillsHeading: (n) => `${n} instruction skills.`,
+  skillsHeading: (n) => `${n} Claude skills for design`,
   skillsLead:
     'Skills the agent loads mid-task — copywriting, color theory, creative direction, brainstorming. There’s no static demo because the outcome depends on your input, so each detail page reads like a brief: title, description, triggers, attribution.',
+  skillsMetaTitle: (n) => `Claude Skills for Design — ${n} Open-Source Skills | Open Design`,
+  skillsMetaDescription:
+    'Browse open-source Claude skills for design — copywriting, color, creative direction and more your coding agent loads mid-task. Works with Claude, Codex & Cursor.',
 
   systemsLabel: 'Plugins · Systems',
-  systemsHeading: (n) => `${n} design systems.`,
+  systemsHeading: () => 'Design systems, ready for your agent',
   systemsLead:
-    'Brand-anchored design systems plugins can adopt via `od.craft.requires`. Each ships its own palette, typography, motion, and voice; snap a project to a system and every plugin output inherits the same identity.',
+    'Browse real-world design system examples — brand-grade palette, typography, motion and voice your coding agent can snap any project to. Every system is open-source and runs with Claude, Codex, Cursor and more.',
+  systemsMetaTitle: (n) => `Design System Examples — ${n} Open-Source Design Systems | Open Design`,
+  systemsMetaDescription:
+    'Browse design system examples your coding agent can apply automatically — brand-grade palette, typography, motion and voice from real-world design systems. Open-source, BYOK, works with Claude, Codex and Cursor.',
+  systemsAboutHead: 'What is a design system?',
+  systemsAboutBody:
+    'A design system is a reusable set of brand foundations — color palette, typography, spacing, motion and voice — that keeps every screen consistent. In Open Design each design system is a plugin: snap a project to one and your coding agent inherits the palette, type, motion and voice automatically, so everything it generates stays on-brand.',
+  systemsMdHead: 'Every system is a DESIGN.md file',
+  systemsMdBody: [
+    'Each design system here is a single DESIGN.md — a human- and agent-readable markdown spec that captures the brand’s visual theme, color roles, typography scale, and interaction language. It lives in your repo, versions in git, and travels with your project.',
+    'Point Claude Code, Cursor, or any coding agent at the file and every component, page, and asset it generates inherits the same identity. DESIGN.md is an open, Apache-2.0 format; Open Design is the open-source, local-first library and tooling built around it.',
+  ],
+  systemsMdSnippet: `# Design System Inspired by Linear
+
+> Category: Productivity
+> Focused, low-chrome workspace. Inter, tight grid, restrained color.
+
+## 1. Visual Theme & Atmosphere
+A calm, dense product surface where typography and spacing
+carry the hierarchy and color is used sparingly for intent.
+
+## 2. Color Palette & Roles
+### Primary
+- **Ink** (\`#0d0e10\`): Primary text and dark surfaces.
+- **Violet** (\`#5e6ad2\`): Action and focus accent.
+- **Surface** (\`#f4f5f8\`): Light canvas for content blocks.`,
+  systemsMdSnippetCaption: 'A DESIGN.md excerpt',
+  systemsMdSteps: [
+    {
+      title: 'Pick a system',
+      body: 'Browse the library above and open any system to read its full DESIGN.md — palette, type, motion, and voice.',
+    },
+    {
+      title: 'Drop it in your project',
+      body: 'Save the DESIGN.md to your repo root. It’s plain markdown — no build step, no account, no export.',
+    },
+    {
+      title: 'Point your agent at it',
+      body: 'Tell Claude Code or Cursor to follow DESIGN.md, and every output stays consistent with the brand.',
+    },
+  ],
+  systemsMdSpecNote:
+    'DESIGN.md is an open format (Apache-2.0). Open Design’s systems are free to read, fork, and contribute to on GitHub.',
+  systemsFaqHead: 'Frequently asked questions',
+  systemsFaq: (n) => [
+    {
+      q: 'What is a design system?',
+      a: 'A design system is a single source of truth for a brand’s visual language — palette, typography, spacing, motion, and tone — so every screen and asset feels like one coherent product.',
+    },
+    {
+      q: 'What is a DESIGN.md file?',
+      a: 'DESIGN.md is an open, markdown-based format for describing a design system in a way both people and AI coding agents can read. It captures color roles, type scale, and interaction patterns as plain text you keep in your repo.',
+    },
+    {
+      q: 'How do I use a DESIGN.md with Claude Code or Cursor?',
+      a: 'Save the file to your project root and tell your agent to follow it. Open Design can also snap a project to a system so every plugin output inherits the same identity automatically.',
+    },
+    {
+      q: 'Are these design systems free?',
+      a: 'Yes. Every system here is open source and free to read, download, fork, and contribute to. Open Design itself is Apache-2.0 and local-first.',
+    },
+    {
+      q: 'How many design systems are there?',
+      a: `${n} and counting, spanning consumer tech, editorial, and experimental styles. New systems land regularly, and you can contribute your own on GitHub.`,
+    },
+    {
+      q: 'Can I create my own DESIGN.md?',
+      a: 'Yes — author a DESIGN.md by hand, or let Open Design generate one from a reference site, then reuse it across every project and agent.',
+    },
+  ],
+  tokensHead: 'Design tokens',
+  tokensLead: (n) =>
+    `${n} tokens conforming to the Open Design token contract — the same structured palette, type, spacing, and motion values your agent reads to theme any artifact.`,
+  tokenGroupLabels: {
+    surface: 'Surface',
+    text: 'Text',
+    border: 'Border',
+    accent: 'Accent',
+    semantic: 'Semantic',
+    fonts: 'Typography',
+    type: 'Type scale',
+    spacing: 'Spacing',
+    radius: 'Radius',
+    elevation: 'Elevation',
+    focus: 'Focus',
+    motion: 'Motion',
+    layout: 'Layout',
+    other: 'Other',
+  },
+  detailTocLabel: 'On this page',
+  detailTocPreview: 'In context',
+  detailTocTokens: 'Design tokens',
+  detailTocGuide: 'DESIGN.md guide',
+  detailTocRelated: 'Related',
+  scenariosHead: 'See it in context',
+  scenariosLead:
+    'The same design tokens applied across artifact kinds — a website, an app, a slide, a poster. Original mocks re-skinned with this system, not screenshots.',
+  scenarioLabels: {
+    web: 'Website',
+    app: 'App',
+    slides: 'Slides',
+    poster: 'Poster',
+  },
+  detailSystemLabel: 'design system',
+  detailSystemTitleSuffix: 'palette, typography & tokens for your agent · Open Design',
+  detailSystemKeywords: (name) =>
+    `${name} design system, ${name} DESIGN.md, ${name} design tokens, design system example, open-source design system`,
+  searchPlaceholder: 'Search by name or keyword…',
+  searchNoResults: 'No matches. Try a different keyword.',
+  searchLabel: 'Search',
+  searchClear: 'Clear',
+  systemPreviewCaption: (name) =>
+    `Mock UI styled entirely with ${name}'s design tokens — a live preview of the design system, not a screenshot.`,
+  systemCardCta: 'View design system →',
+  contributeTitle: 'Built a plugin? Ship it to the catalogue.',
+  contributeBody:
+    'Every template, skill, and design system here is community-extensible. Open a pull request to add yours directly, or open an issue to propose one — merged contributions show up in this catalogue and in the product automatically.',
+  contributeCta: 'Open a pull request →',
+  contributeIssueCta: 'Or open an issue →',
 
   craftLabel: 'Plugins · Craft',
   craftHeading: (n) => `${n} craft principles.`,
@@ -295,7 +493,7 @@ const en: PluginsCopy = {
   shareCopyLink: 'Copy link only',
   shareJumpTo: 'Then jump to:',
   shareTemplate: ({ title, url }) =>
-    `🎨 Just discovered ${title} on @opendesignai — the open-source Claude Design alternative.
+    `🎨 Just discovered ${title} on @OpenDesignHQ — the open-source Claude Design alternative.
 ✨ Local-first · BYOK · your agent does the design.
 
 → ${url}`,
@@ -347,9 +545,12 @@ const en: PluginsCopy = {
 const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
   zh: {
     hubLabel: '插件库',
-    hubHeading: (n) => `${n} 个可组合的构件。`,
+    hubHeading: (n) => `给你 coding agent 的 ${n} 个插件`,
     hubLead:
       'Open Design 围绕四类插件构建：Templates 与 Skills 是 agent 真正运行的内容，Systems 与 Craft 让它保持品牌一致和可访问。点进任意一类深入查看，或直接跳到你已经知道 slug 的那一项。',
+    hubMetaTitle: (n) => `Claude Skills 市场 — ${n}+ 插件 | Open Design`,
+    hubMetaDescription:
+      '浏览开源的 Claude skills 市场——设计 skills、设计系统、模板与 craft，你的 coding agent 可直接运行。支持 Claude、Codex、Cursor。',
     tileTemplates: '模板',
     tileSkills: '技能',
     tileSystems: '设计系统',
@@ -371,13 +572,35 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesLead:
       '每个模板都附带可用的预览——目录中的缩略图直接来自 agent 在产品里使用的 manifest 海报。浏览全部，或按七大产物类型筛选。',
     skillsLabel: '插件 · 技能',
-    skillsHeading: (n) => `${n} 个指令型技能。`,
+    skillsHeading: (n) => `${n} 个 Claude 设计技能`,
     skillsLead:
       'agent 在任务中加载的技能——文案、配色、创意指导、头脑风暴。没有静态 demo，输出取决于你的输入，所以每个详情页像一份简报：标题、描述、触发词、出处。',
+    skillsMetaTitle: (n) => `Claude 设计技能 — ${n} 个开源 skills | Open Design`,
+    skillsMetaDescription:
+      '浏览开源的 Claude 设计 skills——文案、配色、创意指导等，你的 coding agent 在任务中即时加载。支持 Claude、Codex、Cursor。',
     systemsLabel: '插件 · 设计系统',
-    systemsHeading: (n) => `${n} 个设计系统。`,
+    systemsHeading: () => '为你的 agent 准备的设计系统',
     systemsLead:
-      '插件可通过 `od.craft.requires` 采用的品牌设计系统。每个系统自带色板、字体、动效与文风；把项目绑到某个系统，所有插件输出都会继承同一身份。',
+      '浏览真实世界的设计系统范例——品牌级的色板、字体、动效与文风，你的 coding agent 可一键套用到任何项目。每个系统都开源，支持 Claude、Codex、Cursor 等。',
+    systemsMetaTitle: (n) => `设计系统范例 — ${n} 个开源设计系统 | Open Design`,
+    systemsMetaDescription:
+      '浏览你的 coding agent 可自动套用的设计系统范例——来自真实品牌的色板、字体、动效与文风。开源、BYOK，支持 Claude、Codex、Cursor。',
+    systemsAboutHead: '什么是设计系统？',
+    systemsAboutBody:
+      '设计系统是一套可复用的品牌基础——色板、字体、间距、动效与文风——让每个界面保持一致。在 Open Design 中，每个设计系统都是一个插件：把项目绑到某个系统，你的 coding agent 会自动继承它的色板、字体、动效与文风，产出始终贴合品牌。',
+    detailSystemLabel: '设计系统',
+    searchPlaceholder: '按名称或关键词搜索…',
+    searchNoResults: '没有匹配项，换个关键词试试。',
+    searchLabel: '搜索',
+    searchClear: '清除',
+    systemPreviewCaption: (name) =>
+      `用 ${name} 设计系统 token 渲染的示例界面 —— 设计效果实时预览，非截图。`,
+    systemCardCta: '查看设计系统 →',
+    contributeTitle: '做了一个 plugin？把它上架到目录。',
+    contributeBody:
+      '这里的每个模板、skill、设计系统都可由社区扩展。直接提一个 pull request 加上你的，或者提个 issue 提议——合并后会自动出现在这个目录和产品里。',
+    contributeCta: '提交 Pull Request →',
+    contributeIssueCta: '或提个 Issue →',
     craftLabel: '插件 · 工艺',
     craftHeading: (n) => `${n} 条工艺规则。`,
     craftLead:
@@ -413,7 +636,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: '分享 ↗', shareTitle: '分享这个插件',
     shareLead: '复制下面的文案，然后跳到你想分享的平台粘贴即可。',
     shareCopyText: '复制文案', shareCopyLink: '只复制链接', shareJumpTo: '跳转到：',
-    shareTemplate: ({ title, url }) => `🎨 安利一个：@opendesignai 上的 ${title} —— Claude Design 的开源替代品。\n✨ 本地优先 · 自带模型 · 让你自己的 agent 做设计。\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 安利一个：@OpenDesignHQ 上的 ${title} —— Claude Design 的开源替代品。\n✨ 本地优先 · 自带模型 · 让你自己的 agent 做设计。\n\n→ ${url}`,
     detailOpenInNewTabAria: '在新标签打开',
     breadcrumbLabel: '面包屑导航',
     shareDialogClose: '关闭',
@@ -464,8 +687,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     ],
   },
   'zh-tw': {
-    hubLabel: '外掛庫', hubHeading: (n) => `${n} 個可組合的元件。`,
+    hubLabel: '外掛庫', hubHeading: (n) => `給你 coding agent 的 ${n} 個外掛`,
     hubLead: 'Open Design 圍繞四類外掛構建：Templates 與 Skills 是 agent 真正執行的內容，Systems 與 Craft 讓它保持品牌一致與可存取性。',
+    hubMetaTitle: (n) => `Claude Skills 市集 — ${n}+ 外掛 | Open Design`,
+    hubMetaDescription:
+      '瀏覽開源的 Claude skills 市集——設計 skills、設計系統、範本與 craft，你的 coding agent 可直接執行。支援 Claude、Codex、Cursor。',
     tileTemplates: '範本', tileSkills: '技能', tileSystems: '設計系統', tileCraft: '工藝',
     browseTemplates: '瀏覽範本', browseSkills: '瀏覽技能', browseSystems: '瀏覽系統', browseCraft: '瀏覽工藝',
     artifactKindLabel: '產物類型', sceneLabel: '場景', allChip: '全部',
@@ -474,7 +700,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: '分享 ↗', shareTitle: '分享這個外掛',
     shareLead: '複製下面的文案，然後跳到你想分享的平台貼上即可。',
     shareCopyText: '複製文案', shareCopyLink: '只複製連結', shareJumpTo: '跳轉到：',
-    shareTemplate: ({ title, url }) => `🎨 推薦一個：@opendesignai 上的 ${title} —— Claude Design 的開源替代品。\n✨ 本地優先 · 自帶模型 · 讓你自己的 agent 做設計。\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 推薦一個：@OpenDesignHQ 上的 ${title} —— Claude Design 的開源替代品。\n✨ 本地優先 · 自帶模型 · 讓你自己的 agent 做設計。\n\n→ ${url}`,
     tileTemplatesBlurb: '可視覺、可執行的模板——原型、簡報、影像與影片產生器、動效合成。每一條都附 example.html，fork 即可換資料、出貨。',
     tileSkillsBlurb: 'agent 在任務途中載入的指令技能——文案、色彩理論、創意指導、發想。純 SKILL.md 文字；產出取決於你輸入什麼。',
     tileSystemsBlurb: '品牌錨定的設計系統——色票、字體、動效、語氣。把專案綁到一個系統，所有外掛產出都會繼承同一個識別。',
@@ -483,11 +709,31 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} 個可執行模板。`,
     templatesLead: '每個模板都附可運作的預覽——目錄縮圖直接來自 agent 在產品內使用的 manifest poster。可以全部瀏覽，也可以跳到七種產出類型之一。',
     skillsLabel: '外掛 · 技能',
-    skillsHeading: (n) => `${n} 個指令技能。`,
+    skillsHeading: (n) => `${n} 個 Claude 設計技能`,
     skillsLead: 'agent 任務中載入的技能——文案、色彩、創意指導、發想。沒有靜態 demo，因為產出取決於你的輸入；每個詳情頁讀起來像一份 brief：標題、描述、觸發條件、署名。',
+    skillsMetaTitle: (n) => `Claude 設計技能 — ${n} 個開源 skills | Open Design`,
+    skillsMetaDescription:
+      '瀏覽開源的 Claude 設計 skills——文案、配色、創意指導等，你的 coding agent 在任務途中即時載入。支援 Claude、Codex、Cursor。',
     systemsLabel: '外掛 · 設計系統',
-    systemsHeading: (n) => `${n} 個設計系統。`,
-    systemsLead: '外掛可透過 `od.craft.requires` 採用的品牌錨定設計系統。每一個都自帶色票、字體、動效與語氣；綁定一個專案到系統，所有外掛產出都繼承同一識別。',
+    systemsHeading: () => '為你的 agent 準備的設計系統',
+    systemsLead: '瀏覽真實世界的設計系統範例——品牌級的色票、字體、動效與語氣，你的 coding agent 可一鍵套用到任何專案。每個系統都開源，支援 Claude、Codex、Cursor 等。',
+    systemsMetaTitle: (n) => `設計系統範例 — ${n} 個開源設計系統 | Open Design`,
+    systemsMetaDescription: '瀏覽你的 coding agent 可自動套用的設計系統範例——來自真實品牌的色票、字體、動效與語氣。開源、BYOK，支援 Claude、Codex、Cursor。',
+    systemsAboutHead: '什麼是設計系統？',
+    systemsAboutBody: '設計系統是一套可重用的品牌基礎——色票、字體、間距、動效與語氣——讓每個介面保持一致。在 Open Design 中，每個設計系統都是一個外掛：綁定專案到某個系統，你的 coding agent 會自動繼承它的色票、字體、動效與語氣，產出始終貼合品牌。',
+    detailSystemLabel: '設計系統',
+    searchPlaceholder: '依名稱或關鍵字搜尋…',
+    searchNoResults: '沒有相符項目，換個關鍵字試試。',
+    searchLabel: '搜尋',
+    searchClear: '清除',
+    systemPreviewCaption: (name) =>
+      `用 ${name} 設計系統 token 渲染的範例介面 —— 設計效果即時預覽，非截圖。`,
+    systemCardCta: '檢視設計系統 →',
+    contributeTitle: '做了一個 plugin？把它上架到目錄。',
+    contributeBody:
+      '這裡的每個範本、skill、設計系統都可由社群擴充。直接提一個 pull request 加上你的，或者提個 issue 提議——合併後會自動出現在這個目錄和產品裡。',
+    contributeCta: '提交 Pull Request →',
+    contributeIssueCta: '或提個 Issue →',
     craftLabel: '外掛 · 工藝',
     craftHeading: (n) => `${n} 條工藝原則。`,
     craftLead: '與品牌無關的工藝規則——可達性、RTL、動效曲線、攝影倫理。技能透過 `od.craft.requires` opt-in，外掛自動繼承相應嚴謹度。',
@@ -613,7 +859,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ja: {
-    hubLabel: 'プラグインライブラリ', hubHeading: (n) => `${n} 個の組み合わせ可能なパーツ。`,
+    hubMetaTitle: (n) => `Claude Skills マーケットプレイス — ${n}+ プラグイン | Open Design`,
+    hubMetaDescription: 'オープンソースの Claude skills マーケットプレイス——デザイン skills、デザインシステム、テンプレート、craft を coding agent が直接実行。Claude、Codex、Cursor に対応。',
+    skillsMetaTitle: (n) => `デザイン向け Claude Skills — ${n} 個のオープンソース skills | Open Design`,
+    skillsMetaDescription: 'オープンソースのデザイン向け Claude skills——コピーライティング、配色、クリエイティブディレクションなどを coding agent がタスク中に読み込み。Claude、Codex、Cursor に対応。',
+    hubLabel: 'プラグインライブラリ', hubHeading: (n) => `${n} 個の組み合わせ可能なパーツ`,
     tileTemplates: 'テンプレート', tileSkills: 'スキル', tileSystems: 'システム', tileCraft: 'クラフト',
     browseTemplates: 'テンプレートを見る', browseSkills: 'スキルを見る', browseSystems: 'システムを見る', browseCraft: 'クラフトを見る',
     artifactKindLabel: '成果物の種類', sceneLabel: 'シーン', allChip: 'すべて',
@@ -622,7 +872,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: '共有 ↗', shareTitle: 'このプラグインを共有',
     shareLead: '下のメッセージをコピーしてから、共有したいプラットフォームに移動して貼り付けてください。',
     shareCopyText: 'テキストをコピー', shareCopyLink: 'リンクのみコピー', shareJumpTo: 'プラットフォームへ：',
-    shareTemplate: ({ title, url }) => `🎨 @opendesignai で ${title} を発見 —— オープンソースの Claude Design 代替。\n✨ ローカル優先 · BYOK · あなたのエージェントが設計する。\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 @OpenDesignHQ で ${title} を発見 —— オープンソースの Claude Design 代替。\n✨ ローカル優先 · BYOK · あなたのエージェントが設計する。\n\n→ ${url}`,
     hubLead: 'Open Design は 4 種類のプラグインを軸に作られています：テンプレートとスキルは agent が実行するもの、システムとクラフトはブランドとアクセシビリティを守るもの。セクションを選んで掘り下げるか、目当ての slug が決まっているなら直接ジャンプしてください。',
     tileTemplatesBlurb: 'ビジュアルで実行可能なテンプレート——プロトタイプ、スライド、画像／動画ジェネレーター、モーション合成。すべての項目に example.html が同梱されており、fork してデータを差し替えればすぐ出荷できます。',
     tileSkillsBlurb: 'agent がタスク途中で読み込む指示スキル——コピー、カラーセオリー、クリエイティブディレクション、ブレスト。純粋な SKILL.md テキストで、結果はあなたの入力次第です。',
@@ -632,7 +882,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} 個の実行可能テンプレート。`,
     templatesLead: 'すべてのテンプレートに動作するプレビューが付属——カタログのサムネイルは、agent がプロダクト内部で使う manifest poster からそのまま取得しています。一覧を眺めるか、7 つの成果物タイプのいずれかに直接ジャンプしてください。',
     skillsLabel: 'プラグイン · スキル',
-    skillsHeading: (n) => `${n} 個の指示スキル。`,
+    skillsHeading: (n) => `${n} 個の指示スキル`,
     skillsLead: 'agent がタスク途中で読み込むスキル——コピー、カラーセオリー、クリエイティブディレクション、ブレスト。結果は入力次第のため静的 demo はありません。各詳細ページは brief のように読めます：タイトル、説明、トリガー、クレジット。',
     systemsLabel: 'プラグイン · システム',
     systemsHeading: (n) => `${n} 個のデザインシステム。`,
@@ -762,7 +1012,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ko: {
-    hubLabel: '플러그인 라이브러리', hubHeading: (n) => `${n}개의 조합 가능한 구성요소.`,
+    hubMetaTitle: (n) => `Claude Skills 마켓플레이스 — ${n}+ 플러그인 | Open Design`,
+    hubMetaDescription: '오픈소스 Claude skills 마켓플레이스 둘러보기——디자인 skills, 디자인 시스템, 템플릿, craft를 coding agent가 바로 실행합니다. Claude, Codex, Cursor 지원.',
+    skillsMetaTitle: (n) => `디자인용 Claude Skills — 오픈소스 skills ${n}개 | Open Design`,
+    skillsMetaDescription: '오픈소스 디자인용 Claude skills 둘러보기——카피라이팅, 컬러, 크리에이티브 디렉션 등을 coding agent가 작업 중에 불러옵니다. Claude, Codex, Cursor 지원.',
+    hubLabel: '플러그인 라이브러리', hubHeading: (n) => `${n}개의 조합 가능한 구성요소`,
     tileTemplates: '템플릿', tileSkills: '스킬', tileSystems: '시스템', tileCraft: '크래프트',
     browseTemplates: '템플릿 보기', browseSkills: '스킬 보기', browseSystems: '시스템 보기', browseCraft: '크래프트 보기',
     artifactKindLabel: '산출물 종류', sceneLabel: '장면', allChip: '전체',
@@ -771,7 +1025,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: '공유 ↗', shareTitle: '이 플러그인 공유',
     shareLead: '아래 메시지를 복사한 다음 공유할 플랫폼으로 이동해 붙여넣으세요.',
     shareCopyText: '텍스트 복사', shareCopyLink: '링크만 복사', shareJumpTo: '플랫폼으로:',
-    shareTemplate: ({ title, url }) => `🎨 @opendesignai에서 ${title} 발견 —— 오픈 소스 Claude Design 대안.\n✨ 로컬 우선 · BYOK · 에이전트가 디자인합니다.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 @OpenDesignHQ에서 ${title} 발견 —— 오픈 소스 Claude Design 대안.\n✨ 로컬 우선 · BYOK · 에이전트가 디자인합니다.\n\n→ ${url}`,
     hubLead: 'Open Design은 네 가지 플러그인 종류를 중심으로 구성됩니다: 템플릿과 스킬은 agent가 실행하는 것, 시스템과 크래프트는 브랜드와 접근성을 지키는 것. 섹션을 골라 들어가거나, 원하는 slug를 알고 있다면 바로 이동하세요.',
     tileTemplatesBlurb: '시각적이고 실행 가능한 템플릿——프로토타입, 슬라이드, 이미지 및 비디오 생성기, 모션 컴포지션. 모든 항목에 example.html이 포함되어 있어 fork하고 데이터만 바꾸면 바로 출시할 수 있습니다.',
     tileSkillsBlurb: 'agent가 작업 중에 로드하는 지시 스킬——카피라이팅, 컬러 이론, 크리에이티브 디렉션, 브레인스토밍. 순수 SKILL.md 텍스트이며 결과는 입력에 따라 달라집니다.',
@@ -781,7 +1035,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n}개의 실행 가능한 템플릿.`,
     templatesLead: '모든 템플릿에는 작동하는 프리뷰가 포함됩니다——카탈로그 썸네일은 agent가 제품 내에서 사용하는 manifest poster에서 바로 가져옵니다. 전체를 둘러보거나 7가지 산출물 종류 중 하나로 바로 이동하세요.',
     skillsLabel: '플러그인 · 스킬',
-    skillsHeading: (n) => `${n}개의 지시 스킬.`,
+    skillsHeading: (n) => `${n}개의 지시 스킬`,
     skillsLead: 'agent가 작업 도중 로드하는 스킬——카피라이팅, 컬러 이론, 크리에이티브 디렉션, 브레인스토밍. 결과는 입력에 따라 다르므로 정적 demo가 없습니다. 각 상세 페이지는 brief처럼 읽힙니다: 제목, 설명, 트리거, 크레딧.',
     systemsLabel: '플러그인 · 시스템',
     systemsHeading: (n) => `${n}개의 디자인 시스템.`,
@@ -911,7 +1165,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   de: {
-    hubLabel: 'Plugin-Bibliothek', hubHeading: (n) => `${n} kombinierbare Bausteine.`,
+    hubMetaTitle: (n) => `Claude Skills Marktplatz — ${n}+ Plugins | Open Design`,
+    hubMetaDescription: 'Durchstöbere den Open-Source-Marktplatz für Claude skills——Design-skills, Designsysteme, Vorlagen und craft, die dein coding agent direkt ausführt. Funktioniert mit Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills für Design — ${n} Open-Source-skills | Open Design`,
+    skillsMetaDescription: 'Durchstöbere Open-Source Claude skills fürs Design——Texten, Farbe, Creative Direction und mehr, die dein coding agent mitten in der Aufgabe lädt. Mit Claude, Codex & Cursor.',
+    hubLabel: 'Plugin-Bibliothek', hubHeading: (n) => `${n} kombinierbare Bausteine`,
     tileTemplates: 'Vorlagen', tileSkills: 'Skills', tileSystems: 'Systeme', tileCraft: 'Handwerk',
     browseTemplates: 'Vorlagen ansehen', browseSkills: 'Skills ansehen', browseSystems: 'Systeme ansehen', browseCraft: 'Handwerk ansehen',
     artifactKindLabel: 'Artefakt-Art', sceneLabel: 'Szene', allChip: 'Alle',
@@ -920,7 +1178,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Teilen ↗', shareTitle: 'Diesen Plugin teilen',
     shareLead: 'Kopiere die Nachricht unten und füge sie auf der gewünschten Plattform ein.',
     shareCopyText: 'Text kopieren', shareCopyLink: 'Nur Link kopieren', shareJumpTo: 'Zur Plattform:',
-    shareTemplate: ({ title, url }) => `🎨 Gerade entdeckt: ${title} auf @opendesignai — die Open-Source-Alternative zu Claude Design.\n✨ Local-first · BYOK · dein Agent designt.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Gerade entdeckt: ${title} auf @OpenDesignHQ — die Open-Source-Alternative zu Claude Design.\n✨ Local-first · BYOK · dein Agent designt.\n\n→ ${url}`,
     hubLead: 'Open Design ist um vier Plugin-Arten herum gebaut: Templates und Skills sind das, was dein Agent ausführt; Systems und Craft halten Marke und Zugänglichkeit. Wähle eine Sektion zum Vertiefen oder springe direkt zu einem Slug, wenn du schon weißt, welches du willst.',
     tileTemplatesBlurb: 'Visuelle, lauffähige Templates — Prototypen, Slides, Bild- und Video-Generatoren, Motion-Kompositionen. Jeder Eintrag liefert eine example.html, sodass du forken, Daten austauschen und ausliefern kannst.',
     tileSkillsBlurb: 'Instruktions-Skills, die der Agent mitten in einer Aufgabe lädt — Texten, Farbenlehre, Creative Direction, Brainstorming. Reine SKILL.md-Prosa; das Ergebnis hängt von deiner Eingabe ab.',
@@ -930,7 +1188,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} lauffähige Templates.`,
     templatesLead: 'Jedes Template kommt mit einer funktionierenden Preview — die Thumbnails der Katalogzeilen stammen direkt aus dem Manifest-Poster, den der Agent im Produkt benutzt. Schau dir alle an oder springe zu einer der sieben Artefakt-Arten.',
     skillsLabel: 'Plugins · Skills',
-    skillsHeading: (n) => `${n} Instruktions-Skills.`,
+    skillsHeading: (n) => `${n} Instruktions-Skills`,
     skillsLead: 'Skills, die der Agent während einer Aufgabe lädt — Texten, Farbenlehre, Creative Direction, Brainstorming. Es gibt keine statische Demo, weil das Ergebnis von deiner Eingabe abhängt; jede Detailseite liest sich wie ein Brief: Titel, Beschreibung, Trigger, Attribution.',
     systemsLabel: 'Plugins · Systeme',
     systemsHeading: (n) => `${n} Designsysteme.`,
@@ -1060,7 +1318,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   fr: {
-    hubLabel: 'Bibliothèque de plugins', hubHeading: (n) => `${n} éléments composables.`,
+    hubMetaTitle: (n) => `Marketplace Claude Skills — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Explorez la marketplace open source de Claude skills——skills de design, design systems, modèles et craft que votre coding agent exécute directement. Compatible Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills pour le design — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Explorez les Claude skills open source pour le design——rédaction, couleur, direction créative et plus, que votre coding agent charge en pleine tâche. Compatible Claude, Codex et Cursor.',
+    hubLabel: 'Bibliothèque de plugins', hubHeading: (n) => `${n} éléments composables`,
     tileTemplates: 'Modèles', tileSkills: 'Skills', tileSystems: 'Systèmes', tileCraft: 'Artisanat',
     browseTemplates: 'Parcourir les modèles', browseSkills: 'Parcourir les skills', browseSystems: 'Parcourir les systèmes', browseCraft: 'Parcourir l’artisanat',
     artifactKindLabel: 'Type d’artefact', sceneLabel: 'Scène', allChip: 'Tous',
@@ -1069,7 +1331,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Partager ↗', shareTitle: 'Partager ce plugin',
     shareLead: 'Copiez le message ci-dessous, puis ouvrez la plateforme de votre choix et collez.',
     shareCopyText: 'Copier le texte', shareCopyLink: 'Copier le lien', shareJumpTo: 'Aller sur :',
-    shareTemplate: ({ title, url }) => `🎨 Découvert : ${title} sur @opendesignai — l’alternative open-source à Claude Design.\n✨ Local-first · BYOK · votre agent fait le design.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Découvert : ${title} sur @OpenDesignHQ — l’alternative open-source à Claude Design.\n✨ Local-first · BYOK · votre agent fait le design.\n\n→ ${url}`,
     hubLead: 'Open Design s’articule autour de quatre types de plugins : Templates et Skills sont ce que ton agent exécute ; Systems et Craft maintiennent la marque et l’accessibilité. Choisis une section ou saute directement à un slug si tu sais déjà ce que tu veux.',
     tileTemplatesBlurb: 'Templates visuels et exécutables — prototypes, slides, générateurs d’image et de vidéo, compositions motion. Chaque entrée embarque un example.html : forke, change les données, expédie.',
     tileSkillsBlurb: 'Skills d’instruction que l’agent charge en cours de tâche — copie, théorie des couleurs, direction créative, brainstorming. Pure prose SKILL.md ; le résultat dépend de ton input.',
@@ -1079,7 +1341,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} templates exécutables.`,
     templatesLead: 'Chaque template livre une preview fonctionnelle — la vignette du catalogue vient directement du poster de manifest utilisé par l’agent dans le produit. Parcours tout, ou saute à l’une des sept catégories d’artefact.',
     skillsLabel: 'Plugins · Skills',
-    skillsHeading: (n) => `${n} skills d’instruction.`,
+    skillsHeading: (n) => `${n} skills d’instruction`,
     skillsLead: 'Skills que l’agent charge pendant une tâche — copie, théorie des couleurs, direction créative, brainstorming. Pas de demo statique parce que le résultat dépend de ton input ; chaque page détail se lit comme un brief : titre, description, triggers, attribution.',
     systemsLabel: 'Plugins · Systèmes',
     systemsHeading: (n) => `${n} design systems.`,
@@ -1209,7 +1471,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ru: {
-    hubLabel: 'Библиотека плагинов', hubHeading: (n) => `${n} компонуемых элементов.`,
+    hubMetaTitle: (n) => `Маркетплейс Claude Skills — ${n}+ плагинов | Open Design`,
+    hubMetaDescription: 'Откройте опенсорсный маркетплейс Claude skills——дизайн-skills, дизайн-системы, шаблоны и craft, которые ваш coding agent запускает напрямую. Работает с Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills для дизайна — ${n} опенсорсных skills | Open Design`,
+    skillsMetaDescription: 'Откройте опенсорсные Claude skills для дизайна——копирайтинг, цвет, креативное руководство и не только, что ваш coding agent подгружает по ходу задачи. Работает с Claude, Codex и Cursor.',
+    hubLabel: 'Библиотека плагинов', hubHeading: (n) => `${n} компонуемых элементов`,
     tileTemplates: 'Шаблоны', tileSkills: 'Скиллы', tileSystems: 'Системы', tileCraft: 'Ремесло',
     browseTemplates: 'Все шаблоны', browseSkills: 'Все скиллы', browseSystems: 'Все системы', browseCraft: 'Все правила ремесла',
     artifactKindLabel: 'Тип артефакта', sceneLabel: 'Сцена', allChip: 'Все',
@@ -1218,7 +1484,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Поделиться ↗', shareTitle: 'Поделиться плагином',
     shareLead: 'Скопируйте сообщение ниже, затем перейдите на нужную платформу и вставьте.',
     shareCopyText: 'Скопировать текст', shareCopyLink: 'Только ссылка', shareJumpTo: 'Перейти:',
-    shareTemplate: ({ title, url }) => `🎨 Нашёл ${title} на @opendesignai — open-source альтернативу Claude Design.\n✨ Локально · BYOK · агент сам делает дизайн.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Нашёл ${title} на @OpenDesignHQ — open-source альтернативу Claude Design.\n✨ Локально · BYOK · агент сам делает дизайн.\n\n→ ${url}`,
     hubLead: 'Open Design построен вокруг четырёх видов плагинов: Templates и Skills — это то, что выполняет твой agent; Systems и Craft удерживают бренд и доступность. Выбери раздел для углубления или сразу перейди по slug, если уже знаешь, что нужно.',
     tileTemplatesBlurb: 'Визуальные, исполняемые шаблоны — прототипы, слайды, генераторы изображений и видео, motion-композиции. Каждая запись поставляется с example.html — форкни, замени данные, отправляй.',
     tileSkillsBlurb: 'Инструкционные навыки, которые agent подгружает по ходу задачи — копирайтинг, теория цвета, креативное руководство, брейншторм. Чистый текст SKILL.md; результат зависит от твоего ввода.',
@@ -1228,7 +1494,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} исполняемых шаблонов.`,
     templatesLead: 'Каждый шаблон поставляется с рабочей превью — миниатюра в каталоге берётся прямо из manifest poster, который agent использует внутри продукта. Пробегись по всем или прыгни в одну из семи категорий артефактов.',
     skillsLabel: 'Плагины · Навыки',
-    skillsHeading: (n) => `${n} инструкционных навыков.`,
+    skillsHeading: (n) => `${n} инструкционных навыков`,
     skillsLead: 'Навыки, которые agent подгружает в процессе задачи — копирайтинг, теория цвета, креативное руководство, брейншторм. Статичной demo нет, потому что результат зависит от ввода; каждая детальная страница читается как brief: заголовок, описание, триггеры, авторство.',
     systemsLabel: 'Плагины · Системы',
     systemsHeading: (n) => `${n} дизайн-систем.`,
@@ -1358,7 +1624,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   es: {
-    hubLabel: 'Biblioteca de plugins', hubHeading: (n) => `${n} piezas componibles.`,
+    hubMetaTitle: (n) => `Marketplace de Claude Skills — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Explora el marketplace open source de Claude skills——skills de diseño, design systems, plantillas y craft que tu coding agent ejecuta directamente. Compatible con Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills para diseño — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Explora los Claude skills open source para diseño——copywriting, color, dirección creativa y más que tu coding agent carga durante la tarea. Compatible con Claude, Codex y Cursor.',
+    hubLabel: 'Biblioteca de plugins', hubHeading: (n) => `${n} piezas componibles`,
     tileTemplates: 'Plantillas', tileSkills: 'Skills', tileSystems: 'Sistemas', tileCraft: 'Oficio',
     browseTemplates: 'Ver plantillas', browseSkills: 'Ver skills', browseSystems: 'Ver sistemas', browseCraft: 'Ver oficio',
     artifactKindLabel: 'Tipo de artefacto', sceneLabel: 'Escena', allChip: 'Todos',
@@ -1367,7 +1637,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Compartir ↗', shareTitle: 'Compartir este plugin',
     shareLead: 'Copia el mensaje y abre la plataforma donde quieras compartirlo.',
     shareCopyText: 'Copiar texto', shareCopyLink: 'Solo el enlace', shareJumpTo: 'Ir a:',
-    shareTemplate: ({ title, url }) => `🎨 Acabo de descubrir ${title} en @opendesignai — la alternativa open-source a Claude Design.\n✨ Local-first · BYOK · tu agente diseña.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Acabo de descubrir ${title} en @OpenDesignHQ — la alternativa open-source a Claude Design.\n✨ Local-first · BYOK · tu agente diseña.\n\n→ ${url}`,
     hubLead: 'Open Design se construye alrededor de cuatro tipos de plugin: Templates y Skills son lo que tu agent ejecuta; Systems y Craft mantienen marca y accesibilidad. Elige una sección para profundizar o salta directo a un slug si ya sabes cuál quieres.',
     tileTemplatesBlurb: 'Templates visuales y ejecutables — prototipos, slides, generadores de imagen y video, composiciones motion. Cada entrada incluye un example.html: forkea, cambia los datos, despacha.',
     tileSkillsBlurb: 'Skills de instrucción que el agent carga a mitad de tarea — copy, teoría del color, dirección creativa, brainstorming. Prosa pura de SKILL.md; el resultado depende de tu input.',
@@ -1377,7 +1647,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} templates ejecutables.`,
     templatesLead: 'Cada template trae una preview funcional — el thumbnail del catálogo viene directamente del poster del manifest que el agent usa dentro del producto. Recórrelos todos o salta a una de las siete clases de artefacto.',
     skillsLabel: 'Plugins · Skills',
-    skillsHeading: (n) => `${n} skills de instrucción.`,
+    skillsHeading: (n) => `${n} skills de instrucción`,
     skillsLead: 'Skills que el agent carga durante una tarea — copy, teoría del color, dirección creativa, brainstorming. No hay demo estática porque el resultado depende de tu input; cada página de detalle se lee como un brief: título, descripción, triggers, atribución.',
     systemsLabel: 'Plugins · Sistemas',
     systemsHeading: (n) => `${n} design systems.`,
@@ -1507,7 +1777,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   'pt-br': {
-    hubLabel: 'Biblioteca de plugins', hubHeading: (n) => `${n} peças combináveis.`,
+    hubMetaTitle: (n) => `Marketplace de Claude Skills — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Explore o marketplace open source de Claude skills——skills de design, design systems, templates e craft que seu coding agent executa direto. Funciona com Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills para design — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Explore os Claude skills open source para design——copywriting, cor, direção criativa e mais que seu coding agent carrega no meio da tarefa. Funciona com Claude, Codex e Cursor.',
+    hubLabel: 'Biblioteca de plugins', hubHeading: (n) => `${n} peças combináveis`,
     tileTemplates: 'Templates', tileSkills: 'Skills', tileSystems: 'Sistemas', tileCraft: 'Ofício',
     browseTemplates: 'Ver templates', browseSkills: 'Ver skills', browseSystems: 'Ver sistemas', browseCraft: 'Ver ofício',
     artifactKindLabel: 'Tipo de artefato', sceneLabel: 'Cena', allChip: 'Todos',
@@ -1516,7 +1790,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Compartilhar ↗', shareTitle: 'Compartilhar este plugin',
     shareLead: 'Copie a mensagem e abra a plataforma onde quer compartilhar.',
     shareCopyText: 'Copiar texto', shareCopyLink: 'Só o link', shareJumpTo: 'Ir para:',
-    shareTemplate: ({ title, url }) => `🎨 Acabei de descobrir ${title} no @opendesignai — a alternativa open-source ao Claude Design.\n✨ Local-first · BYOK · seu agente faz o design.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Acabei de descobrir ${title} no @OpenDesignHQ — a alternativa open-source ao Claude Design.\n✨ Local-first · BYOK · seu agente faz o design.\n\n→ ${url}`,
     hubLead: 'Open Design é construído em torno de quatro tipos de plugin: Templates e Skills são o que seu agent executa; Systems e Craft mantêm marca e acessibilidade. Escolha uma seção para se aprofundar ou pule direto para um slug se já sabe o que quer.',
     tileTemplatesBlurb: 'Templates visuais e executáveis — protótipos, slides, geradores de imagem e vídeo, composições motion. Cada entrada vem com um example.html: forke, troque os dados, entregue.',
     tileSkillsBlurb: 'Skills de instrução que o agent carrega no meio da tarefa — copy, teoria das cores, direção criativa, brainstorming. Pura prosa de SKILL.md; o resultado depende do seu input.',
@@ -1526,7 +1800,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} templates executáveis.`,
     templatesLead: 'Cada template traz uma preview funcional — a thumbnail do catálogo vem direto do poster do manifest que o agent usa dentro do produto. Veja todos ou pule para uma das sete classes de artefato.',
     skillsLabel: 'Plugins · Skills',
-    skillsHeading: (n) => `${n} skills de instrução.`,
+    skillsHeading: (n) => `${n} skills de instrução`,
     skillsLead: 'Skills que o agent carrega durante uma tarefa — copy, teoria das cores, direção criativa, brainstorming. Não há demo estática porque o resultado depende do input; cada página de detalhe lê como um brief: título, descrição, triggers, atribuição.',
     systemsLabel: 'Plugins · Sistemas',
     systemsHeading: (n) => `${n} design systems.`,
@@ -1656,7 +1930,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   it: {
-    hubLabel: 'Libreria plugin', hubHeading: (n) => `${n} pezzi componibili.`,
+    hubMetaTitle: (n) => `Marketplace di Claude Skills — ${n}+ plugin | Open Design`,
+    hubMetaDescription: 'Esplora il marketplace open source di Claude skills——skills di design, design system, template e craft che il tuo coding agent esegue direttamente. Compatibile con Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills per il design — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Esplora i Claude skills open source per il design——copywriting, colore, direzione creativa e altro che il tuo coding agent carica durante il task. Compatibile con Claude, Codex e Cursor.',
+    hubLabel: 'Libreria plugin', hubHeading: (n) => `${n} pezzi componibili`,
     tileTemplates: 'Modelli', tileSkills: 'Skill', tileSystems: 'Sistemi', tileCraft: 'Artigianato',
     browseTemplates: 'Esplora modelli', browseSkills: 'Esplora skill', browseSystems: 'Esplora sistemi', browseCraft: 'Esplora artigianato',
     artifactKindLabel: 'Tipo di artefatto', sceneLabel: 'Scena', allChip: 'Tutti',
@@ -1665,7 +1943,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Condividi ↗', shareTitle: 'Condividi questo plugin',
     shareLead: 'Copia il messaggio e apri la piattaforma su cui vuoi condividere.',
     shareCopyText: 'Copia testo', shareCopyLink: 'Solo il link', shareJumpTo: 'Vai a:',
-    shareTemplate: ({ title, url }) => `🎨 Ho appena scoperto ${title} su @opendesignai — l’alternativa open-source a Claude Design.\n✨ Local-first · BYOK · il tuo agente progetta.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Ho appena scoperto ${title} su @OpenDesignHQ — l’alternativa open-source a Claude Design.\n✨ Local-first · BYOK · il tuo agente progetta.\n\n→ ${url}`,
     hubLead: 'Open Design è costruito attorno a quattro tipi di plugin: Templates e Skill sono ciò che il tuo agent esegue; Systems e Craft tengono insieme brand e accessibilità. Scegli una sezione in cui scendere o salta a uno slug se sai già quale ti serve.',
     tileTemplatesBlurb: 'Template visuali ed eseguibili — prototipi, slide, generatori di immagine e video, composizioni motion. Ogni voce porta un example.html: fai fork, cambia i dati, spedisci.',
     tileSkillsBlurb: 'Skill di istruzione che l’agent carica a metà task — copy, teoria del colore, direzione creativa, brainstorming. Pura prosa SKILL.md; il risultato dipende dall’input.',
@@ -1675,7 +1953,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} template eseguibili.`,
     templatesLead: 'Ogni template include una preview funzionante — la thumbnail del catalogo arriva diretta dal poster del manifest che l’agent usa dentro il prodotto. Sfogliali tutti o salta a una delle sette classi di artefatto.',
     skillsLabel: 'Plugin · Skill',
-    skillsHeading: (n) => `${n} skill di istruzione.`,
+    skillsHeading: (n) => `${n} skill di istruzione`,
     skillsLead: 'Skill che l’agent carica durante un task — copy, teoria del colore, direzione creativa, brainstorming. Niente demo statica perché il risultato dipende dall’input; ogni pagina di dettaglio si legge come un brief: titolo, descrizione, trigger, attribuzione.',
     systemsLabel: 'Plugin · Sistemi',
     systemsHeading: (n) => `${n} design system.`,
@@ -1805,7 +2083,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   id: {
-    hubLabel: 'Pustaka plugin', hubHeading: (n) => `${n} potongan yang bisa digabungkan.`,
+    hubMetaTitle: (n) => `Marketplace Claude Skills — ${n}+ Plugin | Open Design`,
+    hubMetaDescription: 'Jelajahi marketplace open-source Claude skills——skills desain, design system, template, dan craft yang langsung dijalankan coding agent kamu. Mendukung Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills untuk Desain — ${n} skills Open-Source | Open Design`,
+    skillsMetaDescription: 'Jelajahi Claude skills open-source untuk desain——copywriting, warna, arahan kreatif, dan lainnya yang dimuat coding agent kamu saat bekerja. Mendukung Claude, Codex & Cursor.',
+    hubLabel: 'Pustaka plugin', hubHeading: (n) => `${n} potongan yang bisa digabungkan`,
     tileTemplates: 'Template', tileSkills: 'Skill', tileSystems: 'Sistem', tileCraft: 'Kerajinan',
     browseTemplates: 'Jelajahi template', browseSkills: 'Jelajahi skill', browseSystems: 'Jelajahi sistem', browseCraft: 'Jelajahi kerajinan',
     artifactKindLabel: 'Jenis artefak', sceneLabel: 'Adegan', allChip: 'Semua',
@@ -1814,7 +2096,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Bagikan ↗', shareTitle: 'Bagikan plugin ini',
     shareLead: 'Salin pesan di bawah, lalu buka platform yang ingin Anda gunakan dan tempel.',
     shareCopyText: 'Salin teks', shareCopyLink: 'Salin tautan', shareJumpTo: 'Buka:',
-    shareTemplate: ({ title, url }) => `🎨 Baru nemu ${title} di @opendesignai — alternatif open-source untuk Claude Design.\n✨ Local-first · BYOK · agent kamu yang nge-desain.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Baru nemu ${title} di @OpenDesignHQ — alternatif open-source untuk Claude Design.\n✨ Local-first · BYOK · agent kamu yang nge-desain.\n\n→ ${url}`,
     hubLead: 'Open Design dibangun di sekitar empat jenis plugin: Templates dan Skills adalah yang dijalankan agent kamu; Systems dan Craft menjaga brand dan aksesibilitas. Pilih satu bagian untuk mendalami, atau lompat langsung ke slug kalau sudah tahu mau yang mana.',
     tileTemplatesBlurb: 'Template visual dan dapat dijalankan — prototipe, slide, generator gambar dan video, komposisi motion. Setiap entri membawa example.html: fork, ganti data, kirim.',
     tileSkillsBlurb: 'Skill instruksi yang dimuat agent di tengah tugas — copywriting, teori warna, arah kreatif, brainstorming. Murni prosa SKILL.md; hasil tergantung input kamu.',
@@ -1824,7 +2106,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} template yang dapat dijalankan.`,
     templatesLead: 'Setiap template memiliki preview yang berfungsi — thumbnail katalog langsung dari poster manifest yang dipakai agent di dalam produk. Telusuri semua atau lompat ke salah satu dari tujuh jenis artefak.',
     skillsLabel: 'Plugin · Skill',
-    skillsHeading: (n) => `${n} skill instruksi.`,
+    skillsHeading: (n) => `${n} skill instruksi`,
     skillsLead: 'Skill yang agent muat di tengah tugas — copywriting, teori warna, arah kreatif, brainstorming. Tidak ada demo statis karena hasil tergantung input; setiap halaman detail dibaca seperti brief: judul, deskripsi, trigger, atribusi.',
     systemsLabel: 'Plugin · Sistem',
     systemsHeading: (n) => `${n} design system.`,
@@ -1954,7 +2236,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   pl: {
-    hubLabel: 'Biblioteka pluginów', hubHeading: (n) => `${n} komponowalnych elementów.`,
+    hubMetaTitle: (n) => `Marketplace Claude Skills — ${n}+ wtyczek | Open Design`,
+    hubMetaDescription: 'Przeglądaj otwartoźródłowy marketplace Claude skills——skills do designu, systemy projektowe, szablony i craft, które Twój coding agent uruchamia bezpośrednio. Działa z Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills do designu — ${n} otwartych skills | Open Design`,
+    skillsMetaDescription: 'Przeglądaj otwartoźródłowe Claude skills do designu——copywriting, kolor, kierunek kreatywny i więcej, które Twój coding agent ładuje w trakcie zadania. Działa z Claude, Codex i Cursor.',
+    hubLabel: 'Biblioteka pluginów', hubHeading: (n) => `${n} komponowalnych elementów`,
     tileTemplates: 'Szablony', tileSkills: 'Umiejętności', tileSystems: 'Systemy', tileCraft: 'Rzemiosło',
     browseTemplates: 'Przeglądaj szablony', browseSkills: 'Przeglądaj skille', browseSystems: 'Przeglądaj systemy', browseCraft: 'Przeglądaj rzemiosło',
     artifactKindLabel: 'Typ artefaktu', sceneLabel: 'Scena', allChip: 'Wszystkie',
@@ -1963,7 +2249,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Udostępnij ↗', shareTitle: 'Udostępnij ten plugin',
     shareLead: 'Skopiuj wiadomość poniżej, otwórz wybraną platformę i wklej.',
     shareCopyText: 'Kopiuj tekst', shareCopyLink: 'Skopiuj link', shareJumpTo: 'Przejdź do:',
-    shareTemplate: ({ title, url }) => `🎨 Właśnie odkryłem ${title} na @opendesignai — open-source’ową alternatywę dla Claude Design.\n✨ Local-first · BYOK · twój agent projektuje.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Właśnie odkryłem ${title} na @OpenDesignHQ — open-source’ową alternatywę dla Claude Design.\n✨ Local-first · BYOK · twój agent projektuje.\n\n→ ${url}`,
     hubLead: 'Open Design opiera się na czterech rodzajach wtyczek: Templates i Skills to to, co uruchamia twój agent; Systems i Craft pilnują marki i dostępności. Wybierz sekcję, by zejść głębiej, albo skocz prosto do sluga, jeśli już wiesz, czego chcesz.',
     tileTemplatesBlurb: 'Wizualne, wykonywalne szablony — prototypy, slajdy, generatory obrazów i wideo, kompozycje motion. Każda pozycja ma example.html: forkujesz, podmieniasz dane, wysyłasz.',
     tileSkillsBlurb: 'Wtyczki instrukcyjne, które agent wczytuje w trakcie zadania — copywriting, teoria koloru, kierunek kreatywny, burze mózgów. Czysty tekst SKILL.md; wynik zależy od twojego inputu.',
@@ -1973,7 +2259,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} wykonywalnych szablonów.`,
     templatesLead: 'Każdy szablon ma działający podgląd — miniatura w katalogu przychodzi prosto z postera manifestu, którego agent używa wewnątrz produktu. Przejrzyj wszystkie albo skocz do jednej z siedmiu klas artefaktu.',
     skillsLabel: 'Wtyczki · Skille',
-    skillsHeading: (n) => `${n} skilli instrukcyjnych.`,
+    skillsHeading: (n) => `${n} skilli instrukcyjnych`,
     skillsLead: 'Skille, które agent wczytuje w trakcie zadania — copywriting, teoria koloru, kierunek kreatywny, burze mózgów. Bez statycznego demo, bo wynik zależy od inputu; każda strona szczegółu czyta się jak brief: tytuł, opis, triggery, atrybucja.',
     systemsLabel: 'Wtyczki · Systemy',
     systemsHeading: (n) => `${n} design systemów.`,
@@ -2103,7 +2389,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ar: {
-    hubLabel: 'مكتبة الإضافات', hubHeading: (n) => `${n} قطعة قابلة للتركيب.`,
+    hubMetaTitle: (n) => `سوق Claude Skills — ${n}+ إضافة | Open Design`,
+    hubMetaDescription: 'تصفّح سوق Claude skills مفتوح المصدر——skills التصميم وأنظمة التصميم والقوالب و craft التي يشغّلها coding agent مباشرة. يعمل مع Claude وCodex وCursor.',
+    skillsMetaTitle: (n) => `Claude Skills للتصميم — ${n} skills مفتوحة المصدر | Open Design`,
+    skillsMetaDescription: 'تصفّح Claude skills مفتوحة المصدر للتصميم——كتابة المحتوى والألوان والإخراج الإبداعي وغيرها يحمّلها coding agent أثناء المهمة. يعمل مع Claude وCodex و Cursor.',
+    hubLabel: 'مكتبة الإضافات', hubHeading: (n) => `${n} قطعة قابلة للتركيب`,
     tileTemplates: 'قوالب', tileSkills: 'مهارات', tileSystems: 'أنظمة', tileCraft: 'حِرَفية',
     browseTemplates: 'تصفح القوالب', browseSkills: 'تصفح المهارات', browseSystems: 'تصفح الأنظمة', browseCraft: 'تصفح الحِرَفية',
     artifactKindLabel: 'نوع المنتج', sceneLabel: 'مشهد', allChip: 'الكل',
@@ -2112,7 +2402,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'مشاركة ↗', shareTitle: 'شارك هذه الإضافة',
     shareLead: 'انسخ الرسالة أدناه، ثم انتقل إلى المنصة التي تريد المشاركة عليها والصقها.',
     shareCopyText: 'انسخ النص', shareCopyLink: 'انسخ الرابط فقط', shareJumpTo: 'انتقل إلى:',
-    shareTemplate: ({ title, url }) => `🎨 اكتشفت للتو ${title} على @opendesignai — البديل مفتوح المصدر لـ Claude Design.\n✨ محلي أولًا · BYOK · وكيلك يصمّم.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 اكتشفت للتو ${title} على @OpenDesignHQ — البديل مفتوح المصدر لـ Claude Design.\n✨ محلي أولًا · BYOK · وكيلك يصمّم.\n\n→ ${url}`,
     hubLead: 'تم بناء Open Design حول أربعة أنواع من الإضافات: القوالب والمهارات هي ما يشغّله الـ agent؛ والأنظمة والحرفة تحافظان على الهوية وإمكانية الوصول. اختر قسما للتعمق، أو انتقل مباشرة إلى slug إذا كنت تعرف ما تريد.',
     tileTemplatesBlurb: 'قوالب مرئية وقابلة للتشغيل — نماذج أولية، شرائح، مولّدات صور وفيديو، تركيبات حركة. كل مدخل يأتي مع example.html: انسخ، بدّل البيانات، اطلق.',
     tileSkillsBlurb: 'مهارات إرشاد يحملها الـ agent أثناء المهمة — كتابة، نظرية الألوان، توجيه إبداعي، عصف ذهني. نص SKILL.md خالص؛ النتيجة تعتمد على مدخلاتك.',
@@ -2122,7 +2412,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} قالبا قابلا للتشغيل.`,
     templatesLead: 'كل قالب يأتي مع معاينة شغّالة — صورة الكتالوج المصغّرة تأتي مباشرة من بوستر manifest الذي يستخدمه الـ agent داخل المنتج. تصفّح الجميع، أو انتقل إلى أحد الأنواع السبعة من المنتجات.',
     skillsLabel: 'إضافات · مهارات',
-    skillsHeading: (n) => `${n} مهارة إرشاد.`,
+    skillsHeading: (n) => `${n} مهارة إرشاد`,
     skillsLead: 'مهارات يحملها الـ agent أثناء المهمة — كتابة، نظرية الألوان، توجيه إبداعي، عصف ذهني. لا توجد demo ثابتة لأن النتيجة تعتمد على المدخل؛ كل صفحة تفصيل تُقرأ كموجز: عنوان، وصف، محفّزات، إسناد.',
     systemsLabel: 'إضافات · أنظمة',
     systemsHeading: (n) => `${n} نظام تصميم.`,
@@ -2252,7 +2542,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   tr: {
-    hubLabel: 'Eklenti kütüphanesi', hubHeading: (n) => `${n} birleştirilebilir parça.`,
+    hubMetaTitle: (n) => `Claude Skills Pazarı — ${n}+ Eklenti | Open Design`,
+    hubMetaDescription: 'Açık kaynaklı Claude skills pazarına göz atın——coding agent\'ınızın doğrudan çalıştırdığı tasarım skills, tasarım sistemleri, şablonlar ve craft. Claude, Codex, Cursor ile çalışır.',
+    skillsMetaTitle: (n) => `Tasarım için Claude Skills — ${n} Açık Kaynak skills | Open Design`,
+    skillsMetaDescription: 'Tasarım için açık kaynaklı Claude skills\'e göz atın——metin yazarlığı, renk, kreatif yönetim ve coding agent\'ınızın görev sırasında yüklediği daha fazlası. Claude, Codex ve Cursor ile çalışır.',
+    hubLabel: 'Eklenti kütüphanesi', hubHeading: (n) => `${n} birleştirilebilir parça`,
     tileTemplates: 'Şablonlar', tileSkills: 'Yetenekler', tileSystems: 'Sistemler', tileCraft: 'Zanaat',
     browseTemplates: 'Şablonları gözat', browseSkills: 'Yetenekleri gözat', browseSystems: 'Sistemleri gözat', browseCraft: 'Zanaatı gözat',
     artifactKindLabel: 'Çıktı türü', sceneLabel: 'Sahne', allChip: 'Tümü',
@@ -2261,7 +2555,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Paylaş ↗', shareTitle: 'Bu eklentiyi paylaş',
     shareLead: 'Aşağıdaki mesajı kopyala, dilediğin platformu açıp yapıştır.',
     shareCopyText: 'Metni kopyala', shareCopyLink: 'Sadece linki kopyala', shareJumpTo: 'Şuraya git:',
-    shareTemplate: ({ title, url }) => `🎨 Yeni keşfettim: ${title} (@opendesignai) — Claude Design’a açık kaynaklı alternatif.\n✨ Local-first · BYOK · ajanın tasarlıyor.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Yeni keşfettim: ${title} (@OpenDesignHQ) — Claude Design’a açık kaynaklı alternatif.\n✨ Local-first · BYOK · ajanın tasarlıyor.\n\n→ ${url}`,
     hubLead: 'Open Design dört eklenti türü etrafında inşa edilmiştir: Templates ve Skills agent’ın çalıştırdığı, Systems ve Craft ise marka ve erişilebilirliği koruyan parçalar. Bir bölüme dal ya da hangi slug’u istediğini biliyorsan doğrudan oraya zıpla.',
     tileTemplatesBlurb: 'Görsel ve çalıştırılabilir şablonlar — prototipler, slaytlar, görsel ve video üreticileri, motion kompozisyonları. Her giriş example.html ile gelir: fork, veri değiştir, gönder.',
     tileSkillsBlurb: 'Agent’ın görev sırasında yüklediği yönerge skill’leri — metin yazımı, renk teorisi, kreatif yönlendirme, beyin fırtınası. Saf SKILL.md metni; sonuç input’una göre değişir.',
@@ -2271,7 +2565,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} çalıştırılabilir şablon.`,
     templatesLead: 'Her şablon çalışan bir önizleme ile gelir — katalog satırının küçük resmi doğrudan agent’ın ürün içinde kullandığı manifest poster’ından alınır. Hepsine bak ya da yedi artefakt türünden birine zıpla.',
     skillsLabel: 'Eklentiler · Skill’ler',
-    skillsHeading: (n) => `${n} yönerge skill’i.`,
+    skillsHeading: (n) => `${n} yönerge skill’i`,
     skillsLead: 'Agent’ın görev sırasında yüklediği skill’ler — metin yazımı, renk teorisi, kreatif yönlendirme, beyin fırtınası. Sonuç input’a bağlı olduğu için statik demo yok; her detay sayfası bir brief gibi okunur: başlık, açıklama, tetikler, atıf.',
     systemsLabel: 'Eklentiler · Sistemler',
     systemsHeading: (n) => `${n} tasarım sistemi.`,
@@ -2401,7 +2695,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   uk: {
-    hubLabel: 'Бібліотека плагінів', hubHeading: (n) => `${n} компонованих елементів.`,
+    hubMetaTitle: (n) => `Маркетплейс Claude Skills — ${n}+ плагінів | Open Design`,
+    hubMetaDescription: 'Перегляньте опенсорсний маркетплейс Claude skills——дизайн-skills, дизайн-системи, шаблони та craft, які ваш coding agent запускає напряму. Працює з Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills для дизайну — ${n} опенсорсних skills | Open Design`,
+    skillsMetaDescription: 'Перегляньте опенсорсні Claude skills для дизайну——копірайтинг, колір, креативний напрям та інше, що ваш coding agent завантажує під час завдання. Працює з Claude, Codex і Cursor.',
+    hubLabel: 'Бібліотека плагінів', hubHeading: (n) => `${n} компонованих елементів`,
     tileTemplates: 'Шаблони', tileSkills: 'Навички', tileSystems: 'Системи', tileCraft: 'Ремесло',
     browseTemplates: 'Переглянути шаблони', browseSkills: 'Переглянути навички', browseSystems: 'Переглянути системи', browseCraft: 'Переглянути ремесло',
     artifactKindLabel: 'Тип артефакту', sceneLabel: 'Сцена', allChip: 'Усі',
@@ -2410,7 +2708,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Поділитись ↗', shareTitle: 'Поділитись цим плагіном',
     shareLead: 'Скопіюйте повідомлення нижче, потім перейдіть на платформу й вставте.',
     shareCopyText: 'Копіювати текст', shareCopyLink: 'Тільки посилання', shareJumpTo: 'Перейти:',
-    shareTemplate: ({ title, url }) => `🎨 Щойно знайшов ${title} на @opendesignai — open-source альтернативу Claude Design.\n✨ Local-first · BYOK · ваш агент робить дизайн.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Щойно знайшов ${title} на @OpenDesignHQ — open-source альтернативу Claude Design.\n✨ Local-first · BYOK · ваш агент робить дизайн.\n\n→ ${url}`,
     hubLead: 'Open Design побудовано навколо чотирьох видів плагінів: Templates і Skills — те, що виконує твій agent; Systems і Craft утримують бренд і доступність. Обери розділ для занурення або одразу перейди по slug, якщо вже знаєш, що потрібно.',
     tileTemplatesBlurb: 'Візуальні, виконувані шаблони — прототипи, слайди, генератори зображень і відео, motion-композиції. Кожен запис іде з example.html: форкай, міняй дані, відправляй.',
     tileSkillsBlurb: 'Інструкційні навички, які agent підвантажує під час задачі — копірайтинг, теорія кольору, креативне керівництво, брейншторм. Чистий текст SKILL.md; результат залежить від твого input.',
@@ -2420,7 +2718,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} виконуваних шаблонів.`,
     templatesLead: 'Кожен шаблон має робочий попередній перегляд — мініатюра в каталозі береться прямо з manifest poster, який agent використовує всередині продукту. Перегляньте всі або стрибніть до однієї з семи категорій артефактів.',
     skillsLabel: 'Плагіни · Навички',
-    skillsHeading: (n) => `${n} інструкційних навичок.`,
+    skillsHeading: (n) => `${n} інструкційних навичок`,
     skillsLead: 'Навички, які agent підвантажує під час задачі — копірайтинг, теорія кольору, креативне керівництво, брейншторм. Статичної demo немає, бо результат залежить від input; кожна сторінка деталей читається як brief: заголовок, опис, тригери, авторство.',
     systemsLabel: 'Плагіни · Системи',
     systemsHeading: (n) => `${n} дизайн-систем.`,
@@ -2550,7 +2848,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   vi: {
-    hubLabel: 'Thư viện plugin', hubHeading: (n) => `${n} thành phần có thể ghép nối.`,
+    hubMetaTitle: (n) => `Marketplace Claude Skills — ${n}+ plugin | Open Design`,
+    hubMetaDescription: 'Khám phá marketplace Claude skills mã nguồn mở——skills thiết kế, design system, mẫu và craft mà coding agent của bạn chạy trực tiếp. Hoạt động với Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills cho thiết kế — ${n} skills mã nguồn mở | Open Design`,
+    skillsMetaDescription: 'Khám phá Claude skills mã nguồn mở cho thiết kế——viết nội dung, màu sắc, định hướng sáng tạo và hơn thế mà coding agent của bạn tải giữa tác vụ. Hoạt động với Claude, Codex & Cursor.',
+    hubLabel: 'Thư viện plugin', hubHeading: (n) => `${n} thành phần có thể ghép nối`,
     tileTemplates: 'Mẫu', tileSkills: 'Kỹ năng', tileSystems: 'Hệ thống', tileCraft: 'Thủ công',
     browseTemplates: 'Xem các mẫu', browseSkills: 'Xem kỹ năng', browseSystems: 'Xem hệ thống', browseCraft: 'Xem thủ công',
     artifactKindLabel: 'Loại sản phẩm', sceneLabel: 'Cảnh', allChip: 'Tất cả',
@@ -2559,7 +2861,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Chia sẻ ↗', shareTitle: 'Chia sẻ plugin này',
     shareLead: 'Sao chép nội dung dưới đây, rồi mở nền tảng bạn muốn chia sẻ và dán vào.',
     shareCopyText: 'Sao chép', shareCopyLink: 'Chỉ sao chép link', shareJumpTo: 'Mở:',
-    shareTemplate: ({ title, url }) => `🎨 Vừa khám phá ${title} trên @opendesignai — giải pháp mã nguồn mở thay thế Claude Design.\n✨ Ưu tiên local · BYOK · agent của bạn thiết kế.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Vừa khám phá ${title} trên @OpenDesignHQ — giải pháp mã nguồn mở thay thế Claude Design.\n✨ Ưu tiên local · BYOK · agent của bạn thiết kế.\n\n→ ${url}`,
     hubLead: 'Open Design xoay quanh bốn loại plugin: Templates và Skills là thứ agent của bạn chạy; Systems và Craft giữ thương hiệu và tính tiếp cận. Chọn một mục để đào sâu, hoặc nhảy thẳng tới một slug nếu bạn đã biết cần gì.',
     tileTemplatesBlurb: 'Templates trực quan và chạy được — nguyên mẫu, slide, bộ sinh ảnh và video, bố cục motion. Mỗi mục có example.html: fork, đổi dữ liệu, ship ngay.',
     tileSkillsBlurb: 'Các skill chỉ dẫn mà agent nạp giữa tác vụ — copy, lý thuyết màu, chỉ đạo sáng tạo, brainstorm. Văn xuôi SKILL.md thuần; kết quả tuỳ input của bạn.',
@@ -2569,7 +2871,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} templates chạy được.`,
     templatesLead: 'Mỗi template đều có preview chạy được — thumbnail trong catalog lấy trực tiếp từ manifest poster mà agent dùng trong sản phẩm. Lướt hết, hoặc nhảy tới một trong bảy loại artifact.',
     skillsLabel: 'Plugin · Skills',
-    skillsHeading: (n) => `${n} skill chỉ dẫn.`,
+    skillsHeading: (n) => `${n} skill chỉ dẫn`,
     skillsLead: 'Skills agent nạp giữa tác vụ — copy, lý thuyết màu, chỉ đạo sáng tạo, brainstorm. Không có demo tĩnh vì kết quả phụ thuộc input; mỗi trang chi tiết đọc như một brief: tiêu đề, mô tả, trigger, ghi nguồn.',
     systemsLabel: 'Plugin · Systems',
     systemsHeading: (n) => `${n} design system.`,
@@ -2699,7 +3001,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   nl: {
-    hubLabel: 'Plugin-bibliotheek', hubHeading: (n) => `${n} combineerbare onderdelen.`,
+    hubMetaTitle: (n) => `Claude Skills Marktplaats — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Verken de open-source marktplaats voor Claude skills——design-skills, designsystemen, templates en craft die je coding agent direct uitvoert. Werkt met Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills voor design — ${n} open-source skills | Open Design`,
+    skillsMetaDescription: 'Verken open-source Claude skills voor design——copywriting, kleur, creatieve regie en meer die je coding agent midden in een taak laadt. Werkt met Claude, Codex & Cursor.',
+    hubLabel: 'Plugin-bibliotheek', hubHeading: (n) => `${n} combineerbare onderdelen`,
     tileTemplates: 'Templates', tileSkills: 'Skills', tileSystems: 'Systemen', tileCraft: 'Vakmanschap',
     browseTemplates: 'Bekijk templates', browseSkills: 'Bekijk skills', browseSystems: 'Bekijk systemen', browseCraft: 'Bekijk vakmanschap',
     artifactKindLabel: 'Type artefact', sceneLabel: 'Scène', allChip: 'Alle',
@@ -2708,7 +3014,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     shareOpen: 'Delen ↗', shareTitle: 'Deel deze plugin',
     shareLead: 'Kopieer het bericht hieronder en plak het op het platform van jouw keuze.',
     shareCopyText: 'Tekst kopiëren', shareCopyLink: 'Alleen de link', shareJumpTo: 'Ga naar:',
-    shareTemplate: ({ title, url }) => `🎨 Net ontdekt: ${title} op @opendesignai — het open-source alternatief voor Claude Design.\n✨ Local-first · BYOK · jouw agent ontwerpt.\n\n→ ${url}`,
+    shareTemplate: ({ title, url }) => `🎨 Net ontdekt: ${title} op @OpenDesignHQ — het open-source alternatief voor Claude Design.\n✨ Local-first · BYOK · jouw agent ontwerpt.\n\n→ ${url}`,
     hubLead: 'Open Design is gebouwd rond vier soorten plug-ins: Templates en Skills zijn wat je agent draait; Systems en Craft houden merk en toegankelijkheid op orde. Kies een sectie om dieper in te duiken, of spring direct naar een slug als je al weet wat je wilt.',
     tileTemplatesBlurb: 'Visuele, draaiende templates — prototypes, slides, beeld- en videogeneratoren, motion-composities. Elke entry levert een example.html: fork, wissel data, ship.',
     tileSkillsBlurb: 'Instructie-skills die de agent halverwege een taak laadt — copy, kleurtheorie, creatieve regie, brainstorm. Pure SKILL.md-tekst; het resultaat hangt af van je input.',
@@ -2718,7 +3024,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     templatesHeading: (n) => `${n} draaiende templates.`,
     templatesLead: 'Elke template levert een werkende preview — de thumbnail in de catalogus komt direct van de manifest-poster die de agent in het product gebruikt. Bekijk ze allemaal of spring naar een van de zeven artefactsoorten.',
     skillsLabel: 'Plug-ins · Skills',
-    skillsHeading: (n) => `${n} instructie-skills.`,
+    skillsHeading: (n) => `${n} instructie-skills`,
     skillsLead: 'Skills die de agent tijdens een taak laadt — copy, kleurtheorie, creatieve regie, brainstorm. Geen statische demo omdat de uitkomst van je input afhangt; elke detailpagina leest als een brief: titel, beschrijving, triggers, attributie.',
     systemsLabel: 'Plug-ins · Systemen',
     systemsHeading: (n) => `${n} designsystemen.`,
@@ -2857,13 +3163,19 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
  */
 export function getPluginsCopy(locale: LandingLocaleCode): PluginsCopy {
   if (locale === DEFAULT_LOCALE) return en;
-  const partial = overrides[locale];
-  if (!partial) return en;
+  const base = overrides[locale];
+  const detail = pluginDetailL10n[locale];
+  if (!base && !detail) return en;
+  // Detail-page chrome (plugin-detail-l10n) wins over the original overrides
+  // when both define a key; English (en) fills anything neither provides.
+  const partial = { ...(base ?? {}), ...(detail ?? {}) };
   return {
     ...en,
     ...partial,
     category: { ...en.category, ...(partial.category ?? {}) },
     subcategory: { ...en.subcategory, ...(partial.subcategory ?? {}) },
     detailBucketLabel: { ...en.detailBucketLabel, ...(partial.detailBucketLabel ?? {}) },
+    tokenGroupLabels: { ...en.tokenGroupLabels, ...(partial.tokenGroupLabels ?? {}) },
+    scenarioLabels: { ...en.scenarioLabels, ...(partial.scenarioLabels ?? {}) },
   };
 }

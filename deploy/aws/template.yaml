@@ -1,0 +1,546 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Open Design ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
+
+Parameters:
+  CustomDomainName:
+    Type: String
+    Description: '(Optional) Your custom domain name (e.g., design.yourcompany.com). Leave blank to use the default ALB URL.'
+    Default: ''
+  AcmCertificateArn:
+    Type: String
+    Description: '(Optional) The ARN of your AWS Certificate Manager (ACM) certificate. Required if CustomDomainName is provided.'
+    Default: ''
+  DockerImage:
+    Type: String
+    MinLength: 1
+    Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
+  AllowedSourceIp:
+    Type: String
+    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'
+    ConstraintDescription: 'Must be a valid IPv4 CIDR range with a subnet mask between /16 and /32 (e.g., 192.168.1.0/24 or 10.0.0.1/32).'
+    MinLength: 1
+    Description: 'REQUIRED: The specific IPv4 CIDR block allowlisted to access the ALB. Ensure this is your VPN or corporate range to avoid unintended public exposure. Accepts any valid IPv4 range with a subnet mask between /16 and /32.'
+  ProxyPort:
+    Type: Number
+    Default: 8080
+    MinValue: 1024
+    MaxValue: 65535
+    Description: 'The dynamic port used by the Nginx proxy (must be >= 1024 for unprivileged container).'
+  AppStoragePath:
+    Type: String
+    Description: 'Container path where the .od SQLite directory is stored.'
+    Default: '/app/.od'
+  ApiToken:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: 'REQUIRED: The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager.'
+  VpcCidr:
+    Type: String
+    Default: '10.42.0.0/16'
+    Description: 'The CIDR block for the VPC'
+  PublicSubnet1Cidr:
+    Type: String
+    Default: '10.42.1.0/24'
+    Description: 'The CIDR block for Public Subnet 1 (AZ1)'
+  PublicSubnet2Cidr:
+    Type: String
+    Default: '10.42.3.0/24'
+    Description: 'The CIDR block for Public Subnet 2 (AZ2)'
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: '10.42.2.0/24'
+    Description: 'The CIDR block for Private Subnet 1 (AZ1)'
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: '10.42.4.0/24'
+    Description: 'The CIDR block for Private Subnet 2 (AZ2)'
+  TaskSize:
+    Type: String
+    Default: small
+    AllowedValues: [small, medium, large]
+    Description: 'The compute size for the Open Design application.'
+  TaskCpuArchitecture:
+    Type: String
+    Default: X86_64
+    AllowedValues: [ARM64, X86_64]
+    Description: 'The CPU architecture for the Fargate task. Must match how your DockerImage was built (e.g., use X86_64 for standard linux/amd64 images).'
+
+Mappings:
+  TaskSizes:
+    small:
+      Cpu: '256'
+      Memory: '1024'
+    medium:
+      Cpu: '512'
+      Memory: '2048'
+    large:
+      Cpu: '1024'
+      Memory: '4096'
+
+Conditions:
+  UseCustomDomain: !Not [!Equals [!Ref CustomDomainName, '']]
+
+Rules:
+  RequireCertificateWithDomain:
+    RuleCondition: !Not [!Equals [!Ref CustomDomainName, '']]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AcmCertificateArn, '']]
+        AssertDescription: 'You must provide an AcmCertificateArn when specifying a CustomDomainName.'
+
+
+Resources:
+  # NETWORKING (VPC, Subnets, NAT)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+
+  PublicSubnet2:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: !Ref PublicSubnet2Cidr
+        MapPublicIpOnLaunch: true
+        AvailabilityZone: !Select [ 1, !GetAZs '' ]
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  # SECURITY GROUPS
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow restricted inbound traffic to ALB
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref AllowedSourceIp
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref AllowedSourceIp
+
+  FargateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from ALB to Fargate
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ProxyPort
+          ToPort: !Ref ProxyPort
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow NFS traffic from Fargate to EFS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref FargateSecurityGroup
+
+  # 3. STORAGE (EFS for SQLite .od directory)
+  FileSystem:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref PrivateSubnet1
+      SecurityGroups:
+        - !Ref EfsSecurityGroup
+
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref PrivateSubnet2
+      SecurityGroups:
+        - !Ref EfsSecurityGroup
+
+  EfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref FileSystem
+      PosixUser:
+        Uid: "1001"
+        Gid: "1001"
+      RootDirectory:
+        Path: "/od-data"
+        CreationInfo:
+          OwnerUid: "1001"
+          OwnerGid: "1001"
+          Permissions: "0755"
+
+  # LOAD BALANCER
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+        - !Ref PublicSubnet
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Scheme: internet-facing
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VPC
+      Port: !Ref ProxyPort
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /api/health
+
+  Listener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        LoadBalancerArn: !Ref LoadBalancer
+        Port: 80
+        Protocol: HTTP
+        DefaultActions: !If
+          - UseCustomDomain
+          - - Type: redirect
+              RedirectConfig:
+                Protocol: HTTPS
+                Port: "443"
+                StatusCode: HTTP_301
+          - - Type: forward
+              TargetGroupArn: !Ref TargetGroup
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: UseCustomDomain
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref AcmCertificateArn
+
+  # COMPUTE (ECS Fargate)
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref ApiTokenSecret
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroup.Arn
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EfsMountAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                Resource: !GetAtt FileSystem.Arn
+                Condition:
+                  StringEquals:
+                    elasticfilesystem:AccessPointArn: !GetAtt EfsAccessPoint.Arn
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: opendesign-app
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: !FindInMap [TaskSizes, !Ref TaskSize, Cpu]
+      Memory: !FindInMap [TaskSizes, !Ref TaskSize, Memory]
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      RuntimePlatform:
+        CpuArchitecture: !Ref TaskCpuArchitecture
+        OperatingSystemFamily: LINUX
+      Volumes:
+        - Name: efs-storage
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref FileSystem
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId: !Ref EfsAccessPoint
+              IAM: ENABLED
+      ContainerDefinitions:
+        - Name: app
+          Image: !Ref DockerImage
+          Environment:
+            - Name: OD_ALLOWED_ORIGINS
+              Value: !If
+                - UseCustomDomain
+                - !Sub 'https://${CustomDomainName}'
+                - !Sub 'http://${LoadBalancer.DNSName}'
+            - Name: OD_BIND_HOST
+              Value: "127.0.0.1"
+            - Name: OD_PORT
+              Value: "7456"
+          Secrets:
+            - Name: OD_API_TOKEN
+              ValueFrom: !Ref ApiTokenSecret
+          MountPoints:
+            - SourceVolume: efs-storage
+              ContainerPath: !Ref AppStoragePath
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+        - Name: auth-proxy
+          Image: nginxinc/nginx-unprivileged:1.25-alpine-slim
+          PortMappings:
+            - ContainerPort: !Ref ProxyPort
+          Environment:
+            - Name: PROXY_PORT
+              Value: !Ref ProxyPort
+            - Name: OD_BIND_HOST
+              Value: "127.0.0.1"
+            - Name: OD_WEB_PORT
+              Value: "7456"
+          Secrets:
+            - Name: PROXY_API_TOKEN
+              ValueFrom: !Ref ApiTokenSecret
+          EntryPoint:
+            - /bin/sh
+            - -c
+          Command:
+            - |
+              cat << 'EOF' > /tmp/default.conf.template
+              server {
+                  listen ${PROXY_PORT};
+
+                  location / {
+                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+                      proxy_set_header Host $host;
+                      proxy_set_header X-Real-IP $remote_addr;
+                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                      proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+                      proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+                  }
+
+                  location /api/ {
+                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+                      proxy_set_header Host $host;
+                      proxy_set_header X-Real-IP $remote_addr;
+                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                      proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+                      proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+
+                      proxy_set_header Authorization "Bearer ${PROXY_API_TOKEN}";
+
+                      proxy_buffering off;
+                      proxy_read_timeout 600s;
+                      proxy_send_timeout 600s;
+                      proxy_set_header Connection '';
+                      http2_push_preload on;
+                  }
+              }
+              EOF
+              envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
+              exec nginx -g "daemon off;"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs-proxy
+  EcsService:
+    Type: AWS::ECS::Service
+    DependsOn: Listener
+    Properties:
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 60
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+          SecurityGroups:
+            - !Ref FargateSecurityGroup
+      LoadBalancers:
+        - ContainerName: auth-proxy
+          ContainerPort: !Ref ProxyPort
+          TargetGroupArn: !Ref TargetGroup
+
+  LogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: !Sub '/ecs/${AWS::StackName}/opendesign-app'
+        RetentionInDays: 7
+
+  # SECRETS (Secrets Manager)
+  ApiTokenSecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Description: "API Token for Open Design"
+        SecretString: !Ref ApiToken
+
+Outputs:
+  AppUrl:
+    Description: 'URL of the Load Balancer/Custom Domain'
+    Value: !If
+      - UseCustomDomain
+      - !Sub 'https://${CustomDomainName}'
+      - !Sub 'http://${LoadBalancer.DNSName}'
+  AlbDnsName:
+    Description: 'The raw DNS name of the Application Load Balancer (use as the target for custom domain CNAME/Alias records).'
+    Value: !GetAtt LoadBalancer.DNSName

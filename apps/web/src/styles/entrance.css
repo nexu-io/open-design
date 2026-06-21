@@ -1,0 +1,510 @@
+/* Shared CSS entrance animations — zero JS overhead.
+   Uses the product ease: cubic-bezier(0.23, 1, 0.32, 1). */
+
+/* ================================================================
+   Keyframes
+   ================================================================ */
+
+@keyframes od-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes od-fade-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes od-fade-slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes od-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes od-popover-in {
+  from { opacity: 0; transform: scale(0.93) translateY(-3px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes od-slide-left {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ================================================================
+   Page / section entrance
+   ================================================================ */
+
+.app,
+.entry-shell {
+  animation: od-fade-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Home hero
+   ================================================================ */
+
+.home-hero__brand {
+  animation: od-fade-slide-up 350ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.home-hero__title {
+  animation: od-fade-slide-up 400ms cubic-bezier(0.23, 1, 0.32, 1) 40ms both;
+}
+
+.home-hero__subtitle {
+  animation: od-fade-slide-up 400ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both;
+}
+
+.home-hero__input-card {
+  animation: od-fade-slide-up 350ms cubic-bezier(0.23, 1, 0.32, 1) 100ms both;
+}
+
+.home-hero__rail-group {
+  animation: od-fade-in 300ms cubic-bezier(0.23, 1, 0.32, 1) 160ms both;
+}
+
+/* Example prompts grid stagger */
+.home-hero__prompt-examples-grid > * {
+  animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.home-hero__prompt-examples-grid > *:nth-child(1) { animation-delay: 80ms; }
+.home-hero__prompt-examples-grid > *:nth-child(2) { animation-delay: 120ms; }
+.home-hero__prompt-examples-grid > *:nth-child(3) { animation-delay: 160ms; }
+.home-hero__prompt-examples-grid > *:nth-child(4) { animation-delay: 200ms; }
+.home-hero__prompt-examples-grid > *:nth-child(5) { animation-delay: 240ms; }
+.home-hero__prompt-examples-grid > *:nth-child(6) { animation-delay: 280ms; }
+
+/* Plugin preset list stagger */
+.home-hero__plugin-presets > * {
+  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.home-hero__plugin-presets > *:nth-child(1) { animation-delay: 60ms; }
+.home-hero__plugin-presets > *:nth-child(2) { animation-delay: 100ms; }
+.home-hero__plugin-presets > *:nth-child(3) { animation-delay: 140ms; }
+.home-hero__plugin-presets > *:nth-child(4) { animation-delay: 180ms; }
+.home-hero__plugin-presets > *:nth-child(5) { animation-delay: 220ms; }
+.home-hero__plugin-presets > *:nth-child(6) { animation-delay: 260ms; }
+
+/* ================================================================
+   Recent projects strip
+   ================================================================ */
+
+
+/* ================================================================
+   Plugin cards grid
+   ================================================================ */
+
+
+/* ================================================================
+   Design grid
+   ================================================================ */
+
+
+/* ================================================================
+   Automations template grid
+   ================================================================ */
+
+/* ================================================================
+   Integrations view
+   ================================================================ */
+
+.integrations-view__hero {
+  animation: od-fade-slide-up 350ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.integrations-view__tabs {
+  animation: od-fade-in 300ms cubic-bezier(0.23, 1, 0.32, 1) 60ms both;
+}
+
+.integrations-view__panel {
+  animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) 100ms both;
+}
+
+.integrations-view__coming-soon {
+  animation: od-fade-slide-up 350ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Nav rail
+   ================================================================ */
+
+.entry-nav-rail__btn {
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), transform 100ms var(--ease-out);
+}
+.entry-nav-rail__btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ================================================================
+   Project actions toolbar
+   ================================================================ */
+
+.project-actions-toolbar {
+  animation: od-fade-slide-down 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Popovers & dropdowns
+   ================================================================ */
+
+.conv-menu {
+  animation: od-popover-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.od-select-menu {
+  animation: od-popover-in 140ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.entry-help-popover {
+  animation: od-popover-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.chat-history-menu {
+  animation: od-popover-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Live artifact badges
+   ================================================================ */
+
+
+/* ================================================================
+   Chat pane
+   ================================================================ */
+
+.chat-empty-wrap {
+  animation: od-fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   File viewer & workspace
+   ================================================================ */
+
+.viewer-empty {
+  animation: od-fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Inspector & comment panels (slide in from right)
+   ================================================================ */
+
+.inspect-panel {
+  animation: od-slide-left 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.comment-side-panel {
+  animation: od-slide-left 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+
+/* ================================================================
+   Settings dialog
+   ================================================================ */
+
+
+.settings-section {
+  animation: od-fade-slide-up 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Memory panels
+   ================================================================ */
+
+
+.memory-suggestion-panel {
+  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.memory-management-panel {
+  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   MCP section
+   ================================================================ */
+
+.mcp-picker {
+  animation: od-fade-slide-up 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Marketplace
+   ================================================================ */
+
+.marketplace-view__header {
+  animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.marketplace-view__empty {
+  animation: od-fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Design systems section & cards
+   ================================================================ */
+
+.library-section-header {
+  animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+
+
+/* ================================================================
+   Design files panel
+   ================================================================ */
+
+
+
+/* ================================================================
+   Workspace tabs
+   ================================================================ */
+
+.workspace-tab {
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), transform 100ms var(--ease-out);
+}
+.workspace-tab:active {
+  transform: scale(0.98);
+}
+
+/* ================================================================
+   Updater popup
+   ================================================================ */
+
+.updater-popup {
+  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Design card interactions
+   ================================================================ */
+
+/* Marketplace card hover (no existing hover in stylesheet) */
+.marketplace-view__card {
+  transition: border-color 120ms var(--ease-out), box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.marketplace-view__card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+}
+.marketplace-view__card:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* Card press feedback */
+.design-card:active,
+.plugins-home__card:active,
+.recent-projects__card:active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 80ms;
+}
+
+/* ================================================================
+   Comment card
+   ================================================================ */
+
+
+/* ================================================================
+   Plugin action panel (right side)
+   ================================================================ */
+
+.plugin-action-panel {
+  animation: od-slide-left 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Empty states
+   ================================================================ */
+
+.chat-history-empty,
+.comments-empty {
+  animation: od-fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Automation / routine history rows
+   ================================================================ */
+
+
+/* ================================================================
+   Example cards (ExamplesTab)
+   ================================================================ */
+
+
+/* ================================================================
+   Entry sections (Home tabs)
+   ================================================================ */
+
+
+/* ================================================================
+   Tab content panels
+   ================================================================ */
+
+
+/* ================================================================
+   Agent / model cards
+   ================================================================ */
+
+
+/* ================================================================
+   Connector drawer & sections
+   ================================================================ */
+
+
+/* ================================================================
+   Error / alert banners
+   ================================================================ */
+
+.home-hero__error,
+.connector-panel-alert,
+.deploy-error,
+.library-import-error,
+.library-install-error,
+.memory-disabled-banner,
+.memory-noprovider-banner,
+.df-upload-banner,
+.mcp-error {
+  animation: od-fade-slide-down 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.field-error {
+  animation: od-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Skills section rows
+   ================================================================ */
+
+
+/* ================================================================
+   Onboarding / new project panels
+   ================================================================ */
+
+.onboarding-view__panel {
+  animation: od-fade-slide-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.newproj-section {
+  animation: od-fade-slide-up 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Design system detail / evidence / revision
+   ================================================================ */
+
+.ds-evidence-panel {
+  animation: od-slide-left 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Share menu items
+   ================================================================ */
+
+
+/* ================================================================
+   Staged rows (attachments, files)
+   ================================================================ */
+
+
+/* ================================================================
+   Mention / slash autocomplete items
+   ================================================================ */
+
+
+/* ================================================================
+   Plugin hover card
+   ================================================================ */
+
+.home-hero__plugin-hover-card {
+  animation: od-popover-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Code viewer
+   ================================================================ */
+
+
+/* ================================================================
+   Live artifact panels
+   ================================================================ */
+
+.live-artifact-refresh-panel {
+  animation: od-slide-left 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.live-artifact-refresh-section {
+  animation: od-fade-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Use everywhere sections
+   ================================================================ */
+
+.use-everywhere-section {
+  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Orbit automation rows
+   ================================================================ */
+
+.orbit-automation-lock-banner {
+  animation: od-fade-slide-down 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Notification cards in settings
+   ================================================================ */
+
+
+/* ================================================================
+   Preview modal
+   ================================================================ */
+
+.ds-modal-backdrop {
+  animation: od-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.ds-modal {
+  animation: od-scale-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   Plugin detail view
+   ================================================================ */
+
+.plugin-details-modal {
+  animation: od-fade-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ================================================================
+   DS picker items
+   ================================================================ */
+
+
+/* ================================================================
+   Generic button press feedback
+   ================================================================ */
+
+button.primary:active:not(:disabled),
+button.primary-ghost:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 80ms var(--ease-out);
+}
+
+/* ================================================================
+   Reduce motion preference
+   ================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

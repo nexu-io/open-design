@@ -54,6 +54,7 @@ export const AppliedPluginSnapshotSchema = z.object({
   pinnedRef:            z.string().optional(),
   inputs:               z.record(z.union([z.string(), z.number(), z.boolean()])),
   resolvedContext:      ResolvedContextSchema,
+  craftRequires:        z.array(z.string()).optional(),
   capabilitiesGranted:  z.array(z.string()),
   capabilitiesRequired: z.array(z.string()),
   assetsStaged:         z.array(PluginAssetRefSchema),
