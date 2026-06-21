@@ -14,7 +14,7 @@ import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
-import { recoverHtmlArtifactFromPrecedingDocument, recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument } from '../artifacts/recover';
+import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
 import {
   findFirstQuestionForm,
@@ -1813,12 +1813,12 @@ export function ProjectView({
       sourceText?: string,
       options: { pointerMinMtime?: number } = {},
     ) => {
-      const recoveredHtml = recoverHtmlArtifactFromPrecedingDocument({
+      const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
         sourceText,
       });
-      const artifactToPersist = recoveredHtml ? { ...art, html: recoveredHtml } : art;
+      const artifactToPersist = persistedHtml === art.html ? art : { ...art, html: persistedHtml };
       const baseName = artifactBaseNameFor(art);
       const ext = artifactExtensionFor(art);
       // Pick a name that doesn't collide with an existing project file.
@@ -2957,10 +2957,13 @@ export function ProjectView({
                     nextFiles,
                     { minMtime: runStartedAt },
                   ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
-                    artifactHtml: artifactToPersist.html,
+                    artifactHtml: resolvePersistedArtifactHtml({
+                      artifactHtml: artifactToPersist.html,
+                      identifier: artifactToPersist.identifier,
+                      sourceText: replayedContent,
+                    }),
                     producedFiles: producedBeforeFallback,
                     readProjectHtml,
-                    allowAnyHtmlWrite: message.agentId === 'claude',
                   });
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
@@ -3973,10 +3976,13 @@ export function ProjectView({
             if (artifactToPersist?.html) {
               const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
               const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                artifactHtml: artifactToPersist.html,
+                artifactHtml: resolvePersistedArtifactHtml({
+                  artifactHtml: artifactToPersist.html,
+                  identifier: artifactToPersist.identifier,
+                  sourceText: finalText,
+                }),
                 producedFiles: producedBeforeFallback,
                 readProjectHtml,
-                allowAnyHtmlWrite: assistantAgentId === 'claude',
               });
               if (sameTurnHtmlWrite) {
                 savedArtifactRef.current = sameTurnHtmlWrite.name;
@@ -6925,24 +6931,30 @@ export async function findSameTurnHtmlWriteForRecoveredArtifact({
   artifactHtml,
   producedFiles,
   readProjectHtml,
-  allowAnyHtmlWrite = false,
 }: {
   artifactHtml: string;
   producedFiles: readonly ProjectFile[];
   readProjectHtml: (name: string) => Promise<string | null>;
-  allowAnyHtmlWrite?: boolean;
 }): Promise<ProjectFile | null> {
   const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
   if (!recovered) return null;
   const candidates = producedFiles.filter(isHtmlProjectFile);
-  for (const file of candidates) {
-    const text = await readProjectHtml(file.name);
-    if (normalizeHtmlForRecoveredArtifactComparison(text) === recovered) {
-      return file;
-    }
-  }
-  if (allowAnyHtmlWrite) return candidates[0] ?? null;
-  return null;
+  if (candidates.length === 0) return null;
+  const contents = await Promise.all(candidates.map((file) => readProjectHtml(file.name)));
+  const normalized = contents.map(normalizeHtmlForRecoveredArtifactComparison);
+  // Bind only on an exact normalized-content match. This is inherently
+  // agent-agnostic (#4308): whenever a filesystem-backed CLI writes an HTML
+  // file and echoes the same document as an artifact, the normalized contents
+  // are equal and we suppress the duplicate — no Claude-specific gate needed.
+  //
+  // We deliberately do NOT bind on a content *mismatch*. A differing same-turn
+  // HTML file is a genuinely different document and must persist on its own.
+  // A blind single-file bind also mis-fired across queued runs: the pre-turn
+  // file snapshot for a queued run can predate the previous run's persist, so
+  // computeProducedFiles() reports that earlier artifact as "produced this
+  // turn" and we'd bind the echo to the wrong, unrelated file.
+  const exact = candidates.find((_file, i) => normalized[i] === recovered);
+  return exact ?? null;
 }
 
 function isHtmlProjectFile(file: ProjectFile): boolean {
