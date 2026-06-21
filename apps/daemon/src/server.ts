@@ -5005,7 +5005,17 @@ export async function startServer({
   });
 
   if (fs.existsSync(STATIC_DIR)) {
-    app.use(express.static(STATIC_DIR));
+    const serveStatic = express.static(STATIC_DIR);
+    app.use((req, res, next) => {
+      if (apiToken && isStaticSpaFallbackRequest(req)) {
+        res.cookie('od-api-token', apiToken, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+        });
+      }
+      serveStatic(req, res, next);
+    });
   }
 
   app.get('/api/health', async (_req, res) => {
