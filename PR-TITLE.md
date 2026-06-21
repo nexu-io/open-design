@@ -1,0 +1,1 @@
+AMR: normalize Vela's kimi_k2_7_code id to kimi-k2.7-code
