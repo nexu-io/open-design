@@ -6108,7 +6108,7 @@ export async function startServer({
     handoff: handoffDeps,
   });
   registerDeploymentCheckRoutes(app, { db, http: httpDeps, deploy: deployDeps });
-  app.use('/frames', express.static(FRAMES_DIR));
+  app.use('/frames', apiTokenStaticGuard, express.static(FRAMES_DIR));
   registerProjectExportRoutes(app, {
     db,
     http: httpDeps,
