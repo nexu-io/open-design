@@ -775,23 +775,28 @@ function AppInner() {
       }
 
       // Auto-bootstrap: if the daemon has API auth enabled, get a single-use
-      // nonce (not the raw bearer token) and exchange it for a session cookie.
-      // The nonce expires in 60s and can only be redeemed once.  The daemon
-      // only returns a nonce when the request comes from loopback.
-      // On untrusted networks we skip and the
-      // user enters the token manually if they hit 401 responses.
-      void fetch('/api/auth/bootstrap-token')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data && data.nonce) {
-            fetch('/api/auth/bootstrap', {
+      // nonce and exchange it for a session cookie before the initial API
+      // fan-out below.  The nonce expires in 60s, can only be redeemed once,
+      // and is only available on loopback (so non-loopback deployments fall
+      // through and the user enters the token manually if they hit 401s).
+      // Awaiting the exchange ensures the cookie is visible to the concurrent
+      // fetchAgentsStream / fetchSkills / listProjects calls that follow.
+      try {
+        const tokenRes = await fetch('/api/auth/bootstrap-token');
+        if (tokenRes.ok) {
+          const { nonce } = await tokenRes.json();
+          if (nonce) {
+            await fetch('/api/auth/bootstrap', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nonce: data.nonce }),
-            }).catch(() => {});
+              body: JSON.stringify({ nonce }),
+            });
           }
-        })
-        .catch(() => {});
+        }
+      } catch {
+        // daemon may not support bootstrap (older version, or no auth
+        // configured) — proceed without a cookie.
+      }
 
       const agentRequestId = beginAgentStreamRequest();
       void fetchAgentsStream({
