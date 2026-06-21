@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import { composerText, typeAndSettle } from '../helpers/lexical-composer';
 
 // Regression coverage for the @-mention skill staging path. Originally
 // flagged as adjacent debt on #2881 / #3356: `insertSkillMention` writes
@@ -95,35 +96,27 @@ afterEach(() => {
 describe('ChatComposer skill chip staging (#1635 follow-up)', () => {
   it('mounts a staged-skill chip after picking a skill from the @-popover', async () => {
     renderComposer();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
 
-    fireEvent.change(input, {
-      target: { value: '@deck', selectionStart: 5 },
-    });
+    await typeAndSettle('@deck');
 
     await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
     fireEvent.click(screen.getByText('Deck Builder'));
 
-    await waitFor(() => expect(input.value).toBe('@Deck Builder '));
-    expect(screen.getByTestId('staged-skills').textContent).toContain('Deck Builder');
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('Deck Builder');
   });
 
   it('forwards meta.skillIds when sending after a skill is staged from @-popover', async () => {
     const onSend = vi.fn();
     renderComposer({ onSend });
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
 
-    fireEvent.change(input, {
-      target: { value: '@deck', selectionStart: 5 },
-    });
+    await typeAndSettle('@deck');
 
     await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
     fireEvent.click(screen.getByText('Deck Builder'));
-    await waitFor(() => expect(input.value).toBe('@Deck Builder '));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
 
-    fireEvent.change(input, {
-      target: { value: '@Deck Builder make slides', selectionStart: 25 },
-    });
+    await typeAndSettle('@Deck Builder make slides', 25);
     fireEvent.click(screen.getByTestId('chat-send'));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
@@ -134,43 +127,35 @@ describe('ChatComposer skill chip staging (#1635 follow-up)', () => {
 
   it('removes the inline mention when the staged-skill chip is removed', async () => {
     renderComposer();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
 
-    fireEvent.change(input, {
-      target: { value: '@deck', selectionStart: 5 },
-    });
+    await typeAndSettle('@deck');
 
     await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
     fireEvent.click(screen.getByText('Deck Builder'));
-    await waitFor(() => expect(screen.queryByTestId('staged-skills')).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).not.toBeNull());
 
-    fireEvent.click(screen.getByLabelText(`Remove skill ${SKILL.name}`));
+    fireEvent.click(screen.getByLabelText(`Remove ${SKILL.name}`));
 
     // The strip preserves the boundary char so neighboring text stays
     // intact ('Plan: @Deck Builder note' → 'Plan: note'). With nothing
     // around the mention only the leading boundary remains; that's the
     // same behavior as `removeStaged` for design-file tokens.
-    expect(input.value.trim()).toBe('');
-    expect(input.value).not.toContain('@Deck Builder');
-    expect(screen.queryByTestId('staged-skills')).toBeNull();
+    expect(composerText().trim()).toBe('');
+    expect(composerText()).not.toContain('@Deck Builder');
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('drops the staged-skill chip when the user manually deletes the @-mention', async () => {
     renderComposer();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
 
-    fireEvent.change(input, {
-      target: { value: '@deck', selectionStart: 5 },
-    });
+    await typeAndSettle('@deck');
 
     await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
     fireEvent.click(screen.getByText('Deck Builder'));
-    await waitFor(() => expect(screen.queryByTestId('staged-skills')).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).not.toBeNull());
 
-    fireEvent.change(input, {
-      target: { value: '', selectionStart: 0 },
-    });
+    await typeAndSettle('', 0);
 
-    expect(screen.queryByTestId('staged-skills')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 });
