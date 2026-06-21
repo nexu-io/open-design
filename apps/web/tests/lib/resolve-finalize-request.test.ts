@@ -90,6 +90,41 @@ describe('resolve-finalize-request', () => {
     })).toBe(true);
   });
 
+  it('uses the live deployment model instead of the preserved OpenAI BYOK draft', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      mode: 'api' as const,
+      apiProtocol: 'openai' as const,
+      apiCredentialSource: 'deployment' as const,
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'user-openai-key',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-user',
+          apiCredentialSource: 'user' as const,
+        },
+      },
+    };
+
+    expect(buildFinalizeRequest(config)).toMatchObject({
+      protocol: 'openai',
+      credentialSource: 'deployment',
+      model: 'gpt-routed',
+    });
+    expect(isFinalizeByokConfigured(config)).toBe(true);
+    expect(buildFinalizeRequest({
+      ...config,
+      model: '',
+    })).toBeNull();
+    expect(isFinalizeByokConfigured({
+      ...config,
+      model: '',
+    })).toBe(false);
+  });
+
   it('rejects deployment-sourced finalize requests for non-OpenAI protocols', () => {
     expect(buildFinalizeRequest({
       ...DEFAULT_CONFIG,
