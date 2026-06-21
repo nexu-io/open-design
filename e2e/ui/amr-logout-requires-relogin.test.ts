@@ -13,6 +13,7 @@ import {
   seedBrowserConfig,
   sendPrompt,
 } from '@/playwright/amr';
+import { fulfillAgentsRoute } from '@/playwright/mock-factory';
 
 test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AMR selected', async ({ page }) => {
   const root = join(tmpdir(), `open-design-amr-logout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -47,6 +48,22 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await page.route('**/api/integrations/vela/logout', async (route) => {
     loggedIn = false;
     await route.fulfill({ json: { ok: true } });
+  });
+
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [
+      {
+        id: 'amr',
+        name: 'AMR',
+        bin: 'vela',
+        available: true,
+        version: 'test',
+        authStatus: 'ok',
+        models: [{ id: 'default', label: 'Default' }],
+        modelsSource: 'live',
+        supportsCustomModel: false,
+      },
+    ]);
   });
 
   const config = {
