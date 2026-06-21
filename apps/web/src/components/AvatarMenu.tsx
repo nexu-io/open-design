@@ -11,6 +11,7 @@ import type { AgentInfo, AppConfig, DeploymentProviderConfig, ExecMode, Provider
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { KNOWN_PROVIDERS } from '../state/config';
 import {
+  canCacheProviderModels,
   deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -77,10 +78,18 @@ export function AvatarMenu({
     });
   }
   const [discoveredProviderModels, setDiscoveredProviderModels] = useState<Record<string, ProviderModelOption[]>>({});
+  const [uncachedProviderModels, setUncachedProviderModels] = useState<{
+    key: string;
+    models: ProviderModelOption[];
+  } | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
+
+  useEffect(() => {
+    if (!open) setUncachedProviderModels(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -221,7 +230,12 @@ export function AvatarMenu({
     credentialSource,
     credentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
   );
-  const fetchedByokModels = providerModelsCache?.[byokProviderModelsKey] ?? discoveredProviderModels[byokProviderModelsKey] ?? [];
+  const shouldCacheProviderModels = canCacheProviderModels(credentialSource);
+  const fetchedByokModels = shouldCacheProviderModels
+    ? providerModelsCache?.[byokProviderModelsKey] ?? discoveredProviderModels[byokProviderModelsKey] ?? []
+    : uncachedProviderModels?.key === byokProviderModelsKey
+      ? uncachedProviderModels.models
+      : [];
 
   useEffect(() => {
     if (!open || config.mode !== 'api') return;
@@ -239,10 +253,14 @@ export function AvatarMenu({
       apiKey: credentialSource === 'deployment' ? undefined : apiKey,
     }).then((result) => {
       if (cancelled || !result.ok || !result.models?.length) return;
-      setDiscoveredProviderModels((current) => ({
-        ...current,
-        [byokProviderModelsKey]: result.models ?? [],
-      }));
+      if (shouldCacheProviderModels) {
+        setDiscoveredProviderModels((current) => ({
+          ...current,
+          [byokProviderModelsKey]: result.models ?? [],
+        }));
+      } else {
+        setUncachedProviderModels({ key: byokProviderModelsKey, models: result.models ?? [] });
+      }
     });
     return () => {
       cancelled = true;
@@ -256,6 +274,8 @@ export function AvatarMenu({
     config.apiCredentialSource,
     byokProviderModelsKey,
     fetchedByokModels.length,
+    shouldCacheProviderModels,
+    uncachedProviderModels,
   ]);
 
   const byokModelOptions = mergeProviderModelOptions(

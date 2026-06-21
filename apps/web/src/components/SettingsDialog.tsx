@@ -76,12 +76,14 @@ import {
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
 import {
+  canCacheProviderModels,
   deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
 export {
+  canCacheProviderModels,
   deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -1081,8 +1083,10 @@ export function switchApiProtocolConfig(
   const currentProtocol = config.apiProtocol ?? 'anthropic';
   const apiProtocolConfigs = {
     ...(config.apiProtocolConfigs ?? {}),
-    [currentProtocol]: currentApiProtocolConfig(config),
   };
+  if (!(currentProtocol === 'openai' && config.apiCredentialSource === 'deployment')) {
+    apiProtocolConfigs[currentProtocol] = currentApiProtocolConfig(config);
+  }
   const nextApiConfig = nextApiProtocolConfig(
     {
       ...config,
@@ -2066,7 +2070,9 @@ export function SettingsDialog({
       isDeploymentCredentialMode ? 'deployment' : 'user',
       isDeploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
     );
-    const cachedModels = activeProviderModelsCache[cacheKey];
+    const cachedModels = shouldCacheProviderModels
+      ? activeProviderModelsCache[cacheKey]
+      : undefined;
     if (cachedModels) {
       trackModelsFetchResult(
         {
@@ -2117,7 +2123,7 @@ export function SettingsDialog({
         clearIfStale();
         return;
       }
-      if (result.ok && result.models?.length) {
+      if (shouldCacheProviderModels && result.ok && result.models?.length) {
         activeSetProviderModelsCache((prev) => ({
           ...prev,
           [cacheKey]: result.models ?? [],
@@ -2634,8 +2640,19 @@ export function SettingsDialog({
       isDeploymentCredentialMode,
     ],
   );
+  const shouldCacheProviderModels = canCacheProviderModels(
+    isDeploymentCredentialMode ? 'deployment' : 'user',
+  );
+  const fetchedProviderModelsResult =
+    providerModelsState.status === 'done' &&
+    providerModelsState.cacheKey === providerModelsKey &&
+    providerModelsState.result.ok
+      ? providerModelsState.result.models ?? []
+      : [];
   const fetchedApiModelOptions =
-    activeProviderModelsCache[providerModelsKey] ?? [];
+    shouldCacheProviderModels
+      ? activeProviderModelsCache[providerModelsKey] ?? fetchedProviderModelsResult
+      : fetchedProviderModelsResult;
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||

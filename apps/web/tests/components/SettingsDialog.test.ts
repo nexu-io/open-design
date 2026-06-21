@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
+  canCacheProviderModels,
   canFetchProviderModels,
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
@@ -72,6 +73,11 @@ describe('SettingsDialog API protocol switching', () => {
     );
   });
 
+  it('does not cache deployment provider model lists without a daemon revision', () => {
+    expect(canCacheProviderModels('user')).toBe(true);
+    expect(canCacheProviderModels('deployment')).toBe(false);
+  });
+
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
@@ -133,15 +139,25 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
-  it('clears deployment credential mode outside OpenAI while preserving the OpenAI draft', () => {
+  it('clears deployment credential mode outside OpenAI while preserving the user OpenAI draft', () => {
     const openaiDeployment = switchApiProtocolConfig({
       ...baseConfig,
       apiProtocol: 'openai',
       apiCredentialSource: 'deployment',
-      apiKey: 'stale-browser-key',
-      baseUrl: 'https://stale.example.test/v1',
+      apiKey: '',
+      baseUrl: '',
       model: 'gpt-routed',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'user',
+          apiKey: 'openai-key',
+          baseUrl: 'https://openai-proxy.example.com',
+          model: 'openai-model',
+          apiVersion: '',
+          apiProviderBaseUrl: null,
+        },
+      },
     }, 'google');
 
     expect(openaiDeployment).toMatchObject({
@@ -149,15 +165,19 @@ describe('SettingsDialog API protocol switching', () => {
       apiCredentialSource: 'user',
     });
     expect(openaiDeployment.apiProtocolConfigs?.openai).toMatchObject({
-      apiCredentialSource: 'deployment',
-      model: 'gpt-routed',
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
     });
 
     const restoredOpenai = switchApiProtocolConfig(openaiDeployment, 'openai');
     expect(restoredOpenai).toMatchObject({
       apiProtocol: 'openai',
-      apiCredentialSource: 'deployment',
-      model: 'gpt-routed',
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
     });
   });
 

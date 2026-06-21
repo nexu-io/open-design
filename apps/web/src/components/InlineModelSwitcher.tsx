@@ -44,7 +44,14 @@ import {
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, DeploymentProviderConfig, ExecMode } from '../types';
+import type {
+  AgentInfo,
+  ApiProtocol,
+  AppConfig,
+  DeploymentProviderConfig,
+  ExecMode,
+  ProviderModelOption,
+} from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -59,6 +66,7 @@ import {
 import { normalizeAgentModelChoice } from './agentModelSelection';
 import { SearchableModelSelect } from './modelOptions';
 import {
+  canCacheProviderModels,
   deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -160,6 +168,10 @@ export function InlineModelSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const providerModelsFetchingRef = useRef<Set<string>>(new Set());
+  const [uncachedProviderModels, setUncachedProviderModels] = useState<{
+    key: string;
+    models: ProviderModelOption[];
+  } | null>(null);
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
@@ -168,6 +180,10 @@ export function InlineModelSwitcher({
     useState(false);
   const amrPollRef = useRef<number | null>(null);
   const amrLoginStartedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) setUncachedProviderModels(null);
+  }, [open]);
 
   const stopAmrPolling = useCallback(() => {
     if (amrPollRef.current !== null) {
@@ -477,7 +493,12 @@ export function InlineModelSwitcher({
       deploymentProviderModelsFingerprint,
     ],
   );
-  const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
+  const shouldCacheProviderModels = canCacheProviderModels(credentialSource);
+  const fetchedApiModelOptions = shouldCacheProviderModels
+    ? providerModelsCache?.[providerModelsKey] ?? []
+    : uncachedProviderModels?.key === providerModelsKey
+      ? uncachedProviderModels.models
+      : [];
 
   // Warm the shared provider-models cache from the home picker itself. The
   // picker otherwise depends on Settings/onboarding having fetched first, so on
@@ -507,10 +528,14 @@ export function InlineModelSwitcher({
     })
       .then((result) => {
         if (active && result.ok && result.models?.length) {
-          onProviderModelsCacheChange((current) => ({
-            ...current,
-            [key]: result.models ?? [],
-          }));
+          if (shouldCacheProviderModels) {
+            onProviderModelsCacheChange((current) => ({
+              ...current,
+              [key]: result.models ?? [],
+            }));
+          } else {
+            setUncachedProviderModels({ key, models: result.models ?? [] });
+          }
         }
       })
       .catch(() => {
@@ -531,6 +556,8 @@ export function InlineModelSwitcher({
     apiProtocol,
     providerModelsKey,
     fetchedApiModelOptions.length,
+    shouldCacheProviderModels,
+    uncachedProviderModels,
     onProviderModelsCacheChange,
   ]);
 

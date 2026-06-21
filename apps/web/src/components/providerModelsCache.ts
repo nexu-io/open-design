@@ -40,6 +40,12 @@ export function deploymentProviderModelsCacheFingerprint(
   ].join('\n');
 }
 
+export function canCacheProviderModels(
+  credentialSource: ProviderCredentialSource,
+): boolean {
+  return credentialSource !== 'deployment';
+}
+
 export function mergeProviderModelOptions(
   fetchedModels: readonly ProviderModelOption[],
   suggestedModelIds: readonly string[],

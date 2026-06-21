@@ -144,6 +144,7 @@ import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
+  canCacheProviderModels,
   deploymentProviderModelsCacheFingerprint,
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -1067,6 +1068,7 @@ function OnboardingView({
     providerCredentialSource,
     providerCredentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
   );
+  const shouldCacheProviderModels = canCacheProviderModels(providerCredentialSource);
   providerModelAutoSelectRef.current = {
     model: config.model,
     providerModelsInputKey,
@@ -1473,7 +1475,9 @@ function OnboardingView({
       label: model.label ?? model.id,
     })) ?? [];
   const fetchedProviderModels =
-    activeProviderModelsCache[providerModelsInputKey] ?? [];
+    shouldCacheProviderModels
+      ? activeProviderModelsCache[providerModelsInputKey] ?? []
+      : [];
   const byokModelOptions = mergeOnboardingProviderModelOptions(
     fetchedProviderModels,
     SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
@@ -1519,16 +1523,32 @@ function OnboardingView({
     void Promise.resolve(onConfigPersist(nextConfig)).catch(() => undefined);
   }
 
+  function preservedOpenAiUserDraft(): ApiProtocolConfig | undefined {
+    const saved = config.apiProtocolConfigs?.openai;
+    if (saved && saved.apiCredentialSource !== 'deployment') return saved;
+    if (config.apiProtocol !== 'openai' || config.apiCredentialSource === 'deployment') return undefined;
+    return {
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      apiCredentialSource: 'user',
+      apiVersion: config.apiVersion ?? '',
+      apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    };
+  }
+
   function buildDeploymentProviderConfig(model: string): AppConfig {
     const cleanModel = model.trim();
-    const openAiConfig: ApiProtocolConfig = {
-      apiKey: '',
-      baseUrl: '',
-      model: cleanModel,
-      apiCredentialSource: 'deployment',
-      apiVersion: '',
-      apiProviderBaseUrl: null,
-    };
+    const apiProtocolConfigs = { ...(config.apiProtocolConfigs ?? {}) };
+    const openAiUserDraft = preservedOpenAiUserDraft();
+    if (openAiUserDraft) {
+      apiProtocolConfigs.openai = {
+        ...openAiUserDraft,
+        apiCredentialSource: 'user',
+      };
+    } else {
+      delete apiProtocolConfigs.openai;
+    }
     return {
       ...config,
       mode: 'api',
@@ -1539,10 +1559,7 @@ function OnboardingView({
       model: cleanModel,
       apiVersion: '',
       apiProviderBaseUrl: null,
-      apiProtocolConfigs: {
-        ...(config.apiProtocolConfigs ?? {}),
-        openai: openAiConfig,
-      },
+      apiProtocolConfigs,
     };
   }
 
@@ -2044,7 +2061,9 @@ function OnboardingView({
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
     providerModelsAutoFetchKeyRef.current = inputKey;
-    const cachedModels = activeProviderModelsCache[inputKey];
+    const cachedModels = shouldCacheProviderModels
+      ? activeProviderModelsCache[inputKey]
+      : undefined;
     if (cachedModels) {
       selectFirstProviderModelWhenEmpty(cachedModels, inputKey);
       setProviderModelsState({
@@ -2068,10 +2087,12 @@ function OnboardingView({
       });
       if (result.ok && result.models?.length) {
         selectFirstProviderModelWhenEmpty(result.models, inputKey);
-        activeSetProviderModelsCache((current) => ({
-          ...current,
-          [inputKey]: result.models ?? [],
-        }));
+        if (shouldCacheProviderModels) {
+          activeSetProviderModelsCache((current) => ({
+            ...current,
+            [inputKey]: result.models ?? [],
+          }));
+        }
       }
       setProviderModelsState({ status: 'done', inputKey, result });
     } catch (error) {
