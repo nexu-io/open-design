@@ -5065,7 +5065,7 @@ export async function startServer({
 
     app.get('/api/auth/bootstrap-token', (req, res) => {
       const addr = req.socket?.remoteAddress;
-      if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
+      if (!isLoopbackPeerAddress(addr)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
         });
@@ -5076,7 +5076,14 @@ export async function startServer({
     });
 
     app.post('/api/auth/bootstrap', (req, res) => {
+      const addr = req.socket?.remoteAddress;
+      if (!isLoopbackPeerAddress(addr)) {
+        return res.status(403).json({
+          error: { code: 'BOOTSTRAP_NOT_AVAILABLE', message: 'Bootstrap not available from this network' },
+        });
+      }
       const { nonce } = req.body || {};
+
       if (!nonce || !bootstrapNonces.has(nonce)) {
         return res.status(401).json({
           error: { code: 'BOOTSTRAP_NONCE_REQUIRED', message: 'Valid bootstrap nonce required' },

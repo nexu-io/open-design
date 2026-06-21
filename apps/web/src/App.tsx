@@ -777,8 +777,8 @@ function AppInner() {
       // Auto-bootstrap: if the daemon has API auth enabled, get a single-use
       // nonce (not the raw bearer token) and exchange it for a session cookie.
       // The nonce expires in 60s and can only be redeemed once.  The daemon
-      // only returns a nonce when the request comes from a trusted network
-      // (loopback or private subnet).  On untrusted networks we skip and the
+      // only returns a nonce when the request comes from loopback.
+      // On untrusted networks we skip and the
       // user enters the token manually if they hit 401 responses.
       void fetch('/api/auth/bootstrap-token')
         .then((r) => (r.ok ? r.json() : null))
