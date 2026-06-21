@@ -16,6 +16,7 @@
  */
 
 import { ogDefaultImage } from '../image-assets';
+import { clampDescription } from '../_lib/clamp-description';
 import {
   LANDING_LOCALES,
   alternateLinksForPath,
@@ -82,6 +83,10 @@ const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, Astro.site).toString()
 const canonical = new URL(props.pathname, Astro.site).toString();
 const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
 const rssUrl = new URL('/blog/rss.xml', Astro.site).toString();
+
+// Clamp the meta/OG/Twitter description to a search-friendly length. See
+// `clampDescription` for the rationale; source strings stay untouched.
+const metaDescription = clampDescription(props.description);
 
 const fullTitle = isArticle ? `${props.title} — ${SITE_NAME}` : props.title;
 const ogTitle = props.title;
@@ -159,7 +164,7 @@ const blogJsonLd =
 ---
 
 <title>{fullTitle}</title>
-<meta name='description' content={props.description} />
+<meta name='description' content={metaDescription} />
 <meta name='theme-color' content='#efe7d2' />
 {noindex && <meta name='robots' content='noindex, nofollow' />}
 <link rel='canonical' href={canonical} />
@@ -178,7 +183,7 @@ const blogJsonLd =
 <meta property='og:type' content={props.kind === 'article' ? 'article' : 'website'} />
 <meta property='og:site_name' content={SITE_NAME} />
 <meta property='og:title' content={ogTitle} />
-<meta property='og:description' content={props.description} />
+<meta property='og:description' content={metaDescription} />
 <meta property='og:url' content={canonical} />
 <meta property='og:image' content={image} />
 <meta property='og:locale' content={localeDef.ogLocale} />
@@ -197,7 +202,7 @@ const blogJsonLd =
 
 <meta name='twitter:card' content='summary_large_image' />
 <meta name='twitter:title' content={ogTitle} />
-<meta name='twitter:description' content={props.description} />
+<meta name='twitter:description' content={metaDescription} />
 <meta name='twitter:image' content={image} />
 
 {articleJsonLd && (
