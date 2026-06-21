@@ -4493,7 +4493,19 @@ export async function startServer({
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      let presentedToken = match ? match[1] : '';
+      if (!presentedToken) {
+        const cookieHeader = req.headers.cookie || '';
+        for (const part of cookieHeader.split(';')) {
+          const eq = part.indexOf('=');
+          if (eq === -1) continue;
+          if (part.slice(0, eq).trim() === 'od-api-token') {
+            presentedToken = part.slice(eq + 1).trim();
+            break;
+          }
+        }
+      }
+      if (!presentedToken || presentedToken !== apiToken) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
@@ -11706,7 +11718,7 @@ export async function startServer({
     telemetry: { reportFinalizedMessage, reportFeedback },
   });
 
-  registerStaticSpaFallback(app, STATIC_DIR);
+  registerStaticSpaFallback(app, STATIC_DIR, apiToken || undefined);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
