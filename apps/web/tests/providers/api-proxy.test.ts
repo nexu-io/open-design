@@ -229,6 +229,52 @@ describe('buildProxyMessages', () => {
     });
   });
 
+  it('falls back to browser credentials for non-OpenAI proxy calls after deployment mode', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('event: end\ndata: {}\n\n'),
+          );
+          controller.close();
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamProxyEndpoint(
+      '/api/proxy/google/stream',
+      {
+        mode: 'api',
+        apiProtocol: 'google',
+        apiCredentialSource: 'deployment',
+        apiKey: 'google-key',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        model: 'gemini-3.5-flash',
+        agentId: null,
+        skillId: null,
+        designSystemId: null,
+      } as AppConfig,
+      'System prompt',
+      [userMessage('Hello', [])],
+      new AbortController().signal,
+      {
+        onDelta: vi.fn(),
+        onDone: vi.fn(),
+        onError: vi.fn(),
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const proxyInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(proxyInit.body))).toMatchObject({
+      credentialSource: 'user',
+      apiKey: 'google-key',
+      baseUrl: 'https://generativelanguage.googleapis.com',
+    });
+  });
+
   it('keeps a text fallback when a supported Anthropic image cannot be read', async () => {
     vi.stubGlobal(
       'fetch',

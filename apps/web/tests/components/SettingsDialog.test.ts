@@ -120,6 +120,34 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('clears deployment credential mode outside OpenAI while preserving the OpenAI draft', () => {
+    const openaiDeployment = switchApiProtocolConfig({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: 'stale-browser-key',
+      baseUrl: 'https://stale.example.test/v1',
+      model: 'gpt-routed',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    }, 'google');
+
+    expect(openaiDeployment).toMatchObject({
+      apiProtocol: 'google',
+      apiCredentialSource: 'user',
+    });
+    expect(openaiDeployment.apiProtocolConfigs?.openai).toMatchObject({
+      apiCredentialSource: 'deployment',
+      model: 'gpt-routed',
+    });
+
+    const restoredOpenai = switchApiProtocolConfig(openaiDeployment, 'openai');
+    expect(restoredOpenai).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      model: 'gpt-routed',
+    });
+  });
+
   it('loads the new protocol default on first visit', () => {
     expect(switchApiProtocolConfig(baseConfig, 'openai')).toMatchObject({
       mode: 'api',

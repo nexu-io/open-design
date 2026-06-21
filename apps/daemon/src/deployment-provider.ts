@@ -50,6 +50,43 @@ function optionalPositiveNumber(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+function invalidRunSessionDetail(env: NodeJS.ProcessEnv): string | null {
+  const runSessionUrl = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL);
+  if (!runSessionUrl) return null;
+
+  try {
+    const parsed = new URL(runSessionUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return 'Deployment provider run-session URL must use http or https.';
+    }
+    if (parsed.username || parsed.password) {
+      return 'Deployment provider run-session URL must not include user info.';
+    }
+  } catch {
+    return 'Deployment provider run-session URL is invalid.';
+  }
+
+  const rawRunCostCap = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD);
+  if (!rawRunCostCap) {
+    return 'Deployment provider run sessions require OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD.';
+  }
+  if (optionalPositiveNumber(rawRunCostCap) === undefined) {
+    return 'Deployment provider run-session cost cap must be a non-negative number.';
+  }
+
+  const rawMaxTotalCost = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD);
+  if (rawMaxTotalCost && optionalPositiveNumber(rawMaxTotalCost) === undefined) {
+    return 'Deployment provider run-session max total cost must be a non-negative number.';
+  }
+
+  const rawTtlSeconds = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS);
+  if (rawTtlSeconds && optionalPositiveNumber(rawTtlSeconds) === undefined) {
+    return 'Deployment provider run-session TTL must be a non-negative number.';
+  }
+
+  return null;
+}
+
 export function deploymentProviderConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): DeploymentProviderConfigResponse {
@@ -95,6 +132,20 @@ export function deploymentProviderConfig(
       detail: validated.error ?? 'Invalid deployment provider base URL.',
       ...(defaultModel ? { defaultModel } : {}),
       ...(host ? { displayHost: host } : {}),
+    };
+  }
+
+  const runSessionDetail = invalidRunSessionDetail(env);
+  if (runSessionDetail) {
+    return {
+      available: false,
+      credentialSource: 'deployment',
+      protocol: 'openai',
+      label,
+      kind: 'invalid_run_session_config',
+      detail: runSessionDetail,
+      ...(defaultModel ? { defaultModel } : {}),
+      displayHost: validated.parsed.hostname,
     };
   }
 

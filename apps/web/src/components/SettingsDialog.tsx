@@ -749,6 +749,7 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     model: config.model,
+    apiCredentialSource: config.apiCredentialSource ?? 'user',
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     byokImageModel: config.byokImageModel ?? '',
@@ -763,9 +764,14 @@ function applyApiProtocolConfig(
   protocol: ApiProtocol,
   apiConfig: ApiProtocolConfig,
 ): AppConfig {
+  const apiCredentialSource =
+    protocol === 'openai' && apiConfig.apiCredentialSource === 'deployment'
+      ? 'deployment'
+      : 'user';
   return {
     ...config,
     apiProtocol: protocol,
+    apiCredentialSource,
     apiKey: apiConfig.apiKey,
     baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,

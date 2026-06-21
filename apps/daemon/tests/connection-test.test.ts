@@ -43,6 +43,10 @@ const DEPLOYMENT_PROVIDER_ENV_KEYS = [
   'OD_PROVIDER_ORCHESTRATOR_API_KEY',
   'OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL',
   'OD_PROVIDER_ORCHESTRATOR_LABEL',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS',
 ] as const;
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
@@ -238,6 +242,28 @@ describe('POST /api/provider/models', () => {
         label: 'Deployment provider',
         kind: 'available',
         defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      });
+      expect(JSON.stringify(body)).not.toContain('deployment-secret');
+    });
+  });
+
+  it('reports invalid deployment provider run-session config as unavailable', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: undefined,
+    }, async () => {
+      const res = await realFetch(`${baseUrl}/api/provider-orchestrator/config`);
+      expect(res.status).toBe(200);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body).toMatchObject({
+        available: false,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        kind: 'invalid_run_session_config',
+        detail: 'Deployment provider run sessions require OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD.',
         displayHost: 'gateway.example.test',
       });
       expect(JSON.stringify(body)).not.toContain('deployment-secret');

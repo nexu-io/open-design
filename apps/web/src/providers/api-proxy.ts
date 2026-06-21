@@ -43,7 +43,12 @@ export async function streamProxyEndpoint(
   handlers: StreamHandlers,
   context?: ProxyContext,
 ): Promise<void> {
-  const credentialSource = cfg.apiCredentialSource ?? 'user';
+  const supportsDeploymentCredentials =
+    (cfg.apiProtocol ?? (endpoint.includes('/openai/') ? 'openai' : undefined)) === 'openai';
+  const credentialSource =
+    cfg.apiCredentialSource === 'deployment' && supportsDeploymentCredentials
+      ? 'deployment'
+      : 'user';
   if (credentialSource !== 'deployment' && !cfg.apiKey) {
     handlers.onError(new Error('Missing API key — open Settings and paste one in.'));
     return;
