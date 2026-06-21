@@ -71,8 +71,11 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
       const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
-      const target: 'preview' | 'production' =
-        rawTarget === 'preview' ? 'preview' : 'production';
+      // Omitted target defaults to production; any supplied value must be exact.
+      if (rawTarget !== undefined && rawTarget !== 'preview' && rawTarget !== 'production') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid target: expected "preview" or "production"');
+      }
+      const target: 'preview' | 'production' = rawTarget === 'preview' ? 'preview' : 'production';
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,

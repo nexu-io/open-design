@@ -970,6 +970,139 @@ describe('deploy provider routes', () => {
     }
   });
 
+  // --- target validation tests (P1 finding on PR #4576) ---
+
+  /**
+   * Helper: minimal project + CF config setup, no fetch mock needed.
+   * Returns the projectId so callers can POST to /deploy.
+   */
+  async function setupProjectAndCfConfig(
+    stateRoot: string,
+    projectIdPrefix: string,
+    projectName: string,
+  ): Promise<string> {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `${projectIdPrefix}-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: projectName, skillId: null, designSystemId: null }),
+    });
+    expect(createProjectResp.status).toBe(200);
+    const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+      }),
+    });
+    expect(saveResp.status).toBe(200);
+    return projectId;
+  }
+
+  it('rejects a misspelled target value with HTTP 400 and does not invoke Cloudflare deploy', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-invalid-target-typo-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndCfConfig(stateRoot, 'cf-invalid-typo', 'Invalid target typo test');
+
+      // Stub fetch so any accidental external call fails loudly — the route
+      // must return 400 BEFORE attempting a Cloudflare API call.
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`No Cloudflare deploy call expected for an invalid target: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            target: 'preveiw', // deliberate typo — not 'preview' or 'production'
+          }),
+        });
+        // Must reject with 400, not silently coerce to 'production'
+        expect(deployResp.status).toBe(400);
+        // Cloudflare deploy endpoint must never have been called
+        const cfDeployCalls = fetchMock.mock.calls.filter((args) => {
+          const u = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+          return !u.startsWith(baseUrl);
+        });
+        expect(cfDeployCalls).toHaveLength(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an empty-string target value with HTTP 400 and does not invoke Cloudflare deploy', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-invalid-target-empty-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndCfConfig(stateRoot, 'cf-invalid-empty', 'Invalid target empty test');
+
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`No Cloudflare deploy call expected for an empty-string target: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            target: '', // supplied but empty — not a valid value, not the same as omitted
+          }),
+        });
+        // An explicitly supplied empty string is an invalid target; must be 400
+        expect(deployResp.status).toBe(400);
+        const cfDeployCalls = fetchMock.mock.calls.filter((args) => {
+          const u = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+          return !u.startsWith(baseUrl);
+        });
+        expect(cfDeployCalls).toHaveLength(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Regression guards — these must PASS both before and after the fix to pin
+  // the correct contract for the two valid explicit values and the omitted case.
+
   it('defaults to target=production and records production in the deployment when no target is sent', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
