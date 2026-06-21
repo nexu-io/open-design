@@ -38,7 +38,11 @@ services:
       # change the port binding to 0.0.0.0 (LAN/VPN), every browser on
       # that network can mint a session cookie without knowing OD_API_TOKEN.
       # Set this to 0 via .env when publishing on a private subnet.
-      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=${OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET:-1}
+      # 0 = only localhost can bootstrap (secure).  Set to 1 only when
+      # running behind a same-host reverse proxy (nginx sidecar, etc.)
+      # where the daemon sees RFC1918 remote addresses but all other
+      # network paths are controlled.
+      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=${OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET:-0}
       - OD_TRUST_PROXY=${OD_TRUST_PROXY:-}
       - OD_PUBLIC_BASE_URL=${OD_PUBLIC_BASE_URL:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}

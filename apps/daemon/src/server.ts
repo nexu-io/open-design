@@ -43,6 +43,7 @@ export {
 } from './daemon-paths.js';
 import {
   isStaticSpaFallbackRequest,
+  prepareCachedIndexHtml,
   registerStaticSpaFallback,
   resolveStaticSpaFallbackPath,
 } from './static-spa.js';
@@ -5062,7 +5063,21 @@ export async function startServer({
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
   });
 
+  const shouldInjectToken = apiToken.length > 0 && isApiTokenMiddlewareEnabled();
+  const cachedIndexHtml = fs.existsSync(STATIC_DIR)
+    ? prepareCachedIndexHtml(STATIC_DIR, shouldInjectToken ? apiToken : null)
+    : null;
+
   if (fs.existsSync(STATIC_DIR)) {
+    // Serve cached index.html with injected meta-tag for root requests.
+    if (cachedIndexHtml) {
+      app.use((req, res, next) => {
+        if (req.method === 'GET' && (req.path === '/' || req.path === '/index.html')) {
+          return res.type('html').send(cachedIndexHtml);
+        }
+        next();
+      });
+    }
     const serveStatic = express.static(STATIC_DIR);
     app.use((req, res, next) => {
       serveStatic(req, res, next);
@@ -11989,7 +12004,7 @@ export async function startServer({
     telemetry: { reportFinalizedMessage, reportFeedback },
   });
 
-  registerStaticSpaFallback(app, STATIC_DIR);
+  registerStaticSpaFallback(app, STATIC_DIR, cachedIndexHtml);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
