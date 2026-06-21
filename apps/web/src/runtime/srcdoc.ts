@@ -35,6 +35,206 @@ export type SrcdocOptions = {
   previewFocusGuard?: boolean;
 };
 
+/**
+ * Sanitize a document title string so the resulting PDF filename is accepted by
+ * Microsoft Teams. Teams rejects filenames that contain any of:
+ *   : # % & * { } \ < > ? / + | "
+ * as well as leading/trailing spaces and the prefix sequence "~$".
+ *
+ * Each disallowed character (or run of disallowed characters) is replaced with
+ * a single hyphen. The result is trimmed of leading and trailing whitespace.
+ * Titles that are already safe pass through unchanged.
+ *
+ * Invariant: the returned string contains none of the Teams-disallowed
+ * characters and has no leading or trailing spaces, and does not start
+ * with the ~$ prefix.
+ */
+export function sanitizePreviewTitle(text: string): string {
+  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
+  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
+  let result = text.trim();
+  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
+  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
+  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
+  let prev: string;
+  do {
+    prev = result;
+    result = result.replace(/^~\$/, '').trim();
+  } while (result !== prev);
+  // Replace each disallowed character (or run of them) with a single hyphen.
+  // Character class: : # % & * { } \ < > ? / + | "
+  // eslint-disable-next-line no-useless-escape
+  result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
+  // Final trim to remove any spaces exposed by the substitution.
+  return result.trim();
+}
+
+/**
+ * A small set of common named non-ASCII entities that appear in real-world
+ * titles (e.g. &ccedil; → ç, &eacute; → é). Keeping this narrow avoids
+ * shipping a full HTML entity table while still preventing the "orphaned
+ * name;" garbage that results when & is stripped before entity detection.
+ * Characters produced here that are Teams-disallowed get cleaned up by the
+ * subsequent sanitizePreviewTitle pass.
+ */
+const NAMED_ENTITY_MAP: Record<string, string> = {
+  // Latin-1 letters most likely to appear in design/business titles
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
+  aelig: 'æ', ccedil: 'ç',
+  egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
+  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï',
+  eth: 'ð', ntilde: 'ñ',
+  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø',
+  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü',
+  yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
+  AElig: 'Æ', Ccedil: 'Ç',
+  Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
+  Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï',
+  ETH: 'Ð', Ntilde: 'Ñ',
+  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', Oslash: 'Ø',
+  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü',
+  Yacute: 'Ý', THORN: 'Þ',
+  // Common punctuation / symbols that can appear in business document titles
+  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’',
+  ldquo: '“', rdquo: '”', hellip: '…', trade: '™', reg: '®',
+  copy: '©', deg: '°', euro: '€', pound: '£', yen: '¥',
+};
+
+/**
+ * Safe wrapper around String.fromCodePoint that returns U+FFFD for
+ * out-of-range values instead of throwing RangeError.
+ */
+function safeFromCodePoint(cp: number): string {
+  if (cp < 0 || cp > 0x10ffff) return '�';
+  return String.fromCodePoint(cp);
+}
+
+/**
+ * Decode the minimal HTML entities that browsers render in <title> text:
+ * &amp; → & , &lt; → < , &gt; → > , &quot; → " , &apos; → ' , &#N; / &#xN;
+ * Also decodes a small set of common named non-ASCII entities (e.g. &ccedil;)
+ * so they do not leave orphaned "name;" fragments after the & is sanitized.
+ * Numeric entities with out-of-range code points fall back to U+FFFD instead
+ * of throwing RangeError.
+ */
+function decodeHtmlEntitiesForTitle(encoded: string): string {
+  return encoded
+    // Named non-ASCII entities first — before the standard 5 named entities
+    // below, so &amp; still converts to & (not left as a lookup miss).
+    .replace(/&([A-Za-z]+);/g, (match, name: string) => NAMED_ENTITY_MAP[name] ?? match)
+    // Standard 5 named entities.
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    // Numeric entities — range-checked to avoid RangeError on huge code points.
+    .replace(/&#(\d+);/g, (_, n: string) => safeFromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeFromCodePoint(parseInt(h, 16)));
+}
+
+/**
+ * Find the character offset of the first real `<title>` tag in an HTML string
+ * that is not inside an HTML comment (`<!-- … -->`), a `<script>` block, or a
+ * `<style>` block. Returns -1 when no real title is found.
+ *
+ * The scan is O(n) over the head region. It keeps track of whether the current
+ * cursor is inside a comment / script / style and skips any `<title>` found
+ * within those contexts.
+ */
+function findRealTitleOffset(html: string, searchLimit: number): number {
+  let i = 0;
+  const limit = Math.min(html.length, searchLimit);
+  while (i < limit) {
+    // Check for HTML comment start
+    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
+      const end = html.indexOf('-->', i + 4);
+      if (end < 0) return -1; // unclosed comment — no title after this
+      i = end + 3;
+      continue;
+    }
+    // Check for <script or <style (case-insensitive)
+    if (html.charCodeAt(i) === 60 /* < */) {
+      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
+      if (tagMatch) {
+        const closingTag = `</${tagMatch[1]}`;
+        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
+        if (end < 0) return -1; // unclosed script/style — no title after this
+        const closeEnd = html.indexOf('>', end);
+        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
+        continue;
+      }
+    }
+    // Check for <title (case-insensitive)
+    if (html.charCodeAt(i) === 60 /* < */) {
+      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) {
+        return i;
+      }
+    }
+    i++;
+  }
+  return -1;
+}
+
+/**
+ * Rewrite the <title> element in an HTML string so its text content is
+ * Teams-filename-safe. Only the real `<title>` in the `<head>` region is
+ * changed — `<title>` occurrences inside HTML comments, `<script>` blocks,
+ * or `<style>` blocks are left untouched.
+ *
+ * Strategy:
+ *   1. Locate the `<head>`…`</head>` region (or the area before `<body>`).
+ *   2. Within that region, scan past comments and script/style blocks to find
+ *      the first unambiguous `<title>` start tag.
+ *   3. Decode HTML entities in its text, sanitize, and splice back.
+ *
+ * Pure string operations — no DOMParser — so it works identically in Node
+ * test environments and in the browser.
+ *
+ * @public — exported for daemon-side URL-load title sanitization.
+ */
+export function sanitizeTitleInDoc(html: string): string {
+  const lower = html.toLowerCase();
+
+  // Find the end of the <head> region. Use the last </head> before <body>
+  // (mirrors injectBeforeHeadEnd logic) so we don't pick up </head> literals
+  // inside <script>/<style>.
+  const bodyStart = lower.indexOf('<body');
+  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
+
+  // The region to search: up to (and including) </head> if found, otherwise
+  // up to <body> if found, otherwise the entire document.
+  const searchLimit = headEnd >= 0
+    ? headEnd + 7 // include the </head> tag itself
+    : bodyStart >= 0
+      ? bodyStart
+      : html.length;
+
+  // Find the real <title> start offset, skipping comments and script/style.
+  const titleStart = findRealTitleOffset(html, searchLimit);
+  if (titleStart < 0) return html;
+
+  // Locate the end of the <title> open tag.
+  const openTagEnd = html.indexOf('>', titleStart);
+  if (openTagEnd < 0) return html;
+
+  // Locate the matching </title>.
+  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
+  if (closingTagStart < 0) return html;
+  const closingTagEnd = html.indexOf('>', closingTagStart);
+  if (closingTagEnd < 0) return html;
+
+  const openTag = html.slice(titleStart, openTagEnd + 1);
+  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
+  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+
+  const decoded = decodeHtmlEntitiesForTitle(rawContent);
+  const safe = sanitizePreviewTitle(decoded);
+
+  return html.slice(0, titleStart) + openTag + safe + closeTag + html.slice(closingTagEnd + 1);
+}
+
 export function buildSrcdoc(
   html: string,
   options: SrcdocOptions = {}
@@ -51,7 +251,12 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withOdIds = annotateMissingOdIds(wrapped);
+  // Sanitize <title> text before any other transformation so that when the
+  // user prints the preview iframe (Cmd+P → Save as PDF), Chromium uses the
+  // sanitized title as the default filename — one that Microsoft Teams will
+  // accept. Only the title text changes; visible page content is untouched.
+  const withSafeTitle = sanitizeTitleInDoc(wrapped);
+  const withOdIds = annotateMissingOdIds(withSafeTitle);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
