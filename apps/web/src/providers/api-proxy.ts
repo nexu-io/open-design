@@ -224,6 +224,11 @@ async function buildOpenAICompatibleMessageContent(
     const block = await readOpenAICompatibleImageBlock(projectId, attachment.path);
     if (block) {
       blocks.push(block);
+    } else if (isAnthropicSupportedImagePath(attachment.path)) {
+      blocks.push({
+        type: 'text',
+        text: `Attached image could not be sent as native image content: path: ${attachment.path} | name: ${attachment.name}`,
+      });
     }
   }
 

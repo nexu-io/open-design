@@ -169,6 +169,40 @@ describe('buildProxyMessages', () => {
     ]);
   });
 
+  it('keeps an OpenAI-compatible fallback when image_url content cannot be read', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        headers: { get: () => null },
+        arrayBuffer: async () => new ArrayBuffer(0),
+      }),
+    );
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/openai/stream',
+      [
+        userMessage('Describe the attached image', [
+          { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      { projectId: 'project-1' },
+    );
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe the attached image' },
+          {
+            type: 'text',
+            text: 'Attached image could not be sent as native image content: path: references/logo.png | name: logo.png',
+          },
+        ],
+      },
+    ]);
+  });
+
   it('sends Anthropic image content blocks in the proxy request body', async () => {
     const pngBytes = new Uint8Array([137, 80, 78, 71]);
     const fetchMock = vi
