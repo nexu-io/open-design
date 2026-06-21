@@ -55,11 +55,12 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
   'other',
 ]);
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
+  const { readAppConfig } = ctx.appConfig;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
@@ -319,11 +320,18 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         try {
           const def = getAgentDef(body.agentId);
           const testStart = Date.now();
+          const appConfig = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
+          const configuredModel =
+            def && typeof appConfig.agentModels?.[def.id]?.model === 'string'
+              ? appConfig.agentModels[def.id].model
+              : undefined;
+          const requestedModel =
+            typeof body.model === 'string' ? body.model : configuredModel;
           const safeModel =
-            def && typeof body.model === 'string'
-              ? isKnownModel(def, body.model)
-                ? body.model
-                : sanitizeCustomModel(body.model)
+            def && typeof requestedModel === 'string'
+              ? isKnownModel(def, requestedModel)
+                ? requestedModel
+                : sanitizeCustomModel(requestedModel)
               : undefined;
           if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
             return res.json({

@@ -30,6 +30,7 @@ import {
   resolveAgentLaunch,
   spawnEnvForAgent,
 } from '../src/agents.js';
+import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
@@ -2660,6 +2661,65 @@ setImmediate(() => process.exit(0));
         });
       },
     );
+  });
+
+  it('keeps service tier overrides when connection tests omit model but settings has one', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-service-tier-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: { codex: { model: 'gpt-5.5' } },
+      });
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+            model: 'gpt-5.5',
+          });
+
+          const args = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
+    }
   });
 
   it('spawns agent tests with draft allowlisted CLI env', async () => {

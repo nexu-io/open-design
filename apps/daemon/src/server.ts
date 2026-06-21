@@ -2886,6 +2886,7 @@ export async function startServer({
     testAgentConnection,
     getAgentDef,
     isKnownModel,
+    isKnownServiceTier,
     sanitizeCustomModel,
   };
   const critiqueDeps = {
@@ -8622,6 +8623,7 @@ export async function startServer({
     chat: { startChatRun },
     agents: agentDeps,
     critique: critiqueDeps,
+    appConfig: { readAppConfig },
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     telemetry: { reportFinalizedMessage, reportFeedback },
