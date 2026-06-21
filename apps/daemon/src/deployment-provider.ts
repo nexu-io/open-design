@@ -57,7 +57,7 @@ function optionalPositiveInteger(value: string | undefined): number | undefined 
 }
 
 function validateDeploymentBaseUrl(baseUrl: string): { parsed?: ParsedBaseUrl; error?: string } {
-  let parsed: ParsedBaseUrl;
+  let parsed: URL;
   try {
     parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
   } catch {
@@ -65,6 +65,9 @@ function validateDeploymentBaseUrl(baseUrl: string): { parsed?: ParsedBaseUrl; e
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { error: 'Only http/https allowed' };
+  }
+  if (parsed.username || parsed.password) {
+    return { error: 'Deployment provider base URL must not include user info.' };
   }
   return { parsed };
 }

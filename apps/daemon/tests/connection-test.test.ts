@@ -269,6 +269,29 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('reports deployment provider URLs with user info as unavailable', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://user:pass@gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_LABEL: 'Deployment provider',
+    }, async () => {
+      const res = await realFetch(`${baseUrl}/api/provider-orchestrator/config`);
+      expect(res.status).toBe(200);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body).toMatchObject({
+        available: false,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Deployment provider',
+        kind: 'invalid_base_url',
+        detail: 'Deployment provider base URL must not include user info.',
+        displayHost: 'gateway.example.test',
+      });
+      expect(JSON.stringify(body)).not.toContain('deployment-secret');
+      expect(JSON.stringify(body)).not.toContain('user:pass');
+    });
+  });
+
   it('reports invalid deployment provider run-session config as unavailable', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
