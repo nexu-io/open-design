@@ -56,7 +56,9 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
 }
 
 export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
-  if (cfg.apiProtocol === 'openai' || cfg.apiProtocol === 'azure') return true;
+  if (cfg.apiProtocol === 'openai' || cfg.apiProtocol === 'azure') {
+    return isKnownNativeImageModel(cfg.model);
+  }
   if (
     cfg.apiProtocol === 'google' ||
     cfg.apiProtocol === 'ollama' ||
@@ -67,6 +69,19 @@ export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
   }
   if (cfg.apiProtocol === 'anthropic') return true;
   return !isOpenAICompatible(cfg.model, cfg.baseUrl) || usesAnthropicProxy(cfg);
+}
+
+function isKnownNativeImageModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized === 'chat-gpt-latest' ||
+    normalized.startsWith('gpt-5') ||
+    normalized.startsWith('gpt-4o') ||
+    normalized.startsWith('gpt-4.1') ||
+    normalized.startsWith('gpt-4-turbo') ||
+    normalized.startsWith('o3') ||
+    normalized.startsWith('o4')
+  );
 }
 
 export function isAnthropicSupportedImagePath(path: string): boolean {

@@ -38,6 +38,8 @@ describe('api protocol labels', () => {
     expect(supportsNativeImageAttachments(baseConfig)).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(true);
+    expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-3.5-turbo' })).toBe(false);
+    expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'azure', model: 'text-only-deployment' })).toBe(false);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'google', model: 'gemini-pro' })).toBe(false);
     expect(supportsNativeImageAttachments({
       ...baseConfig,
