@@ -53,7 +53,7 @@ interface TabDragTarget {
 interface Props {
   route: Route;
   projects: Project[];
-  // Once onboarding is finished (completed or skipped), the permanent entry
+  // Once onboarding is finished, the permanent entry
   // tab must never linger on the 'onboarding' (Welcome) view — some completion
   // paths navigate straight to a new project/design-system and leave the entry
   // tab showing Welcome in the background. This flips it back to Home.
@@ -494,11 +494,15 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
 
   // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
   // still parked on the 'onboarding' view back to 'home'. This catches every
-  // finish path uniformly — Skip, last-step Continue, and the design-system
-  // Generate route that navigates to a fresh project while leaving the entry
-  // tab on Welcome in the background.
+  // finish path uniformly — last-step Continue and any future route that
+  // navigates away while leaving the entry tab on Welcome in the background.
   useEffect(() => {
     if (!onboardingCompleted) return;
+    // Don't rewrite the tab back to 'home' while the user is *still* on the
+    // onboarding route — a previously-completed user who re-opens /onboarding
+    // should keep the "Onboarding" tab label, not flip to "Home". The rewrite
+    // still fires the moment they navigate away (onboardingActive turns false).
+    if (onboardingActive) return;
     setState((current) => {
       if (!current.tabs.some((tab) => tab.kind === 'entry' && tab.view === 'onboarding')) {
         return current;
@@ -512,7 +516,17 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         ),
       });
     });
-  }, [onboardingCompleted]);
+  }, [onboardingCompleted, onboardingActive]);
+
+  // Close the Search-tabs popover whenever onboarding becomes active. The
+  // trigger button is hidden during onboarding, so a popover left open across
+  // a route flip to /onboarding (e.g. browser back/forward, which bypasses
+  // activateTab/createNewTab) would otherwise float over the first-run flow
+  // with no visible control to dismiss it. The portal is also gated on
+  // !onboardingActive below so it never renders for the frame before this runs.
+  useEffect(() => {
+    if (onboardingActive) setTabsMenuOpen(false);
+  }, [onboardingActive]);
 
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the
@@ -976,12 +990,14 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           data-tooltip="New tab"
           data-tooltip-placement="bottom"
           aria-label="New tab"
+          data-testid="workspace-tabs-new-tab"
           disabled={onboardingActive}
         >
           <Icon name="plus" size={14} />
         </button>
       </div>
       <div className="workspace-tabs-actions" ref={menuRef}>
+        {onboardingActive ? null : (
         <button
           type="button"
           className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
@@ -995,7 +1011,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         >
           <Icon name="search" size={15} />
         </button>
-        {tabsMenuOpen && typeof document !== 'undefined'
+        )}
+        {tabsMenuOpen && !onboardingActive && typeof document !== 'undefined'
           ? createPortal(
               <div
                 className="workspace-tabs-popover"
@@ -1077,7 +1094,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
+              const previewWidth = Math.max(220, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
                 0,

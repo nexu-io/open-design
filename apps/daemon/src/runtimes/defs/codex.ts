@@ -70,6 +70,10 @@ export const codexAgentDef = {
       parse: parseCodexDebugModels,
       timeoutMs: 5000,
     },
+    authProbe: {
+      args: ['login', 'status'],
+      timeoutMs: 5000,
+    },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       { id: 'gpt-5.5', label: 'gpt-5.5' },
@@ -124,9 +128,6 @@ export const codexAgentDef = {
             '-c',
             'sandbox_workspace_write.network_access=true',
           ];
-      // Newer Codex builds honor permissions config over legacy sandbox
-      // flags; without this, Windows/WSL launches can stay read-only (#2834).
-      args.push('-c', 'default_permissions=":workspace"');
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }

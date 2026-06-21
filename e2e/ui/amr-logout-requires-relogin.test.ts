@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 
 import { writeFakeVelaBin } from '@/amr';
 import {

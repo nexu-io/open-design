@@ -4,7 +4,7 @@
 >
 > ⚡ **Open Design AMR（Agentic Model Router）——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[AMR を試す](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4)。
+> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/9ptkbbqRu)。
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -14,14 +14,14 @@
   <a href="https://open-design.ai/">ウェブサイト</a> ·
   <a href="https://open-design.ai/">ダウンロード</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
+  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio をフォロー</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="QUICKSTART.ja-JP.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Sealos にデプロイ
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos App Store テンプレートは、公開済みの Open Design Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
+
 ### 🧑‍💻 ソースから実行
 
 ```bash
@@ -588,7 +594,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 すべてのチャネルの裏側には、本物の人がいます。
 
-- 💬 **Discord** — 日々のチャット、プラグインの共有、質問 → [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
+- 💬 **Discord** — 日々のチャット、プラグインの共有、質問 → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
 - 🐦 **X / Twitter** — リリースノート、マイルストーン、舞台裏 → [**@nexudotio**](https://x.com/nexudotio)
 - 🗣️ **GitHub Discussions** — 深い Q&A、RFC、「成果を見せて」 → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — バグ報告、機能リクエスト → [**Issues**](https://github.com/nexu-io/open-design/issues)
@@ -638,7 +644,7 @@ gh pr create --fill
 
 ### 🏅 Open Design Fellow プログラム
 
-私たちは世界中で **Open Design Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Open Design を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4) のアナウンス。
+私たちは世界中で **Open Design Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Open Design を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/9ptkbbqRu) のアナウンス。
 
 ---
 

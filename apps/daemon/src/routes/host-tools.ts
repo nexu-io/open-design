@@ -28,10 +28,10 @@ import type { RouteDeps } from '../server-context.js';
 export interface RegisterHostToolsRoutesDeps
   extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {}
 
-type RealPlatform = 'darwin' | 'win32' | 'linux';
-type Platform = RealPlatform | 'unknown';
+export type RealPlatform = 'darwin' | 'win32' | 'linux';
+export type Platform = RealPlatform | 'unknown';
 
-interface CatalogueEntry {
+export interface CatalogueEntry {
   id: HostEditorId;
   label: string;
   icon: string;
@@ -53,7 +53,7 @@ const MAC_OPEN_COMMAND = '/usr/bin/open';
 // The catalogue covers the apps shown in the user's reference screenshot
 // (image 4): Qoder, Cursor, Zed, Windsurf, Antigravity, Finder, Terminal,
 // Warp, Xcode, IntelliJ IDEA — plus a few cross-platform staples.
-const CATALOGUE: ReadonlyArray<CatalogueEntry> = [
+export const CATALOGUE: ReadonlyArray<CatalogueEntry> = [
   { id: 'cursor', label: 'Cursor', icon: 'sparkles', command: 'cursor', macOpenBundle: 'Cursor' },
   { id: 'vscode', label: 'VS Code', icon: 'file-code', command: 'code', macOpenBundle: 'Visual Studio Code' },
   { id: 'windsurf', label: 'Windsurf', icon: 'sparkles', command: 'windsurf', macOpenBundle: 'Windsurf' },
@@ -67,7 +67,10 @@ const CATALOGUE: ReadonlyArray<CatalogueEntry> = [
   { id: 'explorer', label: 'Explorer', icon: 'folder', command: 'explorer', platforms: ['win32'] },
   { id: 'file-manager', label: 'File Manager', icon: 'folder', command: 'xdg-open', platforms: ['linux'] },
   { id: 'terminal', label: 'Terminal', icon: 'sliders', macOpenBundle: 'Terminal', platforms: ['darwin'] },
-  { id: 'warp', label: 'Warp', icon: 'sliders', macOpenBundle: 'Warp' },
+  // darwin-only: Warp cold-starts ignore the cwd argument on win32/linux, so
+  // the "open in Warp" UX is broken on those platforms. Revisit if/when
+  // warpdotdev/Warp#6357 ships cross-platform cwd support. (#4544)
+  { id: 'warp', label: 'Warp', icon: 'sliders', macOpenBundle: 'Warp', platforms: ['darwin'] },
 ];
 
 function currentPlatform(): Platform {
@@ -218,7 +221,7 @@ export async function resolveHostToolLaunchPlan(
   };
 }
 
-function applicableForPlatform(entry: CatalogueEntry, platform: Platform): boolean {
+export function applicableForPlatform(entry: CatalogueEntry, platform: Platform): boolean {
   if (platform === 'unknown') return false;
   if (entry.platforms && !entry.platforms.includes(platform)) return false;
   if (entry.excludedPlatforms && entry.excludedPlatforms.includes(platform)) return false;

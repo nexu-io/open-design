@@ -113,6 +113,7 @@ interface Props {
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
   onRenameProject: (id: string, name: string) => void;
+  onProjectsRefresh?: () => Promise<void> | void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
   onOpenDesignSystem?: (id: string) => void;
@@ -253,6 +254,7 @@ export function EntryView({
   onOpenLiveArtifact,
   onDeleteProject,
   onRenameProject,
+  onProjectsRefresh,
   onChangeDefaultDesignSystem,
   onCreateDesignSystem,
   onOpenDesignSystem,
@@ -366,6 +368,7 @@ export function EntryView({
       onOpenLiveArtifact={onOpenLiveArtifact}
       onDeleteProject={onDeleteProject}
       onRenameProject={onRenameProject}
+      onProjectsRefresh={onProjectsRefresh}
       onChangeDefaultDesignSystem={onChangeDefaultDesignSystem}
       onCreateDesignSystem={onCreateDesignSystem}
       onOpenDesignSystem={onOpenDesignSystem}

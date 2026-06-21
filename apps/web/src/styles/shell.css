@@ -495,6 +495,7 @@
   position: fixed;
   z-index: 140;
   box-sizing: border-box;
+  min-width: 220px;
   display: flex;
   align-items: flex-start;
   gap: 9px;

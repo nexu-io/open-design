@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Drift check between the TypeScript source-of-truth registry
 // (apps/web/src/media/models.ts) and the TS mirror used by the Node daemon
-// (apps/daemon/src/media-models.ts). The two are kept in sync by hand because the
+// (apps/daemon/src/media/models.ts). The two are kept in sync by hand because the
 // daemon avoids a TS toolchain at runtime; this script lets CI fail the
 // build the moment they diverge.
 //
@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const TS_PATH = path.join(ROOT, 'apps', 'web', 'src', 'media', 'models.ts');
-const JS_PATH = path.join(ROOT, 'apps', 'daemon', 'src', 'media-models.ts');
+const JS_PATH = path.join(ROOT, 'apps', 'daemon', 'src', 'media', 'models.ts');
 
 function fail(msg) {
   process.stderr.write(`verify-media-models: ${msg}\n`);
@@ -158,7 +158,7 @@ if (
 
 if (diffs.length > 0) {
   process.stderr.write(
-    'verify-media-models: drift detected between apps/web/src/media/models.ts and apps/daemon/src/media-models.ts\n',
+    'verify-media-models: drift detected between apps/web/src/media/models.ts and apps/daemon/src/media/models.ts\n',
   );
   for (const d of diffs) process.stderr.write(`  - ${d}\n`);
   process.stderr.write(

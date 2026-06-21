@@ -33,21 +33,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: entry-onboarding
-            smoke_shard: smoke
-            shard: entry-onboarding
-          - name: project-workspace
-            smoke_shard: smoke
-            shard: project-workspace
+          - name: entry-settings
+            shard: entry-settings
+          - name: project-runtime
+            shard: project-runtime
           - name: workspace-restoration
-            smoke_shard: smoke
             shard: workspace-restoration
-          - name: runtime-recovery
-            smoke_shard: smoke
-            shard: runtime-recovery
-          - name: settings-connectors
-            smoke_shard: settings-smoke
-            shard: settings-connectors
 
     steps:
       - name: Checkout
@@ -72,10 +63,10 @@ jobs:
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run UI shell smoke
-        run: pnpm -C e2e exec tsx scripts/ui-p0-shards.ts ${{ matrix.smoke_shard }}
+        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
 
       - name: Run UI P0 domain
-        run: pnpm -C e2e exec tsx scripts/ui-p0-shards.ts ${{ matrix.shard }}
+        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}

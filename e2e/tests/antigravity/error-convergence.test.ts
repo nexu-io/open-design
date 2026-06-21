@@ -8,7 +8,7 @@ import { writeFakeAgyBin } from '@/antigravity';
 import { createAntigravityProject, putAntigravityAppConfig } from '@/vitest/antigravity';
 import { listMessages } from '@/vitest/messages';
 import { readRunEvents, startRun, waitForRunTerminal } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 describe('Antigravity error convergence', () => {
   test('marks the run and assistant message as failed with AGENT_AUTH_REQUIRED when agy print mode hits OAuth auth flow', { timeout: 180_000 }, async () => {
@@ -17,10 +17,7 @@ describe('Antigravity error convergence', () => {
       join(suite.scratchDir, 'fake-antigravity-auth'),
       { mode: 'auth-required' },
     );
-    const previousPath = process.env.PATH;
-    process.env.PATH = `${dirname(fakeAgy)}:${previousPath ?? ''}`;
-
-    try {
+    await suite.with.pathEntry(dirname(fakeAgy), async () => {
       await suite.with.toolsDev(async ({ webUrl }) => {
         await putAntigravityAppConfig(webUrl);
 
@@ -50,10 +47,7 @@ describe('Antigravity error convergence', () => {
         const assistant = messages.find((message) => message.id === assistantMessageId);
         expect(assistant?.runStatus).toBe('failed');
       });
-    } finally {
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
-    }
+    });
   });
 
   test('marks the run and assistant message as failed with RATE_LIMITED when agy log file records quota exhaustion', { timeout: 180_000 }, async () => {
@@ -62,10 +56,7 @@ describe('Antigravity error convergence', () => {
       join(suite.scratchDir, 'fake-antigravity-rate-limited'),
       { mode: 'rate-limited' },
     );
-    const previousPath = process.env.PATH;
-    process.env.PATH = `${dirname(fakeAgy)}:${previousPath ?? ''}`;
-
-    try {
+    await suite.with.pathEntry(dirname(fakeAgy), async () => {
       await suite.with.toolsDev(async ({ webUrl }) => {
         await putAntigravityAppConfig(webUrl);
 
@@ -95,9 +86,6 @@ describe('Antigravity error convergence', () => {
         const assistant = messages.find((message) => message.id === assistantMessageId);
         expect(assistant?.runStatus).toBe('failed');
       });
-    } finally {
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
-    }
+    });
   });
 });

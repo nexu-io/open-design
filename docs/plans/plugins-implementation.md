@@ -155,7 +155,7 @@ These notes capture the product/implementation answers that otherwise get lost b
 | `tools/pack/helm/open-design/templates/**` | shipped | Phase 5 — Deployment / Service / Secret / ConfigMap / PVCs / Ingress / NOTES |
 | `tools/pack/helm/open-design/values-{aws,gcp,azure,aliyun,tencent,huawei,self}.yaml` | shipped | Phase 5 — per-cloud overrides (volume + ingress diffs) |
 | `deploy/Dockerfile` plugins/_official COPY | shipped | Phase 5 — bundled atoms travel with the image |
-| `.github/workflows/docker-image.yml` | shipped | Phase 5 — multi-arch ghcr.io push (:edge / :version) |
+| `.github/workflows/docker-image.yml` | shipped | Phase 5 — multi-arch ghcr.io push (:version / :latest) |
 | `apps/daemon/src/storage/project-storage.ts` | shipped | Phase 5 — ProjectStorage interface + Local impl + S3 stub |
 | `apps/daemon/src/storage/daemon-db.ts` | shipped | Phase 5 — DaemonDb config resolver (sqlite default, postgres stub) |
 | `GET /api/plugins/:id/asset/*` | shipped | Phase 4 — sandboxed plugin asset endpoint (§9.2 CSP) |
@@ -506,7 +506,7 @@ Validation
 Deliverables
 
 - [x] `linux/amd64` + `linux/arm64` Dockerfile per spec §15.1 (`deploy/Dockerfile`; entry-slice base is `node:24-alpine` with `NODE_IMAGE` build-arg override → `node:24-bookworm-slim`; bundled atom plugins ship inside the image).
-- [x] CI pushes `:edge` on main, `:<version>` on tag — `.github/workflows/docker-image.yml`.
+- [x] Release automation pushes `:<version>` / `:latest`; tag pushes publish matching images — `.github/workflows/docker-image.yml`.
 - [x] `tools/pack/docker-compose.yml`, `tools/pack/helm/` — chart templates (Deployment / Service / Secret / ConfigMap / PVCs / Ingress / NOTES) shipped, per-cloud `values-<cloud>.yaml` overrides shipped (AWS / GCP / Azure / Aliyun / Tencent / Huawei / self-hosted).
 - [x] Bound-API-token guard: daemon refuses to bind `OD_BIND_HOST=<non-loopback>` without `OD_API_TOKEN`; bearer middleware on `/api/*` skipped only on loopback peers and on the open probes (`/api/health`, `/api/version`, `/api/daemon/status`).
 - [x] `ProjectStorage` adapter substrate — `LocalProjectStorage` (v1 default) wired + tested; `S3ProjectStorage` interface-locked stub; `resolveProjectStorage` reads `OD_PROJECT_STORAGE`. AWS SDK wiring stays as the next Phase 5 PR.

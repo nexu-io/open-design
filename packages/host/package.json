@@ -1,6 +1,6 @@
 {
   "name": "@open-design/host",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "description": "Open Design renderer host bridge protocol.",

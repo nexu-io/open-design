@@ -23,14 +23,14 @@ body.sub-page {
    * `padding` shorthand instead would zero out left/right and let
    * content touch the screen edge on mobile (issue #review-fix-8). */
   padding-top: 140px;
-  padding-bottom: 68px;
+  padding-bottom: 48px;
   min-height: 60vh;
 }
 
 @media (max-width: 720px) {
   .sub-main {
     padding-top: 120px;
-    padding-bottom: 68px;
+    padding-bottom: 48px;
   }
 }
 
@@ -712,24 +712,22 @@ body.sub-page {
 
 .detail {
   max-width: 880px;
+  /* Center the article column on the page (was left-aligned). */
+  margin-inline: auto;
 }
+/* Detail header: no top rule, no eyebrow. The 返回 back button is pinned to the
+   top-left while the title + lead are centered. */
 .detail-head {
-  border-top: 1px solid var(--ink);
-  padding-top: 28px;
   margin-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
-.detail-head .label {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  display: inline-block;
-  margin-bottom: 18px;
-}
-.detail-head .label .ix {
-  color: var(--coral);
-  margin-left: 6px;
+/* Outlined back button sits top-left of the centered header. */
+.detail-head .detail-back {
+  align-self: flex-start;
+  margin-bottom: 28px;
 }
 .detail-head .display {
   font-family: var(--serif);
@@ -747,7 +745,14 @@ body.sub-page {
   color: var(--ink-soft);
   margin-bottom: 28px;
   max-width: 720px;
+  /* Center the lead block under the centered title. */
+  margin-left: auto;
+  margin-right: auto;
 }
+/* Keep the key/value meta as a left-aligned table (spec: don't center tabular
+   content); center the CTA row. */
+.detail-head .detail-meta { align-self: stretch; text-align: left; }
+.detail-head .detail-actions { justify-content: center; }
 
 .detail-actions {
   display: flex;
@@ -810,7 +815,19 @@ body.sub-page {
 }
 
 .detail-block {
+  /* These are <section> elements, so they inherit the global
+   * `section { padding: 130px 0 }` from globals.css — a homepage rule that
+   * leaks a ~130px top/bottom hole into each detail block (off the skill's
+   * spacing scale, which tops out at 68px). Cancel it; the 48px (= --spacing-48)
+   * margin-bottom is the intended rhythm between blocks. */
+  padding: 0;
   margin-bottom: 48px;
+  /* Cancel the homepage `section { padding: 130px 0 }` rule from globals.css
+   * (same counter as .catalog-grid / .tpl-grid): detail-page sections are
+   * `<section>` elements, so without this each one opens with a ~130px hole
+   * top and bottom — glaring on short blocks like Tags. Spacing between
+   * blocks is handled by margin-bottom above. */
+  padding: 0;
 }
 .detail-block h2 {
   font-family: var(--serif);
@@ -1039,7 +1056,14 @@ body.sub-page {
   border-top: 1px solid var(--line);
   background: var(--paper);
   padding: 60px 0 32px;
-  margin-top: 96px;
+  /* No extra top margin: the border-top + .sub-main's padding-bottom already
+     separate the footer. The old 96px (off the skill scale, max 68) stacked
+     into a ~160px hole above the footer line. */
+  margin-top: 0;
+}
+.sub-footer-inner {
+  max-width: none;
+  padding-inline: 238px;
 }
 .sub-footer-inner {
   max-width: none;
@@ -1089,7 +1113,10 @@ body.sub-page {
 }
 @media (max-width: 720px) {
   .sub-footer-inner { padding-inline: 24px; }
-  .sub-footer-grid { grid-template-columns: 1fr; gap: 32px; }
+  /* Match the homepage footer (globals.css): each section spans the full width
+     and lays its links out in horizontal wrapping rows, not a tall column. */
+  .sub-footer-grid { grid-template-columns: 1fr; gap: 24px; }
+  .sub-footer-col ul { flex-direction: row; flex-wrap: wrap; gap: 10px 22px; }
   .sub-footer { padding: 40px 0 24px; }
 }
 
@@ -1850,7 +1877,9 @@ body.sub-page {
 .tpl-card {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
+  /* Rows: media · meta · excerpt(1fr) · actions. The accent band row was
+     removed (see `.tpl-band { display: none }`). */
+  grid-template-rows: auto auto 1fr auto;
   gap: 12px;
   background: var(--bone);
   border: 1.5px solid var(--ink);
@@ -1863,9 +1892,9 @@ body.sub-page {
   box-shadow: 6px 6px 0 var(--ink);
 }
 .tpl-band {
-  display: block;
-  height: 6px;
-  margin: 0 -16px;
+  /* Accent line at the card top removed per design — the media now meets the
+     card's rounded top edge directly. */
+  display: none;
 }
 .tpl-featured-tag {
   position: absolute;
@@ -2456,6 +2485,25 @@ body.sub-page {
   line-height: 125%;
   color: var(--ink-mute);
 }
+/* Responsive columns — re-asserted AFTER the base `repeat(3, minmax(0,1fr))`
+   above, because that base rule comes later in source than the older
+   breakpoints near line 705 and was clobbering them (so the grid stayed
+   3-up on phones). Phone = one card per row; small tablet = two. */
+@media (max-width: 980px) {
+  .systems-grid ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .systems-grid ul { grid-template-columns: 1fr; }
+}
+/* Keep card text on word boundaries: the global `overflow-wrap: break-word`
+   (body) was snapping short brand names like "Agentic" → "Agenti / c" and
+   "Airtable" → "Airtabl / e" whenever a track got narrow. */
+.systems-grid .system-name,
+.systems-grid .system-cat,
+.systems-grid .system-tagline {
+  overflow-wrap: normal;
+  word-break: normal;
+}
 @media (max-width: 720px) {
   .plugin-templates-head .display,
   .plugin-skills-head .display,
@@ -2670,10 +2718,10 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   padding: 16px 0;
   border-top: 1px solid var(--line-soft);
 }
-.solution-step:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
+/* NOTE: the steps now render as bordered cards (see the `.solution-step` card
+   rules further down), so the old flat-list `:first-child { border-top: 0 }`
+   reset was removed — its higher `:first-child` specificity was wiping the
+   first card's top border (the "01" card showed three sides only). */
 .solution-step-index {
   flex: 0 0 auto;
   font-family: var(--mono);
@@ -3200,17 +3248,17 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--spacing-16);
   margin-top: var(--spacing-20);
+  /* Cards hug their own content rather than stretching to the tallest in the
+     row — combined with no min-height below, every card keeps an even 20px
+     inset on all four sides instead of a ballooning bottom gap. */
+  align-items: start;
 }
 .solution-step {
   display: flex;
-  min-height: 170px;
   gap: var(--spacing-16);
   padding: var(--spacing-20);
   border: 1px solid var(--od-border);
   background: var(--od-white);
-}
-.solution-step:first-child {
-  padding-top: var(--spacing-20);
 }
 .solution-step-index,
 .faq-index {
@@ -3523,4 +3571,27 @@ dialog.tpl-share-popover .detail-share-dialog-text {
 }
 @media (max-width: 1024px) {
   .agents-hub .agent-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ====================================================================
+   Mobile module rhythm — match the homepage's unified 112px gap (≤880px)
+   across the info-page family, so the gap between major modules is
+   consistent site-wide. The homepage uses 56px section padding (= 112px
+   gaps); here the same 112px gap is produced per layout type. This block
+   is last in source so it wins over the older ≤720/≤640 sub-page rules.
+   ==================================================================== */
+@media (max-width: 880px) {
+  /* Margin-based pages (plain info-page + agents-hub): sections carry no
+     vertical padding, so the gap IS the inter-section margin. */
+  .info-page .info-section + .info-section { margin-top: 112px; }
+  .agents-hub .info-section + .info-section { margin-top: 112px; }
+
+  /* Divider-based pages (solution + solution-index): the gap is the padding
+     above/below each section's border-top rule — 56px a side = 112px. Zero
+     any inherited inter-section margin so it isn't added on top (solution-
+     index was 48 + 42 + 48 = 138px before). */
+  .info-page.solution-page .info-section,
+  .info-page.solution-index-page .info-section { padding: 56px 0; }
+  .info-page.solution-page .info-section + .info-section,
+  .info-page.solution-index-page .info-section + .info-section { margin-top: 0; }
 }

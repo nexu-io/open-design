@@ -11,7 +11,7 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
-import { applyOsLocaleSwitch, createSplashWindow } from "@open-design/desktop/main";
+import { applyOsLocaleSwitch, createSplashWindow, setSplashStage } from "@open-design/desktop/main";
 import { readProcessStamp } from "@open-design/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
@@ -150,7 +150,26 @@ async function main(): Promise<void> {
     webSidecarEntry: activeConfig.webSidecarEntry,
     webStandaloneRoot: activeConfig.webStandaloneRoot,
     webOutputMode: activeConfig.webOutputMode,
+    // Surface each sidecar boot phase on the splash status line so a slow
+    // cold start (Defender scans, native module loads) never reads as a hang.
+    // Both the "spawning" and "ready" edges are mapped so the step counter
+    // advances the instant each long native wait clears.
+    onPhase(phase) {
+      const stage =
+        phase === "daemon-spawning"
+          ? "engine"
+          : phase === "daemon-ready"
+            ? "engineReady"
+            : phase === "web-spawning"
+              ? "interface"
+              : "interfaceReady";
+      setSplashStage(splash.window, stage);
+    },
   });
+  // Sidecars are up; the remaining wait is the hidden main window loading and
+  // mounting the web bundle (the runtime re-asserts this stage at its reveal
+  // gate, which is a no-op when the label is already current).
+  setSplashStage(splash.window, "workspace");
   registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
 
   const { runDesktopMain } = await import("@open-design/desktop/main");

@@ -23,7 +23,7 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { parseFrontmatter } from './frontmatter.js';
+import { parseFrontmatter } from './design-systems/frontmatter.js';
 // Imported lazily through the memory-extractions module by the call
 // sites below so a future test-only build of memory.ts that stubs the
 // store can still tree-shake the ring buffer. We use a static import
