@@ -294,6 +294,42 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('denies deployment provider proxy egress before creating a run session', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`unexpected egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+          reasoningExecution: { mode: 'disabled' },
+        }),
+      });
+
+      expect(res.status).toBe(403);
+      await expect(res.json()).resolves.toMatchObject({
+        error: { code: 'reasoning_execution_disabled' },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('fails closed on invalid deployment provider run-session URL before provider egress', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',

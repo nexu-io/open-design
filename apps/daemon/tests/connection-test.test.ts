@@ -980,6 +980,38 @@ describe('POST /api/test/connection provider mode', () => {
     });
   });
 
+  it('denies deployment provider connection tests before creating a run session', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const fetchMock = passThroughOrUpstream((url) => {
+        throw new Error(`unexpected egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          reasoningExecution: { mode: 'disabled' },
+        }),
+      });
+
+      expect(res.status).toBe(403);
+      await expect(res.json()).resolves.toMatchObject({
+        error: { code: 'reasoning_execution_disabled' },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('rejects deployment provider connection tests for non-OpenAI protocols', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',

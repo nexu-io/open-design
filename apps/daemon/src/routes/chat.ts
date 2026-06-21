@@ -396,6 +396,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'baseUrl, apiKey, and model are required',
           );
         }
+        const reasoningDenial = authorizeReasoningEgress({
+          policy: body.reasoningExecution,
+          routeKind: 'connection_test',
+          provider: protocol,
+          resolvedBaseUrl: effectiveBaseUrl,
+          model: body.model,
+        });
+        if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
         if (deploymentProfile) {
           const runMetadata = await deploymentProviderRunMetadata(
             deploymentProfile,
@@ -410,14 +418,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           }
           metadata = runMetadata.metadata;
         }
-        const reasoningDenial = authorizeReasoningEgress({
-          policy: body.reasoningExecution,
-          routeKind: 'connection_test',
-          provider: protocol,
-          resolvedBaseUrl: effectiveBaseUrl,
-          model: body.model,
-        });
-        if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
         try {
           const result = await testProviderConnection({
             protocol,
@@ -1090,6 +1090,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     let effectiveBaseUrl = typeof baseUrl === 'string' ? baseUrl : '';
     let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
     let allowPrivateNetworkBaseUrl = false;
+    let deploymentProfile: DeploymentProviderProfile | null = null;
     if (credentialSource === 'deployment') {
       const resolved = resolveDeploymentProviderProfile('openai');
       if (!resolved.ok) {
@@ -1098,27 +1099,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       effectiveBaseUrl = resolved.profile.baseUrl;
       effectiveApiKey = resolved.profile.apiKey;
       allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
-      const runSessionAbort = new AbortController();
-      const abortRunSession = (): void => {
-        if (!runSessionAbort.signal.aborted) runSessionAbort.abort();
-      };
-      res.on('close', abortRunSession);
-      let metadata: DeploymentProviderRunMetadataResult;
-      try {
-        metadata = await deploymentProviderRunMetadata(
-          resolved.profile,
-          proxyBody as Record<string, unknown>,
-          runSessionAbort.signal,
-        );
-      } finally {
-        res.off('close', abortRunSession);
-      }
-      if (!metadata.ok) {
-        return sendApiError(res, metadata.status, metadata.code, metadata.message);
-      }
-      if (metadata.metadata) {
-        proxyBody.metadata = metadata.metadata;
-      }
+      deploymentProfile = resolved.profile;
     }
     if (!effectiveBaseUrl || !effectiveApiKey || !model) {
       return sendApiError(
@@ -1149,6 +1130,30 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       model,
     });
     if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
+
+    if (deploymentProfile) {
+      const runSessionAbort = new AbortController();
+      const abortRunSession = (): void => {
+        if (!runSessionAbort.signal.aborted) runSessionAbort.abort();
+      };
+      res.on('close', abortRunSession);
+      let metadata: DeploymentProviderRunMetadataResult;
+      try {
+        metadata = await deploymentProviderRunMetadata(
+          deploymentProfile,
+          proxyBody as Record<string, unknown>,
+          runSessionAbort.signal,
+        );
+      } finally {
+        res.off('close', abortRunSession);
+      }
+      if (!metadata.ok) {
+        return sendApiError(res, metadata.status, metadata.code, metadata.message);
+      }
+      if (metadata.metadata) {
+        proxyBody.metadata = metadata.metadata;
+      }
+    }
 
     const url = appendVersionedApiPath(effectiveBaseUrl, '/chat/completions');
     console.log(
