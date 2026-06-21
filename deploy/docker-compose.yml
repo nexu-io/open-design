@@ -43,7 +43,7 @@ services:
       # only).  If you change the port binding to 0.0.0.0, set this to 0
       # so every browser on the network cannot mint a session cookie
       # without knowing OD_API_TOKEN.
-      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=0
+      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=1
       - OD_TRUST_PROXY=${OD_TRUST_PROXY:-}
       - OD_PUBLIC_BASE_URL=${OD_PUBLIC_BASE_URL:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}

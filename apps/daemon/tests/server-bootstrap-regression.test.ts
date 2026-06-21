@@ -616,4 +616,51 @@ describe('bootstrap auth bypass regression (reverse-proxy trust)', () => {
     });
     expect(postRes.status).toBe(403);
   });
+
+  it('full bootstrap flow end-to-end: nonce exchange grants cookie access to protected API', async () => {
+    // Bootstrap: get nonce from loopback
+    const tokenRes = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`);
+    expect(tokenRes.status).toBe(200);
+    const { nonce } = await tokenRes.json() as { nonce: string };
+    expect(nonce).toBeTruthy();
+
+    // Exchange nonce for session cookie
+    const exchangeRes = await fetch(`${authBaseUrl}/api/auth/bootstrap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nonce }),
+    });
+    expect(exchangeRes.status).toBe(200);
+
+    // Verify the Set-Cookie header carries the auth token
+    const setCookie = exchangeRes.headers.get('set-cookie');
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).toContain('od-api-token=');
+
+    // The cookie should be httpOnly, sameSite=strict, and have a maxAge
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Strict');
+  });
+
+  it('bootstrap with clientTag succeeds and requireClientTag is true', async () => {
+    const clientTag = crypto.randomUUID();
+    const res = await fetch(`${authBaseUrl}/api/auth/bootstrap-token?clientTag=${clientTag}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('nonce');
+    expect(body.requireClientTag).toBe(true);
+  });
+
+  it('bootstrap with clientTag but POST with wrong clientTag returns 401', async () => {
+    const clientTag = crypto.randomUUID();
+    const tokenRes = await fetch(`${authBaseUrl}/api/auth/bootstrap-token?clientTag=${clientTag}`);
+    const { nonce } = await tokenRes.json() as { nonce: string };
+
+    const postRes = await fetch(`${authBaseUrl}/api/auth/bootstrap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nonce, clientTag: 'wrong-tag' }),
+    });
+    expect(postRes.status).toBe(401);
+  });
 });
