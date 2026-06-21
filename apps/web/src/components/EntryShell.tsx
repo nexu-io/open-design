@@ -144,6 +144,7 @@ import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
+  deploymentProviderModelsCacheFingerprint,
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
@@ -703,6 +704,7 @@ export function EntryShell({
   const executionSwitcher = (
     <InlineModelSwitcher
       config={config}
+      deploymentProviderConfig={deploymentProviderConfig}
       agents={agents}
       providerModelsCache={activeProviderModelsCache}
       onProviderModelsCacheChange={activeSetProviderModelsCache}
@@ -1047,6 +1049,8 @@ function OnboardingView({
     deploymentProviderConfig?.available === true &&
     deploymentProviderConfig.protocol === 'openai';
   const providerCredentialSource = runtime === 'deployment' ? 'deployment' : 'user';
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const providerTestInputKey = [
     providerCredentialSource,
     apiProtocol,
@@ -1061,6 +1065,7 @@ function OnboardingView({
     config.apiKey,
     config.apiVersion ?? '',
     providerCredentialSource,
+    providerCredentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
   );
   providerModelAutoSelectRef.current = {
     model: config.model,
@@ -1543,7 +1548,7 @@ function OnboardingView({
 
   function selectDeploymentProvider(): void {
     if (!deploymentProviderAvailable) return;
-    const model = deploymentProviderConfig?.defaultModel?.trim() || config.model.trim();
+    const model = deploymentProviderConfig?.defaultModel?.trim() ?? '';
     setRuntime('deployment');
     setConnectExpanded('deployment');
     onModeChange('api');

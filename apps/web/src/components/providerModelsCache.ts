@@ -18,13 +18,25 @@ export function providerModelsCacheKey(
   apiKey: string,
   apiVersion = '',
   credentialSource: ProviderCredentialSource = 'user',
+  deploymentFingerprint = '',
 ): string {
   return [
     protocol,
     credentialSource,
+    credentialSource === 'deployment' ? deploymentFingerprint.trim() : '',
     baseUrl.trim().replace(/\/+$/, ''),
     fingerprintSecret(apiKey.trim()),
     protocol === 'azure' ? apiVersion.trim() : '',
+  ].join('\n');
+}
+
+export function deploymentProviderModelsCacheFingerprint(
+  provider: { displayHost?: string; label?: string } | null | undefined,
+): string {
+  if (!provider) return '';
+  return [
+    provider.displayHost?.trim() ?? '',
+    provider.label?.trim() ?? '',
   ].join('\n');
 }
 

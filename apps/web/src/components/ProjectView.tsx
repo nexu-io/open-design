@@ -147,6 +147,7 @@ import type {
   ChatMessageFeedbackChange,
   Conversation,
   DesignSystemSummary,
+  DeploymentProviderConfig,
   OpenTabsState,
   Project,
   ProjectMetadata,
@@ -300,6 +301,7 @@ interface Props {
    */
   routeConversationId?: string | null;
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   agents: AgentInfo[];
   // Mentionable functional skills — already filtered by config.disabledSkills
   // upstream, so this drives only the chat composer's @-picker scope. For
@@ -828,6 +830,7 @@ export function ProjectView({
   routeFileName,
   routeConversationId = null,
   config,
+  deploymentProviderConfig = null,
   agents,
   skills,
   designTemplates,
@@ -6058,6 +6061,7 @@ export function ProjectView({
   const executionControls = (
     <AvatarMenu
       config={config}
+      deploymentProviderConfig={deploymentProviderConfig}
       agents={agents}
       daemonLive={daemonLive}
       onModeChange={onModeChange}

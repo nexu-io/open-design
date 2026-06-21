@@ -76,11 +76,13 @@ import {
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
 import {
+  deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
 export {
+  deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
 } from './providerModelsCache';
@@ -99,6 +101,7 @@ import type {
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
+  DeploymentProviderConfig,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -256,6 +259,7 @@ interface Props {
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
   onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
 }
 
@@ -1121,6 +1125,7 @@ export function SettingsDialog({
   onSkillsChanged,
   onDesignSystemsChanged,
   onDesignSystemImportRebuildJob,
+  deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
 }: Props) {
@@ -1133,6 +1138,8 @@ export function SettingsDialog({
     ...initial,
     baseUrl: resolveFixedOriginBaseUrl(initial.apiProtocol ?? 'anthropic', initial.baseUrl),
   }));
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const [maxTokensInput, setMaxTokensInput] = useState(
     initial.maxTokens == null ? '' : String(initial.maxTokens),
   );
@@ -1359,6 +1366,7 @@ export function SettingsDialog({
         deploymentCredentialMode ? '' : initial.apiKey,
         initial.apiVersion ?? '',
         credentialSource,
+        deploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
       );
     });
   const agentTestAbortRef = useRef<AbortController | null>(null);
@@ -2056,6 +2064,7 @@ export function SettingsDialog({
       isDeploymentCredentialMode ? '' : cfg.apiKey,
       cfg.apiVersion ?? '',
       isDeploymentCredentialMode ? 'deployment' : 'user',
+      isDeploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
     );
     const cachedModels = activeProviderModelsCache[cacheKey];
     if (cachedModels) {
@@ -2614,8 +2623,16 @@ export function SettingsDialog({
       isDeploymentCredentialMode ? '' : cfg.apiKey,
       cfg.apiVersion ?? '',
       isDeploymentCredentialMode ? 'deployment' : 'user',
+      isDeploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
     ),
-    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion, isDeploymentCredentialMode],
+    [
+      apiProtocol,
+      cfg.baseUrl,
+      cfg.apiKey,
+      cfg.apiVersion,
+      deploymentProviderModelsFingerprint,
+      isDeploymentCredentialMode,
+    ],
   );
   const fetchedApiModelOptions =
     activeProviderModelsCache[providerModelsKey] ?? [];

@@ -7,10 +7,14 @@ import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import { RemixIcon } from './RemixIcon';
 import { SearchableModelSelect } from './modelOptions';
-import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
+import type { AgentInfo, AppConfig, DeploymentProviderConfig, ExecMode, ProviderModelOption } from '../types';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { KNOWN_PROVIDERS } from '../state/config';
-import { mergeProviderModelOptions, providerModelsCacheKey } from './SettingsDialog';
+import {
+  deploymentProviderModelsCacheFingerprint,
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+} from './SettingsDialog';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { fetchProviderModels } from '../providers/provider-models';
 import { isMacPlatform } from '../utils/platform';
@@ -18,6 +22,7 @@ import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
 
 interface Props {
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -46,6 +51,7 @@ function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
  */
 export function AvatarMenu({
   config,
+  deploymentProviderConfig = null,
   agents,
   daemonLive,
   onModeChange,
@@ -196,6 +202,9 @@ export function AvatarMenu({
   )?.label;
 
   const apiProtocol = config.apiProtocol ?? 'openai';
+  const credentialSource = config.apiCredentialSource ?? 'user';
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const byokProvider =
     KNOWN_PROVIDERS.find(
       (provider) =>
@@ -209,7 +218,8 @@ export function AvatarMenu({
     config.baseUrl ?? '',
     config.apiKey ?? '',
     config.apiVersion ?? '',
-    config.apiCredentialSource ?? 'user',
+    credentialSource,
+    credentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
   );
   const fetchedByokModels = providerModelsCache?.[byokProviderModelsKey] ?? discoveredProviderModels[byokProviderModelsKey] ?? [];
 

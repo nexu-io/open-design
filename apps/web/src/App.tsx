@@ -2138,6 +2138,7 @@ function AppInner() {
         routeFileName={route.kind === 'project' ? route.fileName : null}
         routeConversationId={route.kind === 'project' ? route.conversationId : null}
         config={config}
+        deploymentProviderConfig={deploymentProviderConfig}
         agents={agents}
         skills={enabledFunctionalSkills}
         designTemplates={designTemplates}
@@ -2282,6 +2283,7 @@ function AppInner() {
           onSkillsChanged={handleSkillsChanged}
           onDesignSystemsChanged={handleDesignSystemsChanged}
           onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
+          deploymentProviderConfig={deploymentProviderConfig}
           providerModelsCache={providerModelsCache}
           onProviderModelsCacheChange={setProviderModelsCache}
         />

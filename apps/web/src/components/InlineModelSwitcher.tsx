@@ -44,7 +44,7 @@ import {
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
+import type { AgentInfo, ApiProtocol, AppConfig, DeploymentProviderConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -59,6 +59,7 @@ import {
 import { normalizeAgentModelChoice } from './agentModelSelection';
 import { SearchableModelSelect } from './modelOptions';
 import {
+  deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -66,6 +67,7 @@ import {
 
 interface Props {
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   agents: AgentInfo[];
   providerModelsCache?: ProviderModelsCache;
   compact?: boolean;
@@ -140,6 +142,7 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 
 export function InlineModelSwitcher({
   config,
+  deploymentProviderConfig = null,
   agents,
   providerModelsCache,
   compact = false,
@@ -441,6 +444,9 @@ export function InlineModelSwitcher({
         : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const credentialSource = config.apiCredentialSource ?? 'user';
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -459,9 +465,17 @@ export function InlineModelSwitcher({
         config.baseUrl,
         config.apiKey,
         config.apiVersion ?? '',
-        config.apiCredentialSource ?? 'user',
+        credentialSource,
+        credentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
       ),
-    [apiProtocol, config.apiCredentialSource, config.apiKey, config.apiVersion, config.baseUrl],
+    [
+      apiProtocol,
+      config.apiKey,
+      config.apiVersion,
+      config.baseUrl,
+      credentialSource,
+      deploymentProviderModelsFingerprint,
+    ],
   );
   const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
 

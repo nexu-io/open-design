@@ -1190,6 +1190,50 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/test/connection'))).toBe(false);
   });
 
+  it('requires an explicit deployment model when the daemon config has no default model', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({ model: 'claude-sonnet-4-5' }),
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Workspace provider',
+        kind: 'available',
+        displayHost: 'gateway.example.test',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Workspace provider/i }));
+
+    await waitFor(() => {
+      expect(props.onConfigPersist).toHaveBeenCalled();
+    });
+    const persisted = (props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+    expect(persisted).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      model: '',
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'deployment',
+          model: '',
+        },
+      },
+    });
+    expect((screen.getByLabelText('Model') as HTMLInputElement).value).toBe('');
+    expect(screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled')).toBe('true');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/provider/models'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/test/connection'))).toBe(false);
+  });
+
   it('automatically fetches BYOK models and tests the selected model in onboarding', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);

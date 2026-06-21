@@ -59,6 +59,19 @@ describe('SettingsDialog API protocol switching', () => {
     );
   });
 
+  it('separates deployment provider model cache keys by deployment fingerprint', () => {
+    expect(
+      providerModelsCacheKey('openai', '', '', '', 'deployment', 'gateway-a.example.test'),
+    ).not.toBe(
+      providerModelsCacheKey('openai', '', '', '', 'deployment', 'gateway-b.example.test'),
+    );
+    expect(
+      providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '', 'user', 'ignored'),
+    ).toBe(
+      providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '', 'user', ''),
+    );
+  });
+
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
