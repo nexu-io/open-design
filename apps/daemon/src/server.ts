@@ -4827,8 +4827,10 @@ export async function startServer({
     // the upstream session's own configured default; omitted models may still
     // resolve to an available fallback below.
     let configuredAgentEnv = {};
+    let appConfigForRun = null;
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      appConfigForRun = appConfig;
       configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
     } catch {
       configuredAgentEnv = {};
@@ -4840,13 +4842,17 @@ export async function startServer({
           ...configuredAgentEnv,
         })
       : null;
+    const configuredModel =
+      typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
+        ? appConfigForRun.agentModels[def.id].model
+        : null;
     let safeModel = resolveModelForAgent(
       def,
       typeof model === 'string'
         ? isKnownModel(def, model, requestedLiveModelScope)
           ? model
           : sanitizeCustomModel(model)
-        : null,
+        : configuredModel,
       process.env,
       requestedLiveModelScope,
     );
