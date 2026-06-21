@@ -1009,7 +1009,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
       let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
       let allowPrivateNetworkBaseUrl = false;
-      if (baseUrl !== undefined) {
+      if (credentialSource !== 'deployment' && baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
         }

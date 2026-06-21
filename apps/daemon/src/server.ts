@@ -545,7 +545,12 @@ import {
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
 } from './origin-validation.js';
-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import {
+  apiTokenFromEnv,
+  isApiAuthDisabled,
+  isApiTokenExemptRequest,
+  isApiTokenMiddlewareEnabled,
+} from './api-token-auth.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -4461,22 +4466,16 @@ export async function startServer({
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
   // value matching `OD_API_TOKEN`. Health / readiness / version remain
-  // open so monitoring probes don't need the token. Server-minted
+  // open so monitoring probes don't need the token. Redacted deployment
+  // provider discovery is also open so the browser can render an
+  // administrator-managed provider during first-run setup. Server-minted
   // project preview asset scopes are also accepted for GETs so sandboxed
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
   if (isApiTokenMiddlewareEnabled()) {
-    const openProbePaths = new Set([
-      '/health',
-      '/api/health',
-      '/ready',
-      '/api/ready',
-      '/version',
-      '/api/version',
-    ]);
     app.use('/api', (req, res, next) => {
-      if (openProbePaths.has(req.path)) return next();
+      if (isApiTokenExemptRequest(req.method, req.path)) return next();
       if (req.method === 'GET') {
         const previewAsset = parseProjectPreviewAssetPath(req.path);
         if (

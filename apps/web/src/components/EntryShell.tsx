@@ -72,6 +72,7 @@ import type {
   AppTheme,
   ConnectionTestResponse,
   DesignSystemSummary,
+  DeploymentProviderConfig,
   ExecMode,
   Project,
   ProjectMetadata,
@@ -295,6 +296,7 @@ interface Props {
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
@@ -420,6 +422,7 @@ export function EntryShell({
   designSystemsLoading = false,
   projectsLoading = false,
   config,
+  deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
@@ -676,6 +679,7 @@ export function EntryShell({
         <main className="entry-onboarding-modal" aria-label={t('settings.welcomeTitle')}>
           <OnboardingView
             config={config}
+            deploymentProviderConfig={deploymentProviderConfig}
             agents={agents}
             agentsLoading={agentsLoading}
             providerModelsCache={activeProviderModelsCache}
@@ -920,6 +924,7 @@ export function EntryShell({
 
 function OnboardingView({
   config,
+  deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
@@ -936,6 +941,7 @@ function OnboardingView({
   onThemeChange,
 }: {
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
@@ -957,12 +963,12 @@ function OnboardingView({
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
-  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | 'deployment' | null>(null);
   // Connect step (step 0) faces: the minimal cloud sign-in landing (null), or
   // a single dedicated setup page for the local CLI or BYOK that the landing's
   // two secondary links open directly. AMR has no card anymore — it signs in
   // straight from the landing's primary button.
-  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | null>(null);
+  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | 'deployment' | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
@@ -1037,7 +1043,12 @@ function OnboardingView({
     step,
   });
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const deploymentProviderAvailable =
+    deploymentProviderConfig?.available === true &&
+    deploymentProviderConfig.protocol === 'openai';
+  const providerCredentialSource = runtime === 'deployment' ? 'deployment' : 'user';
   const providerTestInputKey = [
+    providerCredentialSource,
     apiProtocol,
     config.baseUrl.trim(),
     config.model.trim(),
@@ -1049,6 +1060,7 @@ function OnboardingView({
     config.baseUrl,
     config.apiKey,
     config.apiVersion ?? '',
+    providerCredentialSource,
   );
   providerModelAutoSelectRef.current = {
     model: config.model,
@@ -1096,17 +1108,22 @@ function OnboardingView({
   // satisfies the gate (see handlePrimaryAction / amrSelectedAndSignedOut).
   const byokConnectionVerified =
     visibleProviderTestState.status === 'done' && visibleProviderTestState.result.ok;
+  const deploymentProviderReady =
+    runtime === 'deployment' &&
+    deploymentProviderAvailable &&
+    Boolean(config.model.trim());
   const connectStepRuntimeReady =
     (runtime === 'amr' && amrSignedIn) ||
     (runtime === 'local' && selectedAgent !== null) ||
-    (runtime === 'byok' && byokConnectionVerified);
+    (runtime === 'byok' && byokConnectionVerified) ||
+    deploymentProviderReady;
   const connectStepBlocked =
     step === 0 && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
   // Which Connect gate is in the way, for the Continue tooltip. The three
   // "blocked" reasons hold Continue disabled; `amr_signed_out` is the
   // "Sign in to continue" CTA — still clickable, but the tooltip explains why
   // the next steps need a runtime first.
-  const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | null =
+  const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | 'deployment_model_missing' | null =
     step !== 0
       ? null
       : amrSelectedAndSignedOut
@@ -1116,6 +1133,8 @@ function OnboardingView({
             ? 'local_agent_unavailable'
             : runtime === 'byok'
               ? 'byok_unverified'
+              : runtime === 'deployment'
+                ? 'deployment_model_missing'
               : 'no_runtime'
           : null;
   const connectGateTooltip =
@@ -1125,9 +1144,11 @@ function OnboardingView({
         ? t('settings.onboardingGateTooltipLocal')
         : connectGateReason === 'byok_unverified'
           ? t('settings.onboardingGateTooltipByok')
-          : connectGateReason === 'no_runtime'
-            ? t('settings.onboardingGateTooltipNoRuntime')
-            : null;
+          : connectGateReason === 'deployment_model_missing'
+            ? t('newproj.modelMissingSub')
+            : connectGateReason === 'no_runtime'
+              ? t('settings.onboardingGateTooltipNoRuntime')
+              : null;
 
   useEffect(() => {
     return () => {
@@ -1136,6 +1157,27 @@ function OnboardingView({
       agentRevealTimersRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    if (!deploymentProviderAvailable || runtime !== null) return;
+    if (
+      config.mode !== 'api' ||
+      config.apiProtocol !== 'openai' ||
+      config.apiCredentialSource !== 'deployment'
+    ) {
+      return;
+    }
+    setRuntime('deployment');
+    setConnectExpanded('deployment');
+    onModeChange('api');
+  }, [
+    config.apiCredentialSource,
+    config.apiProtocol,
+    config.mode,
+    deploymentProviderAvailable,
+    onModeChange,
+    runtime,
+  ]);
 
   useEffect(() => {
     if (!amrAgent || runtime !== null) return;
@@ -1261,6 +1303,7 @@ function OnboardingView({
   function currentRuntimeType(): TrackingOnboardingRuntimeType {
     if (runtime === 'amr') return 'amr_cloud';
     if (runtime === 'local') return 'local_cli';
+    if (runtime === 'deployment') return 'byok';
     if (runtime === 'byok') return 'byok';
     return 'none';
   }
@@ -1441,6 +1484,7 @@ function OnboardingView({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       model: config.model,
+      apiCredentialSource: 'user',
       apiVersion: config.apiVersion ?? '',
       apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     };
@@ -1452,6 +1496,7 @@ function OnboardingView({
       ...config,
       mode: 'api',
       apiProtocol: protocol,
+      apiCredentialSource: 'user',
       apiKey: nextProtocolConfig.apiKey,
       baseUrl: nextProtocolConfig.baseUrl,
       model: nextProtocolConfig.model,
@@ -1463,6 +1508,50 @@ function OnboardingView({
       },
     };
     void onConfigPersist(nextConfig);
+  }
+
+  function persistOnboardingConfig(nextConfig: AppConfig): void {
+    void Promise.resolve(onConfigPersist(nextConfig)).catch(() => undefined);
+  }
+
+  function buildDeploymentProviderConfig(model: string): AppConfig {
+    const cleanModel = model.trim();
+    const openAiConfig: ApiProtocolConfig = {
+      apiKey: '',
+      baseUrl: '',
+      model: cleanModel,
+      apiCredentialSource: 'deployment',
+      apiVersion: '',
+      apiProviderBaseUrl: null,
+    };
+    return {
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: cleanModel,
+      apiVersion: '',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        openai: openAiConfig,
+      },
+    };
+  }
+
+  function selectDeploymentProvider(): void {
+    if (!deploymentProviderAvailable) return;
+    const model = deploymentProviderConfig?.defaultModel?.trim() || config.model.trim();
+    setRuntime('deployment');
+    setConnectExpanded('deployment');
+    onModeChange('api');
+    persistOnboardingConfig(buildDeploymentProviderConfig(model));
+  }
+
+  function updateDeploymentProviderModel(model: string): void {
+    persistOnboardingConfig(buildDeploymentProviderConfig(model));
   }
 
   function selectFirstProviderModelWhenEmpty(
@@ -2166,6 +2255,23 @@ function OnboardingView({
               <span className="onboarding-cloud__alts-or">
                 {t('settings.onboardingCloudOr')}
               </span>
+              {deploymentProviderAvailable ? (
+                <>
+                  <button
+                    type="button"
+                    className="onboarding-cloud__secondary"
+                    onClick={() => {
+                      emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                      selectDeploymentProvider();
+                    }}
+                  >
+                    {deploymentProviderConfig?.label ?? t('settings.modeApi')}
+                  </button>
+                  <span className="onboarding-cloud__alts-or">
+                    {t('settings.onboardingCloudOr')}
+                  </span>
+                </>
+              ) : null}
               <button
                 type="button"
                 className="onboarding-cloud__secondary"
@@ -2214,12 +2320,16 @@ function OnboardingView({
                 title={
                   connectExpanded === 'byok'
                     ? t('settings.onboardingByokTitle')
-                    : t('settings.onboardingLocalTitle')
+                    : connectExpanded === 'deployment'
+                      ? deploymentProviderConfig?.label ?? t('settings.modeApi')
+                      : t('settings.onboardingLocalTitle')
                 }
                 body={
                   connectExpanded === 'byok'
                     ? t('settings.onboardingByokBody')
-                    : t('settings.onboardingLocalBody')
+                    : connectExpanded === 'deployment'
+                      ? t('settings.modeApi')
+                      : t('settings.onboardingLocalBody')
                 }
               />
               <div className="onboarding-view__runtime-stack">
@@ -2281,6 +2391,13 @@ function OnboardingView({
                     modelsState={visibleProviderModelsState}
                     canFetchModels={canFetchProviderModels}
                     onFetchModels={() => void fetchProviderModelsInline()}
+                  />
+                ) : null}
+                {connectExpanded === 'deployment' && deploymentProviderConfig ? (
+                  <OnboardingDeploymentProviderPanel
+                    provider={deploymentProviderConfig}
+                    model={config.model}
+                    onModelChange={updateDeploymentProviderModel}
                   />
                 ) : null}
               </div>
@@ -2537,6 +2654,41 @@ function OnboardingCliSetupPanel({
           searchPlaceholder={t('newproj.modelSearch')}
         />
       ) : null}
+    </div>
+  );
+}
+
+function OnboardingDeploymentProviderPanel({
+  provider,
+  model,
+  onModelChange,
+}: {
+  provider: DeploymentProviderConfig;
+  model: string;
+  onModelChange: (model: string) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="onboarding-view__setup-panel">
+      <div className="onboarding-view__setup-head">
+        <div>
+          <strong>{provider.label}</strong>
+          <p>
+            {provider.displayHost
+              ? `${t('settings.modeApi')} · ${provider.displayHost}`
+              : t('settings.modeApi')}
+          </p>
+        </div>
+      </div>
+      <label className="onboarding-view__inline-field">
+        <span>{t('settings.model')}</span>
+        <input
+          type="text"
+          value={model}
+          placeholder={provider.defaultModel ?? 'gpt-4.1'}
+          onChange={(event) => onModelChange(event.target.value.trim())}
+        />
+      </label>
     </div>
   );
 }
@@ -3160,4 +3312,3 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
 // The AMR brand (icon + name) is known up-front and rendered solid; only the
 // version meta, benefit list, and model picker — the parts that depend on the
 // probe result — shimmer. Non-interactive and announced via role="status".
-

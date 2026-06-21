@@ -1130,6 +1130,66 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('continues with an available deployment provider without browser-held credentials', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Workspace provider',
+        kind: 'available',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Workspace provider/i }));
+
+    await waitFor(() => {
+      expect(props.onConfigPersist).toHaveBeenCalled();
+    });
+    expect(props.onModeChange).toHaveBeenCalledWith('api');
+    expect(screen.getByText('API provider · gateway.example.test')).toBeTruthy();
+    expect(screen.queryByLabelText('API key')).toBeNull();
+    expect(screen.queryByLabelText('Base URL')).toBeNull();
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'deployment',
+          apiKey: '',
+          baseUrl: '',
+          model: 'gpt-routed',
+          apiProviderBaseUrl: null,
+        },
+      },
+    });
+
+    const continueButton = screen.getByRole('button', { name: /^Continue$/i });
+    expect(continueButton.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(continueButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/provider/models'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/test/connection'))).toBe(false);
+  });
+
   it('automatically fetches BYOK models and tests the selected model in onboarding', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);

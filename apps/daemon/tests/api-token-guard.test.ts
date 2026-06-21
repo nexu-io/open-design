@@ -14,7 +14,11 @@
 
 import type http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
+import {
+  isApiAuthDisabled,
+  isApiTokenExemptRequest,
+  isApiTokenMiddlewareEnabled,
+} from '../src/api-token-auth.js';
 import { startServer } from '../src/server.js';
 
 const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
@@ -69,6 +73,15 @@ describe('bound-API-token guard', () => {
     };
     server = started.server;
     shutdown = started.shutdown;
+  });
+});
+
+describe('API-token open paths', () => {
+  it('opens only redacted deployment provider discovery beyond probes', () => {
+    expect(isApiTokenExemptRequest('GET', '/provider-orchestrator/config')).toBe(true);
+    expect(isApiTokenExemptRequest('GET', '/api/provider-orchestrator/config')).toBe(true);
+    expect(isApiTokenExemptRequest('POST', '/provider-orchestrator/config')).toBe(false);
+    expect(isApiTokenExemptRequest('GET', '/app-config')).toBe(false);
   });
 });
 

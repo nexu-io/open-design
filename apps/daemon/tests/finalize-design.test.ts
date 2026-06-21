@@ -1123,6 +1123,32 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
     });
   });
 
+  it('ignores caller baseUrl validation for deployment provider finalize', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://api.openai.com/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const res = await fetch(`${serverBaseUrl}/api/projects/p1/finalize/openai`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          baseUrl: '',
+          model: 'gpt-routed',
+          maxTokens: 0,
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('BAD_REQUEST');
+      expect(body.error.message).toContain('maxTokens');
+      expect(JSON.stringify(body)).not.toContain('baseUrl must be a non-empty string');
+      expect(JSON.stringify(body)).not.toContain('deployment-secret');
+    });
+  });
+
   it('400 BAD_REQUEST when :id contains characters outside the safe-id regex (test #16)', async () => {
     // isSafeId allows only [A-Za-z0-9._-]{1,128}. An id like `bad!id`
     // contains `!` and must be rejected before any DB or filesystem work.

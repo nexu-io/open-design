@@ -2180,6 +2180,7 @@ function AppInner() {
         agents={agents}
         agentsLoading={agentsLoading}
         config={config}
+        deploymentProviderConfig={deploymentProviderConfig}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
