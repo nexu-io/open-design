@@ -25,6 +25,7 @@ services:
       # 127.0.0.1 (only accessible from the Docker host). Set OD_API_TOKEN
       # in your .env and remove this line to enable token-based auth.
       - OD_DISABLE_API_AUTH=1
+      - OD_ADDITIONAL_ALLOWED_DIRS=${OD_ADDITIONAL_ALLOWED_DIRS:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}
     ports:
       - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"
