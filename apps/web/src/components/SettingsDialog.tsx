@@ -422,12 +422,13 @@ export function shouldShowCustomModelInput(
 
 export function canRunProviderConnectionTest(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'>,
-  options: { requiresApiKey?: boolean } = {},
+  options: { requiresApiKey?: boolean; requiresBaseUrl?: boolean } = {},
 ): boolean {
   const requiresApiKey = options.requiresApiKey ?? true;
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   return (
     (!requiresApiKey || Boolean(config.apiKey.trim())) &&
-    Boolean(config.baseUrl.trim()) &&
+    (!requiresBaseUrl || Boolean(config.baseUrl.trim())) &&
     Boolean(config.model.trim())
   );
 }
@@ -436,10 +437,11 @@ export function canFetchProviderModels(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
   protocol: ApiProtocol,
 ): boolean {
+  const requiresApiKey = protocol !== 'aihubmix';
   return (
     protocol !== 'azure' &&
     protocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
+    (!requiresApiKey || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isValidApiBaseUrl(config.baseUrl)
   );
@@ -472,12 +474,19 @@ function missingByokModelFetchFields(
 
 function providerConnectionTestKey(
   protocol: ApiProtocol,
-  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion'>,
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion' | 'apiCredentialSource'>,
 ): string {
+  const credentialSource =
+    protocol === 'openai' && config.apiCredentialSource === 'deployment'
+      ? 'deployment'
+      : 'user';
   return [
     protocol,
-    config.baseUrl.trim().replace(/\/+$/, ''),
-    config.apiKey.trim(),
+    credentialSource,
+    credentialSource === 'deployment'
+      ? ''
+      : config.baseUrl.trim().replace(/\/+$/, ''),
+    credentialSource === 'deployment' ? '' : config.apiKey.trim(),
     config.model.trim(),
     protocol === 'azure' ? config.apiVersion?.trim() ?? '' : '',
   ].join('\n');
@@ -1010,6 +1019,9 @@ export function shouldEnableSettingsSave(
       cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available,
     );
   }
+  if (cfg.apiProtocol === 'openai' && cfg.apiCredentialSource === 'deployment') {
+    return Boolean(cfg.model.trim());
+  }
   return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
 }
 
@@ -1045,6 +1057,7 @@ export function sanitizeSettingsSavePayload(
     ...cfg,
     mode: initial.mode,
     apiKey: initial.apiKey,
+    apiCredentialSource: initial.apiCredentialSource,
     apiProtocol: initial.apiProtocol,
     apiVersion: initial.apiVersion,
     apiProtocolConfigs: initial.apiProtocolConfigs,
@@ -1321,20 +1334,31 @@ export function SettingsDialog({
   const [providerModelsCommittedKey, setProviderModelsCommittedKey] =
     useState<string | null>(() => {
       const protocol = initial.apiProtocol ?? 'anthropic';
+      const credentialSource =
+        protocol === 'openai' && initial.apiCredentialSource === 'deployment'
+          ? 'deployment'
+          : 'user';
+      const deploymentCredentialMode = credentialSource === 'deployment';
       if (
         initial.mode !== 'api' ||
         protocol === 'azure' ||
         protocol === 'ollama' ||
-        missingByokModelFetchFields(initial, protocol).length > 0 ||
-        !isValidApiBaseUrl(initial.baseUrl)
+        (
+          !deploymentCredentialMode &&
+          (
+            missingByokModelFetchFields(initial, protocol).length > 0 ||
+            !isValidApiBaseUrl(initial.baseUrl)
+          )
+        )
       ) {
         return null;
       }
       return providerModelsCacheKey(
         protocol,
-        initial.baseUrl,
-        initial.apiKey,
+        deploymentCredentialMode ? '' : initial.baseUrl,
+        deploymentCredentialMode ? '' : initial.apiKey,
         initial.apiVersion ?? '',
+        credentialSource,
       );
     });
   const agentTestAbortRef = useRef<AbortController | null>(null);
@@ -1847,8 +1871,13 @@ export function SettingsDialog({
       const result = await testApiProvider(
         {
           protocol: apiProtocol,
-          baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
+          credentialSource: isDeploymentCredentialMode ? 'deployment' : 'user',
+          ...(isDeploymentCredentialMode
+            ? {}
+            : {
+                baseUrl: cfg.baseUrl,
+                apiKey: cleanByokApiKey(cfg.apiKey),
+              }),
           model: cfg.model,
           apiVersion:
             apiProtocol === 'azure'
@@ -2023,9 +2052,10 @@ export function SettingsDialog({
     }
     const cacheKey = providerModelsCacheKey(
       apiProtocol,
-      cfg.baseUrl,
-      cfg.apiKey,
+      isDeploymentCredentialMode ? '' : cfg.baseUrl,
+      isDeploymentCredentialMode ? '' : cfg.apiKey,
       cfg.apiVersion ?? '',
+      isDeploymentCredentialMode ? 'deployment' : 'user',
     );
     const cachedModels = activeProviderModelsCache[cacheKey];
     if (cachedModels) {
@@ -2063,8 +2093,13 @@ export function SettingsDialog({
       const result = await fetchProviderModels(
         {
           protocol: apiProtocol,
-          baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
+          credentialSource: isDeploymentCredentialMode ? 'deployment' : 'user',
+          ...(isDeploymentCredentialMode
+            ? {}
+            : {
+                baseUrl: cfg.baseUrl,
+                apiKey: cleanByokApiKey(cfg.apiKey),
+              }),
         },
         controller.signal,
       );
@@ -2202,6 +2237,8 @@ export function SettingsDialog({
   };
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
+  const isDeploymentCredentialMode =
+    apiProtocol === 'openai' && cfg.apiCredentialSource === 'deployment';
   const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const apiProtocolTabGroups = [
     {
@@ -2215,8 +2252,8 @@ export function SettingsDialog({
       tabs: API_PROTOCOL_TABS.filter((tab) => GATEWAY_API_PROTOCOLS.has(tab.id)),
     },
   ];
-  const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
-  const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
+  const baseUrlValid = isDeploymentCredentialMode || isValidApiBaseUrl(cfg.baseUrl);
+  const baseUrlInvalid = !isDeploymentCredentialMode && Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const byokRequiredLabel = (field: ByokRequiredField): string => {
     switch (field) {
       case 'api_key':
@@ -2493,15 +2530,18 @@ export function SettingsDialog({
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const showProviderPreset =
-    protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
+    !isDeploymentCredentialMode &&
+    protocolProviders.length > 0 &&
+    !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
   // user to edit, so hide the field entirely.
-  const showBaseUrlField = !isFixedOriginGateway(apiProtocol);
+  const showBaseUrlField =
+    !isDeploymentCredentialMode && !isFixedOriginGateway(apiProtocol);
   const byokRequiresApiKey = byokProviderRequiresApiKey(
     apiProtocol,
     selectedProvider,
     cfg.baseUrl,
-  );
+  ) && !isDeploymentCredentialMode;
   const byokFirstPartyBaseUrl = useMemo(
     () => byokFirstPartyBaseUrlHint(
       apiProtocol,
@@ -2521,6 +2561,7 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: !isDeploymentCredentialMode,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
     ),
@@ -2531,6 +2572,7 @@ export function SettingsDialog({
       cfg.apiKey,
       cfg.baseUrl,
       cfg.model,
+      isDeploymentCredentialMode,
     ],
   );
   const byokBlockingDraftIssues = useMemo(
@@ -2550,6 +2592,7 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: !isDeploymentCredentialMode,
         requireModel: false,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
@@ -2561,16 +2604,18 @@ export function SettingsDialog({
       cfg.apiKey,
       cfg.baseUrl,
       cfg.model,
+      isDeploymentCredentialMode,
     ],
   );
   const providerModelsKey = useMemo(
     () => providerModelsCacheKey(
       apiProtocol,
-      cfg.baseUrl,
-      cfg.apiKey,
+      isDeploymentCredentialMode ? '' : cfg.baseUrl,
+      isDeploymentCredentialMode ? '' : cfg.apiKey,
       cfg.apiVersion ?? '',
+      isDeploymentCredentialMode ? 'deployment' : 'user',
     ),
-    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
+    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion, isDeploymentCredentialMode],
   );
   const fetchedApiModelOptions =
     activeProviderModelsCache[providerModelsKey] ?? [];
@@ -2662,7 +2707,13 @@ export function SettingsDialog({
     // debounce-commit — fetch as soon as the tab is selected. Every other
     // protocol waits until the key/baseUrl inputs are committed (on blur) so we
     // don't fire on each keystroke.
-    if (apiProtocol !== 'aihubmix' && providerModelsCommittedKey !== providerModelsKey) return;
+    if (
+      !isDeploymentCredentialMode &&
+      apiProtocol !== 'aihubmix' &&
+      providerModelsCommittedKey !== providerModelsKey
+    ) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       void handleFetchProviderModels({ silent: true });
     }, 300);
@@ -2677,6 +2728,7 @@ export function SettingsDialog({
     byokModelFetchDraftValidation,
     providerModelsCommittedKey,
     providerModelsKey,
+    isDeploymentCredentialMode,
     visualStabilityMode,
   ]);
   const currentProviderModelsResult =
@@ -4155,6 +4207,7 @@ export function SettingsDialog({
                     !byokFirstPartyBaseUrl?.hostTypo &&
                     canRunProviderConnectionTest(cfg, {
                       requiresApiKey: byokRequiresApiKey,
+                      requiresBaseUrl: !isDeploymentCredentialMode,
                     })
                   }
                   labels={{
@@ -4212,48 +4265,50 @@ export function SettingsDialog({
                   }}
                 />
               ) : null}
-              <ByokKeyField
-                apiKey={cfg.apiKey}
-                apiKeyConsoleLink={apiKeyConsoleLink}
-                apiProtocol={apiProtocol}
-                inputRef={apiKeyInputRef}
-                labels={{
-                  apiHint: t('settings.apiHint'),
-                  apiKey: t('settings.apiKey'),
-                  apiKeyCleaned: t('settings.apiKeyCleaned'),
-                  apiKeyGetLink: t('settings.apiKeyGetLink', {
-                    host: apiKeyConsoleLink.host,
-                  }),
-                  apiKeyInvalid: t('settings.apiKeyInvalid'),
-                  hide: t('settings.hide'),
-                  hideKey: t('settings.hideKey'),
-                  required: t('settings.required'),
-                  show: t('settings.show'),
-                  showKey: t('settings.showKey'),
-                }}
-                requiresApiKey={byokRequiresApiKey}
-                showApiKeyInvalid={Boolean(
-                  apiKeyFieldAuthFailed ||
-                    byokPreconditionNotice?.field === 'api_key' ||
-                    apiKeyDraftInvalid,
-                )}
-                showApiKey={showApiKey}
-                onBlur={onByokKeyCommit}
-                onChange={(value) => updateApiConfig({ apiKey: value })}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'api_key',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.apiKey?.trim()),
-                    });
-                  }
-                }}
-                onToggleShowApiKey={() => setShowApiKey((v) => !v)}
-              />
+              {!isDeploymentCredentialMode ? (
+                <ByokKeyField
+                  apiKey={cfg.apiKey}
+                  apiKeyConsoleLink={apiKeyConsoleLink}
+                  apiProtocol={apiProtocol}
+                  inputRef={apiKeyInputRef}
+                  labels={{
+                    apiHint: t('settings.apiHint'),
+                    apiKey: t('settings.apiKey'),
+                    apiKeyCleaned: t('settings.apiKeyCleaned'),
+                    apiKeyGetLink: t('settings.apiKeyGetLink', {
+                      host: apiKeyConsoleLink.host,
+                    }),
+                    apiKeyInvalid: t('settings.apiKeyInvalid'),
+                    hide: t('settings.hide'),
+                    hideKey: t('settings.hideKey'),
+                    required: t('settings.required'),
+                    show: t('settings.show'),
+                    showKey: t('settings.showKey'),
+                  }}
+                  requiresApiKey={byokRequiresApiKey}
+                  showApiKeyInvalid={Boolean(
+                    apiKeyFieldAuthFailed ||
+                      byokPreconditionNotice?.field === 'api_key' ||
+                      apiKeyDraftInvalid,
+                  )}
+                  showApiKey={showApiKey}
+                  onBlur={onByokKeyCommit}
+                  onChange={(value) => updateApiConfig({ apiKey: value })}
+                  onFocus={() => {
+                    const byokProviderId = byokProtocolToTracking(apiProtocol);
+                    if (byokProviderId) {
+                      trackSettingsByokFieldClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'configure_execution_mode_byok',
+                        element: 'api_key',
+                        provider_id: byokProviderId,
+                        has_value: Boolean(cfg.apiKey?.trim()),
+                      });
+                    }
+                  }}
+                  onToggleShowApiKey={() => setShowApiKey((v) => !v)}
+                />
+              ) : null}
               {showBaseUrlField ? (
                 <ByokProviderBaseUrl
                   apiProtocol={apiProtocol}

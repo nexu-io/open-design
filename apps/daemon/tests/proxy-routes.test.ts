@@ -294,6 +294,63 @@ describe('API proxy routes', () => {
     });
   });
 
+  it.each([
+    {
+      name: 'times out',
+      failure: () => Promise.reject(new DOMException('timed out', 'TimeoutError')),
+      status: 504,
+      message: 'Deployment provider run session endpoint timed out.',
+    },
+    {
+      name: 'is unreachable',
+      failure: () => Promise.reject(new TypeError('fetch failed')),
+      status: 502,
+      message: 'Deployment provider run session endpoint was unreachable.',
+    },
+  ])(
+    'fails closed when the deployment provider run-session endpoint $name before provider egress',
+    async ({ failure, status, message }) => {
+      await withDeploymentProviderEnv({
+        OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+        OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+        OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+        OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+      }, async () => {
+        const seen: string[] = [];
+        const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+          const url = String(input);
+          if (url.startsWith(baseUrl)) return realFetch(input, init);
+          seen.push(url);
+          if (url === 'https://authority.example.test/api/runs') {
+            expect(init?.headers).toMatchObject({
+              Authorization: 'Bearer deployment-secret',
+            });
+            return failure();
+          }
+          throw new Error(`unexpected provider egress to ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            projectId: 'project_1',
+            providerRunId: 'conversation_1',
+            providerOperationId: 'message_1',
+            messages: [{ role: 'user', content: 'hello' }],
+          }),
+        });
+
+        expect(res.status).toBe(status);
+        await expect(res.text()).resolves.toContain(message);
+        expect(seen).toEqual(['https://authority.example.test/api/runs']);
+      });
+    },
+  );
+
   it('redacts deployment provider credentials from OpenAI-compatible upstream errors', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',

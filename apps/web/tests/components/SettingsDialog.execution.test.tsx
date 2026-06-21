@@ -436,6 +436,42 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     ).toBe('https://platform.openai.com/api-keys');
   });
 
+  it('treats deployment-sourced OpenAI settings as model-only', async () => {
+    renderSettingsDialog({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'deployment',
+          apiKey: '',
+          baseUrl: '',
+          model: 'gpt-routed',
+          apiProviderBaseUrl: null,
+        },
+      },
+    });
+
+    expect(screen.queryByLabelText('API key')).toBeNull();
+    expect(screen.queryByLabelText('Base URL')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(fetchProviderModelsMock).toHaveBeenCalled();
+    });
+    const [request] = fetchProviderModelsMock.mock.calls.at(-1) ?? [];
+    expect(request).toMatchObject({
+      protocol: 'openai',
+      credentialSource: 'deployment',
+    });
+    expect(request).not.toHaveProperty('apiKey');
+    expect(request).not.toHaveProperty('baseUrl');
+  });
+
   it('keeps BYOK file-editing limits discoverable from the provider heading (issue #1106)', () => {
     // Regression cover: switching from Local CLI to BYOK previously gave no
     // signal that file-editing tools (`Read`/`Write`/`Edit`) are absent on the

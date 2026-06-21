@@ -49,6 +49,13 @@ function optionalPositiveNumber(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+function optionalPositiveInteger(value: string | undefined): number | undefined {
+  const raw = cleanEnvValue(value);
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function validateDeploymentBaseUrl(baseUrl: string): { parsed?: ParsedBaseUrl; error?: string } {
   let parsed: ParsedBaseUrl;
   try {
@@ -92,8 +99,8 @@ function invalidRunSessionDetail(env: NodeJS.ProcessEnv): string | null {
   }
 
   const rawTtlSeconds = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS);
-  if (rawTtlSeconds && optionalPositiveNumber(rawTtlSeconds) === undefined) {
-    return 'Deployment provider run-session TTL must be a non-negative number.';
+  if (rawTtlSeconds && optionalPositiveInteger(rawTtlSeconds) === undefined) {
+    return 'Deployment provider run-session TTL must be a positive integer.';
   }
 
   return null;
@@ -217,7 +224,7 @@ export function resolveDeploymentProviderProfile(
   if (runCostCapUsd !== undefined) profile.runCostCapUsd = runCostCapUsd;
   const runMaxTotalCostUsd = optionalPositiveNumber(env.OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD);
   if (runMaxTotalCostUsd !== undefined) profile.runMaxTotalCostUsd = runMaxTotalCostUsd;
-  const runTtlSeconds = optionalPositiveNumber(env.OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS);
+  const runTtlSeconds = optionalPositiveInteger(env.OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS);
   if (runTtlSeconds !== undefined) profile.runTtlSeconds = runTtlSeconds;
 
   return {

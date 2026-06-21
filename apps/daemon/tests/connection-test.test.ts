@@ -291,6 +291,32 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it.each(['0', '0.5'])(
+    'reports deployment provider run-session TTL %s as unavailable',
+    async (ttlSeconds) => {
+      await withDeploymentProviderEnv({
+        OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+        OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+        OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+        OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+        OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS: ttlSeconds,
+      }, async () => {
+        const res = await realFetch(`${baseUrl}/api/provider-orchestrator/config`);
+        expect(res.status).toBe(200);
+        const body = await res.json() as Record<string, unknown>;
+        expect(body).toMatchObject({
+          available: false,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          kind: 'invalid_run_session_config',
+          detail: 'Deployment provider run-session TTL must be a positive integer.',
+          displayHost: 'gateway.example.test',
+        });
+        expect(JSON.stringify(body)).not.toContain('deployment-secret');
+      });
+    },
+  );
+
   it('reports missing deployment provider config without contacting upstream', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',

@@ -247,6 +247,21 @@ describe('SettingsDialog provider connection test requirements', () => {
       canRunProviderConnectionTest({ ...baseConfig, model: '' }),
     ).toBe(false);
   });
+
+  it('allows deployment provider tests to use only a model', () => {
+    expect(
+      canRunProviderConnectionTest(
+        { apiKey: '', baseUrl: '', model: 'gpt-routed' },
+        { requiresApiKey: false, requiresBaseUrl: false },
+      ),
+    ).toBe(true);
+    expect(
+      canRunProviderConnectionTest(
+        { apiKey: '', baseUrl: '', model: '' },
+        { requiresApiKey: false, requiresBaseUrl: false },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('SettingsDialog provider model fetch helpers', () => {
@@ -263,6 +278,12 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'openai',
       ),
     ).toBe(false);
+    expect(
+      canFetchProviderModels(
+        { apiKey: '', baseUrl: 'https://api.aihubmix.com/v1' },
+        'aihubmix',
+      ),
+    ).toBe(true);
     expect(
       canFetchProviderModels(
         { apiKey: 'sk-openai', baseUrl: 'http://10.0.0.5:11434/v1' },
@@ -956,6 +977,27 @@ describe('shouldEnableSettingsSave', () => {
     expect(shouldEnableSettingsSave({ ...validApiCfg, apiKey: '   ' }, 'execution', [], true)).toBe(false);
     expect(shouldEnableSettingsSave({ ...validApiCfg, model: '' }, 'execution', [], true)).toBe(false);
     expect(shouldEnableSettingsSave(validApiCfg, 'execution', [], false)).toBe(false);
+  });
+
+  it('on execution + deployment provider: returns true when only the model is set', () => {
+    const deploymentCfg: AppConfig = {
+      ...validApiCfg,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+    };
+
+    expect(shouldEnableSettingsSave(deploymentCfg, 'execution', [], false)).toBe(true);
+    expect(
+      shouldEnableSettingsSave(
+        { ...deploymentCfg, model: '' },
+        'execution',
+        [],
+        false,
+      ),
+    ).toBe(false);
   });
 
   it('on execution: incomplete BYOK still disables save (existing behavior preserved)', () => {
