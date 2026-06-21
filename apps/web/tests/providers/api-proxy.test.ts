@@ -203,6 +203,28 @@ describe('buildProxyMessages', () => {
     ]);
   });
 
+  it('keeps OpenAI-compatible image attachments as text when native images are disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/openai/stream',
+      [
+        userMessage('Describe the attached image\n\n<attached-project-files>metadata</attached-project-files>', [
+          { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      { projectId: 'project-1', nativeImageAttachments: false },
+    );
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: 'Describe the attached image\n\n<attached-project-files>metadata</attached-project-files>',
+      },
+    ]);
+  });
+
   it('sends Anthropic image content blocks in the proxy request body', async () => {
     const pngBytes = new Uint8Array([137, 80, 78, 71]);
     const fetchMock = vi

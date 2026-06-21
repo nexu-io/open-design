@@ -28,6 +28,7 @@ export type AnthropicMessageContent = string | Array<ProxyTextContentBlock | Pro
  */
 export interface ProxyContext {
   projectId?: string;
+  nativeImageAttachments?: boolean;
   byokImageModel?: string;
   byokVideoModel?: string;
   byokSpeechModel?: string;
@@ -150,7 +151,7 @@ export async function buildProxyMessages(
       });
       continue;
     }
-    if (usesOpenAICompatibleMessagesPayload(endpoint)) {
+    if (usesOpenAICompatibleMessagesPayload(endpoint) && context.nativeImageAttachments !== false) {
       out.push({
         role: message.role,
         content: await buildOpenAICompatibleMessageContent(message, context.projectId),
