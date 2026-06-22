@@ -3211,6 +3211,18 @@ function isProxiedRequest(req) {
   return !!(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.headers['forwarded']);
 }
 
+// True when the TCP peer is a loopback address AND the Host header also
+// targets loopback.  This prevents same-host reverse proxies (nginx, Caddy,
+// local-forwarding proxies) from bypassing auth: those proxies connect from
+// 127.0.0.1 but send a public-domain Host header, so isLocalConnection
+// rejects them and the daemon requires OD_API_TOKEN.
+function isLocalConnection(req) {
+  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) return false;
+  const host = (req.headers['host'] || '').split(':')[0];
+  if (!host) return false;
+  return isLoopbackHostname(host);
+}
+
 function verifyBearerOrCookieToken(req, apiToken) {
   const auth = req.get('authorization') ?? '';
   const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
@@ -4556,12 +4568,13 @@ export async function startServer({
           return next();
         }
       }
-      // Loopback short-circuit — the localhost desktop UI has no
-      // proxy in the path so remoteAddress is the real client.  When
-      // forward headers (X-Forwarded-For etc.) are present the request
-      // came through a reverse proxy, in which case the daemon is
-      // exposed beyond localhost and must require the bearer token.
-      if (!isProxiedRequest(req) && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+      // Local-connection short-circuit — the localhost desktop UI and
+      // local CLI connect directly so both remoteAddress and the Host
+      // header target loopback.  A same-host reverse proxy (nginx/Caddy
+      // forwarding to 127.0.0.1) also has a loopback remoteAddress but
+      // carries a public-domain Host — isLocalConnection correctly
+      // rejects it and auth is required.
+      if (isLocalConnection(req)) return next();
       if (!verifyBearerOrCookieToken(req, apiToken)) {
         console.warn('[od] API auth rejected:', req.socket?.remoteAddress, req.method, req.path);
         return res.status(401).json({
@@ -5103,8 +5116,8 @@ export async function startServer({
     const bootstrapAllowPrivateSubnet = process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET === '1';
     function isBootstrapAllowed(req) {
       if (isProxiedRequest(req)) return false;
+      if (isLocalConnection(req)) return true;
       const addr = req.socket?.remoteAddress;
-      if (isLoopbackPeerAddress(addr)) return true;
       return bootstrapAllowPrivateSubnet && isPrivateSubnetAddress(addr);
     }
 
@@ -6116,7 +6129,7 @@ export async function startServer({
   });
   const apiTokenStaticGuard = isApiTokenMiddlewareEnabled()
     ? (req, res, next) => {
-        if (!isProxiedRequest(req) && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+        if (isLocalConnection(req)) return next();
         if (!verifyBearerOrCookieToken(req, apiToken)) {
           console.warn('[od] Static guard auth rejected:', req.socket?.remoteAddress, req.method, req.path);
           return res.status(401).json({
