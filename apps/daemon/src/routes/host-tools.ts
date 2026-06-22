@@ -221,6 +221,39 @@ export async function resolveHostToolLaunchPlan(
   };
 }
 
+// Spawn a detached host-tool launch and wait for the OS to confirm it
+// actually started. Node emits `spawn` once the child is running and `error`
+// when the launch is refused (missing binary, quarantine, EACCES). The
+// `error` event arrives on a later tick, so the route must await this before
+// replying — otherwise it reports success for a launch the OS rejected and
+// the user sees nothing happen (#3871).
+export function launchHostTool(
+  command: string,
+  args: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return new Promise((resolve) => {
+    // Detached so the daemon doesn't keep the child alive; same shape paseo
+    // uses (CLI shim, `open -a`, Explorer, xdg-open, etc.).
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+    });
+    let settled = false;
+    child.once('spawn', () => {
+      if (settled) return;
+      settled = true;
+      child.unref();
+      resolve({ ok: true });
+    });
+    child.once('error', (err) => {
+      if (settled) return;
+      settled = true;
+      resolve({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    });
+  });
+}
+
 export function applicableForPlatform(entry: CatalogueEntry, platform: Platform): boolean {
   if (platform === 'unknown') return false;
   if (entry.platforms && !entry.platforms.includes(platform)) return false;
@@ -309,21 +342,20 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       if (!launchPlan.available || !launchPlan.command || !launchPlan.args) {
         return sendApiError(res, 409, 'EDITOR_NOT_AVAILABLE', `${entry.label} is not installed`);
       }
-      // Detached spawn so the daemon doesn't keep the child alive; same
-      // shape paseo uses. Each catalogue entry turns the project dir into
-      // the native argument shape it expects (CLI shim, `open -a`, Explorer,
-      // xdg-open, etc.).
-      const child = spawn(launchPlan.command, launchPlan.args, {
-        detached: true,
-        stdio: 'ignore',
-        shell: process.platform === 'win32',
-      });
-      child.on('error', () => {
-        // Swallow — best-effort; the client will see ok:true but the OS
-        // might still have refused (e.g. quarantine). Real diagnostic
-        // path is `od project open-in --debug`.
-      });
-      child.unref();
+      // Wait for the OS to confirm the launch before replying. Previously
+      // this returned ok:true synchronously and swallowed the child's `error`
+      // event, so a refused launch was reported as success and the user saw
+      // nothing happen — the web button only surfaces an error on a non-OK
+      // response (#3871).
+      const launch = await launchHostTool(launchPlan.command, launchPlan.args);
+      if (!launch.ok) {
+        return sendApiError(
+          res,
+          500,
+          'EDITOR_LAUNCH_FAILED',
+          `Failed to launch ${entry.label}: ${launch.error}`,
+        );
+      }
       const body: OpenProjectInEditorResponse = {
         ok: true,
         editorId,
