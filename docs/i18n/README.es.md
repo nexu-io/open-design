@@ -15,7 +15,7 @@
   <a href="https://open-design.ai/">Descargar</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">Sigue a @nexudotio</a>
+  <a href="https://x.com/OpenDesignHQ">Sigue a @OpenDesignHQ</a>
 </p>
 
 <p align="center">
@@ -595,7 +595,7 @@ Entrega por fases → [`docs/roadmap.md`](../../docs/roadmap.md).
 Personas reales detrás de cada canal.
 
 - 💬 **Discord** — chat diario, intercambio de plugins, preguntas → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter** — notas de lanzamiento, hitos, detrás de cámaras → [**@nexudotio**](https://x.com/nexudotio)
+- 🐦 **X / Twitter** — notas de lanzamiento, hitos, detrás de cámaras → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — preguntas y respuestas a fondo, RFCs, "muestra tu trabajo" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — reportes de bugs, solicitudes de características → [**Issues**](https://github.com/nexu-io/open-design/issues)
 

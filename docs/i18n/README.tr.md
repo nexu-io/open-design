@@ -15,7 +15,7 @@
   <a href="https://open-design.ai/">İndir</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">@nexudotio'yu takip et</a>
+  <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ'yu takip et</a>
 </p>
 
 <p align="center">
@@ -595,7 +595,7 @@ Aşamalı teslimat → [`docs/roadmap.md`](../../docs/roadmap.md).
 Her kanalın arkasında gerçek insanlar var.
 
 - 💬 **Discord** — günlük sohbet, eklenti paylaşımı, sorular → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter** — sürüm notları, kilometre taşları, perde arkası → [**@nexudotio**](https://x.com/nexudotio)
+- 🐦 **X / Twitter** — sürüm notları, kilometre taşları, perde arkası → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — derinlemesine soru-cevap, RFC'ler, "çalışmanı göster" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — hata raporları, özellik istekleri → [**Issues**](https://github.com/nexu-io/open-design/issues)
 

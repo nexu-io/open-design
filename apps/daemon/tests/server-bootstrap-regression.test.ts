@@ -380,6 +380,7 @@ describe('bootstrap route regressions', () => {
     let smokeServer: http.Server | undefined;
     const paths = {
       ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
+      BRANDS_DIR: path.join(tempRoot, 'brands'),
       BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
       CRAFT_DIR: path.join(tempRoot, 'craft'),
       DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),

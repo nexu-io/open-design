@@ -46,7 +46,9 @@ export type IconName =
   | 'link'
   | 'log-out'
   | 'integrations-filled'
+  | 'maximize'
   | 'mic'
+  | 'minimize'
   | 'minus'
   | 'more-horizontal'
   | 'orbit'
@@ -59,6 +61,7 @@ export type IconName =
   | 'plus-filled'
   | 'puzzle'
   | 'star'
+  | 'swatchbook'
   | 'play'
   | 'present'
   | 'refresh'
@@ -649,6 +652,19 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <rect x="6" y="6" width="12" height="12" rx="1.5" />
         </svg>
       );
+    case 'swatchbook':
+      // Lucide-style swatchbook — a folded swatch card peeling off a stacked
+      // base. Reads as "brand kit / palette card" rather than the generic
+      // `blocks` glyph, matching the Brand Kit nav destination and the
+      // "Create Brand Kit" home chip.
+      return (
+        <svg {...common}>
+          <path d="M11 17a4 4 0 0 1-8 0V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2Z" />
+          <path d="M16.7 13H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H7" />
+          <path d="M7 17h.01" />
+          <path d="m11 8 2.3-2.3a2.4 2.4 0 0 1 3.404.004L18.6 7.6a2.4 2.4 0 0 1 .026 3.434L9.9 19.8" />
+        </svg>
+      );
     case 'sun':
       return (
         <svg {...common}>
@@ -728,6 +744,24 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M11 5 6 9H2v6h4l5 4z" />
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+      );
+    case 'maximize':
+      return (
+        <svg {...common}>
+          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+          <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+          <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+          <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+        </svg>
+      );
+    case 'minimize':
+      return (
+        <svg {...common}>
+          <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+          <path d="M16 3v3a2 2 0 0 0 2 2h3" />
+          <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+          <path d="M3 16h3a2 2 0 0 1 2 2v3" />
         </svg>
       );
     case 'zoom-in':

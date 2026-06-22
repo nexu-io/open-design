@@ -57,6 +57,17 @@ export interface RunTelemetryTimestamps {
   promptBuildEndAt?: number;
   processSpawnStartedAt?: number;
   processSpawnedAt?: number;
+  // Subsegment boundaries inside `processSpawnedAt -> firstTokenAt`. The
+  // markers are keyed by runtime family (see `noteCliReadyAt` /
+  // `noteSessionInitDoneAt` in server.ts and the ACP callbacks): `cliReadyAt`
+  // is the first well-formed adapter output (first JSONL line / first ACP
+  // JSON-RPC message / first decoded stream event / first non-empty stdout
+  // chunk), and `sessionInitDoneAt` is the resume/`session/new` ack for ACP or
+  // the first model-bound request for stream agents. Either may be absent when
+  // its declared marker cannot be observed; the unattributed time then rolls
+  // into `spawn_to_first_token_remainder_ms`.
+  cliReadyAt?: number;
+  sessionInitDoneAt?: number;
   modelCallStartAt?: number;
   firstTokenAt?: number;
   finalizeStartAt?: number;
@@ -84,6 +95,14 @@ export interface RunTimingAnalytics {
   process_spawn_duration_ms?: number;
   time_to_first_token_ms?: number;
   spawn_to_first_token_ms?: number;
+  // `spawn_to_first_token_ms` split into auditable subsegments. By construction
+  // `cli_ready_ms + session_init_ms + model_first_token_ms +
+  // spawn_to_first_token_remainder_ms === spawn_to_first_token_ms` (absent
+  // subsegments count as 0 and their time falls into the remainder).
+  cli_ready_ms?: number;
+  session_init_ms?: number;
+  model_first_token_ms?: number;
+  spawn_to_first_token_remainder_ms?: number;
   generation_duration_ms?: number;
   tool_call_count: number;
   tool_duration_ms?: number;
@@ -372,6 +391,32 @@ export function summarizeRunTimingAnalytics(args: {
   );
   if (spawnToFirstToken !== undefined) {
     result.spawn_to_first_token_ms = spawnToFirstToken;
+    // Split spawn->first-token into subsegments where the markers were
+    // observed. Each subsegment is the gap between two adjacent marks; an
+    // absent mark leaves its subsegment undefined and that time flows into the
+    // remainder so the four parts always sum back to spawn_to_first_token_ms.
+    const cliReady = durationBetween(
+      telemetry.processSpawnedAt,
+      telemetry.cliReadyAt,
+    );
+    const sessionInit = durationBetween(
+      telemetry.cliReadyAt,
+      telemetry.sessionInitDoneAt,
+    );
+    const modelFirstToken = durationBetween(
+      telemetry.sessionInitDoneAt,
+      telemetry.firstTokenAt,
+    );
+    if (cliReady !== undefined) result.cli_ready_ms = cliReady;
+    if (sessionInit !== undefined) result.session_init_ms = sessionInit;
+    if (modelFirstToken !== undefined) {
+      result.model_first_token_ms = modelFirstToken;
+    }
+    const attributed = (cliReady ?? 0) + (sessionInit ?? 0) + (modelFirstToken ?? 0);
+    result.spawn_to_first_token_remainder_ms = Math.max(
+      0,
+      spawnToFirstToken - attributed,
+    );
   }
   const generationDuration = durationBetween(telemetry.firstTokenAt, runEndAt);
   if (generationDuration !== undefined) {

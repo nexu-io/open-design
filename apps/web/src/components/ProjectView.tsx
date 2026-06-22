@@ -2497,9 +2497,9 @@ export function ProjectView({
         );
         const repairPrompt = buildDesignSystemPackageAuditRepairPrompt(audit);
         if (repairPrompt) {
-          const seed = { id: `audit-${Date.now()}`, value: repairPrompt };
-          setChatSeed(seed);
           if (consumeDesignSystemAuditAutoRepair(project.id)) {
+            const seed = { id: `audit-${Date.now()}`, value: repairPrompt };
+            setChatSeed(seed);
             setAutoAuditRepairSeed(seed);
           }
         } else {

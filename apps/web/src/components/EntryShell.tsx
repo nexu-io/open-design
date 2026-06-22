@@ -9,6 +9,7 @@
 // thin wrapper that passes data and callbacks through to this shell.
 
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -20,9 +21,11 @@ import {
 } from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  PROFILE_MEMORY_ID,
   type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
+  type UpsertMemoryRequest,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
@@ -85,6 +88,7 @@ import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
+import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { UpdaterPopup } from './UpdaterPopup';
 import { GithubStarBadge } from './GithubStarBadge';
@@ -138,6 +142,9 @@ import {
   amrLoginPollOutcome,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
+import { useBrandExtract } from '../runtime/useBrandExtract';
+import type { BrandReference } from '../runtime/brand-references';
+import { BrandReferencePicker } from './BrandReferencePicker';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
@@ -172,7 +179,7 @@ function writeStoredRailOpen(open: boolean): void {
 }
 
 const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
-const X_URL = 'https://x.com/nexudotio';
+const X_URL = 'https://x.com/OpenDesignHQ';
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
@@ -196,6 +203,14 @@ const NEWSLETTER_SUBSCRIBE_URL =
 const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
+
+type OnboardingProfileState = {
+  role: string;
+  orgSize: string;
+  useCase: string[];
+  source: string;
+  email: string;
+};
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
@@ -339,7 +354,7 @@ interface Props {
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
-  onOpenProject: (id: string) => void;
+  onOpenProject: (id: string) => Promise<boolean> | boolean | void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => Promise<boolean | void> | boolean | void;
   onRenameProject: (id: string, name: string) => void;
@@ -348,8 +363,8 @@ interface Props {
   onCreateDesignSystem?: () => void;
   // NOTE: first-run onboarding intentionally no longer hosts guided
   // design-system creation. The previous step-3 design-system surface was
-  // replaced by the newsletter step, so EntryShell deliberately does not
-  // accept a `renderDesignSystemCreation` renderer. Guided creation stays
+  // replaced by the newsletter and brand-extraction steps, so EntryShell does
+  // not accept a `renderDesignSystemCreation` renderer. Guided creation stays
   // reachable from the standalone `design-system-create` route and the
   // Design Systems tab; do not re-thread an onboarding renderer here.
   onOpenDesignSystem?: (id: string) => void;
@@ -383,6 +398,10 @@ function navElementForView(
     case 'plugins':
       return 'plugins';
     case 'design-systems':
+      return 'design_systems';
+    case 'brands':
+      // No dedicated brands analytics element yet; reuse the design_systems
+      // slot since Brands replaces that nav destination.
       return 'design_systems';
     case 'integrations':
       return 'integrations';
@@ -872,6 +891,12 @@ export function EntryShell({
                 </div>
               )}
             </div>
+            <div data-testid="entry-view-brands" data-active={view === 'brands' ? 'true' : 'false'} {...inactiveViewProps(view === 'brands')}>
+              <BrandsTab
+                onApplyDesignSystem={onChangeDefaultDesignSystem}
+                onOpenProject={onOpenProject}
+              />
+            </div>
             {view === 'integrations' ? (
               <IntegrationsView
                 config={config}
@@ -975,6 +1000,55 @@ function OnboardingView({
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
+  // Optional brand extraction on the final onboarding step. The hook
+  // drives a 3-stage SSE progress model against POST /api/brands; the
+  // local URL string is the only extra state the panel needs. Extraction
+  // is entirely optional — it never blocks the Finish/Continue button
+  // (see handlePrimaryAction, which has no brand awareness).
+  const [brandUrl, setBrandUrl] = useState('');
+  const {
+    state: brandExtractState,
+    run: runBrandExtract,
+  } = useBrandExtract();
+  const brandExtractActive = brandExtractState.phase === 'starting';
+  const brandExtractDone = brandExtractState.phase === 'done';
+  const brandExtractFailed = brandExtractState.phase === 'error';
+  // Clicking Extract here behaves exactly like the Brands tab: stand up the
+  // extraction project, then finish onboarding and open it so the agent runs
+  // the extraction live (with a browser tab on the target site).
+  const handleOnboardingBrandExtract = useCallback(
+    async (explicitUrl?: string) => {
+      // An explicit URL (a picked reference brand) wins over the input, whose
+      // state update may not have committed yet when the picker fires.
+      const trimmed = (explicitUrl ?? brandUrl).trim();
+      if (!trimmed || brandExtractActive) return;
+      const result = await runBrandExtract(trimmed);
+      if (!result) return;
+      try {
+        window.sessionStorage.setItem(`od:auto-send-first:${result.projectId}`, '1');
+      } catch {
+        // Private-mode storage failures should not block navigation.
+      }
+      onFinish();
+      navigate({
+        kind: 'project',
+        projectId: result.projectId,
+        fileName: null,
+        conversationId: result.conversationId,
+      });
+    },
+    [brandUrl, brandExtractActive, runBrandExtract, onFinish],
+  );
+
+  // The onboarding picker fills the URL field and immediately starts extraction.
+  const handleOnboardingPickReference = useCallback(
+    (brand: BrandReference) => {
+      if (brandExtractActive) return;
+      setBrandUrl(brand.domain);
+      void handleOnboardingBrandExtract(brand.domain);
+    },
+    [brandExtractActive, handleOnboardingBrandExtract],
+  );
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [providerTestState, setProviderTestState] = useState<
@@ -999,7 +1073,7 @@ function OnboardingView({
     hasSharedProviderModelsCache
       ? onProviderModelsCacheChange!
       : setLocalProviderModelsCache;
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<OnboardingProfileState>({
     role: '',
     orgSize: '',
     useCase: [] as string[],
@@ -1015,6 +1089,7 @@ function OnboardingView({
   // emitted on both — fine — but reading any cumulative summary off
   // `profile` directly missed the second pick until the next commit.
   const profileRef = useRef(profile);
+  const lastPersistedOnboardingProfileBodyRef = useRef<string>('');
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
@@ -1221,27 +1296,12 @@ function OnboardingView({
   useEffect(() => {
     const onboardingSessionId = onboardingSessionIdRef.current;
     if (!onboardingSessionId) return;
-    let area: TrackingOnboardingArea;
-    let stepIndex: TrackingOnboardingStepIndex;
-    let stepName: TrackingOnboardingStepName;
-    if (step === 0) {
-      area = 'runtime';
-      stepIndex = '1';
-      stepName = 'connect';
-    } else if (step === 1) {
-      area = 'about_you';
-      stepIndex = '2';
-      stepName = 'about_you';
-    } else {
-      area = 'newsletter';
-      stepIndex = '3';
-      stepName = 'newsletter';
-    }
+    const info = stepInfo(step);
     trackPageView(analytics.track, {
       page_name: 'onboarding',
-      area,
-      step_index: stepIndex,
-      step_name: stepName,
+      area: info.area,
+      step_index: info.stepIndex,
+      step_name: info.stepName,
       onboarding_session_id: onboardingSessionId,
     });
   }, [analytics.track, step]);
@@ -1271,7 +1331,8 @@ function OnboardingView({
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
     if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
+    if (stepIdx === 2) return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
+    return { area: 'brand', stepIndex: '4', stepName: 'brand_extract' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1366,6 +1427,7 @@ function OnboardingView({
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
     t('settings.onboardingStepNewsletter'),
+    t('newBrand.extract'),
   ];
   const isLastStep = step === steps.length - 1;
 
@@ -1412,6 +1474,63 @@ function OnboardingView({
     { value: 'search', label: t('settings.onboardingSourceSearch') },
     { value: 'event', label: t('settings.onboardingSourceEvent') },
   ];
+
+  function cleanOnboardingOptionLabel(label: string): string {
+    const trimmed = label.trim();
+    return trimmed.replace(/^[^\p{L}\p{N}]+/u, '').trim() || trimmed;
+  }
+
+  function optionLabel(
+    options: ReadonlyArray<{ value: string; label: string }>,
+    value: string,
+  ): string {
+    const option = options.find((item) => item.value === value);
+    return cleanOnboardingOptionLabel(option?.label ?? value);
+  }
+
+  function buildOnboardingProfileBody(snapshot: OnboardingProfileState): string {
+    const fields: Array<[string, string]> = [];
+    if (snapshot.role) {
+      fields.push(['Role', optionLabel(roleOptions, snapshot.role)]);
+    }
+    if (snapshot.orgSize) {
+      fields.push(['Organization size', optionLabel(orgSizeOptions, snapshot.orgSize)]);
+    }
+    if (snapshot.useCase.length > 0) {
+      fields.push([
+        'Use cases',
+        snapshot.useCase.map((value) => optionLabel(useCaseOptions, value)).join(', '),
+      ]);
+    }
+    if (snapshot.source) {
+      fields.push(['Discovery source', optionLabel(sourceOptions, snapshot.source)]);
+    }
+    return fields.map(([label, value]) => `- ${label}: ${value}`).join('\n');
+  }
+
+  async function persistOnboardingProfileToMemory(): Promise<void> {
+    const body = buildOnboardingProfileBody(profileRef.current);
+    if (!body || body === lastPersistedOnboardingProfileBodyRef.current) return;
+    const payload: UpsertMemoryRequest = {
+      type: 'profile',
+      name: t('settings.memoryProfileName'),
+      description: t('settings.memoryProfileDescription'),
+      body,
+    };
+    try {
+      const resp = await fetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (resp.ok) {
+        lastPersistedOnboardingProfileBodyRef.current = body;
+      }
+    } catch {
+      // Onboarding completion should not fail because local memory is unavailable.
+    }
+  }
+
   const byokProviderOptions = [
     { value: '', label: t('settings.customProvider') },
     ...KNOWN_PROVIDERS.filter((provider) => provider.protocol === apiProtocol).map((provider) => ({
@@ -1615,6 +1734,7 @@ function OnboardingView({
       // `onboarding_complete_result` give the funnel two independent
       // carriers for the same data.
       emitAboutYouSubmit();
+      void persistOnboardingProfileToMemory();
       const newsletterEmail = profileRef.current.email;
       const shouldSubmitNewsletter =
         NEWSLETTER_EMAIL_RE.test(newsletterEmail.trim().toLowerCase());
@@ -1633,6 +1753,9 @@ function OnboardingView({
       return;
     }
     emitOnboardingClick('continue', 'continue');
+    if (step === 1) {
+      void persistOnboardingProfileToMemory();
+    }
     setStep((current) => current + 1);
   }
 
@@ -1773,7 +1896,7 @@ function OnboardingView({
   // About-you step (the spec keeps the wire type open-string so a new
   // role / use-case option doesn't force a contract bump).
   //
-  // This now fires from the completion path (the final Newsletter step),
+  // This now fires from the completion path (the final brand-extraction step),
   // so it stamps the About-you step coordinates explicitly instead of
   // reading the live `step` via `emitOnboardingClick`: the event describes
   // the About-you submission, not whatever step the user finished on. The
@@ -2368,6 +2491,29 @@ function OnboardingView({
                   }}
                 />
               </div>
+              <div className="onboarding-view__memory-callout">
+                <span className="onboarding-view__memory-callout-icon" aria-hidden>
+                  <Icon name="sparkles" size={16} />
+                </span>
+                <div className="onboarding-view__memory-callout-body">
+                  <strong>{t('settings.onboardingMemoryCalloutTitle')}</strong>
+                  <p>{t('settings.onboardingMemoryCalloutBody')}</p>
+                  <ul className="onboarding-view__memory-benefits">
+                    <li>
+                      <Icon name="check" size={13} aria-hidden />
+                      <span>{t('settings.onboardingMemoryBenefitIntent')}</span>
+                    </li>
+                    <li>
+                      <Icon name="check" size={13} aria-hidden />
+                      <span>{t('settings.onboardingMemoryBenefitFewerQuestions')}</span>
+                    </li>
+                    <li>
+                      <Icon name="check" size={13} aria-hidden />
+                      <span>{t('settings.onboardingMemoryBenefitPersonalized')}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -2402,6 +2548,93 @@ function OnboardingView({
                   }
                 />
               </label>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
+              <OnboardingPanelHeader
+                title={t('onboarding.brandTitle')}
+                body={t('onboarding.brandSubtitle')}
+              />
+              <label className="onboarding-view__email-field">
+                <span className="onboarding-view__email-label">
+                  {t('newBrand.urlLabel')}
+                </span>
+                <input
+                  className="onboarding-view__brand-url-input"
+                  type="url"
+                  autoComplete="url"
+                  inputMode="url"
+                  placeholder={t('newBrand.urlPlaceholder')}
+                  value={brandUrl}
+                  disabled={brandExtractActive}
+                  onChange={(event) => setBrandUrl(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === 'Enter' &&
+                      brandUrl.trim() &&
+                      !brandExtractActive
+                    ) {
+                      event.preventDefault();
+                      void handleOnboardingBrandExtract();
+                    }
+                  }}
+                />
+              </label>
+              <div className="onboarding-view__email-field">
+                <button
+                  type="button"
+                  className={`onboarding-view__mini-button${brandExtractActive ? ' is-loading' : ''}`}
+                  onClick={() => {
+                    void handleOnboardingBrandExtract();
+                  }}
+                  disabled={!brandUrl.trim() || brandExtractActive}
+                >
+                  {brandExtractActive
+                    ? t('brand.extracting')
+                    : t('newBrand.extract')}
+                </button>
+                {brandExtractActive ? (
+                  <span
+                    className="onboarding-view__action-status"
+                    role="status"
+                  >
+                    {t('brand.extracting')}
+                  </span>
+                ) : null}
+                {brandExtractDone ? (
+                  <span className="onboarding-view__action-status" role="status">
+                    {t('onboarding.brandDone')}
+                  </span>
+                ) : null}
+                {brandExtractFailed ? (
+                  <span
+                    className="onboarding-view__action-status is-error"
+                    role="alert"
+                  >
+                    {brandExtractState.error || t('brand.failed')}
+                  </span>
+                ) : null}
+              </div>
+              <div
+                style={{
+                  marginTop: 22,
+                  paddingTop: 18,
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <BrandReferencePicker
+                  variant="compact"
+                  busy={brandExtractActive}
+                  error={
+                    brandExtractFailed
+                      ? brandExtractState.error || t('brand.failed')
+                      : null
+                  }
+                  onPick={handleOnboardingPickReference}
+                />
+              </div>
             </div>
           ) : null}
 
@@ -3160,4 +3393,3 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
 // The AMR brand (icon + name) is known up-front and rendered solid; only the
 // version meta, benefit list, and model picker — the parts that depend on the
 // probe result — shimmer. Non-interactive and announced via role="status".
-

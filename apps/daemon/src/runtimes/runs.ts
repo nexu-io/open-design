@@ -86,9 +86,13 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      retryRestartTimer: null,
       stdinOpen: false,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
+      // Set once finish() has closed the log stream, so a late post-finish emit
+      // can't lazily re-open a stream nothing will ever close (FD leak).
+      eventsLogClosed: false,
     };
     runs.set(run.id, run);
     return run;
@@ -109,6 +113,16 @@ export function createChatRunService({
   const ensureLogStream = (run) => {
     if (!run.eventsLogPath) return null;
     if (run.eventsLogStream) return run.eventsLogStream;
+    // finish() has already closed + nulled this run's log stream. Re-opening it
+    // here for a late event (async child-close diagnostic, trailing tool
+    // callback, telemetry) would leak a file descriptor that nothing ever
+    // closes. We gate on the explicit `eventsLogClosed` flag — NOT on terminal
+    // status — so finish()'s own `end` emit (which runs while status is already
+    // terminal but before the stream is closed) can still open + write + close
+    // the log for a run that had no prior events. Late events still reach
+    // memory + SSE clients below; we just stop persisting them to the closed
+    // log. (#3408 P1 FD-leak fix; cf. #4163.)
+    if (run.eventsLogClosed) return null;
     try {
       fs.mkdirSync(path.dirname(run.eventsLogPath), { recursive: true });
       run.eventsLogStream = fs.createWriteStream(run.eventsLogPath, { flags: 'a' });
@@ -154,6 +168,10 @@ export function createChatRunService({
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
     agentId: run.agentId,
+    designSystemId: run.designSystemId ?? null,
+    designSystemRequestedId: run.designSystemRequestedId ?? null,
+    designSystemSelectionSource: run.designSystemSelectionSource ?? null,
+    designSystemDigest: run.designSystemDigest ?? null,
     appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
     pluginId: run.pluginId ?? null,
     status: run.status,
@@ -173,6 +191,7 @@ export function createChatRunService({
     workspace: run.workspace ?? projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
+    ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 
@@ -191,6 +210,8 @@ export function createChatRunService({
     // emitted for this run. The file stays on disk for tail/grep.
     try { run.eventsLogStream?.end(); } catch { /* ignore */ }
     run.eventsLogStream = null;
+    // Any event emitted after this point must not lazily re-open the log.
+    run.eventsLogClosed = true;
     scheduleCleanup(run);
   };
 
@@ -329,10 +350,21 @@ export function createChatRunService({
     run.stdinOpen = false;
   };
 
+  // A same-run retry can be waiting out its backoff window (server.ts
+  // scheduleRetryRestart). Cancellation/shutdown must drop that pending restart
+  // so a cancelled run is not resurrected after the timer fires.
+  const clearPendingRetryRestart = (run) => {
+    if (run?.retryRestartTimer) {
+      clearTimeout(run.retryRestartTimer);
+      run.retryRestartTimer = null;
+    }
+  };
+
   const cancel = async (run) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
     run.cancelRequested = true;
     run.updatedAt = Date.now();
+    clearPendingRetryRestart(run);
     closeRunStdin(run);
     if (!run.child) {
       finish(run, 'canceled', null, 'SIGTERM');
@@ -375,6 +407,7 @@ export function createChatRunService({
     await Promise.all(activeRuns.map(async (run) => {
       run.cancelRequested = true;
       run.updatedAt = Date.now();
+      clearPendingRetryRestart(run);
       closeRunStdin(run);
       if (run.acpSession?.abort) {
         try {

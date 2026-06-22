@@ -9,7 +9,7 @@
 // otherwise Markdown wins. Other fields (`name`/`description`/`category`/
 // `surface`) fall back to frontmatter when the body has none.
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -429,6 +429,13 @@ export type DesignSystemAssets = {
   craftExemptions?: string[] | undefined;
 };
 
+const DESIGN_SYSTEM_ASSETS_CACHE_LIMIT = 128;
+const designSystemAssetsCache = new Map<string, Promise<DesignSystemAssets> | DesignSystemAssets>();
+
+export function clearDesignSystemAssetsCacheForTests(): void {
+  designSystemAssetsCache.clear();
+}
+
 export async function readDesignSystemAssets(
   root: string,
   id: string,
@@ -505,6 +512,42 @@ export function isDesignTokenChannelEnabled(
   return env.OD_DESIGN_TOKEN_CHANNEL !== '0';
 }
 
+export function digestDesignSystemContext(input: {
+  id?: string | null;
+  title?: string | null;
+  body?: string | null;
+  usageMd?: string | null;
+  tokensCss?: string | null;
+  componentsManifest?: string | null;
+  fixtureHtml?: string | null;
+  pullIndex?: string | null;
+  importMode?: string | null;
+}): string | null {
+  const hasContent = [
+    input.body,
+    input.usageMd,
+    input.tokensCss,
+    input.componentsManifest,
+    input.fixtureHtml,
+    input.pullIndex,
+    input.importMode,
+  ].some((value) => typeof value === 'string' && value.length > 0);
+  if (!hasContent) return null;
+
+  const payload = {
+    id: input.id ?? null,
+    title: input.title ?? null,
+    body: input.body ?? null,
+    usageMd: input.usageMd ?? null,
+    tokensCss: input.tokensCss ?? null,
+    componentsManifest: input.componentsManifest ?? null,
+    fixtureHtml: input.fixtureHtml ?? null,
+    pullIndex: input.pullIndex ?? null,
+    importMode: input.importMode ?? null,
+  };
+  return createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
+}
+
 export async function resolveDesignSystemAssets(
   designSystemId: string,
   builtInRoot: string,
@@ -524,6 +567,46 @@ export async function resolveDesignSystemAssets(
     };
   }
 
+  const fingerprint = await designSystemAssetsCacheFingerprint(
+    designSystemId,
+    builtInRoot,
+    userInstalledRoot,
+    env,
+  );
+  const cacheKey = [
+    designSystemId,
+    builtInRoot,
+    userInstalledRoot,
+    env.OD_DESIGN_TOKEN_CHANNEL ?? '',
+    fingerprint,
+  ].join('\0');
+  const cached = designSystemAssetsCache.get(cacheKey);
+  if (cached) return cached;
+
+  const pending = resolveDesignSystemAssetsUncached(
+    designSystemId,
+    builtInRoot,
+    userInstalledRoot,
+  )
+    .then((assets) => {
+      designSystemAssetsCache.set(cacheKey, assets);
+      pruneDesignSystemAssetsCache();
+      return assets;
+    })
+    .catch((error) => {
+      designSystemAssetsCache.delete(cacheKey);
+      throw error;
+    });
+  designSystemAssetsCache.set(cacheKey, pending);
+  pruneDesignSystemAssetsCache();
+  return pending;
+}
+
+async function resolveDesignSystemAssetsUncached(
+  designSystemId: string,
+  builtInRoot: string,
+  userInstalledRoot: string,
+): Promise<DesignSystemAssets> {
   const builtIn = await readDesignSystemAssets(builtInRoot, designSystemId);
   if (builtIn.tokensCss !== undefined && builtIn.fixtureHtml !== undefined) {
     return builtIn;
@@ -541,6 +624,75 @@ export async function resolveDesignSystemAssets(
     craftApplies: builtIn.craftApplies ?? userInstalled.craftApplies,
     craftExemptions: builtIn.craftExemptions ?? userInstalled.craftExemptions,
   });
+}
+
+function pruneDesignSystemAssetsCache(): void {
+  while (designSystemAssetsCache.size > DESIGN_SYSTEM_ASSETS_CACHE_LIMIT) {
+    const oldest = designSystemAssetsCache.keys().next().value;
+    if (oldest === undefined) return;
+    designSystemAssetsCache.delete(oldest);
+  }
+}
+
+async function designSystemAssetsCacheFingerprint(
+  designSystemId: string,
+  builtInRoot: string,
+  userInstalledRoot: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  const payload = {
+    tokenChannel: env.OD_DESIGN_TOKEN_CHANNEL ?? null,
+    roots: await Promise.all([
+      designSystemAssetsRootFingerprint(builtInRoot, designSystemId),
+      designSystemAssetsRootFingerprint(userInstalledRoot, designSystemId),
+    ]),
+  };
+  return createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
+}
+
+async function designSystemAssetsRootFingerprint(
+  root: string,
+  id: string,
+): Promise<unknown> {
+  const dirId = stripPrefixAndValidateId(id, id.startsWith('user:') ? 'user:' : '');
+  if (!dirId) return { root, id, invalid: true };
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  const candidates = new Set<string>([
+    'manifest.json',
+    manifest?.usage ?? 'USAGE.md',
+    manifest?.files.tokens ?? 'tokens.css',
+    manifest?.files.components ?? 'components.html',
+    manifest?.componentsManifest ?? 'components.manifest.json',
+  ]);
+  return {
+    root,
+    id,
+    files: await Promise.all(
+      Array.from(candidates)
+        .filter((filePath) => typeof filePath === 'string' && filePath.length > 0)
+        .sort()
+        .map(async (filePath) => fileFingerprint(brandRoot, filePath)),
+    ),
+  };
+}
+
+async function fileFingerprint(root: string, relativePath: string): Promise<unknown> {
+  const cleanPath = sanitizeRelativeFilePath(relativePath);
+  if (!cleanPath) return { path: relativePath, unsafe: true };
+  try {
+    const stats = await stat(path.join(root, cleanPath));
+    return {
+      path: cleanPath,
+      size: stats.size,
+      mtimeMs: stats.mtimeMs,
+      isFile: stats.isFile(),
+      isDirectory: stats.isDirectory(),
+    };
+  } catch (err) {
+    if (isAbsenceError(err)) return { path: cleanPath, absent: true };
+    throw err;
+  }
 }
 
 function withComponentsManifest(

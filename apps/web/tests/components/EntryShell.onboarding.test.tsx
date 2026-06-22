@@ -303,7 +303,9 @@ describe('EntryShell settings menu', () => {
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toBeTruthy();
+    const xMenuItem = screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i });
+    expect(xMenuItem).toBeTruthy();
+    expect(xMenuItem.getAttribute('href')).toBe('https://x.com/OpenDesignHQ');
 
     fireEvent.click(screen.getByTestId('entry-settings-open-details'));
 
@@ -321,6 +323,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
+    expect(
+      await screen.findByRole('button', { name: /Sign in to Open Design Cloud/i }),
+    ).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
 
@@ -838,6 +843,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
@@ -862,6 +871,12 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
           area: 'newsletter',
           step_index: '3',
           step_name: 'newsletter',
+        }),
+        expect.objectContaining({
+          page_name: 'onboarding',
+          area: 'brand',
+          step_index: '4',
+          step_name: 'brand_extract',
         }),
       ]),
     );
@@ -894,7 +909,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
-  it('submits the optional newsletter email when finishing the About-you step', async () => {
+  it('submits the optional newsletter email when finishing onboarding', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
       const url = String(input);
@@ -914,10 +929,8 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    // Connect -> About you -> Newsletter
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Continue \(signed in\)/i }),
-    );
+    // Connect -> About you -> Newsletter -> Brand
+    fireEvent.click(await screen.findByRole('button', { name: /Continue \(signed in\)/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
@@ -935,6 +948,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     fireEvent.change(emailInput as HTMLInputElement, {
       target: { value: '  Tester@Studio.com  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
@@ -979,9 +996,72 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
+  });
+
+  it('persists about-you selections to the work profile memory', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
+        return jsonResponse({
+          entry: {
+            id: 'user_profile',
+            name: 'Work profile',
+            description: 'Role and defaults',
+            type: 'profile',
+            updatedAt: Date.now(),
+            body: JSON.parse(String(init.body)).body,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Continue \(signed in\)/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    chooseChipOption('Your role', 'Engineer');
+    chooseChipOption('Organization size', /Growth company/i);
+    chooseChipOption('Use case', /Product design/i);
+    chooseChipOption('Where did you hear about us?', /Search/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile')).toBe(true);
+    });
+    const memoryCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/memory/user_profile');
+    const payload = JSON.parse(String(memoryCall?.[1]?.body));
+    expect(memoryCall?.[1]).toMatchObject({
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(payload).toMatchObject({
+      type: 'profile',
+      name: 'Work profile',
+    });
+    expect(payload.body).toContain('- Role: Engineer');
+    expect(payload.body).toContain('- Organization size: Growth company');
+    expect(payload.body).toContain('- Use cases: Product design');
+    expect(payload.body).toContain('- Discovery source: Search');
+    expect(payload.body).not.toContain('user@example.com');
   });
 
   it('reports about_you_submit exactly once when advancing to the newsletter step', async () => {
@@ -1009,6 +1089,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
@@ -1048,10 +1132,14 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
-    // Continue -> Newsletter again, then finish.
+    // Continue -> Newsletter again, then Brand and finish.
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
@@ -1113,6 +1201,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
@@ -1395,6 +1487,23 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     ) as typeof fetch;
     renderOnboarding({ agentsLoading: false });
+
+    expect(
+      await screen.findByRole('button', { name: /Sign in to Open Design Cloud/i }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
+  });
+
+  it('keeps the cloud sign-in landing visible after detection settles without surfacing AMR', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding({
+      agents: [cliAgent()],
+      agentsLoading: false,
+      onRefreshAgents: vi.fn(() => [cliAgent()]),
+    });
 
     expect(
       await screen.findByRole('button', { name: /Sign in to Open Design Cloud/i }),

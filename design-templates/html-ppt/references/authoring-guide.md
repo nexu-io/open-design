@@ -114,6 +114,11 @@ Walk through every slide with ← →. Press:
 Output is 1920×1080 by default. Change in `render.sh` if the user wants 3:4
 for 小红书图文 (1242×1660).
 
+The renderer uses Playwright's managed Chromium. Do not replace it with
+`/Applications/Google Chrome.app` or another user-profile Chrome launch on
+macOS. If the managed renderer fails once, report the error and stop instead of
+retrying alternate Chrome commands.
+
 ## 10. What to NOT do
 
 - Don't hand-author from a blank file.
@@ -138,4 +143,4 @@ for 小红书图文 (1242×1660).
 - **Fonts fall back**: make sure `fonts.css` is linked before the theme.
 - **Chart.js colors wrong**: charts read CSS vars in JS; make sure they run
   after the DOM is ready (`addEventListener('DOMContentLoaded', …)`).
-- **PNG too small**: bump `--window-size` in `scripts/render.sh`.
+- **PNG too small**: bump `--viewport-size` in `scripts/render.sh`.

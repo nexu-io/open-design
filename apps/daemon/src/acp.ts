@@ -89,6 +89,13 @@ interface AttachAcpSessionOptions {
   clientVersion?: string;
   stageTimeoutMs?: number;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
+  // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
+  // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
+  // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
+  // the `session/new` handshake is acknowledged (a session id is established).
+  // Both are best-effort and the caller dedupes, so extra calls are harmless.
+  onCliReady?: () => void;
+  onSessionInit?: () => void;
 }
 
 function errorMessage(err: unknown): string {
@@ -821,6 +828,8 @@ export function attachAcpSession({
   clientVersion = 'runtime-adapter',
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   modelUnavailableErrorCode,
+  onCliReady,
+  onSessionInit,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -1021,6 +1030,9 @@ export function attachAcpSession({
     resetStageTimer('response');
     const obj = asObject(raw);
     if (!obj) return;
+    // First well-formed ACP JSON-RPC message = CLI ready (#3408 §4). Caller
+    // dedupes, so re-notifying on later messages is harmless.
+    onCliReady?.();
     const error = asObject(obj.error);
     const params = asObject(obj.params);
     const result = asObject(obj.result);
@@ -1244,6 +1256,8 @@ export function attachAcpSession({
     }
     if (expectedId === 2) {
       sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
+      // session/new acknowledged with a session id = handshake done (#3408 §4).
+      if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);
       modelConfigId = modelConfig?.configId ?? null;
       activeModel = currentModelFromSessionResult(result);
