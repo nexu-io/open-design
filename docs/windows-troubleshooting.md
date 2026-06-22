@@ -6,6 +6,50 @@ Open Design runs on Windows natively, but the path is less travelled than macOS,
 
 ---
 
+## Installing the desktop app: "Windows protected your PC"
+
+### Symptom
+
+When you run the downloaded installer (for example `open-design-0.11.0-win-x64-setup.exe`), a blue Windows Defender SmartScreen dialog appears:
+
+```text
+Windows protected your PC
+Microsoft Defender SmartScreen prevented an unrecognized app from starting.
+App:       open-design-x.y.z-win-x64-setup.exe
+Publisher: Unknown publisher
+```
+
+The first dialog only shows a **Don't run** button. The **Run anyway** button is hidden until you click **More info**.
+
+### Why this happens
+
+This is expected and does not mean the app is unsafe or broken. SmartScreen warns about any installer that is not signed with a code-signing certificate it already recognizes. Open Design ships unsigned Windows builds today, so the installer reports `Publisher: Unknown publisher` and SmartScreen flags it until a given signed binary builds up download reputation. The warning is about verifying who published the file, not about detecting a threat.
+
+### Fix
+
+If you downloaded the installer from an official source, you can proceed:
+
+1. Click **More info** in the dialog.
+2. Click **Run anyway**.
+3. Continue through the installer as normal.
+
+### Verify the download first
+
+Only run the installer if you got it from an official source:
+
+- [open-design.ai](https://open-design.ai/), or
+- [GitHub Releases](https://github.com/nexu-io/open-design/releases) on the `nexu-io/open-design` repository.
+
+Do not run an installer from a mirror, a re-upload, or a link you cannot trace back to one of those two sources. If a release publishes a SHA-256 checksum, you can confirm the file is intact before running it:
+
+```powershell
+Get-FileHash .\open-design-x.y.z-win-x64-setup.exe -Algorithm SHA256
+```
+
+Compare the printed hash against the checksum listed on the release page. They must match exactly.
+
+---
+
 ## Prerequisites
 
 | Tool | Version | How to verify |
