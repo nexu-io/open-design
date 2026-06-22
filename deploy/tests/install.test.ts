@@ -142,9 +142,11 @@ test('install.sh --non-interactive creates .env and starts container', { skip: !
       env: testEnv(ctx),
     });
 
-    // .env should contain the port
+    // .env should contain the port and auth-override pair
     const envContent = await readFile(join(ctx.tmpDir, '.env'), 'utf8');
     assert.match(envContent, new RegExp(`OPEN_DESIGN_PORT=${ctx.port}`));
+    assert.match(envContent, /^OD_DISABLE_API_AUTH=0$/m, 'installer must disable compose default auth when it generates a token');
+    assert.match(envContent, /^OD_API_TOKEN=/m, 'installer must generate an API token');
 
     // Container should be healthy
     const healthy = await waitForHealth(ctx.port, 60_000);
