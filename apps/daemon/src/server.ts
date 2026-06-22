@@ -502,6 +502,7 @@ import {
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
+import { isCrossProjectConversation } from './conversation-isolation.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -5383,6 +5384,18 @@ export async function startServer({
       typeof conversationId === 'string' && conversationId
         ? getConversation(db, conversationId)
         : null;
+    // Project isolation (#4594): refuse a run whose conversation belongs to a
+    // different project. The resumable CLI session is keyed off the
+    // conversation (agent_sessions), so proceeding would resume the other
+    // project's agent session / working memory into this run instead of
+    // silently crossing the project boundary.
+    if (isCrossProjectConversation(conversationSession?.projectId, run.projectId)) {
+      return design.runs.fail(
+        run,
+        'BAD_REQUEST',
+        `conversation ${run.conversationId} belongs to a different project (${conversationSession?.projectId}) than this run (${run.projectId})`,
+      );
+    }
     const runSessionMode =
       sessionMode === 'chat' || sessionMode === 'design'
         ? normalizeConversationSessionMode(sessionMode)
