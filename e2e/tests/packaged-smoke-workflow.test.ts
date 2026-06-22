@@ -9,6 +9,8 @@ import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
+import { uiP0CiMatrix, uiP0Groups } from "../lib/playwright/suites.ts";
+
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
@@ -232,6 +234,33 @@ describe("packaged smoke workflow", () => {
     });
   });
 
+  it("[P2] keeps the lightweight unit workspace check on GitHub hosted runners", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const workspaceUnitTests = sectionBetween(workflow, "  workspace_unit_tests:", "  windows_tools_pack_payload_tests:");
+    const webWorkspaceTests = sectionBetween(workflow, "  web_workspace_tests:", "  e2e_vitest:");
+    const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
+    const visual = sectionBetween(workflow, "  playwright_visual:", "  docker_pr:");
+
+    expect(workspaceUnitTests).toContain("runs-on: ubuntu-24.04");
+    expect(webWorkspaceTests).toContain("runs-on: blacksmith-4vcpu-ubuntu-2404");
+    expect(uiP0).toContain("runs-on: blacksmith-8vcpu-ubuntu-2404");
+    expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
+    expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
+      "entry-settings",
+      "project-workspace",
+      "project-runtime",
+      "workspace-restoration",
+    ]);
+    expect(uiP0Groups["project-workspace"].files).toEqual([
+      "ui/app.test.ts",
+      "ui/app-design-files.test.ts",
+      "ui/app-manual-edit.test.ts",
+      "ui/project-management-flows.test.ts",
+      "ui/workspace-keyboard-flows.test.ts",
+    ]);
+    expect(visual).toContain("runs-on: blacksmith-8vcpu-ubuntu-2404");
+  });
+
   it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
     const [ciWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow, handoffScript] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),
@@ -251,11 +280,14 @@ describe("packaged smoke workflow", () => {
     expect(ciWorkflow).not.toContain("visual-pr-comment");
     expect(commentWorkflow).toContain("artifact-pattern comment");
     expect(commentWorkflow).toContain("merge-multiple: false");
+    expect(commentWorkflow).toContain("pull-requests: write");
     expect(autofixWorkflow).toContain("artifact-pattern autofix");
     expect(autofixWorkflow).toContain("allowed_paths");
     expect(reportWorkflow).toContain("artifact-pattern report");
     expect(reportWorkflow).toContain("scripts/visual-report.ts compare-pr");
     expect(reportWorkflow).toContain("R2_ACCESS_KEY_ID");
+    expect(reportWorkflow).toContain("pull-requests: write");
+    expect(reportWorkflow).toContain("Visual report comment creation failed");
     expect(reportWorkflow).toContain("jq -n --rawfile body");
     expect(reportWorkflow).toContain("--input");
     expect(reportWorkflow).not.toContain("handoff.py dir comment");
