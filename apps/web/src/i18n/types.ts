@@ -3282,6 +3282,7 @@ export interface Dict {
   'apiTokenPrompt.title': string;
   'apiTokenPrompt.description': string;
   'apiTokenPrompt.placeholder': string;
+  'apiTokenPrompt.invalidToken': string;
 
   // Brands library + extraction
   'brand.libraryTitle': string;

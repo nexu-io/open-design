@@ -3,9 +3,11 @@ import { useT } from '../i18n';
 
 interface Props {
   onSubmit: (token: string) => void;
+  submitting?: boolean;
+  error?: string;
 }
 
-export function ApiTokenPrompt({ onSubmit }: Props): JSX.Element {
+export function ApiTokenPrompt({ onSubmit, submitting, error }: Props): JSX.Element {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,7 +39,7 @@ export function ApiTokenPrompt({ onSubmit }: Props): JSX.Element {
               padding: '10px 14px',
               fontSize: 14,
               borderRadius: 8,
-              border: '1px solid var(--border-primary)',
+              border: error ? '1px solid var(--error-primary)' : '1px solid var(--border-primary)',
               background: 'var(--bg-secondary)',
               color: 'var(--text-primary)',
               outline: 'none',
@@ -45,12 +47,18 @@ export function ApiTokenPrompt({ onSubmit }: Props): JSX.Element {
             }}
             autoFocus
           />
+          {error && (
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.4, color: 'var(--error-primary)', textAlign: 'left' }}>
+              {error}
+            </p>
+          )}
           <button
             type="submit"
             className="action-btn"
             style={{ alignSelf: 'center' }}
+            disabled={submitting}
           >
-            {t('common.save')}
+            {submitting ? 'Verifying…' : t('common.save')}
           </button>
         </form>
       </div>

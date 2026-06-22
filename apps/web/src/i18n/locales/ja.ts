@@ -3149,6 +3149,7 @@ export const ja: Dict = {
   'apiTokenPrompt.title': 'Daemon requires a token',
   'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
   'apiTokenPrompt.placeholder': 'Paste your API token',
+  'apiTokenPrompt.invalidToken': 'The token was rejected by the daemon. Check your OD_API_TOKEN value and try again.',
 
   // Brands library + extraction
   'brand.libraryTitle': 'ブランドキット',

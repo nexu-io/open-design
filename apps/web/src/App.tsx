@@ -447,6 +447,8 @@ function AppInner() {
   // We show a prompt; once the user enters a token, we bypass bootstrap and
   // send it as Authorization: Bearer on every subsequent API request.
   const [needsToken, setNeedsToken] = useState(false);
+  const [apiTokenError, setApiTokenError] = useState<string | null>(null);
+  const [verifyingToken, setVerifyingToken] = useState(false);
   const apiTokenRef = useRef('');
   const route = useRoute();
   const analytics = useAnalytics();
@@ -2027,29 +2029,27 @@ function AppInner() {
   // The token is injected ONLY on same-origin /api/* requests to avoid
   // leaking the daemon bearer token to off-origin analytics or external API
   // calls that the app also makes via window.fetch.
-  const handleApiTokenSubmit = useCallback((token: string) => {
+  const handleApiTokenSubmit = useCallback(async (token: string) => {
+    setVerifyingToken(true);
+    setApiTokenError(null);
+    try {
+      const probe = await fetch('/api/agents', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!probe.ok && probe.status === 401) {
+        setApiTokenError(t('apiTokenPrompt.invalidToken'));
+        setVerifyingToken(false);
+        return;
+      }
+    } catch {
+      setApiTokenError(t('apiTokenPrompt.invalidToken'));
+      setVerifyingToken(false);
+      return;
+    }
+
     apiTokenRef.current = token;
     setApiToken(token);
-
-    const originalFetch = window.fetch.bind(window);
-    window.fetch = ((input, init) => {
-      const url = new URL(
-        typeof input === 'string' ? input
-          : input instanceof Request ? input.url
-          : (input instanceof URL ? input.href : ''),
-        location.href,
-      );
-      if (url.origin === location.origin && url.pathname.startsWith('/api/')) {
-        const headers = new Headers(init?.headers);
-        if (!headers.has('Authorization')) {
-          headers.set('Authorization', `Bearer ${token}`);
-        }
-        return originalFetch(input, { ...init, headers });
-      }
-      return originalFetch(input, init);
-    }) as typeof window.fetch;
-
-    setNeedsToken(false);
+    setVerifyingToken(false);
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
@@ -2179,7 +2179,13 @@ function AppInner() {
     config.onboardingCompleted !== true &&
     !daemonConfigLoaded;
   if (needsToken) {
-    appMain = <ApiTokenPrompt onSubmit={handleApiTokenSubmit} />;
+    appMain = (
+      <ApiTokenPrompt
+        onSubmit={handleApiTokenSubmit}
+        error={apiTokenError ?? undefined}
+        submitting={verifyingToken}
+      />
+    );
   } else if (pendingFirstRunOnboardingRoute) {
     appMain = (
       <div className="entry-shell entry-shell--no-header">
