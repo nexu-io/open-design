@@ -1,5 +1,6 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { posix } from "node:path";
@@ -38,6 +39,7 @@ import {
   resolveLinuxLifecycleMode,
   resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
+  stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
 } from "../src/linux.js";
@@ -86,6 +88,19 @@ function makeConfig(): ToolPackConfig {
     webOutputMode: "server",
     workspaceRoot: "/work",
   };
+}
+
+const linuxOnlyIt = process.platform === "linux" ? it : it.skip;
+
+async function waitForChildExit(child: ChildProcess, timeoutMs = 5000): Promise<void> {
+  if (child.exitCode != null || child.signalCode != null) return;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 describe("buildDockerArgs", () => {
@@ -502,6 +517,103 @@ describe("stopPackedLinuxHeadless", () => {
   });
 });
 
+describe("stopPackedLinuxApp", () => {
+  linuxOnlyIt("treats a direct AppRun-launched Electron process as owned", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-direct-apprun-"));
+    const namespace = "direct-apprun";
+    const outputNamespaceRoot = join(root, "out", "linux", "namespaces", namespace);
+    const runtimeNamespaceBaseRoot = join(root, "runtime", "linux", "namespaces");
+    const runtimeNamespaceRoot = join(runtimeNamespaceBaseRoot, namespace);
+    const config: ToolPackConfig = {
+      ...makeConfig(),
+      namespace,
+      roots: {
+        ...makeConfig().roots,
+        output: {
+          ...makeConfig().roots.output,
+          appBuilderRoot: join(outputNamespaceRoot, "builder"),
+          namespaceRoot: outputNamespaceRoot,
+        },
+        runtime: {
+          namespaceBaseRoot: runtimeNamespaceBaseRoot,
+          namespaceRoot: runtimeNamespaceRoot,
+        },
+      },
+    };
+    const appDir = join(root, "AppDir");
+    const executablePath = join(appDir, "Open Design");
+    const appRunPath = join(appDir, "AppRun");
+    const markerPath = join(runtimeNamespaceRoot, "runtime", "desktop-root.json");
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      }),
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace,
+      source: SIDECAR_SOURCES.PACKAGED,
+    };
+    let child: ChildProcess | null = null;
+
+    try {
+      await mkdir(appDir, { recursive: true });
+      await copyFile(process.execPath, executablePath);
+      await chmod(executablePath, 0o755);
+      await writeFile(appRunPath, "#!/bin/sh\n", "utf8");
+      await mkdir(config.roots.output.appBuilderRoot, { recursive: true });
+      await writeFile(join(config.roots.output.appBuilderRoot, "Open-Design.direct-apprun.AppImage"), "", "utf8");
+
+      child = spawn(executablePath, ["-e", "setInterval(() => {}, 1000)"], {
+        env: { ...process.env, APPIMAGE: appRunPath },
+        stdio: "ignore",
+      });
+      await new Promise<void>((resolve, reject) => {
+        child?.once("spawn", resolve);
+        child?.once("error", reject);
+      });
+      expect(child.pid).toEqual(expect.any(Number));
+      await access(`/proc/${child.pid}/exe`);
+
+      await mkdir(dirname(markerPath), { recursive: true });
+      await writeFile(
+        markerPath,
+        `${JSON.stringify({
+          appPath: "/",
+          executablePath,
+          logPath: join(runtimeNamespaceRoot, "logs", "desktop", "latest.log"),
+          namespaceRoot: runtimeNamespaceRoot,
+          pid: child.pid,
+          ppid: process.pid,
+          stamp,
+          startedAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+          version: 1,
+        })}\n`,
+        "utf8",
+      );
+
+      vi.mocked(requestJsonIpc).mockRejectedValue(new Error("shutdown unavailable in test"));
+      const result = await stopPackedLinuxApp(config);
+
+      expect(result.status).toBe("stopped");
+      expect(result.stoppedPids).toContain(child.pid);
+      expect(result.remainingPids).toEqual([]);
+    } finally {
+      if (child?.pid != null && child.exitCode == null && child.signalCode == null) {
+        try {
+          process.kill(child.pid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+        await waitForChildExit(child, 1000);
+      }
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("resolveProductionInstallCommand", () => {
   it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
     expect(resolveProductionInstallCommand({})).toEqual({
@@ -801,6 +913,30 @@ describe("matchesAppImageProcess", () => {
   it("rejects extracted-mode when APPIMAGE env is missing", () => {
     const ok = matchesAppImageProcess(
       { pid: 1234, executable: "/tmp/.mount_abc123/AppRun", env: {} },
+      installPath,
+    );
+    expect(ok).toBe(false);
+  });
+
+  it("matches direct AppRun fallback when APPIMAGE points to the sibling AppRun", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        env: { APPIMAGE: "/tmp/appimage_extracted_fe548e54/AppRun" },
+      },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("rejects direct AppRun fallback when APPIMAGE points outside the executable directory", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        env: { APPIMAGE: "/tmp/other/AppRun" },
+      },
       installPath,
     );
     expect(ok).toBe(false);

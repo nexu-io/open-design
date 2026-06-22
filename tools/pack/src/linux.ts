@@ -332,8 +332,16 @@ export function matchesAppImageProcess(
   // In both cases the AppImage runtime sets $APPIMAGE to the original install path.
   const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/AppRun$/.test(snapshot.executable);
   const isExtractedRunner = /^\/tmp\/appimage_extracted_[^/]+\/[^/]+$/.test(snapshot.executable);
-  if (!isMountedRunner && !isExtractedRunner) return false;
-  return snapshot.env.APPIMAGE === installPath;
+  if ((isMountedRunner || isExtractedRunner) && snapshot.env.APPIMAGE === installPath) {
+    return true;
+  }
+
+  // Direct AppRun launches do not know the installed .AppImage path. Our AppRun
+  // fallback sets $APPIMAGE to the sibling AppRun before execing Electron.
+  return (
+    basename(snapshot.executable) === PRODUCT_NAME &&
+    snapshot.env.APPIMAGE === join(dirname(snapshot.executable), "AppRun")
+  );
 }
 
 // --- Step 1: LinuxPaths type and resolveLinuxPaths ---
