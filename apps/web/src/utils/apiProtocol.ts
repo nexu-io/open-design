@@ -55,7 +55,7 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
   return Boolean(cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com');
 }
 
-export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
+export function supportsNativeImageAttachmentSerialization(cfg: AppConfig): boolean {
   if (cfg.apiProtocol === 'azure') return true;
   if (cfg.apiProtocol === 'openai') {
     return isKnownNativeImageModel(cfg.model);
@@ -73,6 +73,11 @@ export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
     return isKnownNativeImageModel(cfg.model);
   }
   return true;
+}
+
+export function shouldOmitNativeImageAttachmentMetadata(cfg: AppConfig): boolean {
+  if (cfg.apiProtocol === 'azure') return false;
+  return supportsNativeImageAttachmentSerialization(cfg);
 }
 
 function isKnownNativeImageModel(model: string): boolean {
