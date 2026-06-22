@@ -264,6 +264,8 @@ export function renderLinuxPackagedMainEntry(): string {
   return 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
 }
 
+export const LINUX_APPIMAGE_EXECUTABLE_ARGS = ["--"] as const;
+
 export type AppImageProcessSnapshot = {
   pid: number;
   executable: string;
@@ -576,6 +578,14 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       category: "Development",
       synopsis: "Open Design",
       maintainer: "Open Design Contributors",
+    },
+    // electron-builder's AppImage target injects `--no-sandbox` when
+    // executableArgs is unset. AppImageLauncher copies that embedded Exec line
+    // into its generated desktop entry, which breaks when the launch environment
+    // includes ELECTRON_RUN_AS_NODE. A non-empty end-of-options marker suppresses
+    // the default while still letting electron-builder append its `%U` placeholder.
+    appImage: {
+      executableArgs: [...LINUX_APPIMAGE_EXECUTABLE_ARGS],
     },
     nodeGypRebuild: false,
     npmRebuild: false,

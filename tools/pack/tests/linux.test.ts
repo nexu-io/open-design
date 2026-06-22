@@ -30,6 +30,7 @@ import {
   cleanupPackedLinuxNamespace,
   createLinuxDesktopLaunchEnv,
   inspectPackedLinuxApp,
+  LINUX_APPIMAGE_EXECUTABLE_ARGS,
   matchesAppImageProcess,
   renderDesktopTemplate,
   renderLinuxPackagedMainEntry,
@@ -621,6 +622,12 @@ describe("renderLinuxPackagedMainEntry", () => {
     expect(out).toContain('import("@open-design/packaged")');
     expect(out).not.toContain('require("@open-design/packaged")');
     expect(out).not.toContain("setTimeout");
+  });
+});
+
+describe("LINUX_APPIMAGE_EXECUTABLE_ARGS", () => {
+  it("uses an end-of-options marker so electron-builder does not inject --no-sandbox", () => {
+    expect([...LINUX_APPIMAGE_EXECUTABLE_ARGS]).toEqual(["--"]);
   });
 });
 
