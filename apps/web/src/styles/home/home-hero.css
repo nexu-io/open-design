@@ -2054,8 +2054,14 @@
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   padding: 1px 2px 8px;
-  scrollbar-width: thin;
+  /* Hide the native horizontal scrollbar (#4609). On overlay-scrollbar
+     platforms it was a wide thumb floating over the bottom edge / titles of
+     the cards. The partially-revealed next card plus scroll-snap already
+     signal that the row scrolls, so this mirrors the sibling horizontal
+     scroller `.home-hero__mention-tabs` rather than competing with the cards. */
+  scrollbar-width: none;
 }
+.home-hero__plugin-presets::-webkit-scrollbar { display: none; }
 
 .home-hero__plugin-preset {
   appearance: none;
