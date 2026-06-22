@@ -337,6 +337,7 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
     registryResiduesRemoved,
     uninstalledAt: new Date().toISOString(),
   }).catch(() => undefined));
+  const removedCacheRoot = removalPlan.some((target) => target.scope === "cache" && target.willRemove && target.exists);
   const removedDataRoot = removalPlan.some((target) => target.scope === "data" && target.willRemove && target.exists);
   const removedLogsRoot = removalPlan.some((target) => target.scope === "logs" && target.willRemove && target.exists);
   const removedSidecarRoot = removalPlan.some((target) => target.scope === "sidecars" && target.willRemove && target.exists);
@@ -349,6 +350,7 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
     markerPath: paths.uninstallMarkerPath,
     namespace: config.namespace,
     nsisLogPath: paths.nsisLogPath,
+    removedCacheRoot,
     registryResiduesRemoved,
     removedDataRoot,
     removedLogsRoot,
@@ -374,6 +376,7 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   const removedOutputRoot = await pathExists(config.roots.output.namespaceRoot);
   const removedRuntimeNamespaceRoot = await pathExists(config.roots.runtime.namespaceRoot);
   const removedLauncherNamespaceRoot = await pathExists(launcher.paths.namespaceRoot);
+  const removedCacheRoot = removalPlan.some((target) => target.scope === "cache" && target.willRemove && target.exists);
   const removedProductUserDataRoot = removalPlan.some((target) => target.scope === "product-user-data" && target.willRemove && target.exists);
   await cleanupWinRegistryResidues(registeredPaths, config);
   for (const target of removalPlan) {
@@ -385,6 +388,7 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   return {
     namespace: config.namespace,
     removedLauncherNamespaceRoot,
+    removedCacheRoot,
     removedOutputRoot,
     removedProductUserDataRoot,
     removedRuntimeNamespaceRoot,

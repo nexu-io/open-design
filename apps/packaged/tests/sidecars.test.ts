@@ -18,8 +18,11 @@
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
@@ -30,6 +33,10 @@ import {
   waitForStatus,
 } from '../src/sidecars.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
+
+function slashPath(value: string): string {
+  return value.replaceAll('\\', '/');
+}
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the default 35-second budget for normal cold boots', () => {
@@ -104,11 +111,15 @@ describe('packaged child Vite+ environment forwarding', () => {
       HTTPS_PROXY: 'http://127.0.0.1:7891',
       NODE_USE_ENV_PROXY: '1',
       NO_PROXY: 'localhost,127.0.0.1,::1',
-      all_proxy: 'socks5://127.0.0.1:1081',
-      http_proxy: 'http://127.0.0.1:7891',
-      https_proxy: 'http://127.0.0.1:7891',
-      no_proxy: 'localhost,127.0.0.1,::1',
     });
+    if (process.platform !== 'win32') {
+      expect(env).toMatchObject({
+        all_proxy: 'socks5://127.0.0.1:1081',
+        http_proxy: 'http://127.0.0.1:7891',
+        https_proxy: 'http://127.0.0.1:7891',
+        no_proxy: 'localhost,127.0.0.1,::1',
+      });
+    }
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
@@ -216,9 +227,9 @@ describe('resolvePackagedElectronNodeCommand', () => {
   it('uses the hidden Electron helper as the macOS Electron-as-Node command when available', async () => {
     const root = mkdtempSync(join(tmpdir(), 'od-packaged-electron-helper-'));
     try {
-      const appPath = join(root, 'Open Design.app');
-      const execPath = join(appPath, 'Contents', 'MacOS', 'Open Design');
-      const helperPath = join(
+      const appPath = posix.join(root.replaceAll('\\', '/'), 'Open Design.app');
+      const execPath = posix.join(appPath, 'Contents', 'MacOS', 'Open Design');
+      const helperPath = posix.join(
         appPath,
         'Contents',
         'Frameworks',
@@ -228,12 +239,14 @@ describe('resolvePackagedElectronNodeCommand', () => {
         'Open Design Helper',
       );
 
-      mkdirSync(join(appPath, 'Contents', 'MacOS'), { recursive: true });
+      mkdirSync(posix.join(appPath, 'Contents', 'MacOS'), { recursive: true });
       mkdirSync(dirname(helperPath), { recursive: true });
       writeFileSync(execPath, '#!/bin/sh\n', 'utf8');
       writeFileSync(helperPath, '#!/bin/sh\n', 'utf8');
 
-      await expect(resolvePackagedElectronNodeCommand(execPath, 'darwin')).resolves.toBe(helperPath);
+      await expect(resolvePackagedElectronNodeCommand(execPath, 'darwin')).resolves.toSatisfy(
+        (value: string) => slashPath(value) === helperPath,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -267,15 +280,18 @@ describe('resolvePackagedElectronNodeCommand', () => {
  */
 function fakeChild(): EventEmitter & {
   exitCode: number | null;
+  pid: number;
   signalCode: NodeJS.Signals | null;
   fireExit: (code: number | null, signal: NodeJS.Signals | null) => void;
 } {
   const emitter = new EventEmitter() as EventEmitter & {
     exitCode: number | null;
+    pid: number;
     signalCode: NodeJS.Signals | null;
     fireExit: (code: number | null, signal: NodeJS.Signals | null) => void;
   };
   emitter.exitCode = null;
+  emitter.pid = 1234;
   emitter.signalCode = null;
   emitter.fireExit = (code, signal) => {
     emitter.exitCode = code;
@@ -499,5 +515,43 @@ describe('waitForStatus child-exit fast-fail', () => {
     expect((captured as Error).message).toMatch(/daemon exited before reporting status/);
     expect((captured as Error).message).toContain('code=2');
     expect(elapsed).toBeLessThan(2_000);
+  });
+
+  it('does not accept ready status from a stale IPC endpoint owned by a different pid', async () => {
+    const child = fakeChild();
+    child.pid = 5678;
+    const ipcPath = resolveAppIpcPath({
+      app: APP_KEYS.WEB,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: `stale-ipc-${process.pid}-${Date.now()}`,
+    });
+    const server = await createJsonIpcServer({
+      socketPath: ipcPath,
+      handler: async () => ({
+        pid: 1234,
+        state: 'running',
+        updatedAt: new Date().toISOString(),
+        url: 'http://127.0.0.1:1234',
+      }),
+    });
+
+    try {
+      let captured: unknown;
+      try {
+        await waitForStatus<{ pid?: number | null; url: string | null }>(
+          ipcPath,
+          (status) => status.url != null,
+          250,
+          { child, logPath: join(tmpdir(), 'od-test-web.log') },
+        );
+      } catch (err) {
+        captured = err;
+      }
+
+      expect(captured).toBeInstanceOf(Error);
+      expect((captured as Error).message).toContain('sidecar status pid 1234 did not match spawned pid 5678');
+    } finally {
+      await server.close();
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache.js";
@@ -65,7 +66,14 @@ import type {
 const execFileAsync = promisify(execFile);
 const WIN_ARCHIVE_CACHE_VERSION = 3;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 6;
-const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 1;
+const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
+
+async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
+  const sourceModulePath = join(config.workspaceRoot, "tools", "pack", "src", "win", "custom-installer.ts");
+  if (await pathExists(sourceModulePath)) return hashPath(sourceModulePath);
+  const currentModulePath = fileURLToPath(import.meta.url);
+  return hashPath(currentModulePath);
+}
 
 function logWinBuildProgress(message: string, fields: Record<string, unknown> = {}): void {
   const suffix = Object.entries(fields)
@@ -306,7 +314,13 @@ async function resolveCachedNsisBasePayloadInputHash(
   const cached = await readCachedNsisBasePayloadInputHash(entryPath);
   if (cached != null) return cached;
 
-  const hash = await hashWinNsisBasePayloadInputs(builtApp);
+  const hash = builtApp.cacheEntryPath == null
+    ? await hashWinNsisBasePayloadInputs(builtApp)
+    : hashJson({
+      cacheEntryPath: builtApp.cacheEntryPath,
+      excludedOverlayPaths: resolveWinNsisOverlayRequiredPaths(),
+      version: WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION,
+    });
   await writeFile(
     resolveCachedNsisBasePayloadInputHashPath(entryPath),
     `${JSON.stringify({
@@ -592,6 +606,9 @@ export async function runElectronBuilder(
   });
   if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
     const signingCacheKey = resolveWinSigningCacheKey(config);
+    const nsisInstallerImplementation = shouldBuildWinNsisInstaller(config.to)
+      ? await runSegment("nsis-installer:implementation-hash", () => hashWinNsisInstallerImplementation(config))
+      : null;
     const nsisSetupMaterialize = [
       { from: "setup.exe", reuse: true, to: paths.setupPath },
     ];
@@ -676,6 +693,7 @@ export async function runElectronBuilder(
         archiveCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
         basePayloadKey,
         namespace: config.namespace,
+        nsisInstallerImplementation,
         overlayPayloadKey,
         packagedVersion,
         signing: signingCacheKey,

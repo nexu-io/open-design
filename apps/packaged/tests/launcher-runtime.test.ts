@@ -197,4 +197,54 @@ describe("resolvePackagedLauncherRuntime", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("lets a newer installed package supersede stale persisted payload runtime state before target selection", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-installed-newer-"));
+    try {
+      const config = fakeConfig(root, "1.2.3-beta.6");
+      const paths = resolvePackagedNamespacePaths(config);
+      const namespaceRoot = join(paths.installationRoot, "launcher", "channels", "beta", "namespaces", config.namespace);
+      await mkdir(join(namespaceRoot, "state"), { recursive: true });
+      await writeFile(
+        join(namespaceRoot, "runtime.json"),
+        `${JSON.stringify({
+          active: { generation: 1, version: "1.2.3-beta.5" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "1.2.3-beta.4" },
+          namespace: config.namespace,
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+      await writeFile(
+        join(namespaceRoot, "state", "attempt.json"),
+        `${JSON.stringify({
+          channel: "beta",
+          generation: 1,
+          namespace: config.namespace,
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+          version: "1.2.3-beta.5",
+        })}\n`,
+      );
+
+      const runtime = await resolvePackagedLauncherRuntime(config, paths);
+
+      expect(runtime.source).toBe("current-package");
+      expect(runtime.config.appVersion).toBe("1.2.3-beta.6");
+      expect(JSON.parse(await readFile(runtime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
+        active: { generation: 0, version: "1.2.3-beta.6" },
+        lastSuccessful: { generation: 0, version: "1.2.3-beta.6" },
+      });
+      await expect(readFile(runtime.launcherPaths.attemptsPath, "utf8")).rejects.toThrow();
+      expect(JSON.parse(await readFile(runtime.launcherPaths.cleanupPath, "utf8"))).toMatchObject({
+        currentVersion: "1.2.3-beta.6",
+        versions: expect.arrayContaining([
+          expect.objectContaining({ reason: "older-than-bound-package", state: "deprecated", version: "1.2.3-beta.5" }),
+          expect.objectContaining({ reason: "older-than-bound-package", state: "deprecated", version: "1.2.3-beta.4" }),
+          expect.objectContaining({ reason: "current-bound-package", state: "retained", version: "1.2.3-beta.6" }),
+        ]),
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });

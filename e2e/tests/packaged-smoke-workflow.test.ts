@@ -23,6 +23,7 @@ const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workfl
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
+const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package.json");
 const releaseBetaScriptPath = join(workspaceRoot, "scripts", "release-beta.ts");
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
@@ -73,6 +74,14 @@ async function runReleaseStableForFailure(env: Record<string, string>): Promise<
   }
 
   throw new Error("release-stable script unexpectedly succeeded");
+}
+
+async function readPackagedVersion(): Promise<string> {
+  const packageJson = JSON.parse(await readFile(packagedPackageJsonPath, "utf8")) as { version?: unknown };
+  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+    throw new Error("apps/packaged/package.json must define a version");
+  }
+  return packageJson.version;
 }
 
 async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
@@ -482,13 +491,11 @@ describe("packaged smoke workflow", () => {
   });
 
   it("[P2] validates stable dry-run nightly metadata from a non-release ref", async () => {
+    const baseVersion = await readPackagedVersion();
+    const nightlyVersion = `${baseVersion}.nightly.12`;
     const objects: Record<string, unknown> = {};
     const fixture = await startStableNightlyMetadataServer(objects);
-    objects["nightly/versions/0.11.0.nightly.12/metadata.json"] = stableNightlyMetadataFixture(
-      "0.11.0",
-      "0.11.0.nightly.12",
-      fixture.origin,
-    );
+    objects[`nightly/versions/${nightlyVersion}/metadata.json`] = stableNightlyMetadataFixture(baseVersion, nightlyVersion, fixture.origin);
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-stable-dry-run-"));
 
     try {
@@ -506,16 +513,16 @@ describe("packaged smoke workflow", () => {
           OPEN_DESIGN_RELEASE_CHANNEL: "stable",
           OPEN_DESIGN_RELEASE_DRY_RUN: "true",
           OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: fixture.origin,
-          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: "0.11.0.nightly.12",
-          OPEN_DESIGN_STABLE_VERSION: "0.11.0",
+          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: nightlyVersion,
+          OPEN_DESIGN_STABLE_VERSION: baseVersion,
           PATH: `${join(runnerTemp, "bin")}:${process.env.PATH ?? ""}`,
         },
       });
 
-      expect(result.stdout).toContain("[release-stable] validated nightly: 0.11.0.nightly.12");
+      expect(result.stdout).toContain(`[release-stable] validated nightly: ${nightlyVersion}`);
       expect(result.stdout).toContain("[release-stable] channel: stable");
       expect(result.stdout).toContain("[release-stable] dry run: true");
-      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.11.0");
+      expect(result.stdout).toContain(`[release-stable] version tag: open-design-v${baseVersion}`);
     } finally {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });

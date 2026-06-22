@@ -12,6 +12,7 @@ import {
   LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
   LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
   LAUNCHER_SCHEMA_VERSION,
+  resolveLauncherPaths,
 } from "@open-design/launcher-proto";
 import {
   DESKTOP_UPDATE_CHANNELS,
@@ -2408,6 +2409,90 @@ describe("desktop updater", () => {
       expect(cleanup.releases[0]?.state).toBe("cleanup-removed");
       expect(cleanup.releases[0]?.deprecatedAt).toBe("2026-06-08T00:00:00.000Z");
       expect(existsSync(join(root, "releases", "1.0.0-beta.0-win-x64-old0"))).toBe(false);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("cleans deprecated launcher payload versions on cold start from the launcher cleanup descriptor", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ channel: "beta", platform: "win", version: "1.0.0-beta.3" });
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    try {
+      const launcherPaths = resolveLauncherPaths({
+        channel: "beta",
+        namespace: "release-beta-win",
+        root,
+      });
+      await mkdir(join(launcherPaths.versionsRoot, "1.0.0-beta.2"), { recursive: true });
+      await writeFile(join(launcherPaths.versionsRoot, "1.0.0-beta.2", "manifest.json"), "{}\n", "utf8");
+      await mkdir(launcherPaths.stateRoot, { recursive: true });
+      await writeFile(launcherPaths.runtimePath, `${JSON.stringify({
+        active: { generation: 0, version: "1.0.0-beta.3" },
+        channel: "beta",
+        lastSuccessful: { generation: 0, version: "1.0.0-beta.3" },
+        namespace: "release-beta-win",
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      }, null, 2)}\n`, "utf8");
+      await writeFile(launcherPaths.cleanupPath, `${JSON.stringify({
+        channel: "beta",
+        currentVersion: "1.0.0-beta.3",
+        namespace: "release-beta-win",
+        updatedAt: "2026-06-08T00:00:00.000Z",
+        version: 1,
+        versions: [
+          {
+            generation: 1,
+            reason: "older-than-bound-package",
+            state: "deprecated",
+            updatedAt: "2026-06-08T00:00:00.000Z",
+            version: "1.0.0-beta.2",
+          },
+          {
+            generation: 0,
+            reason: "current-bound-package",
+            state: "retained",
+            updatedAt: "2026-06-08T00:00:00.000Z",
+            version: "1.0.0-beta.3",
+          },
+        ],
+      }, null, 2)}\n`, "utf8");
+
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CHANNEL]: DESKTOP_UPDATE_CHANNELS.BETA,
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.3",
+        },
+        launcherRoot: root,
+        launcherRuntimePath: launcherPaths.runtimePath,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        logger,
+        now: () => new Date("2026-06-09T07:50:51.000Z"),
+      });
+
+      await updater.status();
+      const cleanup = JSON.parse(await readFile(launcherPaths.cleanupPath, "utf8")) as {
+        versions: Array<{ removedAt?: string; state: string; version: string }>;
+      };
+
+      expect(existsSync(join(launcherPaths.versionsRoot, "1.0.0-beta.2"))).toBe(false);
+      expect(cleanup.versions.find((entry) => entry.version === "1.0.0-beta.2")).toMatchObject({
+        removedAt: "2026-06-09T07:50:51.000Z",
+        state: "cleanup-removed",
+      });
+      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+        event: "launcher-lifecycle",
+        removed: 1,
+        retained: 1,
+        total: 2,
+        trigger: "cold-start",
+      }));
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
