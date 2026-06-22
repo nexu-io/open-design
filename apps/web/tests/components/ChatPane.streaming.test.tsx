@@ -331,6 +331,7 @@ describe('ChatPane streaming state', () => {
             label: 'error',
             detail: 'json-rpc id 4: Connection reset by server',
             code: 'AGENT_EXECUTION_FAILED',
+            model: 'claude-sonnet-4.5',
           },
         ],
       },
@@ -359,16 +360,20 @@ describe('ChatPane streaming state', () => {
 
     await waitFor(() => expect(clipboardMocks.copyToClipboard).toHaveBeenCalledTimes(1));
     const copied = clipboardMocks.copyToClipboard.mock.calls[0]?.[0] ?? '';
+    expect(copied.startsWith('json-rpc id 4: Connection reset by server')).toBe(true);
+    expect(copied).toContain('Error_Info');
     expect(copied).toContain('trace_id: run-trace-123');
     expect(copied).toContain('run_id: run-trace-123');
     expect(copied).toContain('error_code: AGENT_EXECUTION_FAILED');
-    expect(copied).toContain('project_id: project-1');
-    expect(copied).toContain('conversation_id: conv-1');
-    expect(copied).toContain('json-rpc id 4: Connection reset by server');
+    expect(copied).toContain('agent_id: amr');
+    expect(copied).toContain('model: claude-sonnet-4.5');
+    expect(copied).not.toContain('project_id:');
+    expect(copied).not.toContain('conversation_id:');
+    expect(copied).not.toContain('assistant_message_id:');
   });
 
-  it('formats run error diagnostics with a raw error when guidance copy differs', () => {
-    expect(buildRunErrorDiagnosticText({
+  it('formats run error diagnostics with raw error first and error info after it', () => {
+    const text = buildRunErrorDiagnosticText({
       message: 'Service unavailable. Try again.',
       rawMessage: 'json-rpc id 4: Connection reset by server',
       errorCode: 'UPSTREAM_UNAVAILABLE',
@@ -377,7 +382,18 @@ describe('ChatPane streaming state', () => {
       conversationId: 'conv-1',
       assistantMessageId: 'assistant-1',
       agentId: 'amr',
-    })).toContain('raw_error:\njson-rpc id 4: Connection reset by server');
+      model: 'claude-opus-4.8',
+    });
+    expect(text).toBe([
+      'json-rpc id 4: Connection reset by server',
+      '',
+      'Error_Info',
+      'trace_id: run-abc',
+      'run_id: run-abc',
+      'error_code: UPSTREAM_UNAVAILABLE',
+      'agent_id: amr',
+      'model: claude-opus-4.8',
+    ].join('\n'));
   });
 
   it('renders user turns with the chat bubble styling hook', () => {

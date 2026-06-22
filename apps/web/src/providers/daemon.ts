@@ -1197,6 +1197,7 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     return {
       kind: 'status',
       label: normalizeAgentStatusLabel(data.label),
+      ...(typeof data.model === 'string' ? { model: data.model } : {}),
       detail:
         typeof data.detail === 'string'
           ? data.detail

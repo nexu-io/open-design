@@ -2663,7 +2663,12 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
           : typeof data.ttftMs === 'number'
             ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
             : undefined;
-    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+    return {
+      kind: 'status',
+      label: data.label,
+      ...(detail ? { detail } : {}),
+      ...(typeof data.model === 'string' && data.model.trim() ? { model: data.model.trim() } : {}),
+    };
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
