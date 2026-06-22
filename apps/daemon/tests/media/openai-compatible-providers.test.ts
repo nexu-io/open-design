@@ -557,7 +557,7 @@ process.stdin.on('end', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('normalizes stale Codex service_tier before subscription image generation', async () => {
+  it('removes stale Codex service_tier before subscription image generation', async () => {
     const generatedHome = path.join(root, 'stale-tier-codex-home');
     await writeCodexAuth(generatedHome, {
       auth_mode: 'chatgpt',
@@ -569,8 +569,10 @@ process.stdin.on('end', () => {
       'utf8',
     );
     await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
-      expectedConfigIncludes: 'service_tier = "fast"',
-      expectedConfigExcludes: 'service_tier = "default"',
+      // The invalid service_tier line is removed entirely (Codex falls back to
+      // its built-in default tier), so the key is gone and the rest remains.
+      expectedConfigIncludes: 'model = "gpt-5.5"',
+      expectedConfigExcludes: 'service_tier',
       expectedArgsExcludes: 'default_permissions',
     });
 
@@ -586,8 +588,9 @@ process.stdin.on('end', () => {
 
     expect(result.providerId).toBe('codex');
     const after = await readFile(path.join(generatedHome, 'config.toml'), 'utf8');
-    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('service_tier');
     expect(after).not.toContain('"default"');
+    expect(after).toContain('model = "gpt-5.5"');
   });
 
   it('does not reroute OpenAI image models without a Codex twin', async () => {
