@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { getApiToken, setApiToken } from './state/api-token-store';
+import { setApiToken } from './state/api-token-store';
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useAnalytics } from './analytics/provider';
@@ -1990,34 +1990,27 @@ function AppInner() {
   }, []);
 
   // When the user enters their API token through the token prompt, store it
-  // in-memory and re-trigger the bootstrap effect (which skips the bootstrap
-  // exchange since the token is already set).
+  // in-memory, patch window.fetch synchronously with the bearer header, then
+  // clear needsToken so the bootstrap effect re-runs.  Because the fetch
+  // override is installed BEFORE setNeedsToken(false), the re-rendered
+  // bootstrap effect picks up the patched fetch for its fan-out calls —
+  // fetchAgentsStream / fetchSkills / listProjects all authenticate on the
+  // first attempt instead of 401-ing with stale unauthenticated fetch.
   const handleApiTokenSubmit = useCallback((token: string) => {
     apiTokenRef.current = token;
     setApiToken(token);
-    setNeedsToken(false);
-  }, []);
 
-  // In-memory token fetch override: when apiTokenRef holds a value, patch
-  // window.fetch to inject Authorization: Bearer <token> so the fan-out
-  // requests authenticate against the daemon auth middleware. Stored only in
-  // a module-level variable + ref, never persisted to localStorage or cookies.
-  useEffect(() => {
-    const token = apiTokenRef.current;
-    if (!token) return;
     const originalFetch = window.fetch.bind(window);
-    const patchedFetch: typeof window.fetch = (input, init) => {
+    window.fetch = ((input, init) => {
       const headers = new Headers(init?.headers);
       if (!headers.has('Authorization')) {
         headers.set('Authorization', `Bearer ${token}`);
       }
       return originalFetch(input, { ...init, headers });
-    };
-    window.fetch = patchedFetch as typeof window.fetch;
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [apiTokenRef.current]);
+    }) as typeof window.fetch;
+
+    setNeedsToken(false);
+  }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
   // beat the browser's default Preferences dialog. Platform-gated so

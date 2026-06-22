@@ -88,12 +88,40 @@ test('[P0] bootstrap denied shows token prompt', async ({ page }) => {
   await expect(page.getByText('Daemon requires a token')).toBeVisible();
   await expect(page.getByText('OD_API_TOKEN')).toBeVisible();
 
+  // Set up a promise that resolves when /api/app-config is called with the
+  // correct bearer header, proving the fetch override was installed before
+  // the fan-out ran.
+  let appConfigAuthHeader = '';
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') { await route.continue(); return; }
+    appConfigAuthHeader = route.request().headers()['authorization'] ?? '';
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
+
   // Entering a valid token and submitting should dismiss the prompt
   await passwordField.fill('test-daemon-token-abc');
   await page.getByRole('button', { name: /save/i }).click();
 
-  // The prompt should disappear and the app should start loading
+  // The prompt should disappear
   await expect(passwordField).not.toBeVisible({ timeout: T.short });
+
+  // The fan-out /api/app-config call must carry the bearer token (proving the
+  // fetch patch was applied synchronously before setNeedsToken triggered the
+  // re-render that kicked off the fan-out).
+  await expect.poll(() => appConfigAuthHeader, { timeout: T.short })
+    .toBe('Bearer test-daemon-token-abc');
 });
 
 test('[P0] bootstrap denied hides token prompt on daemon health failure', async ({ page }) => {
