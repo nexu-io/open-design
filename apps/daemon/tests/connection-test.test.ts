@@ -3173,6 +3173,10 @@ if (args.includes('acp')) {
   console.error('error: too many arguments. Expected 0 arguments but got 1.');
   process.exit(1);
 }
+if (!args.includes('--print')) {
+  console.error('missing --print flag');
+  process.exit(1);
+}
 const promptIndex = args.indexOf('-p');
 if (promptIndex === -1 || args[promptIndex + 1] !== 'Reply with only: ok') {
   console.error('missing connection-test prompt');
@@ -3183,7 +3187,7 @@ if (outputFormatIndex === -1 || args[outputFormatIndex + 1] !== 'stream-json') {
   console.error('missing --output-format stream-json');
   process.exit(1);
 }
-console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
+console.log(JSON.stringify({ role: 'assistant', content: [{ type: 'text', text: 'ok' }] }));
 `,
         async () => {
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
@@ -3206,6 +3210,7 @@ console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
 
           await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
             JSON.stringify([
+              '--print',
               '-p',
               'Reply with only: ok',
               '--output-format',

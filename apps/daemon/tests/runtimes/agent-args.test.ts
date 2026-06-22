@@ -749,7 +749,7 @@ test('kimi args use prompt-mode JSONL instead of ACP', () => {
   const prompt = 'design a page';
   const args = kimi.buildArgs(prompt, [], [], {});
 
-  assert.deepEqual(args, ['-p', prompt, '--output-format', 'stream-json']);
+  assert.deepEqual(args, ['--print', '-p', prompt, '--output-format', 'stream-json']);
   assert.equal(args.includes('acp'), false);
   assert.equal(args.includes('--yolo'), false);
   assert.equal(kimi.streamFormat, 'json-event-stream');
@@ -762,6 +762,7 @@ test('kimi args pass explicit model selections through prompt mode', () => {
   const args = kimi.buildArgs('hello', [], [], { model: 'moonshot-v1-32k' });
 
   assert.deepEqual(args, [
+    '--print',
     '-p',
     'hello',
     '--output-format',

@@ -258,6 +258,41 @@ test('kimi stream emits OpenAI-style tool calls, tool results, and assistant tex
   ]);
 });
 
+test('kimi stream extracts text from array content blocks (stream-json format)', () => {
+  const { events, handler } = collectEvents('kimi');
+
+  handler.feed(
+    JSON.stringify({
+      role: 'assistant',
+      content: [
+        { type: 'think', think: 'The user wants a greeting.', encrypted: null },
+        { type: 'text', text: 'Hello!' },
+      ],
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'Hello!' },
+  ]);
+});
+
+test('kimi stream silently drops think-only array content without emitting text_delta', () => {
+  const { events, handler } = collectEvents('kimi');
+
+  handler.feed(
+    JSON.stringify({
+      role: 'assistant',
+      content: [
+        { type: 'think', think: 'Thinking...', encrypted: null },
+      ],
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, []);
+});
+
 test('gemini stream handles real stream-json user, tool, and error frames', () => {
   const { events, handler } = collectEvents('gemini');
 
