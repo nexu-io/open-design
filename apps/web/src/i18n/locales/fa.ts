@@ -3071,4 +3071,7 @@ export const fa: Dict = {
   'mcpClient.notForwardedToLabel': 'ارسال‌نشده به:',
   'mcpClient.forwardedAcpNote': 'آداپتورهای ACP که با stdio علامت‌گذاری شده‌اند فقط سرورهای MCP از نوع stdio را از این فهرست دریافت می‌کنند؛ ورودی‌های HTTP و SSE هنگام راه‌اندازی حذف می‌شوند.',
   'mcpClient.notForwardedNote': 'برای آن Agentها، سرورهای MCP را در فایل پیکربندی خودِ Agent تنظیم کنید (مثلاً ~/.codex/config.toml، ~/.gemini/settings.json)؛ سرورهای زیر در آن‌جا بی‌سروصدا بلااستفاده می‌مانند.',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };

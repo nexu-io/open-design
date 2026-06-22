@@ -3071,4 +3071,7 @@ export const ja: Dict = {
   'mcpClient.notForwardedToLabel': '転送されない先：',
   'mcpClient.forwardedAcpNote': 'stdio only と表示された ACP アダプターは、このリストから stdio タイプの MCP サーバーのみを受け取ります。HTTP と SSE のエントリは起動時に破棄されます。',
   'mcpClient.notForwardedNote': 'これらのエージェントについては、各エージェント自身の設定ファイル（例：~/.codex/config.toml、~/.gemini/settings.json）で MCP サーバーを設定してください。以下のサーバーはそこでは使用されません。',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };

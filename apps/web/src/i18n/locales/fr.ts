@@ -3071,4 +3071,7 @@ export const fr: Dict = {
   'mcpClient.notForwardedToLabel': 'Non transféré vers :',
   'mcpClient.forwardedAcpNote': 'Les adaptateurs ACP marqués stdio ne reçoivent que les serveurs MCP stdio de cette liste ; les entrées HTTP et SSE sont abandonnées au lancement.',
   'mcpClient.notForwardedNote': 'Pour ces agents, configurez les serveurs MCP dans le fichier de configuration propre à l\'agent (par ex. ~/.codex/config.toml, ~/.gemini/settings.json) ; les serveurs ci-dessous y sont inutilisés sans avertissement.',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };

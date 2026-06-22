@@ -3072,4 +3072,7 @@ export const zhCN: Dict = {
   'mcpClient.notForwardedToLabel': '未转发给：',
   'mcpClient.forwardedAcpNote': '标记为 stdio only 的 ACP 适配器只会从此列表接收 stdio 类型的 MCP 服务器；HTTP 和 SSE 条目会在启动时被丢弃。',
   'mcpClient.notForwardedNote': '对于这些智能体，请在其各自的配置文件中配置 MCP 服务器（例如 ~/.codex/config.toml、~/.gemini/settings.json）；下方的服务器在那里不会生效。',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };

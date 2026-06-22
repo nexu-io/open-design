@@ -3071,4 +3071,7 @@ export const tr: Dict = {
   'mcpClient.notForwardedToLabel': 'İletilmediği yer:',
   'mcpClient.forwardedAcpNote': 'stdio olarak işaretlenen ACP adaptörleri bu listeden yalnızca stdio MCP sunucularını alır; HTTP ve SSE girdileri başlatma sırasında düşürülür.',
   'mcpClient.notForwardedNote': 'Bu agent\'lar için MCP sunucularını agent\'ın kendi yapılandırma dosyasında ayarlayın (ör. ~/.codex/config.toml, ~/.gemini/settings.json); aşağıdaki sunucular orada sessizce kullanılmaz.',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };

@@ -3203,4 +3203,7 @@ export interface Dict {
   'diagnostics.exporting': string;
   'diagnostics.exportSuccess': string;
   'diagnostics.exportFailed': string;
+  'apiTokenPrompt.title': string;
+  'apiTokenPrompt.description': string;
+  'apiTokenPrompt.placeholder': string;
 }

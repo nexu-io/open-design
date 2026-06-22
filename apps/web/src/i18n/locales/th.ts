@@ -3071,4 +3071,7 @@ export const th: Dict = {
   'mcpClient.notForwardedToLabel': 'ไม่ได้ส่งต่อไปยัง:',
   'mcpClient.forwardedAcpNote': 'ACP adapter ที่ทำเครื่องหมาย stdio จะรับเฉพาะเซิร์ฟเวอร์ MCP แบบ stdio จากรายการนี้เท่านั้น รายการ HTTP และ SSE จะถูกตัดทิ้งในเวลาที่ spawn',
   'mcpClient.notForwardedNote': 'สำหรับ Agent เหล่านั้น ให้กำหนดค่าเซิร์ฟเวอร์ MCP ในไฟล์ config ของ Agent เอง (เช่น ~/.codex/config.toml, ~/.gemini/settings.json) เซิร์ฟเวอร์ด้านล่างจะไม่ถูกใช้งานที่นั่นโดยไม่มีการแจ้งเตือน',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };

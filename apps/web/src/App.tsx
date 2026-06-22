@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { getApiToken, setApiToken } from './state/api-token-store';
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useAnalytics } from './analytics/provider';
@@ -22,6 +23,7 @@ import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewPro
 import { MemoryToast } from './components/MemoryToast';
 import { Toast } from './components/Toast';
 import { CenteredLoader } from './components/Loading';
+import { ApiTokenPrompt } from './components/ApiTokenPrompt';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
@@ -435,6 +437,12 @@ function AppInner() {
   // mistake for "no key saved" — and to disable Save/Clear so a misclick
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
+  // When bootstrap returns 403, the daemon requires an API token that the
+  // auto-bootstrap cookie exchange cannot provide (e.g. proxied deployment).
+  // We show a prompt; once the user enters a token, we bypass bootstrap and
+  // send it as Authorization: Bearer on every subsequent API request.
+  const [needsToken, setNeedsToken] = useState(false);
+  const apiTokenRef = useRef('');
   const route = useRoute();
   const analytics = useAnalytics();
 
@@ -774,38 +782,47 @@ function AppInner() {
         return;
       }
 
-      // Auto-bootstrap: if the daemon has API auth enabled, get a single-use
-      // nonce and exchange it for a session cookie before the initial API
-      // fan-out below.  The nonce expires in 60s, can only be redeemed once,
-      // is bound to the requesting IP, and is available on loopback or
-      // private-subnet networks (so reverse-proxy deployments work).
-      // Untrusted-network requests 403 and fall through — the user enters
-      // the token manually if they hit 401s.
-      // Awaiting the exchange ensures the cookie is visible to the concurrent
-      // fetchAgentsStream / fetchSkills / listProjects calls that follow.
-      // 10s timeout guards against a hung daemon blocking the entire boot.
-      const bootstrapAbort = new AbortController();
-      const bootstrapTimeout = setTimeout(() => bootstrapAbort.abort(), 10_000);
-      const clientTag = crypto.randomUUID();
-      try {
-        const tokenRes = await fetch(`/api/auth/bootstrap-token?clientTag=${clientTag}`, {
-          signal: bootstrapAbort.signal,
-        });
-        if (tokenRes.ok) {
-          const { nonce } = await tokenRes.json();
-          if (nonce) {
-            await fetch('/api/auth/bootstrap', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nonce, clientTag }),
-              signal: bootstrapAbort.signal,
-            });
+      // If the user already provided a token via the ApiTokenPrompt, skip
+      // bootstrap entirely and rely on the bearer token sent on every fetch.
+      if (!apiTokenRef.current) {
+        // Auto-bootstrap: if the daemon has API auth enabled, get a single-use
+        // nonce and exchange it for a session cookie before the initial API
+        // fan-out below.  The nonce expires in 60s, can only be redeemed once,
+        // is bound to the requesting IP, and is available on loopback or
+        // private-subnet networks (so reverse-proxy deployments work).
+        // Untrusted-network requests 403 — we show a token prompt.
+        // Awaiting the exchange ensures the cookie is visible to the concurrent
+        // fetchAgentsStream / fetchSkills / listProjects calls that follow.
+        // 10s timeout guards against a hung daemon blocking the entire boot.
+        const bootstrapAbort = new AbortController();
+        const bootstrapTimeout = setTimeout(() => bootstrapAbort.abort(), 10_000);
+        const clientTag = crypto.randomUUID();
+        try {
+          const tokenRes = await fetch(`/api/auth/bootstrap-token?clientTag=${clientTag}`, {
+            signal: bootstrapAbort.signal,
+          });
+          if (!tokenRes.ok && tokenRes.status === 403) {
+            // Daemon refuses bootstrap (e.g. proxied request).  Prompt user.
+            setNeedsToken(true);
+            clearTimeout(bootstrapTimeout);
+            return; // stop here — fan-out below will run once token is provided
           }
+          if (tokenRes.ok) {
+            const { nonce } = await tokenRes.json();
+            if (nonce) {
+              await fetch('/api/auth/bootstrap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce, clientTag }),
+                signal: bootstrapAbort.signal,
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[od] Bootstrap auth failed, proceeding without cookie:', err);
+        } finally {
+          clearTimeout(bootstrapTimeout);
         }
-      } catch (err) {
-        console.warn('[od] Bootstrap auth failed, proceeding without cookie:', err);
-      } finally {
-        clearTimeout(bootstrapTimeout);
       }
 
       const agentRequestId = beginAgentStreamRequest();
@@ -990,6 +1007,7 @@ function AppInner() {
     beginProjectListRequest,
     isCurrentAgentStreamRequest,
     reconcileFetchedProjects,
+    needsToken,
   ]);
 
   // Auto-pick the first available agent once both the daemon-stored config
@@ -1971,6 +1989,36 @@ function AppInner() {
     setConfig(next);
   }, []);
 
+  // When the user enters their API token through the token prompt, store it
+  // in-memory and re-trigger the bootstrap effect (which skips the bootstrap
+  // exchange since the token is already set).
+  const handleApiTokenSubmit = useCallback((token: string) => {
+    apiTokenRef.current = token;
+    setApiToken(token);
+    setNeedsToken(false);
+  }, []);
+
+  // In-memory token fetch override: when apiTokenRef holds a value, patch
+  // window.fetch to inject Authorization: Bearer <token> so the fan-out
+  // requests authenticate against the daemon auth middleware. Stored only in
+  // a module-level variable + ref, never persisted to localStorage or cookies.
+  useEffect(() => {
+    const token = apiTokenRef.current;
+    if (!token) return;
+    const originalFetch = window.fetch.bind(window);
+    const patchedFetch: typeof window.fetch = (input, init) => {
+      const headers = new Headers(init?.headers);
+      if (!headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      return originalFetch(input, { ...init, headers });
+    };
+    window.fetch = patchedFetch as typeof window.fetch;
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [apiTokenRef.current]);
+
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
   // beat the browser's default Preferences dialog. Platform-gated so
   // meta/ctrl don't conflict across OS.
@@ -2097,7 +2145,9 @@ function AppInner() {
     route.view === 'home' &&
     config.onboardingCompleted !== true &&
     !daemonConfigLoaded;
-  if (pendingFirstRunOnboardingRoute) {
+  if (needsToken) {
+    appMain = <ApiTokenPrompt onSubmit={handleApiTokenSubmit} />;
+  } else if (pendingFirstRunOnboardingRoute) {
     appMain = (
       <div className="entry-shell entry-shell--no-header">
         <CenteredLoader label={t('entry.loadingWorkspace')} />

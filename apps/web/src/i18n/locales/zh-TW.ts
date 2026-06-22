@@ -3072,4 +3072,7 @@ export const zhTW: Dict = {
   'mcpClient.notForwardedToLabel': '未轉發給：',
   'mcpClient.forwardedAcpNote': '標記為 stdio only 的 ACP 介面卡只會從此清單接收 stdio 類型的 MCP 伺服器；HTTP 與 SSE 項目會在啟動時被捨棄。',
   'mcpClient.notForwardedNote': '對於這些智慧體，請在其各自的設定檔中設定 MCP 伺服器（例如 ~/.codex/config.toml、~/.gemini/settings.json）；下方的伺服器在那裡不會生效。',
+  'apiTokenPrompt.title': 'Daemon requires a token',
+  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.placeholder': 'Paste your API token',
 };
