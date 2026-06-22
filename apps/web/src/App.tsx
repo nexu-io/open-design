@@ -2049,7 +2049,27 @@ function AppInner() {
 
     apiTokenRef.current = token;
     setApiToken(token);
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = ((input, init) => {
+      const url = new URL(
+        typeof input === 'string' ? input
+          : input instanceof Request ? input.url
+          : (input instanceof URL ? input.href : ''),
+        location.href,
+      );
+      if (url.origin === location.origin && url.pathname.startsWith('/api/')) {
+        const headers = new Headers(init?.headers);
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+        return originalFetch(input, { ...init, headers });
+      }
+      return originalFetch(input, init);
+    }) as typeof window.fetch;
+
     setVerifyingToken(false);
+    setNeedsToken(false);
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
