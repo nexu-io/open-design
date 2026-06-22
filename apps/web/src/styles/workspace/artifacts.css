@@ -1840,20 +1840,6 @@
   position: relative;
   overflow: visible;
 }
-/*
-  Inside an Execution-mode CLI card the model picker reuses the full-width
-  `.settings-model-select` / `.inline-switcher__select` styling, so on a wide
-  Settings dialog it stretches edge-to-edge with the chevron stranded at the
-  far right — reading like an unfinished text input rather than a dropdown
-  (#4443). Cap the control so the selected model and chevron stay grouped,
-  reusing the BYOK picker's 420px width budget (`max-width`, so it still
-  collapses to the card width on narrow dialogs). Applies to both the loaded
-  button and the loading row, which share this wrapper.
-*/
-.agent-card-config .agent-model-select-wrap {
-  max-width: 420px;
-}
-
 .settings-model-select {
   display: block;
   width: 100%;
@@ -1893,6 +1879,23 @@
 }
 .agent-card-config .agent-model-select-wrap select:hover {
   border-color: var(--border-strong);
+}
+/*
+  The model picker is a <button>, so the global `button:hover` rule
+  (primitives.css) applies — but it sets `background` as a shorthand, which
+  wipes this button's chevron (a background-image) on hover, leaving the model
+  picker without a dropdown affordance mid-interaction (#4443 read it as an
+  unfinished text input; #4547 QA flagged the unstable hover/blur affordance).
+  Re-assert the full background (hover surface + chevron) at a higher
+  specificity so exactly one dropdown affordance stays put across hover/blur.
+  The control keeps its full card width — capping it to 420px made it read as
+  clipped, noticeably narrower than the card (#4547 QA).
+*/
+.agent-card-config .agent-model-select-wrap .inline-switcher__select:hover {
+  background:
+    var(--bg-subtle)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")
+    no-repeat right 10px center;
 }
 .agent-model-select-chevron {
   position: absolute;
