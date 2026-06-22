@@ -598,6 +598,29 @@ test('codex preserves explicit live service tiers from debug models JSON', () =>
   ]);
 });
 
+test('codex preserves service tier labels from debug models JSON', () => {
+  assert.ok(codex.listModels, 'codex must define live model discovery');
+  const parsed = codex.listModels.parse(JSON.stringify({
+    models: [
+      {
+        slug: 'gpt-5.5',
+        display_name: 'GPT-5.5',
+        visibility: 'list',
+        service_tiers: [{ id: 'priority', label: 'Fast' }],
+      },
+    ],
+  }));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    {
+      id: 'gpt-5.5',
+      label: 'GPT-5.5',
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ]);
+});
+
 test('codex detection surfaces live debug models separately from fallback models', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
   try {

@@ -19,6 +19,7 @@ function parseCodexServiceTiers(raw: unknown): RuntimeModelOption[] | undefined 
     const entry = tier as {
       id?: unknown;
       name?: unknown;
+      label?: unknown;
     };
     const id = typeof entry.id === 'string' ? entry.id.trim() : '';
     if (!id || seen.has(id)) continue;
@@ -26,6 +27,8 @@ function parseCodexServiceTiers(raw: unknown): RuntimeModelOption[] | undefined 
     const label =
       typeof entry.name === 'string' && entry.name.trim()
         ? entry.name.trim()
+        : typeof entry.label === 'string' && entry.label.trim()
+          ? entry.label.trim()
         : id;
     out.push({ id, label });
   }
