@@ -1,395 +1,209 @@
-# P0 — 리브랜딩 (OD → Marketing AX) Implementation Plan
+# P0 — 리브랜딩 (OD → Marketing AX) Implementation Plan (v2 — 실측 규모 반영)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans 또는 superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) 추적.
+>
+> **v2 개정 이유 (2026-06-22)**: v1은 규모를 ~50배 과소평가했다. 실측: `@open-design/` 스코프 **1037곳/512파일**(import 동반 필수 — tsconfig path alias 없음, 모듈 해석이 package `name` 기반), env `OD_` **distinct 202키 / `process.env.OD_*` 읽기 ~880곳**(중앙화 안 됨), `"Open Design"` 텍스트 **7157곳/386파일**. v1의 "const 1곳 + sweep" 전제는 거짓 → 컴파일·게이트 둘 다 실패. v2는 **카테고리 전역 치환**으로 재설계. 근거: `FORK-GUIDE.md §3`(v2 교정본).
 
-**Goal:** OD(Open Design) 포크에서 모든 하드코딩 제품 식별자를 Marketing AX 값으로 치환하고, 빌드·기동·가드가 그린인 상태를 만든다.
+**Goal:** OD 기능 식별자를 Marketing AX로 전역 치환하고 빌드·타입체크·가드가 그린.
 
-**Architecture:** find-and-replace 중심 작업. 식별자는 대부분 const 테이블에 중앙화돼 있어 정의 지점을 바꾸고 전역 sweep으로 잔존을 검출한다. 각 태스크는 한 식별자 카테고리를 바꾸고 `grep 잔존 0 + typecheck`로 검증한다.
+**Architecture:** 카테고리 단위 repo-wide 치환. 카테고리끼리 같은 파일을 공유하므로 **치환은 순차**(병렬 sed = 동시 편집 충돌). 각 카테고리 = 앵커링된 perl 치환 → 카테고리 grep 0 → `pnpm typecheck`.
 
-**Tech Stack:** pnpm 10.33.2 monorepo, TypeScript 5.9/6.0, Node 24, esbuild, electron-builder.
+**Tech Stack:** pnpm 10.33.2 monorepo, TS 5.9/6.0, Node 24, esbuild, electron-builder.
+
+---
+
+## 결정 (이 플랜의 전제 — 변경 시 해당 줄만 교체)
+
+- **[Q1 = A] 텍스트 범위**: 기능 식별자는 전역. `"Open Design"` 브랜드 텍스트는 **apps/web(18개 i18n 로케일 포함) + 앱 UI + 패키징 제품명**까지. **apps/landing-page 마케팅 사이트(4903곳) 제외**(별도 P 단계). `LICENSE`/`docs/*.md`/`CHANGELOG.md`/`*.md` 제외(Apache-2.0 attribution).
+- **[Q2 = A] mocks/**: **건드리지 않음**. 익명 replay fixture 무결성 보존. sweep/게이트 제외.
+- **마켓플레이스 repo/URL**: 자체 도메인 미정 → placeholder + env 오버라이드. (전면 비활성화는 P2.)
+
+## 식별자 치환 매핑 (verbatim)
+
+| 카테고리 | from | to | 앵커 주의 |
+|---|---|---|---|
+| 1 npm 스코프 | `@open-design/` | `@marketing-ax/` | `/` 포함 → URL 안 걸림 |
+| 1 루트 name | `"name": "open-design"` | `"name": "marketing-ax"` | 루트 package.json만 |
+| 2 env 접두사 | `OD_` | `MAX_` | **`\bOD_`** (word-boundary). `PROD_`/`METHOD_`/`PERIOD_` 오염 금지 |
+| 3 appId | `io.open-design.desktop` | `io.marketing-ax.desktop` | 채널접미사 `.beta/.preview/.nightly` 유지 |
+| 4 URL origin | `releases.open-design.ai` | `releases.marketing-ax.example`(placeholder) | env 오버라이드 가능 |
+| 4 URL public | `open-design.ai` | placeholder 또는 P2 | |
+| 4 marketplace repo | `nexu-io/open-design` | `marketing-ax/marketing-ax`(placeholder) | |
+| 5 ipcBase | `/tmp/open-design/ipc` | `/tmp/marketing-ax/ipc` | |
+| 5 windowsPipePrefix | `open-design` | `marketing-ax` | 값만(상수명 유지) |
+| 5 세션 파티션 | `persist:open-design-design-browser` | `persist:marketing-ax-design-browser` | 2곳 |
+| 6 스킴 | `od://` + `OD_SCHEME = "od"` | `max://` + `"max"` | 값만 |
+| 6 host 글로벌 | `__od__` | `__max__` | |
+| 7 데이터 디렉터리 | `.od` | `.max` | **앵커 필수**: `'.od'`/`"/.od"`/`.od/`/regex만. `.odd` 등 오염 금지 |
+| 8 제품명 | `Open Design` | `Marketing AX` | **Q1 범위 한정** (landing-page/docs/mocks 제외) |
 
 ## Global Constraints
 
-- 식별자 치환 매핑 (verbatim):
-  - 제품명: `Open Design` → `Marketing AX`
-  - npm 스코프: `@open-design/` → `@marketing-ax/`
-  - 루트 패키지명: `open-design` → `marketing-ax`
-  - env 접두사: `OD_` → `MAX_` (모든 env 키)
-  - 프로토콜 스킴: `od` (`od://`) → `max` (`max://`)
-  - 데이터 디렉터리: `.od` → `.max`
-  - host 글로벌: `__od__` → `__max__`
-  - appId: `io.open-design.desktop` → `io.marketing-ax.desktop` (채널 접미사 `.beta/.preview/.nightly` 유지)
-  - 세션 파티션: `persist:open-design-design-browser` → `persist:marketing-ax-design-browser`
-  - ipcBase: `/tmp/open-design/ipc` → `/tmp/marketing-ax/ipc`
-  - windowsPipePrefix: `open-design` → `marketing-ax`
-  - 마켓플레이스 repo: `nexu-io/open-design` → (자체 repo 미정 → P0에서는 `marketing-ax/marketing-ax` placeholder, 또는 마켓플레이스 비활성화는 P2에서)
-- 라이선스 의무(Apache-2.0): 루트 `LICENSE` 파일 유지, 수정 파일에 변경 표시 허용, "Open Design" 상표 잔존 0.
-- 각 태스크 종료 시 `pnpm typecheck` 그린 유지. 전체 종료 시 `pnpm guard` 그린.
-- `.od` 데이터 디렉터리는 런타임 생성물이므로 코드 식별자만 바꾸고 기존 로컬 `.od/`는 무시(신규 `.max/` 생성됨).
+- **macOS = BSD sed → `\b` 미지원.** 모든 앵커 치환은 **`perl -pi -e`** 사용(PCRE `\b` 지원). `sed -i ''`는 단순 비앵커 치환에만.
+- 치환 대상 파일 글롭: `*.ts *.tsx *.mts *.cts *.json *.mjs *.cjs *.css`, 디렉터리 `apps packages tools scripts e2e` + 루트 package.json. **제외**: `node_modules`, `**/dist`, `apps/landing-page`(Q1), `mocks/`(Q2), `*.md`, `LICENSE`.
+- 각 카테고리 종료 시 **카테고리 grep 0**(허용 잔존 제외) + `pnpm typecheck` 그린. 전체 종료 시 `pnpm guard`.
+- 라이선스(Apache-2.0): 루트 `LICENSE` 유지, 수정 파일 변경 표시 허용, "Open Design" **상표** 잔존 0(코드/UI). 문서 attribution 잔존은 의도적 허용.
+- 기존 로컬 `.od/` 런타임 데이터는 무시(신규 `.max/` 생성).
 
----
+## 잔존 검증 헬퍼 (재사용)
 
-## File Structure
-
-리브랜딩이 닿는 파일군:
-- 24개 `package.json` (npm 스코프 + 루트 이름)
-- `packages/sidecar-proto/src/index.ts` (env/ipc/제품명/stamp/registry)
-- `apps/packaged/src/protocol.ts` (스킴)
-- `packages/host/src/index.ts` (글로벌)
-- `tools/pack/src/{mac,win,linux}/*` (appId/제품명)
-- `apps/desktop/src/main/updater.ts` (origin/env)
-- `apps/daemon/src/plugins/marketplaces.ts` (URL/repo/env)
-- `apps/web/app/layout.tsx` (title)
-- `apps/web/src/components/DesignBrowserPanel.tsx`, `apps/desktop/src/main/runtime.ts` (세션 파티션)
-- `apps/web/src/artifacts/validate.ts` (예약경로 regex)
-- `apps/daemon/src/db.ts`, `scripts/guard.ts` (.od 참조)
-
----
-
-## Task 1: npm 스코프 + 루트 패키지명 치환
-
-**Files:**
-- Modify: 24개 `package.json` (루트 + apps/* + packages/* + tools/* + e2e)
-
-**Interfaces:**
-- Produces: 모든 워크스페이스 패키지가 `@marketing-ax/*` 스코프, 루트 이름 `marketing-ax`.
-
-- [ ] **Step 1: 현재 스코프 참조 전수 확인**
-
-Run: `cd /Users/gyumin/Project/open-design && grep -rln '@open-design/' --include=package.json`
-Expected: 24개 경로 출력 (루트, apps/{daemon,desktop,landing-page,packaged,telemetry-worker,web}, e2e, packages/{agui-adapter,components,contracts,diagnostics,download,host,launcher-proto,metatool,platform,plugin-runtime,registry-protocol,sidecar-proto,sidecar}, tools/{dev,pack,serve})
-
-- [ ] **Step 2: 모든 package.json의 스코프 치환**
-
-Run:
 ```bash
+# /tmp/odsweep.sh — 카테고리 grep (제외 규칙 통일)
 cd /Users/gyumin/Project/open-design
-grep -rl '@open-design/' --include=package.json . | xargs sed -i '' 's#@open-design/#@marketing-ax/#g'
-```
-
-- [ ] **Step 3: 루트 패키지명 치환**
-
-루트 `package.json`의 `"name": "open-design",` → `"name": "marketing-ax",`. 정확히 그 라인만:
-```bash
-sed -i '' 's/"name": "open-design",/"name": "marketing-ax",/' package.json
-```
-
-- [ ] **Step 4: 잔존 검증**
-
-Run: `grep -rn '@open-design/' --include=package.json . ; grep -n '"name": "open-design"' package.json`
-Expected: 둘 다 출력 없음(잔존 0)
-
-- [ ] **Step 5: 재설치로 워크스페이스 링크 재생성**
-
-Run: `pnpm install`
-Expected: 성공, `@marketing-ax/*` 워크스페이스 링크 해소
-
-- [ ] **Step 6: 타입체크**
-
-Run: `pnpm typecheck`
-Expected: PASS (스코프 변경이 import 경로에 영향 없음 — workspace protocol)
-
-- [ ] **Step 7: 커밋**
-
-```bash
-git add -A
-git commit -m "Rebrand npm scope to @marketing-ax — fork identity (P0 task1)"
+odgrep() { grep -rn "$1" --include="*.ts" --include="*.tsx" --include="*.mts" --include="*.cts" \
+  --include="*.json" --include="*.mjs" --include="*.cjs" --include="*.css" \
+  apps packages tools scripts e2e package.json 2>/dev/null \
+  | grep -v node_modules | grep -v '/dist/' | grep -v 'apps/landing-page/' | grep -v '/mocks/'; }
 ```
 
 ---
 
-## Task 2: sidecar-proto 식별자 (env / ipc / 제품명 / stamp / registry)
+## Task 1: npm 스코프 + 루트 패키지명 (전역)
 
-**Files:**
-- Modify: `packages/sidecar-proto/src/index.ts`
+**규모:** `@open-design/` 1037곳 / 512파일 (package.json name+deps + import 문 + 설정).
 
-**Interfaces:**
-- Consumes: 없음
-- Produces: `SIDECAR_ENV`/`SIDECAR_STAMP_FLAGS`/`DESKTOP_UPDATE_ENV` 류가 `MAX_*` 키, `OPEN_DESIGN_PRODUCT_NAME = "Marketing AX"`, ipcBase/pipe prefix 변경. 다른 패키지는 이 const를 import하므로 정의만 바꾸면 전파됨.
-
-- [ ] **Step 1: env 테이블 치환 (`OD_` → `MAX_`)**
-
-`packages/sidecar-proto/src/index.ts:24-36` `SIDECAR_ENV`의 각 값을 변경. 현재:
-```typescript
-export const SIDECAR_ENV = Object.freeze({
-  BASE: "OD_SIDECAR_BASE",
-  DAEMON_CLI_PATH: "OD_DAEMON_CLI_PATH",
-  DAEMON_PORT: "OD_PORT",
-  IPC_BASE: "OD_SIDECAR_IPC_BASE",
-  IPC_PATH: "OD_SIDECAR_IPC_PATH",
-  NAMESPACE: "OD_SIDECAR_NAMESPACE",
-  SOURCE: "OD_SIDECAR_SOURCE",
-  TOOLS_DEV_PARENT_PID: "OD_TOOLS_DEV_PARENT_PID",
-  WEB_DIST_DIR: "OD_WEB_DIST_DIR",
-  WEB_PORT: "OD_WEB_PORT",
-  WEB_TSCONFIG_PATH: "OD_WEB_TSCONFIG_PATH",
-} as const);
-```
-→ 각 `"OD_...”`를 `"MAX_..."`로 (예: `BASE: "MAX_SIDECAR_BASE"`, `DAEMON_PORT: "MAX_PORT"` 등 11개 전부).
-
-- [ ] **Step 2: stamp 플래그 치환**
-
-`:46-52` `SIDECAR_STAMP_FLAGS`의 각 값 `--od-stamp-*` → `--max-stamp-*` (app/ipc/mode/namespace/source 5개).
-
-- [ ] **Step 3: 제품명·ipc·pipe 치환**
-
-```
-:64  ipcBase: "/tmp/open-design/ipc",      → ipcBase: "/tmp/marketing-ax/ipc",
-:67  windowsPipePrefix: "open-design",      → windowsPipePrefix: "marketing-ax",
-:70  export const OPEN_DESIGN_PRODUCT_NAME = "Open Design";  → ... = "Marketing AX";
-```
-(상수 *이름* `OPEN_DESIGN_PRODUCT_NAME`은 식별자라 유지해도 무방하나, 값만 `Marketing AX`로. 원하면 이름도 `PRODUCT_NAME`으로 리네임 — 단 import처 동반 수정 필요. P0에서는 값만 변경 권장.)
-
-- [ ] **Step 4: registry 키는 자동 전파 확인**
-
-`:76-79` `resolveWindowsUninstallRegistryKey`는 `OPEN_DESIGN_PRODUCT_NAME`을 참조하므로 Step 3로 자동 반영. 코드 변경 불필요.
-
-- [ ] **Step 5: 잔존 검증 + 타입체크**
-
-Run: `grep -n '"OD_\|--od-stamp\|open-design' packages/sidecar-proto/src/index.ts ; pnpm typecheck`
-Expected: grep 출력 0, typecheck PASS
-
-- [ ] **Step 6: 커밋**
-
+- [ ] **Step 1: 현황 확인** — `odgrep '@open-design/' | wc -l` (≈1037), `odgrep '@open-design/' | cut -d: -f1 | sort -u | wc -l` (≈512)
+- [ ] **Step 2: 전역 치환**
 ```bash
-git add packages/sidecar-proto/src/index.ts
-git commit -m "Rebrand sidecar-proto identifiers (env/ipc/product) to Marketing AX (P0 task2)"
+odgrep '@open-design/' | cut -d: -f1 | sort -u | xargs perl -pi -e 's#\@open-design/#\@marketing-ax/#g'
 ```
+- [ ] **Step 3: 루트 name** — `perl -pi -e 's/"name": "open-design"/"name": "marketing-ax"/' package.json`
+- [ ] **Step 4: 잔존 0** — `odgrep '@open-design/'` 출력 없음, `grep -n '"name": "open-design"' package.json` 없음
+- [ ] **Step 5: 재설치** — `pnpm install` (워크스페이스 링크 `@marketing-ax/*` 재해소)
+- [ ] **Step 6: 타입체크** — `pnpm typecheck` PASS (import·deps 동반 치환됐으므로 해소)
+- [ ] **Step 7: 커밋** — `git add -A && git commit -m "Rebrand npm scope @open-design/ -> @marketing-ax/ repo-wide — fork identity (P0 task1)"`
 
 ---
 
-## Task 3: 프로토콜 스킴 + host 글로벌
+## Task 2: env 접두사 `OD_` → `MAX_` (전역, word-boundary)
 
-**Files:**
-- Modify: `apps/packaged/src/protocol.ts`, `packages/host/src/index.ts`
+**규모:** distinct 202키 / `process.env.OD_*` 읽기 ~880곳 + 정의 테이블. **중앙화 안 됨 — 전역 치환 필수.**
 
-**Interfaces:**
-- Produces: 렌더러→사이드카 fetch가 `max://app/`로, 프리로드 브릿지 글로벌이 `__max__`.
-
-- [ ] **Step 1: 스킴 치환**
-
-`apps/packaged/src/protocol.ts:3`:
-```
-const OD_SCHEME = "od";   → const OD_SCHEME = "max";
-```
-(상수 이름 `OD_SCHEME`은 유지 가능; 값만 `"max"`. `OD_ENTRY_URL`/registerSchemesAsPrivileged/handler는 상수 참조라 자동 전파.)
-
-- [ ] **Step 2: host 글로벌 치환**
-
-`packages/host/src/index.ts:1`:
-```
-export const OPEN_DESIGN_HOST_GLOBAL = "__od__";   → ... = "__max__";
-```
-
-- [ ] **Step 3: 잔존 검증 + 타입체크**
-
-Run: `grep -rn '"od"\|__od__\|od://' apps/packaged/src/protocol.ts packages/host/src/index.ts ; pnpm typecheck`
-Expected: grep 출력 0, typecheck PASS
-
-- [ ] **Step 4: 커밋**
-
+- [ ] **Step 1: 현황** — `odgrep '\bOD_' | wc -l`. 오염 후보 점검: `odgrep '\bOD_'` 결과에 `PROD_`/`METHOD_`/`PERIOD_` 같은 부분일치 없는지 육안 확인(없어야 함 — `\b` 앵커)
+- [ ] **Step 2: 전역 치환 (perl `\b`)**
 ```bash
-git add apps/packaged/src/protocol.ts packages/host/src/index.ts
-git commit -m "Rebrand protocol scheme to max:// and host global to __max__ (P0 task3)"
+odgrep '\bOD_' | cut -d: -f1 | sort -u | xargs perl -pi -e 's/\bOD_/MAX_/g'
 ```
+> 주의: `OD_MAX_DEVLOOP_ITERATIONS` → `MAX_MAX_DEVLOOP_ITERATIONS` 정상(리네임). 의도된 동작.
+- [ ] **Step 3: 잔존 0** — `odgrep '\bOD_'` 없음
+- [ ] **Step 4: 타입체크** — `pnpm typecheck` PASS
+- [ ] **Step 5: 커밋** — `git add -A && git commit -m "Rebrand env prefix OD_ -> MAX_ repo-wide (P0 task2)"`
 
 ---
 
-## Task 4: 데이터 디렉터리 `.od` + 세션 파티션 + 예약경로 + guard skip
+## Task 3: appId (패키징 번들 식별자)
 
-**Files:**
-- Modify: `apps/web/src/artifacts/validate.ts:41`, `scripts/guard.ts:50`, `apps/web/src/components/DesignBrowserPanel.tsx:229`, `apps/desktop/src/main/runtime.ts:245`
-- Also: 데이터 디렉터리 `.od` 문자열 사용처 전역 sweep
+**Files:** `tools/pack/src/mac/identity.ts:48-52`, `tools/pack/src/win/identity.ts`, `tools/pack/src/linux.ts:542`.
 
-**Interfaces:**
-- Produces: 신규 데이터 디렉터리 `.max`, 세션 파티션 `persist:marketing-ax-design-browser`.
-
-- [ ] **Step 1: `.od` 데이터 디렉터리 참조 전수 확인**
-
-Run: `grep -rn "'\.od'\|\"\.od\"\|/\.od\b\|\.od/" apps packages scripts --include=*.ts --include=*.tsx | grep -v node_modules`
-Expected: 데이터 디렉터리/예약경로 참조 목록(validate.ts, guard.ts, db 경로 helper 등). 출력 검토 후 각각 `.max`로 치환 대상 식별.
-
-- [ ] **Step 2: 예약경로 regex 치환**
-
-`apps/web/src/artifacts/validate.ts:41`:
-```
-const RESERVED_PROJECT_PATH_RE = /(?:^|\/|\.\/)(?:\.live-artifacts|\.od|\.tmp)(?=$|[/?#"'`\s>)])/i;
-```
-→ `\.od` 부분만 `\.max`로:
-```
-const RESERVED_PROJECT_PATH_RE = /(?:^|\/|\.\/)(?:\.live-artifacts|\.max|\.tmp)(?=$|[/?#"'`\s>)])/i;
-```
-
-- [ ] **Step 3: guard skip-list 치환**
-
-`scripts/guard.ts:50` `".od",` → `".max",` (인접 `.od-e2e`가 있으면 `.max-e2e`로 동반).
-
-- [ ] **Step 4: 세션 파티션 치환 (2곳)**
-
-```
-apps/web/src/components/DesignBrowserPanel.tsx:229
-  'persist:open-design-design-browser'  → 'persist:marketing-ax-design-browser'
-apps/desktop/src/main/runtime.ts:245
-  "persist:open-design-design-browser"  → "persist:marketing-ax-design-browser"
-```
-
-- [ ] **Step 5: 데이터 디렉터리 경로 helper 치환**
-
-Step 1에서 찾은 `.od` 디렉터리 생성/해석 코드(데몬 데이터 디렉터리 contract — `AGENTS.md` 참조)를 `.max`로. 정확한 위치는 Step 1 grep 결과로 확정.
-
-- [ ] **Step 6: 잔존 검증 + 타입체크**
-
-Run: `grep -rn "open-design-design-browser\|\.od\b" apps packages scripts --include=*.ts --include=*.tsx | grep -v node_modules ; pnpm typecheck`
-Expected: 의도된 잔존 외 0, typecheck PASS
-
-- [ ] **Step 7: 커밋**
-
-```bash
-git add -A
-git commit -m "Rebrand data dir to .max + session partition + reserved paths (P0 task4)"
-```
+- [ ] **Step 1** — `odgrep 'io\.open-design'` (≈11곳) 위치 확인
+- [ ] **Step 2: 치환** — `odgrep 'io\.open-design' | cut -d: -f1 | sort -u | xargs perl -pi -e 's/io\.open-design\.desktop/io.marketing-ax.desktop/g'` (채널접미사 자동 보존)
+- [ ] **Step 3: 잔존 0 + typecheck** — `odgrep 'io\.open-design'` 없음, `pnpm typecheck` PASS
+- [ ] **Step 4: 커밋** — `git commit -am "Rebrand appId io.open-design.desktop -> io.marketing-ax.desktop (P0 task3)"`
 
 ---
 
-## Task 5: 패키징 식별자 (appId / 제품명)
+## Task 4: 하드코딩 URL / 마켓플레이스 (placeholder)
 
-**Files:**
-- Modify: `tools/pack/src/mac/identity.ts`, `tools/pack/src/mac/constants.ts`, `tools/pack/src/win/constants.ts`, `tools/pack/src/win/identity.ts`, `tools/pack/src/linux.ts`
+**Files:** `apps/desktop/src/main/updater.ts:81`, `apps/daemon/src/plugins/marketplaces.ts:76-80`, 그 외 `nexu-io/open-design` 참조처(`HandoffButton.tsx`, `amr-guidance.ts`, `EntryShell.tsx`, `PrivacyConsentModal.tsx`).
 
-**Interfaces:**
-- Produces: 빌드 산출물의 appId `io.marketing-ax.desktop`, 제품명 `Marketing AX`.
-
-- [ ] **Step 1: mac appId 치환**
-
-`tools/pack/src/mac/identity.ts:48-52`:
-```typescript
-function appIdForChannel(channel: ReleaseChannelIdentity): string {
-  if (channel === "beta") return "io.open-design.desktop.beta";
-  if (channel === "nightly") return "io.open-design.desktop.nightly";
-  if (channel === "preview") return "io.open-design.desktop.preview";
-  return "io.open-design.desktop";
-}
-```
-→ 각 `io.open-design.desktop` → `io.marketing-ax.desktop`.
-
-- [ ] **Step 2: 제품명 상수 치환 (3파일)**
-
-```
-tools/pack/src/mac/constants.ts:1   export const PRODUCT_NAME = "Open Design";  → "Marketing AX"
-tools/pack/src/win/constants.ts:1   export const PRODUCT_NAME = "Open Design";  → "Marketing AX"
-tools/pack/src/linux.ts:37          const PRODUCT_NAME = "Open Design";          → "Marketing AX"
-```
-(win/identity.ts:42-45 displayNameForChannel은 `PRODUCT_NAME` 템플릿 참조라 자동 전파.)
-
-- [ ] **Step 3: linux appId 치환**
-
-`tools/pack/src/linux.ts:542` `appId: "io.open-design.desktop",` → `appId: "io.marketing-ax.desktop",`.
-
-- [ ] **Step 4: 잔존 검증 + 타입체크**
-
-Run: `grep -rn 'open-design\|Open Design' tools/pack/src ; pnpm typecheck`
-Expected: grep 출력 0, typecheck PASS
-
-- [ ] **Step 5: 커밋**
-
+- [ ] **Step 1** — `odgrep 'releases\.open-design\.ai'`, `odgrep 'open-design\.ai'`, `odgrep 'nexu-io/open-design'` 위치 확인
+- [ ] **Step 2: 치환**
 ```bash
-git add tools/pack/src
-git commit -m "Rebrand packaging identifiers (appId/product name) to Marketing AX (P0 task5)"
+odgrep 'releases\.open-design\.ai' | cut -d: -f1 | sort -u | xargs perl -pi -e 's#releases\.open-design\.ai#releases.marketing-ax.example#g'
+odgrep 'nexu-io/open-design' | cut -d: -f1 | sort -u | xargs perl -pi -e 's#nexu-io/open-design#marketing-ax/marketing-ax#g'
+odgrep 'open-design\.ai' | cut -d: -f1 | sort -u | xargs perl -pi -e 's#open-design\.ai#marketing-ax.example#g'
 ```
+- [ ] **Step 3: 잔존 0 + typecheck** — 위 3패턴 grep 없음(placeholder만), `pnpm typecheck` PASS
+- [ ] **Step 4: 커밋** — `git commit -am "Rebrand hardcoded release/marketplace URLs to placeholders (P0 task4)"`
 
 ---
 
-## Task 6: 하드코딩 URL + env 잔여 + 제목
+## Task 5: ipc / 파이프 / 세션 파티션
 
-**Files:**
-- Modify: `apps/desktop/src/main/updater.ts`, `apps/daemon/src/plugins/marketplaces.ts`, `apps/web/app/layout.tsx`
+**Files:** `packages/sidecar-proto/src/index.ts:64,67`, `apps/web/src/components/DesignBrowserPanel.tsx:229`, `apps/desktop/src/main/runtime.ts:245`.
 
-**Interfaces:**
-- Produces: 업데이트 origin/마켓플레이스 URL/HTML 제목이 새 브랜드.
-
-- [ ] **Step 1: updater env 접두사 치환**
-
-`apps/desktop/src/main/updater.ts:63-79` `DESKTOP_UPDATE_ENV`의 모든 값 `OD_UPDATE_*` → `MAX_UPDATE_*` (16개).
-
-- [ ] **Step 2: updater origin 치환**
-
-`:81` `const DEFAULT_RELEASE_ORIGIN = "https://releases.open-design.ai";` → 자체 릴리스 origin. P0에서는 placeholder `"https://releases.marketing-ax.example"`로 두고, 실제 도메인 확정 시 교체(또는 `MAX_UPDATE_METADATA_URL` env로 런타임 오버라이드 가능하므로 빌드 시 주입).
-
-- [ ] **Step 3: marketplace repo/URL/env 치환**
-
-`apps/daemon/src/plugins/marketplaces.ts`:
-```
-:76  const DEFAULT_MARKETPLACE_REPO = 'nexu-io/open-design';  → 'marketing-ax/marketing-ax' (placeholder)
-:79  const PUBLIC_MARKETPLACE_BASE_URL = 'https://open-design.ai/marketplace';  → placeholder 또는 P2에서 처리
-:80  const PUBLIC_PLUGINS_BASE_URL = 'https://open-design.ai/plugins';          → placeholder
-```
-env 키 `OD_MARKETPLACE_*` (REPO/REGISTRY_BASE_URL/REPO_REF/REGISTRY_PATH) → `MAX_MARKETPLACE_*`.
-(마켓플레이스 전면 비활성화 결정은 제품 스펙 §5에 따라 별도. P0는 식별자만.)
-
-- [ ] **Step 4: HTML 제목 치환**
-
-`apps/web/app/layout.tsx:9` `title: 'Open Design',` → `title: 'Marketing AX',`.
-
-- [ ] **Step 5: 잔존 검증 + 타입체크**
-
-Run: `grep -rn 'OD_UPDATE\|OD_MARKETPLACE\|open-design\.ai\|nexu-io/open-design' apps ; pnpm typecheck`
-Expected: 의도된 placeholder 외 0, typecheck PASS
-
-- [ ] **Step 6: 커밋**
-
+- [ ] **Step 1: 치환**
 ```bash
-git add apps/desktop/src/main/updater.ts apps/daemon/src/plugins/marketplaces.ts apps/web/app/layout.tsx
-git commit -m "Rebrand hardcoded URLs/env/title to Marketing AX (P0 task6)"
+odgrep '/tmp/open-design/ipc' | cut -d: -f1 | sort -u | xargs perl -pi -e 's#/tmp/open-design/ipc#/tmp/marketing-ax/ipc#g'
+odgrep 'persist:open-design-design-browser' | cut -d: -f1 | sort -u | xargs perl -pi -e 's/persist:open-design-design-browser/persist:marketing-ax-design-browser/g'
+# windowsPipePrefix 값 "open-design" (sidecar-proto:67) — 정확 라인 확인 후
+perl -pi -e 's/windowsPipePrefix: "open-design"/windowsPipePrefix: "marketing-ax"/' packages/sidecar-proto/src/index.ts
 ```
+- [ ] **Step 2: 잔존 0 + typecheck** — 위 패턴 grep 없음, `pnpm typecheck` PASS
+- [ ] **Step 3: 커밋** — `git commit -am "Rebrand ipc base/pipe prefix/session partition (P0 task5)"`
 
 ---
 
-## Task 7: 전역 sweep + 가드 + 기동 검증 (게이트)
+## Task 6: 프로토콜 스킴 + host 글로벌
 
-**Files:** (검증 전용, 잔존 발견 시 해당 파일 수정)
+**Files:** `apps/packaged/src/protocol.ts:3-17,84`, `packages/host/src/index.ts:1`.
 
-**Interfaces:**
-- Produces: OD 식별자 잔존 0, guard/typecheck/기동 그린 — P0 완료 게이트.
-
-- [ ] **Step 1: 전역 OD 식별자 sweep**
-
-Run:
-```bash
-cd /Users/gyumin/Project/open-design
-grep -rn 'open-design\|Open Design\|OD_\|__od__\|od://\|io\.open-design' \
-  apps packages tools scripts --include=*.ts --include=*.tsx --include=*.json \
-  | grep -v node_modules | grep -v 'docs/' | grep -v '\.md:'
-```
-Expected: 출력 0. 잔존 시 카테고리별로 해당 태스크 규칙 적용해 수정 후 재실행.
-
-> 주의: `LICENSE`, `docs/*.md`, `CHANGELOG.md` 등 문서/라이선스의 "Open Design" 언급은 의도적 유지(라이선스 attribution). sweep에서 문서는 제외.
-
-- [ ] **Step 2: 가드 통과**
-
-Run: `pnpm guard`
-Expected: PASS (특히 cross-app import, style policy)
-
-- [ ] **Step 3: 타입체크 통과**
-
-Run: `pnpm typecheck`
-Expected: PASS
-
-- [ ] **Step 4: 개발 기동 검증**
-
-Run: `pnpm tools-dev run web` (별도 터미널에서 기동 후 브라우저 확인)
-Expected: 데몬+웹 정상 기동, 데이터 디렉터리 `.max/` 생성됨, 프로토콜 `max://` 동작, HTML 제목 "Marketing AX". 기존 기능(프로젝트 생성, 디자인시스템 목록) 정상.
-
-- [ ] **Step 5: 최종 커밋**
-
-```bash
-git add -A
-git commit -m "Verify rebranding sweep + guard + dev boot green (P0 complete)"
-```
+- [ ] **Step 1: 스킴** — `apps/packaged/src/protocol.ts:3` `OD_SCHEME = "od"` → `"max"` (상수명 유지, `OD_ENTRY_URL`/등록/핸들러 자동 전파). `perl -pi -e 's/(SCHEME = )"od"/$1"max"/' apps/packaged/src/protocol.ts`
+- [ ] **Step 2: host 글로벌** — `odgrep '__od__' | cut -d: -f1 | sort -u | xargs perl -pi -e 's/__od__/__max__/g'` (값; `OPEN_DESIGN_HOST_GLOBAL` 상수명 유지)
+- [ ] **Step 3: 잔존 `od://` 검증** — `odgrep 'od://'`·`odgrep '__od__'` 없음 (단 Task2에서 `MAX_`로 바뀐 env는 무관)
+- [ ] **Step 4: typecheck** — `pnpm typecheck` PASS
+- [ ] **Step 5: 커밋** — `git commit -am "Rebrand protocol scheme max:// + host global __max__ (P0 task6)"`
 
 ---
 
-## Self-Review 체크 (작성자 수행)
+## Task 7: 데이터 디렉터리 `.od` → `.max` (앵커 치환)
 
-- **스펙 커버리지**: 제품 스펙 §3.1(리브랜딩 항목) + §4(성공기준 "OD 식별자 완전 제거") + FORK-GUIDE §3 인벤토리 전 카테고리 → Task 1~6에 매핑됨. ✅
-- **누락 카테고리 점검**: npm스코프(T1)/sidecar-proto(T2)/스킴·글로벌(T3)/데이터디렉터리·파티션(T4)/패키징(T5)/URL·env(T6) + 전역sweep(T7). FORK-GUIDE §3 A~J 전부 커버. ✅
-- **placeholder**: 릴리스 origin·마켓플레이스 도메인은 "확정 도메인 미정"이라 명시적 placeholder + env 오버라이드 경로 안내. 실제 미결정 사항이므로 허용. ✅
+**Files:** `apps/web/src/artifacts/validate.ts:41`(예약경로 regex), `scripts/guard.ts:50`(skip-list), 데몬 데이터루트 helper(`AGENTS.md` 데이터디렉터리 contract — `apps/daemon/src/server.ts` `RUNTIME_DATA_DIR` 해석부 / `db.ts`).
+
+- [ ] **Step 1: `.od` 참조 전수** — `odgrep "[\"'./]\.od\b"` 로 데이터 디렉터리 참조만 추출(확장자 `.odd` 등 오염 없는 앵커). 결과 검토 후 치환 대상 확정
+- [ ] **Step 2: 예약경로 regex** — `validate.ts:41` `\.od` → `\.max` (정규식 리터럴 내)
+- [ ] **Step 3: guard skip** — `scripts/guard.ts:50` `".od"` → `".max"` (인접 `.od-e2e` 있으면 `.max-e2e` 동반)
+- [ ] **Step 4: 데이터루트 helper** — Step1에서 찾은 `.od` 생성/해석 코드를 `.max`로 (데이터디렉터리 contract 준수 — `RUNTIME_DATA_DIR` 경유 유지)
+- [ ] **Step 5: 잔존 0 + typecheck** — `odgrep "[\"'./]\.od\b"` 의도외 0, `pnpm typecheck` PASS
+- [ ] **Step 6: 커밋** — `git commit -am "Rebrand data dir .od -> .max + reserved paths + guard skip (P0 task7)"`
+
+---
+
+## Task 8: 제품명 "Open Design" → "Marketing AX" (Q1 범위 한정)
+
+**규모/위험:** `"Open Design"` 7157곳. **위험 계층 분리** — 테스트 단언/스냅샷이 옛 문자열에 의존하면 깨짐. 단계적으로.
+
+- [ ] **Step 1: 패키징/UI 제품명 상수 (확실·안전)** — 먼저 1급 식별자만:
+  - `packages/sidecar-proto/src/index.ts:70` `OPEN_DESIGN_PRODUCT_NAME` 값 → `"Marketing AX"` (상수명 유지 → Windows 레지스트리 키 자동 전파)
+  - `tools/pack/src/mac/constants.ts:1`, `win/constants.ts:1` `PRODUCT_NAME` → `"Marketing AX"`, `tools/pack/src/linux.ts:37` 동일
+  - `apps/web/app/layout.tsx:9` `title: 'Open Design'` → `'Marketing AX'`
+  - typecheck PASS 확인 후 커밋
+- [ ] **Step 2: 범위 산정** — `odgrep 'Open Design' | cut -d/ -f1-2 | sort | uniq -c | sort -rn` 로 분포 확인. (landing-page·mocks는 odgrep에서 이미 제외.) 남은 분포 = apps/web(i18n 포함), apps/daemon(프롬프트/주석), 패키징, e2e
+- [ ] **Step 3: i18n 로케일 치환** — `apps/web/src/i18n/locales/*.ts` 의 사용자 노출 "Open Design" → "Marketing AX" (18개 로케일 동일 키). `odgrep 'Open Design' apps/web/src/i18n` 대상
+- [ ] **Step 4: 앱 UI 문자열 치환** — `apps/web/src` 잔여(컴포넌트 표시 문자열). **주의**: 주석은 선택. 치환 후 `pnpm --filter @marketing-ax/web typecheck` + `pnpm --filter @marketing-ax/web test`
+- [ ] **Step 5: 데몬 프롬프트/도메인 문자열** — `apps/daemon/src/prompts/*` 등 에이전트에 제품을 "Open Design"으로 소개하는 문자열 → 새 브랜드. `pnpm --filter @marketing-ax/daemon test`
+- [ ] **Step 6: 테스트 단언 처리** — `odgrep 'Open Design'` 에 남은 e2e/단위 테스트의 단언/스냅샷: 제품명을 검증하는 것이면 새 값으로 갱신, fixture면 검토. **테스트 그린 유지가 게이트.**
+- [ ] **Step 7: 잔존 검증** — `odgrep 'Open Design'` = 의도된 잔존(있다면 명시)만. `pnpm typecheck` PASS
+- [ ] **Step 8: 커밋** — `git commit -am "Rebrand product name Open Design -> Marketing AX (app UI + i18n + packaging, P0 task8)"`
+
+---
+
+## Task 9: 전역 sweep + 가드 + 기동 (게이트)
+
+- [ ] **Step 1: 기능식별자 sweep 0**
+```bash
+odgrep 'open-design|Open Design|\bOD_|__od__|od://|io\.open-design'
+```
+Expected: 0 (apps/landing-page·mocks·*.md 제외 — odgrep 규칙). 잔존 시 해당 카테고리 규칙 재적용.
+> landing-page/docs/mocks의 "Open Design"은 의도적 잔존(Q1/Q2 + attribution).
+- [ ] **Step 2: guard** — `pnpm guard` PASS (web import isolation, style policy)
+- [ ] **Step 3: typecheck** — `pnpm typecheck` PASS
+- [ ] **Step 4: 기동 검증** — `pnpm tools-dev run web` → 데몬+웹 기동, 데이터 디렉터리 `.max/` 생성, 스킴 `max://` 동작, HTML title "Marketing AX", 기존 기능(프로젝트 생성·디자인시스템 목록) 정상
+- [ ] **Step 5: (선택) 패키징 스모크** — `pnpm tools-pack mac build` 로 appId/제품명 산출물 확인 (GUI 머신)
+- [ ] **Step 6: 최종 커밋** — `git commit -am "Verify rebrand sweep + guard + dev boot green (P0 complete)"`
+
+---
+
+## 병렬화 메모
+
+- 카테고리 치환은 **순차** (Task1→9). 같은 파일이 여러 카테고리 문자열을 보유 → 병렬 sed = 동시 편집 충돌.
+- 병렬 가능: 각 Task **후** 검증/리뷰(읽기 전용)는 병렬. Task8 Step3~5(i18n/UI/daemon)는 디렉터리 분리되면 부분 병렬 가능하나 같은 파일 위험 있으면 순차.
+
+## Self-Review 체크
+
+- **규모 정합**: v1 과소평가(14파일) → v2 실측(스코프 512 / env 272 / 제품명 386 파일). FORK-GUIDE §3 v2 교정본과 일치. ✅
+- **컴파일 보장**: Task1(import 동반)·Task2(env 880 읽기) 전역 치환으로 typecheck 그린 확보. ✅
+- **게이트 정합**: T9 sweep 제외규칙(landing-page/mocks/*.md) = Q1/Q2 결정과 일치. surgical 모순 제거. ✅
+- **앵커 안전**: env `\bOD_`(perl), 데이터디렉터리 `.od` 앵커 — 부분일치 오염 방지. BSD sed 회피(perl). ✅
+- **placeholder**: 릴리스/마켓플레이스 도메인 미정 → placeholder + env 오버라이드 명시. ✅
+- **위험**: Task8 테스트 단언 의존 — Step6에서 테스트 그린으로 흡수. ⚠️ 실행 중 재확인.

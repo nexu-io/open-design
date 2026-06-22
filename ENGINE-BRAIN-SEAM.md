@@ -29,7 +29,7 @@
 - **DI 심이 이미 존재**: `src/server-context.ts:90-130` `ServerContext` — ~40개 capability 슬라이스(`db, design, http, paths, projectStore, conversations, chat, agents, critique, media, deploy, orbit, research, mcp, …`)의 플랫 레코드. 각 route registrar가 `Pick<ServerContext, K>` 슬라이스를 받음. 계약 검증 `assertServerContextSatisfiesRoutes()` at `server.ts:12388`. → **`BrainProvider`가 `ctx.brain`으로 들어갈 정확한 지점.**
 - **server.ts는 모놀리식이 아니라 등록 허브**: 12,607줄이지만 하단 1/3(~5096-12458)이 `registerXxxRoutes(app, ctx-slice)` 시퀀스. 구조가 심을 거부하지 않음.
 - **critique LOOP/PROMPT 이미 분리**: `critique/orchestrator.ts`가 **`panel.ts`를 import 안 함.** `runOrchestrator({cfg, db, bus, stdout, child})`만 받음. 채점 `computeComposite(scores, cfg.weights)`(`scoreboard.ts:27`)는 역할 무관·가중치 구동. → critique 도메인 교체 = `prompts/panel.ts` + `contracts/critique.ts`(PANELIST_ROLES+weights) **2파일만**. 루프는 무수정.
-- **SQLite 모듈러**: 워크스페이스 테이블(`projects/conversations/messages/agent_sessions/tabs/deployments/routines`)은 `db.ts`, 도메인 테이블은 각자 모듈+자체 migration fn(`critique/persistence.ts`, `plugins/persistence.ts`, `media-tasks.ts`). 도메인 FK는 **바깥으로만** 향함(→projects/conversations, ON DELETE CASCADE). `db.ts:migrate()`가 조율(`:350-352`).
+- **SQLite 모듈러**: 워크스페이스 테이블(`projects/conversations/messages/agent_sessions/tabs/deployments/routines`)은 `db.ts`, 도메인 테이블은 각자 모듈+자체 migration fn(`critique/persistence.ts`, `plugins/persistence.ts`, `media-tasks.ts`). 도메인 FK는 **바깥으로만** 향함(→projects/conversations, ON DELETE CASCADE). `db.ts:migrate()`(정의 `:54`)가 도메인 마이그레이션 호출을 조율(`:350-352`).
 
 ---
 
@@ -66,7 +66,7 @@
 | 파일 | 누수 | 처리 |
 |------|------|------|
 | `plugins/atoms/built-ins.ts` | `../atoms.js`에서 `FIRST_PARTY_ATOMS` import(`:20`) 후 등록(`:31-45`), critique-theater 특수처리 | **카탈로그를 두뇌에서 받기** → `ctx.brain.registerAtoms(registry)` |
-| `server.ts` 상단 static 도메인 import | `design-systems.ts`(`:161-167`), `prompts/system.ts`(`:21-26`), `critique/orchestrator.ts`(`:221`), skills | **`ctx.brain.*` 호출로 치환** |
+| `server.ts` 상단 static 도메인 import | `design-systems.ts`(`:156-170`), `prompts/system.ts`(`:20-26`), `critique/orchestrator.ts`(`:221`), skills | **`ctx.brain.*` 호출로 치환** |
 | `db.ts:59-60` | `projects.skill_id` + `projects.design_system_id` 컬럼(도메인 정체성이 워크스페이스 테이블에 누출) | nullable TEXT라 치명적 아님. 일반화하거나 brain 소유 사이드테이블로 이전(선택) |
 
 ---
@@ -106,10 +106,10 @@ export interface BrainProvider {
 
 > 인터페이스 설계는 쉽다. **시간은 `startChatRun` 수술에서 나간다.**
 
-1. **`startChatRun` god-function** (`server.ts:8123`→~11000). 내부 prompt-builder closure(~`7580-8048`)가 skill·design-system·craft·memory·plugin·`critiqueShouldRun`을 **한 클로저에서 인라인 해결** 후 `composeSystemPrompt`(`:7984`) 호출. 엔진 plumbing(spawn args, adapter, SSE)과 BRAIN 판정이 뒤섞임.
+1. **`startChatRun` god-function** (`server.ts:8123`→~11000). 내부 prompt-builder closure `composeDaemonSystemPrompt`(`server.ts:7559`~8048)가 skill·design-system·craft·memory·plugin·`critiqueShouldRun`을 **한 클로저에서 인라인 해결** 후 `composeSystemPrompt`(정의 `prompts/system.ts:508`) 호출. 엔진 plumbing(spawn args, adapter, SSE)과 BRAIN 판정이 뒤섞임.
 2. **lockstep 3곳** (가장 깨지기 쉬움) — critique 라우팅이 세 지점에서 일치해야 함:
    - 게이트 `server.ts:7925-7929` (`critiqueShouldRun = enabled && brand && skill && !media && plainAdapter`)
-   - 프롬프트 addendum `:7984/8015`
+   - 프롬프트 addendum (`composeDaemonSystemPrompt` 내부, `server.ts:~8000`)
    - orchestrator 분기 `:9995`
    → 이 3곳을 `ctx.brain.shouldRunReview()` 하나로 수렴시키는 게 핵심.
 3. **`design` god-object** (`server.ts:5307`, `design.runs.finish/fail/start`) — 엔진이지만 startChatRun 10여 곳에서 도메인 로직과 섞여 호출.

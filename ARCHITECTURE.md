@@ -207,7 +207,7 @@
   - `EntryShell` → marketplace/projects/design-systems/integrations
   - `ProjectView` → 채팅 + 아티팩트 프리뷰어 + 워크스페이스 탭
   - `WorkspaceTabsBar` → 파일/채팅/터미널/라이브아티팩트 멀티탭
-- `apps/web/src/components/`에 **142개 피처 컴포넌트**(ChatPane, DesignSystemFlow, ConnectorsBrowser 등).
+- `apps/web/src/components/`에 **~202개 피처 컴포넌트 파일**(ChatPane, DesignSystemFlow, ConnectorsBrowser 등).
 - 스타일: Tailwind 유틸 + CSS Modules(`.module.css`) 혼용. styled-components/Emotion 미사용. **디자인 토큰 레이어는 UI가 아니라 아티팩트 생성 시점에 적용**됨.
 
 ### 5.3 데이터 흐름

@@ -81,18 +81,20 @@
 | 카테고리 | 위치 |
 |----------|------|
 | **제품명 "Open Design"** | `tools/pack/src/{mac/constants.ts:1, win/constants.ts:1, linux.ts:37}`, `packages/sidecar-proto/src/index.ts:70`, `apps/web/app/layout.tsx:9`, 채널변형 `tools/pack/src/mac/identity.ts:41` |
-| **npm 스코프 `@open-design/*`** | 전 워크스페이스 + 루트 `package.json:2 "name":"open-design"` (~20 패키지) |
+| **npm 스코프 `@open-design/*`** | **24개** `package.json`(name + `workspace:*` 의존성 키) + 루트 `package.json:2 "name":"open-design"`. **⚠️ tsconfig path alias 없음 → 모듈 해석이 package `name` 기반.** `name`만 바꾸면 안 되고 **`@open-design/` import 문 전부(소스/테스트 ~1037곳 / 512파일)를 동반 치환**해야 typecheck 통과 |
 | **도메인/URL** | `apps/desktop/src/main/updater.ts:81`(`releases.open-design.ai`), `apps/daemon/src/plugins/marketplaces.ts:79-80`, `apps/web/src/components/HandoffButton.tsx:27`, `runtime/amr-guidance.ts:11`, `EntryShell.tsx:190`, `PrivacyConsentModal.tsx:11`(`github.com/nexu-io/open-design`) |
 | **앱 번들 ID** | `tools/pack/src/mac/identity.ts:48-52`(`io.open-design.desktop[.beta/.preview/.nightly]`), `win/identity.ts:42-45`, `linux.ts:542` |
 | **프로토콜 스킴 `od://`** | `apps/packaged/src/protocol.ts:3`(`OD_SCHEME="od"`), `:4`(`od://app/`), 등록 `:6-17`, 핸들 `:84` — 모든 렌더러→사이드카 fetch가 통과 |
 | **데이터 디렉터리 `.od`** | `.od/projects/<id>`; 예약경로 정규식 `apps/web/src/artifacts/validate.ts:41`; guard skip `scripts/guard.ts:50` |
 | **세션 파티션** | `apps/web/src/components/DesignBrowserPanel.tsx:229`, `apps/desktop/src/main/runtime.ts:245`(`persist:open-design-design-browser`) |
 | **IPC 글로벌 `__od__`** | `packages/host/src/index.ts:1` |
-| **env 접두사 `OD_`** (~130개) | 중앙 정의 테이블: `sidecar-proto/src/index.ts:24-36`, `desktop/.../updater.ts:63-78`, `packaged/src/config.ts:14-19`, `daemon/.../marketplaces.ts`. **const 객체 통해 리네임 + 전역 sweep** |
+| **env 접두사 `OD_`** (**distinct 키 ~202개**) | 중앙 정의 테이블 일부 존재(`sidecar-proto/src/index.ts:24-36`, `desktop/.../updater.ts:63-78`, `packaged/src/config.ts:14-19`, `daemon/.../marketplaces.ts`) **그러나 중앙화 안 됨 — `process.env.OD_*` 직접 읽기 ~880곳이 소스 전역 산재.** const 정의만 바꾸면 런타임 깨짐. **카테고리 전역 치환(repo-wide `OD_`→새접두사) 필요**, "const 1곳 + sweep" 아님 |
 | **Windows 언인스톨 레지스트리 키** | `sidecar-proto/src/index.ts:76-79`(제품명에서 생성) |
 | **마켓플레이스 파일명** | `open-design-marketplace.json` (100+ refs; 플러그인 시스템 유지 시만 관련) |
 
-**리브랜딩 순서 권장**: ① 루트+패키지 `package.json` 스코프 일괄 → ② sidecar-proto const 테이블(env/ipc/제품명) → ③ `od://`·`.od`·`__od__`·세션파티션 → ④ tools/pack 식별자(appId/productName/signing) → ⑤ 하드코딩 URL(updater/marketplace/web).
+**리브랜딩 순서 권장**: ① 스코프 `@open-design/`→ 전역(package.json name+deps + import 1037곳) + 루트 name → ② env `OD_`→ 전역(정의 테이블 + `process.env.OD_*` 880곳) + ipc/제품명 → ③ `od://`·`.od`·`__od__`·세션파티션 → ④ tools/pack 식별자(appId/productName/signing) → ⑤ 하드코딩 URL(updater/marketplace/web).
+
+> **⚠️ 규모 주의**: 위 ①②는 surgical const 편집이 **아니라** repo-wide 카테고리 치환이다(스코프 512파일 / env 272파일). 카테고리끼리 같은 파일을 공유하므로 **치환은 순차로**(병렬 sed = 동시 편집 충돌). 검증은 카테고리 grep 0 + `typecheck`. ③~⑤만 소수 파일 surgical.
 
 ---
 
