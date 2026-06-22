@@ -823,18 +823,23 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .viewer .present-exit-btn:hover {
-  background: var(--bg-subtle);
+  background: var(--bg-muted);
   color: var(--text);
+}
+.viewer .present-exit-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .live-artifact-preview-frame-host {
   width: 100%;
