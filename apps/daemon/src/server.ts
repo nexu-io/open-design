@@ -2527,9 +2527,9 @@ function isProxiedRequest(req) {
 // rejects them and the daemon requires OD_API_TOKEN.
 function isLocalConnection(req) {
   if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) return false;
-  const host = (req.headers['host'] || '').split(':')[0];
-  if (!host) return false;
-  return isLoopbackHostname(host);
+  const authority = normalizeLocalAuthority(req.get('host'));
+  if (!authority) return false;
+  return isLoopbackHostname(authority.hostname);
 }
 
 function verifyBearerOrCookieToken(req, apiToken) {
@@ -4030,7 +4030,6 @@ export async function startServer({
   // follow-up — see reconcile decision log.
   // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
-  const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
   const { analyticsService } = telemetry;
   const design = {
     runs: createChatRunService({

@@ -12,7 +12,7 @@
 // the "refuse 0.0.0.0 without token" path is exercised by a separate
 // negative case that constructs the start call directly).
 
-import type http from 'node:http';
+import http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
 import { startServer } from '../src/server.js';
@@ -113,5 +113,25 @@ describe('bearer middleware', () => {
         OD_DISABLE_API_AUTH: '1',
       }),
     ).toBe(true);
+  });
+
+  it('accepts [::1] IPv6-loopback Host header as local without bearer', async () => {
+    // Connect to 127.0.0.1 (so remoteAddress is loopback) but send
+    // Host: [::1]:<port>, which the naive split(':')[0] would turn into
+    // just '[' — the fix must parse it via normalizeLocalAuthority.
+    const url = new URL(baseUrl);
+    const resp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/plugins',
+        method: 'GET',
+        headers: { Host: `[::1]:${url.port}` },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    expect(resp.statusCode).toBe(200);
+    resp.resume();
   });
 });
