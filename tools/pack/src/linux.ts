@@ -307,7 +307,7 @@ atexit()
 }
 
 if [ -z "$APPIMAGE" ] ; then
-  APPIMAGE="$APPDIR/AppRun"
+  export APPIMAGE="$APPDIR/AppRun"
   # not running from within an AppImage; hence using the AppRun for Exec=
 fi
 `;

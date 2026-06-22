@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { access, chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { posix } from "node:path";
@@ -771,6 +771,50 @@ describe("renderLinuxAppImageAppRun", () => {
     const out = renderLinuxAppImageAppRun();
 
     expect(out).toContain('APPIMAGE="$APPDIR/AppRun"');
+  });
+
+  linuxOnlyIt("exports APPIMAGE fallback to the execed Electron process", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-apprun-export-"));
+    const appDir = join(root, "AppDir");
+    const appRunPath = join(appDir, "AppRun");
+    const observedEnvPath = join(root, "observed-env.txt");
+    const electronPath = join(appDir, "Open Design");
+
+    try {
+      await mkdir(appDir, { recursive: true });
+      await writeFile(appRunPath, renderLinuxAppImageAppRun(), "utf8");
+      await chmod(appRunPath, 0o755);
+      await writeFile(
+        electronPath,
+        `#!/bin/bash
+{
+  printf 'APPIMAGE=%s\\n' "$APPIMAGE"
+  printf 'ELECTRON_RUN_AS_NODE=%s\\n' "\${ELECTRON_RUN_AS_NODE-unset}"
+} > ${JSON.stringify(observedEnvPath)}
+`,
+        "utf8",
+      );
+      await chmod(electronPath, 0o755);
+
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        APPDIR: appDir,
+        ELECTRON_RUN_AS_NODE: "1",
+      };
+      delete env.APPIMAGE;
+      const child = spawn(appRunPath, [], { env, stdio: "ignore" });
+      const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      });
+
+      expect(exit).toEqual({ code: 0, signal: null });
+      expect(await readFile(observedEnvPath, "utf8")).toBe(
+        `APPIMAGE=${appRunPath}\nELECTRON_RUN_AS_NODE=unset\n`,
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });
 
