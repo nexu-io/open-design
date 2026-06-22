@@ -2542,7 +2542,13 @@ function verifyBearerOrCookieToken(req, apiToken) {
       const eq = part.indexOf('=');
       if (eq === -1) continue;
       if (part.slice(0, eq).trim() === 'od-api-token') {
-        presentedToken = part.slice(eq + 1).trim();
+        const raw = part.slice(eq + 1).trim();
+        try {
+          presentedToken = decodeURIComponent(raw);
+        } catch {
+          // Malformed percent-encoding — treat as token mismatch.
+          return false;
+        }
         break;
       }
     }
