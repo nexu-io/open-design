@@ -6,22 +6,22 @@ import {
   type ChatSessionMode,
   type PluginManifest,
 } from '@open-design/contracts';
-import { createProjectArtifactFile } from './artifacts/create.js';
-import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
-import { ArtifactRegressionError } from './artifacts/stub-guard.js';
-import { listDesignSystems } from './design-systems/index.js';
+import { readMeta as readBrandMeta } from '../../brands/store.js';
+import { createProjectArtifactFile } from '../../artifacts/create.js';
+import { ArtifactPublicationBlockedError } from '../../artifacts/publication-guard.js';
+import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
+import { listDesignSystems } from '../../design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
   getInstalledPlugin,
   listInstalledPlugins,
   resolvePluginSnapshot,
-} from './plugins/index.js';
-import { connectorService } from './connectors/service.js';
-import type { RouteDeps } from './server-context.js';
-import { readAnalyticsContext } from './analytics.js';
-import { listSkills } from './skills.js';
-import { isSafeId } from './projects.js';
+} from '../../plugins/index.js';
+import { connectorService } from '../../connectors/service.js';
+import type { RouteDeps } from '../../server-context.js';
+import { listSkills } from '../../skills.js';
+import { isSafeId } from '../../projects.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -29,9 +29,10 @@ import {
   ensureProjectLocation,
   scanProjectLocation,
   writeProjectManifest,
-} from './project-locations.js';
-import { auditDesignSystemPackage } from './tools-connectors-cli.js';
-import { parseOrchestratorWorkspace } from './workspace-contract.js';
+} from '../../project-locations.js';
+import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
+import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
+import { registerProjectConversationRoutes } from './conversations.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
@@ -909,11 +910,11 @@ function normalizeChatSessionMode(value: unknown): ChatSessionMode {
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, BRANDS_DIR } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
-  const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
+  const { insertConversation } = ctx.conversations;
   const { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate } = ctx.templates;
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
@@ -1185,11 +1186,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           .filter((project: any) => projectVisibleForLocations(project, locations))
           .map((project: any) => ({
             ...project,
-            status: composeProjectDisplayStatus(
-              activeRunStatuses.get(project.id) ??
-                latestRunStatuses.get(project.id) ?? { value: 'not_started' },
-              awaitingInputProjects,
-              project.id,
+            status: brandAwareProjectStatus(
+              project,
+              composeProjectDisplayStatus(
+                activeRunStatuses.get(project.id) ??
+                  latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+                awaitingInputProjects,
+                project.id,
+              ),
             ),
           })),
       };
@@ -1205,6 +1209,32 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       updatedAt: run.updatedAt,
       runId: run.id,
     };
+  }
+
+  // Brand-extraction projects are driven by a brand lifecycle (extracting →
+  // needs_input → ready / failed), not only by a chat run. When the run-derived
+  // status would be `not_started` — e.g. the programmatic-first finalize ran
+  // without a recorded chat run, or the daemon restarted and the in-memory run
+  // aged out — fall back to the brand's own status so Home / Designs never show
+  // a live brand extraction as "Not started". Run-derived status is kept
+  // whenever it is meaningful (queued/running/succeeded/failed/awaiting_input).
+  function brandAwareProjectStatus(project: any, status: { value: string; updatedAt?: number; runId?: string }) {
+    if (status.value !== 'not_started') return status;
+    const metadata = project?.metadata;
+    if (metadata?.kind !== 'brand') return status;
+    const brandId = typeof metadata.brandId === 'string' ? metadata.brandId : null;
+    if (!brandId) return status;
+    const brandMeta = readBrandMeta(BRANDS_DIR, brandId);
+    if (!brandMeta) return status;
+    const mapped =
+      brandMeta.status === 'ready'
+        ? 'succeeded'
+        : brandMeta.status === 'failed'
+          ? 'failed'
+          : brandMeta.status === 'needs_input'
+            ? 'awaiting_input'
+            : 'running'; // 'extracting'
+    return { ...status, value: mapped, updatedAt: status.updatedAt ?? brandMeta.updatedAt };
   }
 
   app.post('/api/projects', async (req, res) => {
@@ -1693,227 +1723,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  // ---- Conversations --------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    res.json({ conversations: listConversations(db, req.params.id) });
-  });
-
-  app.post('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
-    const now = Date.now();
-    const hasExplicitSessionMode = Boolean(
-      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
-    );
-    const requestedForkMessageId =
-      typeof forkAfterMessageId === 'string' && forkAfterMessageId
-        ? forkAfterMessageId
-        : null;
-    const sourceConversation =
-      typeof seedFromConversationId === 'string' && seedFromConversationId
-        ? getConversation(db, seedFromConversationId)
-        : null;
-    // Client-supplied fork snapshot. The chat "Fork" action sends the exact
-    // messages the user is looking at (up to the fork point). We prefer it over
-    // reading the source conversation from the DB so a fork point that was
-    // never persisted — e.g. an assistant turn whose run errored / had its
-    // connection reset before reaching the database — still forks instead of
-    // 404ing on `forkAfterMessageId`.
-    const clientSeedMessages = Array.isArray(req.body?.seedMessages)
-      ? (req.body.seedMessages as any[]).filter(
-          (message) => message && typeof message.role === 'string',
-        )
-      : null;
-    let seedMessages: any[] = [];
-    if (clientSeedMessages && clientSeedMessages.length > 0) {
-      seedMessages = clientSeedMessages;
-      if (requestedForkMessageId) {
-        const forkIndex = seedMessages.findIndex(
-          (message) => message.id === requestedForkMessageId,
-        );
-        if (forkIndex >= 0) {
-          seedMessages = seedMessages.slice(0, forkIndex + 1);
-        }
-      }
-    } else if (sourceConversation && sourceConversation.projectId === req.params.id) {
-      seedMessages = listMessages(db, seedFromConversationId);
-      if (requestedForkMessageId) {
-        const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
-        if (forkIndex < 0) {
-          return res.status(404).json({ error: 'fork message not found' });
-        }
-        seedMessages = seedMessages.slice(0, forkIndex + 1);
-      }
-    } else if (requestedForkMessageId) {
-      return res.status(404).json({ error: 'fork source conversation not found' });
-    }
-    const sessionMode =
-      hasExplicitSessionMode
-        ? normalizeChatSessionMode(req.body.sessionMode)
-        : sourceConversation && sourceConversation.projectId === req.params.id
-          ? normalizeChatSessionMode(sourceConversation.sessionMode)
-          : 'design';
-    const conv = insertConversation(db, {
-      id: randomId(),
-      projectId: req.params.id,
-      title: typeof title === 'string' ? title.trim() || null : null,
-      sessionMode,
-      createdAt: now,
-      updatedAt: now,
-    });
-    // Side Chat: inherit the source conversation's context by copying its
-    // messages into the fresh conversation. Be defensive — a missing or
-    // cross-project source id silently yields an empty conversation.
-    if (conv && seedMessages.length > 0) {
-      for (const m of seedMessages) {
-        // Fresh id per copied message; upsertMessage assigns the next
-        // position so role/content ordering is preserved. Drop the source's
-        // run pointers (runId/runStatus/lastRunEventId): they belong to the
-        // OTHER conversation's runs, and a copied still-`running` assistant
-        // turn would otherwise render a perpetual spinner in the side chat.
-        upsertMessage(db, conv.id, {
-          ...m,
-          id: randomId(),
-          runId: undefined,
-          runStatus: undefined,
-          lastRunEventId: undefined,
-        });
-      }
-    }
-    res.json({ conversation: conv });
-  });
-
-  app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    const updated = updateConversation(db, req.params.cid, req.body || {});
-    res.json({ conversation: updated });
-  });
-
-  app.delete('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    deleteConversation(db, req.params.cid);
-    res.json({ ok: true });
-  });
-
-  // ---- Messages -------------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({ messages: listMessages(db, req.params.cid) });
-  });
-
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    const m = req.body || {};
-    if (m.id && m.id !== req.params.mid) {
-      return res.status(400).json({ error: 'id mismatch' });
-    }
-    const saved = upsertMessage(db, req.params.cid, {
-      ...m,
-      id: req.params.mid,
-    });
-    // Bump the parent project's updatedAt so the project list re-orders.
-    updateProject(db, req.params.id, {});
-    ctx.telemetry?.reportFinalizedMessage(saved, m, {
-      analyticsContext: readAnalyticsContext(req),
-      projectId: req.params.id,
-      conversationId: req.params.cid,
-    });
-    res.json({ message: saved });
-  });
-
-  // ---- Preview comments ----------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({
-      comments: listPreviewComments(db, req.params.id, req.params.cid),
-    });
-  });
-
-  app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    try {
-      const comment = upsertPreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.body || {},
-      );
-      updateProject(db, req.params.id, {});
-      res.json({ comment });
-    } catch (err: any) {
-      res.status(400).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.patch(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      try {
-        const comment = updatePreviewCommentStatus(
-          db,
-          req.params.id,
-          req.params.cid,
-          req.params.commentId,
-          req.body?.status,
-        );
-        if (!comment)
-          return res.status(404).json({ error: 'comment not found' });
-        updateProject(db, req.params.id, {});
-        res.json({ comment });
-      } catch (err: any) {
-        res.status(400).json({ error: String(err?.message || err) });
-      }
-    },
-  );
-
-  app.delete(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      const ok = deletePreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.params.commentId,
-      );
-      if (!ok) return res.status(404).json({ error: 'comment not found' });
-      updateProject(db, req.params.id, {});
-      res.json({ ok: true });
-    },
-  );
+  registerProjectConversationRoutes(app, ctx);
 
   // ---- Tabs -----------------------------------------------------------------
 

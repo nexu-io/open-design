@@ -666,4 +666,87 @@ describe('run event log persistence', () => {
     // because we configured runsLogDir=null.
     expect(fs.readdirSync(tmpDir)).toEqual([]);
   });
+
+  it('does not re-open the event log stream for events emitted after the run finished (FD-leak guard)', () => {
+    // finish() closes the per-run events.jsonl write stream and nulls it. The
+    // stream is opened lazily on emit, so an event emitted AFTER finish (a late
+    // async child-close diagnostic, a trailing tool callback, telemetry) would
+    // re-open a NEW write stream that finish() — guarded against re-running on a
+    // terminal run — never closes. Each such late emit then leaks one file
+    // descriptor; over a long-lived daemon this exhausts the fd table and
+    // posix_spawn starts returning EBADF (#3408 P1, distinct from the stdio
+    // leak fixed in #4163).
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1' });
+
+    runs.emit(run, 'agent', { type: 'text_delta', delta: 'hi' }); // opens the stream
+    runs.finish(run, 'succeeded', 0, null); // closes + nulls the stream
+    expect(run.eventsLogStream).toBeNull();
+
+    // A late event must NOT lazily re-open a stream that will never be closed.
+    runs.emit(run, 'diagnostic', { type: 'runtime_close' });
+    expect(run.eventsLogStream).toBeNull();
+  });
+
+  it("still writes finish()'s own end event for a run that finished with no prior events", async () => {
+    // Regression for the FD-leak guard: finish() sets status terminal before
+    // emitting `end`, so the guard must NOT block that in-progress emit — a
+    // no-output failure / queued-run cancellation, where `end` is the only
+    // event, must still leave a forensic events.jsonl on disk.
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1' });
+
+    runs.finish(run, 'canceled', null, 'SIGTERM'); // no prior emit; end is the only event
+
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    let lines: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      if (fs.existsSync(logPath)) {
+        const text = fs.readFileSync(logPath, 'utf8').trim();
+        lines = text ? text.split('\n') : [];
+        if (lines.length >= 1) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(fs.existsSync(logPath)).toBe(true);
+    expect(lines.length).toBe(1);
+    expect(JSON.parse(lines[0] ?? '')).toMatchObject({ event: 'end', data: { status: 'canceled' } });
+    // …but the stream is closed and a later emit still must not re-open it.
+    expect(run.eventsLogStream).toBeNull();
+    runs.emit(run, 'diagnostic', { type: 'runtime_close' });
+    expect(run.eventsLogStream).toBeNull();
+  });
+
+  it('does not leak real file descriptors across many finished runs with late emits', async () => {
+    // fd-level proof of the leak (the actual cause of spawn EBADF), not just the
+    // JS-object proxy above. Repeatedly: open the log, finish, then emit late.
+    // On the buggy code each late emit re-opens a WriteStream whose fd stays
+    // open as long as the run object is referenced — so N iterations leak ~N
+    // fds. With the fix the count stays flat. Linux/macOS expose the process's
+    // open fds at /dev/fd; skip elsewhere (Windows has no equivalent dir).
+    const fdDir = '/dev/fd';
+    if (!fs.existsSync(fdDir)) return;
+    const countFds = () => fs.readdirSync(fdDir).length;
+
+    const runs = createRunsWithLog(tmpDir);
+    const kept: unknown[] = []; // hold run refs so leaked streams can't be GC'd
+    const ITER = 60;
+    const before = countFds();
+    for (let i = 0; i < ITER; i++) {
+      const run = runs.create({ projectId: 'p1', conversationId: `c${i}` });
+      kept.push(run);
+      runs.emit(run, 'agent', { type: 'text_delta', delta: 'x' });
+      runs.finish(run, 'succeeded', 0, null);
+      runs.emit(run, 'diagnostic', { type: 'runtime_close' }); // late — must not re-open
+    }
+    // createWriteStream opens its fd asynchronously, so any leaked streams from
+    // the late emits only hold their fd a tick later — wait for opens to settle
+    // before counting, otherwise the leak is invisible to a synchronous count.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const after = countFds();
+    // Generous noise margin, far below ITER. On the buggy code this grows by
+    // ~ITER (each late emit re-opened a never-closed stream).
+    expect(after - before).toBeLessThan(15);
+    expect(kept.length).toBe(ITER);
+  });
 });

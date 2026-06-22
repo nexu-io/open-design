@@ -2835,6 +2835,7 @@
   }
 
   .ds-project-toc {
+    position: static;
     z-index: 5;
     top: 0;
     max-height: none;

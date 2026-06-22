@@ -15,7 +15,7 @@
   <a href="https://open-design.ai/">ダウンロード</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">@nexudotio をフォロー</a>
+  <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ をフォロー</a>
 </p>
 
 <p align="center">
@@ -595,7 +595,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 すべてのチャネルの裏側には、本物の人がいます。
 
 - 💬 **Discord** — 日々のチャット、プラグインの共有、質問 → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter** — リリースノート、マイルストーン、舞台裏 → [**@nexudotio**](https://x.com/nexudotio)
+- 🐦 **X / Twitter** — リリースノート、マイルストーン、舞台裏 → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — 深い Q&A、RFC、「成果を見せて」 → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — バグ報告、機能リクエスト → [**Issues**](https://github.com/nexu-io/open-design/issues)
 
@@ -678,7 +678,7 @@ gh pr create --fill
 参加してくださったすべての方に感謝します——コード、ドキュメント、フィードバック、鋭い issue、新しいスキル、新しいデザインシステム。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-22" alt="Open Design contributors" />
 </a>
 
 ---
@@ -703,9 +703,9 @@ gh pr create --fill
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-22" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
   </picture>
 </a>
 

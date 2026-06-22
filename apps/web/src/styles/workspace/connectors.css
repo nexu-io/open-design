@@ -149,10 +149,37 @@
   right: auto;
   z-index: 1000;
 }
+.ds-picker-popover-portal > .ds-picker-popover {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
+  max-height: inherit;
+}
 .ds-picker-popover-portal .ds-picker-list {
   max-height: none;
   flex: 1 1 auto;
   min-height: 0;
+}
+/* Rich brand preview flyout — a side panel anchored to the popover that shows
+   the compact Brand Kit card for the hovered / selected brand. It sits OUTSIDE
+   the `overflow: hidden` popover (as a sibling) so it is not clipped, and to
+   the right of the popover via the wrapper's relative positioning. */
+.ds-picker-brand-flyout {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  z-index: 31;
+  width: 320px;
+  max-height: min(560px, 70vh);
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: ds-pop-in 140ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 .ds-picker-head {
   display: flex;

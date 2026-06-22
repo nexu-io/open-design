@@ -1278,6 +1278,13 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
           reasoning: 'high',
           skillId: 'landing-page',
           designSystemId: 'mission-control',
+          designSystemDigest: 'digest-abc',
+          designSystemSelectionSource: 'project',
+          promptCache: {
+            stablePromptHash: 'stable-hash-1',
+            hit: true,
+            missReason: null,
+          },
           clientType: 'desktop',
         }) as any,
         appVersion: {
@@ -1303,6 +1310,11 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(trace.metadata.reasoning).toBe('high');
     expect(trace.metadata.skillId).toBe('landing-page');
     expect(trace.metadata.designSystemId).toBe('mission-control');
+    expect(trace.metadata.designSystemDigest).toBe('digest-abc');
+    expect(trace.metadata.designSystemSelectionSource).toBe('project');
+    expect(trace.metadata.stablePromptHash).toBe('stable-hash-1');
+    expect(trace.metadata.stablePromptCacheHit).toBe(true);
+    expect(trace.metadata.stablePromptCacheMissReason).toBeNull();
     expect(trace.tags).toEqual(
       expect.arrayContaining([
         'model:claude-sonnet-4-5',

@@ -51,7 +51,10 @@ export type ChipAction =
       projectMetadata?: ProjectMetadata;
     }
   | { kind: 'create-plugin' }
-  | { kind: 'open-template-picker' };
+  | { kind: 'open-template-picker' }
+  // Routes the user into the Brand Kit tab and opens its New Brand Kit modal,
+  // reusing the same extraction flow as the tab's own "New Brand Kit" button.
+  | { kind: 'create-brand-kit' };
 
 // Two intent groups: "create" = produce a design artifact, "migrate" =
 // lower-row starter shortcuts such as plugin authoring, imports, and
@@ -70,6 +73,21 @@ export interface HomeHeroChip {
 }
 
 export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
+  {
+    id: 'create-brand-kit',
+    // Inline English fallback only — the rendered label is localized through
+    // the `homeHero.chip.createBrandKit` Dict key (see `homeHeroChipLabel` in
+    // HomeHero.tsx / `homeHeroChipLabelForId` in HomeView.tsx) so the Chinese
+    // UI shows "创建品牌套件".
+    label: 'Create Brand Kit',
+    icon: 'swatchbook',
+    group: 'create',
+    hint: 'Extract a brand kit from a website, then apply it in any chat.',
+    // Distinct from the plugin-bound create chips: this dispatches straight
+    // into the Brand Kit tab's extraction flow instead of binding a scenario
+    // plugin to the composer.
+    action: { kind: 'create-brand-kit' },
+  },
   {
     id: 'prototype',
     label: 'Prototype',

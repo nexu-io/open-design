@@ -463,7 +463,7 @@ function projectCover(
   return { kind: 'fallback', style, initial };
 }
 
-type ProjectCategory = 'prototype' | 'live-artifact' | 'slide' | 'media';
+type ProjectCategory = 'prototype' | 'live-artifact' | 'slide' | 'media' | 'brand';
 
 function projectCategory(project: Project): ProjectCategory {
   const meta = project.metadata;
@@ -471,6 +471,7 @@ function projectCategory(project: Project): ProjectCategory {
     return 'live-artifact';
   }
   if (meta?.kind === 'deck') return 'slide';
+  if (meta?.kind === 'brand') return 'brand';
   if (meta?.kind === 'image' || meta?.kind === 'video' || meta?.kind === 'audio') {
     return 'media';
   }
@@ -484,6 +485,8 @@ function ProjectTag({ category }: { category: ProjectCategory }) {
       ? t('designs.tagLiveArtifact')
       : category === 'slide'
         ? t('designs.tagSlide')
+        : category === 'brand'
+          ? 'Brand'
         : category === 'media'
           ? t('designs.tagMedia')
           : t('designs.tagPrototype');

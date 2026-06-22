@@ -15,7 +15,7 @@
   <a href="https://open-design.ai/">Descargar</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">Sigue a @nexudotio</a>
+  <a href="https://x.com/OpenDesignHQ">Sigue a @OpenDesignHQ</a>
 </p>
 
 <p align="center">
@@ -595,7 +595,7 @@ Entrega por fases → [`docs/roadmap.md`](../../docs/roadmap.md).
 Personas reales detrás de cada canal.
 
 - 💬 **Discord** — chat diario, intercambio de plugins, preguntas → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter** — notas de lanzamiento, hitos, detrás de cámaras → [**@nexudotio**](https://x.com/nexudotio)
+- 🐦 **X / Twitter** — notas de lanzamiento, hitos, detrás de cámaras → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — preguntas y respuestas a fondo, RFCs, "muestra tu trabajo" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — reportes de bugs, solicitudes de características → [**Issues**](https://github.com/nexu-io/open-design/issues)
 
@@ -678,7 +678,7 @@ Reglas de los mantenedores, criterios de promoción y el protocolo de salida →
 Gracias a todos los que han participado — código, documentación, comentarios, una incidencia certera, un nuevo skill, un nuevo sistema de diseño.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-22" alt="Open Design contributors" />
 </a>
 
 ---
@@ -703,9 +703,9 @@ Si esto te ahorró treinta minutos, dale una ★. Las estrellas no pagan el alqu
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-22" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
   </picture>
 </a>
 

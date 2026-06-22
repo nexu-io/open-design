@@ -10,20 +10,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import {
-  defaultScenarioPluginIdForProjectMetadata,
-  type OpenDesignDiscordPresenceResponse,
-  type OpenDesignGithubLatestReleaseResponse,
-  type OpenDesignGithubRepoResponse,
-  PLUGIN_SHARE_ACTION_PLUGIN_IDS,
-  RUN_RESULT_PACKAGE_SCHEMA,
-} from '@open-design/contracts';
+import { PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
 import {
   composeSystemPrompt,
-  renderCodexImagegenOverride,
-  resolveCodexImagegenModelId,
   resolveExclusiveSurface,
-  shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
@@ -71,10 +61,69 @@ import {
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
 } from './browser-use-diagnostics.js';
+import {
+  UPLOAD_DIR,
+  composeLiveInstructionPrompt,
+  formatDesignFilesWorkspaceHint,
+  formatProjectAttachmentHint,
+  normalizeCommentAttachments,
+  renderCommentAttachmentHint,
+  resolveChatExtraAllowedDirs,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
+  resolveCodexGeneratedImagesDir,
+  resolveEffectiveDesignSystemSelection,
+  resolveGrantedCodexImagegenOverride,
+  resolveResearchCommandContract,
+  resolveSafeProjectAttachments,
+  resolveSafePromptImagePaths,
+  selectPromptImagePaths,
+  validateCodexGeneratedImagesDir,
+} from './runtimes/chat-prompt-inputs.js';
+import {
+  applyClaudeStreamJsonRunBookkeeping,
+  assertValidRuntimeDefInactivityTimeoutMs,
+  bufferedAntigravityGeminiFirstTokenAt,
+  classifyChatRunCloseStatus,
+  looksLikeGeminiJsonEventStream,
+  resolveAcpStageTimeoutMs,
+  resolveActiveInactivityTimeoutMs,
+  resolveChatRunArtifactQuietPeriodMs,
+  resolveChatRunInactivityTimeoutMs,
+  resolveChatRunShutdownGraceMs,
+} from './runtimes/chat-run-lifecycle.js';
+export {
+  composeLiveInstructionPrompt,
+  formatDesignFilesWorkspaceHint,
+  formatProjectAttachmentHint,
+  normalizeCommentAttachments,
+  renderCommentAttachmentHint,
+  resolveChatExtraAllowedDirs,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
+  resolveCodexGeneratedImagesDir,
+  resolveEffectiveDesignSystemSelection,
+  resolveGrantedCodexImagegenOverride,
+  resolveResearchCommandContract,
+  resolveSafeProjectAttachments,
+  resolveSafePromptImagePaths,
+  selectPromptImagePaths,
+  validateCodexGeneratedImagesDir,
+} from './runtimes/chat-prompt-inputs.js';
+export {
+  applyClaudeStreamJsonRunBookkeeping,
+  assertValidRuntimeDefInactivityTimeoutMs,
+  bufferedAntigravityGeminiFirstTokenAt,
+  classifyChatRunCloseStatus,
+  looksLikeGeminiJsonEventStream,
+  resolveActiveInactivityTimeoutMs,
+  resolveChatRunArtifactQuietPeriodMs,
+  resolveChatRunInactivityTimeoutMs,
+} from './runtimes/chat-run-lifecycle.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
-import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
@@ -98,7 +147,6 @@ import {
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import {
-  readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
@@ -132,6 +180,7 @@ export {
   signDesktopImportToken,
   verifyDesktopImportToken,
 } from './desktop-auth.js';
+import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   findSkillById,
   listSkills,
@@ -157,6 +206,7 @@ import {
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
+  digestDesignSystemContext,
   LEGACY_DESIGN_SYSTEM_ARTIFACTS,
   linkUserDesignSystemProject,
   listDesignSystems,
@@ -170,6 +220,7 @@ import {
   updateUserDesignSystemRevisionStatus,
 } from './design-systems/index.js';
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { createDesignSystemServerServices } from './design-systems/server-services.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
@@ -224,9 +275,6 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
-import { getCritiqueMetrics, register } from './metrics/index.js';
-import { readConformanceHistory } from './critique/conformance-history.js';
-import { evaluateRollout } from './critique/ratchet.js';
 import {
   isCritiqueEnabled,
   parseEnvEnabled,
@@ -255,47 +303,24 @@ import { classifyRunFailure, isResumableFailure } from './run-failure-classifica
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
-  hasExplicitRequestedModelForAnalytics,
-  runtimeTypeForRunAnalytics,
   scanRunEventsForUsageAnalytics,
-  summarizeRunTimingAnalytics,
 } from './run-analytics-observability.js';
-import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
   countNewArtifacts,
-  deriveActivationMilestones,
   didRunCreateDesignSystemFile,
-  runAskedUserQuestion,
 } from './runtimes/run-artifacts.js';
 import {
   createRunArtifactBaselines,
-  diffRunArtifacts,
   snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
-import {
-  reportRunCompletedFromDaemon,
-  reportRunFeedbackFromDaemon,
-} from './langfuse-bridge.js';
-import {
-  deriveLangfuseDeliveryState,
-  readTelemetrySinkConfig,
-} from './langfuse-trace.js';
+import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
-import {
-  createAnalyticsService,
-  newInsertId,
-  readAnalyticsContext,
-  readPublicConfigResponse,
-} from './analytics.js';
-import { observePendingInstallerApplyAttempts } from './update-apply-observations.js';
+import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
-  deriveConfigureGlobals,
   modelIdForTracking,
   projectKindToTracking,
-  sessionModeToTracking,
-  type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -322,7 +347,6 @@ import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { renderResearchCommandContract } from './prompts/research-contract.js';
 import { openBrowser } from './browser-open.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -353,9 +377,7 @@ import {
   writeMcpConfig,
 } from './mcp-config.js';
 import {
-  parseRunToolBundleForRequest,
   resolveExternalMcpServersForRun,
-  validateRunToolBundleForAgent,
 } from './run-tool-bundle.js';
 import {
   beginAuth,
@@ -413,7 +435,6 @@ import {
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifacts/manifest.js';
 import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
-import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   appendMessageAgentEvent,
   appendMessageStatusEvent,
@@ -489,6 +510,7 @@ import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
+import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
 import { registerHostToolsRoutes } from './routes/host-tools.js';
@@ -501,19 +523,29 @@ import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
-import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
+import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './routes/project/index.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
+import { registerRunRoutes } from './routes/runs.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
+import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerMemoryRoutes } from './routes/memory.js';
-import { registerAtomRoutes, registerStaticResourceRoutes } from './routes/static-resource.js';
+import { registerTelemetryRoutes } from './routes/telemetry.js';
+import {
+  assembleExample,
+  registerAtomRoutes,
+  registerStaticResourceRoutes,
+  rewriteSkillAssetUrls,
+} from './routes/static-resource.js';
+export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
+import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
@@ -547,6 +579,7 @@ import {
   isLocalSameOrigin,
 } from './origin-validation.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -562,30 +595,6 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 
-export function composeLiveInstructionPrompt({
-  daemonSystemPrompt,
-  runtimeToolPrompt,
-  clientSystemPrompt,
-  finalPromptOverride,
-}) {
-  const override =
-    typeof finalPromptOverride === 'string'
-      ? finalPromptOverride.trim()
-      : '';
-  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
-    .map((part) => (typeof part === 'string' ? part.trim() : ''))
-    .map((part) =>
-      override && part.includes(override)
-        ? part.split(override).join('').trim()
-        : part,
-    )
-    .filter(Boolean);
-  if (override) {
-    parts.push(override);
-  }
-  return parts.join('\n\n---\n\n');
-}
-
 function renderPluginBriefTemplate(template, inputs = {}) {
   if (typeof template !== 'string' || template.length === 0) return '';
   return template.replace(/\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g, (full, key) => {
@@ -594,708 +603,6 @@ function renderPluginBriefTemplate(template, inputs = {}) {
     if (value === undefined || value === null || value === '') return full;
     return String(value);
   });
-}
-
-export function resolveResearchCommandContract(research, message) {
-  if (!research || !research.enabled) return '';
-  const researchQuery =
-    typeof research.query === 'string' && research.query.trim()
-      ? research.query
-      : message;
-  return renderResearchCommandContract({
-    query: researchQuery,
-    maxSources:
-      typeof research.maxSources === 'number' ? research.maxSources : undefined,
-  });
-}
-
-export function resolveCodexGeneratedImagesDir(
-  agentId,
-  metadata,
-  env = process.env,
-  homeDir = os.homedir(),
-  mediaExecution: any = undefined,
-) {
-  if (!shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution)) return null;
-  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
-  const rawCodexHome =
-    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
-      ? env.CODEX_HOME.trim()
-      : path.join(homeDir, '.codex');
-  const codexHome = rawCodexHome.startsWith('~/')
-    ? path.join(homeDir, rawCodexHome.slice(2))
-    : rawCodexHome;
-  return path.resolve(codexHome, 'generated_images');
-}
-
-type DirectoryStat = {
-  isDirectory(): boolean;
-  isSymbolicLink(): boolean;
-};
-
-type CodexGeneratedImagesDirValidationOptions = {
-  protectedDirs?: Array<string | null | undefined>;
-  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
-  lstatSync?: (target: string) => DirectoryStat;
-  statSync?: (target: string) => DirectoryStat;
-  realpathSync?: (target: string) => string;
-  warn?: (message: string) => void;
-};
-
-function isMissingPathError(err: unknown): boolean {
-  return (
-    err &&
-    typeof err === 'object' &&
-    'code' in err &&
-    err.code === 'ENOENT'
-  );
-}
-
-function collectProtectedDirRoots(
-  protectedDirs: Array<string | null | undefined>,
-  {
-    realpathSync,
-    statSync,
-  }: {
-    realpathSync: (target: string) => string;
-    statSync: (target: string) => DirectoryStat;
-  },
-): string[] {
-  const roots = [];
-  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
-    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
-    const resolved = path.resolve(raw);
-    roots.push(resolved);
-    try {
-      const canonical = realpathSync(resolved);
-      try {
-        if (statSync(canonical).isDirectory()) roots.push(canonical);
-      } catch {
-        roots.push(canonical);
-      }
-    } catch {
-      // A missing protected root cannot be the canonical target of a symlink.
-    }
-  }
-  return Array.from(new Set(roots));
-}
-
-function findContainingProtectedRoot(
-  candidate: string,
-  protectedRoots: string[],
-): string | null {
-  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
-}
-
-export function validateCodexGeneratedImagesDir(
-  codexGeneratedImagesDir: string | null | undefined,
-  {
-    protectedDirs = [],
-    mkdirSync = fs.mkdirSync,
-    lstatSync = fs.lstatSync,
-    statSync = fs.statSync,
-    realpathSync = fs.realpathSync.native,
-    warn = console.warn,
-  }: CodexGeneratedImagesDirValidationOptions = {},
-): string | null {
-  if (
-    typeof codexGeneratedImagesDir !== 'string' ||
-    codexGeneratedImagesDir.trim().length === 0
-  ) {
-    return null;
-  }
-
-  const resolved = path.resolve(codexGeneratedImagesDir);
-  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
-    realpathSync,
-    statSync,
-  });
-  const warnSkipped = (reason: string) =>
-    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
-
-  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
-  if (protectedRoot) {
-    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
-    return null;
-  }
-
-  try {
-    let existingTargetStat = null;
-    try {
-      existingTargetStat = lstatSync(resolved);
-    } catch (err) {
-      if (!isMissingPathError(err)) throw err;
-    }
-    if (existingTargetStat?.isSymbolicLink()) {
-      warnSkipped(`${resolved} is a symlink`);
-      return null;
-    }
-    if (existingTargetStat && !existingTargetStat.isDirectory()) {
-      warnSkipped(`${resolved} is not a directory`);
-      return null;
-    }
-
-    const parent = path.dirname(resolved);
-    const protectedParentRoot = findContainingProtectedRoot(
-      parent,
-      protectedRoots,
-    );
-    if (protectedParentRoot) {
-      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
-      return null;
-    }
-
-    mkdirSync(parent, { recursive: true });
-    const canonicalParent = realpathSync(parent);
-    const canonicalCandidate = path.join(
-      canonicalParent,
-      path.basename(resolved),
-    );
-    const protectedCanonicalParentRoot = findContainingProtectedRoot(
-      canonicalCandidate,
-      protectedRoots,
-    );
-    if (protectedCanonicalParentRoot) {
-      warnSkipped(
-        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
-      );
-      return null;
-    }
-
-    mkdirSync(resolved, { recursive: true });
-    if (lstatSync(resolved).isSymbolicLink()) {
-      warnSkipped(`${resolved} is a symlink`);
-      return null;
-    }
-    if (!statSync(resolved).isDirectory()) {
-      warnSkipped(`${resolved} is not a directory`);
-      return null;
-    }
-    const canonicalDir = realpathSync(resolved);
-    const protectedCanonicalRoot = findContainingProtectedRoot(
-      canonicalDir,
-      protectedRoots,
-    );
-    if (protectedCanonicalRoot) {
-      warnSkipped(
-        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
-      );
-      return null;
-    }
-
-    return canonicalDir;
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : String(err ?? 'unknown error');
-    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
-    return null;
-  }
-}
-
-export function resolveChatExtraAllowedDirs({
-  agentId,
-  skillsDir,
-  designSystemsDir,
-  linkedDirs = [],
-  codexGeneratedImagesDir,
-  existsSync = fs.existsSync,
-}: {
-  agentId?: string | null;
-  skillsDir?: string | null;
-  designSystemsDir?: string | null;
-  linkedDirs?: Array<string | null | undefined>;
-  codexGeneratedImagesDir?: string | null;
-  existsSync?: (path: string) => boolean;
-}): string[] {
-  const isCodex =
-    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
-  const candidates = isCodex
-    ? [codexGeneratedImagesDir]
-    : [
-        skillsDir,
-        designSystemsDir,
-        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
-      ];
-  return Array.from(
-    new Set(
-      candidates.filter(
-        (d) =>
-          typeof d === 'string' && d.length > 0 && existsSync(d),
-      ),
-    ),
-  );
-}
-
-export function resolveGrantedCodexImagegenOverride({
-  agentId,
-  metadata,
-  codexGeneratedImagesDir,
-  extraAllowedDirs = [],
-  mediaExecution,
-}: {
-  agentId?: string | null;
-  metadata?: unknown;
-  codexGeneratedImagesDir?: string | null;
-  extraAllowedDirs?: string[];
-  mediaExecution?: unknown;
-}): string | null {
-  if (!shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution)) {
-    return null;
-  }
-  if (
-    typeof codexGeneratedImagesDir !== 'string' ||
-    codexGeneratedImagesDir.length === 0 ||
-    !Array.isArray(extraAllowedDirs) ||
-    !extraAllowedDirs.includes(codexGeneratedImagesDir)
-  ) {
-    return null;
-  }
-  return renderCodexImagegenOverride(agentId, metadata);
-}
-
-function shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution) {
-  const mode = mediaExecution?.mode ?? 'enabled';
-  if (mode !== 'enabled') return false;
-  if (
-    Array.isArray(mediaExecution?.allowedSurfaces) &&
-    mediaExecution.allowedSurfaces.length > 0 &&
-    !mediaExecution.allowedSurfaces.includes('image')
-  ) {
-    return false;
-  }
-  const model = resolveCodexImagegenModelId(metadata);
-  if (
-    model &&
-    Array.isArray(mediaExecution?.allowedModels) &&
-    mediaExecution.allowedModels.length > 0 &&
-    !mediaExecution.allowedModels.includes(model)
-  ) {
-    return false;
-  }
-  return true;
-}
-
-export function normalizeCommentAttachments(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((raw, index) => {
-      if (!raw || typeof raw !== 'object') return null;
-      const filePath = cleanString(raw.filePath);
-      const elementId = cleanString(raw.elementId);
-      const selector = cleanString(raw.selector);
-      const label = cleanString(raw.label);
-      const screenshotPath = cleanString(raw.screenshotPath);
-      const markKind = normalizeVisualMarkKind(raw.markKind);
-      const intent = compactString(raw.intent, 220);
-      const imageAttachments = normalizePreviewCommentImageAttachments(raw.imageAttachments);
-      const commentContext = raw.commentContext === 'query' ? 'query' : 'context';
-      const comment = commentContext === 'query'
-        ? ''
-        : cleanString(raw.comment) || intent || imageOnlyCommentFallback(imageAttachments.length);
-      const selectionKind =
-        raw.selectionKind === 'visual' ? 'visual' : raw.selectionKind === 'pod' ? 'pod' : 'element';
-      if (!filePath || !elementId) return null;
-      if (selectionKind !== 'visual' && !selector) return null;
-      if (selectionKind === 'visual' && !screenshotPath) return null;
-      const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
-      const memberCount =
-        selectionKind === 'pod'
-          ? (podMembers.length > 0
-              ? podMembers.length
-              : Number.isFinite(raw.memberCount)
-                ? Math.max(0, Math.round(raw.memberCount))
-                : 0)
-          : 0;
-      return {
-        id: cleanString(raw.id) || `comment-${index + 1}`,
-        order: Number.isFinite(raw.order)
-          ? Math.max(1, Math.round(raw.order))
-          : index + 1,
-        filePath,
-        elementId,
-        selector,
-        label,
-        comment,
-        currentText: compactString(raw.currentText, 160),
-        pagePosition: normalizeAttachmentPosition(raw.pagePosition),
-        htmlHint: compactString(raw.htmlHint, 180),
-        style: normalizeAnnotationStyle(raw.style),
-        selectionKind,
-        memberCount,
-        podMembers,
-        screenshotPath: selectionKind === 'visual' ? screenshotPath : undefined,
-        markKind: selectionKind === 'visual' ? markKind : undefined,
-        intent: selectionKind === 'visual'
-          ? intent || visualAnnotationIntent(markKind)
-          : undefined,
-        imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined,
-        commentContext,
-        source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.order - b.order);
-}
-
-export function renderCommentAttachmentHint(commentAttachments) {
-  if (!commentAttachments.length) return '';
-  const lines = [
-    '',
-    '',
-    '<attached-preview-comments>',
-    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
-  ];
-  for (const item of commentAttachments) {
-    const targetKind =
-      item.selectionKind === 'visual' ? 'visual' : item.selectionKind === 'pod' ? 'pod' : 'element';
-    lines.push(
-      '',
-      `${item.order}. ${item.elementId}`,
-      `targetKind: ${targetKind}`,
-      `file: ${item.filePath}`,
-      `label: ${item.label || '(unlabeled)'}`,
-      `position: ${formatAttachmentPosition(item.pagePosition)}`,
-      `currentText: ${item.currentText || '(empty)'}`,
-      `htmlHint: ${item.htmlHint || '(none)'}`,
-      `computedStyle: ${formatAnnotationStyle(item.style) || '(none)'}`,
-    );
-    if (item.comment && item.commentContext !== 'query') {
-      lines.push(`comment: ${item.comment}`);
-    }
-    if (targetKind === 'visual') {
-      lines.push(
-        `screenshot: ${item.screenshotPath}`,
-        `markKind: ${item.markKind || 'stroke'}`,
-        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
-      );
-      if (item.selector) lines.push(`selector: ${item.selector}`);
-    } else {
-      lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
-    }
-    if (targetKind === 'pod') {
-      lines.push(`memberCount: ${item.memberCount || item.podMembers.length || 0}`);
-      item.podMembers.slice(0, 8).forEach((member, memberIndex) => {
-        lines.push(
-          `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
-        );
-        const memberStyle = formatAnnotationStyle(member.style);
-        if (memberStyle) lines.push(`member.${memberIndex + 1}.computedStyle: ${memberStyle}`);
-      });
-    }
-    const imageAttachments = normalizePreviewCommentImageAttachments(item.imageAttachments);
-    if (imageAttachments.length > 0) {
-      lines.push(`imageAttachments: ${imageAttachments.length}`);
-      imageAttachments.forEach((attachment, attachmentIndex) => {
-        lines.push(`image.${attachmentIndex + 1}: ${attachment.path} | ${attachment.name}`);
-      });
-    }
-  }
-  lines.push('</attached-preview-comments>');
-  return lines.join('\n');
-}
-
-function cleanString(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizePreviewCommentImageAttachments(input) {
-  if (!Array.isArray(input)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const item of input) {
-    if (!item || typeof item !== 'object') continue;
-    const path = cleanString(item.path);
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    const name = cleanString(item.name) || path.split('/').pop() || path;
-    out.push({ path, name });
-    if (out.length >= 20) break;
-  }
-  return out;
-}
-
-function imageOnlyCommentFallback(count) {
-  if (count <= 0) return '';
-  return count > 1
-    ? `Use the ${count} attached images as the comment reference.`
-    : 'Use the attached image as the comment reference.';
-}
-
-function normalizeVisualMarkKind(value) {
-  return value === 'click' || value === 'click+stroke' || value === 'stroke'
-    ? value
-    : 'stroke';
-}
-
-function visualAnnotationIntent(markKind) {
-  if (markKind === 'click') {
-    return 'The screenshot has a blue focus box around the picked element; modify that picked part first.';
-  }
-  if (markKind === 'click+stroke') {
-    return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
-  }
-  return 'The screenshot has red strokes that identify the visual region the user wants changed.';
-}
-
-function compactString(value, max) {
-  const text = cleanString(value).replace(/\s+/g, ' ');
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
-}
-
-function normalizeAttachmentPosition(input) {
-  const value = input && typeof input === 'object' ? input : {};
-  return {
-    x: finiteAttachmentNumber(value.x),
-    y: finiteAttachmentNumber(value.y),
-    width: finiteAttachmentNumber(value.width),
-    height: finiteAttachmentNumber(value.height),
-  };
-}
-
-function normalizeAttachmentPodMembers(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((member) => {
-      if (!member || typeof member !== 'object') return null;
-      const elementId = cleanString(member.elementId);
-      const selector = cleanString(member.selector);
-      const label = cleanString(member.label);
-      if (!elementId || !selector) return null;
-      return {
-        elementId,
-        selector,
-        label,
-        text: compactString(member.text, 160),
-        position: normalizeAttachmentPosition(member.position),
-        htmlHint: compactString(member.htmlHint, 180),
-        style: normalizeAnnotationStyle(member.style),
-      };
-    })
-    .filter(Boolean);
-}
-
-function normalizeAnnotationStyle(input) {
-  if (!input || typeof input !== 'object') return undefined;
-  const style = {};
-  for (const key of ANNOTATION_STYLE_KEYS) {
-    const value = input[key];
-    if (typeof value !== 'string') continue;
-    const trimmed = value.replace(/\s+/g, ' ').trim();
-    if (trimmed) style[key] = trimmed.slice(0, 120);
-  }
-  return Object.keys(style).length > 0 ? style : undefined;
-}
-
-function formatAnnotationStyle(style) {
-  if (!style || typeof style !== 'object') return '';
-  return ANNOTATION_STYLE_KEYS
-    .map((key) => {
-      const value = style[key];
-      return value ? `${key}: ${value}` : null;
-    })
-    .filter(Boolean)
-    .join('; ');
-}
-
-const ANNOTATION_STYLE_KEYS = [
-  'color',
-  'backgroundColor',
-  'fontSize',
-  'fontWeight',
-  'lineHeight',
-  'textAlign',
-  'fontFamily',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderRadius',
-];
-
-function finiteAttachmentNumber(value) {
-  return Number.isFinite(value) ? Math.round(value) : 0;
-}
-
-const DESIGN_FILES_HINT_FOLDER_LIMIT = 40;
-const DESIGN_FILES_HINT_FILE_LIMIT = 80;
-type DesignFilesHintEntry = {
-  name?: string;
-  path?: string;
-  kind?: string;
-  type?: string;
-  size?: number;
-};
-
-function formatAttachmentPosition(position) {
-  return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
-}
-
-function isPathWithin(base, target) {
-  const relativePath = path.relative(path.resolve(base), path.resolve(target));
-  return (
-    relativePath === '' ||
-    (relativePath.length > 0 &&
-      !relativePath.startsWith('..') &&
-      !path.isAbsolute(relativePath))
-  );
-}
-
-export function resolveSafeProjectAttachments(cwd, attachments, opts = {}) {
-  if (!cwd || !Array.isArray(attachments)) return [];
-  const pathImpl = opts.pathImpl ?? path;
-  const existsSync = opts.existsSync ?? fs.existsSync;
-  const root = pathImpl.resolve(cwd);
-  const out = [];
-
-  for (const attachment of attachments) {
-    if (typeof attachment !== 'string' || attachment.length === 0) continue;
-    try {
-      const abs = pathImpl.resolve(root, attachment);
-      const relativePath = pathImpl.relative(root, abs);
-      const withinRoot =
-        relativePath === '' ||
-        (relativePath.length > 0 &&
-          !relativePath.startsWith('..') &&
-          !pathImpl.isAbsolute(relativePath));
-      if (withinRoot && existsSync(abs)) out.push(attachment);
-    } catch {
-      // Drop malformed paths; attachments are advisory prompt context.
-    }
-  }
-
-  return out;
-}
-
-export function formatProjectAttachmentHint(attachments) {
-  if (!Array.isArray(attachments) || attachments.length === 0) return '';
-  return [
-    '',
-    '',
-    'Attached project files in user-visible order:',
-    ...attachments.map((p, index) => `${index + 1}. \`${p}\``),
-    '',
-    'When the user says "first attachment", "second file", or similar, map those references to the numbered list above.',
-  ].join('\n');
-}
-
-function formatProjectEntrySize(size: number) {
-  if (!Number.isFinite(size) || size <= 0) return '';
-  if (size < 1024) return `${Math.round(size)} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDesignFilesEntryLine(entry: DesignFilesHintEntry | null | undefined, fallbackKind?: string) {
-  const entryPath =
-    typeof entry?.path === 'string' && entry.path
-      ? entry.path
-      : typeof entry?.name === 'string'
-        ? entry.name
-        : '';
-  if (!entryPath) return null;
-  const kind = fallbackKind || entry.kind || entry.type || 'file';
-  const size = kind === 'folder' ? '' : formatProjectEntrySize(Number(entry.size));
-  return `- \`${entryPath}\` (${[kind, size].filter(Boolean).join(', ')})`;
-}
-
-export function formatDesignFilesWorkspaceHint(
-  cwd: string | null | undefined,
-  files: DesignFilesHintEntry[] = [],
-  folders: DesignFilesHintEntry[] = [],
-) {
-  if (typeof cwd !== 'string' || cwd.trim().length === 0) return '';
-  const safeFolders = Array.isArray(folders) ? folders : [];
-  const safeFiles = Array.isArray(files) ? files : [];
-  const folderLines = safeFolders
-    .slice(0, DESIGN_FILES_HINT_FOLDER_LIMIT)
-    .map((folder) => formatDesignFilesEntryLine(folder, 'folder'))
-    .filter(Boolean);
-  const fileLines = safeFiles
-    .slice(0, DESIGN_FILES_HINT_FILE_LIMIT)
-    .map((file) => formatDesignFilesEntryLine(file, file?.kind || 'file'))
-    .filter(Boolean);
-  const totalFolders = safeFolders.length;
-  const totalFiles = safeFiles.length;
-  const omittedFolders = Math.max(0, totalFolders - folderLines.length);
-  const omittedFiles = Math.max(0, totalFiles - fileLines.length);
-
-  const lines = [
-    '',
-    '',
-    '## Design Files workspace',
-    `The Design Files panel is backed by your current working directory: \`${cwd}\`. Write project files relative to this directory (for example \`index.html\` or \`assets/x.png\`). The user can browse these files in real time.`,
-    'The selected/attached files for a turn are only a shortcut for priority and ordering. If the user did not attach any file, do not assume there are no relevant Design Files.',
-    'When the request refers to existing files, asks you to choose a file, says "current", "this design", "the deck", "the image", "the folder", or depends on project state, inspect/search/read this workspace before answering or editing. Prefer project-relative paths, use the active workspace context as the default target, and ask only if multiple plausible targets remain after inspection.',
-    'For non-trivial inspection or edits, surface progress through visible planning/status/tool events instead of silently guessing.',
-    '',
-    `Current Design Files snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
-  ];
-
-  if (folderLines.length > 0) {
-    lines.push('', 'Folders:', ...folderLines);
-    if (omittedFolders > 0) lines.push(`- ... ${omittedFolders} more folder${omittedFolders === 1 ? '' : 's'} omitted`);
-  }
-
-  if (fileLines.length > 0) {
-    lines.push('', 'Files:', ...fileLines);
-    if (omittedFiles > 0) lines.push(`- ... ${omittedFiles} more file${omittedFiles === 1 ? '' : 's'} omitted`);
-  }
-
-  if (folderLines.length === 0 && fileLines.length === 0) {
-    lines.push('', 'No user-visible Design Files exist yet. Create clear project-relative files when the task requires output.');
-  }
-
-  return lines.join('\n');
-}
-
-export function resolveSafePromptImagePaths(imagePaths, opts = {}) {
-  if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
-    return { safeImages: [], oversizedImages: [], failedImages: [] };
-  }
-  const pathImpl = opts.pathImpl ?? path;
-  const existsSync = opts.existsSync ?? fs.existsSync;
-  const statSync = opts.statSync ?? fs.statSync;
-  const uploadDir = pathImpl.resolve(opts.uploadDir ?? UPLOAD_DIR);
-  const maxBytes = Number.isFinite(opts.maxBytes)
-    ? Number(opts.maxBytes)
-    : MAX_CHAT_IMAGE_BYTES;
-  const safeImages = [];
-  const oversizedImages = [];
-  const failedImages = [];
-
-  for (const inputPath of imagePaths) {
-    if (typeof inputPath !== 'string' || inputPath.length === 0) continue;
-    let resolved;
-    try {
-      resolved = pathImpl.resolve(inputPath);
-    } catch {
-      // Drop malformed path input; we cannot even resolve it to a location.
-      continue;
-    }
-    if (!isPathWithin(uploadDir, resolved) || !existsSync(resolved)) continue;
-    // Past the within-UPLOAD_DIR + existence gate the path points at a real
-    // upload. A statSync failure here (EACCES/EPERM, a file that vanished
-    // mid-run) is an infrastructure error, not bad input — surface it so the
-    // run fails loudly instead of silently dropping required prompt context.
-    let stat;
-    try {
-      stat = statSync(resolved);
-    } catch (err) {
-      failedImages.push({
-        path: inputPath,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
-    if (!stat.isFile()) continue;
-    if (typeof stat.size === 'number' && stat.size > maxBytes) {
-      oversizedImages.push({ path: inputPath, sizeBytes: stat.size });
-      continue;
-    }
-    safeImages.push(inputPath);
-  }
-
-  return { safeImages, oversizedImages, failedImages };
 }
 
 const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
@@ -1393,6 +700,16 @@ function bundledPluginRegistrySource(sourcePath) {
   const rel = path.relative(PROJECT_ROOT, sourcePath).split(path.sep).join('/');
   if (!rel || rel.startsWith('..')) return sourcePath;
   return `${OFFICIAL_PLUGIN_SOURCE_REPO}/${rel}`;
+}
+
+function isPathWithin(base, target) {
+  const relativePath = path.relative(path.resolve(base), path.resolve(target));
+  return (
+    relativePath === '' ||
+    (relativePath.length > 0 &&
+      !relativePath.startsWith('..') &&
+      !path.isAbsolute(relativePath))
+  );
 }
 
 function mergeMarketplaceEntries(manifestText, entries) {
@@ -1672,7 +989,7 @@ function emitLiveArtifactRefreshEvent(grant, payload) {
 
 // Broadcast an event to every SSE subscriber currently watching the given
 // project's `/api/projects/:id/events` stream. The payload's `type` field
-// becomes the SSE event name (see project-routes.ts). Used for live-artifact
+// becomes the SSE event name (see routes/project/index.ts). Used for live-artifact
 // events and `conversation-created` events emitted by routine runs (#1361).
 function emitProjectEvent(projectId, payload) {
   const sinks = activeProjectEventSinks.get(projectId);
@@ -2353,14 +1670,6 @@ async function copyPluginContextDir(src, dest, rootReal) {
 
 function shouldSkipPluginContextEntry(name) {
   return PLUGIN_CONTEXT_SKIP_DIRS.has(name) || PLUGIN_CONTEXT_SKIP_FILES.has(name);
-}
-
-export function selectPromptImagePaths(
-  agentId,
-  safeImages,
-  amrStagedImages,
-) {
-  return agentId === 'amr' ? amrStagedImages : safeImages;
 }
 
 async function ensureGhReady() {
@@ -3473,202 +2782,6 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
-const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
-const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
-const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
-const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
-const OPEN_DESIGN_DISCORD_INVITE_CODE = '9ptkbbqRu';
-const OPEN_DESIGN_DISCORD_INVITE_URL = `https://discord.gg/${OPEN_DESIGN_DISCORD_INVITE_CODE}`;
-const OPEN_DESIGN_DISCORD_INVITE_API = `https://discord.com/api/v10/invites/${OPEN_DESIGN_DISCORD_INVITE_CODE}?with_counts=true`;
-const OPEN_DESIGN_DISCORD_CACHE_TTL_MS = 5 * 60 * 1000;
-const OPEN_DESIGN_DISCORD_TIMEOUT_MS = 4_000;
-
-let openDesignGithubRepoCache = null;
-let openDesignGithubRepoInflight = null;
-let openDesignGithubLatestReleaseCache = null;
-let openDesignGithubLatestReleaseInflight = null;
-let openDesignDiscordPresenceCache = null;
-let openDesignDiscordPresenceInflight = null;
-
-async function readOpenDesignGithubRepoStats() {
-  const now = Date.now();
-  if (
-    openDesignGithubRepoCache &&
-    now - openDesignGithubRepoCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
-  ) {
-    return { ...openDesignGithubRepoCache, stale: false };
-  }
-
-  if (openDesignGithubRepoInflight) {
-    return openDesignGithubRepoInflight;
-  }
-
-  openDesignGithubRepoInflight = (async () => {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
-    try {
-      const response = await fetch(OPEN_DESIGN_GITHUB_REPO_API, {
-        headers: {
-          accept: 'application/vnd.github+json',
-          'user-agent': 'open-design-daemon',
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`GitHub repo metadata request failed with HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const count = payload && typeof payload.stargazers_count === 'number'
-        ? payload.stargazers_count
-        : null;
-      if (!Number.isFinite(count) || count == null || count < 0) {
-        throw new Error('GitHub repo metadata did not include a numeric stargazers_count');
-      }
-      openDesignGithubRepoCache = {
-        stargazersCount: count,
-        fetchedAt: Date.now(),
-      };
-      return { ...openDesignGithubRepoCache, stale: false };
-    } catch (error) {
-      if (openDesignGithubRepoCache) {
-        return { ...openDesignGithubRepoCache, stale: true };
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      openDesignGithubRepoInflight = null;
-    }
-  })();
-
-  return openDesignGithubRepoInflight;
-}
-
-async function readOpenDesignLatestReleaseInfo() {
-  const now = Date.now();
-  if (
-    openDesignGithubLatestReleaseCache &&
-    now - openDesignGithubLatestReleaseCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
-  ) {
-    return { ...openDesignGithubLatestReleaseCache, stale: false };
-  }
-
-  if (openDesignGithubLatestReleaseInflight) {
-    return openDesignGithubLatestReleaseInflight;
-  }
-
-  openDesignGithubLatestReleaseInflight = (async () => {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
-    try {
-      const response = await fetch(OPEN_DESIGN_GITHUB_RELEASE_LATEST_API, {
-        headers: {
-          accept: 'application/vnd.github+json',
-          'user-agent': 'open-design-daemon',
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`GitHub latest release request failed with HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const tagName = payload && typeof payload.tag_name === 'string' ? payload.tag_name : null;
-      const htmlUrl = payload && typeof payload.html_url === 'string' ? payload.html_url : null;
-      if (!tagName || !htmlUrl) {
-        throw new Error('GitHub latest release metadata did not include tag_name/html_url');
-      }
-      openDesignGithubLatestReleaseCache = {
-        tagName,
-        htmlUrl,
-        fetchedAt: Date.now(),
-      };
-      return { ...openDesignGithubLatestReleaseCache, stale: false };
-    } catch (error) {
-      if (openDesignGithubLatestReleaseCache) {
-        return { ...openDesignGithubLatestReleaseCache, stale: true };
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      openDesignGithubLatestReleaseInflight = null;
-    }
-  })();
-
-  return openDesignGithubLatestReleaseInflight;
-}
-
-async function readOpenDesignDiscordPresence() {
-  const now = Date.now();
-  if (
-    openDesignDiscordPresenceCache &&
-    now - openDesignDiscordPresenceCache.fetchedAt < OPEN_DESIGN_DISCORD_CACHE_TTL_MS
-  ) {
-    return { ...openDesignDiscordPresenceCache, stale: false };
-  }
-
-  if (openDesignDiscordPresenceInflight) {
-    return openDesignDiscordPresenceInflight;
-  }
-
-  openDesignDiscordPresenceInflight = (async () => {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_DISCORD_TIMEOUT_MS);
-    try {
-      const response = await fetch(OPEN_DESIGN_DISCORD_INVITE_API, {
-        headers: {
-          accept: 'application/json',
-          'user-agent': 'open-design-daemon',
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`Discord invite metadata request failed with HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const profile = payload && typeof payload.profile === 'object' ? payload.profile : null;
-      const onlineCount =
-        typeof payload?.approximate_presence_count === 'number'
-          ? payload.approximate_presence_count
-          : typeof profile?.online_count === 'number'
-            ? profile.online_count
-            : null;
-      const memberCount =
-        typeof payload?.approximate_member_count === 'number'
-          ? payload.approximate_member_count
-          : typeof profile?.member_count === 'number'
-            ? profile.member_count
-            : null;
-
-      if (
-        !Number.isFinite(onlineCount) ||
-        onlineCount == null ||
-        onlineCount < 0 ||
-        !Number.isFinite(memberCount) ||
-        memberCount == null ||
-        memberCount < 0
-      ) {
-        throw new Error('Discord invite metadata did not include numeric member counts');
-      }
-
-      openDesignDiscordPresenceCache = {
-        onlineCount,
-        memberCount,
-        fetchedAt: Date.now(),
-      };
-      return { ...openDesignDiscordPresenceCache, stale: false };
-    } catch (error) {
-      if (openDesignDiscordPresenceCache) {
-        return { ...openDesignDiscordPresenceCache, stale: true };
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      openDesignDiscordPresenceInflight = null;
-    }
-  })();
-
-  return openDesignDiscordPresenceInflight;
-}
-
 function bearerTokenFromRequest(req) {
   const header = req.get('authorization');
   if (typeof header !== 'string') return undefined;
@@ -3753,8 +2866,6 @@ function createSseErrorPayload(code, message, init = {}) {
   return { message, error: createCompatApiError(code, message, init) };
 }
 
-const MAX_CHAT_IMAGE_BYTES = 1024 * 1024;
-
 function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   const rawMessage =
     typeof message === 'string' && message.trim()
@@ -3790,7 +2901,6 @@ function createAmrModelUnavailablePayload(model, init = {}) {
   );
 }
 
-const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
@@ -4149,337 +3259,6 @@ export interface StartServerResult {
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
-const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
-const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-// After a successful live-artifact registration the daemon switches the
-// chat-run inactivity watchdog from the long pre-artifact ceiling
-// (DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS) down to a much shorter
-// "quiet period" — the deliverable exists, so further silence almost
-// always means the agent is winding down or hanging. See #1451.
-const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
-
-// Resolve the chat-run inactivity watchdog ceiling. Priority order:
-//   1. `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` (operator escape hatch).
-//   2. The agent runtime def's `inactivityTimeoutMs` recommendation —
-//      lets agents whose CLIs go silent for long stretches during
-//      legitimate work (e.g. Copilot from #2467) raise the ceiling
-//      without every operator having to set an env var.
-//   3. The 10-minute global default.
-//
-// The env path is lenient (silently normalizes / falls back) because it
-// comes from a runtime knob an operator can mis-type at any time. The
-// def path is strict (throws on non-finite or negative) because the
-// value lives in checked-in source — a typo like `inactivityTimeoutMs: -1`
-// should crash loudly at chat-run time rather than silently disable the
-// watchdog for that agent. Both paths still pass through the 24-hour
-// clamp because Node silently downgrades signed-32-bit-overflowing
-// setTimeout delays to 1ms.
-//
-// Order matters: validate the def hint *before* checking the env
-// override. Otherwise a finite env value would hide a bad checked-in
-// value (e.g. `inactivityTimeoutMs: -1`) from ever tripping the
-// fast-fail — the typo could sit unnoticed in source until someone
-// removed the override. Validation now runs on every call regardless
-// of which branch ultimately wins.
-export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number): void {
-  // Strict checked-in-config guard for `RuntimeAgentDef.inactivityTimeoutMs`.
-  // Exported (and called by `resolveChatRunInactivityTimeoutMs` below)
-  // so that chat-run startup can invoke this immediately after the
-  // runtime def is selected — before any filesystem or
-  // prompt-building work happens — and abort with a loud RangeError
-  // when a checked-in def carries an invalid value. That keeps a
-  // typo from leaving partial setup state (e.g. a `.mcp.json` write
-  // / unlink, a freshly-composed system prompt) on disk when the
-  // run then aborts later at watchdog-arm time.
-  if (agentDefault === undefined) return;
-  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
-    throw new RangeError(
-      `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
-        'Fix the runtime def — invalid values used to silently disable the watchdog.',
-    );
-  }
-}
-
-export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
-  assertValidRuntimeDefInactivityTimeoutMs(agentDefault);
-  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (Number.isFinite(env)) {
-    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
-  }
-  if (agentDefault !== undefined) {
-    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
-  }
-  return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-}
-
-// Resolve the post-artifact quiet-period window. Same clamp as the outer
-// inactivity watchdog so an oversized override doesn't get Node-downgraded
-// to a 1ms timer. Exported so tests can pin the env behavior without
-// reaching into chat-run internals.
-export function resolveChatRunArtifactQuietPeriodMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
-  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS;
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
-}
-
-// Pure resolver for the chat run's *currently active* inactivity
-// ceiling. Used by both `noteAgentActivity` and `noteArtifactRegistered`
-// to pick between the pre-artifact watchdog and the shortened quiet
-// period. Extracted so the `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
-// "disable the quiet period" semantics can be pinned with focused unit
-// tests (#1451 review: a 0-value override must not strand the pre-artifact
-// timer or stop further reschedules — it has to fall back to the
-// pre-artifact ceiling so subsequent activity keeps refreshing the timer).
-export function resolveActiveInactivityTimeoutMs(params: {
-  inactivityTimeoutMs: number;
-  artifactQuietPeriodMs: number;
-  artifactRegistered: boolean;
-}): number {
-  if (params.artifactRegistered && params.artifactQuietPeriodMs > 0) {
-    return params.artifactQuietPeriodMs;
-  }
-  return params.inactivityTimeoutMs;
-}
-
-// Pure final-status classifier for the chat run's child-close handler.
-// Extracted so the per-branch invariants can be unit-tested without
-// driving a full child process — in particular:
-//   - cancel always wins over success/failure classification.
-//   - the ACP forced-shutdown override is scoped to SIGTERM + clean
-//     completion only (signed-32-bit-overflow SIGKILL or non-clean ACP
-//     state still report `failed`).
-//   - the artifact quiet-period override is gated on a daemon-initiated
-//     flag, NOT on `artifactRegistered` alone — see #1451 review:
-//     an external `kill -9` after the artifact write must still report
-//     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
-//     is allowed to flip the status to `succeeded`.
-//   - the artifact-produced carve-out is EXIT-CODE ONLY (code != null &&
-//     code !== 0): a non-zero *normal* exit that nonetheless wrote a
-//     confirmed artifact this run is teardown noise, not a generation
-//     failure. It deliberately never overrides a signal kill (code ===
-//     null) — an OOM / external `kill` / container shutdown after an
-//     artifact write stays `failed`, same guard as the quiet-period
-//     branch above.
-export function classifyChatRunCloseStatus(params: {
-  cancelRequested: boolean;
-  code: number | null;
-  signal: NodeJS.Signals | string | null;
-  acpCleanCompletion: boolean;
-  artifactQuietShutdownRequested: boolean;
-  turnCompletedCleanly: boolean;
-  artifactProducedThisRun: boolean;
-}): 'canceled' | 'succeeded' | 'failed' {
-  if (params.cancelRequested) return 'canceled';
-  if (params.code === 0) return 'succeeded';
-  const acpForcedShutdown =
-    params.acpCleanCompletion &&
-    (
-      (params.code === null && params.signal === 'SIGTERM') ||
-      // Vela's ACP bridge can surface the daemon-triggered post-completion
-      // teardown as a normal exit code 130 instead of a SIGTERM signal. Once
-      // the ACP prompt already resolved cleanly, that is shutdown noise rather
-      // than an agent execution failure.
-      (params.code === 130 && params.signal === null)
-    );
-  if (acpForcedShutdown) return 'succeeded';
-  const artifactQuietShutdown =
-    params.artifactQuietShutdownRequested &&
-    params.code === null &&
-    (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
-  if (artifactQuietShutdown) return 'succeeded';
-  // Artifact-aware NORMAL-exit carve-out. A non-zero exit that still
-  // produced a confirmed artifact this run (a SessionEnd hook or a late
-  // stdin/stream error dragging the CLI to exit 1 *after* the deliverable
-  // landed) is teardown noise, not a generation failure — reproduced by
-  // project c92897e1: a 31KB HTML + .artifact.json on disk, status='failed'.
-  // CRITICAL: gated on `code != null && code !== 0` so a signal kill
-  // (code === null, SIGKILL/SIGTERM) is NEVER flipped by an artifact,
-  // preserving the OOM / external-kill / container-shutdown guard.
-  if (params.code != null && params.code !== 0 && params.artifactProducedThisRun) {
-    return 'succeeded';
-  }
-  // Post-completion teardown carve-out (#3372). When the model already
-  // emitted a clean terminal turn (a `turn_end`/`usage` event with no
-  // outstanding host answer, the same condition that closes the child's
-  // stdin), a later non-zero exit or kill signal is a teardown artifact,
-  // not a generation failure: a SessionEnd hook the agent runs on its way
-  // out (e.g. the Honcho memory plugin) can exit non-zero and drag the
-  // whole `claude` process to `exit 1` long after the deliverable was
-  // produced. Treating that as `failed` surfaces a red banner and halts
-  // the flow for work that already succeeded. Same family as the ACP and
-  // artifact-quiet-shutdown carve-outs above: the work completed; the odd
-  // exit is teardown noise. This deliberately does NOT cover non-zero
-  // exits *before* a clean turn — those stay `failed` (real CLI bug,
-  // model error, mid-turn crash), and the agent-specific auth/quota/AMR
-  // guards in the close handler run before this classifier so a genuine
-  // post-turn auth failure is still surfaced with its specific code.
-  if (params.turnCompletedCleanly) return 'succeeded';
-  return 'failed';
-}
-
-type ClaudeStreamJsonBookkeepingRun = {
-  stdinOpen?: boolean;
-  turnCompletedCleanly?: boolean;
-  child?: {
-    stdin?: {
-      destroyed?: boolean;
-      end: () => void;
-    } | null;
-  } | null;
-};
-
-// Stream-json input mode keeps the child's stdin open across the turn so the
-// daemon can stream further user messages mid-conversation. The child has no
-// other way to know the turn is over, though — without an EOF it idles until
-// the inactivity watchdog kills it. So when a turn terminates cleanly we close
-// stdin to let the child exit.
-export function applyClaudeStreamJsonRunBookkeeping(
-  run: ClaudeStreamJsonBookkeepingRun,
-  ev: unknown,
-) {
-  if (!ev || typeof ev !== 'object') return;
-  const event = ev as {
-    type?: unknown;
-    name?: unknown;
-    id?: unknown;
-    stopReason?: unknown;
-  };
-
-  const cleanTerminalTurn =
-    (event.type === 'turn_end' &&
-      // `stop_reason: tool_use` means the model paused to wait for tool
-      // execution (claude-code is about to run an internal tool). The
-      // conversation is still in flight.
-      event.stopReason !== 'tool_use') ||
-    (event.type === 'usage' && event.stopReason !== 'tool_use');
-  if (!cleanTerminalTurn) return;
-
-  // Record clean completion even if stdin was already closed. The
-  // close-status classifier reads this to ignore late SessionEnd hook
-  // failures after the final assistant turn completed.
-  run.turnCompletedCleanly = true;
-  if (run.stdinOpen) {
-    if (run.child?.stdin && !run.child.stdin.destroyed) {
-      try { run.child.stdin.end(); } catch {}
-    }
-    run.stdinOpen = false;
-  }
-}
-
-function resolveChatRunShutdownGraceMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
-  if (!Number.isFinite(raw)) return 3_000;
-  return Math.max(0, Math.floor(raw));
-}
-
-function resolveAcpStageTimeoutMs(): number | undefined {
-  // Per-stage silence watchdog for ACP chat sessions. Defaults are owned by
-  // `attachAcpSession` in acp.ts; this resolver only applies when an operator
-  // sets `OD_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
-  // outer chat inactivity watchdog so an oversized override doesn't get
-  // clamped to 1ms by Node's signed-32-bit delay limit.
-  const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return undefined;
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
-}
-
-type GeminiJsonEventStreamEvent = Record<string, unknown>;
-type BufferedStdoutChunk = { text: string; receivedAt: number };
-
-function parseGeminiJsonEventStreamEvents(text: string): GeminiJsonEventStreamEvent[] | null {
-  const lines = text
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return null;
-  const events: GeminiJsonEventStreamEvent[] = [];
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line);
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-      events.push(obj as GeminiJsonEventStreamEvent);
-    } catch {
-      return null;
-    }
-  }
-  return events;
-}
-
-function isGeminiJsonEventStream(events: GeminiJsonEventStreamEvent[] | null): boolean {
-  if (!events || events.length === 0) return false;
-  const [firstEvent] = events;
-  if (
-    !firstEvent ||
-    firstEvent.type !== 'init' ||
-    typeof firstEvent.session_id !== 'string' ||
-    firstEvent.session_id.length === 0 ||
-    typeof firstEvent.model !== 'string' ||
-    firstEvent.model.length === 0
-  ) {
-    return false;
-  }
-  return events.every((event) => {
-    const type = event?.type;
-    return (
-      type === 'init' ||
-      type === 'message' ||
-      type === 'tool_use' ||
-      type === 'tool_result' ||
-      type === 'error' ||
-      type === 'result'
-    );
-  });
-}
-
-function geminiJsonEventStreamHasVisibleAssistantText(
-  events: GeminiJsonEventStreamEvent[] | null,
-): boolean {
-  if (!events) return false;
-  return events.some((event) => (
-    event.type === 'message' &&
-    event.role === 'assistant' &&
-    typeof event.content === 'string' &&
-    event.content.length > 0
-  ));
-}
-
-export function bufferedAntigravityGeminiFirstTokenAt(
-  chunks: readonly BufferedStdoutChunk[],
-): number | null {
-  if (chunks.length === 0) return null;
-  const text = chunks.map((chunk) => chunk.text).join('');
-  const events = parseGeminiJsonEventStreamEvents(text);
-  if (!isGeminiJsonEventStream(events)) return null;
-  if (!geminiJsonEventStreamHasVisibleAssistantText(events)) return null;
-
-  let offset = 0;
-  for (const line of text.split(/(\r?\n)/u)) {
-    const nextOffset = offset + line.length;
-    if (line.length > 0 && line.trim().length > 0) {
-      try {
-        const event = JSON.parse(line) as GeminiJsonEventStreamEvent;
-        if (
-          event?.type === 'message' &&
-          event.role === 'assistant' &&
-          typeof event.content === 'string' &&
-          event.content.length > 0
-        ) {
-          let consumed = 0;
-          for (const chunk of chunks) {
-            consumed += chunk.text.length;
-            if (consumed >= nextOffset) return chunk.receivedAt;
-          }
-          return chunks.at(-1)?.receivedAt ?? null;
-        }
-      } catch {
-        return null;
-      }
-    }
-    offset = nextOffset;
-  }
-  return null;
-}
-
 export async function startServer({
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
@@ -4585,266 +3364,43 @@ export async function startServer({
     });
   }
 
-  // Multi-directory scanning shared by every skill / template surface. The
-  // helpers delegate to listSkills(roots) which walks roots in priority
-  // order, tags each entry with the SkillSource ('user' for the user
-  // root, 'built-in' for the bundled root) the contracts package
-  // declares, and lets a user-imported entry shadow a built-in one of
-  // the same id without erasing the built-in copy.
-  async function listAllSkills() {
-    return listSkills(SKILL_ROOTS);
-  }
-
-  async function listAllDesignTemplates() {
-    return listSkills(DESIGN_TEMPLATE_ROOTS);
-  }
-
-  // Spans both roots so chat run system-prompt composition and the orbit
-  // template resolver can resolve a stored project.skillId regardless of
-  // which surface created the project after the skills/design-templates
-  // split. Keep in sync with SKILL_ROOTS + DESIGN_TEMPLATE_ROOTS above.
-  async function listAllSkillLikeEntries() {
-    return listSkills(ALL_SKILL_LIKE_ROOTS);
-  }
-
-  async function listAllDesignSystems() {
-    const builtIn = (await listDesignSystems(DESIGN_SYSTEMS_DIR)).map((s) => ({
-      ...s,
-      source: 'built-in',
-      isEditable: false,
-      status: 'published',
-    }));
-    let installed = [];
-    try {
-      installed = await listDesignSystems(USER_DESIGN_SYSTEMS_DIR, {
-        idPrefix: 'user:',
-        source: 'user',
-        isEditable: true,
-        defaultStatus: 'draft',
-      });
-    } catch {
-      // User directory may not exist yet or be unreadable.
-    }
-    const seen = new Set(builtIn.map((s) => s.id));
-    return [
-      ...installed
-        .filter((s) => s.source === 'user')
-        .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')),
-      ...builtIn,
-      ...installed.filter((s) => s.source !== 'user' && !seen.has(s.id)),
-    ];
-  }
-
-  async function readAvailableDesignSystem(id) {
-    if (typeof id === 'string' && id.startsWith('user:')) {
-      return readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
-    }
-    return (
-      (await readDesignSystem(DESIGN_SYSTEMS_DIR, id))
-      ?? (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id))
-    );
-  }
-
-  async function readAvailableDesignSystemPackageInfo(id) {
-    if (typeof id === 'string' && id.startsWith('user:')) {
-      return readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
-    }
-    return (
-      (await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, id))
-      ?? (await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id))
-    );
-  }
-
-  function isProjectUsableDesignSystem(summary) {
-    return summary?.status !== 'draft';
-  }
-
-  async function validateProjectDesignSystemId(id) {
-    if (id === undefined || id === null || id === '') return { ok: true, id: null };
-    if (typeof id !== 'string') {
-      return {
-        ok: false,
-        code: 'INVALID_DESIGN_SYSTEM',
-        message: 'designSystemId must be a string or null',
-      };
-    }
-    const systems = await listAllDesignSystems();
-    const summary = systems.find((system) => system.id === id);
-    if (!summary) {
-      return {
-        ok: false,
-        code: 'DESIGN_SYSTEM_NOT_FOUND',
-        message: 'design system not found',
-      };
-    }
-    if (!isProjectUsableDesignSystem(summary)) {
-      return {
-        ok: false,
-        code: 'DESIGN_SYSTEM_NOT_PUBLISHED',
-        message: 'draft design systems cannot be used by projects',
-      };
-    }
-    return { ok: true, id };
-  }
-
-  async function validateProjectSkillId(id) {
-    if (id === undefined || id === null || id === '') {
-      return { ok: true, id: null };
-    }
-    if (typeof id !== 'string') {
-      return {
-        ok: false,
-        code: 'INVALID_SKILL_ID',
-        message: 'skillId must be a string or null',
-      };
-    }
-    const skills = await listAllSkillLikeEntries();
-    const resolved = findSkillById(skills, id);
-    if (!resolved) {
-      return {
-        ok: false,
-        code: 'SKILL_NOT_FOUND',
-        message: 'skill not found',
-      };
-    }
-    return { ok: true, id: resolved.id };
-  }
-
-  function userDesignSystemWorkspaceProjectId(id) {
-    if (typeof id !== 'string' || !id.startsWith('user:')) return null;
-    const dirId = id.slice('user:'.length);
-    if (!/^[A-Za-z0-9._-]{1,120}$/.test(dirId)) return null;
-    return `ds-${dirId}`.slice(0, 128);
-  }
-
-  function projectBackedDesignSystemProjectId(id, summary) {
-    if (typeof summary?.projectId === 'string' && isSafeId(summary.projectId)) {
-      return summary.projectId;
-    }
-    return userDesignSystemWorkspaceProjectId(id);
-  }
-
-  async function ensureUserDesignSystemWorkspaceProject(db, id) {
-    const systems = await listAllDesignSystems();
-    const summary = systems.find((s) => s.id === id && s.source === 'user');
-    if (!summary) return null;
-    const projectId = projectBackedDesignSystemProjectId(id, summary);
-    if (!projectId) return null;
-
-    const now = Date.now();
-    const metadata = {
-      kind: 'other',
-      importedFrom: 'design-system',
-      entryFile: 'DESIGN.md',
-      sourceFileName: id,
-    };
-    const existing = getProject(db, projectId);
-    const project = existing
-      ? updateProject(db, projectId, {
-          name: summary.title,
-          designSystemId: id,
-          metadata: { ...existing.metadata, ...metadata },
-          updatedAt: now,
-        })
-      : insertProject(db, {
-          id: projectId,
-          name: summary.title,
-          skillId: null,
-          designSystemId: id,
-          pendingPrompt: null,
-          metadata,
-          createdAt: now,
-          updatedAt: now,
-        });
-    if (!project) return null;
-
-    const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, id);
-    if (!files) return null;
-    for (const file of files) {
-      if (file.kind === 'folder') continue;
-      const detail = await readUserDesignSystemFile(USER_DESIGN_SYSTEMS_DIR, id, file.path);
-      if (!detail) continue;
-      if (existing) {
-        try {
-          const existingFile = await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
-          if (!isReplaceableDesignSystemWorkspaceFile(detail.path, existingFile)) continue;
-        } catch (err) {
-          if (!err || err.code !== 'ENOENT') throw err;
-        }
-      }
-      await writeProjectFile(
-        PROJECTS_DIR,
-        projectId,
-        detail.path,
-        Buffer.from(detail.content, 'utf8'),
-        {},
-        project.metadata,
-      );
-    }
-    await removeLegacyDesignSystemWorkspaceArtifacts(project);
-    await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
-    const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
-    return { project, files: projectFiles };
-  }
-
-  function isReplaceableDesignSystemWorkspaceFile(filePath, file) {
-    const buffer = file?.buffer;
-    if (!Buffer.isBuffer(buffer)) return false;
-    const text = buffer.toString('utf8');
-    if (/^ui_kits\/app\/components\/.+\.(jsx|tsx|js|ts|css|html)$/u.test(filePath)) {
-      return buffer.length < 700 && /od-ui-kit-[a-z-]+/u.test(text);
-    }
-    if (!/^(DESIGN\.md|README\.md|SKILL\.md|ui_kits\/app\/README\.md)$/u.test(filePath)) {
-      return false;
-    }
-    return hasLegacyDesignSystemPackageReferences(text);
-  }
-
-  function hasLegacyDesignSystemPackageReferences(text) {
-    return /preview\/(colors-node-types|colors-ui-palette|typography-scale|spacing-system|logo-variants)\.html|ui_kits\/generated_interface(?:\/index\.html|\/)?/u.test(text);
-  }
-
-  async function removeLegacyDesignSystemWorkspaceArtifacts(project) {
-    if (project?.metadata?.importedFrom !== 'design-system') return;
-    const dir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
-    for (const artifact of LEGACY_DESIGN_SYSTEM_ARTIFACTS) {
-      const replacementReady = await Promise.all(
-        artifact.replacementPaths.map(async (replacementPath) => {
-          try {
-            const stats = await fs.promises.stat(path.join(dir, ...replacementPath.split('/')));
-            return stats.isFile();
-          } catch (err) {
-            if (!err || (err.code !== 'ENOENT' && err.code !== 'ENOTDIR')) throw err;
-            return false;
-          }
-        }),
-      );
-      if (!replacementReady.every(Boolean)) continue;
-      await fs.promises.rm(path.join(dir, ...artifact.legacyPath.split('/')), {
-        recursive: artifact.removeDirectory === true,
-        force: true,
-      });
-    }
-  }
-
-  async function readDesignSystemWorkspaceTextFile(db, summary, filePath) {
-    if (!summary?.projectId || !isSafeId(summary.projectId)) return null;
-    const project = getProject(db, summary.projectId);
-    if (!project) return null;
-    try {
-      const file = await readProjectFile(
-        PROJECTS_DIR,
-        project.id,
-        filePath,
-        project.metadata,
-      );
-      const text = file.buffer.toString('utf8');
-      if (text.includes('\0')) return null;
-      return text;
-    } catch {
-      return null;
-    }
-  }
+  const designSystemServices = createDesignSystemServerServices({
+    roots: { SKILL_ROOTS, DESIGN_TEMPLATE_ROOTS, ALL_SKILL_LIKE_ROOTS },
+    paths: { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR },
+    skills: { listSkills, findSkillById },
+    designSystems: {
+      listDesignSystems,
+      readDesignSystem,
+      readDesignSystemPackageInfo,
+      listUserDesignSystemFiles,
+      readUserDesignSystemFile,
+      linkUserDesignSystemProject,
+      LEGACY_DESIGN_SYSTEM_ARTIFACTS,
+    },
+    projects: {
+      getProject,
+      insertProject,
+      updateProject,
+      readProjectFile,
+      writeProjectFile,
+      listFiles,
+      resolveProjectDir,
+      isSafeId,
+    },
+  });
+  const {
+    ensureUserDesignSystemWorkspaceProject,
+    isProjectUsableDesignSystem,
+    listAllDesignSystems,
+    listAllDesignTemplates,
+    listAllSkillLikeEntries,
+    listAllSkills,
+    readAvailableDesignSystem,
+    readAvailableDesignSystemPackageInfo,
+    readDesignSystemWorkspaceTextFile,
+    validateProjectDesignSystemId,
+    validateProjectSkillId,
+  } = designSystemServices;
 
   // Chrome may strip the port from the Origin header on same-origin GET
   // requests. Only use this as a fallback for safe, idempotent GET requests;
@@ -5190,78 +3746,33 @@ export async function startServer({
     });
   }
 
-  app.get('/api/health', async (_req, res) => {
-    const versionInfo = await readCurrentAppVersionInfo();
-    res.json({ ok: true, version: versionInfo.version });
+  // ---- Projects (DB-backed) -------------------------------------------------
+
+
+  registerMemoryRoutes(app, {
+    http: { createSseResponse, requireLocalDaemonRequest },
+    paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
+    appConfig: { readAppConfig },
   });
 
-  app.get('/api/ready', async (_req, res) => {
-    const versionInfo = await readCurrentAppVersionInfo();
-    const ready = !daemonShuttingDown;
-    res.status(ready ? 200 : 503).json({
-      ok: ready,
-      ready,
-      version: versionInfo.version,
-    });
+  registerAutomationRoutes(app, {
+    paths: { RUNTIME_DATA_DIR },
   });
 
-  app.get('/api/version', async (_req, res) => {
-    const version = await readCurrentAppVersionInfo();
-    res.json({ version });
-  });
+  // Reconcile follow-up — the inline POST /api/projects body that lived
+  // on garnet (with baseDir privilege check, linkedDirs validation,
+  // template snapshot seeding, plugin snapshot resolution with default
+  // scenario fallback) is intentionally dropped here. main moved project
+  // route registration into `./routes/project/index.js` via PR #1043, so the
+  // simple project-create surface is wired through `registerProjectRoutes`
+  // further down. Plugin-snapshot-resolution / default-scenario-fallback
+  // from garnet need to be re-integrated into routes/project/index.ts as a
+  // follow-up — see reconcile decision log.
+  // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
-  app.get('/api/github/open-design', async (_req, res) => {
-    try {
-      const stats = await readOpenDesignGithubRepoStats();
-      const payload = /** @type {OpenDesignGithubRepoResponse} */ ({
-        repo: 'nexu-io/open-design',
-        stargazers_count: stats.stargazersCount,
-        fetchedAt: stats.fetchedAt,
-        stale: stats.stale,
-      });
-      res.json(payload);
-    } catch (error) {
-      res.status(502).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  app.get('/api/github/open-design/releases/latest', async (_req, res) => {
-    try {
-      const release = await readOpenDesignLatestReleaseInfo();
-      const payload = /** @type {OpenDesignGithubLatestReleaseResponse} */ ({
-        repo: 'nexu-io/open-design',
-        tag_name: release.tagName,
-        html_url: release.htmlUrl,
-        fetchedAt: release.fetchedAt,
-        stale: release.stale,
-      });
-      res.json(payload);
-    } catch (error) {
-      res.status(502).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  app.get('/api/community/discord', async (_req, res) => {
-    try {
-      const presence = await readOpenDesignDiscordPresence();
-      const payload = /** @type {OpenDesignDiscordPresenceResponse} */ ({
-        inviteCode: OPEN_DESIGN_DISCORD_INVITE_CODE,
-        inviteUrl: OPEN_DESIGN_DISCORD_INVITE_URL,
-        onlineCount: presence.onlineCount,
-        memberCount: presence.memberCount,
-        fetchedAt: presence.fetchedAt,
-        stale: presence.stale,
-      });
-      res.json(payload);
-    } catch (error) {
-      res.status(502).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  const telemetry = registerTelemetryRoutes(app, {
+    dataDir: RUNTIME_DATA_DIR,
+    readAppConfig,
   });
 
   // Plan §3.F2 / spec §11.7 — daemon lifecycle status. Returns the
@@ -5520,6 +4031,7 @@ export async function startServer({
   // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
   const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
+  const { analyticsService } = telemetry;
   const design = {
     runs: createChatRunService({
       createSseResponse,
@@ -5527,7 +4039,7 @@ export async function startServer({
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
     }),
     analytics: analyticsService,
-    getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
+    getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
     readAnalyticsContext,
   };
 
@@ -5535,194 +4047,18 @@ export async function startServer({
   // killed on daemon shutdown — see shutdownDaemonRuns below.
   const terminalService = createTerminalService();
 
-  // PostHog runtime config.
-  //
-  // - `enabled` reflects ONLY the user's consent toggle (Privacy → "Share
-  //   usage data"). When false, posthog-js's full autocapture/$pageview/
-  //   $autocapture pipeline must stay off — that's the privacy contract.
-  //
-  // - `key` and `host` are populated whenever the server has a build-time
-  //   POSTHOG_KEY, regardless of consent. The error-tracking module
-  //   (apps/web/src/analytics/error-tracking.ts) reads them to ship
-  //   `$exception` events directly to the ingest endpoint, bypassing the
-  //   consent gate. Product decision: error reports always flow so we
-  //   don't lose ground truth on stability — see the privacy section of
-  //   Settings → Privacy for the user-facing copy.
-  //
-  // - When the build itself has no POSTHOG_KEY (forks, PR builds, OSS
-  //   contributors), `key` and `host` are null and even the error
-  //   pipeline becomes a no-op.
-  app.get('/api/analytics/config', async (_req, res) => {
-    const baseline = readPublicConfigResponse();
-    if (!baseline.enabled) {
-      // No build-time key → nothing to report on, consent or not.
-      res.json(baseline);
-      return;
-    }
-    try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-      const consentGranted = appCfg.telemetry?.metrics === true;
-      // Echo the installationId so the web client uses the same anonymous
-      // id PostHog already saw on prior runs (and that Langfuse uses too).
-      const installationId =
-        typeof appCfg.installationId === 'string' && appCfg.installationId
-          ? appCfg.installationId
-          : null;
-      res.json({
-        enabled: consentGranted,
-        env: baseline.env,
-        key: baseline.key,
-        host: baseline.host,
-        installationId,
-      });
-    } catch {
-      // If the config file is unreadable, fail closed for analytics but
-      // still let the error tracker run — exception reports are the most
-      // valuable signal in a degraded-state scenario.
-      res.json({
-        enabled: false,
-        env: baseline.env,
-        key: baseline.key,
-        host: baseline.host,
-        installationId: null,
-      });
-    }
-  });
-
-  // Cross-process safety-event bridge. Used by:
-  //   - Electron main process (renderer crash via render-process-gone)
-  //   - Any future helper / sidecar that needs to report a safety event
-  //     without owning its own posthog-node client
-  //
-  // The route DOES NOT check the user's analytics consent: this is the
-  // same "safety telemetry always flows" contract the web error-tracking
-  // module relies on. If POSTHOG_KEY is not set on the daemon (fork
-  // builds), captureSafety is a no-op on NOOP_SERVICE.
-  app.post('/api/observability/event', express.json({ limit: '64kb' }), (req, res) => {
-    const body = (req.body ?? {}) as Partial<ObservabilityEventRequest>;
-    const eventName = typeof body.event === 'string' ? body.event.trim() : '';
-    if (!eventName) {
-      res.status(400).json({ error: 'missing or invalid `event` field' });
-      return;
-    }
-    const properties =
-      body.properties != null && typeof body.properties === 'object' && !Array.isArray(body.properties)
-        ? (body.properties as Record<string, unknown>)
-        : {};
-    analyticsService.captureSafety({
-      eventName,
-      appVersion: cachedAppVersion?.version ?? '0.0.0',
-      properties,
-    });
-    res.json({ ok: true });
-  });
-
-  // Daemon-side uncaught errors. Without these, a crash in any daemon
-  // request handler or background task leaves no PostHog signal — the
-  // user sees a 500 (or worse, a connection drop) and we see nothing.
-  // Both listeners install AFTER the analyticsService is created so the
-  // captureSafety dispatch path is guaranteed to be ready.
-  //
-  // IMPORTANT — these handlers MUST keep Node's fatal-exit semantics.
-  // Installing an `uncaughtException` listener silences Node's default
-  // crash/exit path, and Node 15+ does the same for `unhandledRejection`
-  // when a listener is present (the `--unhandled-rejections=throw` mode
-  // only fires when nothing has subscribed). We bounded-flush posthog-
-  // node and then call `process.exit(1)` explicitly so the supervisor
-  // (pm2, packaged updater, dev `tools-dev`) gets a fresh process and
-  // we don't leave a half-broken daemon answering requests with state
-  // corruption. See codex review on PR #2527 (Siri-Ray).
-  const FATAL_FLUSH_TIMEOUT_MS = 1000;
-  let fatalShuttingDown = false;
-  const triggerFatalShutdown = (
-    eventName: string,
-    properties: Record<string, unknown>,
-  ): void => {
-    if (fatalShuttingDown) return;
-    fatalShuttingDown = true;
-    // CRITICAL — wait for captureSafety to ENQUEUE the event in
-    // posthog-node's local buffer before starting shutdown(). The
-    // captureSafety implementation does an `await readInstallationIdSafe()`
-    // before calling `client.capture()`; a sync fire-and-forget here would
-    // race shutdown() ahead of that await, drain an empty queue, and lose
-    // the crash event itself. See codex review on PR #2527 (Siri-Ray).
-    const flushSequence = (async () => {
-      try {
-        await analyticsService.captureSafety({
-          eventName,
-          appVersion: cachedAppVersion?.version ?? '0.0.0',
-          properties,
-        });
-      } catch {
-        // capture must never block the exit path
-      }
-      await analyticsService.shutdown();
-    })();
-    // Race the enqueue+shutdown sequence against a bounded timeout. If
-    // posthog-node hangs on a slow flush (or the installationId read
-    // hangs on the filesystem) we still die in bounded time — the
-    // supervisor will restart us, which is the whole point.
-    void Promise.race([
-      flushSequence,
-      new Promise<void>((resolve) => {
-        const handle = setTimeout(resolve, FATAL_FLUSH_TIMEOUT_MS);
-        handle.unref?.();
-      }),
-    ]).finally(() => {
-      process.exitCode = 1;
-      process.exit(1);
-    });
-  };
-  process.on('uncaughtException', (error) => {
-    triggerFatalShutdown('daemon_uncaught_exception', {
-      error_message: error?.message ?? String(error),
-      error_name: error?.name ?? 'Error',
-      // Stack truncation: 8 KB ceiling to keep the ingest payload bounded
-      // even when the stack contains huge native frames. Most actionable
-      // stacks fit in well under 2 KB.
-      error_stack: typeof error?.stack === 'string' ? error.stack.slice(0, 8192) : undefined,
-    });
-  });
-  process.on('unhandledRejection', (reason) => {
-    const asError = reason instanceof Error ? reason : null;
-    triggerFatalShutdown('daemon_unhandled_rejection', {
-      error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
-      error_name: asError?.name ?? 'NonErrorRejection',
-      error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
-    });
-  });
-
   // Tracks runs whose finalized assistant message has already been forwarded
   // to Langfuse so repeated message updates only emit one final trace per run.
   // Terminal fallback reports intentionally do not claim this set; a delayed
   // telemetry-finalized message can still replace the synthetic fallback.
   const reportedRuns = new Set();
 
-  // App-version snapshot read once at server start for Langfuse trace metadata.
-  let cachedAppVersion = null;
-  void (async () => {
-    try {
-      cachedAppVersion = await readCurrentAppVersionInfo();
-      await observePendingInstallerApplyAttempts({
-        analytics: analyticsService,
-        appVersion: cachedAppVersion.version,
-        currentChannel: cachedAppVersion.channel,
-        currentVersion: cachedAppVersion.version,
-        dataRoot: RUNTIME_DATA_DIR,
-        logger: console,
-        namespace: process.env[SIDECAR_ENV.NAMESPACE] ?? SIDECAR_DEFAULTS.namespace,
-      });
-    } catch {
-      // Telemetry is best-effort; appVersion is omitted when unavailable.
-    }
-  })();
-
   const reportFinalizedMessage = createFinalizedMessageTelemetryReporter({
     design,
     db,
     dataDir: RUNTIME_DATA_DIR,
     reportedRuns,
-    getAppVersion: () => cachedAppVersion,
+    getAppVersion: telemetry.getCachedAppVersion,
   });
   const reportRunCompletionTelemetryFallback = ({
     analyticsContext,
@@ -5761,18 +4097,7 @@ export async function startServer({
     timer.unref?.();
   };
 
-  const reportFeedback = (req: {
-    runId: string;
-    rating: 'positive' | 'negative';
-    reasonCodes: string[];
-    hasCustomReason: boolean;
-    customReason: string;
-    scoreMetadata?: Record<string, unknown>;
-  }) =>
-    reportRunFeedbackFromDaemon({
-      dataDir: RUNTIME_DATA_DIR,
-      ...req,
-    });
+  const reportFeedback = telemetry.reportFeedback;
 
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
@@ -5818,6 +4143,72 @@ export async function startServer({
     BUNDLED_PETS_DIR,
     OD_BIN,
   };
+
+  app.get('/api/health', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    res.json({ ok: true, version: versionInfo.version });
+  });
+
+  app.get('/api/ready', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    const ready = !daemonShuttingDown;
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      ready,
+      version: versionInfo.version,
+    });
+  });
+
+  app.get('/api/version', async (_req, res) => {
+    const version = await readCurrentAppVersionInfo();
+    res.json({ version });
+  });
+
+  registerDaemonRoutes(app, {
+    db,
+    paths: { RUNTIME_DATA_DIR },
+    http: { requireLocalDaemonRequest, sendApiError },
+    host,
+    getResolvedPort: () => resolvedPort,
+    getDaemonShuttingDown: () => daemonShuttingDown,
+    sandboxRuntime: SANDBOX_RUNTIME,
+    env: process.env,
+  });
+
+  const openDesignPublicMetadata = createOpenDesignPublicMetadataService();
+  registerOpenDesignPublicMetadataRoutes(app, {
+    http: httpDeps,
+    openDesignPublicMetadata,
+  });
+
+  registerPluginEventRoutes(app, {
+    http: { requireLocalDaemonRequest },
+  });
+
+  registerConnectorRoutes(app, {
+    sendApiError,
+    authorizeToolRequest,
+    projectsRoot: PROJECTS_DIR,
+    requireLocalDaemonRequest,
+    composio: composioConnectorProvider,
+  });
+
+  // Gate the diagnostics export behind requireLocalDaemonRequest so it stays
+  // unreachable when daemon binds to a non-loopback address (Tailscale,
+  // 0.0.0.0, etc.). The bundle contains daemon/web/desktop logs, host
+  // metadata, and crash reports — same threat tier as connector / live-
+  // artifact endpoints, which all use the same guard.
+  app.get(
+    DIAGNOSTICS_EXPORT_PATH,
+    requireLocalDaemonRequest,
+    createDiagnosticsExportHandler({
+      runtime,
+      projectRoot: PROJECT_ROOT,
+      runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      dataDir: RUNTIME_DATA_DIR,
+    }),
+  );
+
   const nodeDeps = { fs, path };
   const idDeps = { randomId, randomUUID };
   const uploadDeps = { upload, importUpload, handleProjectUpload };
@@ -6212,291 +4603,6 @@ export async function startServer({
     research: researchDeps,
   });
 
-  app.delete('/api/projects/:id', async (req, res) => {
-    try {
-      dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      /** @type {import('@open-design/contracts').OkResponse} */
-      const body = { ok: true };
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // SSE stream of file-changed events for a project. Drives preview live-reload.
-  // Receipt of a `file-changed` event triggers a file-list refresh, which
-  // propagates new mtimes through to FileViewer iframes (the URL-load
-  // `?v=${mtime}` cache-bust from PR #384 then reloads the iframe automatically).
-  // Subscribers come and go as users open/close project tabs; the underlying
-  // chokidar watcher is refcounted in project-watchers.ts so we never hold
-  // descriptors for projects no UI is looking at.
-  app.get('/api/projects/:id/events', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    }
-    let sub;
-    try {
-      const sse = createSseResponse(res);
-      const projectEventSink = (payload) => {
-        sse.send(payload.type, payload);
-      };
-      let sinks = activeProjectEventSinks.get(req.params.id);
-      if (!sinks) {
-        sinks = new Set();
-        activeProjectEventSinks.set(req.params.id, sinks);
-      }
-      sinks.add(projectEventSink);
-      const watchProject = getProject(db, req.params.id);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
-        sse.send('file-changed', evt);
-      }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
-      const cleanup = () => {
-        if (sub) {
-          const { unsubscribe } = sub;
-          sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
-        }
-        const currentSinks = activeProjectEventSinks.get(req.params.id);
-        currentSinks?.delete(projectEventSink);
-        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
-      };
-      res.on('close', cleanup);
-      res.on('finish', cleanup);
-    } catch (err) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
-      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-    }
-  });
-
-  // ---- Conversations --------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    res.json({ conversations: listConversations(db, req.params.id) });
-  });
-
-  app.post('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
-    const now = Date.now();
-    const hasExplicitSessionMode = Boolean(
-      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
-    );
-    const requestedForkMessageId =
-      typeof forkAfterMessageId === 'string' && forkAfterMessageId
-        ? forkAfterMessageId
-        : null;
-    const sourceConversation =
-      typeof seedFromConversationId === 'string' && seedFromConversationId
-        ? getConversation(db, seedFromConversationId)
-        : null;
-    let seedMessages = [];
-    if (sourceConversation && sourceConversation.projectId === req.params.id) {
-      seedMessages = listMessages(db, seedFromConversationId);
-      if (requestedForkMessageId) {
-        const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
-        if (forkIndex < 0) {
-          return res.status(404).json({ error: 'fork message not found' });
-        }
-        seedMessages = seedMessages.slice(0, forkIndex + 1);
-      }
-    } else if (requestedForkMessageId) {
-      return res.status(404).json({ error: 'fork source conversation not found' });
-    }
-    const sessionMode =
-      hasExplicitSessionMode
-        ? normalizeConversationSessionMode(req.body.sessionMode)
-        : sourceConversation && sourceConversation.projectId === req.params.id
-          ? normalizeConversationSessionMode(sourceConversation.sessionMode)
-          : 'design';
-    const conv = insertConversation(db, {
-      id: randomId(),
-      projectId: req.params.id,
-      title: typeof title === 'string' ? title.trim() || null : null,
-      sessionMode,
-      createdAt: now,
-      updatedAt: now,
-    });
-    if (conv && seedMessages.length > 0) {
-      for (const m of seedMessages) {
-        upsertMessage(db, conv.id, {
-          ...m,
-          id: randomId(),
-          runId: undefined,
-          runStatus: undefined,
-          lastRunEventId: undefined,
-        });
-      }
-    }
-    res.json({ conversation: conv });
-  });
-
-  app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    const updated = updateConversation(db, req.params.cid, req.body || {});
-    res.json({ conversation: updated });
-  });
-
-  app.delete('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    deleteConversation(db, req.params.cid);
-    res.json({ ok: true });
-  });
-
-  // ---- Messages -------------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({ messages: listMessages(db, req.params.cid) });
-  });
-
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    const m = req.body || {};
-    if (m.id && m.id !== req.params.mid) {
-      return res.status(400).json({ error: 'id mismatch' });
-    }
-    const saved = upsertMessage(db, req.params.cid, {
-      ...m,
-      id: req.params.mid,
-    });
-    // Bump the parent project's updatedAt so the project list re-orders.
-    updateProject(db, req.params.id, {});
-    reportFinalizedMessage(saved, m, {
-      analyticsContext: readAnalyticsContext(req),
-      projectId: req.params.id,
-      conversationId: req.params.cid,
-    });
-    res.json({ message: saved });
-  });
-
-  // ---- Preview comments ----------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({
-      comments: listPreviewComments(db, req.params.id, req.params.cid),
-    });
-  });
-
-  app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    try {
-      const comment = upsertPreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.body || {},
-      );
-      updateProject(db, req.params.id, {});
-      res.json({ comment });
-    } catch (err) {
-      res.status(400).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.patch(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      try {
-        const comment = updatePreviewCommentStatus(
-          db,
-          req.params.id,
-          req.params.cid,
-          req.params.commentId,
-          req.body?.status,
-        );
-        if (!comment)
-          return res.status(404).json({ error: 'comment not found' });
-        updateProject(db, req.params.id, {});
-        res.json({ comment });
-      } catch (err) {
-        res.status(400).json({ error: String(err?.message || err) });
-      }
-    },
-  );
-
-  app.delete(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      const ok = deletePreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.params.commentId,
-      );
-      if (!ok) return res.status(404).json({ error: 'comment not found' });
-      updateProject(db, req.params.id, {});
-      res.json({ ok: true });
-    },
-  );
-
-  async function resolveAmrModelProbe() {
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-    const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-    const def = getAgentDef('amr');
-    if (!def) throw new Error('AMR runtime definition is missing');
-    const agentLaunch = resolveAgentLaunch(def, configuredEnv);
-    const launchPath = agentLaunch.launchPath ?? agentLaunch.selectedPath;
-    if (!launchPath) throw new Error('AMR vela binary could not be resolved');
-    const env = applyAgentLaunchEnv(
-      spawnEnvForAgent(
-        def.id,
-        {
-          ...process.env,
-          ...(def.env || {}),
-        },
-        configuredEnv,
-        undefined,
-      ),
-      agentLaunch,
-    );
-    const credentialRevision = readVelaCredentialRevision(process.env, configuredEnv);
-    const cacheKey = JSON.stringify({
-      launchPath,
-      home: env.HOME ?? env.USERPROFILE ?? '',
-      openDesignAmrProfile: env.OPEN_DESIGN_AMR_PROFILE ?? '',
-      velaProfile: env.VELA_PROFILE ?? '',
-      velaLinkUrl: env.VELA_LINK_URL ?? '',
-      velaRuntimeKey: env.VELA_RUNTIME_KEY ?? '',
-      velaOpencodeBin: env.VELA_OPENCODE_BIN ?? '',
-      credentialRevision,
-    });
-    return { launchPath, env, configuredEnv, cacheKey };
-  }
-
   registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
@@ -6809,12 +4915,39 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
+    let appConfigForPrompt = null;
+    try {
+      appConfigForPrompt = await readAppConfig(RUNTIME_DATA_DIR);
+    } catch (err) {
+      console.warn('[app-config] readAppConfig failed', err);
+    }
+    let pluginDesignSystemId = null;
+    if (
+      typeof appliedPluginSnapshotId === 'string' &&
+      appliedPluginSnapshotId.length > 0
+    ) {
+      try {
+        pluginDesignSystemId = designSystemIdFromPluginSnapshot(
+          getSnapshot(db, appliedPluginSnapshotId),
+        );
+      } catch (err) {
+        console.warn(
+          `[plugins] designSystem selection failed: ${err?.message ?? err}`,
+        );
+      }
+    }
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const effectiveDesignSystemId =
-      typeof designSystemId === 'string' && designSystemId
-        ? designSystemId
-        : project?.designSystemId;
+    const designSystemSelection = resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: designSystemId,
+      pluginDesignSystemId,
+      projectDesignSystemId: project?.designSystemId,
+      appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+      // A project row with designSystemId=null can mean the user picked
+      // "No design system"; do not reapply the global default behind their back.
+      allowAppDefault: project === null,
+    });
+    const effectiveDesignSystemId = designSystemSelection.id;
     const metadata = project?.metadata;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
@@ -6994,11 +5127,8 @@ export async function startServer({
 
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
-    try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-      if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
-    } catch (err) {
-      console.warn('[custom-instructions] readAppConfig failed', err);
+    if (appConfigForPrompt?.customInstructions) {
+      userInstructions = appConfigForPrompt.customInstructions;
     }
 
     let designSystemBody;
@@ -7024,6 +5154,8 @@ export async function startServer({
     let designSystemImportMode;
     let designSystemCraftApplies = [];
     let designSystemCraftExemptions = [];
+    let activeDesignSystemId = null;
+    let designSystemDigest = null;
     if (effectiveDesignSystemId) {
       let systems = await listAllDesignSystems();
       let summary = systems.find((s) => s.id === effectiveDesignSystemId);
@@ -7057,6 +5189,20 @@ export async function startServer({
         designSystemImportMode = assets.importMode;
         designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
         designSystemCraftExemptions = Array.isArray(assets.craftExemptions) ? assets.craftExemptions : [];
+        if (typeof designSystemBody === 'string' && designSystemBody.length > 0) {
+          activeDesignSystemId = effectiveDesignSystemId;
+          designSystemDigest = digestDesignSystemContext({
+            id: effectiveDesignSystemId,
+            title: designSystemTitle,
+            body: designSystemBody,
+            usageMd: designSystemUsageMd,
+            tokensCss: designSystemTokensCss,
+            componentsManifest: designSystemComponentsManifest,
+            fixtureHtml: designSystemFixtureHtml,
+            pullIndex: designSystemPullIndex,
+            importMode: designSystemImportMode,
+          });
+        }
       }
     }
 
@@ -7273,6 +5419,12 @@ export async function startServer({
       activeSkillDir,
       activeSkillDirs,
       critiqueShouldRun,
+      designSystemSelection: {
+        id: activeDesignSystemId,
+        requestedId: effectiveDesignSystemId,
+        source: activeDesignSystemId ? designSystemSelection.source : 'none',
+        digest: designSystemDigest,
+      },
       promptTelemetryParts: {
         skillPrompt: skillBody ?? '',
         designSystemPrompt: designSystemBody ?? '',
@@ -7695,6 +5847,7 @@ export async function startServer({
       prompt: daemonSystemPrompt,
       activeSkillDirs,
       critiqueShouldRun,
+      designSystemSelection,
       promptTelemetryParts,
     } =
       await composeDaemonSystemPrompt({
@@ -7713,6 +5866,11 @@ export async function startServer({
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
       });
+
+    run.designSystemId = designSystemSelection?.id ?? null;
+    run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
+    run.designSystemSelectionSource = designSystemSelection?.source ?? 'none';
+    run.designSystemDigest = designSystemSelection?.digest ?? null;
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -7851,6 +6009,11 @@ export async function startServer({
       agentResumeCtx.storedStablePromptHash,
       currentStableHash,
     );
+    run.promptCache = describeStablePromptCache({
+      isResuming: agentResumeCtx.isResuming,
+      storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
+      currentStableHash,
+    });
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const titleGenerationRequested =
       titleGeneration &&
@@ -8085,7 +6248,13 @@ export async function startServer({
       destroyStream(child.stderr);
       destroyStream(child.stdin);
     };
-    const restartSameRunAfterRetry = () => {
+    // Synchronously detach the failed attempt: kill the old child and move the
+    // run back to `queued` *now*, even when the re-spawn is delayed by backoff.
+    // This must not be deferred — leaving the old child alive during the backoff
+    // window lets a follow-on signal (e.g. the inactivity watchdog's SIGTERM)
+    // drive a second close-handler pass that finalizes the run as failed before
+    // the retry ever spawns.
+    const tearDownAttemptForRetry = () => {
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
       destroyChildStdio(run.child);
@@ -8109,6 +6278,8 @@ export async function startServer({
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
+    };
+    const spawnRetryAttempt = () => {
       void startChatRun(chatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
@@ -8125,6 +6296,24 @@ export async function startServer({
         // cannot trigger another restart loop.
         finishWithRetryDecision('failed', 1, null);
       });
+    };
+    // Tear the failed attempt down now (moving the run to `queued`), then wait
+    // out the policy's backoff before re-spawning. Stays cancel-aware: a cancel
+    // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
+    // and finalizes the queued run, and the callback re-checks cancel/terminal
+    // state in case it fires first.
+    const scheduleRetryRestart = (delayMs) => {
+      tearDownAttemptForRetry();
+      const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
+      if (wait <= 0) {
+        spawnRetryAttempt();
+        return;
+      }
+      run.retryRestartTimer = setTimeout(() => {
+        run.retryRestartTimer = null;
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        spawnRetryAttempt();
+      }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
       const attemptCount = run.retryAttemptCount ?? 0;
@@ -8216,8 +6405,9 @@ export async function startServer({
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
+          retry_delay_ms: decision.retryDelayMs,
         });
-        restartSameRunAfterRetry();
+        scheduleRetryRestart(decision.retryDelayMs);
         return true;
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream
@@ -8486,7 +6676,7 @@ export async function startServer({
       // of fail-closing; vela's own `session/set_model` remains the final gate.
       let liveModels = [];
       try {
-        const probe = await resolveAmrModelProbe();
+        const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
         const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
@@ -8607,13 +6797,14 @@ export async function startServer({
       if (promptFile) promptFile.cleanup().catch(() => {});
     };
 
-    // Codex CLI parses config.toml before processing any -c overrides. A
-    // stale `service_tier = "priority"` (written by the Codex app's fast-mode
-    // toggle before the value was renamed to "fast") causes an immediate parse
-    // error and exit-1 before any work starts. Normalize it in-place so the
-    // launch succeeds. Errors are silently swallowed — a missing or read-only
-    // config.toml is fine, and the Codex CLI still surfaces the original error
-    // if the write fails. See issue #4276.
+    // Codex CLI parses config.toml before processing any -c overrides. An
+    // invalid `service_tier` value (the Codex app has written "priority",
+    // "default", and other values the CLI rejects) causes an immediate parse
+    // error and exit-1 before any work starts. Normalize it in-place — any
+    // value outside {fast,flex} has its line removed so the CLI uses its
+    // built-in default — so the launch succeeds. Errors are silently swallowed
+    // — a missing or read-only config.toml is fine, and the Codex CLI still
+    // surfaces the original error if the write fails. See issue #4276 / #3408.
     if (def.id === 'codex') {
       const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
       // Route through spawnEnvForAgent so resolveCodexConfigPath sees the same
@@ -9436,9 +7627,6 @@ export async function startServer({
     // guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    const looksLikeGeminiJsonEventStream = (text: string) => (
-      isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text))
-    );
     // Event types that count as "the agent actually produced something the
     // user can see." Lifecycle markers (`status`) and meter readings
     // (`usage`) deliberately do NOT count — a model can emit token-usage
@@ -9468,6 +7656,30 @@ export async function startServer({
       run.analyticsTelemetry = {
         ...(run.analyticsTelemetry ?? {}),
         firstTokenAt: timestamp,
+      };
+    };
+    // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
+    // `cliReadyAt` is the first well-formed adapter output and is stamped for
+    // every runtime family from its own decode choke point: first JSONL line
+    // (claude-stream-json), first decoded stream event (json-event-stream /
+    // qoder / pi-rpc), first non-empty stdout chunk (plain), or first ACP
+    // JSON-RPC message (acp-json-rpc). `sessionInitDoneAt` is only observable
+    // for ACP (the resume/`session/new` ack); for stream/plain families that
+    // gap is folded into `spawn_to_first_token_remainder_ms` rather than
+    // anchored to a fabricated marker. Both are first-write-wins like
+    // `firstTokenAt` so a later chunk cannot move an already-stamped boundary.
+    const noteCliReadyAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.cliReadyAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        cliReadyAt: timestamp,
+      };
+    };
+    const noteSessionInitDoneAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.sessionInitDoneAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        sessionInitDoneAt: timestamp,
       };
     };
     const noteFirstTokenFromAgentEvent = (ev) => {
@@ -9685,6 +7897,9 @@ export async function startServer({
         }));
         return;
       }
+      // First well-formed decoded stream event = CLI ready for the
+      // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
+      noteCliReadyAt();
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -9698,11 +7913,6 @@ export async function startServer({
       noteFirstTokenFromAgentEvent(ev);
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
-      }
-      // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
-      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
-        emitGuardedTextDelta(ev.delta);
-        return;
       }
       emitAgentEvent(ev);
     };
@@ -9727,6 +7937,9 @@ export async function startServer({
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
+        // First parsed claude-stream-json event = CLI ready (#3408 §4); the
+        // init/system line arrives well before the model's first token.
+        noteCliReadyAt();
         if (ev?.type === 'error') {
           if (agentStreamError) return;
           flushVisibleAgentStderr();
@@ -9773,7 +7986,7 @@ export async function startServer({
           const visibleDelta = titleMarkerStripper.strip(ev.delta);
           if (visibleDelta) {
             noteFirstTokenAt();
-            send('agent', { ...ev, delta: visibleDelta });
+            emitAgentEvent({ ...ev, delta: visibleDelta });
           }
           return;
         }
@@ -9886,6 +8099,8 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        onCliReady: () => noteCliReadyAt(),
+        onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
@@ -9955,6 +8170,10 @@ export async function startServer({
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
         const text = typeof chunk === 'string' ? chunk : String(chunk);
+        // First non-empty stdout chunk = CLI ready for the plain family
+        // (#3408 §4 marker). A plain adapter has no structured preamble, so
+        // this typically coincides with its first model output.
+        if (text.length > 0) noteCliReadyAt();
         const visibleText = titleMarkerStripper.strip(text);
         const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
@@ -10556,1033 +8775,31 @@ export async function startServer({
     };
   });
 
-  function runToolBundleDeliveryTargetForProject(projectId, metadata) {
-    if (typeof projectId !== 'string' || !projectId || !isSafeId(projectId)) {
-      return 'none';
-    }
-    try {
-      const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata, {
-        allowUnavailableSandboxImportedProject: true,
-      });
-      return isManagedProjectCwd(cwd, PROJECTS_DIR) ? 'managed-project' : 'external-project';
-    } catch {
-      return 'none';
-    }
-  }
-
-  app.post('/api/runs', async (req, res) => {
-    if (daemonShuttingDown) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
-    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
-    if (!toolBundle.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
-    }
-    // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
-    // before the run is created. The resolver returns null when the body
-    // does not mention a plugin (legacy runs unchanged), an error envelope
-    // for missing-input / capability / not-found / stale, or an ok result
-    // whose `snapshotId` is pinned onto the run object so downstream
-    // code (system prompt block, tool tokens, replay) can reach it.
-    //
-    // Stage A of plugin-driven-flow-plan: when neither the body nor the
-    // project carries plugin info we fall back to the bundled scenario
-    // plugin for the project's metadata kind/intent so direct callers
-    // (CLI / SDK / agent-headless runs) get the same auto-binding the
-    // web create flow already produces. The fallback is silent — a
-    // bundled scenario that is not installed leaves the run plugin-less,
-    // which matches the legacy path.
-    let resolvedSnapshot = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      let registryView;
-      try {
-        registryView = await loadPluginRegistryView();
-      } catch (err) {
-        return res.status(500).json({ error: String(err) });
-      }
-      const explicitPlugin =
-        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
-      let runResolveBody = requestBody;
-      if (!explicitPlugin) {
-        const projectRow = getProject(db, requestBody.projectId);
-        const hasPin =
-          typeof projectRow?.appliedPluginSnapshotId === 'string'
-          && projectRow.appliedPluginSnapshotId.length > 0;
-        if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
-          if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-            runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
-          }
-        }
-      }
-      const resolved = resolvePluginSnapshot({
-        db,
-        body: runResolveBody,
-        projectId: requestBody.projectId,
-        conversationId: typeof requestBody.conversationId === 'string'
-          ? requestBody.conversationId
-          : null,
-        registry: registryView,
-        connectorProbe: buildConnectorProbe(connectorService),
-      });
-      if (resolved && !resolved.ok) {
-        if (!explicitPlugin) {
-          console.warn(
-            `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
-          );
-        } else {
-          return res.status(resolved.status).json(resolved.body);
-        }
-      } else {
-        resolvedSnapshot = resolved;
-      }
-    }
-    const meta = {
-      ...requestBody,
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-    };
-    if (resolvedSnapshot?.ok) {
-      meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
-      if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
-      if (typeof meta.message !== 'string' || meta.message.trim().length === 0) {
-        const renderedQuery = renderPluginBriefTemplate(
-          resolvedSnapshot.snapshot.query,
-          resolvedSnapshot.snapshot.inputs,
-        ).trim();
-        if (renderedQuery.length > 0) meta.message = renderedQuery;
-      }
-    }
-    let runProject = null;
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      try {
-        runProject = getProject(db, meta.projectId);
-        assertSandboxProjectRootAvailable(runProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
-    // MCP / SDK callers may omit agentId. Resolve it before any run-create
-    // side effects so unsupported run-scoped tool bundles can fail cleanly.
-    if (typeof meta.agentId !== 'string' || !meta.agentId) {
-      try {
-        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
-        const agents = await detectAgents(appCfg.agentCliEnv ?? {}).catch(() => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        if (cfgAgent && cfgAgentAvailable) {
-          meta.agentId = cfgAgent;
-        } else {
-          const firstAvailable = agents.find((a) => a.available)?.id ?? null;
-          if (firstAvailable) meta.agentId = firstAvailable;
-        }
-      } catch (err) {
-        console.warn('[runs] agent id fallback failed', err);
-      }
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          meta.projectId,
-          runProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    if (runProject?.metadata) {
-      meta.projectMetadata = runProject.metadata;
-    }
-    // MCP / SDK callers POST /api/runs with just a projectId — no
-    // conversationId, no pre-created assistantMessageId — because they
-    // don't know about OD's chat-row lifecycle. The web flow
-    // (POST /api/chat) on the other hand creates both client-side and
-    // passes them in. Without binding the run to a conversation and
-    // pre-pinning an assistant message row, the OD studio page for
-    // the project shows an empty chat panel — the user has no way to
-    // see what the outer agent asked or what the inner agent replied,
-    // even though the run finished and produced files.
-    //
-    // Fall back here: pick the project's default conversation (the
-    // one create_project seeded), write a user message with the
-    // prompt as content, and synthesize an assistantMessageId so the
-    // pin helper below will insert the empty assistant row. From that
-    // point on, the existing appendMessageAgentEvent path accumulates
-    // every text_delta into the assistant row's content — same as web
-    // chat.
-    if (
-      typeof meta.projectId === 'string' &&
-      meta.projectId &&
-      (typeof meta.conversationId !== 'string' || !meta.conversationId)
-    ) {
-      try {
-        const convs = listConversations(db, meta.projectId);
-        // listConversations is ordered for the UI by recent activity; this
-        // fallback must bind to the seeded default conversation instead.
-        const defaultConv = Array.isArray(convs) && convs.length > 0
-          ? [...convs].sort((a, b) => {
-              const aCreated = Number(a?.createdAt);
-              const bCreated = Number(b?.createdAt);
-              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-                return aCreated - bCreated;
-              }
-              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-            })[0]
-          : null;
-        if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
-          meta.conversationId = defaultConv.id;
-          if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
-            meta.assistantMessageId = randomUUID();
-          }
-          const promptForUserMessage =
-            typeof meta.message === 'string' && meta.message.trim().length > 0
-              ? meta.message
-              : null;
-          if (promptForUserMessage) {
-            upsertMessage(db, defaultConv.id, {
-              id: randomUUID(),
-              role: 'user',
-              content: promptForUserMessage,
-              startedAt: Date.now(),
-              endedAt: Date.now(),
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('[runs] mcp conversation fallback failed', err);
-      }
-    }
-    const run = design.runs.create(meta);
-    try {
-      pinAssistantMessageOnRunCreate(db, run);
-    } catch (err) {
-      console.warn('[runs] message create pin failed', err);
-    }
-    // Capture clientType for downstream telemetry (Langfuse uses it on
-    // run-completed metadata; PostHog gets it via the request header
-    // bridge). Prefer the explicit `x-od-client` header from desktop /
-    // web sidecars, fall back to user-agent detection. Without this the
-    // run object's `clientType` stays undefined and Langfuse traces lose
-    // the surface dimension.
-    const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
-    if (declaredClient === 'desktop' || declaredClient === 'web') {
-      run.clientType = declaredClient;
-    } else {
-      const ua = String(req.get('user-agent') ?? '');
-      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
-    }
-    if (resolvedSnapshot?.ok) {
-      try {
-        const { linkSnapshotToRun } = await import('./plugins/snapshots.js');
-        linkSnapshotToRun(db, resolvedSnapshot.snapshotId, run.id);
-      } catch {
-        // Linking is best-effort here; in-memory run still carries the id.
-      }
-    }
-    /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
-    const body = {
-      runId: run.id,
-      // Surface the bound conversation/message so MCP / SDK callers
-      // who did not provide them get back the daemon-resolved values
-      // (used for building studio deep links and threading chat
-      // history). Always nullable so the contract stays additive.
-      conversationId: run.conversationId ?? null,
-      assistantMessageId: run.assistantMessageId ?? null,
-      ...(resolvedSnapshot?.ok
-        ? {
-            appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
-            pluginId: resolvedSnapshot.snapshot.pluginId,
-          }
-        : {}),
-    };
-    res.status(202).json(body);
-    // Plan §3.I1 / spec §10.1 — fire the pipeline schedule on the run's
-    // SSE stream BEFORE the agent process is started. The first
-    // pipeline_stage_started event is emitted synchronously (before
-    // the first await inside runPipelineForRun), so any SSE consumer
-    // that subscribes between create() and start() sees a stage event
-    // ahead of the agent's message_chunk stream — exactly what §8 e2e-3
-    // expects. The stub stage runner returns immediately so a
-    // non-loop pipeline walks through every stage in O(stages) time;
-    // the audit row in `run_devloop_iterations` records the timeline.
-    if (resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
-      firePipelineForRun({
-        run,
-        snapshot: resolvedSnapshot.snapshot,
-        runs: design.runs,
-        db,
-      });
-    }
-    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    if (run.projectId && run.conversationId) {
-      try {
-        const project = getProject(db, run.projectId);
-        const projectRoot = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
-        detectSkillPluginCandidateOnRunSuccess(db, design.runs, run, req.body || {}, projectRoot);
-      } catch (err) {
-        console.warn('[plugins] skill candidate hook setup failed', err);
-      }
-    }
-    design.runs.start(run, () => startChatRun(meta, run));
-
-    // Analytics v2: emit run_created (daemon-side authoritative) and
-    // schedule run_finished on terminal state. The matching `chat-routes.ts`
-    // handler is shadowed by this earlier registration in Express; emit
-    // here so PostHog actually receives the event. Both fire under the
-    // same insert_id prefix so any web-side mirror dedupes by $insert_id.
-    const analyticsContext = readAnalyticsContext(req);
-    if (analyticsContext) {
-      run.analyticsContext = analyticsContext;
-    }
-    design.runs.wait(run).then((status: { status: string }) => {
-      reportRunCompletionTelemetryFallback({
-        analyticsContext: analyticsContext ?? null,
-        run,
-        status: status.status,
-      });
-    }).catch(() => {
-      // wait() can't reject in current runs.ts impl, but guard anyway.
-    });
-    if (analyticsContext) {
-      const reqBody = (req.body || {}) as Record<string, unknown>;
-      const runInsertId = newInsertId();
-      // Configure-state triplet — v2 schema requires every event to carry
-      // these so PostHog dashboards can split run lifecycle by execution
-      // setup. Web-side captures inherit them from a PostHog global
-      // register, but daemon-side captures (run_created/run_finished) need
-      // to populate them at capture time. Best-effort derivation from
-      // `detectAgents()` + the request's `agentId`:
-      //   - has_available_configure_cli: any CLI on PATH appears installed
-      //   - configure_type: 'local_cli' when the run targets an installed
-      //     CLI, otherwise 'unknown' (BYOK keys live in the web client
-      //     storage and are not visible to the daemon at this layer)
-      //   - configure_availability: 'available' when the requested CLI is
-      //     installed; 'unavailable' when it's known but not installed;
-      //     'unknown' otherwise
-      const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
-        () => ({} as Record<string, unknown>),
-      );
-      const detectedAgentsForAnalytics = await detectAgents(
-        (appCfgForAnalytics as { agentCliEnv?: Record<string, unknown> }).agentCliEnv ?? {},
-      ).catch(() => [] as Array<{ id: string; available: boolean }>);
-      // BYOK credentials live in the web client (localStorage / store) and
-      // are not visible to the daemon at this layer, so we pass
-      // `byokConfigured: undefined` and let the helper fall back to the
-      // installed-CLI signal. Web-side captures use the same helper with
-      // the full credential view to keep dashboards aligned.
-      //
-      // `mode: 'daemon'` pins the call into the helper's daemon branch so
-      // `configure_availability` is judged from the requested agent's
-      // install status (not the cohort-wide "any CLI installed?" fallback).
-      // Without it, a run for an uninstalled agent would still report
-      // `available` whenever any unrelated CLI was on PATH — see PR #2285
-      // review.
-      // AMR sign-in state is daemon-visible (vela's config file or the
-      // Settings-backed VELA_RUNTIME_KEY/VELA_LINK_URL env config), so the
-      // server-side captures can fill `amrAuthorized` even though BYOK
-      // stays web-only. Merge the configured AMR env exactly like the
-      // /api/integrations/vela/status route and the run launcher do —
-      // env-configured users are signed in to the UI, and dropping the
-      // configured env here would keep reporting them as 'none'.
-      const velaStatusForAnalytics = (() => {
-        try {
-          const configuredAmrEnv = agentCliEnvForAgent(
-            (appCfgForAnalytics as {
-              agentCliEnv?: Parameters<typeof agentCliEnvForAgent>[0];
-            }).agentCliEnv,
-            'amr',
-          );
-          return readVelaLoginStatus(process.env, configuredAmrEnv);
-        } catch {
-          return null;
-        }
-      })();
-      const configureGlobals = deriveConfigureGlobals({
-        mode: 'daemon',
-        agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        agents: detectedAgentsForAnalytics,
-        amrAuthorized: velaStatusForAnalytics?.loggedIn === true,
-      });
-      const promptText =
-        typeof reqBody.currentPrompt === 'string'
-          ? reqBody.currentPrompt
-          : typeof reqBody.message === 'string'
-            ? reqBody.message
-            : '';
-      const userQueryTokens = promptText.length > 0
-        ? Math.ceil(promptText.length / 4)
-        : 0;
-      // Optional analytics context the client may attach to a run.
-      // Used to thread the DS run variant (`design_system_project` /
-      // `design_system_generation` page+area, `project_kind=design_system`,
-      // entry_from values like `design_system_create`) plus per-source
-      // counts onto run_created / run_finished. Behavior never depends on
-      // these; only PostHog props do.
-      const analyticsHints =
-        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
-          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
-          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
-          : {};
-      const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
-        ? analyticsHints.entryFrom
-        : undefined;
-      const hintProjectKind = typeof analyticsHints.projectKind === 'string'
-        ? analyticsHints.projectKind
-        : null;
-      // Session-dimension hints (client-computed, behavior-irrelevant): the
-      // 0-based run turn index within the browser analytics session, whether
-      // it's the session's first run, and whether the project already had a
-      // generated artifact (run is an edit, not a first creation).
-      const hintTurnIndex = typeof analyticsHints.turnIndex === 'number'
-        ? analyticsHints.turnIndex
-        : undefined;
-      const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
-        ? analyticsHints.isFirstRun
-        : undefined;
-      const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
-        ? analyticsHints.hasExistingArtifact
-        : undefined;
-      const sessionDimensionProps = {
-        ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
-        ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
-        ...(hintHasExistingArtifact !== undefined
-          ? { has_existing_artifact: hintHasExistingArtifact }
-          : {}),
-      };
-      const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
-      const runProject = requestProjectId ? getProject(db, requestProjectId) : null;
-      const runProjectKind = resolveRunProjectKindForAnalytics({
-        hintProjectKind,
-        projectMetadata: runProject?.metadata,
-      });
-      const dsRunContext =
-        analyticsHints.designSystemRunContext
-          && typeof analyticsHints.designSystemRunContext === 'object'
-          ? (analyticsHints.designSystemRunContext as Record<string, unknown>)
-          : {};
-      const isDesignSystemRun =
-        runProjectKind === 'design_system'
-        || hintEntryFrom === 'design_system_create'
-        || hintEntryFrom === 'onboarding_design_system'
-        || hintEntryFrom === 'regenerate_from_review';
-      // Only fields the current `/api/runs` create payload actually
-      // sends. The v2 schema documents extended context props
-      // (entry_from / project_kind / target_platforms / fidelity /
-      // companion_surfaces / connectors / use_speaker_notes /
-      // include_animations / reference_template / aspect /
-      // project_source) — most aren't on the wire yet, but
-      // project_kind falls back to the stored project metadata so ordinary
-      // project runs are classified even when callers do not send
-      // `analyticsHints`. Other dimensions stay omitted until follow-up PRs
-      // thread them through.
-      // Per-turn capability sets: MCP servers live under the nested
-      // `context` selection; skills are sent top-level. Both are arrays of
-      // ids on the wire; coerce defensively so a malformed payload never
-      // throws inside the capture path.
-      const reqContext =
-        reqBody.context && typeof reqBody.context === 'object'
-          ? (reqBody.context as Record<string, unknown>)
-          : {};
-      const runMcpServerIds = Array.isArray(reqContext.mcpServerIds)
-        ? (reqContext.mcpServerIds as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          )
-        : [];
-      const runTurnSkillIds = Array.isArray(reqBody.skillIds)
-        ? (reqBody.skillIds as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          )
-        : [];
-      // `skill_ids` is the full per-send skill context, so fold in the
-      // project-bound persistent `skillId` (also reported singularly as
-      // `skill_id`) alongside the staged one-turn skills — otherwise a normal
-      // project run with a persisted skill but no staged skills would emit
-      // `skill_ids=[]` and undercount in dashboards that read the array.
-      const runSkillIds = [
-        ...new Set(
-          [reqBody.skillId, ...runTurnSkillIds].filter(
-            (id): id is string => typeof id === 'string' && id.length > 0,
-          ),
-        ),
-      ];
-      const baseProps: Record<string, unknown> = {
-        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
-        area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
-        ...configureGlobals,
-        // Override the BYOK-blind derived runtime_type with the client's
-        // authoritative per-run value when supplied — the daemon can't see a
-        // saved BYOK key, so a BYOK run would otherwise report as local_cli/amr.
-        runtime_type: runtimeTypeForRunAnalytics({
-          derived: configureGlobals.runtime_type,
-          hint: analyticsHints.runtimeType,
-        }),
-        ...amrUserIdForRunAnalytics(velaStatusForAnalytics),
-        project_id: requestProjectId,
-        conversation_id:
-          typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
-        run_id: run.id,
-        project_kind: runProjectKind,
-        ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
-        ...sessionDimensionProps,
-        design_system_id:
-          typeof reqBody.designSystemId === 'string'
-            ? reqBody.designSystemId
-            : undefined,
-        // `design_system_source` is required in the v2 contract
-        // (RunCreatedProps / RunFinishedProps). The daemon doesn't see
-        // whether the chosen design system was the workspace default,
-        // a user pick, or template-inherited — that signal lives only
-        // in the web client. Derive what we honestly know from the
-        // wire payload: 'not_applicable' when no design system was
-        // selected, 'unknown' otherwise. A follow-up that threads
-        // `designSystemSource` through `CreateRunRequest` can replace
-        // this with the precise value. See PR #2285 review 2026-05-20
-        // 04:35 for the rationale.
-        design_system_source:
-          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
-            ? 'unknown'
-            : 'not_applicable',
-        ...(isDesignSystemRun ? {
-          ds_source_origin: typeof dsRunContext.origin === 'string'
-            ? dsRunContext.origin
-            : undefined,
-          source_count: typeof dsRunContext.sourceCount === 'number'
-            ? dsRunContext.sourceCount
-            : undefined,
-          has_brand_description: typeof dsRunContext.hasBrandDescription === 'boolean'
-            ? dsRunContext.hasBrandDescription
-            : undefined,
-          brand_description_length_bucket:
-            typeof dsRunContext.brandDescriptionLengthBucket === 'string'
-              ? dsRunContext.brandDescriptionLengthBucket
-              : undefined,
-          github_repo_count: typeof dsRunContext.githubRepoCount === 'number'
-            ? dsRunContext.githubRepoCount
-            : undefined,
-          local_folder_count: typeof dsRunContext.localFolderCount === 'number'
-            ? dsRunContext.localFolderCount
-            : undefined,
-          fig_file_count: typeof dsRunContext.figFileCount === 'number'
-            ? dsRunContext.figFileCount
-            : undefined,
-          asset_file_count: typeof dsRunContext.assetFileCount === 'number'
-            ? dsRunContext.assetFileCount
-            : undefined,
-        } : {}),
-        has_attachment: Array.isArray(reqBody.attachments)
-          ? (reqBody.attachments as unknown[]).length > 0
-          : false,
-        user_query_tokens: userQueryTokens,
-        // `modelIdForTracking` buckets null/empty into `'default'` so the
-        // PostHog `model_id` column always has an analysable value. The
-        // user-picked model only lands here on `run_created` (the agent
-        // hasn't initialised yet); `run_finished` below upgrades this to
-        // the agent-reported model when available.
-        model_id: modelIdForTracking(
-          typeof reqBody.model === 'string' ? reqBody.model : null,
-        ),
-        agent_provider_id: agentIdToTracking(
-          typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        ),
-        skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
-        // Per-send composer context (v2 spec: every prompt records mode +
-        // which model/cli/mcp/skill/plugin/design-system it ran with). Mode,
-        // plugin, and the MCP/skill sets weren't on `run_created` before; the
-        // values are all on the create payload, so populate them here. The
-        // legacy singular `mcp_id` becomes the first enabled server for
-        // back-compat; `mcp_ids` carries the full set.
-        // Only composer-originated runs have an ask/design mode. DS-generation
-        // runs never go through the composer, so omit `session_mode` for them
-        // rather than defaulting them to `ask` and polluting mode dashboards.
-        ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'
-          ? { session_mode: sessionModeToTracking(reqBody.sessionMode) }
-          : {}),
-        plugin_id: resolvedSnapshot?.ok
-          ? resolvedSnapshot.snapshot.pluginId
-          : typeof reqBody.pluginId === 'string'
-            ? reqBody.pluginId
-            : null,
-        mcp_ids: runMcpServerIds,
-        mcp_id: runMcpServerIds[0] ?? null,
-        skill_ids: runSkillIds,
-        token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
-      };
-      design.analytics.capture({
-        eventName: 'run_created',
-        context: analyticsContext,
-        appVersion: design.getAppVersion(),
-        properties: baseProps,
-        insertId: runInsertId,
-      });
-      design.runs.wait(run).then(async (status: {
-        status: string;
-        error?: string | null;
-        errorCode?: string | null;
-        exitCode?: number | null;
-        signal?: string | null;
-      }) => {
-        // Langfuse eligibility must be re-derived at completion time, not
-        // reused from a launch-time snapshot. A long-running run can have the
-        // user flip telemetry consent or the relay config mid-flight; the
-        // Langfuse sink (`reportRunCompletedFromDaemon`) re-reads app config
-        // when the run ends, so PostHog's `langfuse_expected` /
-        // `langfuse_delivery_status` / `langfuse_drop_reason` must read the
-        // same completion-time eligibility to stay aligned. See PR #3412
-        // review.
-        const appCfgAtFinish = await readAppConfig(RUNTIME_DATA_DIR).catch(
-          () => ({} as Record<string, unknown>),
-        );
-        const langfuseDeliveryForAnalytics = deriveLangfuseDeliveryState(
-          (appCfgAtFinish as { telemetry?: Record<string, unknown> }).telemetry ?? {},
-          readTelemetrySinkConfig(),
-        );
-        // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
-        // it always returns a non-empty string so dashboards keyed on
-        // `error_code` never see a blank cell. Live in `run-result.ts`
-        // with unit coverage for the fall-through cases (ACP fatal,
-        // child close without error event, etc.).
-        const result = runResultFromStatus(status.status);
-        const errorCode = deriveRunErrorCode(status);
-        const failure = classifyRunFailure({
-          result,
-          status,
-          ...(errorCode ? { errorCode } : {}),
-          agentId: run.agentId,
-          events: run.events,
-        });
-        // ACP reports { type:'status', label:'model', model:<id> } after
-        // session/new; stream adapters report { type:'status',
-        // label:'initializing', model:<id> } at run start. The scan must
-        // not short-circuit on usage before reaching the model signal —
-        // see `scanRunEventsForFinishedProps` for the invariant.
-        const usageAnalytics = scanRunEventsForUsageAnalytics(
-          run.events,
-          reqBody.model,
-          userQueryTokens,
-        );
-        const analyticsCapturedAt = Date.now();
-        const timingAnalytics = summarizeRunTimingAnalytics({
-          runCreatedAt: run.createdAt,
-          runUpdatedAt: run.updatedAt,
-          analyticsCapturedAt,
-          telemetry: run.analyticsTelemetry,
-          events: run.events,
-        });
-        // Agent-agnostic artifact count: diff the project's artifact files
-        // against the baseline captured at run start. A created OR modified
-        // file counts (an edit-only turn still reports >0). Falls back to the
-        // tool-stream counter when no baseline was captured (no-project runs,
-        // or runs that started before this code shipped) — that path is
-        // claude-accurate and was the previous behaviour for everyone.
-        // Tool-stream fallbacks for the no-baseline path (no-project runs, or
-        // runs that started before this code shipped). These are claude-accurate
-        // and were the previous behaviour for every agent.
-        const toolStreamArtifactCount = (): number => countNewArtifacts(run.events);
-        const toolStreamDesignSystemCreated = (): boolean =>
-          didRunCreateDesignSystemFile(run.events);
-        const toolStreamPreviewModuleCount = (): number =>
-          countDesignSystemPreviewModules(run.events);
-        const artifactBaseline = runArtifactBaselines.take(run.id);
-        let artifactCount: number;
-        let artifactsCreated: number | undefined;
-        let artifactsModified: number | undefined;
-        let designSystemCreated: boolean;
-        let previewModuleCount: number;
-        // Skip the whole-tree diff when this run overlapped another run in the
-        // same cwd: the snapshot cannot tell which run wrote a file, so a
-        // contended diff would cross-attribute artifacts / design_system /
-        // preview / activation milestones. Fall back to the per-run tool-stream
-        // count instead (claude-accurate; a non-claude contended run is a rare
-        // undercount, which beats misattribution).
-        if (artifactBaseline && !artifactBaseline.contended) {
-          // Diff the project's tracked files against the run-start baseline so
-          // artifact_count / design_system_created / preview_module_count are
-          // derived agent-agnostically (not just for claude_code).
-          let diff: ReturnType<typeof diffRunArtifacts> | null = null;
-          try {
-            diff = diffRunArtifacts(
-              artifactBaseline.before,
-              snapshotProjectArtifacts(artifactBaseline.cwd),
-            );
-          } catch {
-            diff = null;
-          }
-          if (diff) {
-            artifactCount = diff.touched;
-            artifactsCreated = diff.created;
-            artifactsModified = diff.modified;
-            designSystemCreated = diff.designSystemCreated;
-            previewModuleCount = diff.previewModuleCount;
-          } else {
-            artifactCount = toolStreamArtifactCount();
-            designSystemCreated = toolStreamDesignSystemCreated();
-            previewModuleCount = toolStreamPreviewModuleCount();
-          }
-        } else {
-          artifactCount = toolStreamArtifactCount();
-          designSystemCreated = toolStreamDesignSystemCreated();
-          previewModuleCount = toolStreamPreviewModuleCount();
-        }
-        // First-touch activation milestones (first-artifact / first-design-
-        // system observed since this stamp shipped — NOT first-ever; see
-        // `deriveActivationMilestones`) written to the PostHog person record
-        // via `$set_once` below. Derived from this same run-outcome snapshot so
-        // the milestone lands at the exact success moment without a second
-        // event; `$set_once` keeps it pinned to the first qualifying run.
-        const activationMilestones = deriveActivationMilestones({
-          result,
-          artifactCount,
-          designSystemCreated,
-          // Gate the DS milestone on the same `isDesignSystemRun` condition the
-          // `run_finished.design_system_created` field uses below, so a plain
-          // chat run that writes a `DESIGN.md` doesn't overstate DS activation.
-          isDesignSystemRun,
-          capturedAtIso: new Date(analyticsCapturedAt).toISOString(),
-        });
-        const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
-          events: run.events,
-          exitCode: status.exitCode ?? null,
-          signal: status.signal ?? null,
-          cancelRequested: !!run.cancelRequested,
-          firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
-          artifactWriteSeen: artifactCount > 0 || designSystemCreated || previewModuleCount > 0,
-        });
-        const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
-          ? modelIdForTracking(reqBody.model)
-          : modelIdForTracking(usageAnalytics.agent_reported_model);
-        for (const [index, retryEvent] of runRetryEventsForAnalytics(run.events).entries()) {
-          design.analytics.capture({
-            eventName: retryEvent.event,
-            context: analyticsContext,
-            appVersion: design.getAppVersion(),
-            properties: retryEvent.data,
-            insertId: `${runInsertId}-${retryEvent.event}-${index}`,
-          });
-        }
-        design.analytics.capture({
-          eventName: 'run_finished',
-          context: analyticsContext,
-          appVersion: design.getAppVersion(),
-          properties: {
-            ...baseProps,
-            // `area` flips on run_finished: chat_panel runs publish
-            // under `chat_panel`, DS runs stay on
-            // `design_system_generation` to match the run_created shape.
-            area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
-            result,
-            // PostHog person-property milestones. `$set_once` only writes a
-            // key that doesn't already exist, so the timestamp pins to the
-            // user's FIRST qualifying run observed since rollout (true
-            // first-ever only for users who onboard after rollout; the
-            // installed base gets their next qualifying run — see
-            // `deriveActivationMilestones`). Omitted when no milestone crossed.
-            ...(activationMilestones ? { $set_once: activationMilestones } : {}),
-            // `model_id` upgrades the request-side value with the
-            // agent-reported model on terminal state; see
-            // `finishedModelId` derivation above.
-            model_id: finishedModelId,
-            // Distinct artifact files this run produced OR edited, measured by
-            // a filesystem snapshot diff (`run-artifact-fs.ts`) so it works for
-            // every agent — not just claude_code, the only one whose tool
-            // stream the legacy counter recognized. Falls back to the
-            // tool-stream count for no-project runs. An edit-only turn (file
-            // count unchanged) still reports >0.
-            artifact_count: artifactCount,
-            // Breakdown of `artifact_count` when a filesystem baseline existed:
-            // created ≈ activation (new artifact), modified ≈ iteration on an
-            // existing one. Omitted on the tool-stream fallback path.
-            ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
-            ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
-            // True when the run raised a `<question-form>` clarification.
-            // Clarification turns inherently produce no artifact, so the
-            // dashboard excludes them from the "run finished -> has artifact"
-            // funnel instead of counting them as failures. See
-            // `run-artifacts.ts`; tested in `tests/run-artifacts.test.ts`.
-            asked_user_question: runAskedUserQuestion(run.events),
-            retry_attempt_count: run.retryAttemptCount ?? 0,
-            retry_final_result: run.retryFinalResult ?? 'not_attempted',
-            ...(run.retrySuppressedReason
-              ? { retry_suppressed_reason: run.retrySuppressedReason }
-              : {}),
-            ...(isDesignSystemRun ? {
-              // DS runs land a `DESIGN.md` write when generation
-              // succeeded; the run-artifacts inspector reuses the
-              // same Write/Edit pairing it already does for HTML
-              // artifact counts, just keyed on `DESIGN.md`.
-              design_system_created: designSystemCreated,
-              preview_module_count: previewModuleCount,
-              // `missing_font_count` defaults to 0 — the agent flow
-              // doesn't emit a structured "missing fonts" signal yet.
-              // Kept on the wire so the dashboard has the column from
-              // day one; can be sourced later from a font-audit hook.
-              missing_font_count: 0,
-            } : {}),
-            ...timingAnalytics,
-            ...diagnosticsAnalytics,
-            langfuse_trace_id: run.id,
-            ...langfuseDeliveryForAnalytics,
-            ...(errorCode ? { error_code: errorCode } : {}),
-            ...(failure ?? {}),
-            ...(usageAnalytics.input_tokens !== undefined
-              ? { input_tokens: usageAnalytics.input_tokens }
-              : {}),
-            ...(usageAnalytics.input_tokens_provider !== undefined
-              ? { input_tokens_provider: usageAnalytics.input_tokens_provider }
-              : {}),
-            ...(usageAnalytics.input_tokens_effective !== undefined
-              ? { input_tokens_effective: usageAnalytics.input_tokens_effective }
-              : {}),
-            ...(usageAnalytics.output_tokens !== undefined
-              ? { output_tokens: usageAnalytics.output_tokens }
-              : {}),
-            ...(usageAnalytics.total_tokens !== undefined
-              ? { total_tokens: usageAnalytics.total_tokens }
-              : {}),
-            ...(usageAnalytics.cache_read_input_tokens !== undefined
-              ? { cache_read_input_tokens: usageAnalytics.cache_read_input_tokens }
-              : {}),
-            ...(usageAnalytics.cache_creation_input_tokens !== undefined
-              ? {
-                  cache_creation_input_tokens:
-                    usageAnalytics.cache_creation_input_tokens,
-                }
-              : {}),
-            ...(usageAnalytics.uncached_input_tokens !== undefined
-              ? { uncached_input_tokens: usageAnalytics.uncached_input_tokens }
-              : {}),
-            ...(usageAnalytics.estimated_context_tokens !== undefined
-              ? { estimated_context_tokens: usageAnalytics.estimated_context_tokens }
-              : {}),
-            ...(usageAnalytics.cache_hit_ratio !== undefined
-              ? { cache_hit_ratio: usageAnalytics.cache_hit_ratio }
-              : {}),
-            cache_token_source: usageAnalytics.cache_token_source,
-            token_count_source: usageAnalytics.token_count_source,
-          },
-          insertId: `${runInsertId}-finish`,
-        });
-      }).catch(() => {
-        // wait() can't reject in current runs.ts impl, but guard anyway.
-      });
-    }
-  });
-
-  app.get('/api/runs', (req, res) => {
-    const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
-    /** @type {import('@open-design/contracts').ChatRunListResponse} */
-    const body = { runs: runs.map(design.runs.statusBody) };
-    res.json(body);
-  });
-
-  app.get('/api/runs/:id/result-package', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = design.runs.statusBody(run);
-    const project = run.projectId ? getProject(db, run.projectId) : null;
-    let files: any[] = [];
-    if (project) {
-      const packageMetadata = run.projectMetadata ?? null;
-      try {
-        if (status.workspace?.storage?.kind === 'folder-backed') {
-          const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, packageMetadata);
-          const projectRootStat = await fs.promises.stat(projectRoot);
-          if (!projectRootStat.isDirectory()) {
-            throw new Error('workspace root is not a directory');
-          }
-        }
-        files = await listFiles(PROJECTS_DIR, project.id, { metadata: packageMetadata });
-      } catch (err) {
-        return sendApiError(
-          res,
-          500,
-          'WORKSPACE_ENUMERATION_FAILED',
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-    const artifacts = files
-      .filter((file) => file?.artifactManifest && typeof file.artifactManifest === 'object')
-      .map((file) => ({
-        file: file.name,
-        kind: typeof file.artifactManifest.kind === 'string'
-          ? file.artifactManifest.kind
-          : file.artifactKind ?? null,
-        renderer: typeof file.artifactManifest.renderer === 'string'
-          ? file.artifactManifest.renderer
-          : null,
-        title: typeof file.artifactManifest.title === 'string'
-          ? file.artifactManifest.title
-          : file.name,
-        status: typeof file.artifactManifest.status === 'string'
-          ? file.artifactManifest.status
-          : null,
-        manifest: file.artifactManifest,
-      }));
-    res.json({
-      schema: RUN_RESULT_PACKAGE_SCHEMA,
-      run: {
-        id: status.id,
-        status: status.status,
-        projectId: status.projectId,
-        conversationId: status.conversationId,
-        assistantMessageId: status.assistantMessageId,
-        agentId: status.agentId,
-        createdAt: status.createdAt,
-        updatedAt: status.updatedAt,
-        cancelRequested: status.cancelRequested,
-        exitCode: status.exitCode,
-        signal: status.signal,
-        error: status.error,
-        errorCode: status.errorCode,
-      },
-      workspace: status.workspace,
-      events: {
-        logPath: status.eventsLogPath,
-      },
-      project: project
-        ? {
-            id: project.id,
-            name: project.name,
-            fileCount: files.length,
-          }
-        : null,
-      artifacts,
-    });
-  });
-
-  app.get('/api/runs/:id', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(design.runs.statusBody(run));
-  });
-
-  app.get('/api/runs/:id/events', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.stream(run, req, res);
-  });
-
-  // Phase 4 / spec §10.3.5 — AG-UI canonical stream.
-  //
-  // Same data plane as /api/runs/:id/events but every record passes
-  // through `encodeOdEventForAgui` first so an external CopilotKit /
-  // AG-UI client can consume the run unmodified. Events the encoder
-  // can't map are dropped; the SSE stream stays canonical even when
-  // OD adds internal-only events later.
-  app.get('/api/runs/:id/agui', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const { encodeOdEventForAgui } = await import('@open-design/agui-adapter');
-    const sse = createSseResponse(res);
-    const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
-    const emitMapped = (record) => {
-      const mapped = encodeOdEventForAgui(
-        { kind: record.event, ...(record.data ?? {}) },
-        { runId: run.id, seq: record.id, now: Date.now() },
-      );
-      if (mapped) sse.send(mapped.kind, mapped, record.id);
-    };
-    for (const record of run.events) {
-      if (!Number.isFinite(lastEventId) || record.id > lastEventId) emitMapped(record);
-    }
-    if (design.runs.isTerminal(run.status)) {
-      sse.end();
-      return;
-    }
-    // Mirror runs.stream's subscriber pattern but route through the
-    // adapter. We attach a thin wrapper to run.clients so the existing
-    // emit() loop reaches us; the wrapper only implements the
-    // {send,end,cleanup} surface the runs service uses.
-    const adapterClient = {
-      send: (event, data, id) => {
-        const mapped = encodeOdEventForAgui(
-          { kind: event, ...(data ?? {}) },
-          { runId: run.id, seq: id, now: Date.now() },
-        );
-        if (mapped) sse.send(mapped.kind, mapped, id);
-      },
-      end:     () => sse.end(),
-      cleanup: () => sse.cleanup?.(),
-    };
-    run.clients.add(adapterClient);
-    res.on('close', () => {
-      run.clients.delete(adapterClient);
-      sse.cleanup?.();
-    });
-  });
-
-  app.post('/api/runs/:id/cancel', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = await design.runs.cancel(run);
-    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true, run: status };
-    res.json(body);
-  });
-
-  app.post('/api/chat', (req, res) => {
-    if (daemonShuttingDown) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
-    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
-    if (!toolBundle.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
-    }
-    let chatProject = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      try {
-        chatProject = getProject(db, requestBody.projectId);
-        assertSandboxProjectRootAvailable(chatProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          requestBody.projectId,
-          chatProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    const meta = {
-      ...requestBody,
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
-    };
-    const run = design.runs.create(meta);
-    design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(meta, run));
+  registerRunRoutes(app, {
+    db,
+    design,
+    http: httpDeps,
+    paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
+    agents: { detectAgents, getAgentDef },
+    chat: { startChatRun },
+    lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
+    plugins: {
+      connectorService,
+      detectSkillPluginCandidateOnRunSuccess,
+      firePipelineForRun,
+      loadPluginRegistryView,
+      renderPluginBriefTemplate,
+    },
+    telemetry: {
+      reportRunCompletionTelemetryFallback,
+      resolveRunProjectKindForAnalytics,
+      runArtifactBaselines,
+      runRetryEventsForAnalytics,
+    },
+    messages: {
+      pinAssistantMessageOnRunCreate,
+      reconcileAssistantMessageOnRunEnd,
+    },
   });
 
   // Each routine fire resolves an agent, prepares project/conversation state,
@@ -11957,6 +9174,13 @@ export async function startServer({
     nativeDialogs: nativeDialogDeps,
     research: researchDeps,
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
+    plugins: {
+      connectorService,
+      detectSkillPluginCandidateOnRunSuccess,
+      firePipelineForRun,
+      loadPluginRegistryView,
+      renderPluginBriefTemplate,
+    },
     resources: {
       listAllSkills,
       listAllDesignTemplates,
@@ -11970,8 +9194,13 @@ export async function startServer({
     finalize: finalizeDeps,
     handoff: handoffDeps,
     chat: { startChatRun },
+    messages: {
+      pinAssistantMessageOnRunCreate,
+      reconcileAssistantMessageOnRunEnd,
+    },
     agents: agentDeps,
     critique: critiqueDeps,
+    openDesignPublicMetadata,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
   });
 
@@ -12115,37 +9344,4 @@ function sanitizeSlug(text) {
     .replace(/[\s_]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 64);
-}
-
-function assembleExample(templateHtml, slidesHtml, title) {
-  return templateHtml
-    .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(
-      /<title>.*?<\/title>/,
-      `<title>${title} | Open Design Example</title>`,
-    );
-}
-
-// Skill example HTML often references shipped images via relative paths
-// like `./assets/hero.png`. Those resolve correctly when the file is
-// opened from disk, but the web app loads the example into a sandboxed
-// iframe via `srcdoc`, where the document URL is `about:srcdoc` and
-// relative URLs cannot find the assets. Rewriting them to an absolute
-// `/api/skills/<id>/assets/...` URL lets the same HTML render in both
-// places — the disk preview keeps working, and the in-app preview now
-// fetches assets through the matching route below.
-export function rewriteSkillAssetUrls(html: string, skillId: string): string {
-  if (typeof html !== 'string' || html.length === 0) return html;
-  // Match src/href attributes whose values point at the current skill's
-  // assets (`./assets/...` or `assets/...`) or a sibling skill's assets
-  // (`../other-skill/assets/...`). Quote style is preserved so we do not
-  // disturb the surrounding markup.
-  return html.replace(
-    /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
-    (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
-      const resolvedSkillId = siblingSkillId || skillId;
-      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
-      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
-    },
-  );
 }

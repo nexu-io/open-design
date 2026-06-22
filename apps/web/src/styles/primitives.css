@@ -13,10 +13,15 @@ button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 button.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--accent);
   border-color: var(--accent);
   color: white;
   font-weight: 500;
+  line-height: 1.2;
   box-shadow: 0 1px 0 rgba(180, 90, 59, 0.18) inset, var(--shadow-xs);
 }
 button.primary:hover:not(:disabled) {
@@ -24,17 +29,27 @@ button.primary:hover:not(:disabled) {
   border-color: var(--accent-hover);
 }
 button.primary-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--bg-panel);
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 500;
+  line-height: 1.2;
 }
 button.primary-ghost:hover:not(:disabled) { background: var(--accent-tint); }
 
 button.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: transparent;
   border-color: var(--border);
   color: var(--text);
+  line-height: 1.2;
 }
 button.ghost:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
 /*

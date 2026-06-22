@@ -460,7 +460,7 @@ function installDesktopMenu(
           {
             label: "Contact Us",
             click() {
-              void shell.openExternal("https://x.com/nexudotio");
+              void shell.openExternal("https://x.com/OpenDesignHQ");
             },
           },
           {

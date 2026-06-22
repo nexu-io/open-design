@@ -65,7 +65,15 @@ import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
+import { Toast } from './Toast';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
+import {
+  consumePendingHomeChip,
+  consumePendingHomeNotice,
+  HOME_CHIP_INTENT_EVENT,
+} from '../runtime/home-intent';
+import { requestNewBrandKit } from '../runtime/brand-intent';
+import { navigate } from '../router';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -1403,6 +1411,14 @@ export function HomeView({
         queuePluginAuthoring(chip.id);
         return;
       }
+      case 'create-brand-kit': {
+        // Reuse the Brand Kit tab's own extraction flow: route to the tab and
+        // ask it to open its New Brand Kit modal (the same modal its "New Brand
+        // Kit" button opens), rather than reimplementing the extraction here.
+        requestNewBrandKit();
+        navigate({ kind: 'home', view: 'brands' });
+        return;
+      }
       case 'open-template-picker': {
         if (!onOpenNewProject) {
           setError('Template picker is not available in this shell.');
@@ -1413,6 +1429,49 @@ export function HomeView({
       }
     }
   }
+
+  // Consume a one-shot Home composer chip intent (e.g. "Use in new chat" on the
+  // Brands tab requesting the Prototype scenario). The entry shell keeps
+  // HomeView mounted across view switches, so we react to the intent event
+  // rather than to mount.
+  //
+  // The producer (Brands tab) applies the brand's design system as the default
+  // and fires the intent in the same synchronous click handler. Consuming the
+  // chip inside the event listener would run `pickChip` before React commits
+  // that config change, so the composer would seed its design-system field from
+  // the stale (empty) default — showing "No design system" for the brand. We
+  // therefore only bump a tick from the listener and consume the chip in a
+  // separate effect: by the time that effect runs, the re-render has landed and
+  // `defaultDesignSystemTitle` reflects the freshly-applied brand.
+  const [chipIntentTick, setChipIntentTick] = useState(0);
+  useEffect(() => {
+    function bumpChipIntent() {
+      setChipIntentTick((tick) => tick + 1);
+    }
+    window.addEventListener(HOME_CHIP_INTENT_EVENT, bumpChipIntent);
+    return () => window.removeEventListener(HOME_CHIP_INTENT_EVENT, bumpChipIntent);
+  }, []);
+  useEffect(() => {
+    // Guard on the plugin catalog being loaded — chip dispatch resolves a
+    // bundled plugin — and re-run when `plugins` arrives so an intent queued
+    // before the catalog loaded is still honored once it does.
+    if (plugins.length === 0) return;
+    const chipId = consumePendingHomeChip();
+    if (!chipId) return;
+    // A confirmation notice queued alongside the chip (e.g. "Using Ramp Brand
+    // Kit" from "Use in new chat") makes the navigate+apply visibly verifiable.
+    const notice = consumePendingHomeNotice();
+    if (notice) setHomeNotice(notice);
+    const chip = findChip(chipId);
+    if (chip) pickChip(chip);
+    // pickChip / defaultDesignSystemTitle are recreated each render; this effect
+    // runs after the commit that bumped the tick, so the closure it captures
+    // already reflects the latest default design system.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plugins, chipIntentTick]);
+  // One-shot success confirmation surfaced as a toast after a brand "Use in new
+  // chat" lands on Home (cleared on dismiss / TTL).
+  const [homeNotice, setHomeNotice] = useState<string | null>(null);
 
   async function submit() {
     // The send button disables itself while sending, but the Enter-to-send
@@ -1833,6 +1892,15 @@ export function HomeView({
             </DialogFooter>
         </Dialog>
       ) : null}
+      {homeNotice ? (
+        <Toast
+          message={homeNotice}
+          tone="success"
+          placement="bottom"
+          ttlMs={3200}
+          onDismiss={() => setHomeNotice(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1881,6 +1949,7 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
     case 'video': return t('homeHero.chip.video');
     case 'hyperframes': return t('homeHero.chip.hyperframes');
     case 'audio': return t('homeHero.chip.audio');
+    case 'create-brand-kit': return t('homeHero.chip.createBrandKit');
     case 'create-plugin': return t('homeHero.chip.createPlugin');
     case 'figma': return t('homeHero.chip.figma');
     case 'template': return t('homeHero.chip.template');

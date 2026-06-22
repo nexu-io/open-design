@@ -111,6 +111,7 @@ export type TrackingProjectKind =
   // `hyperframes-html` as a secondary anchor.
   | 'hyperframes'
   | 'audio'
+  | 'brand'
   // `design_system` covers DS-as-project runs (creation + regeneration).
   // The dashboard reads it on run_created / run_finished to split the
   // DS generation funnel from regular artifact runs.
@@ -268,6 +269,7 @@ export type TrackingRunFailureDetail =
   | 'model_not_found'
   | 'model_not_supported'
   | 'model_disabled'
+  | 'local_model_not_loaded'
   | 'cli_version_incompatible'
   | 'prompt_too_large'
   | 'upstream_5xx'
@@ -290,6 +292,7 @@ export type TrackingRunFailureDetail =
   | 'spawn_eperm'
   | 'stdin_write_eof'
   | 'agent_protocol_error'
+  | 'session_resume_expired'
   | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
@@ -298,6 +301,9 @@ export type TrackingRunFailureDetail =
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
+  | 'stream_error'
+  | 'exit_nonzero'
+  | 'fatal_rpc_error'
   | 'execution_failed'
   | 'user_cancelled'
   | 'unknown';
@@ -460,25 +466,28 @@ export type TrackingChatPanelPageViewSource =
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
 // welcome flow. The current first-run flow is Connect → About you →
-// Newsletter; the design-system and generation literals remain in the
-// contract for historical rows and a future reintroduction. Each step's `step_index` / `step_name`
-// must match the enum pairs below. `onboarding_session_id` is generated once
-// per session so dashboards can stitch the funnel.
+// Newsletter → Brand extraction; the design-system and generation literals
+// remain in the contract for historical rows and a future reintroduction.
+// Each step's `step_index` / `step_name` must match the enum pairs below.
+// `onboarding_session_id` is generated once per session so dashboards can
+// stitch the funnel.
 export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
   | 'newsletter'
+  | 'brand'
   | 'design_system'
   | 'generation_progress';
 
-// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3'`
+// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3' | '4'`
 // and the generation phase as `'progress'`. Mirrors the v2 doc literally.
-export type TrackingOnboardingStepIndex = '1' | '2' | '3' | 'progress';
+export type TrackingOnboardingStepIndex = '1' | '2' | '3' | '4' | 'progress';
 
 export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
   | 'newsletter'
+  | 'brand_extract'
   | 'design_system'
   | 'generation';
 
@@ -2716,6 +2725,14 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   process_spawn_duration_ms?: number;
   time_to_first_token_ms?: number;
   spawn_to_first_token_ms?: number;
+  // `spawn_to_first_token_ms` split into auditable subsegments so dashboards
+  // can separate local CLI startup from session handshake from provider
+  // first-token latency. The four parts sum back to `spawn_to_first_token_ms`
+  // (absent subsegments count as 0 and roll into the remainder).
+  cli_ready_ms?: number;
+  session_init_ms?: number;
+  model_first_token_ms?: number;
+  spawn_to_first_token_remainder_ms?: number;
   generation_duration_ms?: number;
   tool_call_count?: number;
   tool_duration_ms?: number;
@@ -2773,6 +2790,8 @@ export interface RunRetryBaseProps {
 
 export interface RunRetryAttemptedProps extends RunRetryBaseProps {
   retry_reason: 'transient_failure';
+  // Backoff delay (ms) waited before this retry attempt was restarted.
+  retry_delay_ms?: number;
 }
 
 export interface RunRetryFinishedProps extends RunRetryBaseProps {
@@ -3102,7 +3121,7 @@ export function sessionModeToTracking(
 }
 
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
-//   'prototype' | 'deck' | 'template' | 'other' | 'image' | 'video' | 'audio'
+//   'prototype' | 'deck' | 'template' | 'other' | 'brand' | 'image' | 'video' | 'audio'
 // Discriminates HyperFrames from generic AI video. A HyperFrames project is
 // stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
 // (the local HTML→MP4 renderer); callers pass that videoModel through so the
@@ -3131,6 +3150,8 @@ export function projectKindToTracking(
       return videoModel === HYPERFRAMES_VIDEO_MODEL ? 'hyperframes' : 'video';
     case 'audio':
       return 'audio';
+    case 'brand':
+      return 'brand';
     case 'live-artifact':
     case 'live_artifact':
       return 'live_artifact';

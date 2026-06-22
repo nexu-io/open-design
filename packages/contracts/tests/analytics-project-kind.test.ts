@@ -10,6 +10,7 @@ describe('projectKindToTracking', () => {
     expect(projectKindToTracking('image')).toBe('image');
     expect(projectKindToTracking('video')).toBe('video');
     expect(projectKindToTracking('audio')).toBe('audio');
+    expect(projectKindToTracking('brand')).toBe('brand');
     expect(projectKindToTracking('live-artifact')).toBe('live_artifact');
     expect(projectKindToTracking('other')).toBe('other');
     expect(projectKindToTracking(null)).toBeNull();
