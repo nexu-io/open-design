@@ -318,6 +318,8 @@ export const ar: Dict = {
   'settings.azureCustomDeploymentName': 'اسم نشر مخصّص',
   'settings.azureDeploymentModelHint': 'في Azure OpenAI، يُستخدم هذا الحقل كاسم النشر في /openai/deployments/<model>. أدخل اسم النشر الذي أنشأته في Azure.',
   'settings.azureModelFetchHint': 'أدخل اسم النشر من مورد Azure الخاص بك. لا يمكن جلب عمليات نشر Azure تلقائيًا.',
+  'settings.azureNativeImageInput': 'Enable image input for this Azure deployment',
+  'settings.azureNativeImageInputHint': 'Turn this on only when the selected Azure deployment supports image input. Text-only deployments should leave it off.',
   'settings.apiVersion': 'إصدار API',
   'settings.byokImageModel': 'نموذج إنشاء الصور',
   'settings.byokVideoModel': 'نموذج إنشاء الفيديو',

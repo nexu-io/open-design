@@ -318,6 +318,8 @@ export const fa: Dict = {
   'settings.azureCustomDeploymentName': 'نام deployment سفارشی',
   'settings.azureDeploymentModelHint': 'در Azure OpenAI، این فیلد به عنوان نام استقرار در /openai/deployments/<model> استفاده می‌شود. نام استقراری را که در Azure ساخته‌اید وارد کنید.',
   'settings.azureModelFetchHint': 'نام deployment را از منبع Azure خود وارد کنید. deployment‌های Azure را نمی‌توان به‌صورت خودکار دریافت کرد.',
+  'settings.azureNativeImageInput': 'Enable image input for this Azure deployment',
+  'settings.azureNativeImageInputHint': 'Turn this on only when the selected Azure deployment supports image input. Text-only deployments should leave it off.',
   'settings.apiVersion': 'نسخه API',
   'settings.byokImageModel': 'مدل تولید تصویر',
   'settings.byokVideoModel': 'مدل تولید ویدیو',

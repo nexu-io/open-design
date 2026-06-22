@@ -318,6 +318,8 @@ export const it: Dict = {
   'settings.azureCustomDeploymentName': 'Nome di deployment personalizzato',
   'settings.azureDeploymentModelHint': 'Per Azure OpenAI, questo campo viene utilizzato come nome del deployment in /openai/deployments/<model>. Inserisci il nome del deployment creato in Azure.',
   'settings.azureModelFetchHint': 'Inserisci il nome del deployment dalla tua risorsa Azure. I deployment Azure non possono essere recuperati automaticamente.',
+  'settings.azureNativeImageInput': 'Enable image input for this Azure deployment',
+  'settings.azureNativeImageInputHint': 'Turn this on only when the selected Azure deployment supports image input. Text-only deployments should leave it off.',
   'settings.apiVersion': 'Versione API',
   'settings.byokImageModel': 'Modello di generazione immagini',
   'settings.byokVideoModel': 'Modello di generazione video',

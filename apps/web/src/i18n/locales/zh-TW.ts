@@ -318,6 +318,8 @@ export const zhTW: Dict = {
   'settings.azureCustomDeploymentName': 'Custom deployment name',
   'settings.azureDeploymentModelHint': '對於 Azure OpenAI，此欄位會作為 /openai/deployments/<model> 中的部署名稱使用。請填入你在 Azure 中建立的部署名稱。',
   'settings.azureModelFetchHint': '請輸入您 Azure 資源中的部署名稱。Azure 部署無法自動擷取。',
+  'settings.azureNativeImageInput': 'Enable image input for this Azure deployment',
+  'settings.azureNativeImageInputHint': 'Turn this on only when the selected Azure deployment supports image input. Text-only deployments should leave it off.',
   'settings.apiVersion': 'API 版本',
   'settings.byokImageModel': '圖片生成模型',
   'settings.byokVideoModel': '影片生成模型',

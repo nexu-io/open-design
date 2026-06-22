@@ -318,6 +318,8 @@ export const pl: Dict = {
   'settings.azureCustomDeploymentName': 'Niestandardowa nazwa wdrożenia',
   'settings.azureDeploymentModelHint': 'Dla Azure OpenAI to pole jest używane jako nazwa wdrożenia w /openai/deployments/<model>. Wpisz nazwę wdrożenia utworzonego w Azure.',
   'settings.azureModelFetchHint': 'Wprowadź nazwę wdrożenia z Twojego zasobu Azure. Wdrożeń Azure nie można pobrać automatycznie.',
+  'settings.azureNativeImageInput': 'Enable image input for this Azure deployment',
+  'settings.azureNativeImageInputHint': 'Turn this on only when the selected Azure deployment supports image input. Text-only deployments should leave it off.',
   'settings.apiVersion': 'Wersja API',
   'settings.byokImageModel': 'Model generowania obrazów',
   'settings.byokVideoModel': 'Model generowania wideo',

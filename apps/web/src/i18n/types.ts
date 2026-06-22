@@ -342,6 +342,8 @@ export interface Dict {
   'settings.azureCustomDeploymentName': string;
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
+  'settings.azureNativeImageInput': string;
+  'settings.azureNativeImageInputHint': string;
   'settings.apiVersion': string;
   'settings.byokImageModel': string;
   'settings.byokVideoModel': string;

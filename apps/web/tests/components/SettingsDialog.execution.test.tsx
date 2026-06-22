@@ -764,6 +764,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('heading', { name: 'Azure OpenAI' })).toBeTruthy();
     expect(screen.getByLabelText('Deployment name')).toBeTruthy();
     expect(screen.getByLabelText('API version')).toBeTruthy();
+    expect(screen.getByLabelText('Enable image input for this Azure deployment')).toBeTruthy();
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).placeholder).toBe(
       'Paste Azure endpoint URL',
     );
@@ -786,6 +787,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.change(screen.getByLabelText('API version'), {
       target: { value: '2024-10-21' },
     });
+    fireEvent.click(screen.getByLabelText('Enable image input for this Azure deployment'));
 
     await waitFor(() => {
       expect(screen.getByText('Ready to test')).toBeTruthy();
@@ -800,6 +802,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         model: 'deployment-one',
         baseUrl: 'https://example.openai.azure.com',
         apiVersion: '2024-10-21',
+        nativeImageInputEnabled: true,
         apiProviderBaseUrl: null,
       }),
       {},

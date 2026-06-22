@@ -38,8 +38,9 @@ describe('api protocol labels', () => {
 
     expect(supportsNativeImageAttachmentSerialization(baseConfig)).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
-    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(true);
-    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod' })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(false);
+    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: false })).toBe(false);
+    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: true })).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-3.5-turbo' })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({
       ...baseConfig,
@@ -52,7 +53,8 @@ describe('api protocol labels', () => {
       baseUrl: 'https://custom-openai-compatible.example/v1',
       model: 'text-only-model',
     })).toBe(false);
-    expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod' })).toBe(false);
+    expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: false })).toBe(false);
+    expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: true })).toBe(false);
     expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
   });
 
