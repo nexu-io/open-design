@@ -33,6 +33,7 @@ import {
   waitForProcessExit,
   wellKnownUserToolchainBins,
   type ProcessSnapshot,
+  type StopProcessesResult,
 } from "@open-design/platform";
 
 import type { PackagedWebOutputMode } from "./config.js";
@@ -256,7 +257,7 @@ async function removeNamespaceIpcSockets(namespace: string): Promise<void> {
 
 export type ReclaimStaleNamespaceSidecarsDeps = {
   listProcesses?: () => Promise<ProcessSnapshot[]>;
-  stop?: (pids: number[]) => Promise<void>;
+  stop?: (pids: number[]) => Promise<Pick<StopProcessesResult, "remainingPids"> | void>;
   cleanupSockets?: () => Promise<void>;
   selfPid?: number;
 };
@@ -285,11 +286,7 @@ export async function reclaimStaleNamespaceSidecars(
   deps: ReclaimStaleNamespaceSidecarsDeps = {},
 ): Promise<{ reclaimedPids: number[] }> {
   const listProcesses = deps.listProcesses ?? listProcessSnapshots;
-  const stop =
-    deps.stop ??
-    (async (pids: number[]): Promise<void> => {
-      await stopProcesses(pids);
-    });
+  const stop = deps.stop ?? stopProcesses;
   const cleanupSockets =
     deps.cleanupSockets ?? (async (): Promise<void> => removeNamespaceIpcSockets(namespace));
   const selfPid = deps.selfPid ?? process.pid;
@@ -317,7 +314,14 @@ export async function reclaimStaleNamespaceSidecars(
 
   if (reclaimedPids.length === 0) return { reclaimedPids: [] };
 
-  await stop(reclaimedPids);
+  const stopResult = await stop(reclaimedPids);
+  const remainingPids = stopResult?.remainingPids ?? [];
+  if (remainingPids.length > 0) {
+    throw new Error(
+      `stale packaged sidecars still running after stop: ${remainingPids.join(", ")}`,
+    );
+  }
+
   await cleanupSockets();
   return { reclaimedPids };
 }

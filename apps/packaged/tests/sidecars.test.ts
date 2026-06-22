@@ -609,6 +609,32 @@ describe('reclaimStaleNamespaceSidecars', () => {
     expect(result.reclaimedPids).toHaveLength(0);
   });
 
+  it('does not clear sockets when requested stale sidecars are still running', async () => {
+    const namespace = 'release-nightly';
+    const processes: ProcessSnapshot[] = [
+      stampedProcessSnapshot(6001, 1, packagedSidecarStamp(APP_KEYS.DAEMON, namespace)),
+    ];
+    const stopped: number[][] = [];
+    let cleanups = 0;
+
+    await expect(
+      reclaimStaleNamespaceSidecars(namespace, {
+        selfPid: 1234,
+        listProcesses: async () => processes,
+        stop: async (pids) => {
+          stopped.push(pids);
+          return { remainingPids: [6001] };
+        },
+        cleanupSockets: async () => {
+          cleanups += 1;
+        },
+      }),
+    ).rejects.toThrow(/still running/);
+
+    expect(stopped).toEqual([[6001]]);
+    expect(cleanups).toBe(0);
+  });
+
   it('never stops the current process or its descendants', async () => {
     const namespace = 'release-nightly';
     const processes: ProcessSnapshot[] = [
