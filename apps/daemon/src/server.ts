@@ -13,10 +13,7 @@ import net from 'node:net';
 import { PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
 import {
   composeSystemPrompt,
-  renderCodexImagegenOverride,
-  resolveCodexImagegenModelId,
   resolveExclusiveSurface,
-  shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
@@ -64,6 +61,65 @@ import {
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
 } from './browser-use-diagnostics.js';
+import {
+  UPLOAD_DIR,
+  composeLiveInstructionPrompt,
+  formatDesignFilesWorkspaceHint,
+  formatProjectAttachmentHint,
+  normalizeCommentAttachments,
+  renderCommentAttachmentHint,
+  resolveChatExtraAllowedDirs,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
+  resolveCodexGeneratedImagesDir,
+  resolveEffectiveDesignSystemSelection,
+  resolveGrantedCodexImagegenOverride,
+  resolveResearchCommandContract,
+  resolveSafeProjectAttachments,
+  resolveSafePromptImagePaths,
+  selectPromptImagePaths,
+  validateCodexGeneratedImagesDir,
+} from './runtimes/chat-prompt-inputs.js';
+import {
+  applyClaudeStreamJsonRunBookkeeping,
+  assertValidRuntimeDefInactivityTimeoutMs,
+  bufferedAntigravityGeminiFirstTokenAt,
+  classifyChatRunCloseStatus,
+  looksLikeGeminiJsonEventStream,
+  resolveAcpStageTimeoutMs,
+  resolveActiveInactivityTimeoutMs,
+  resolveChatRunArtifactQuietPeriodMs,
+  resolveChatRunInactivityTimeoutMs,
+  resolveChatRunShutdownGraceMs,
+} from './runtimes/chat-run-lifecycle.js';
+export {
+  composeLiveInstructionPrompt,
+  formatDesignFilesWorkspaceHint,
+  formatProjectAttachmentHint,
+  normalizeCommentAttachments,
+  renderCommentAttachmentHint,
+  resolveChatExtraAllowedDirs,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
+  resolveCodexGeneratedImagesDir,
+  resolveEffectiveDesignSystemSelection,
+  resolveGrantedCodexImagegenOverride,
+  resolveResearchCommandContract,
+  resolveSafeProjectAttachments,
+  resolveSafePromptImagePaths,
+  selectPromptImagePaths,
+  validateCodexGeneratedImagesDir,
+} from './runtimes/chat-prompt-inputs.js';
+export {
+  applyClaudeStreamJsonRunBookkeeping,
+  assertValidRuntimeDefInactivityTimeoutMs,
+  bufferedAntigravityGeminiFirstTokenAt,
+  classifyChatRunCloseStatus,
+  looksLikeGeminiJsonEventStream,
+  resolveActiveInactivityTimeoutMs,
+  resolveChatRunArtifactQuietPeriodMs,
+  resolveChatRunInactivityTimeoutMs,
+} from './runtimes/chat-run-lifecycle.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -164,6 +220,7 @@ import {
   updateUserDesignSystemRevisionStatus,
 } from './design-systems/index.js';
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { createDesignSystemServerServices } from './design-systems/server-services.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
@@ -290,7 +347,6 @@ import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { renderResearchCommandContract } from './prompts/research-contract.js';
 import { openBrowser } from './browser-open.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -481,7 +537,13 @@ import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
-import { registerAtomRoutes, registerStaticResourceRoutes } from './routes/static-resource.js';
+import {
+  assembleExample,
+  registerAtomRoutes,
+  registerStaticResourceRoutes,
+  rewriteSkillAssetUrls,
+} from './routes/static-resource.js';
+export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
@@ -533,30 +595,6 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 
-export function composeLiveInstructionPrompt({
-  daemonSystemPrompt,
-  runtimeToolPrompt,
-  clientSystemPrompt,
-  finalPromptOverride,
-}) {
-  const override =
-    typeof finalPromptOverride === 'string'
-      ? finalPromptOverride.trim()
-      : '';
-  const parts = [daemonSystemPrompt, runtimeToolPrompt, clientSystemPrompt]
-    .map((part) => (typeof part === 'string' ? part.trim() : ''))
-    .map((part) =>
-      override && part.includes(override)
-        ? part.split(override).join('').trim()
-        : part,
-    )
-    .filter(Boolean);
-  if (override) {
-    parts.push(override);
-  }
-  return parts.join('\n\n---\n\n');
-}
-
 function renderPluginBriefTemplate(template, inputs = {}) {
   if (typeof template !== 'string' || template.length === 0) return '';
   return template.replace(/\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g, (full, key) => {
@@ -565,807 +603,6 @@ function renderPluginBriefTemplate(template, inputs = {}) {
     if (value === undefined || value === null || value === '') return full;
     return String(value);
   });
-}
-
-export function resolveResearchCommandContract(research, message) {
-  if (!research || !research.enabled) return '';
-  const researchQuery =
-    typeof research.query === 'string' && research.query.trim()
-      ? research.query
-      : message;
-  return renderResearchCommandContract({
-    query: researchQuery,
-    maxSources:
-      typeof research.maxSources === 'number' ? research.maxSources : undefined,
-  });
-}
-
-export function resolveCodexGeneratedImagesDir(
-  agentId,
-  metadata,
-  env = process.env,
-  homeDir = os.homedir(),
-  mediaExecution: any = undefined,
-) {
-  if (!shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution)) return null;
-  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
-  const rawCodexHome =
-    typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
-      ? env.CODEX_HOME.trim()
-      : path.join(homeDir, '.codex');
-  const codexHome = rawCodexHome.startsWith('~/')
-    ? path.join(homeDir, rawCodexHome.slice(2))
-    : rawCodexHome;
-  return path.resolve(codexHome, 'generated_images');
-}
-
-type DirectoryStat = {
-  isDirectory(): boolean;
-  isSymbolicLink(): boolean;
-};
-
-type CodexGeneratedImagesDirValidationOptions = {
-  protectedDirs?: Array<string | null | undefined>;
-  mkdirSync?: (target: string, options: { recursive: true }) => unknown;
-  lstatSync?: (target: string) => DirectoryStat;
-  statSync?: (target: string) => DirectoryStat;
-  realpathSync?: (target: string) => string;
-  warn?: (message: string) => void;
-};
-
-function isMissingPathError(err: unknown): boolean {
-  return (
-    err &&
-    typeof err === 'object' &&
-    'code' in err &&
-    err.code === 'ENOENT'
-  );
-}
-
-function collectProtectedDirRoots(
-  protectedDirs: Array<string | null | undefined>,
-  {
-    realpathSync,
-    statSync,
-  }: {
-    realpathSync: (target: string) => string;
-    statSync: (target: string) => DirectoryStat;
-  },
-): string[] {
-  const roots = [];
-  for (const raw of Array.isArray(protectedDirs) ? protectedDirs : []) {
-    if (typeof raw !== 'string' || raw.trim().length === 0) continue;
-    const resolved = path.resolve(raw);
-    roots.push(resolved);
-    try {
-      const canonical = realpathSync(resolved);
-      try {
-        if (statSync(canonical).isDirectory()) roots.push(canonical);
-      } catch {
-        roots.push(canonical);
-      }
-    } catch {
-      // A missing protected root cannot be the canonical target of a symlink.
-    }
-  }
-  return Array.from(new Set(roots));
-}
-
-function findContainingProtectedRoot(
-  candidate: string,
-  protectedRoots: string[],
-): string | null {
-  return protectedRoots.find((root) => isPathWithin(root, candidate)) ?? null;
-}
-
-export function validateCodexGeneratedImagesDir(
-  codexGeneratedImagesDir: string | null | undefined,
-  {
-    protectedDirs = [],
-    mkdirSync = fs.mkdirSync,
-    lstatSync = fs.lstatSync,
-    statSync = fs.statSync,
-    realpathSync = fs.realpathSync.native,
-    warn = console.warn,
-  }: CodexGeneratedImagesDirValidationOptions = {},
-): string | null {
-  if (
-    typeof codexGeneratedImagesDir !== 'string' ||
-    codexGeneratedImagesDir.trim().length === 0
-  ) {
-    return null;
-  }
-
-  const resolved = path.resolve(codexGeneratedImagesDir);
-  const protectedRoots = collectProtectedDirRoots(protectedDirs, {
-    realpathSync,
-    statSync,
-  });
-  const warnSkipped = (reason: string) =>
-    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
-
-  const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
-  if (protectedRoot) {
-    warnSkipped(`${resolved} is inside protected root ${protectedRoot}`);
-    return null;
-  }
-
-  try {
-    let existingTargetStat = null;
-    try {
-      existingTargetStat = lstatSync(resolved);
-    } catch (err) {
-      if (!isMissingPathError(err)) throw err;
-    }
-    if (existingTargetStat?.isSymbolicLink()) {
-      warnSkipped(`${resolved} is a symlink`);
-      return null;
-    }
-    if (existingTargetStat && !existingTargetStat.isDirectory()) {
-      warnSkipped(`${resolved} is not a directory`);
-      return null;
-    }
-
-    const parent = path.dirname(resolved);
-    const protectedParentRoot = findContainingProtectedRoot(
-      parent,
-      protectedRoots,
-    );
-    if (protectedParentRoot) {
-      warnSkipped(`${parent} is inside protected root ${protectedParentRoot}`);
-      return null;
-    }
-
-    mkdirSync(parent, { recursive: true });
-    const canonicalParent = realpathSync(parent);
-    const canonicalCandidate = path.join(
-      canonicalParent,
-      path.basename(resolved),
-    );
-    const protectedCanonicalParentRoot = findContainingProtectedRoot(
-      canonicalCandidate,
-      protectedRoots,
-    );
-    if (protectedCanonicalParentRoot) {
-      warnSkipped(
-        `${canonicalCandidate} resolves inside protected root ${protectedCanonicalParentRoot}`,
-      );
-      return null;
-    }
-
-    mkdirSync(resolved, { recursive: true });
-    if (lstatSync(resolved).isSymbolicLink()) {
-      warnSkipped(`${resolved} is a symlink`);
-      return null;
-    }
-    if (!statSync(resolved).isDirectory()) {
-      warnSkipped(`${resolved} is not a directory`);
-      return null;
-    }
-    const canonicalDir = realpathSync(resolved);
-    const protectedCanonicalRoot = findContainingProtectedRoot(
-      canonicalDir,
-      protectedRoots,
-    );
-    if (protectedCanonicalRoot) {
-      warnSkipped(
-        `${canonicalDir} resolves inside protected root ${protectedCanonicalRoot}`,
-      );
-      return null;
-    }
-
-    return canonicalDir;
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : String(err ?? 'unknown error');
-    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
-    return null;
-  }
-}
-
-export function resolveChatExtraAllowedDirs({
-  agentId,
-  skillsDir,
-  designSystemsDir,
-  linkedDirs = [],
-  codexGeneratedImagesDir,
-  existsSync = fs.existsSync,
-}: {
-  agentId?: string | null;
-  skillsDir?: string | null;
-  designSystemsDir?: string | null;
-  linkedDirs?: Array<string | null | undefined>;
-  codexGeneratedImagesDir?: string | null;
-  existsSync?: (path: string) => boolean;
-}): string[] {
-  const isCodex =
-    typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
-  const candidates = isCodex
-    ? [codexGeneratedImagesDir]
-    : [
-        skillsDir,
-        designSystemsDir,
-        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
-      ];
-  return Array.from(
-    new Set(
-      candidates.filter(
-        (d) =>
-          typeof d === 'string' && d.length > 0 && existsSync(d),
-      ),
-    ),
-  );
-}
-
-export type DesignSystemSelectionSource =
-  | 'request'
-  | 'plugin'
-  | 'project'
-  | 'app-default'
-  | 'none';
-
-function normalizedDesignSystemId(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0
-    ? value.trim()
-    : null;
-}
-
-export function resolveEffectiveDesignSystemSelection({
-  requestDesignSystemId,
-  pluginDesignSystemId,
-  projectDesignSystemId,
-  appDefaultDesignSystemId,
-  allowAppDefault = true,
-}: {
-  requestDesignSystemId?: unknown;
-  pluginDesignSystemId?: unknown;
-  projectDesignSystemId?: unknown;
-  appDefaultDesignSystemId?: unknown;
-  allowAppDefault?: boolean;
-}): { id: string | null; source: DesignSystemSelectionSource } {
-  const requestId = normalizedDesignSystemId(requestDesignSystemId);
-  if (requestId) return { id: requestId, source: 'request' };
-
-  const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
-  if (pluginId) return { id: pluginId, source: 'plugin' };
-
-  const projectId = normalizedDesignSystemId(projectDesignSystemId);
-  if (projectId) return { id: projectId, source: 'project' };
-
-  if (allowAppDefault) {
-    const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
-    if (appDefaultId) return { id: appDefaultId, source: 'app-default' };
-  }
-
-  return { id: null, source: 'none' };
-}
-
-export function designSystemIdFromPluginSnapshot(snapshot: unknown): string | null {
-  const items = (snapshot as { resolvedContext?: { items?: unknown } } | null | undefined)
-    ?.resolvedContext?.items;
-  if (!Array.isArray(items)) return null;
-  const designSystemItems = items.filter(
-    (item): item is { kind: string; id?: unknown; primary?: unknown } =>
-      item !== null &&
-      typeof item === 'object' &&
-      (item as { kind?: unknown }).kind === 'design-system',
-  );
-  const primary = designSystemItems.find((item) => item.primary === true);
-  return normalizedDesignSystemId(primary?.id ?? designSystemItems[0]?.id);
-}
-
-export type StablePromptCacheMissReason =
-  | 'new-session'
-  | 'missing-stored-hash'
-  | 'stable-prompt-changed'
-  | null;
-
-export function describeStablePromptCache({
-  isResuming,
-  storedStablePromptHash,
-  currentStableHash,
-}: {
-  isResuming: boolean;
-  storedStablePromptHash: string | null;
-  currentStableHash: string;
-}): {
-  stablePromptHash: string;
-  hit: boolean;
-  missReason: StablePromptCacheMissReason;
-} {
-  if (!isResuming) {
-    return {
-      stablePromptHash: currentStableHash,
-      hit: false,
-      missReason: 'new-session',
-    };
-  }
-  if (storedStablePromptHash === currentStableHash) {
-    return {
-      stablePromptHash: currentStableHash,
-      hit: true,
-      missReason: null,
-    };
-  }
-  return {
-    stablePromptHash: currentStableHash,
-    hit: false,
-    missReason: storedStablePromptHash === null
-      ? 'missing-stored-hash'
-      : 'stable-prompt-changed',
-  };
-}
-
-export function resolveGrantedCodexImagegenOverride({
-  agentId,
-  metadata,
-  codexGeneratedImagesDir,
-  extraAllowedDirs = [],
-  mediaExecution,
-}: {
-  agentId?: string | null;
-  metadata?: unknown;
-  codexGeneratedImagesDir?: string | null;
-  extraAllowedDirs?: string[];
-  mediaExecution?: unknown;
-}): string | null {
-  if (!shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution)) {
-    return null;
-  }
-  if (
-    typeof codexGeneratedImagesDir !== 'string' ||
-    codexGeneratedImagesDir.length === 0 ||
-    !Array.isArray(extraAllowedDirs) ||
-    !extraAllowedDirs.includes(codexGeneratedImagesDir)
-  ) {
-    return null;
-  }
-  return renderCodexImagegenOverride(agentId, metadata);
-}
-
-function shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution) {
-  const mode = mediaExecution?.mode ?? 'enabled';
-  if (mode !== 'enabled') return false;
-  if (
-    Array.isArray(mediaExecution?.allowedSurfaces) &&
-    mediaExecution.allowedSurfaces.length > 0 &&
-    !mediaExecution.allowedSurfaces.includes('image')
-  ) {
-    return false;
-  }
-  const model = resolveCodexImagegenModelId(metadata);
-  if (
-    model &&
-    Array.isArray(mediaExecution?.allowedModels) &&
-    mediaExecution.allowedModels.length > 0 &&
-    !mediaExecution.allowedModels.includes(model)
-  ) {
-    return false;
-  }
-  return true;
-}
-
-export function normalizeCommentAttachments(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((raw, index) => {
-      if (!raw || typeof raw !== 'object') return null;
-      const filePath = cleanString(raw.filePath);
-      const elementId = cleanString(raw.elementId);
-      const selector = cleanString(raw.selector);
-      const label = cleanString(raw.label);
-      const screenshotPath = cleanString(raw.screenshotPath);
-      const markKind = normalizeVisualMarkKind(raw.markKind);
-      const intent = compactString(raw.intent, 220);
-      const imageAttachments = normalizePreviewCommentImageAttachments(raw.imageAttachments);
-      const commentContext = raw.commentContext === 'query' ? 'query' : 'context';
-      const comment = commentContext === 'query'
-        ? ''
-        : cleanString(raw.comment) || intent || imageOnlyCommentFallback(imageAttachments.length);
-      const selectionKind =
-        raw.selectionKind === 'visual' ? 'visual' : raw.selectionKind === 'pod' ? 'pod' : 'element';
-      if (!filePath || !elementId) return null;
-      if (selectionKind !== 'visual' && !selector) return null;
-      if (selectionKind === 'visual' && !screenshotPath) return null;
-      const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
-      const memberCount =
-        selectionKind === 'pod'
-          ? (podMembers.length > 0
-              ? podMembers.length
-              : Number.isFinite(raw.memberCount)
-                ? Math.max(0, Math.round(raw.memberCount))
-                : 0)
-          : 0;
-      return {
-        id: cleanString(raw.id) || `comment-${index + 1}`,
-        order: Number.isFinite(raw.order)
-          ? Math.max(1, Math.round(raw.order))
-          : index + 1,
-        filePath,
-        elementId,
-        selector,
-        label,
-        comment,
-        currentText: compactString(raw.currentText, 160),
-        pagePosition: normalizeAttachmentPosition(raw.pagePosition),
-        htmlHint: compactString(raw.htmlHint, 180),
-        style: normalizeAnnotationStyle(raw.style),
-        selectionKind,
-        memberCount,
-        podMembers,
-        screenshotPath: selectionKind === 'visual' ? screenshotPath : undefined,
-        markKind: selectionKind === 'visual' ? markKind : undefined,
-        intent: selectionKind === 'visual'
-          ? intent || visualAnnotationIntent(markKind)
-          : undefined,
-        imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined,
-        commentContext,
-        source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.order - b.order);
-}
-
-export function renderCommentAttachmentHint(commentAttachments) {
-  if (!commentAttachments.length) return '';
-  const lines = [
-    '',
-    '',
-    '<attached-preview-comments>',
-    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
-  ];
-  for (const item of commentAttachments) {
-    const targetKind =
-      item.selectionKind === 'visual' ? 'visual' : item.selectionKind === 'pod' ? 'pod' : 'element';
-    lines.push(
-      '',
-      `${item.order}. ${item.elementId}`,
-      `targetKind: ${targetKind}`,
-      `file: ${item.filePath}`,
-      `label: ${item.label || '(unlabeled)'}`,
-      `position: ${formatAttachmentPosition(item.pagePosition)}`,
-      `currentText: ${item.currentText || '(empty)'}`,
-      `htmlHint: ${item.htmlHint || '(none)'}`,
-      `computedStyle: ${formatAnnotationStyle(item.style) || '(none)'}`,
-    );
-    if (item.comment && item.commentContext !== 'query') {
-      lines.push(`comment: ${item.comment}`);
-    }
-    if (targetKind === 'visual') {
-      lines.push(
-        `screenshot: ${item.screenshotPath}`,
-        `markKind: ${item.markKind || 'stroke'}`,
-        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
-      );
-      if (item.selector) lines.push(`selector: ${item.selector}`);
-    } else {
-      lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
-    }
-    if (targetKind === 'pod') {
-      lines.push(`memberCount: ${item.memberCount || item.podMembers.length || 0}`);
-      item.podMembers.slice(0, 8).forEach((member, memberIndex) => {
-        lines.push(
-          `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
-        );
-        const memberStyle = formatAnnotationStyle(member.style);
-        if (memberStyle) lines.push(`member.${memberIndex + 1}.computedStyle: ${memberStyle}`);
-      });
-    }
-    const imageAttachments = normalizePreviewCommentImageAttachments(item.imageAttachments);
-    if (imageAttachments.length > 0) {
-      lines.push(`imageAttachments: ${imageAttachments.length}`);
-      imageAttachments.forEach((attachment, attachmentIndex) => {
-        lines.push(`image.${attachmentIndex + 1}: ${attachment.path} | ${attachment.name}`);
-      });
-    }
-  }
-  lines.push('</attached-preview-comments>');
-  return lines.join('\n');
-}
-
-function cleanString(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizePreviewCommentImageAttachments(input) {
-  if (!Array.isArray(input)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const item of input) {
-    if (!item || typeof item !== 'object') continue;
-    const path = cleanString(item.path);
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    const name = cleanString(item.name) || path.split('/').pop() || path;
-    out.push({ path, name });
-    if (out.length >= 20) break;
-  }
-  return out;
-}
-
-function imageOnlyCommentFallback(count) {
-  if (count <= 0) return '';
-  return count > 1
-    ? `Use the ${count} attached images as the comment reference.`
-    : 'Use the attached image as the comment reference.';
-}
-
-function normalizeVisualMarkKind(value) {
-  return value === 'click' || value === 'click+stroke' || value === 'stroke'
-    ? value
-    : 'stroke';
-}
-
-function visualAnnotationIntent(markKind) {
-  if (markKind === 'click') {
-    return 'The screenshot has a blue focus box around the picked element; modify that picked part first.';
-  }
-  if (markKind === 'click+stroke') {
-    return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
-  }
-  return 'The screenshot has red strokes that identify the visual region the user wants changed.';
-}
-
-function compactString(value, max) {
-  const text = cleanString(value).replace(/\s+/g, ' ');
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
-}
-
-function normalizeAttachmentPosition(input) {
-  const value = input && typeof input === 'object' ? input : {};
-  return {
-    x: finiteAttachmentNumber(value.x),
-    y: finiteAttachmentNumber(value.y),
-    width: finiteAttachmentNumber(value.width),
-    height: finiteAttachmentNumber(value.height),
-  };
-}
-
-function normalizeAttachmentPodMembers(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((member) => {
-      if (!member || typeof member !== 'object') return null;
-      const elementId = cleanString(member.elementId);
-      const selector = cleanString(member.selector);
-      const label = cleanString(member.label);
-      if (!elementId || !selector) return null;
-      return {
-        elementId,
-        selector,
-        label,
-        text: compactString(member.text, 160),
-        position: normalizeAttachmentPosition(member.position),
-        htmlHint: compactString(member.htmlHint, 180),
-        style: normalizeAnnotationStyle(member.style),
-      };
-    })
-    .filter(Boolean);
-}
-
-function normalizeAnnotationStyle(input) {
-  if (!input || typeof input !== 'object') return undefined;
-  const style = {};
-  for (const key of ANNOTATION_STYLE_KEYS) {
-    const value = input[key];
-    if (typeof value !== 'string') continue;
-    const trimmed = value.replace(/\s+/g, ' ').trim();
-    if (trimmed) style[key] = trimmed.slice(0, 120);
-  }
-  return Object.keys(style).length > 0 ? style : undefined;
-}
-
-function formatAnnotationStyle(style) {
-  if (!style || typeof style !== 'object') return '';
-  return ANNOTATION_STYLE_KEYS
-    .map((key) => {
-      const value = style[key];
-      return value ? `${key}: ${value}` : null;
-    })
-    .filter(Boolean)
-    .join('; ');
-}
-
-const ANNOTATION_STYLE_KEYS = [
-  'color',
-  'backgroundColor',
-  'fontSize',
-  'fontWeight',
-  'lineHeight',
-  'textAlign',
-  'fontFamily',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderRadius',
-];
-
-function finiteAttachmentNumber(value) {
-  return Number.isFinite(value) ? Math.round(value) : 0;
-}
-
-const DESIGN_FILES_HINT_FOLDER_LIMIT = 40;
-const DESIGN_FILES_HINT_FILE_LIMIT = 80;
-type DesignFilesHintEntry = {
-  name?: string;
-  path?: string;
-  kind?: string;
-  type?: string;
-  size?: number;
-};
-
-function formatAttachmentPosition(position) {
-  return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
-}
-
-function isPathWithin(base, target) {
-  const relativePath = path.relative(path.resolve(base), path.resolve(target));
-  return (
-    relativePath === '' ||
-    (relativePath.length > 0 &&
-      !relativePath.startsWith('..') &&
-      !path.isAbsolute(relativePath))
-  );
-}
-
-export function resolveSafeProjectAttachments(cwd, attachments, opts = {}) {
-  if (!cwd || !Array.isArray(attachments)) return [];
-  const pathImpl = opts.pathImpl ?? path;
-  const existsSync = opts.existsSync ?? fs.existsSync;
-  const root = pathImpl.resolve(cwd);
-  const out = [];
-
-  for (const attachment of attachments) {
-    if (typeof attachment !== 'string' || attachment.length === 0) continue;
-    try {
-      const abs = pathImpl.resolve(root, attachment);
-      const relativePath = pathImpl.relative(root, abs);
-      const withinRoot =
-        relativePath === '' ||
-        (relativePath.length > 0 &&
-          !relativePath.startsWith('..') &&
-          !pathImpl.isAbsolute(relativePath));
-      if (withinRoot && existsSync(abs)) out.push(attachment);
-    } catch {
-      // Drop malformed paths; attachments are advisory prompt context.
-    }
-  }
-
-  return out;
-}
-
-export function formatProjectAttachmentHint(attachments) {
-  if (!Array.isArray(attachments) || attachments.length === 0) return '';
-  return [
-    '',
-    '',
-    'Attached project files in user-visible order:',
-    ...attachments.map((p, index) => `${index + 1}. \`${p}\``),
-    '',
-    'When the user says "first attachment", "second file", or similar, map those references to the numbered list above.',
-  ].join('\n');
-}
-
-function formatProjectEntrySize(size: number) {
-  if (!Number.isFinite(size) || size <= 0) return '';
-  if (size < 1024) return `${Math.round(size)} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDesignFilesEntryLine(entry: DesignFilesHintEntry | null | undefined, fallbackKind?: string) {
-  const entryPath =
-    typeof entry?.path === 'string' && entry.path
-      ? entry.path
-      : typeof entry?.name === 'string'
-        ? entry.name
-        : '';
-  if (!entryPath) return null;
-  const kind = fallbackKind || entry.kind || entry.type || 'file';
-  const size = kind === 'folder' ? '' : formatProjectEntrySize(Number(entry.size));
-  return `- \`${entryPath}\` (${[kind, size].filter(Boolean).join(', ')})`;
-}
-
-export function formatDesignFilesWorkspaceHint(
-  cwd: string | null | undefined,
-  files: DesignFilesHintEntry[] = [],
-  folders: DesignFilesHintEntry[] = [],
-) {
-  if (typeof cwd !== 'string' || cwd.trim().length === 0) return '';
-  const safeFolders = Array.isArray(folders) ? folders : [];
-  const safeFiles = Array.isArray(files) ? files : [];
-  const folderLines = safeFolders
-    .slice(0, DESIGN_FILES_HINT_FOLDER_LIMIT)
-    .map((folder) => formatDesignFilesEntryLine(folder, 'folder'))
-    .filter(Boolean);
-  const fileLines = safeFiles
-    .slice(0, DESIGN_FILES_HINT_FILE_LIMIT)
-    .map((file) => formatDesignFilesEntryLine(file, file?.kind || 'file'))
-    .filter(Boolean);
-  const totalFolders = safeFolders.length;
-  const totalFiles = safeFiles.length;
-  const omittedFolders = Math.max(0, totalFolders - folderLines.length);
-  const omittedFiles = Math.max(0, totalFiles - fileLines.length);
-
-  const lines = [
-    '',
-    '',
-    '## Design Files workspace',
-    `The Design Files panel is backed by your current working directory: \`${cwd}\`. Write project files relative to this directory (for example \`index.html\` or \`assets/x.png\`). The user can browse these files in real time.`,
-    'The selected/attached files for a turn are only a shortcut for priority and ordering. If the user did not attach any file, do not assume there are no relevant Design Files.',
-    'When the request refers to existing files, asks you to choose a file, says "current", "this design", "the deck", "the image", "the folder", or depends on project state, inspect/search/read this workspace before answering or editing. Prefer project-relative paths, use the active workspace context as the default target, and ask only if multiple plausible targets remain after inspection.',
-    'For non-trivial inspection or edits, surface progress through visible planning/status/tool events instead of silently guessing.',
-    '',
-    `Current Design Files snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
-  ];
-
-  if (folderLines.length > 0) {
-    lines.push('', 'Folders:', ...folderLines);
-    if (omittedFolders > 0) lines.push(`- ... ${omittedFolders} more folder${omittedFolders === 1 ? '' : 's'} omitted`);
-  }
-
-  if (fileLines.length > 0) {
-    lines.push('', 'Files:', ...fileLines);
-    if (omittedFiles > 0) lines.push(`- ... ${omittedFiles} more file${omittedFiles === 1 ? '' : 's'} omitted`);
-  }
-
-  if (folderLines.length === 0 && fileLines.length === 0) {
-    lines.push('', 'No user-visible Design Files exist yet. Create clear project-relative files when the task requires output.');
-  }
-
-  return lines.join('\n');
-}
-
-export function resolveSafePromptImagePaths(imagePaths, opts = {}) {
-  if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
-    return { safeImages: [], oversizedImages: [], failedImages: [] };
-  }
-  const pathImpl = opts.pathImpl ?? path;
-  const existsSync = opts.existsSync ?? fs.existsSync;
-  const statSync = opts.statSync ?? fs.statSync;
-  const uploadDir = pathImpl.resolve(opts.uploadDir ?? UPLOAD_DIR);
-  const maxBytes = Number.isFinite(opts.maxBytes)
-    ? Number(opts.maxBytes)
-    : MAX_CHAT_IMAGE_BYTES;
-  const safeImages = [];
-  const oversizedImages = [];
-  const failedImages = [];
-
-  for (const inputPath of imagePaths) {
-    if (typeof inputPath !== 'string' || inputPath.length === 0) continue;
-    let resolved;
-    try {
-      resolved = pathImpl.resolve(inputPath);
-    } catch {
-      // Drop malformed path input; we cannot even resolve it to a location.
-      continue;
-    }
-    if (!isPathWithin(uploadDir, resolved) || !existsSync(resolved)) continue;
-    // Past the within-UPLOAD_DIR + existence gate the path points at a real
-    // upload. A statSync failure here (EACCES/EPERM, a file that vanished
-    // mid-run) is an infrastructure error, not bad input — surface it so the
-    // run fails loudly instead of silently dropping required prompt context.
-    let stat;
-    try {
-      stat = statSync(resolved);
-    } catch (err) {
-      failedImages.push({
-        path: inputPath,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
-    if (!stat.isFile()) continue;
-    if (typeof stat.size === 'number' && stat.size > maxBytes) {
-      oversizedImages.push({ path: inputPath, sizeBytes: stat.size });
-      continue;
-    }
-    safeImages.push(inputPath);
-  }
-
-  return { safeImages, oversizedImages, failedImages };
 }
 
 const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
@@ -1463,6 +700,16 @@ function bundledPluginRegistrySource(sourcePath) {
   const rel = path.relative(PROJECT_ROOT, sourcePath).split(path.sep).join('/');
   if (!rel || rel.startsWith('..')) return sourcePath;
   return `${OFFICIAL_PLUGIN_SOURCE_REPO}/${rel}`;
+}
+
+function isPathWithin(base, target) {
+  const relativePath = path.relative(path.resolve(base), path.resolve(target));
+  return (
+    relativePath === '' ||
+    (relativePath.length > 0 &&
+      !relativePath.startsWith('..') &&
+      !path.isAbsolute(relativePath))
+  );
 }
 
 function mergeMarketplaceEntries(manifestText, entries) {
@@ -2423,14 +1670,6 @@ async function copyPluginContextDir(src, dest, rootReal) {
 
 function shouldSkipPluginContextEntry(name) {
   return PLUGIN_CONTEXT_SKIP_DIRS.has(name) || PLUGIN_CONTEXT_SKIP_FILES.has(name);
-}
-
-export function selectPromptImagePaths(
-  agentId,
-  safeImages,
-  amrStagedImages,
-) {
-  return agentId === 'amr' ? amrStagedImages : safeImages;
 }
 
 async function ensureGhReady() {
@@ -3576,8 +2815,6 @@ function createSseErrorPayload(code, message, init = {}) {
   return { message, error: createCompatApiError(code, message, init) };
 }
 
-const MAX_CHAT_IMAGE_BYTES = 1024 * 1024;
-
 function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   const rawMessage =
     typeof message === 'string' && message.trim()
@@ -3613,7 +2850,6 @@ function createAmrModelUnavailablePayload(model, init = {}) {
   );
 }
 
-const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
@@ -3972,337 +3208,6 @@ export interface StartServerResult {
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
-const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
-const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-// After a successful live-artifact registration the daemon switches the
-// chat-run inactivity watchdog from the long pre-artifact ceiling
-// (DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS) down to a much shorter
-// "quiet period" — the deliverable exists, so further silence almost
-// always means the agent is winding down or hanging. See #1451.
-const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
-
-// Resolve the chat-run inactivity watchdog ceiling. Priority order:
-//   1. `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` (operator escape hatch).
-//   2. The agent runtime def's `inactivityTimeoutMs` recommendation —
-//      lets agents whose CLIs go silent for long stretches during
-//      legitimate work (e.g. Copilot from #2467) raise the ceiling
-//      without every operator having to set an env var.
-//   3. The 10-minute global default.
-//
-// The env path is lenient (silently normalizes / falls back) because it
-// comes from a runtime knob an operator can mis-type at any time. The
-// def path is strict (throws on non-finite or negative) because the
-// value lives in checked-in source — a typo like `inactivityTimeoutMs: -1`
-// should crash loudly at chat-run time rather than silently disable the
-// watchdog for that agent. Both paths still pass through the 24-hour
-// clamp because Node silently downgrades signed-32-bit-overflowing
-// setTimeout delays to 1ms.
-//
-// Order matters: validate the def hint *before* checking the env
-// override. Otherwise a finite env value would hide a bad checked-in
-// value (e.g. `inactivityTimeoutMs: -1`) from ever tripping the
-// fast-fail — the typo could sit unnoticed in source until someone
-// removed the override. Validation now runs on every call regardless
-// of which branch ultimately wins.
-export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number): void {
-  // Strict checked-in-config guard for `RuntimeAgentDef.inactivityTimeoutMs`.
-  // Exported (and called by `resolveChatRunInactivityTimeoutMs` below)
-  // so that chat-run startup can invoke this immediately after the
-  // runtime def is selected — before any filesystem or
-  // prompt-building work happens — and abort with a loud RangeError
-  // when a checked-in def carries an invalid value. That keeps a
-  // typo from leaving partial setup state (e.g. a `.mcp.json` write
-  // / unlink, a freshly-composed system prompt) on disk when the
-  // run then aborts later at watchdog-arm time.
-  if (agentDefault === undefined) return;
-  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
-    throw new RangeError(
-      `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
-        'Fix the runtime def — invalid values used to silently disable the watchdog.',
-    );
-  }
-}
-
-export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
-  assertValidRuntimeDefInactivityTimeoutMs(agentDefault);
-  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (Number.isFinite(env)) {
-    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
-  }
-  if (agentDefault !== undefined) {
-    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
-  }
-  return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-}
-
-// Resolve the post-artifact quiet-period window. Same clamp as the outer
-// inactivity watchdog so an oversized override doesn't get Node-downgraded
-// to a 1ms timer. Exported so tests can pin the env behavior without
-// reaching into chat-run internals.
-export function resolveChatRunArtifactQuietPeriodMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
-  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS;
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
-}
-
-// Pure resolver for the chat run's *currently active* inactivity
-// ceiling. Used by both `noteAgentActivity` and `noteArtifactRegistered`
-// to pick between the pre-artifact watchdog and the shortened quiet
-// period. Extracted so the `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
-// "disable the quiet period" semantics can be pinned with focused unit
-// tests (#1451 review: a 0-value override must not strand the pre-artifact
-// timer or stop further reschedules — it has to fall back to the
-// pre-artifact ceiling so subsequent activity keeps refreshing the timer).
-export function resolveActiveInactivityTimeoutMs(params: {
-  inactivityTimeoutMs: number;
-  artifactQuietPeriodMs: number;
-  artifactRegistered: boolean;
-}): number {
-  if (params.artifactRegistered && params.artifactQuietPeriodMs > 0) {
-    return params.artifactQuietPeriodMs;
-  }
-  return params.inactivityTimeoutMs;
-}
-
-// Pure final-status classifier for the chat run's child-close handler.
-// Extracted so the per-branch invariants can be unit-tested without
-// driving a full child process — in particular:
-//   - cancel always wins over success/failure classification.
-//   - the ACP forced-shutdown override is scoped to SIGTERM + clean
-//     completion only (signed-32-bit-overflow SIGKILL or non-clean ACP
-//     state still report `failed`).
-//   - the artifact quiet-period override is gated on a daemon-initiated
-//     flag, NOT on `artifactRegistered` alone — see #1451 review:
-//     an external `kill -9` after the artifact write must still report
-//     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
-//     is allowed to flip the status to `succeeded`.
-//   - the artifact-produced carve-out is EXIT-CODE ONLY (code != null &&
-//     code !== 0): a non-zero *normal* exit that nonetheless wrote a
-//     confirmed artifact this run is teardown noise, not a generation
-//     failure. It deliberately never overrides a signal kill (code ===
-//     null) — an OOM / external `kill` / container shutdown after an
-//     artifact write stays `failed`, same guard as the quiet-period
-//     branch above.
-export function classifyChatRunCloseStatus(params: {
-  cancelRequested: boolean;
-  code: number | null;
-  signal: NodeJS.Signals | string | null;
-  acpCleanCompletion: boolean;
-  artifactQuietShutdownRequested: boolean;
-  turnCompletedCleanly: boolean;
-  artifactProducedThisRun: boolean;
-}): 'canceled' | 'succeeded' | 'failed' {
-  if (params.cancelRequested) return 'canceled';
-  if (params.code === 0) return 'succeeded';
-  const acpForcedShutdown =
-    params.acpCleanCompletion &&
-    (
-      (params.code === null && params.signal === 'SIGTERM') ||
-      // Vela's ACP bridge can surface the daemon-triggered post-completion
-      // teardown as a normal exit code 130 instead of a SIGTERM signal. Once
-      // the ACP prompt already resolved cleanly, that is shutdown noise rather
-      // than an agent execution failure.
-      (params.code === 130 && params.signal === null)
-    );
-  if (acpForcedShutdown) return 'succeeded';
-  const artifactQuietShutdown =
-    params.artifactQuietShutdownRequested &&
-    params.code === null &&
-    (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
-  if (artifactQuietShutdown) return 'succeeded';
-  // Artifact-aware NORMAL-exit carve-out. A non-zero exit that still
-  // produced a confirmed artifact this run (a SessionEnd hook or a late
-  // stdin/stream error dragging the CLI to exit 1 *after* the deliverable
-  // landed) is teardown noise, not a generation failure — reproduced by
-  // project c92897e1: a 31KB HTML + .artifact.json on disk, status='failed'.
-  // CRITICAL: gated on `code != null && code !== 0` so a signal kill
-  // (code === null, SIGKILL/SIGTERM) is NEVER flipped by an artifact,
-  // preserving the OOM / external-kill / container-shutdown guard.
-  if (params.code != null && params.code !== 0 && params.artifactProducedThisRun) {
-    return 'succeeded';
-  }
-  // Post-completion teardown carve-out (#3372). When the model already
-  // emitted a clean terminal turn (a `turn_end`/`usage` event with no
-  // outstanding host answer, the same condition that closes the child's
-  // stdin), a later non-zero exit or kill signal is a teardown artifact,
-  // not a generation failure: a SessionEnd hook the agent runs on its way
-  // out (e.g. the Honcho memory plugin) can exit non-zero and drag the
-  // whole `claude` process to `exit 1` long after the deliverable was
-  // produced. Treating that as `failed` surfaces a red banner and halts
-  // the flow for work that already succeeded. Same family as the ACP and
-  // artifact-quiet-shutdown carve-outs above: the work completed; the odd
-  // exit is teardown noise. This deliberately does NOT cover non-zero
-  // exits *before* a clean turn — those stay `failed` (real CLI bug,
-  // model error, mid-turn crash), and the agent-specific auth/quota/AMR
-  // guards in the close handler run before this classifier so a genuine
-  // post-turn auth failure is still surfaced with its specific code.
-  if (params.turnCompletedCleanly) return 'succeeded';
-  return 'failed';
-}
-
-type ClaudeStreamJsonBookkeepingRun = {
-  stdinOpen?: boolean;
-  turnCompletedCleanly?: boolean;
-  child?: {
-    stdin?: {
-      destroyed?: boolean;
-      end: () => void;
-    } | null;
-  } | null;
-};
-
-// Stream-json input mode keeps the child's stdin open across the turn so the
-// daemon can stream further user messages mid-conversation. The child has no
-// other way to know the turn is over, though — without an EOF it idles until
-// the inactivity watchdog kills it. So when a turn terminates cleanly we close
-// stdin to let the child exit.
-export function applyClaudeStreamJsonRunBookkeeping(
-  run: ClaudeStreamJsonBookkeepingRun,
-  ev: unknown,
-) {
-  if (!ev || typeof ev !== 'object') return;
-  const event = ev as {
-    type?: unknown;
-    name?: unknown;
-    id?: unknown;
-    stopReason?: unknown;
-  };
-
-  const cleanTerminalTurn =
-    (event.type === 'turn_end' &&
-      // `stop_reason: tool_use` means the model paused to wait for tool
-      // execution (claude-code is about to run an internal tool). The
-      // conversation is still in flight.
-      event.stopReason !== 'tool_use') ||
-    (event.type === 'usage' && event.stopReason !== 'tool_use');
-  if (!cleanTerminalTurn) return;
-
-  // Record clean completion even if stdin was already closed. The
-  // close-status classifier reads this to ignore late SessionEnd hook
-  // failures after the final assistant turn completed.
-  run.turnCompletedCleanly = true;
-  if (run.stdinOpen) {
-    if (run.child?.stdin && !run.child.stdin.destroyed) {
-      try { run.child.stdin.end(); } catch {}
-    }
-    run.stdinOpen = false;
-  }
-}
-
-function resolveChatRunShutdownGraceMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
-  if (!Number.isFinite(raw)) return 3_000;
-  return Math.max(0, Math.floor(raw));
-}
-
-function resolveAcpStageTimeoutMs(): number | undefined {
-  // Per-stage silence watchdog for ACP chat sessions. Defaults are owned by
-  // `attachAcpSession` in acp.ts; this resolver only applies when an operator
-  // sets `OD_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
-  // outer chat inactivity watchdog so an oversized override doesn't get
-  // clamped to 1ms by Node's signed-32-bit delay limit.
-  const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return undefined;
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
-}
-
-type GeminiJsonEventStreamEvent = Record<string, unknown>;
-type BufferedStdoutChunk = { text: string; receivedAt: number };
-
-function parseGeminiJsonEventStreamEvents(text: string): GeminiJsonEventStreamEvent[] | null {
-  const lines = text
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return null;
-  const events: GeminiJsonEventStreamEvent[] = [];
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line);
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
-      events.push(obj as GeminiJsonEventStreamEvent);
-    } catch {
-      return null;
-    }
-  }
-  return events;
-}
-
-function isGeminiJsonEventStream(events: GeminiJsonEventStreamEvent[] | null): boolean {
-  if (!events || events.length === 0) return false;
-  const [firstEvent] = events;
-  if (
-    !firstEvent ||
-    firstEvent.type !== 'init' ||
-    typeof firstEvent.session_id !== 'string' ||
-    firstEvent.session_id.length === 0 ||
-    typeof firstEvent.model !== 'string' ||
-    firstEvent.model.length === 0
-  ) {
-    return false;
-  }
-  return events.every((event) => {
-    const type = event?.type;
-    return (
-      type === 'init' ||
-      type === 'message' ||
-      type === 'tool_use' ||
-      type === 'tool_result' ||
-      type === 'error' ||
-      type === 'result'
-    );
-  });
-}
-
-function geminiJsonEventStreamHasVisibleAssistantText(
-  events: GeminiJsonEventStreamEvent[] | null,
-): boolean {
-  if (!events) return false;
-  return events.some((event) => (
-    event.type === 'message' &&
-    event.role === 'assistant' &&
-    typeof event.content === 'string' &&
-    event.content.length > 0
-  ));
-}
-
-export function bufferedAntigravityGeminiFirstTokenAt(
-  chunks: readonly BufferedStdoutChunk[],
-): number | null {
-  if (chunks.length === 0) return null;
-  const text = chunks.map((chunk) => chunk.text).join('');
-  const events = parseGeminiJsonEventStreamEvents(text);
-  if (!isGeminiJsonEventStream(events)) return null;
-  if (!geminiJsonEventStreamHasVisibleAssistantText(events)) return null;
-
-  let offset = 0;
-  for (const line of text.split(/(\r?\n)/u)) {
-    const nextOffset = offset + line.length;
-    if (line.length > 0 && line.trim().length > 0) {
-      try {
-        const event = JSON.parse(line) as GeminiJsonEventStreamEvent;
-        if (
-          event?.type === 'message' &&
-          event.role === 'assistant' &&
-          typeof event.content === 'string' &&
-          event.content.length > 0
-        ) {
-          let consumed = 0;
-          for (const chunk of chunks) {
-            consumed += chunk.text.length;
-            if (consumed >= nextOffset) return chunk.receivedAt;
-          }
-          return chunks.at(-1)?.receivedAt ?? null;
-        }
-      } catch {
-        return null;
-      }
-    }
-    offset = nextOffset;
-  }
-  return null;
-}
-
 export async function startServer({
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
@@ -4391,266 +3296,43 @@ export async function startServer({
     });
   }
 
-  // Multi-directory scanning shared by every skill / template surface. The
-  // helpers delegate to listSkills(roots) which walks roots in priority
-  // order, tags each entry with the SkillSource ('user' for the user
-  // root, 'built-in' for the bundled root) the contracts package
-  // declares, and lets a user-imported entry shadow a built-in one of
-  // the same id without erasing the built-in copy.
-  async function listAllSkills() {
-    return listSkills(SKILL_ROOTS);
-  }
-
-  async function listAllDesignTemplates() {
-    return listSkills(DESIGN_TEMPLATE_ROOTS);
-  }
-
-  // Spans both roots so chat run system-prompt composition and the orbit
-  // template resolver can resolve a stored project.skillId regardless of
-  // which surface created the project after the skills/design-templates
-  // split. Keep in sync with SKILL_ROOTS + DESIGN_TEMPLATE_ROOTS above.
-  async function listAllSkillLikeEntries() {
-    return listSkills(ALL_SKILL_LIKE_ROOTS);
-  }
-
-  async function listAllDesignSystems() {
-    const builtIn = (await listDesignSystems(DESIGN_SYSTEMS_DIR)).map((s) => ({
-      ...s,
-      source: 'built-in',
-      isEditable: false,
-      status: 'published',
-    }));
-    let installed = [];
-    try {
-      installed = await listDesignSystems(USER_DESIGN_SYSTEMS_DIR, {
-        idPrefix: 'user:',
-        source: 'user',
-        isEditable: true,
-        defaultStatus: 'draft',
-      });
-    } catch {
-      // User directory may not exist yet or be unreadable.
-    }
-    const seen = new Set(builtIn.map((s) => s.id));
-    return [
-      ...installed
-        .filter((s) => s.source === 'user')
-        .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')),
-      ...builtIn,
-      ...installed.filter((s) => s.source !== 'user' && !seen.has(s.id)),
-    ];
-  }
-
-  async function readAvailableDesignSystem(id) {
-    if (typeof id === 'string' && id.startsWith('user:')) {
-      return readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
-    }
-    return (
-      (await readDesignSystem(DESIGN_SYSTEMS_DIR, id))
-      ?? (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id))
-    );
-  }
-
-  async function readAvailableDesignSystemPackageInfo(id) {
-    if (typeof id === 'string' && id.startsWith('user:')) {
-      return readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
-    }
-    return (
-      (await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, id))
-      ?? (await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id))
-    );
-  }
-
-  function isProjectUsableDesignSystem(summary) {
-    return summary?.status !== 'draft';
-  }
-
-  async function validateProjectDesignSystemId(id) {
-    if (id === undefined || id === null || id === '') return { ok: true, id: null };
-    if (typeof id !== 'string') {
-      return {
-        ok: false,
-        code: 'INVALID_DESIGN_SYSTEM',
-        message: 'designSystemId must be a string or null',
-      };
-    }
-    const systems = await listAllDesignSystems();
-    const summary = systems.find((system) => system.id === id);
-    if (!summary) {
-      return {
-        ok: false,
-        code: 'DESIGN_SYSTEM_NOT_FOUND',
-        message: 'design system not found',
-      };
-    }
-    if (!isProjectUsableDesignSystem(summary)) {
-      return {
-        ok: false,
-        code: 'DESIGN_SYSTEM_NOT_PUBLISHED',
-        message: 'draft design systems cannot be used by projects',
-      };
-    }
-    return { ok: true, id };
-  }
-
-  async function validateProjectSkillId(id) {
-    if (id === undefined || id === null || id === '') {
-      return { ok: true, id: null };
-    }
-    if (typeof id !== 'string') {
-      return {
-        ok: false,
-        code: 'INVALID_SKILL_ID',
-        message: 'skillId must be a string or null',
-      };
-    }
-    const skills = await listAllSkillLikeEntries();
-    const resolved = findSkillById(skills, id);
-    if (!resolved) {
-      return {
-        ok: false,
-        code: 'SKILL_NOT_FOUND',
-        message: 'skill not found',
-      };
-    }
-    return { ok: true, id: resolved.id };
-  }
-
-  function userDesignSystemWorkspaceProjectId(id) {
-    if (typeof id !== 'string' || !id.startsWith('user:')) return null;
-    const dirId = id.slice('user:'.length);
-    if (!/^[A-Za-z0-9._-]{1,120}$/.test(dirId)) return null;
-    return `ds-${dirId}`.slice(0, 128);
-  }
-
-  function projectBackedDesignSystemProjectId(id, summary) {
-    if (typeof summary?.projectId === 'string' && isSafeId(summary.projectId)) {
-      return summary.projectId;
-    }
-    return userDesignSystemWorkspaceProjectId(id);
-  }
-
-  async function ensureUserDesignSystemWorkspaceProject(db, id) {
-    const systems = await listAllDesignSystems();
-    const summary = systems.find((s) => s.id === id && s.source === 'user');
-    if (!summary) return null;
-    const projectId = projectBackedDesignSystemProjectId(id, summary);
-    if (!projectId) return null;
-
-    const now = Date.now();
-    const metadata = {
-      kind: 'other',
-      importedFrom: 'design-system',
-      entryFile: 'DESIGN.md',
-      sourceFileName: id,
-    };
-    const existing = getProject(db, projectId);
-    const project = existing
-      ? updateProject(db, projectId, {
-          name: summary.title,
-          designSystemId: id,
-          metadata: { ...existing.metadata, ...metadata },
-          updatedAt: now,
-        })
-      : insertProject(db, {
-          id: projectId,
-          name: summary.title,
-          skillId: null,
-          designSystemId: id,
-          pendingPrompt: null,
-          metadata,
-          createdAt: now,
-          updatedAt: now,
-        });
-    if (!project) return null;
-
-    const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, id);
-    if (!files) return null;
-    for (const file of files) {
-      if (file.kind === 'folder') continue;
-      const detail = await readUserDesignSystemFile(USER_DESIGN_SYSTEMS_DIR, id, file.path);
-      if (!detail) continue;
-      if (existing) {
-        try {
-          const existingFile = await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
-          if (!isReplaceableDesignSystemWorkspaceFile(detail.path, existingFile)) continue;
-        } catch (err) {
-          if (!err || err.code !== 'ENOENT') throw err;
-        }
-      }
-      await writeProjectFile(
-        PROJECTS_DIR,
-        projectId,
-        detail.path,
-        Buffer.from(detail.content, 'utf8'),
-        {},
-        project.metadata,
-      );
-    }
-    await removeLegacyDesignSystemWorkspaceArtifacts(project);
-    await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
-    const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
-    return { project, files: projectFiles };
-  }
-
-  function isReplaceableDesignSystemWorkspaceFile(filePath, file) {
-    const buffer = file?.buffer;
-    if (!Buffer.isBuffer(buffer)) return false;
-    const text = buffer.toString('utf8');
-    if (/^ui_kits\/app\/components\/.+\.(jsx|tsx|js|ts|css|html)$/u.test(filePath)) {
-      return buffer.length < 700 && /od-ui-kit-[a-z-]+/u.test(text);
-    }
-    if (!/^(DESIGN\.md|README\.md|SKILL\.md|ui_kits\/app\/README\.md)$/u.test(filePath)) {
-      return false;
-    }
-    return hasLegacyDesignSystemPackageReferences(text);
-  }
-
-  function hasLegacyDesignSystemPackageReferences(text) {
-    return /preview\/(colors-node-types|colors-ui-palette|typography-scale|spacing-system|logo-variants)\.html|ui_kits\/generated_interface(?:\/index\.html|\/)?/u.test(text);
-  }
-
-  async function removeLegacyDesignSystemWorkspaceArtifacts(project) {
-    if (project?.metadata?.importedFrom !== 'design-system') return;
-    const dir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
-    for (const artifact of LEGACY_DESIGN_SYSTEM_ARTIFACTS) {
-      const replacementReady = await Promise.all(
-        artifact.replacementPaths.map(async (replacementPath) => {
-          try {
-            const stats = await fs.promises.stat(path.join(dir, ...replacementPath.split('/')));
-            return stats.isFile();
-          } catch (err) {
-            if (!err || (err.code !== 'ENOENT' && err.code !== 'ENOTDIR')) throw err;
-            return false;
-          }
-        }),
-      );
-      if (!replacementReady.every(Boolean)) continue;
-      await fs.promises.rm(path.join(dir, ...artifact.legacyPath.split('/')), {
-        recursive: artifact.removeDirectory === true,
-        force: true,
-      });
-    }
-  }
-
-  async function readDesignSystemWorkspaceTextFile(db, summary, filePath) {
-    if (!summary?.projectId || !isSafeId(summary.projectId)) return null;
-    const project = getProject(db, summary.projectId);
-    if (!project) return null;
-    try {
-      const file = await readProjectFile(
-        PROJECTS_DIR,
-        project.id,
-        filePath,
-        project.metadata,
-      );
-      const text = file.buffer.toString('utf8');
-      if (text.includes('\0')) return null;
-      return text;
-    } catch {
-      return null;
-    }
-  }
+  const designSystemServices = createDesignSystemServerServices({
+    roots: { SKILL_ROOTS, DESIGN_TEMPLATE_ROOTS, ALL_SKILL_LIKE_ROOTS },
+    paths: { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR },
+    skills: { listSkills, findSkillById },
+    designSystems: {
+      listDesignSystems,
+      readDesignSystem,
+      readDesignSystemPackageInfo,
+      listUserDesignSystemFiles,
+      readUserDesignSystemFile,
+      linkUserDesignSystemProject,
+      LEGACY_DESIGN_SYSTEM_ARTIFACTS,
+    },
+    projects: {
+      getProject,
+      insertProject,
+      updateProject,
+      readProjectFile,
+      writeProjectFile,
+      listFiles,
+      resolveProjectDir,
+      isSafeId,
+    },
+  });
+  const {
+    ensureUserDesignSystemWorkspaceProject,
+    isProjectUsableDesignSystem,
+    listAllDesignSystems,
+    listAllDesignTemplates,
+    listAllSkillLikeEntries,
+    listAllSkills,
+    readAvailableDesignSystem,
+    readAvailableDesignSystemPackageInfo,
+    readDesignSystemWorkspaceTextFile,
+    validateProjectDesignSystemId,
+    validateProjectSkillId,
+  } = designSystemServices;
 
   // Chrome may strip the port from the Origin header on same-origin GET
   // requests. Only use this as a fallback for safe, idempotent GET requests;
@@ -8495,9 +7177,6 @@ export async function startServer({
     // guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    const looksLikeGeminiJsonEventStream = (text: string) => (
-      isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text))
-    );
     // Event types that count as "the agent actually produced something the
     // user can see." Lifecycle markers (`status`) and meter readings
     // (`usage`) deliberately do NOT count — a model can emit token-usage
@@ -10216,37 +8895,4 @@ function sanitizeSlug(text) {
     .replace(/[\s_]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 64);
-}
-
-function assembleExample(templateHtml, slidesHtml, title) {
-  return templateHtml
-    .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(
-      /<title>.*?<\/title>/,
-      `<title>${title} | Open Design Example</title>`,
-    );
-}
-
-// Skill example HTML often references shipped images via relative paths
-// like `./assets/hero.png`. Those resolve correctly when the file is
-// opened from disk, but the web app loads the example into a sandboxed
-// iframe via `srcdoc`, where the document URL is `about:srcdoc` and
-// relative URLs cannot find the assets. Rewriting them to an absolute
-// `/api/skills/<id>/assets/...` URL lets the same HTML render in both
-// places — the disk preview keeps working, and the in-app preview now
-// fetches assets through the matching route below.
-export function rewriteSkillAssetUrls(html: string, skillId: string): string {
-  if (typeof html !== 'string' || html.length === 0) return html;
-  // Match src/href attributes whose values point at the current skill's
-  // assets (`./assets/...` or `assets/...`) or a sibling skill's assets
-  // (`../other-skill/assets/...`). Quote style is preserved so we do not
-  // disturb the surrounding markup.
-  return html.replace(
-    /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
-    (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
-      const resolvedSkillId = siblingSkillId || skillId;
-      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
-      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
-    },
-  );
 }
