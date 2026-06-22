@@ -76,14 +76,55 @@ export function persistCapturedAgentSession(
 
 // Signatures Claude Code prints to stderr when a `--resume <id>` target no
 // longer exists on disk (session pruned, repo moved machines, ~/.claude
-// cleared). VERIFY against the installed CLI during implementation and add
-// the exact observed string to a mocks/ fixture — these patterns are the
-// planning-time best guess, intentionally permissive.
+// cleared). Verified against the installed CLI (v2.1.178): the first pattern
+// matches its "No conversation found with session ID: <id>" string. These stay
+// as a fast path, but Claude's human-readable prose drifts across builds — when
+// it does, none of these match and the stale session id is never cleared, so
+// every turn retries the same dead `--resume` (#4275). The structured detector
+// below is the version-stable primary; treat these patterns as a complement.
 const CLAUDE_RESUME_FAILURE_PATTERNS: RegExp[] = [
   /no conversation found with session id/i,
   /no session found/i,
   /session .* not found/i,
 ];
+
+/**
+ * Version-stable structured signal that a `--resume <id>` turn failed because
+ * the target session could not be loaded. Unlike the human-readable prose
+ * (which #4275 shows can silently stop matching across Claude builds), the
+ * stream-json `result` event shape is stable: a resume whose session can't be
+ * loaded fails LOCALLY, before any API call, so the terminal result is
+ * `is_error` with zero turns and zero API time. A genuine in-turn failure
+ * (overload / network) spends real API time (`duration_api_ms > 0`) and/or
+ * completes a turn, so it is deliberately left alone — a transient blip must
+ * not drop a still-valid session.
+ */
+function hasClaudeResumeFailureResultEvent(text: string): boolean {
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{') || !trimmed.includes('"result"')) continue;
+    let event: {
+      type?: unknown;
+      is_error?: unknown;
+      num_turns?: unknown;
+      duration_api_ms?: unknown;
+    };
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (event.type !== 'result') continue;
+    if (
+      event.is_error === true
+      && Number(event.num_turns) === 0
+      && Number(event.duration_api_ms) === 0
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** sha256 hex digest of the composed stable instruction block. */
 export function hashStableInstructions(stable: string): string {
@@ -109,5 +150,6 @@ export function computeIncludeStable(
 /** True when CLI output indicates a resume target session is missing. */
 export function isClaudeResumeFailure(text: string): boolean {
   if (!text) return false;
-  return CLAUDE_RESUME_FAILURE_PATTERNS.some((re) => re.test(text));
+  if (CLAUDE_RESUME_FAILURE_PATTERNS.some((re) => re.test(text))) return true;
+  return hasClaudeResumeFailureResultEvent(text);
 }

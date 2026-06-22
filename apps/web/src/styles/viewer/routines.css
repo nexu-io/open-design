@@ -1005,10 +1005,6 @@
   color: var(--text);
   font-weight: 650;
 }
-.app .msg.user .role {
-  padding-right: 4px;
-  color: var(--text-soft);
-}
 .app .msg.assistant .role {
   align-items: center;
   gap: 8px;

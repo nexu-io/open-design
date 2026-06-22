@@ -6,22 +6,21 @@ import {
   type ChatSessionMode,
   type PluginManifest,
 } from '@open-design/contracts';
-import { createProjectArtifactFile } from './artifacts/create.js';
-import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
-import { ArtifactRegressionError } from './artifacts/stub-guard.js';
-import { listDesignSystems } from './design-systems/index.js';
+import { createProjectArtifactFile } from '../../artifacts/create.js';
+import { ArtifactPublicationBlockedError } from '../../artifacts/publication-guard.js';
+import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
+import { listDesignSystems } from '../../design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
   getInstalledPlugin,
   listInstalledPlugins,
   resolvePluginSnapshot,
-} from './plugins/index.js';
-import { connectorService } from './connectors/service.js';
-import type { RouteDeps } from './server-context.js';
-import { readAnalyticsContext } from './analytics.js';
-import { listSkills } from './skills.js';
-import { isSafeId } from './projects.js';
+} from '../../plugins/index.js';
+import { connectorService } from '../../connectors/service.js';
+import type { RouteDeps } from '../../server-context.js';
+import { listSkills } from '../../skills.js';
+import { isSafeId } from '../../projects.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -29,9 +28,10 @@ import {
   ensureProjectLocation,
   scanProjectLocation,
   writeProjectManifest,
-} from './project-locations.js';
-import { auditDesignSystemPackage } from './tools-connectors-cli.js';
-import { parseOrchestratorWorkspace } from './workspace-contract.js';
+} from '../../project-locations.js';
+import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
+import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
+import { registerProjectConversationRoutes } from './conversations.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
@@ -757,6 +757,151 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
 }
 
+// ---------------------------------------------------------------------------
+// Teams-safe title sanitization for the URL-load preview path (issue #3918).
+//
+// When a user prints an HTML preview via Cmd+P → "Save as PDF", Chromium uses
+// the iframe's document <title> as the default filename. The URL-load iframe
+// uses sandbox="allow-scripts allow-downloads" (no allow-same-origin), so the
+// host page cannot access contentDocument to rewrite the title after load.
+// Instead we rewrite it here, in the daemon response, before the browser
+// parses the document. The web srcDoc path has its own sanitizeTitleInDoc in
+// apps/web/src/runtime/srcdoc.ts — keep the two in sync when the logic changes.
+// ---------------------------------------------------------------------------
+
+/** Named non-ASCII entities common in business/design document titles. */
+const DAEMON_NAMED_ENTITY_MAP: Record<string, string> = {
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
+  aelig: 'æ', ccedil: 'ç',
+  egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
+  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï',
+  eth: 'ð', ntilde: 'ñ',
+  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø',
+  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü',
+  yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
+  AElig: 'Æ', Ccedil: 'Ç',
+  Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
+  Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï',
+  ETH: 'Ð', Ntilde: 'Ñ',
+  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', Oslash: 'Ø',
+  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü',
+  Yacute: 'Ý', THORN: 'Þ',
+  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’',
+  ldquo: '“', rdquo: '”', hellip: '…', trade: '™', reg: '®',
+  copy: '©', deg: '°', euro: '€', pound: '£', yen: '¥',
+};
+
+function daemonSafeFromCodePoint(cp: number): string {
+  if (cp < 0 || cp > 0x10ffff) return '�';
+  return String.fromCodePoint(cp);
+}
+
+function daemonDecodeHtmlEntitiesForTitle(encoded: string): string {
+  return encoded
+    .replace(/&([A-Za-z]+);/g, (match: string, name: string) => DAEMON_NAMED_ENTITY_MAP[name] ?? match)
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_: string, n: string) => daemonSafeFromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_: string, h: string) => daemonSafeFromCodePoint(parseInt(h, 16)));
+}
+
+function daemonSanitizePreviewTitle(text: string): string {
+  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
+  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
+  let result = text.trim();
+  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
+  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
+  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
+  let prev: string;
+  do {
+    prev = result;
+    result = result.replace(/^~\$/, '').trim();
+  } while (result !== prev);
+  // Replace each disallowed character (or run of them) with a single hyphen.
+  // Character class: : # % & * { } \ < > ? / + | "
+  // eslint-disable-next-line no-useless-escape
+  result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
+  // Final trim to remove any spaces exposed by the substitution.
+  return result.trim();
+}
+
+/**
+ * Find the offset of the first real `<title>` tag in html[0..searchLimit)
+ * that is not inside an HTML comment or a `<script>`/`<style>` block.
+ * Returns -1 if no real title is found.
+ */
+function daemonFindRealTitleOffset(html: string, searchLimit: number): number {
+  let i = 0;
+  const limit = Math.min(html.length, searchLimit);
+  while (i < limit) {
+    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
+      const end = html.indexOf('-->', i + 4);
+      if (end < 0) return -1;
+      i = end + 3;
+      continue;
+    }
+    if (html.charCodeAt(i) === 60 /* < */) {
+      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
+      if (tagMatch) {
+        const closingTag = `</${tagMatch[1]}`;
+        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
+        if (end < 0) return -1;
+        const closeEnd = html.indexOf('>', end);
+        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
+        continue;
+      }
+    }
+    if (html.charCodeAt(i) === 60 /* < */) {
+      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+/**
+ * Rewrite the `<title>` in html so the resulting PDF filename is Teams-safe.
+ * Only the real `<head>` title is changed; `<title>` inside comments or script
+ * blocks is left untouched. Mirrors sanitizeTitleInDoc in srcdoc.ts.
+ *
+ * Exported for unit testing; not part of the public API surface.
+ */
+export function daemonSanitizeTitleInDoc(html: string): string {
+  const lower = html.toLowerCase();
+  const bodyStart = lower.indexOf('<body');
+  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
+  const searchLimit = headEnd >= 0
+    ? headEnd + 7
+    : bodyStart >= 0
+      ? bodyStart
+      : html.length;
+
+  const titleStart = daemonFindRealTitleOffset(html, searchLimit);
+  if (titleStart < 0) return html;
+
+  const openTagEnd = html.indexOf('>', titleStart);
+  if (openTagEnd < 0) return html;
+
+  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
+  if (closingTagStart < 0) return html;
+
+  const closingTagEnd = html.indexOf('>', closingTagStart);
+  if (closingTagEnd < 0) return html;
+
+  const openTag = html.slice(titleStart, openTagEnd + 1);
+  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
+  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+
+  const decoded = daemonDecodeHtmlEntitiesForTitle(rawContent);
+  const safe = daemonSanitizePreviewTitle(decoded);
+
+  return html.slice(0, titleStart) + openTag + safe + closeTag + html.slice(closingTagEnd + 1);
+}
+
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' ? 'chat' : 'design';
 }
@@ -768,7 +913,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
-  const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
+  const { insertConversation } = ctx.conversations;
   const { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate } = ctx.templates;
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
@@ -1548,227 +1693,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  // ---- Conversations --------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    res.json({ conversations: listConversations(db, req.params.id) });
-  });
-
-  app.post('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
-    const now = Date.now();
-    const hasExplicitSessionMode = Boolean(
-      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
-    );
-    const requestedForkMessageId =
-      typeof forkAfterMessageId === 'string' && forkAfterMessageId
-        ? forkAfterMessageId
-        : null;
-    const sourceConversation =
-      typeof seedFromConversationId === 'string' && seedFromConversationId
-        ? getConversation(db, seedFromConversationId)
-        : null;
-    // Client-supplied fork snapshot. The chat "Fork" action sends the exact
-    // messages the user is looking at (up to the fork point). We prefer it over
-    // reading the source conversation from the DB so a fork point that was
-    // never persisted — e.g. an assistant turn whose run errored / had its
-    // connection reset before reaching the database — still forks instead of
-    // 404ing on `forkAfterMessageId`.
-    const clientSeedMessages = Array.isArray(req.body?.seedMessages)
-      ? (req.body.seedMessages as any[]).filter(
-          (message) => message && typeof message.role === 'string',
-        )
-      : null;
-    let seedMessages: any[] = [];
-    if (clientSeedMessages && clientSeedMessages.length > 0) {
-      seedMessages = clientSeedMessages;
-      if (requestedForkMessageId) {
-        const forkIndex = seedMessages.findIndex(
-          (message) => message.id === requestedForkMessageId,
-        );
-        if (forkIndex >= 0) {
-          seedMessages = seedMessages.slice(0, forkIndex + 1);
-        }
-      }
-    } else if (sourceConversation && sourceConversation.projectId === req.params.id) {
-      seedMessages = listMessages(db, seedFromConversationId);
-      if (requestedForkMessageId) {
-        const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
-        if (forkIndex < 0) {
-          return res.status(404).json({ error: 'fork message not found' });
-        }
-        seedMessages = seedMessages.slice(0, forkIndex + 1);
-      }
-    } else if (requestedForkMessageId) {
-      return res.status(404).json({ error: 'fork source conversation not found' });
-    }
-    const sessionMode =
-      hasExplicitSessionMode
-        ? normalizeChatSessionMode(req.body.sessionMode)
-        : sourceConversation && sourceConversation.projectId === req.params.id
-          ? normalizeChatSessionMode(sourceConversation.sessionMode)
-          : 'design';
-    const conv = insertConversation(db, {
-      id: randomId(),
-      projectId: req.params.id,
-      title: typeof title === 'string' ? title.trim() || null : null,
-      sessionMode,
-      createdAt: now,
-      updatedAt: now,
-    });
-    // Side Chat: inherit the source conversation's context by copying its
-    // messages into the fresh conversation. Be defensive — a missing or
-    // cross-project source id silently yields an empty conversation.
-    if (conv && seedMessages.length > 0) {
-      for (const m of seedMessages) {
-        // Fresh id per copied message; upsertMessage assigns the next
-        // position so role/content ordering is preserved. Drop the source's
-        // run pointers (runId/runStatus/lastRunEventId): they belong to the
-        // OTHER conversation's runs, and a copied still-`running` assistant
-        // turn would otherwise render a perpetual spinner in the side chat.
-        upsertMessage(db, conv.id, {
-          ...m,
-          id: randomId(),
-          runId: undefined,
-          runStatus: undefined,
-          lastRunEventId: undefined,
-        });
-      }
-    }
-    res.json({ conversation: conv });
-  });
-
-  app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    const updated = updateConversation(db, req.params.cid, req.body || {});
-    res.json({ conversation: updated });
-  });
-
-  app.delete('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    deleteConversation(db, req.params.cid);
-    res.json({ ok: true });
-  });
-
-  // ---- Messages -------------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({ messages: listMessages(db, req.params.cid) });
-  });
-
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    const m = req.body || {};
-    if (m.id && m.id !== req.params.mid) {
-      return res.status(400).json({ error: 'id mismatch' });
-    }
-    const saved = upsertMessage(db, req.params.cid, {
-      ...m,
-      id: req.params.mid,
-    });
-    // Bump the parent project's updatedAt so the project list re-orders.
-    updateProject(db, req.params.id, {});
-    ctx.telemetry?.reportFinalizedMessage(saved, m, {
-      analyticsContext: readAnalyticsContext(req),
-      projectId: req.params.id,
-      conversationId: req.params.cid,
-    });
-    res.json({ message: saved });
-  });
-
-  // ---- Preview comments ----------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({
-      comments: listPreviewComments(db, req.params.id, req.params.cid),
-    });
-  });
-
-  app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    try {
-      const comment = upsertPreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.body || {},
-      );
-      updateProject(db, req.params.id, {});
-      res.json({ comment });
-    } catch (err: any) {
-      res.status(400).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.patch(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      try {
-        const comment = updatePreviewCommentStatus(
-          db,
-          req.params.id,
-          req.params.cid,
-          req.params.commentId,
-          req.body?.status,
-        );
-        if (!comment)
-          return res.status(404).json({ error: 'comment not found' });
-        updateProject(db, req.params.id, {});
-        res.json({ comment });
-      } catch (err: any) {
-        res.status(400).json({ error: String(err?.message || err) });
-      }
-    },
-  );
-
-  app.delete(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      const ok = deletePreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.params.commentId,
-      );
-      if (!ok) return res.status(404).json({ error: 'comment not found' });
-      updateProject(db, req.params.id, {});
-      res.json({ ok: true });
-    },
-  );
+  registerProjectConversationRoutes(app, ctx);
 
   // ---- Tabs -----------------------------------------------------------------
 
@@ -2364,6 +2289,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             /^text\/html(?:;|$)/i.test(file.mime)
           ) {
             let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
+            // Sanitize the <title> so Cmd+P → "Save as PDF" produces a
+            // Teams-safe filename. The URL-load iframe uses sandbox without
+            // allow-same-origin, so the host cannot rewrite contentDocument.title
+            // after load — we must do it here in the response. The srcDoc path
+            // has its own sanitization in buildSrcdoc (apps/web/src/runtime/srcdoc.ts).
+            html = daemonSanitizeTitleInDoc(html);
             if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'scroll');
             }

@@ -1220,7 +1220,7 @@ function exitWithStructuredError({ code, message, data }) {
 //   { error: { code, message, ... } }  — newer routes using sendApiError
 //   { error: '<message>' }             — older flat-string routes
 //                                         (e.g. POST /api/templates at
-//                                         project-routes.ts:667-680)
+//                                         routes/project/index.ts)
 // Normalize so a flat-string body still surfaces its message to the
 // structured envelope instead of collapsing to `HTTP <status>: `, which
 // would drop the only diagnostic the daemon actually returned to a

@@ -38,7 +38,6 @@ import {
 } from '../design-system-auto-prompt';
 import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
-import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
@@ -3411,13 +3410,10 @@ function UserMessageImpl({
   }
 
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
-  const ts = messageTime(message);
 
   return (
     <div className="msg user">
-      <div className="role">
-        <span>{t('chat.you')}</span>
-      </div>
+      <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
           {message.sessionMode ? (
@@ -3506,15 +3502,6 @@ function UserMessageImpl({
         <div className="user-text-wrap">
           <div className="user-text user-bubble">{message.content}</div>
           <div className="user-actions">
-            {ts ? (
-              <time
-                className="user-actions-time"
-                dateTime={new Date(ts).toISOString()}
-                title={exactDateTime(ts)}
-              >
-                {shortTime(ts)}
-              </time>
-            ) : null}
             <button
               type="button"
               className="ghost user-copy-btn"

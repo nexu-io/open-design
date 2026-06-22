@@ -3,10 +3,12 @@ import { dirname, join } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
+  compareLauncherVersions,
   type LauncherChannel,
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
+  type LauncherVersionPointer,
   normalizeLauncherChannel,
   normalizeLauncherVersion,
   resolveLauncherPaths,
@@ -50,6 +52,23 @@ type LauncherInstallDescriptor = {
   namespace: string;
   schemaVersion: typeof LAUNCHER_SCHEMA_VERSION;
   updatedAt?: string;
+};
+
+type LauncherCleanupDescriptor = {
+  channel: LauncherChannel;
+  currentVersion: string;
+  namespace: string;
+  updatedAt: string;
+  version: 1;
+  versions: LauncherCleanupEntry[];
+};
+
+type LauncherCleanupEntry = {
+  generation: number;
+  reason: "current-bound-package" | "older-than-bound-package";
+  state: "deprecated" | "retained";
+  updatedAt: string;
+  version: string;
 };
 
 async function pathExists(path: string): Promise<boolean> {
@@ -243,6 +262,75 @@ async function readOrCreateRuntimeDescriptor(
   return descriptor;
 }
 
+function maxRuntimePointer(runtime: LauncherRuntimeDescriptor): string | null {
+  const pointers = [runtime.active, runtime.lastSuccessful].filter((pointer): pointer is LauncherVersionPointer => pointer != null);
+  if (pointers.length === 0) return null;
+  return pointers.reduce((latest, pointer) => (
+    compareLauncherVersions(pointer.version, latest.version) > 0 ? pointer : latest
+  )).version;
+}
+
+function cleanupEntriesForSupersededRuntime(
+  runtime: LauncherRuntimeDescriptor,
+  boundVersion: string,
+  updatedAt: string,
+): LauncherCleanupEntry[] {
+  const byVersion = new Map<string, LauncherCleanupEntry>();
+  for (const pointer of [runtime.active, runtime.lastSuccessful]) {
+    if (pointer == null) continue;
+    if (compareLauncherVersions(pointer.version, boundVersion) >= 0) continue;
+    const existing = byVersion.get(pointer.version);
+    byVersion.set(pointer.version, {
+      generation: Math.max(existing?.generation ?? 0, pointer.generation),
+      reason: "older-than-bound-package",
+      state: "deprecated",
+      updatedAt,
+      version: pointer.version,
+    });
+  }
+  byVersion.set(boundVersion, {
+    generation: 0,
+    reason: "current-bound-package",
+    state: "retained",
+    updatedAt,
+    version: boundVersion,
+  });
+  return [...byVersion.values()].sort((left, right) => compareLauncherVersions(left.version, right.version) || left.version.localeCompare(right.version));
+}
+
+async function reconcileRuntimeWithBoundPackage(
+  config: PackagedConfig,
+  descriptor: LauncherRuntimeDescriptor,
+  launcherPaths: LauncherPaths,
+  channel: LauncherChannel,
+): Promise<LauncherRuntimeDescriptor> {
+  const boundVersion = config.appVersion == null ? null : normalizeLauncherVersion(config.appVersion);
+  if (boundVersion == null) return descriptor;
+  const maxPersistedVersion = maxRuntimePointer(descriptor);
+  if (maxPersistedVersion != null && compareLauncherVersions(boundVersion, maxPersistedVersion) <= 0) return descriptor;
+  const pointer = { generation: 0, version: boundVersion };
+  const updatedAt = new Date().toISOString();
+  const next: LauncherRuntimeDescriptor = {
+    active: pointer,
+    channel,
+    lastSuccessful: pointer,
+    namespace: config.namespace,
+    schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    updatedAt,
+  };
+  await writeJsonFile(launcherPaths.runtimePath, next);
+  await rm(launcherPaths.attemptsPath, { force: true });
+  await writeJsonFile(launcherPaths.cleanupPath, {
+    channel,
+    currentVersion: boundVersion,
+    namespace: config.namespace,
+    updatedAt,
+    version: 1,
+    versions: cleanupEntriesForSupersededRuntime(descriptor, boundVersion, updatedAt),
+  } satisfies LauncherCleanupDescriptor);
+  return next;
+}
+
 export async function resolvePackagedLauncherRuntime(
   config: PackagedConfig,
   paths: PackagedNamespacePaths,
@@ -253,7 +341,12 @@ export async function resolvePackagedLauncherRuntime(
     namespace: config.namespace,
     root: paths.installationRoot,
   });
-  const descriptor = await readOrCreateRuntimeDescriptor(config, launcherPaths, channel);
+  const descriptor = await reconcileRuntimeWithBoundPackage(
+    config,
+    await readOrCreateRuntimeDescriptor(config, launcherPaths, channel),
+    launcherPaths,
+    channel,
+  );
   const attempted = await readLauncherAttempt(launcherPaths, channel, config.namespace).catch(() => null);
   const selection = selectLauncherRuntimeTarget({ attempted, runtime: descriptor });
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
