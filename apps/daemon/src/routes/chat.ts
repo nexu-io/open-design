@@ -375,6 +375,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             deploymentProfile,
             {
               ...(body as Record<string, unknown>),
+              projectId: body.projectId ?? 'connection-test',
+              providerRunId: body.providerRunId ?? `connection-test:${protocol}:${body.model}`,
+              providerOperationId: body.providerOperationId ?? `connection-test:${protocol}:${body.model}`,
               providerRunPurpose: body.providerRunPurpose ?? 'connection-test',
             },
             controller.signal,

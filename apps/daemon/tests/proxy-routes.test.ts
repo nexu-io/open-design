@@ -688,6 +688,7 @@ describe('API proxy routes', () => {
           });
           expect(JSON.parse(String(init?.body))).toMatchObject({
             od_project_id: projectId,
+            od_run_id: `finalize:${projectId}`,
             purpose: 'finalize',
             allowed_surfaces: ['reasoning'],
             max_total_cost_usd: 0.05,
@@ -702,6 +703,7 @@ describe('API proxy routes', () => {
         expect(body.metadata).toMatchObject({
           opendesign_run_session_id: 'odrs_finalize',
           opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: `finalize:${projectId}`,
         });
         return Promise.resolve(Response.json({
           choices: [{ message: { content: '# Final design\n' } }],

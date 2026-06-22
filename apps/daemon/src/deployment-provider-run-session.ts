@@ -14,10 +14,14 @@ export type DeploymentProviderRunMetadataResult =
   | { ok: true; metadata?: Record<string, unknown> }
   | { ok: false; status: number; code: DeploymentProviderRunErrorCode; message: string };
 
-function cleanProviderRunString(value: unknown, fallback: string): string {
+function cleanProviderRunString(value: unknown): string | null {
   const raw = typeof value === 'string' ? value.trim() : '';
-  const candidate = raw || fallback;
-  return candidate.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 128) || fallback;
+  if (!raw) return null;
+  return raw.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 128) || null;
+}
+
+function cleanProviderRunStringOrDefault(value: unknown, fallback: string): string {
+  return cleanProviderRunString(value) ?? fallback;
 }
 
 function existingMetadata(value: unknown): Record<string, unknown> {
@@ -64,10 +68,34 @@ export async function deploymentProviderRunMetadata(
     };
   }
 
-  const projectId = cleanProviderRunString(body.projectId, `project-${randomUUID()}`);
-  const runId = cleanProviderRunString(body.providerRunId, `run-${randomUUID()}`);
-  const operationId = cleanProviderRunString(body.providerOperationId, `operation-${randomUUID()}`);
-  const purpose = cleanProviderRunString(body.providerRunPurpose, 'chat-completion');
+  const projectId = cleanProviderRunString(body.projectId);
+  if (!projectId) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: 'Deployment provider run sessions require projectId.',
+    };
+  }
+  const runId = cleanProviderRunString(body.providerRunId);
+  if (!runId) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: 'Deployment provider run sessions require providerRunId.',
+    };
+  }
+  const operationId = cleanProviderRunString(body.providerOperationId);
+  if (!operationId) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: 'Deployment provider run sessions require providerOperationId.',
+    };
+  }
+  const purpose = cleanProviderRunStringOrDefault(body.providerRunPurpose, 'chat-completion');
   const requestBody: Record<string, unknown> = {
     od_project_id: projectId,
     od_run_id: runId,

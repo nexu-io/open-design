@@ -938,6 +938,8 @@ describe('POST /api/test/connection provider mode', () => {
             'Bearer deployment-secret',
           );
           expect(JSON.parse(String(init?.body))).toMatchObject({
+            od_project_id: 'connection-test',
+            od_run_id: 'connection-test:openai:gpt-routed',
             purpose: 'connection-test',
             allowed_surfaces: ['reasoning'],
             max_total_cost_usd: 0.05,
@@ -949,6 +951,7 @@ describe('POST /api/test/connection provider mode', () => {
         expect(body.metadata).toMatchObject({
           opendesign_run_session_id: 'odrs_connection',
           opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: 'connection-test:openai:gpt-routed',
         });
         return jsonResponse({
           choices: [{ message: { content: 'ok' } }],

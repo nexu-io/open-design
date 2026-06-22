@@ -1086,6 +1086,8 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
             {
               ...(req.body as Record<string, unknown>),
               projectId: req.params.id,
+              providerRunId: req.body.providerRunId ?? `finalize:${req.params.id}`,
+              providerOperationId: req.body.providerOperationId ?? `finalize:${req.params.id}`,
               providerRunPurpose: 'finalize',
             },
             finalizeAbort.signal,
