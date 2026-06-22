@@ -324,6 +324,104 @@ export function resolveChatExtraAllowedDirs({
   );
 }
 
+export type DesignSystemSelectionSource =
+  | 'request'
+  | 'plugin'
+  | 'project'
+  | 'app-default'
+  | 'none';
+
+function normalizedDesignSystemId(value: InputValue): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+export function resolveEffectiveDesignSystemSelection({
+  requestDesignSystemId,
+  pluginDesignSystemId,
+  projectDesignSystemId,
+  appDefaultDesignSystemId,
+  allowAppDefault = true,
+}: {
+  requestDesignSystemId?: InputValue;
+  pluginDesignSystemId?: InputValue;
+  projectDesignSystemId?: InputValue;
+  appDefaultDesignSystemId?: InputValue;
+  allowAppDefault?: boolean;
+}): { id: string | null; source: DesignSystemSelectionSource } {
+  const requestId = normalizedDesignSystemId(requestDesignSystemId);
+  if (requestId) return { id: requestId, source: 'request' };
+
+  const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
+  if (pluginId) return { id: pluginId, source: 'plugin' };
+
+  const projectId = normalizedDesignSystemId(projectDesignSystemId);
+  if (projectId) return { id: projectId, source: 'project' };
+
+  if (allowAppDefault) {
+    const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
+    if (appDefaultId) return { id: appDefaultId, source: 'app-default' };
+  }
+
+  return { id: null, source: 'none' };
+}
+
+export function designSystemIdFromPluginSnapshot(snapshot: InputValue): string | null {
+  if (!isInputRecord(snapshot)) return null;
+  const resolvedContext = snapshot.resolvedContext;
+  if (!isInputRecord(resolvedContext)) return null;
+  const items = resolvedContext.items;
+  if (!Array.isArray(items)) return null;
+  const designSystemItems = items.filter((item): item is InputRecord => (
+    isInputRecord(item) && item.kind === 'design-system'
+  ));
+  const primary = designSystemItems.find((item) => item.primary === true);
+  return normalizedDesignSystemId(primary?.id ?? designSystemItems[0]?.id);
+}
+
+export type StablePromptCacheMissReason =
+  | 'new-session'
+  | 'missing-stored-hash'
+  | 'stable-prompt-changed'
+  | null;
+
+export function describeStablePromptCache({
+  isResuming,
+  storedStablePromptHash,
+  currentStableHash,
+}: {
+  isResuming: boolean;
+  storedStablePromptHash: string | null;
+  currentStableHash: string;
+}): {
+  stablePromptHash: string;
+  hit: boolean;
+  missReason: StablePromptCacheMissReason;
+} {
+  if (!isResuming) {
+    return {
+      stablePromptHash: currentStableHash,
+      hit: false,
+      missReason: 'new-session',
+    };
+  }
+  if (storedStablePromptHash === currentStableHash) {
+    return {
+      stablePromptHash: currentStableHash,
+      hit: true,
+      missReason: null,
+    };
+  }
+  return {
+    stablePromptHash: currentStableHash,
+    hit: false,
+    missReason: storedStablePromptHash === null
+      ? 'missing-stored-hash'
+      : 'stable-prompt-changed',
+  };
+}
+
 export function resolveGrantedCodexImagegenOverride({
   agentId,
   metadata,

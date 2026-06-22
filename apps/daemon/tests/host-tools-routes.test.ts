@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATALOGUE,
   applicableForPlatform,
+  launchHostTool,
   resolveHostToolLaunchPlan,
 } from '../src/routes/host-tools.js';
 import type { CatalogueEntry, Platform } from '../src/routes/host-tools.js';
@@ -59,5 +60,26 @@ describe('platform gate — Warp is darwin-only, cross-platform tools stay avail
   it('cursor remains applicable on darwin (regression guard — no platforms restriction)', () => {
     const cursor = CATALOGUE.find((e: CatalogueEntry) => e.id === 'cursor')!;
     expect(applicableForPlatform(cursor, 'darwin' as Platform)).toBe(true);
+  });
+});
+
+describe('host tools launch reporting (#3871)', () => {
+  it('reports ok once the OS confirms the process spawned', async () => {
+    // process.execPath (the running node binary) always spawns, so this
+    // exercises the success path without depending on an installed editor.
+    const result = await launchHostTool(process.execPath, ['--version']);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('surfaces the launch failure instead of swallowing it', async () => {
+    // shell:true on win32 runs the command through cmd.exe, which exits
+    // non-zero rather than emitting an `error` event for a missing binary.
+    if (process.platform === 'win32') return;
+
+    const result = await launchHostTool('open-design-nonexistent-editor-3871', []);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBeTruthy();
   });
 });

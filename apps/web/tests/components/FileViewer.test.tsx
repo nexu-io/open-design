@@ -5516,6 +5516,23 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('align-items: center;');
   });
 
+  it('gives the in-tab present exit button a distinct elevated surface for dark-mode contrast', () => {
+    const css = readExpandedIndexCss();
+    const rule = css.match(/\.viewer\s+\.present-exit-btn\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('background: var(--bg-elevated)');
+    expect(rule).toContain('border: 1px solid var(--border-strong)');
+    expect(rule).toContain('box-shadow: var(--shadow-md)');
+  });
+
+  it('adds a keyboard focus ring to the in-tab present exit button', () => {
+    const css = readExpandedIndexCss();
+    const rule = css.match(/\.viewer\s+\.present-exit-btn:focus-visible\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('outline: 2px solid var(--accent)');
+    expect(rule).toContain('outline-offset: 2px');
+  });
+
   it('keeps in-tab presentation overlays anchored to the inherited workspace tab height', () => {
     const css = readExpandedIndexCss();
     const overlayRule = css.match(/\.present-overlay\s*\{[^}]+\}/)?.[0] ?? '';

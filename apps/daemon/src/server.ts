@@ -69,7 +69,10 @@ import {
   normalizeCommentAttachments,
   renderCommentAttachmentHint,
   resolveChatExtraAllowedDirs,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
   resolveCodexGeneratedImagesDir,
+  resolveEffectiveDesignSystemSelection,
   resolveGrantedCodexImagegenOverride,
   resolveResearchCommandContract,
   resolveSafeProjectAttachments,
@@ -95,7 +98,10 @@ export {
   normalizeCommentAttachments,
   renderCommentAttachmentHint,
   resolveChatExtraAllowedDirs,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
   resolveCodexGeneratedImagesDir,
+  resolveEffectiveDesignSystemSelection,
   resolveGrantedCodexImagegenOverride,
   resolveResearchCommandContract,
   resolveSafeProjectAttachments,
@@ -198,6 +204,7 @@ import {
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
+  digestDesignSystemContext,
   LEGACY_DESIGN_SYSTEM_ARTIFACTS,
   linkUserDesignSystemProject,
   listDesignSystems,
@@ -4456,12 +4463,39 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
+    let appConfigForPrompt = null;
+    try {
+      appConfigForPrompt = await readAppConfig(RUNTIME_DATA_DIR);
+    } catch (err) {
+      console.warn('[app-config] readAppConfig failed', err);
+    }
+    let pluginDesignSystemId = null;
+    if (
+      typeof appliedPluginSnapshotId === 'string' &&
+      appliedPluginSnapshotId.length > 0
+    ) {
+      try {
+        pluginDesignSystemId = designSystemIdFromPluginSnapshot(
+          getSnapshot(db, appliedPluginSnapshotId),
+        );
+      } catch (err) {
+        console.warn(
+          `[plugins] designSystem selection failed: ${err?.message ?? err}`,
+        );
+      }
+    }
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const effectiveDesignSystemId =
-      typeof designSystemId === 'string' && designSystemId
-        ? designSystemId
-        : project?.designSystemId;
+    const designSystemSelection = resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: designSystemId,
+      pluginDesignSystemId,
+      projectDesignSystemId: project?.designSystemId,
+      appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+      // A project row with designSystemId=null can mean the user picked
+      // "No design system"; do not reapply the global default behind their back.
+      allowAppDefault: project === null,
+    });
+    const effectiveDesignSystemId = designSystemSelection.id;
     const metadata = project?.metadata;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
@@ -4641,11 +4675,8 @@ export async function startServer({
 
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
-    try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-      if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
-    } catch (err) {
-      console.warn('[custom-instructions] readAppConfig failed', err);
+    if (appConfigForPrompt?.customInstructions) {
+      userInstructions = appConfigForPrompt.customInstructions;
     }
 
     let designSystemBody;
@@ -4671,6 +4702,8 @@ export async function startServer({
     let designSystemImportMode;
     let designSystemCraftApplies = [];
     let designSystemCraftExemptions = [];
+    let activeDesignSystemId = null;
+    let designSystemDigest = null;
     if (effectiveDesignSystemId) {
       let systems = await listAllDesignSystems();
       let summary = systems.find((s) => s.id === effectiveDesignSystemId);
@@ -4704,6 +4737,20 @@ export async function startServer({
         designSystemImportMode = assets.importMode;
         designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
         designSystemCraftExemptions = Array.isArray(assets.craftExemptions) ? assets.craftExemptions : [];
+        if (typeof designSystemBody === 'string' && designSystemBody.length > 0) {
+          activeDesignSystemId = effectiveDesignSystemId;
+          designSystemDigest = digestDesignSystemContext({
+            id: effectiveDesignSystemId,
+            title: designSystemTitle,
+            body: designSystemBody,
+            usageMd: designSystemUsageMd,
+            tokensCss: designSystemTokensCss,
+            componentsManifest: designSystemComponentsManifest,
+            fixtureHtml: designSystemFixtureHtml,
+            pullIndex: designSystemPullIndex,
+            importMode: designSystemImportMode,
+          });
+        }
       }
     }
 
@@ -4920,6 +4967,12 @@ export async function startServer({
       activeSkillDir,
       activeSkillDirs,
       critiqueShouldRun,
+      designSystemSelection: {
+        id: activeDesignSystemId,
+        requestedId: effectiveDesignSystemId,
+        source: activeDesignSystemId ? designSystemSelection.source : 'none',
+        digest: designSystemDigest,
+      },
       promptTelemetryParts: {
         skillPrompt: skillBody ?? '',
         designSystemPrompt: designSystemBody ?? '',
@@ -5342,6 +5395,7 @@ export async function startServer({
       prompt: daemonSystemPrompt,
       activeSkillDirs,
       critiqueShouldRun,
+      designSystemSelection,
       promptTelemetryParts,
     } =
       await composeDaemonSystemPrompt({
@@ -5360,6 +5414,11 @@ export async function startServer({
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
       });
+
+    run.designSystemId = designSystemSelection?.id ?? null;
+    run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
+    run.designSystemSelectionSource = designSystemSelection?.source ?? 'none';
+    run.designSystemDigest = designSystemSelection?.digest ?? null;
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -5498,6 +5557,11 @@ export async function startServer({
       agentResumeCtx.storedStablePromptHash,
       currentStableHash,
     );
+    run.promptCache = describeStablePromptCache({
+      isResuming: agentResumeCtx.isResuming,
+      storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
+      currentStableHash,
+    });
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const titleGenerationRequested =
       titleGeneration &&
@@ -5732,7 +5796,13 @@ export async function startServer({
       destroyStream(child.stderr);
       destroyStream(child.stdin);
     };
-    const restartSameRunAfterRetry = () => {
+    // Synchronously detach the failed attempt: kill the old child and move the
+    // run back to `queued` *now*, even when the re-spawn is delayed by backoff.
+    // This must not be deferred — leaving the old child alive during the backoff
+    // window lets a follow-on signal (e.g. the inactivity watchdog's SIGTERM)
+    // drive a second close-handler pass that finalizes the run as failed before
+    // the retry ever spawns.
+    const tearDownAttemptForRetry = () => {
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
       destroyChildStdio(run.child);
@@ -5756,6 +5826,8 @@ export async function startServer({
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
+    };
+    const spawnRetryAttempt = () => {
       void startChatRun(chatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
@@ -5772,6 +5844,24 @@ export async function startServer({
         // cannot trigger another restart loop.
         finishWithRetryDecision('failed', 1, null);
       });
+    };
+    // Tear the failed attempt down now (moving the run to `queued`), then wait
+    // out the policy's backoff before re-spawning. Stays cancel-aware: a cancel
+    // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
+    // and finalizes the queued run, and the callback re-checks cancel/terminal
+    // state in case it fires first.
+    const scheduleRetryRestart = (delayMs) => {
+      tearDownAttemptForRetry();
+      const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
+      if (wait <= 0) {
+        spawnRetryAttempt();
+        return;
+      }
+      run.retryRestartTimer = setTimeout(() => {
+        run.retryRestartTimer = null;
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        spawnRetryAttempt();
+      }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
       const attemptCount = run.retryAttemptCount ?? 0;
@@ -5863,8 +5953,9 @@ export async function startServer({
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
+          retry_delay_ms: decision.retryDelayMs,
         });
-        restartSameRunAfterRetry();
+        scheduleRetryRestart(decision.retryDelayMs);
         return true;
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream
@@ -7118,6 +7209,30 @@ export async function startServer({
         firstTokenAt: timestamp,
       };
     };
+    // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
+    // `cliReadyAt` is the first well-formed adapter output and is stamped for
+    // every runtime family from its own decode choke point: first JSONL line
+    // (claude-stream-json), first decoded stream event (json-event-stream /
+    // qoder / pi-rpc), first non-empty stdout chunk (plain), or first ACP
+    // JSON-RPC message (acp-json-rpc). `sessionInitDoneAt` is only observable
+    // for ACP (the resume/`session/new` ack); for stream/plain families that
+    // gap is folded into `spawn_to_first_token_remainder_ms` rather than
+    // anchored to a fabricated marker. Both are first-write-wins like
+    // `firstTokenAt` so a later chunk cannot move an already-stamped boundary.
+    const noteCliReadyAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.cliReadyAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        cliReadyAt: timestamp,
+      };
+    };
+    const noteSessionInitDoneAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.sessionInitDoneAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        sessionInitDoneAt: timestamp,
+      };
+    };
     const noteFirstTokenFromAgentEvent = (ev) => {
       if (ev?.type && FIRST_TOKEN_AGENT_EVENT_TYPES.has(ev.type)) {
         noteFirstTokenAt();
@@ -7333,6 +7448,9 @@ export async function startServer({
         }));
         return;
       }
+      // First well-formed decoded stream event = CLI ready for the
+      // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
+      noteCliReadyAt();
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -7370,6 +7488,9 @@ export async function startServer({
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
+        // First parsed claude-stream-json event = CLI ready (#3408 §4); the
+        // init/system line arrives well before the model's first token.
+        noteCliReadyAt();
         if (ev?.type === 'error') {
           if (agentStreamError) return;
           flushVisibleAgentStderr();
@@ -7529,6 +7650,8 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        onCliReady: () => noteCliReadyAt(),
+        onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
@@ -7598,6 +7721,10 @@ export async function startServer({
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
         const text = typeof chunk === 'string' ? chunk : String(chunk);
+        // First non-empty stdout chunk = CLI ready for the plain family
+        // (#3408 §4 marker). A plain adapter has no structured preamble, so
+        // this typically coincides with its first model output.
+        if (text.length > 0) noteCliReadyAt();
         const visibleText = titleMarkerStripper.strip(text);
         const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
