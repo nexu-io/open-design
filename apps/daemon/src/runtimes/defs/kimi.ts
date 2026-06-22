@@ -13,7 +13,7 @@ export const kimiAgentDef = {
       { id: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
     ],
     buildArgs: (prompt, _imagePaths, _extraAllowedDirs = [], options = {}) => {
-      const args = ['-p', prompt, '--output-format', 'stream-json'];
+      const args = ['--print', '-p', prompt, '--output-format', 'stream-json'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }

@@ -373,13 +373,21 @@ function handleKimiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     return true;
   }
 
-  if (
-    obj.role === 'assistant' &&
-    typeof obj.content === 'string' &&
-    obj.content.length > 0
-  ) {
-    onEvent({ type: 'text_delta', delta: obj.content });
-    return true;
+  if (obj.role === 'assistant' && !Array.isArray(obj.tool_calls)) {
+    if (typeof obj.content === 'string' && obj.content.length > 0) {
+      onEvent({ type: 'text_delta', delta: obj.content });
+      return true;
+    }
+    if (Array.isArray(obj.content)) {
+      const text = obj.content
+        .filter((part) => isRecord(part) && part.type === 'text' && typeof part.text === 'string' && (part.text as string).length > 0)
+        .map((part) => (part as { text: string }).text)
+        .join('');
+      if (text.length > 0) {
+        onEvent({ type: 'text_delta', delta: text });
+      }
+      return true;
+    }
   }
 
   if (obj.role === 'meta' && obj.type === 'session.resume_hint') {
