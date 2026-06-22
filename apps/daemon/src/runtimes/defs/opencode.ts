@@ -42,6 +42,7 @@ export const opencodeAgentDef = {
         'run',
         '--format',
         'json',
+        '--pure',
       ];
       if (options.model && options.model !== 'default') {
         args.push('-m', options.model);
