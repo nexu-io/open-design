@@ -5,13 +5,15 @@
   "title": "Huashu Slides",
   "title_i18n": {
     "en": "Huashu Slides",
-    "zh-CN": "花叔幻灯片"
+    "zh-CN": "花叔幻灯片",
+    "tr": "Huashu Slaytları"
   },
   "version": "1.0.0",
   "description": "Publication-grade single-file HTML decks from the slides workflow of 花叔's huashu-design skill: editorial masthead/kicker/serif-display grammar on a fixed 1920×1080 auto-fit canvas, one terracotta accent, light/dark rhythm, keyboard + hash navigation, anti-AI-slop rules, and an optional editable-PPTX path.",
   "description_i18n": {
     "en": "Publication-grade single-file HTML decks from the slides workflow of 花叔's huashu-design skill: editorial masthead/kicker/serif-display grammar on a fixed 1920×1080 auto-fit canvas, one terracotta accent, light/dark rhythm, keyboard + hash navigation, anti-AI-slop rules, and an optional editable-PPTX path.",
-    "zh-CN": "出版物级单文件 HTML 幻灯片，裁剪自花叔 huashu-design skill 的 slides 工作流：1920×1080 固定画布自适应缩放、报刊式 masthead/kicker/衬线大字版式、单一赤陶橙 accent、亮暗节奏交替、键盘翻页 + #/N hash 跳页、反 AI slop 守则，并可选导出可编辑 PPTX。"
+    "zh-CN": "出版物级单文件 HTML 幻灯片，裁剪自花叔 huashu-design skill 的 slides 工作流：1920×1080 固定画布自适应缩放、报刊式 masthead/kicker/衬线大字版式、单一赤陶橙 accent、亮暗节奏交替、键盘翻页 + #/N hash 跳页、反 AI slop 守则，并可选导出可编辑 PPTX。",
+    "tr": "花叔'nin huashu tasarım becerisinin slayt iş akışından yayın düzeyinde tek dosyalı HTML desteleri: sabit 1920×1080 otomatik sığdırılmış bir tuval üzerinde editoryal masthead/kicker/serif-ekran dilbilgisi, bir pişmiş toprak vurgu, açık/koyu ritim, klavye + karma gezinme, AI eğim önleme kuralları ve isteğe bağlı düzenlenebilir PPTX yolu."
   },
   "license": "MIT",
   "author": {

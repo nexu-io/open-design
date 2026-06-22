@@ -5,13 +5,15 @@
   "title": "Vignelli",
   "title_i18n": {
     "en": "Vignelli",
-    "zh-CN": "维涅里"
+    "zh-CN": "维涅里",
+    "tr": "Vignelli"
   },
   "version": "0.1.0",
   "description": "Bold typography with red accents",
   "description_i18n": {
     "en": "Bold typography with red accents",
-    "zh-CN": "维涅里风格的竖版强字幕动效，厚重的无衬线大字与强对比，适合社交竖屏。"
+    "zh-CN": "维涅里风格的竖版强字幕动效，厚重的无衬线大字与强对比，适合社交竖屏。",
+    "tr": "Kırmızı desenli cesur tipografi"
   },
   "license": "Apache-2.0",
   "author": {

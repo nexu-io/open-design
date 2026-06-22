@@ -5,13 +5,15 @@
   "title": "Build Minimal Frame",
   "title_i18n": {
     "en": "Build Minimal Frame",
-    "zh-CN": "奢华极简留白帧"
+    "zh-CN": "奢华极简留白帧",
+    "tr": "Minimal Çerçeve Oluşturun"
   },
   "version": "0.1.0",
   "description": "Luxury-minimal whitespace hero — single word reveals letter by letter, warm-gold hairline, breathing indicators.",
   "description_i18n": {
     "en": "Luxury-minimal whitespace hero — single word reveals letter by letter, warm-gold hairline, breathing indicators.",
-    "zh-CN": "奢华极简留白帧:单词逐字浮现 + 暖金细线 + 呼吸感细线指示器, 70%+ 留白"
+    "zh-CN": "奢华极简留白帧:单词逐字浮现 + 暖金细线 + 呼吸感细线指示器, 70%+ 留白",
+    "tr": "Lüks-minimum boşluk kahramanı — tek kelime, harfi harfine, sıcak altın rengi saç çizgisini, nefes alma göstergelerini ortaya çıkarır."
   },
   "license": "Apache-2.0",
   "author": {

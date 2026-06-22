@@ -5,13 +5,15 @@
   "title": "Data Rollup Frame",
   "title_i18n": {
     "en": "Data Rollup Frame",
-    "zh-CN": "数据滚动帧"
+    "zh-CN": "数据滚动帧",
+    "tr": "Veri Toplama Çerçevesi"
   },
   "version": "0.1.0",
   "description": "A native Remotion data frame — bars grow from zero by real data via spring physics while the figures roll 0→target in sync.",
   "description_i18n": {
     "en": "A native Remotion data frame — bars grow from zero by real data via spring physics while the figures roll 0→target in sync.",
-    "zh-CN": "数据滚动帧:原生 Remotion 数据动画 — 柱子按真实数据用 spring 从 0 长上去、数字同步从 0 滚到目标值。静态 HTML 图表做不出的'数字活起来'效果。"
+    "zh-CN": "数据滚动帧:原生 Remotion 数据动画 — 柱子按真实数据用 spring 从 0 长上去、数字同步从 0 滚到目标值。静态 HTML 图表做不出的'数字活起来'效果。",
+    "tr": "Yerel bir Remotion veri çerçevesi — çubuklar, bahar fiziği yoluyla gerçek verilerle sıfırdan büyürken, rakamlar senkronize olarak 0 → hedef döner."
   },
   "license": "Apache-2.0",
   "author": {

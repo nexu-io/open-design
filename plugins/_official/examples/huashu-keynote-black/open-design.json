@@ -5,13 +5,15 @@
   "title": "Keynote Black",
   "title_i18n": {
     "en": "Keynote Black",
-    "zh-CN": "黑场大数字"
+    "zh-CN": "黑场大数字",
+    "tr": "Açılış Siyahı"
   },
   "version": "1.0.0",
   "description": "Jobs-2007 / Lei-Jun-launch-event keynote decks: pure black #000000 stage, pure white type, one word or one giant tabular-nums numeral per screen, exactly one brand accent (Mi orange #FF6900 / Spotify green #1ED760 / Apple blue #2997FF) per deck, massive negative space, faint center spotlight, accent-vs-grey spec-comparison bars, and a price-reveal climax page on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design black-big-number-stage (design-styles.md 大胆派「黑底巨型数字剧场」, generated from spec and wrapped in a full multi-section deck shell).",
   "description_i18n": {
     "en": "Jobs-2007 / Lei-Jun-launch-event keynote decks: pure black #000000 stage, pure white type, one word or one giant tabular-nums numeral per screen, exactly one brand accent (Mi orange #FF6900 / Spotify green #1ED760 / Apple blue #2997FF) per deck, massive negative space, faint center spotlight, accent-vs-grey spec-comparison bars, and a price-reveal climax page on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design black-big-number-stage (design-styles.md 大胆派「黑底巨型数字剧场」, generated from spec and wrapped in a full multi-section deck shell).",
-    "zh-CN": "Jobs 2007 / 雷军发布会流派主题演讲幻灯片：纯黑 #000000 舞台 + 纯白文字高反差，一屏一词或一个超大 tabular-nums 数字，整套 deck 只选一个品牌强调色（小米橙 #FF6900 / Spotify 绿 #1ED760 / Apple 蓝 #2997FF），大量负空间、极淡中心聚光、强调色对灰色的参数对比条、价格揭晓高潮页，1920×1080 固定画布。基于花叔 huashu-design design-styles.md 大胆派「黑底巨型数字剧场」spec 现场生成，并扩成完整多章节 deck 外壳。"
+    "zh-CN": "Jobs 2007 / 雷军发布会流派主题演讲幻灯片：纯黑 #000000 舞台 + 纯白文字高反差，一屏一词或一个超大 tabular-nums 数字，整套 deck 只选一个品牌强调色（小米橙 #FF6900 / Spotify 绿 #1ED760 / Apple 蓝 #2997FF），大量负空间、极淡中心聚光、强调色对灰色的参数对比条、价格揭晓高潮页，1920×1080 固定画布。基于花叔 huashu-design design-styles.md 大胆派「黑底巨型数字剧场」spec 现场生成，并扩成完整多章节 deck 外壳。",
+    "tr": "Jobs-2007 / Lei-Haziran-lansman etkinliği açılış konuşması desteleri: saf siyah #000000 sahne, saf beyaz tip, ekran başına bir kelime veya dev tablo şeklinde rakamlar, her destede tam olarak bir marka vurgusu (Mi turuncu #FF6900 / Spotify yeşil #1ED760 / Apple mavi #2997FF), büyük negatif alan, soluk merkez spot ışığı, griye karşı vurgulu özellik karşılaştırma çubukları ve sabit bir 1920×1080 tuval üzerinde fiyat açıklama doruk sayfası. https://github.com/alchaincyf/huashu-design black-big-number-stage (design-styles.md 大胆派「黑底巨型数字剧场」) temel alınarak spesifikasyonlardan oluşturulmuş ve tam çok bölümlü bir güverte kabuğuna sarılmıştır."
   },
   "license": "MIT",
   "author": {

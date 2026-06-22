@@ -5,13 +5,15 @@
   "title": "Narrative Sparkline",
   "title_i18n": {
     "en": "Narrative Sparkline",
-    "zh-CN": "叙事波形"
+    "zh-CN": "叙事波形",
+    "tr": "Anlatı Mini Özeti"
   },
   "version": "1.0.0",
   "description": "Duarte-style narrative sparkline decks: one oscillating SVG bézier waveform spanning the full 1920×1080 canvas, brand-orange (#FF6B2C) turning-point annotations, greyed ghost comparison lines, stroke-dashoffset progressive reveal, mono hairline chrome, Inter + Geist Mono. Built for change narratives, before/after contrasts, and data story arcs. Based on https://github.com/alchaincyf/huashu-design narrative-sparkline (references/design-styles.md · 中性派 · Sparkline叙事波形), generated from spec into a full multi-section deck.",
   "description_i18n": {
     "en": "Duarte-style narrative sparkline decks: one oscillating SVG bézier waveform spanning the full 1920×1080 canvas, brand-orange (#FF6B2C) turning-point annotations, greyed ghost comparison lines, stroke-dashoffset progressive reveal, mono hairline chrome, Inter + Geist Mono. Built for change narratives, before/after contrasts, and data story arcs. Based on https://github.com/alchaincyf/huashu-design narrative-sparkline (references/design-styles.md · 中性派 · Sparkline叙事波形), generated from spec into a full multi-section deck.",
-    "zh-CN": "Duarte 流派叙事波形幻灯片：横贯 1920×1080 全屏的 SVG 贝塞尔振荡波形线、品牌橙 #FF6B2C 转折点标注、灰化对照波形、stroke-dashoffset 逐步 reveal、等宽字 hairline 信息条，Inter + Geist Mono 双字体。适合变革叙事、before/after 对照与数据故事弧线。基于花叔 huashu-design 的 narrative-sparkline 规格（design-styles.md 中性派 · Sparkline叙事波形）按 spec 生成完整多章节 deck。"
+    "zh-CN": "Duarte 流派叙事波形幻灯片：横贯 1920×1080 全屏的 SVG 贝塞尔振荡波形线、品牌橙 #FF6B2C 转折点标注、灰化对照波形、stroke-dashoffset 逐步 reveal、等宽字 hairline 信息条，Inter + Geist Mono 双字体。适合变革叙事、before/after 对照与数据故事弧线。基于花叔 huashu-design 的 narrative-sparkline 规格（design-styles.md 中性派 · Sparkline叙事波形）按 spec 生成完整多章节 deck。",
+    "tr": "Duarte tarzı anlatımlı mini grafik desteleri: 1920×1080 tuvalin tamamını kapsayan bir salınımlı SVG bézier dalga formu, marka-turuncu (#FF6B2C) dönüm noktası açıklamaları, gri gölgeli karşılaştırma çizgileri, kontur-çizgi ofseti aşamalı ortaya çıkarma, mono ince çizgili krom, Inter + Geist Mono. Değişim anlatıları, öncesi/sonrası karşılaştırmaları ve veri hikayeleri için tasarlandı. https://github.com/alchaincyf/huashu-design anlatı-sparkline (references/design-styles.md · 中性派 · Sparkline叙事波形) temel alınarak spesifikasyondan tam çok bölümlü bir desteye dönüştürülmüştür."
   },
   "license": "MIT",
   "author": {

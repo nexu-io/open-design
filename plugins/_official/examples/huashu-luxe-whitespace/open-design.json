@@ -5,13 +5,15 @@
   "title": "Luxe Whitespace",
   "title_i18n": {
     "en": "Luxe Whitespace",
-    "zh-CN": "奢华留白"
+    "zh-CN": "奢华留白",
+    "tr": "Lüks Boşluk"
   },
   "version": "1.0.0",
   "description": "Quiet-luxury decks with 70%+ whitespace: a warm off-white #FAFAF8 canvas, Inter 200-600 ultra-thin hierarchy, 120px weight-200 floating numerals with gold decimal points, one warm gold (#D4A574) spent only on hairlines and winning comparison bars, and gradient hairline separators (#E0DCD6) on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-build, expanded from a single showcase page into a full multi-section deck.",
   "description_i18n": {
     "en": "Quiet-luxury decks with 70%+ whitespace: a warm off-white #FAFAF8 canvas, Inter 200-600 ultra-thin hierarchy, 120px weight-200 floating numerals with gold decimal points, one warm gold (#D4A574) spent only on hairlines and winning comparison bars, and gradient hairline separators (#E0DCD6) on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-build, expanded from a single showcase page into a full multi-section deck.",
-    "zh-CN": "奢侈品级 70%+ 留白幻灯片：米白 #FAFAF8 底、Inter 200–600 超细字重层级、120px 超细数字悬浮 + 金色小数点、唯一暖金 #D4A574 只用于发丝线与获胜对比条、渐变发丝线分隔 #E0DCD6，1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design 的 ppt-build 单页范本扩展为完整多章节 deck。"
+    "zh-CN": "奢侈品级 70%+ 留白幻灯片：米白 #FAFAF8 底、Inter 200–600 超细字重层级、120px 超细数字悬浮 + 金色小数点、唯一暖金 #D4A574 只用于发丝线与获胜对比条、渐变发丝线分隔 #E0DCD6，1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design 的 ppt-build 单页范本扩展为完整多章节 deck。",
+    "tr": "%70'in üzerinde boşluk içeren sessiz lüks desteler: sıcak kirli beyaz #FAFAF8 tuval, Inter 200-600 ultra ince hiyerarşi, altın ondalık noktalı 120 piksel ağırlıkta 200 kayan rakamlar, yalnızca ince çizgiler ve kazanan karşılaştırma çubukları için harcanan bir sıcak altın (#D4A574) ve sabit bir 1920×1080 tuval üzerinde degrade ince çizgi ayırıcılar (#E0DCD6). https://github.com/alchaincyf/huashu-design ppt-build temel alınarak, tek bir vitrin sayfasından tam çok bölümlü bir sunuma genişletildi."
   },
   "license": "MIT",
   "author": {

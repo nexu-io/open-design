@@ -5,13 +5,15 @@
   "title": "Creative Voltage",
   "title_i18n": {
     "en": "Creative Voltage",
-    "zh-CN": "创意伏特"
+    "zh-CN": "创意伏特",
+    "tr": "Yaratıcı Gerilim"
   },
   "version": "1.0.0",
   "description": "Retro-modern single-file HTML decks: electric blue x deep navy split panels, neon yellow badges, halftone dot textures, and script flourishes with Syne + Space Mono on a fixed 1920x1080 stage that scales to any viewport. Based on zarazhangrui/frontend-slides Creative Voltage preset (STYLE_PRESETS.md section 3).",
   "description_i18n": {
     "en": "Retro-modern single-file HTML decks: electric blue x deep navy split panels, neon yellow badges, halftone dot textures, and script flourishes with Syne + Space Mono on a fixed 1920x1080 stage that scales to any viewport. Based on zarazhangrui/frontend-slides Creative Voltage preset (STYLE_PRESETS.md section 3).",
-    "zh-CN": "复古现代撞色单文件 HTML 幻灯片：电光蓝 × 深海军双色分割版面、荧光黄徽章、halftone 网点纹理与 script 手写点缀，Syne + Space Mono 字体，固定 1920x1080 舞台等比缩放适配任意屏幕。基于 zarazhangrui/frontend-slides 的 Creative Voltage 预设（STYLE_PRESETS.md 第 3 节）。"
+    "zh-CN": "复古现代撞色单文件 HTML 幻灯片：电光蓝 × 深海军双色分割版面、荧光黄徽章、halftone 网点纹理与 script 手写点缀，Syne + Space Mono 字体，固定 1920x1080 舞台等比缩放适配任意屏幕。基于 zarazhangrui/frontend-slides 的 Creative Voltage 预设（STYLE_PRESETS.md 第 3 节）。",
+    "tr": "Retro-modern tek dosyalı HTML desteleri: elektrik mavisi x derin lacivert bölmeli paneller, neon sarı rozetler, yarı tonlu nokta dokuları ve herhangi bir görüntü alanına ölçeklenebilen sabit bir 1920x1080 sahne üzerinde Syne + Space Mono ile zenginleşen yazı. zarazhangrui/frontend-slides Yaratıcı Gerilim ön ayarına dayanmaktadır (STYLE_PRESETS.md bölüm 3)."
   },
   "license": "MIT",
   "author": {

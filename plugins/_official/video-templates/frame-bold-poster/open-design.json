@@ -5,13 +5,15 @@
   "title": "Bold Poster Frame",
   "title_i18n": {
     "en": "Bold Poster Frame",
-    "zh-CN": "大胆海报帧"
+    "zh-CN": "大胆海报帧",
+    "tr": "Kalın Poster Çerçevesi"
   },
   "version": "0.1.0",
   "description": "A 1970s European editorial poster in motion — a red rule draws across, a giant tilted figure drops in, a three-line headline rises line-by-line, an italic serif standfirst fades.",
   "description_i18n": {
     "en": "A 1970s European editorial poster in motion — a red rule draws across, a giant tilted figure drops in, a three-line headline rises line-by-line, an italic serif standfirst fades.",
-    "zh-CN": "大胆海报帧:1970s 欧洲社论海报风 + 番红强调色 + 巨型倾斜 Shrikhand 大字 + 三行标题逐行升起 + 衬线斜体副题, 印刷质感强。"
+    "zh-CN": "大胆海报帧:1970s 欧洲社论海报风 + 番红强调色 + 巨型倾斜 Shrikhand 大字 + 三行标题逐行升起 + 衬线斜体副题, 印刷质感强。",
+    "tr": "1970'lerden kalma bir Avrupa editoryal posteri, hareket halinde; kırmızı bir kural çiziliyor, dev bir eğik figür düşüyor, üç satırlık bir başlık satır satır yükseliyor, baştaki italik bir serif kayboluyor."
   },
   "license": "Apache-2.0",
   "author": {

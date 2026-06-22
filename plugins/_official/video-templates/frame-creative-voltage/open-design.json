@@ -5,13 +5,15 @@
   "title": "Creative Voltage Frame",
   "title_i18n": {
     "en": "Creative Voltage Frame",
-    "zh-CN": "创意电压分屏帧"
+    "zh-CN": "创意电压分屏帧",
+    "tr": "Yaratıcı Gerilim Çerçevesi"
   },
   "version": "0.1.0",
   "description": "Electric split with hand-drawn script — offset panels slide in, display title rises with an outlined word, script strokes itself in.",
   "description_i18n": {
     "en": "Electric split with hand-drawn script — offset panels slide in, display title rises with an outlined word, script strokes itself in.",
-    "zh-CN": "创意电压分屏帧:电光蓝/暗错位分屏滑入 + 描边电光词 + 手写 script 自描, 复古现代有活力"
+    "zh-CN": "创意电压分屏帧:电光蓝/暗错位分屏滑入 + 描边电光词 + 手写 script 自描, 复古现代有活力",
+    "tr": "Elle çizilmiş yazıyla elektrikli bölünme — ofset paneller içeri kayar, ekran başlığı ana hatlarıyla belirtilen bir kelimeyle yükselir, yazı kendi kendine girer."
   },
   "license": "Apache-2.0",
   "author": {

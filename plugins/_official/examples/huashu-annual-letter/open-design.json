@@ -5,13 +5,15 @@
   "title": "Annual Letter",
   "title_i18n": {
     "en": "Annual Letter",
-    "zh-CN": "年度信笺"
+    "zh-CN": "年度信笺",
+    "tr": "Yıllık Mektup"
   },
   "version": "1.0.0",
   "description": "Stripe-annual-letter style single-file HTML decks: cream #FBFAF8 paper with a single Stripe-purple #635BFF accent, serif prose paragraphs at a 65ch publication measure, inline data cards embedded in the running text, and oversized tabular display-number anchor pages — the 'editorial longform' letter genre, prose flow instead of bullets. Based on alchaincyf/huashu-design editorial-longform (design-styles.md 安静派 · Editorial Longform).",
   "description_i18n": {
     "en": "Stripe-annual-letter style single-file HTML decks: cream #FBFAF8 paper with a single Stripe-purple #635BFF accent, serif prose paragraphs at a 65ch publication measure, inline data cards embedded in the running text, and oversized tabular display-number anchor pages — the 'editorial longform' letter genre, prose flow instead of bullets. Based on alchaincyf/huashu-design editorial-longform (design-styles.md 安静派 · Editorial Longform).",
-    "zh-CN": "Stripe 年度信流派的单文件 HTML 幻灯片：奶白 #FBFAF8 纸面 + 单一 Stripe 紫 #635BFF 点睛，衬线散文体段落控制在 65ch 出版物行宽，内联数据卡嵌进正文流，超大 tabular display 数字锚点页穿插——「散文流 + 内联数据卡」的年度信文体，用段落而不是 bullet 说话。Based on alchaincyf/huashu-design editorial-longform（design-styles.md 安静派 · 杂志编辑长文流）。"
+    "zh-CN": "Stripe 年度信流派的单文件 HTML 幻灯片：奶白 #FBFAF8 纸面 + 单一 Stripe 紫 #635BFF 点睛，衬线散文体段落控制在 65ch 出版物行宽，内联数据卡嵌进正文流，超大 tabular display 数字锚点页穿插——「散文流 + 内联数据卡」的年度信文体，用段落而不是 bullet 说话。Based on alchaincyf/huashu-design editorial-longform（design-styles.md 安静派 · 杂志编辑长文流）。",
+    "tr": "Yıllık şeritli harf stili tek dosyalı HTML desteleri: Tek Şerit-mor #635BFF vurgulu krem ​​#FBFAF8 kağıdı, 65 kanallı yayın ölçüsünde serif düzyazı paragrafları, çalışan metne gömülü satır içi veri kartları ve büyük boyutlu tablolu ekran numarası bağlantı sayfaları - 'editöre ait uzun biçimli' harf türü, madde işaretleri yerine düzyazı akışı. alchaincyf/huashu-design editoryal-longform'a (design-styles.md 安静派 · Editoryal Uzun Form) dayanmaktadır."
   },
   "license": "MIT",
   "author": {

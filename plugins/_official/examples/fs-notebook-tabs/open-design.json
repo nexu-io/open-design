@@ -5,13 +5,15 @@
   "title": "Notebook Tabs",
   "title_i18n": {
     "en": "Notebook Tabs",
-    "zh-CN": "索引笔记本"
+    "zh-CN": "索引笔记本",
+    "tr": "Defter Sekmeleri"
   },
   "version": "1.0.0",
   "description": "Editorial 'physical notebook' HTML decks: a cream paper card (#f8f6f1) floating on a dark ground, mint/lavender/pink/sky index tabs on the right fore-edge, binder holes on the left, Bodoni Moda display + DM Sans body, on a fixed 1920x1080 stage that scales to any viewport. Based on zarazhangrui/frontend-slides 'Notebook Tabs' style preset (STYLE_PRESETS.md section 5).",
   "description_i18n": {
     "en": "Editorial 'physical notebook' HTML decks: a cream paper card (#f8f6f1) floating on a dark ground, mint/lavender/pink/sky index tabs on the right fore-edge, binder holes on the left, Bodoni Moda display + DM Sans body, on a fixed 1920x1080 stage that scales to any viewport. Based on zarazhangrui/frontend-slides 'Notebook Tabs' style preset (STYLE_PRESETS.md section 5).",
-    "zh-CN": "编辑系「实体笔记本」HTML 幻灯片：深底之上的奶油纸卡 (#f8f6f1)，右缘薄荷/薰衣草/粉/天蓝竖向索引标签 + 左侧活页装订孔装饰，Bodoni Moda 标题 + DM Sans 正文，固定 1920x1080 舞台等比缩放适配任意视口。基于 zarazhangrui/frontend-slides 的 Notebook Tabs 风格预设（STYLE_PRESETS.md 第 5 节）。"
+    "zh-CN": "编辑系「实体笔记本」HTML 幻灯片：深底之上的奶油纸卡 (#f8f6f1)，右缘薄荷/薰衣草/粉/天蓝竖向索引标签 + 左侧活页装订孔装饰，Bodoni Moda 标题 + DM Sans 正文，固定 1920x1080 舞台等比缩放适配任意视口。基于 zarazhangrui/frontend-slides 的 Notebook Tabs 风格预设（STYLE_PRESETS.md 第 5 节）。",
+    "tr": "Editoryal 'fiziksel not defteri' HTML desteleri: karanlık bir zemin üzerinde yüzen krem ​​renkli bir kağıt kart (#f8f6f1), sağ ön kenarda nane/lavanta/pembe/gökyüzü dizin sekmeleri, solda dosya delikleri, Bodoni Moda ekranı + DM Sans gövdesi, herhangi bir görüntü alanına ölçeklenebilen sabit bir 1920x1080 sahne üzerinde. zarazhangrui/frontend-slides 'Notebook Sekmeleri' stili ön ayarına dayanmaktadır (STYLE_PRESETS.md bölüm 5)."
   },
   "license": "MIT",
   "author": {

@@ -5,13 +5,15 @@
   "title": "Bold Signal Frame",
   "title_i18n": {
     "en": "Bold Signal Frame",
-    "zh-CN": "大胆信号卡帧"
+    "zh-CN": "大胆信号卡帧",
+    "tr": "Kalın Sinyal Çerçevesi"
   },
   "version": "0.1.0",
   "description": "Bold colored card on a dark gradient — big section number, nav breadcrumb, orange card sliding in, title rising.",
   "description_i18n": {
     "en": "Bold colored card on a dark gradient — big section number, nav breadcrumb, orange card sliding in, title rising.",
-    "zh-CN": "大胆信号卡帧:暗渐变底 + 大编号 + 导航面包屑 + 橙色卡片滑入 + 标题升起, 高冲击力"
+    "zh-CN": "大胆信号卡帧:暗渐变底 + 大编号 + 导航面包屑 + 橙色卡片滑入 + 标题升起, 高冲击力",
+    "tr": "Koyu bir degrade üzerinde kalın renkli kart — büyük bölüm numarası, gezinme kırıntısı, içeri kayan turuncu kart, yükselen başlık."
   },
   "license": "Apache-2.0",
   "author": {

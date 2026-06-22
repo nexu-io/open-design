@@ -5,13 +5,15 @@
   "title": "Bauhaus Primary",
   "title_i18n": {
     "en": "Bauhaus Primary",
-    "zh-CN": "包豪斯三原色"
+    "zh-CN": "包豪斯三原色",
+    "tr": "Bauhaus İlköğretim Okulu"
   },
   "version": "1.0.0",
   "description": "Design-history geometric deck: aged canvas #f4efe3, the red/yellow/blue primaries (#e03c27/#f4c430/#1d4eaf), a hard three-band gradient, zero border radius, 2px ink strokes, hard offset shadows, Archivo Black + Space Grotesk. Based on lewislulu/html-ppt-skill bauhaus theme — single-file HTML deck with keyboard navigation and #/N hash deep links.",
   "description_i18n": {
     "en": "Design-history geometric deck: aged canvas #f4efe3, the red/yellow/blue primaries (#e03c27/#f4c430/#1d4eaf), a hard three-band gradient, zero border radius, 2px ink strokes, hard offset shadows, Archivo Black + Space Grotesk. Based on lewislulu/html-ppt-skill bauhaus theme — single-file HTML deck with keyboard navigation and #/N hash deep links.",
-    "zh-CN": "设计史几何主义幻灯片：做旧画布 #f4efe3 + 红黄蓝三原色 #e03c27/#f4c430/#1d4eaf + 三段硬分色渐变，零圆角、2px 黑描边、硬偏移阴影，Archivo Black + Space Grotesk。基于 lewislulu/html-ppt-skill 的 bauhaus 主题——单文件 HTML 幻灯片，键盘翻页 + #/N 哈希直达。"
+    "zh-CN": "设计史几何主义幻灯片：做旧画布 #f4efe3 + 红黄蓝三原色 #e03c27/#f4c430/#1d4eaf + 三段硬分色渐变，零圆角、2px 黑描边、硬偏移阴影，Archivo Black + Space Grotesk。基于 lewislulu/html-ppt-skill 的 bauhaus 主题——单文件 HTML 幻灯片，键盘翻页 + #/N 哈希直达。",
+    "tr": "Tasarım geçmişi geometrik döşeme: eskitilmiş tuval #f4efe3, kırmızı/sarı/mavi ana renkler (#e03c27/#f4c430/#1d4eaf), sert üç bantlı degrade, sıfır kenarlık yarıçapı, 2 piksel mürekkep vuruşları, sert ofset gölgeler, Archivo Black + Space Grotesk. Lewislulu/html-ppt-skill bauhaus temasına dayalıdır — klavye gezintisi ve #/N karma derin bağlantılarına sahip tek dosyalı HTML desteği."
   },
   "license": "MIT",
   "author": {

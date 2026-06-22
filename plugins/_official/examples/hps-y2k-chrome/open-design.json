@@ -5,13 +5,15 @@
   "title": "Y2K Chrome",
   "title_i18n": {
     "en": "Y2K Chrome",
-    "zh-CN": "千禧银铬"
+    "zh-CN": "千禧银铬",
+    "tr": "Y2K Krom"
   },
   "version": "1.0.0",
   "description": "Y2K chrome deck — full-bleed 5-stop silver-metal gradient canvas, white→steel→gunmetal chrome-clipped H1 headlines, 72% white frosted-glass cards with inset top highlights, 26–36px mega-radius corners, candy purple #8a5cff / aqua #3ccfd8 / pink #ff84c4 accents, glossy orb and sparkle decor, Space Grotesk type. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill y2k-chrome. Use for product launches, consumer-app pitches, music/fashion/creator decks, or anything that wants millennium-bug-era metallic shine.",
   "description_i18n": {
     "en": "Y2K chrome deck — full-bleed 5-stop silver-metal gradient canvas, white→steel→gunmetal chrome-clipped H1 headlines, 72% white frosted-glass cards with inset top highlights, 26–36px mega-radius corners, candy purple #8a5cff / aqua #3ccfd8 / pink #ff84c4 accents, glossy orb and sparkle decor, Space Grotesk type. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill y2k-chrome. Use for product launches, consumer-app pitches, music/fashion/creator decks, or anything that wants millennium-bug-era metallic shine.",
-    "zh-CN": "千禧银铬幻灯片——5 段银铬金属渐变满版底，H1 白→钢→枪灰铬色裁切字，72% 白磨砂玻璃卡带 inset 顶部高光，26–36px 巨圆角，糖果紫 #8a5cff / 水蓝 #3ccfd8 / 粉 #ff84c4 accent，光泽圆球与星芒装饰，Space Grotesk 字体。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 y2k-chrome 主题。适合产品发布、消费级 App 路演、音乐/时尚/创作者主题等想要千禧年金属光泽的演示。"
+    "zh-CN": "千禧银铬幻灯片——5 段银铬金属渐变满版底，H1 白→钢→枪灰铬色裁切字，72% 白磨砂玻璃卡带 inset 顶部高光，26–36px 巨圆角，糖果紫 #8a5cff / 水蓝 #3ccfd8 / 粉 #ff84c4 accent，光泽圆球与星芒装饰，Space Grotesk 字体。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 y2k-chrome 主题。适合产品发布、消费级 App 路演、音乐/时尚/创作者主题等想要千禧年金属光泽的演示。",
+    "tr": "Y2K krom kaplama — tam ekran 5 kademeli gümüş metal degrade kanvas, beyaz → çelik → tunç krom kesimli H1 başlıklar, üst kısım vurgulu %72 beyaz buzlu cam kartlar, 26–36 piksel mega yarıçaplı köşeler, şeker moru #8a5cff / aqua #3ccfd8 / pembe #ff84c4 vurgular, parlak küre ve ışıltılı dekor, Space Grotesk tipi. Tek dosyalı HTML, klavyede gezinme, sıfır bağımlılık. Lewislulu/html-ppt-skill y2k-chrome'a ​​dayanmaktadır. Ürün lansmanları, tüketici uygulaması tanıtımları, müzik/moda/yaratıcı desteleri veya milenyum böcek döneminin metalik parlaklığını isteyen herhangi bir şey için kullanın."
   },
   "license": "MIT",
   "author": {

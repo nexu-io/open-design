@@ -5,13 +5,15 @@
   "title": "Play Mode",
   "title_i18n": {
     "en": "Play Mode",
-    "zh-CN": "玩乐模式"
+    "zh-CN": "玩乐模式",
+    "tr": "Çalma Modu"
   },
   "version": "0.1.0",
   "description": "Playful elastic animations",
   "description_i18n": {
     "en": "Playful elastic animations",
-    "zh-CN": "活泼俏皮的短视频动效，明快的色彩与弹跳节奏，适合社交短片与轻量预告。"
+    "zh-CN": "活泼俏皮的短视频动效，明快的色彩与弹跳节奏，适合社交短片与轻量预告。",
+    "tr": "Eğlenceli elastik animasyonlar"
   },
   "license": "Apache-2.0",
   "author": {

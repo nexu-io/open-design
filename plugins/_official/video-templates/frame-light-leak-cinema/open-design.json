@@ -5,13 +5,15 @@
   "title": "Light-Leak Cinematic Frame",
   "title_i18n": {
     "en": "Light-Leak Cinematic Frame",
-    "zh-CN": "胶片漏光电影帧"
+    "zh-CN": "胶片漏光电影帧",
+    "tr": "Işık Sızdıran Sinematik Çerçeve"
   },
   "version": "0.1.0",
   "description": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
   "description_i18n": {
     "en": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
-    "zh-CN": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡"
+    "zh-CN": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡",
+    "tr": "Sinematik açılışlar veya bölüm kartları için film ışığı sızıntıları, gren, 16:9 posta kutusu ve büyük serif tipi."
   },
   "license": "Apache-2.0",
   "author": {

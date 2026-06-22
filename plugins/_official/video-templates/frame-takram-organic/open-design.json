@@ -5,13 +5,15 @@
   "title": "Takram Organic Frame",
   "title_i18n": {
     "en": "Takram Organic Frame",
-    "zh-CN": "东方柔和有机帧"
+    "zh-CN": "东方柔和有机帧",
+    "tr": "Takram Organik Çerçeve"
   },
   "version": "0.1.0",
   "description": "Soft-tech radial node graph as art — frosted rounded card, curved links drawing in, nodes popping outward, gentle float.",
   "description_i18n": {
     "en": "Soft-tech radial node graph as art — frosted rounded card, curved links drawing in, nodes popping outward, gentle float.",
-    "zh-CN": "东方柔和有机帧:毛玻璃圆角卡 + 曲线连接描入 + 放射节点弹出 + 柔和漂浮, 米色自然色调"
+    "zh-CN": "东方柔和有机帧:毛玻璃圆角卡 + 曲线连接描入 + 放射节点弹出 + 柔和漂浮, 米色自然色调",
+    "tr": "Sanat eseri gibi yumuşak teknolojili radyal düğüm grafiği - buzlu yuvarlak kart, içeri doğru çekilen kavisli bağlantılar, dışarı doğru fırlayan düğümler, hafifçe süzülme."
   },
   "license": "Apache-2.0",
   "author": {

@@ -5,13 +5,15 @@
   "title": "Retro TV",
   "title_i18n": {
     "en": "Retro TV",
-    "zh-CN": "复古显像管"
+    "zh-CN": "复古显像管",
+    "tr": "retro televizyon"
   },
   "version": "1.0.0",
   "description": "80s/90s picture-tube deck — warm cream canvas with CRT scanlines on every slide (::before repeating-gradient) over a curved-glass tube vignette, amber #e67e14 / brick-red #c73a1f accents, Playfair Display headlines with heavy offset shadows, test-card color bars and antenna/dial inline-SVG decor. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill retro-tv. Use for nostalgic product launches, media or entertainment pitches, retrospectives, or any deck that wants warm broadcast-era television energy.",
   "description_i18n": {
     "en": "80s/90s picture-tube deck — warm cream canvas with CRT scanlines on every slide (::before repeating-gradient) over a curved-glass tube vignette, amber #e67e14 / brick-red #c73a1f accents, Playfair Display headlines with heavy offset shadows, test-card color bars and antenna/dial inline-SVG decor. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill retro-tv. Use for nostalgic product launches, media or entertainment pitches, retrospectives, or any deck that wants warm broadcast-era television energy.",
-    "zh-CN": "80/90 年代显像管幻灯片——暖奶油底，每页叠加 CRT 扫描线（::before repeating-gradient），底层是显像管弧面暗角背景；琥珀 #e67e14 / 砖红 #c73a1f accent，Playfair Display 大标题配厚重偏移投影，检验图彩条与天线/旋钮内联 SVG 装饰。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 retro-tv 主题。适合怀旧产品发布、媒体娱乐提案、年度回顾等想要老电视机广播质感的演示。"
+    "zh-CN": "80/90 年代显像管幻灯片——暖奶油底，每页叠加 CRT 扫描线（::before repeating-gradient），底层是显像管弧面暗角背景；琥珀 #e67e14 / 砖红 #c73a1f accent，Playfair Display 大标题配厚重偏移投影，检验图彩条与天线/旋钮内联 SVG 装饰。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 retro-tv 主题。适合怀旧产品发布、媒体娱乐提案、年度回顾等想要老电视机广播质感的演示。",
+    "tr": "80'ler/90'lar resim tüpü destesi — kavisli cam tüp skeçi üzerinde her slaytta CRT tarama çizgileri (::yinelenen degradeden önce) bulunan sıcak krem ​​rengi kanvas, kehribar #e67e14 / tuğla kırmızısı #c73a1f vurgular, yoğun gölgeli Playfair Display başlıkları, test kartı renk çubukları ve anten/kadran satır içi SVG dekoru. Tek dosyalı HTML, klavyede gezinme, sıfır bağımlılık. Lewislulu/html-ppt-skill retro-tv'ye dayanmaktadır. Nostaljik ürün lansmanları, medya veya eğlence sunumları, retrospektifler veya sıcak yayın dönemi televizyon enerjisi isteyen herhangi bir sunum için kullanın."
   },
   "license": "MIT",
   "author": {

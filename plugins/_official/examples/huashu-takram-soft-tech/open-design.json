@@ -5,13 +5,15 @@
   "title": "Takram Soft Tech",
   "title_i18n": {
     "en": "Takram Soft Tech",
-    "zh-CN": "东方柔光科技"
+    "zh-CN": "东方柔光科技",
+    "tr": "Takram Soft Tech"
   },
   "version": "1.0.0",
   "description": "Soft Eastern-philosophy tech decks: warm rice-paper canvas (#F5F0EB), sage green #6B8F71 + one gold #D4A574 + warm grays, Noto Serif SC display headings mixed with Inter labels, rounded translucent data cards, and SVG data visualization treated as an art piece — three-series overlaid radar charts on hand-drawn dashed grids with Fig. NN plate annotations, on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-takram, expanded from a single showcase page into a full multi-section deck.",
   "description_i18n": {
     "en": "Soft Eastern-philosophy tech decks: warm rice-paper canvas (#F5F0EB), sage green #6B8F71 + one gold #D4A574 + warm grays, Noto Serif SC display headings mixed with Inter labels, rounded translucent data cards, and SVG data visualization treated as an art piece — three-series overlaid radar charts on hand-drawn dashed grids with Fig. NN plate annotations, on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-takram, expanded from a single showcase page into a full multi-section deck.",
-    "zh-CN": "东方哲学柔和科技感幻灯片：米色和纸底 #F5F0EB、鼠尾草绿 #6B8F71 + 唯一金 #D4A574 + 暖灰自然色系、Noto Serif SC 衬线大标题与 Inter 标签混排、圆角半透明数据卡片，招牌装置是「数据可视化当艺术品」——手绘感虚线同心网格上的三色叠加 SVG 雷达图与 Fig. NN 图版注记，1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design 的 ppt-takram 单页范本扩展为完整多章节 deck。"
+    "zh-CN": "东方哲学柔和科技感幻灯片：米色和纸底 #F5F0EB、鼠尾草绿 #6B8F71 + 唯一金 #D4A574 + 暖灰自然色系、Noto Serif SC 衬线大标题与 Inter 标签混排、圆角半透明数据卡片，招牌装置是「数据可视化当艺术品」——手绘感虚线同心网格上的三色叠加 SVG 雷达图与 Fig. NN 图版注记，1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design 的 ppt-takram 单页范本扩展为完整多章节 deck。",
+    "tr": "Yumuşak Doğu felsefesi teknoloji desteleri: sıcak pirinç kağıdı kanvas (#F5F0EB), adaçayı yeşili #6B8F71 + bir altın #D4A574 + sıcak griler, Inter etiketleriyle karıştırılmış Noto Serif SC ekran başlıkları, yuvarlak yarı saydam veri kartları ve bir sanat eseri gibi değerlendirilen SVG veri görselleştirmesi — sabit bir düzlemde, Fig. NN plaka açıklamaları ile elle çizilmiş kesikli ızgaralar üzerinde üç serili üst üste bindirilmiş radar grafikleri 1920×1080 tuval. https://github.com/alchaincyf/huashu-design ppt-takram'a dayanarak, tek bir vitrin sayfasından tam çok bölümlü bir sunuma genişletildi."
   },
   "license": "MIT",
   "author": {

@@ -5,13 +5,15 @@
   "title": "Frontend Slides",
   "title_i18n": {
     "en": "Frontend Slides",
-    "zh-CN": "Frontend Slides 动效幻灯片"
+    "zh-CN": "Frontend Slides 动效幻灯片",
+    "tr": "Ön Uç Slaytları"
   },
   "version": "1.0.0",
   "description": "Animation-rich, zero-dependency HTML presentations on a fixed 1920x1080 stage that scales to any viewport. Distinctive typography, committed palettes, choreographed staggered reveals, keyboard navigation, and hash routing - no generic AI-slop aesthetics.",
   "description_i18n": {
     "en": "Animation-rich, zero-dependency HTML presentations on a fixed 1920x1080 stage that scales to any viewport. Distinctive typography, committed palettes, choreographed staggered reveals, keyboard navigation, and hash routing - no generic AI-slop aesthetics.",
-    "zh-CN": "动画丰富的零依赖单文件 HTML 幻灯片：固定 1920x1080 舞台等比缩放适配任意屏幕，个性化字体排印、坚定的配色系统、编排式错峰入场动画、键盘导航和 hash 路由，拒绝千篇一律的 AI 味设计。"
+    "zh-CN": "动画丰富的零依赖单文件 HTML 幻灯片：固定 1920x1080 舞台等比缩放适配任意屏幕，个性化字体排印、坚定的配色系统、编排式错峰入场动画、键盘导航和 hash 路由，拒绝千篇一律的 AI 味设计。",
+    "tr": "Herhangi bir görüntü alanına ölçeklenebilen sabit bir 1920x1080 sahne alanında animasyon açısından zengin, sıfır bağımlılıklı HTML sunumları. Ayırt edici tipografi, özel paletler, koreograflı kademeli gösterimler, klavye navigasyonu ve karma yönlendirme - genel AI eğimi estetiği yok."
   },
   "license": "MIT",
   "author": {

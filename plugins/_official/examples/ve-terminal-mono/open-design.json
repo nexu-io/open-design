@@ -5,13 +5,15 @@
   "title": "Terminal Mono",
   "title_i18n": {
     "en": "Terminal Mono",
-    "zh-CN": "等宽终端"
+    "zh-CN": "等宽终端",
+    "tr": "Terminal Mono"
   },
   "version": "1.0.0",
   "description": "Developer-native dark deck theme: near-black #0a0e14 ground, Geist Mono everywhere with large weight-400 titles (never bold display), Dracula-green #50fa7b accent, faint dot-grid texture, and low-opacity green hairlines. Zero skeuomorphism, zero effects - pure typographic discipline. Scroll-snap single-file HTML with SlideEngine navigation, hash routing, and automatic light mode (#f4f6f8 / #0d7a3e) via prefers-color-scheme. Based on nicobailon/visual-explainer terminal-mono.",
   "description_i18n": {
     "en": "Developer-native dark deck theme: near-black #0a0e14 ground, Geist Mono everywhere with large weight-400 titles (never bold display), Dracula-green #50fa7b accent, faint dot-grid texture, and low-opacity green hairlines. Zero skeuomorphism, zero effects - pure typographic discipline. Scroll-snap single-file HTML with SlideEngine navigation, hash routing, and automatic light mode (#f4f6f8 / #0d7a3e) via prefers-color-scheme. Based on nicobailon/visual-explainer terminal-mono.",
-    "zh-CN": "开发者原生暗调幻灯片主题「等宽终端」：近黑 #0a0e14 底色，全 Geist Mono 等宽排印（标题用大号 weight-400 而非粗体 display），Dracula 绿 #50fa7b 点缀，微点阵背景质感，低透明度绿色描边。零拟物零特效，靠字体纪律成立。scroll-snap 单文件 HTML，SlideEngine 键盘导航 + hash 路由，prefers-color-scheme 自动亮色模式（#f4f6f8 / #0d7a3e）。移植自 nicobailon/visual-explainer 的 terminal-mono 风格。"
+    "zh-CN": "开发者原生暗调幻灯片主题「等宽终端」：近黑 #0a0e14 底色，全 Geist Mono 等宽排印（标题用大号 weight-400 而非粗体 display），Dracula 绿 #50fa7b 点缀，微点阵背景质感，低透明度绿色描边。零拟物零特效，靠字体纪律成立。scroll-snap 单文件 HTML，SlideEngine 键盘导航 + hash 路由，prefers-color-scheme 自动亮色模式（#f4f6f8 / #0d7a3e）。移植自 nicobailon/visual-explainer 的 terminal-mono 风格。",
+    "tr": "Geliştiriciye özgü koyu deste teması: siyaha yakın #0a0e14 zemin, 400'e yakın büyük başlıklarla her yerde Geist Mono (hiçbir zaman kalın görüntülenmez), Drakula yeşili #50fa7b vurgusu, soluk noktalı ızgara dokusu ve düşük opaklıkta yeşil ince çizgiler. Sıfır skeuomorphism, sıfır efekt - saf tipografik disiplin. Tercih renk şeması aracılığıyla SlideEngine navigasyonu, karma yönlendirme ve otomatik ışık modu (#f4f6f8 / #0d7a3e) ile kaydırmalı tek dosyalı HTML. Nicobailon/görsel açıklayıcı terminal-mono'ya dayanmaktadır."
   },
   "license": "MIT",
   "author": {

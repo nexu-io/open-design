@@ -5,13 +5,15 @@
   "title": "Midnight Editorial",
   "title_i18n": {
     "en": "Midnight Editorial",
-    "zh-CN": "午夜金辉"
+    "zh-CN": "午夜金辉",
+    "tr": "Gece Yarısı Editoryal"
   },
   "version": "1.0.0",
   "description": "Cinematic editorial dark deck theme: deep navy #0f1729 pages with warm gold #d4a73a accents, Instrument Serif 120px dramatic display dropping straight to 14px JetBrains Mono labels, a gold radial accent glow per slide, gold SVG corner marks and ghost section numerals, staggered cinematic reveal transitions, and a locked cream/gold light mode toggled by the SlideEngine (T key). Pure CSS/SVG diagrams and charts, keyboard-first single-file HTML, zero external JS. Based on https://github.com/nicobailon/visual-explainer midnight-editorial (templates/slide-deck.html), locked as a single-aesthetic deck plugin. Use for engineering reviews, product keynotes and editorial launches that should feel like a midnight issue of a serious journal.",
   "description_i18n": {
     "en": "Cinematic editorial dark deck theme: deep navy #0f1729 pages with warm gold #d4a73a accents, Instrument Serif 120px dramatic display dropping straight to 14px JetBrains Mono labels, a gold radial accent glow per slide, gold SVG corner marks and ghost section numerals, staggered cinematic reveal transitions, and a locked cream/gold light mode toggled by the SlideEngine (T key). Pure CSS/SVG diagrams and charts, keyboard-first single-file HTML, zero external JS. Based on https://github.com/nicobailon/visual-explainer midnight-editorial (templates/slide-deck.html), locked as a single-aesthetic deck plugin. Use for engineering reviews, product keynotes and editorial launches that should feel like a midnight issue of a serious journal.",
-    "zh-CN": "电影级编辑刊暗调幻灯片主题：深 navy #0f1729 页面 + 暖金 #d4a73a 点缀，Instrument Serif 120px 戏剧 display 直落 14px JetBrains Mono 标签，每页一处金色径向光晕，金色 SVG 角标与幽灵章节数字，交错 cinematic 转场，并自带 SlideEngine 锁定的奶油/金浅色模式（T 键切换）。纯 CSS/SVG 图解与图表、键盘优先的单文件 HTML、零外部 JS。基于 nicobailon/visual-explainer 的 midnight-editorial 预设（templates/slide-deck.html）锁定为单美学 deck 插件，适合想要「严肃杂志午夜刊」气质的工程评审、产品发布与编辑刊式演示。"
+    "zh-CN": "电影级编辑刊暗调幻灯片主题：深 navy #0f1729 页面 + 暖金 #d4a73a 点缀，Instrument Serif 120px 戏剧 display 直落 14px JetBrains Mono 标签，每页一处金色径向光晕，金色 SVG 角标与幽灵章节数字，交错 cinematic 转场，并自带 SlideEngine 锁定的奶油/金浅色模式（T 键切换）。纯 CSS/SVG 图解与图表、键盘优先的单文件 HTML、零外部 JS。基于 nicobailon/visual-explainer 的 midnight-editorial 预设（templates/slide-deck.html）锁定为单美学 deck 插件，适合想要「严肃杂志午夜刊」气质的工程评审、产品发布与编辑刊式演示。",
+    "tr": "Sinematik editoryal karanlık deste teması: sıcak altın #d4a73a vurgulara sahip derin lacivert #0f1729 sayfalar, doğrudan 14 piksele düşen JetBrains Mono etiketleri 120 piksellik dramatik ekran, slayt başına altın radyal vurgu parıltısı, altın SVG köşe işaretleri ve hayalet bölüm rakamları, kademeli sinematik gösterim geçişleri ve SlideEngine (T tuşu) tarafından değiştirilen kilitli krem ​​​​/ altın ışık modu. Saf CSS/SVG diyagramları ve çizelgeleri, klavye öncelikli tek dosyalı HTML, sıfır harici JS. https://github.com/nicobailon/visual-explainer gece yarısı editörüne (templates/slide-deck.html) dayalıdır ve tek estetik deste eklentisi olarak kilitlenmiştir. Ciddi bir derginin gece yarısı sayısı gibi hissettirmesi gereken mühendislik incelemeleri, ürün açılış notları ve editoryal lansmanlar için kullanın."
   },
   "license": "MIT",
   "author": {

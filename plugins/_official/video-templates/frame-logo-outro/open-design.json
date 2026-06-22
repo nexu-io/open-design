@@ -5,13 +5,15 @@
   "title": "Logo Outro Frame",
   "title_i18n": {
     "en": "Logo Outro Frame",
-    "zh-CN": "品牌 Logo 收尾帧"
+    "zh-CN": "品牌 Logo 收尾帧",
+    "tr": "Logo Dış Çerçeve"
   },
   "version": "0.1.0",
   "description": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
   "description_i18n": {
     "en": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
-    "zh-CN": "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕"
+    "zh-CN": "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕",
+    "tr": "Video çıkışları veya marka kapanış çerçeveleri için parçalı logo montajı, parlak çiçek ve slogan gösterimi."
   },
   "license": "Apache-2.0",
   "author": {

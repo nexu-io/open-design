@@ -5,13 +5,15 @@
   "title": "Glitch Title Frame",
   "title_i18n": {
     "en": "Glitch Title Frame",
-    "zh-CN": "故障艺术标题帧"
+    "zh-CN": "故障艺术标题帧",
+    "tr": "Glitch Başlık Çerçevesi"
   },
   "version": "0.1.0",
   "description": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
   "description_i18n": {
     "en": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
-    "zh-CN": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero"
+    "zh-CN": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero",
+    "tr": "Video geçişleri veya siberpunk kahramanları için dijital aksaklık, kromatik kayma ve veri bozulması başlık çerçevesi."
   },
   "license": "Apache-2.0",
   "author": {

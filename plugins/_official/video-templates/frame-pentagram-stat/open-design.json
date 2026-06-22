@@ -5,13 +5,15 @@
   "title": "Pentagram Stat Frame",
   "title_i18n": {
     "en": "Pentagram Stat Frame",
-    "zh-CN": "瑞士网格数据帧"
+    "zh-CN": "瑞士网格数据帧",
+    "tr": "Pentagram İstatistik Çerçevesi"
   },
   "version": "0.1.0",
   "description": "Swiss-grid statistic anchor — giant number, red accent, growing bars, black data bar. Rational and editorial.",
   "description_i18n": {
     "en": "Swiss-grid statistic anchor — giant number, red accent, growing bars, black data bar. Rational and editorial.",
-    "zh-CN": "瑞士网格数据帧:巨大数字锚点 + 红色强调 + 生长条形图 + 黑色数据底栏, 理性克制的编辑风"
+    "zh-CN": "瑞士网格数据帧:巨大数字锚点 + 红色强调 + 生长条形图 + 黑色数据底栏, 理性克制的编辑风",
+    "tr": "İsviçre ızgara istatistik çapası — dev sayı, kırmızı vurgu, büyüyen çubuklar, siyah veri çubuğu. Rasyonel ve editoryal."
   },
   "license": "Apache-2.0",
   "author": {

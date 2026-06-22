@@ -5,13 +5,15 @@
   "title": "Warm Grain",
   "title_i18n": {
     "en": "Warm Grain",
-    "zh-CN": "暖色颗粒"
+    "zh-CN": "暖色颗粒",
+    "tr": "Sıcak Tahıl"
   },
   "version": "0.1.0",
   "description": "Cream aesthetic with grain texture",
   "description_i18n": {
     "en": "Cream aesthetic with grain texture",
-    "zh-CN": "暖色胶片颗粒质感的 Hero 动效，柔和光晕与缓慢推进，适合品牌开场。"
+    "zh-CN": "暖色胶片颗粒质感的 Hero 动效，柔和光晕与缓慢推进，适合品牌开场。",
+    "tr": "Damar dokusuyla krem ​​estetiği"
   },
   "license": "Apache-2.0",
   "author": {

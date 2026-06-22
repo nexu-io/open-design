@@ -5,13 +5,15 @@
   "title": "Editorial Forest",
   "title_i18n": {
     "en": "Editorial Forest",
-    "zh-CN": "林间编辑部"
+    "zh-CN": "林间编辑部",
+    "tr": "Editoryal Orman"
   },
   "version": "1.0.0",
   "description": "Quiet, literary single-file HTML decks: deep forest green #2e4a2a, dusty pink #e89cb1, and warm cream #efe7d4 paper set in Source Serif 4 with JetBrains Mono kickers, on a fixed 1920x1080 stage that scales to any viewport. Mixed light/dark scheme with an 8-slide quarterly-review rhythm. Based on zarazhangrui/beautiful-html-templates editorial-forest.",
   "description_i18n": {
     "en": "Quiet, literary single-file HTML decks: deep forest green #2e4a2a, dusty pink #e89cb1, and warm cream #efe7d4 paper set in Source Serif 4 with JetBrains Mono kickers, on a fixed 1920x1080 stage that scales to any viewport. Mixed light/dark scheme with an 8-slide quarterly-review rhythm. Based on zarazhangrui/beautiful-html-templates editorial-forest.",
-    "zh-CN": "林间编辑部：安静、文学气质的单文件 HTML 幻灯片 —— 森林绿 #2e4a2a × 尘粉 #e89cb1 × 暖奶油 #efe7d4 纸面，Source Serif 4 衬线排印配 JetBrains Mono 标签，固定 1920x1080 舞台等比缩放适配任意视口，明暗混排的 8 页季评节奏。移植自 zarazhangrui/beautiful-html-templates 的 editorial-forest 模板。"
+    "zh-CN": "林间编辑部：安静、文学气质的单文件 HTML 幻灯片 —— 森林绿 #2e4a2a × 尘粉 #e89cb1 × 暖奶油 #efe7d4 纸面，Source Serif 4 衬线排印配 JetBrains Mono 标签，固定 1920x1080 舞台等比缩放适配任意视口，明暗混排的 8 页季评节奏。移植自 zarazhangrui/beautiful-html-templates 的 editorial-forest 模板。",
+    "tr": "Sessiz, edebi tek dosyalı HTML desteleri: derin orman yeşili #2e4a2a, tozlu pembe #e89cb1 ve sıcak krem ​​#efe7d4 kağıt seti, JetBrains Mono tetikleyicilerle Source Serif 4'te, herhangi bir görüntü alanına ölçeklenebilen sabit 1920x1080 sahnede. Üç aylık 8 slaytlık inceleme ritmiyle karışık açık/koyu şema. Zarazhangrui/beautiful-html-templates editoryal-ormana dayanmaktadır."
   },
   "license": "MIT",
   "author": {

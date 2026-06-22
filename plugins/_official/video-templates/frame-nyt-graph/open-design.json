@@ -5,13 +5,15 @@
   "title": "NYT Graph",
   "title_i18n": {
     "en": "NYT Graph",
-    "zh-CN": "NYT 图表"
+    "zh-CN": "NYT 图表",
+    "tr": "NYT Grafiği"
   },
   "version": "0.1.0",
   "description": "Animated data chart in print editorial style",
   "description_i18n": {
     "en": "Animated data chart in print editorial style",
-    "zh-CN": "《纽约时报》社论风格的数据图表动效，克制的排版与坐标轴逐步浮现，适合数据叙事。"
+    "zh-CN": "《纽约时报》社论风格的数据图表动效，克制的排版与坐标轴逐步浮现，适合数据叙事。",
+    "tr": "Basılı editoryal tarzda animasyonlu veri grafiği"
   },
   "license": "Apache-2.0",
   "author": {

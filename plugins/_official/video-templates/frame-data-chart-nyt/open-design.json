@@ -5,13 +5,15 @@
   "title": "NYT-Style Data Chart Frame",
   "title_i18n": {
     "en": "NYT-Style Data Chart Frame",
-    "zh-CN": "NYT 风数据图表帧"
+    "zh-CN": "NYT 风数据图表帧",
+    "tr": "NYT Tarzı Veri Tablosu Çerçevesi"
   },
   "version": "0.1.0",
   "description": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
   "description_i18n": {
     "en": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
-    "zh-CN": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)"
+    "zh-CN": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)",
+    "tr": "NYT haber odası tipografisi, kademeli gösterim animasyonu ve editoryal düzeyde grafikler (çizgi, çubuk veya aralık bandı)."
   },
   "license": "Apache-2.0",
   "author": {

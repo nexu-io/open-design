@@ -5,13 +5,15 @@
   "title": "Emerald Editorial",
   "title_i18n": {
     "en": "Emerald Editorial",
-    "zh-CN": "祖母绿封面故事"
+    "zh-CN": "祖母绿封面故事",
+    "tr": "Zümrüt Editoryal"
   },
   "version": "1.0.0",
   "description": "Magazine-cover business decks: a saturated emerald #3CD896 canvas, deep navy #0F1A5C ink, warm paper #F1E9D6 tiles, double-rule masthead ornaments, and Bodoni Moda weight-900 display serif on a fixed 1920x1080 stage with uniform viewport scaling. Mixed emerald/navy scheme, 8-slide editorial rhythm. Based on zarazhangrui/beautiful-html-templates emerald-editorial.",
   "description_i18n": {
     "en": "Magazine-cover business decks: a saturated emerald #3CD896 canvas, deep navy #0F1A5C ink, warm paper #F1E9D6 tiles, double-rule masthead ornaments, and Bodoni Moda weight-900 display serif on a fixed 1920x1080 stage with uniform viewport scaling. Mixed emerald/navy scheme, 8-slide editorial rhythm. Based on zarazhangrui/beautiful-html-templates emerald-editorial.",
-    "zh-CN": "杂志封面级商务刊幻灯片：祖母绿 #3CD896 画布 + 海军蓝 #0F1A5C 油墨 + 纸色 #F1E9D6 暖纸瓦片，双线 masthead 刊头装饰与 Bodoni Moda 900 粗显示衬线，固定 1920x1080 舞台等比缩放，mixed 绿/蓝混合 scheme 的 8 页编辑部节奏。Based on zarazhangrui/beautiful-html-templates emerald-editorial。"
+    "zh-CN": "杂志封面级商务刊幻灯片：祖母绿 #3CD896 画布 + 海军蓝 #0F1A5C 油墨 + 纸色 #F1E9D6 暖纸瓦片，双线 masthead 刊头装饰与 Bodoni Moda 900 粗显示衬线，固定 1920x1080 舞台等比缩放，mixed 绿/蓝混合 scheme 的 8 页编辑部节奏。Based on zarazhangrui/beautiful-html-templates emerald-editorial。",
+    "tr": "Dergi kapağı iş desteleri: doymuş zümrüt #3CD896 tuval, koyu lacivert #0F1A5C mürekkep, sıcak kağıt #F1E9D6 döşemeler, çift kurallı masthead süsleri ve sabit 1920x1080 sahne üzerinde tekdüze görüntü alanı ölçeklendirmesine sahip Bodoni Moda ağırlık-900 ekran serif. Karışık zümrüt/lacivert şeması, 8 slaytlı editoryal ritim. zarazhangrui/beautiful-html-templates emerald-editoryal'e dayanmaktadır."
   },
   "license": "MIT",
   "author": {

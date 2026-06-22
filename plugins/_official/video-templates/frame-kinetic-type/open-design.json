@@ -5,13 +5,15 @@
   "title": "Kinetic Type",
   "title_i18n": {
     "en": "Kinetic Type",
-    "zh-CN": "动态排版"
+    "zh-CN": "动态排版",
+    "tr": "Kinetik Tip"
   },
   "version": "0.1.0",
   "description": "Bold kinetic typography promo",
   "description_i18n": {
     "en": "Bold kinetic typography promo",
-    "zh-CN": "大胆的动态排版动效，适用于有冲击力的宣传标题、口号与开场。"
+    "zh-CN": "大胆的动态排版动效，适用于有冲击力的宣传标题、口号与开场。",
+    "tr": "Cesur kinetik tipografi tanıtımı"
   },
   "license": "Apache-2.0",
   "author": {

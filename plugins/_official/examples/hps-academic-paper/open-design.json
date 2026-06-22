@@ -5,13 +5,15 @@
   "title": "Academic Paper",
   "title_i18n": {
     "en": "Academic Paper",
-    "zh-CN": "学术论文风"
+    "zh-CN": "学术论文风",
+    "tr": "Akademik Makale"
   },
   "version": "1.0.0",
   "description": "LaTeX-paper deck theme: paper-white #fdfcf8 ground, all-serif type (Latin Modern Roman with Playfair Display fallback), ink-black body, link-blue #1a3a7a underlined citation anchors, italic kickers, zero radius and near-zero shadow, double-rule title page, numbered Figure/Table captions and booktabs three-line tables. Single-file HTML deck with keyboard navigation and hash deep links — for conference talks, thesis defenses, research reviews and journal clubs. Based on lewislulu/html-ppt-skill academic-paper.",
   "description_i18n": {
     "en": "LaTeX-paper deck theme: paper-white #fdfcf8 ground, all-serif type (Latin Modern Roman with Playfair Display fallback), ink-black body, link-blue #1a3a7a underlined citation anchors, italic kickers, zero radius and near-zero shadow, double-rule title page, numbered Figure/Table captions and booktabs three-line tables. Single-file HTML deck with keyboard navigation and hash deep links — for conference talks, thesis defenses, research reviews and journal clubs. Based on lewislulu/html-ppt-skill academic-paper.",
-    "zh-CN": "「学术论文风」幻灯片主题：纸白 #fdfcf8 底色全衬线排印（Latin Modern Roman，Playfair Display 兜底），墨黑正文 + 链接蓝 #1a3a7a 下划线引用锚点 + 斜体 kicker，零圆角近零阴影，双规则线扉页、带编号的 Figure/Table 图注与 booktabs 三线表。零依赖单文件 HTML，键盘导航 + hash 直达——适合学术会议报告、论文答辩、研究评审与组会分享。移植自 lewislulu/html-ppt-skill 的 academic-paper 主题。"
+    "zh-CN": "「学术论文风」幻灯片主题：纸白 #fdfcf8 底色全衬线排印（Latin Modern Roman，Playfair Display 兜底），墨黑正文 + 链接蓝 #1a3a7a 下划线引用锚点 + 斜体 kicker，零圆角近零阴影，双规则线扉页、带编号的 Figure/Table 图注与 booktabs 三线表。零依赖单文件 HTML，键盘导航 + hash 直达——适合学术会议报告、论文答辩、研究评审与组会分享。移植自 lewislulu/html-ppt-skill 的 academic-paper 主题。",
+    "tr": "LaTeX kağıt destesi teması: kağıt beyazı #fdfcf8 zemin, tamamı serif tipi (Playfair Display geri dönüşüyle ​​Latin Modern Roman), mürekkep siyahı gövde, bağlantı mavisi #1a3a7a altı çizili alıntı bağlantıları, italik işaretleyiciler, sıfır yarıçap ve sıfıra yakın gölge, çift kurallı başlık sayfası, numaralandırılmış Şekil/Tablo başlıkları ve kitap sekmeleri üç satırlı tablolar. Konferans konuşmaları, tez savunmaları, araştırma incelemeleri ve dergi kulüpleri için klavye gezintisi ve karma derin bağlantılara sahip tek dosyalı HTML desteği. Lewislulu/html-ppt-skill akademik makalesine dayanmaktadır."
   },
   "license": "MIT",
   "author": {

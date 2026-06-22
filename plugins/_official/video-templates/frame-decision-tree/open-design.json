@@ -5,13 +5,15 @@
   "title": "Decision Tree",
   "title_i18n": {
     "en": "Decision Tree",
-    "zh-CN": "决策树"
+    "zh-CN": "决策树",
+    "tr": "Karar Ağacı"
   },
   "version": "0.1.0",
   "description": "Animated flowchart with branching paths",
   "description_i18n": {
     "en": "Animated flowchart with branching paths",
-    "zh-CN": "清爽的决策树 / 流程图动效合成，节点与连线依次绘入，适合讲清判断逻辑与分支流程。"
+    "zh-CN": "清爽的决策树 / 流程图动效合成，节点与连线依次绘入，适合讲清判断逻辑与分支流程。",
+    "tr": "Dallanma yollarına sahip animasyonlu akış şeması"
   },
   "license": "Apache-2.0",
   "author": {

@@ -5,13 +5,15 @@
   "title": "Product Promo",
   "title_i18n": {
     "en": "Product Promo",
-    "zh-CN": "产品宣传"
+    "zh-CN": "产品宣传",
+    "tr": "Ürün Promosyonu"
   },
   "version": "0.1.0",
   "description": "Multi-scene product showcase with SVG assets",
   "description_i18n": {
     "en": "Multi-scene product showcase with SVG assets",
-    "zh-CN": "多镜头产品宣传动效合成，场景依次切换，适合功能展示与发布短片。"
+    "zh-CN": "多镜头产品宣传动效合成，场景依次切换，适合功能展示与发布短片。",
+    "tr": "SVG varlıklarıyla çok sahneli ürün vitrini"
   },
   "license": "Apache-2.0",
   "author": {

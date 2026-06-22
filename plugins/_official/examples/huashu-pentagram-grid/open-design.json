@@ -5,13 +5,15 @@
   "title": "Pentagram Info-Architecture",
   "title_i18n": {
     "en": "Pentagram Info-Architecture",
-    "zh-CN": "信息建筑·红"
+    "zh-CN": "信息建筑·红",
+    "tr": "Pentagram Bilgi Mimarisi"
   },
   "version": "1.0.0",
   "description": "Rational Swiss-grid data decks: black-and-white restraint, Helvetica Neue hierarchy, one red (#E63946), 64px black chrome bars, 5%-opacity grid hairlines, and 260px giant numerals anchoring red/dark/grey comparison bar charts on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-pentagram, expanded from a single showcase page into a full multi-section deck.",
   "description_i18n": {
     "en": "Rational Swiss-grid data decks: black-and-white restraint, Helvetica Neue hierarchy, one red (#E63946), 64px black chrome bars, 5%-opacity grid hairlines, and 260px giant numerals anchoring red/dark/grey comparison bar charts on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-pentagram, expanded from a single showcase page into a full multi-section deck.",
-    "zh-CN": "理性信息建筑派数据幻灯片：黑白克制的瑞士网格、Helvetica Neue 强层级、唯一红色 #E63946、上下 64px 黑色信息条、5% 透明度网格细线、260px 巨型数字锚点压红/黑/灰对比条形图，1920×1080 固定画布、零外部依赖。基于花叔 huashu-design 的 ppt-pentagram 单页范本扩展为完整多章节 deck。"
+    "zh-CN": "理性信息建筑派数据幻灯片：黑白克制的瑞士网格、Helvetica Neue 强层级、唯一红色 #E63946、上下 64px 黑色信息条、5% 透明度网格细线、260px 巨型数字锚点压红/黑/灰对比条形图，1920×1080 固定画布、零外部依赖。基于花叔 huashu-design 的 ppt-pentagram 单页范本扩展为完整多章节 deck。",
+    "tr": "Rasyonel İsviçre ızgara veri desteleri: siyah-beyaz sınırlama, Helvetica Neue hiyerarşisi, bir kırmızı (#E63946), 64 piksel siyah krom çubuklar, %5 opaklık ızgara çizgileri ve sabit bir 1920×1080 tuval üzerinde kırmızı/koyu/gri karşılaştırma çubuk grafiklerini sabitleyen 260 piksel dev rakamlar. https://github.com/alchaincyf/huashu-design ppt-pentagram'a dayanarak, tek bir vitrin sayfasından tam çok bölümlü bir desteye genişletildi."
   },
   "license": "MIT",
   "author": {

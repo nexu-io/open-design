@@ -5,13 +5,15 @@
   "title": "Memphis Pop",
   "title_i18n": {
     "en": "Memphis Pop",
-    "zh-CN": "孟菲斯波普"
+    "zh-CN": "孟菲斯波普",
+    "tr": "Memphis Pop'u"
   },
   "version": "1.0.0",
   "description": "80s Memphis pop deck — warm cream canvas tiled edge-to-edge with a pink/teal/yellow confetti-dot pattern, 2.5px black-outlined cards with 5–9px hard offset shadows, hot-pink #ff3d8b lead accent, Archivo Black display type. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill memphis-pop. Use for playful product launches, creative pitches, community talks, or any deck that wants loud 1980s Memphis-design energy.",
   "description_i18n": {
     "en": "80s Memphis pop deck — warm cream canvas tiled edge-to-edge with a pink/teal/yellow confetti-dot pattern, 2.5px black-outlined cards with 5–9px hard offset shadows, hot-pink #ff3d8b lead accent, Archivo Black display type. Single-file HTML, keyboard navigation, zero dependencies. Based on lewislulu/html-ppt-skill memphis-pop. Use for playful product launches, creative pitches, community talks, or any deck that wants loud 1980s Memphis-design energy.",
-    "zh-CN": "80 年代孟菲斯波普幻灯片——暖奶油底满版平铺粉/青/黄 confetti 圆点 pattern，2.5px 黑描边卡片 + 5–9px 硬阴影，热粉 #ff3d8b 主 accent，Archivo Black 展示字体。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 memphis-pop 主题。适合好玩的产品发布、创意提案、社区分享等想要 80 年代孟菲斯设计能量的演示。"
+    "zh-CN": "80 年代孟菲斯波普幻灯片——暖奶油底满版平铺粉/青/黄 confetti 圆点 pattern，2.5px 黑描边卡片 + 5–9px 硬阴影，热粉 #ff3d8b 主 accent，Archivo Black 展示字体。单文件 HTML、键盘翻页、零依赖。基于 lewislulu/html-ppt-skill 的 memphis-pop 主题。适合好玩的产品发布、创意提案、社区分享等想要 80 年代孟菲斯设计能量的演示。",
+    "tr": "80'lerin Memphis pop destesi — uçtan uca pembe/turuncu/sarı konfeti nokta desenli sıcak krem ​​rengi kanvas döşemeli, 5–9 piksel sert ofset gölgeli 2,5 piksel siyah çerçeveli kartlar, sıcak pembe #ff3d8b kurşun vurgulu, Archivo Siyah ekran tipi. Tek dosyalı HTML, klavyede gezinme, sıfır bağımlılık. Lewislulu/html-ppt-skill memphis-pop'a dayanmaktadır. Eğlenceli ürün lansmanları, yaratıcı sunumlar, topluluk konuşmaları veya 1980'lerin yüksek Memphis tasarımı enerjisini isteyen herhangi bir sunum için kullanın."
   },
   "license": "MIT",
   "author": {

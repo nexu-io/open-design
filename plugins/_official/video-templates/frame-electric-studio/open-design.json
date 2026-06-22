@@ -5,13 +5,15 @@
   "title": "Electric Studio Frame",
   "title_i18n": {
     "en": "Electric Studio Frame",
-    "zh-CN": "电光工作室分屏帧"
+    "zh-CN": "电光工作室分屏帧",
+    "tr": "Elektrikli Stüdyo Çerçevesi"
   },
   "version": "0.1.0",
   "description": "Two-panel split with quote as hero — white/blue panels open from center, accent bar grows, quote reveals line by line.",
   "description_i18n": {
     "en": "Two-panel split with quote as hero — white/blue panels open from center, accent bar grows, quote reveals line by line.",
-    "zh-CN": "电光工作室分屏帧:白/蓝双屏从中心开合 + 强调条生长 + 引言逐行浮现, 高对比专业感"
+    "zh-CN": "电光工作室分屏帧:白/蓝双屏从中心开合 + 强调条生长 + 引言逐行浮现, 高对比专业感",
+    "tr": "Kahraman alıntısıyla iki panel bölünmüş — beyaz/mavi paneller merkezden açılıyor, vurgu çubuğu büyüyor, alıntı satır satır ortaya çıkıyor."
   },
   "license": "Apache-2.0",
   "author": {

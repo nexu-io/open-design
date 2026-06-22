@@ -5,13 +5,15 @@
   "title": "True Blueprint",
   "title_i18n": {
     "en": "True Blueprint",
-    "zh-CN": "工程蓝图"
+    "zh-CN": "工程蓝图",
+    "tr": "Gerçek Taslak"
   },
   "version": "1.0.0",
   "description": "True-blueprint deck theme: a blueprint-blue #0b3a6f full-bleed field under a 40px white drafting grid, dashed-border translucent cards, white and ice-blue #aee1ff ink lines with amber #ffd27a annotations, every glyph in JetBrains Mono, 2px corners, zero shadows. Drawing-sheet chrome (title block, sheet index, construction-line section numbers, hatched CSS bars, inline-SVG schematics) makes it the natural skin for system-architecture and engineering-design decks. Single self-contained HTML file, zero external JS. Based on lewislulu/html-ppt-skill blueprint theme.",
   "description_i18n": {
     "en": "True-blueprint deck theme: a blueprint-blue #0b3a6f full-bleed field under a 40px white drafting grid, dashed-border translucent cards, white and ice-blue #aee1ff ink lines with amber #ffd27a annotations, every glyph in JetBrains Mono, 2px corners, zero shadows. Drawing-sheet chrome (title block, sheet index, construction-line section numbers, hatched CSS bars, inline-SVG schematics) makes it the natural skin for system-architecture and engineering-design decks. Single self-contained HTML file, zero external JS. Based on lewislulu/html-ppt-skill blueprint theme.",
-    "zh-CN": "「工程蓝图」幻灯片主题：蓝图蓝 #0b3a6f 满底 + 40px 白色绘图网格，虚线边框半透明卡片，白/冰蓝 #aee1ff 墨线 + 琥珀 #ffd27a 标注，全 JetBrains Mono，2px 圆角、零阴影。图纸式装置（标题栏、图纸索引、轮廓线巨型章节号、斜纹填充 CSS 柱图、内联 SVG 系统简图）天生适合系统架构与工程设计 deck。零外部 JS 的自包含单文件 HTML。移植自 lewislulu/html-ppt-skill 的 blueprint 主题。"
+    "zh-CN": "「工程蓝图」幻灯片主题：蓝图蓝 #0b3a6f 满底 + 40px 白色绘图网格，虚线边框半透明卡片，白/冰蓝 #aee1ff 墨线 + 琥珀 #ffd27a 标注，全 JetBrains Mono，2px 圆角、零阴影。图纸式装置（标题栏、图纸索引、轮廓线巨型章节号、斜纹填充 CSS 柱图、内联 SVG 系统简图）天生适合系统架构与工程设计 deck。零外部 JS 的自包含单文件 HTML。移植自 lewislulu/html-ppt-skill 的 blueprint 主题。",
+    "tr": "Gerçek plan destesi teması: 40 piksellik beyaz çizim ızgarasının altında plan mavisi #0b3a6f tam kenarlı alan, kesik kenarlı yarı saydam kartlar, kehribar rengi #ffd27a ek açıklamalarıyla beyaz ve buz mavisi #aee1ff mürekkep çizgileri, JetBrains Mono'daki her glif, 2 piksel köşeler, sıfır gölge. Çizim sayfası kromu (başlık bloğu, sayfa dizini, inşaat çizgisi bölüm numaraları, taranmış CSS çubukları, satır içi SVG şemaları), onu sistem mimarisi ve mühendislik tasarımı döşemeleri için doğal kaplama haline getirir. Tek bağımsız HTML dosyası, sıfır harici JS. Lewislulu/html-ppt-skill planı temasına dayanmaktadır."
   },
   "license": "MIT",
   "author": {

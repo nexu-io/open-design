@@ -5,13 +5,15 @@
   "title": "VFX Text Cursor",
   "title_i18n": {
     "en": "VFX Text Cursor",
-    "zh-CN": "VFX 文字光标"
+    "zh-CN": "VFX 文字光标",
+    "tr": "VFX Metin İmleci"
   },
   "version": "0.1.0",
   "description": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
   "description_i18n": {
     "en": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
-    "zh-CN": "光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句"
+    "zh-CN": "光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句",
+    "tr": "Video tanıtımlarında kelime kelime alıntıların ortaya çıkarılması için imleç ışık izi, kromatik ışınlar ve yön işaret fişekleri."
   },
   "license": "Apache-2.0",
   "author": {

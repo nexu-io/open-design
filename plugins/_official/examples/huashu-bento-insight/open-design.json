@@ -5,13 +5,15 @@
   "title": "Bento Insight Grid",
   "title_i18n": {
     "en": "Bento Insight Grid",
-    "zh-CN": "便当格洞见"
+    "zh-CN": "便当格洞见",
+    "tr": "Bento İçgörü Izgarası"
   },
   "version": "1.0.0",
   "description": "Apple Keynote / QBR-school bento decks: light-grey #F5F5F7 and cream pages, unequal-height rounded cards with 1px hairlines and micro shadows, one insight per card (giant Geist Mono tabular numeral, linear inline-SVG icon, or SVG sparkline), oversized display headlines with hard weight contrast, Inter/Geist typography on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design design-styles.md bento-grid spec (Bento便当格模块网格, neutral school, 95% fidelity), generated from the spec into a full multi-section deck.",
   "description_i18n": {
     "en": "Apple Keynote / QBR-school bento decks: light-grey #F5F5F7 and cream pages, unequal-height rounded cards with 1px hairlines and micro shadows, one insight per card (giant Geist Mono tabular numeral, linear inline-SVG icon, or SVG sparkline), oversized display headlines with hard weight contrast, Inter/Geist typography on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design design-styles.md bento-grid spec (Bento便当格模块网格, neutral school, 95% fidelity), generated from the spec into a full multi-section deck.",
-    "zh-CN": "Apple Keynote/QBR 流派便当格幻灯片：#F5F5F7 浅灰与奶白底、不等高圆角卡片网格（1px 细描边 + 微阴影）、每卡一个洞见（巨型 Geist Mono 等宽数字 / 线性 SVG 图标 / SVG sparkline）、超大 display 标题强字重对比、Inter/Geist 字体、1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design design-styles.md「Bento便当格模块网格」规格（中性派 · 还原95%）按 spec 生成完整多章节 deck。"
+    "zh-CN": "Apple Keynote/QBR 流派便当格幻灯片：#F5F5F7 浅灰与奶白底、不等高圆角卡片网格（1px 细描边 + 微阴影）、每卡一个洞见（巨型 Geist Mono 等宽数字 / 线性 SVG 图标 / SVG sparkline）、超大 display 标题强字重对比、Inter/Geist 字体、1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design design-styles.md「Bento便当格模块网格」规格（中性派 · 还原95%）按 spec 生成完整多章节 deck。",
+    "tr": "Apple Açılış Konuşması / QBR okulu bento desteleri: açık gri #F5F5F7 ve krem ​​sayfalar, 1 piksel ince çizgili ve mikro gölgeli eşit olmayan yükseklikte yuvarlak kartlar, kart başına bir bilgi (dev Geist Mono tablo rakamı, doğrusal satır içi SVG simgesi veya SVG mini grafiği), sert ağırlık kontrastına sahip büyük boy ekran başlıkları, sabit 1920×1080 tuval üzerinde Inter/Geist tipografisi. https://github.com/alchaincyf/huashu-design design-styles.md bento-grid spesifikasyonuna (Bento便当格模块网格, nötr okul, %95 doğruluk) dayanmaktadır ve spesifikasyondan tam çok bölümlü bir deste halinde oluşturulmuştur."
   },
   "license": "MIT",
   "author": {
