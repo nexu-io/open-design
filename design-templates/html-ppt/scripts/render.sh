@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# html-ppt :: render.sh — headless Chrome screenshot(s)
+# html-ppt :: render.sh — managed Chromium screenshot(s)
 #
 # Usage:
 #   render.sh <html-file>                     # one PNG, slide 1
@@ -7,15 +7,13 @@
 #   render.sh <html-file> all                 # autodetect .slide count
 #   render.sh <html-file> <N> <out-dir>       # custom output dir
 #
-# Requires: Google Chrome at /Applications/Google Chrome.app (macOS).
+# Uses Playwright's managed Chromium. Do not fall back to the user's installed
+# Google Chrome on macOS; Crashpad/profile permissions can abort it inside the
+# Open Design desktop sandbox.
 
 set -euo pipefail
 
-CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-if [[ ! -x "$CHROME" ]]; then
-  echo "error: Chrome not found at $CHROME" >&2
-  exit 1
-fi
+PLAYWRIGHT_VERSION="${PLAYWRIGHT_VERSION:-1.60.0}"
 
 FILE="${1:-}"
 if [[ -z "$FILE" ]]; then
@@ -32,6 +30,46 @@ OUT="${3:-}"
 
 ABS="$(cd "$(dirname "$FILE")" && pwd)/$(basename "$FILE")"
 STEM="$(basename "${FILE%.*}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INPUT_DIR="$(dirname "$ABS")"
+
+find_upward_playwright() {
+  local start dir
+  for start in "$@"; do
+    [[ -n "$start" ]] || continue
+    dir="$(cd "$start" 2>/dev/null && pwd)" || continue
+    while [[ "$dir" != "/" ]]; do
+      if [[ -x "$dir/node_modules/.bin/playwright" ]]; then
+        printf '%s\n' "$dir/node_modules/.bin/playwright"
+        return 0
+      fi
+      dir="$(dirname "$dir")"
+    done
+  done
+  return 1
+}
+
+run_playwright() {
+  if [[ -n "${PLAYWRIGHT_CLI:-}" ]]; then
+    "$PLAYWRIGHT_CLI" "$@"
+    return $?
+  fi
+
+  local local_playwright
+  if local_playwright="$(find_upward_playwright "$SCRIPT_DIR" "$INPUT_DIR")"; then
+    "$local_playwright" "$@"
+    return $?
+  fi
+
+  npx --yes "playwright@${PLAYWRIGHT_VERSION}" "$@"
+}
+
+ensure_managed_chromium() {
+  if ! run_playwright install chromium; then
+    echo "error: failed to install Playwright managed Chromium; cannot render PNG export" >&2
+    exit 1
+  fi
+}
 
 if [[ "$COUNT" == "all" ]]; then
   COUNT="$(grep -c 'class="slide"' "$FILE" || true)"
@@ -45,17 +83,19 @@ if [[ -z "$OUT" ]]; then
   fi
 fi
 
+ensure_managed_chromium
+
 render_one() {
   local url="$1" target="$2"
-  "$CHROME" \
-    --headless=new \
-    --disable-gpu \
-    --hide-scrollbars \
-    --no-sandbox \
-    --virtual-time-budget=4000 \
-    --window-size=1920,1080 \
-    --screenshot="$target" \
-    "$url" >/dev/null 2>&1
+  if ! run_playwright screenshot \
+    --browser chromium \
+    --viewport-size=1920,1080 \
+    --wait-for-timeout=4000 \
+    "$url" \
+    "$target"; then
+    echo "error: managed Chromium screenshot failed; not retrying and not falling back to system Google Chrome" >&2
+    exit 1
+  fi
   echo "  ✔ $target"
 }
 

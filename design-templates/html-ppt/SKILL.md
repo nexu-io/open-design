@@ -54,7 +54,7 @@ One command, no build. Pure static HTML/CSS/JS with only CDN webfonts.
 - **Keyboard runtime** (`assets/runtime.js`) — arrows, T (theme), A (anim), F/O, **S (presenter mode: magnetic-card popup with CURRENT / NEXT / SCRIPT / TIMER cards)**, N (notes drawer), R (reset timer in presenter)
 - **FX runtime** (`assets/animations/fx-runtime.js`) — auto-inits `[data-fx]` on slide enter, cleans up on leave
 - **Showcase decks** for themes / layouts / animations / full-decks gallery
-- **Headless Chrome render script** for PNG export
+- **Managed Chromium render script** for PNG export
 
 ## When to use
 
@@ -214,15 +214,20 @@ html-ppt/
 │   └── single-page/*.html         (31 layout files with demo data)
 ├── scripts/
 │   ├── new-deck.sh                (scaffold a deck from deck.html)
-│   └── render.sh                  (headless Chrome → PNG)
+│   └── render.sh                  (managed Chromium → PNG)
 └── examples/demo-deck/            (complete working deck)
 ```
 
 ## Rendering to PNG
 
-`scripts/render.sh` wraps headless Chrome at
-`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. For multi-slide
-capture, runtime.js exposes `#/N` deep-links, and render.sh iterates 1..N.
+`scripts/render.sh` uses Playwright's managed Chromium renderer. Do not call the
+user's installed Google Chrome directly for PNG export, especially on macOS
+desktop builds where Crashpad/profile permissions can abort Chrome before a
+screenshot is written. If the managed renderer fails once, surface that error
+and stop instead of retrying alternate Chrome launch commands.
+
+For multi-slide capture, runtime.js exposes `#/N` deep-links, and render.sh
+iterates 1..N.
 
 ```bash
 ./scripts/render.sh templates/single-page/kpi-grid.html        # single page
