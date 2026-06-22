@@ -15,7 +15,7 @@
   <a href="https://open-design.ai/">Скачать</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">Подписаться @nexudotio</a>
+  <a href="https://x.com/OpenDesignHQ">Подписаться @OpenDesignHQ</a>
 </p>
 
 <p align="center">
@@ -595,7 +595,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 За каждым каналом стоят настоящие люди.
 
 - 💬 **Discord** — ежедневный чат, обмен плагинами, вопросы → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter** — заметки о релизах, вехи, закулисье → [**@nexudotio**](https://x.com/nexudotio)
+- 🐦 **X / Twitter** — заметки о релизах, вехи, закулисье → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — глубокие Q&A, RFC, «покажи свою работу» → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — отчёты об ошибках, запросы функций → [**Issues**](https://github.com/nexu-io/open-design/issues)
 

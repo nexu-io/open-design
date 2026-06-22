@@ -15,7 +15,7 @@
   <a href="https://open-design.ai/">下载</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
-  <a href="https://x.com/nexudotio">关注 @nexudotio</a>
+  <a href="https://x.com/OpenDesignHQ">关注 @OpenDesignHQ</a>
 </p>
 
 <p align="center">
@@ -594,7 +594,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 每个渠道背后都是真实的人。
 
 - 💬 **Discord**——日常聊天、插件分享、提问 → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
-- 🐦 **X / Twitter**——发版说明、里程碑、幕后 → [**@nexudotio**](https://x.com/nexudotio)
+- 🐦 **X / Twitter**——发版说明、里程碑、幕后 → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions**——深度问答、RFC、"展示你的作品" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues**——Bug 报告、功能请求 → [**Issues**](https://github.com/nexu-io/open-design/issues)
 

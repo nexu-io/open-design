@@ -303,7 +303,9 @@ describe('EntryShell settings menu', () => {
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toBeTruthy();
+    const xMenuItem = screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i });
+    expect(xMenuItem).toBeTruthy();
+    expect(xMenuItem.getAttribute('href')).toBe('https://x.com/OpenDesignHQ');
 
     fireEvent.click(screen.getByTestId('entry-settings-open-details'));
 

@@ -173,7 +173,7 @@ const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip5' },
   { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/9ptkbbqRu' },
   { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
-  { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/nexudotio' },
+  { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/OpenDesignHQ' },
 ];
 const TIP_TYPE_MS = 32; // per-character typing speed
 const TIP_HOLD_MS = 3800; // pause on a fully-typed tip before advancing
