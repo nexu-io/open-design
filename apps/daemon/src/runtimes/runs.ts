@@ -90,6 +90,9 @@ export function createChatRunService({
       stdinOpen: false,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
+      // Set once finish() has closed the log stream, so a late post-finish emit
+      // can't lazily re-open a stream nothing will ever close (FD leak).
+      eventsLogClosed: false,
     };
     runs.set(run.id, run);
     return run;
@@ -110,6 +113,16 @@ export function createChatRunService({
   const ensureLogStream = (run) => {
     if (!run.eventsLogPath) return null;
     if (run.eventsLogStream) return run.eventsLogStream;
+    // finish() has already closed + nulled this run's log stream. Re-opening it
+    // here for a late event (async child-close diagnostic, trailing tool
+    // callback, telemetry) would leak a file descriptor that nothing ever
+    // closes. We gate on the explicit `eventsLogClosed` flag — NOT on terminal
+    // status — so finish()'s own `end` emit (which runs while status is already
+    // terminal but before the stream is closed) can still open + write + close
+    // the log for a run that had no prior events. Late events still reach
+    // memory + SSE clients below; we just stop persisting them to the closed
+    // log. (#3408 P1 FD-leak fix; cf. #4163.)
+    if (run.eventsLogClosed) return null;
     try {
       fs.mkdirSync(path.dirname(run.eventsLogPath), { recursive: true });
       run.eventsLogStream = fs.createWriteStream(run.eventsLogPath, { flags: 'a' });
@@ -197,6 +210,8 @@ export function createChatRunService({
     // emitted for this run. The file stays on disk for tail/grep.
     try { run.eventsLogStream?.end(); } catch { /* ignore */ }
     run.eventsLogStream = null;
+    // Any event emitted after this point must not lazily re-open the log.
+    run.eventsLogClosed = true;
     scheduleCleanup(run);
   };
 
