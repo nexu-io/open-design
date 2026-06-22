@@ -586,6 +586,39 @@ describe('reclaimStaleNamespaceSidecars', () => {
     expect(result.reclaimedPids).toHaveLength(2);
   });
 
+  it('stops leftover same-namespace daemon and web sidecars launched by tools-pack', async () => {
+    const namespace = 'release-nightly';
+    const processes: ProcessSnapshot[] = [
+      stampedProcessSnapshot(4102, 1, {
+        ...packagedSidecarStamp(APP_KEYS.WEB, namespace),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }),
+      stampedProcessSnapshot(4101, 1, {
+        ...packagedSidecarStamp(APP_KEYS.DAEMON, namespace),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }),
+    ];
+    const stopped: number[][] = [];
+    let cleanups = 0;
+
+    const result = await reclaimStaleNamespaceSidecars(namespace, {
+      selfPid: 1234,
+      listProcesses: async () => processes,
+      stop: async (pids) => {
+        stopped.push(pids);
+      },
+      cleanupSockets: async () => {
+        cleanups += 1;
+      },
+    });
+
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0]).toEqual(expect.arrayContaining([4101, 4102]));
+    expect(cleanups).toBe(1);
+    expect(result.reclaimedPids).toEqual(expect.arrayContaining([4101, 4102]));
+    expect(result.reclaimedPids).toHaveLength(2);
+  });
+
   it('ignores sidecars stamped for a different namespace', async () => {
     const processes: ProcessSnapshot[] = [
       stampedProcessSnapshot(5001, 1, packagedSidecarStamp(APP_KEYS.WEB, 'release-beta')),

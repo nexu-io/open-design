@@ -294,19 +294,22 @@ export async function reclaimStaleNamespaceSidecars(
   const processes = await listProcesses();
   const protectedPids = new Set(collectProcessTreePids(processes, [selfPid]));
   const reclaimApps: AppKey[] = [APP_KEYS.DAEMON, APP_KEYS.WEB];
+  const reclaimSources = [SIDECAR_SOURCES.PACKAGED, SIDECAR_SOURCES.TOOLS_PACK] as const;
   const reclaimedPids = processes
     .filter((processInfo) => !protectedPids.has(processInfo.pid))
     .filter((processInfo) =>
       reclaimApps.some((app) =>
-        matchesStampedProcess(
-          processInfo,
-          {
-            app,
-            mode: SIDECAR_MODES.RUNTIME,
-            namespace,
-            source: SIDECAR_SOURCES.PACKAGED,
-          },
-          OPEN_DESIGN_SIDECAR_CONTRACT,
+        reclaimSources.some((source) =>
+          matchesStampedProcess(
+            processInfo,
+            {
+              app,
+              mode: SIDECAR_MODES.RUNTIME,
+              namespace,
+              source,
+            },
+            OPEN_DESIGN_SIDECAR_CONTRACT,
+          ),
         ),
       ),
     )
