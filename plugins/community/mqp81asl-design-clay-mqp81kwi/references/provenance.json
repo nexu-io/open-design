@@ -1,0 +1,19 @@
+{
+  "candidateId": "a86c8952-bb38-42ad-8012-84888fc28fcb",
+  "projectId": "c3d321c3-d8f4-46cd-8cdf-5cca72413d69",
+  "runId": "e06562c1-f78d-43b3-a8b1-5ac042546a5a",
+  "conversationId": "aa4767cb-33c7-45bf-8aa9-349476f5010f",
+  "provenance": {
+    "summary": "Detected from mqp81asl-DESIGN-clay.md after a successful run.",
+    "detectedAt": 1782133107115
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "mqp81asl-DESIGN-clay.md",
+      "label": "mqp81asl-DESIGN-clay.md",
+      "size": 25705,
+      "copied": true
+    }
+  ]
+}
