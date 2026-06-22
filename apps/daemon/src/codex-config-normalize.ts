@@ -1,21 +1,31 @@
 // Normalize ~/.codex/config.toml before launching the Codex CLI.
 //
-// Codex renamed service_tier="priority" → service_tier="fast" in a recent
-// release. Some installations also have the older service_tier="default"
-// value. Both stale values cause the CLI to exit with:
+// The Codex CLI only accepts `service_tier = "fast"` or `"flex"`. Any other
+// value makes it exit before processing the prompt:
 //
-//   Error loading config.toml: unknown variant 'priority', expected 'fast'
+//   Error loading config.toml: unknown variant '<value>', expected 'fast'
 //   or 'flex' in `service_tier`
 //
-// The CLI parses config.toml before processing any -c flag overrides, so
-// the only way to prevent the exit is to fix the file on disk. This module
-// performs a targeted in-place replacement of the stale value before the
-// daemon spawns Codex. It is intentionally scoped: only the `service_tier`
-// field is touched; everything else in config.toml is preserved verbatim.
+// The Codex app has written several invalid values over time ("priority",
+// "default", and others observed in production). An earlier version of this
+// module kept a hardcoded map of the known-stale values → "fast"; every new
+// invalid value the app emitted then slipped through and crashed the CLI until
+// someone added it to the map — whack-a-mole.
 //
-// The normalization is idempotent: if the file is absent, already correct,
-// or contains an unknown service_tier value outside the stale map, it is left
-// unchanged.
+// Instead, this module takes the wildcard view: the valid set is small and
+// known ({fast, flex}), so ANY service_tier value outside it is treated as
+// invalid and its line is REMOVED, letting the Codex CLI fall back to its
+// built-in default tier. Removing — rather than forcing "fast" — is the
+// smallest assumption: it never imposes an opinionated tier on the user, and
+// "default"/unknown values semantically mean "let the system choose" anyway.
+//
+// The CLI parses config.toml before processing any -c flag overrides, so the
+// only way to prevent the exit is to fix the file on disk. The edit is
+// intentionally scoped: only standalone `service_tier` key lines are touched;
+// everything else in config.toml is preserved verbatim.
+//
+// The normalization is idempotent: if the file is absent or every service_tier
+// value is already valid, it is left unchanged.
 
 import { randomBytes } from 'node:crypto';
 import { rename, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -46,44 +56,54 @@ export function resolveCodexConfigPath(
 }
 
 /**
+ * The only `service_tier` values the Codex CLI accepts. Anything else makes
+ * the CLI exit on config load, so the normalizer removes it.
+ */
+const VALID_SERVICE_TIERS = new Set(['fast', 'flex']);
+
+/**
  * Normalize the `service_tier` field in a config.toml string.
  *
- * Replaces any stale/invalid service_tier value (e.g. "priority" or
- * "default") with its current valid equivalent ("fast"). Valid values are
- * left unchanged. Unrecognised values are also left unchanged — the Codex CLI
- * will surface a clear error for those.
+ * Any standalone `service_tier` key line whose value is not in
+ * {@link VALID_SERVICE_TIERS} has its entire line removed (so the Codex CLI
+ * uses its built-in default tier). Valid values are left verbatim.
  *
- * Returns `null` when no substitution was needed, otherwise returns the
- * patched content.
+ * Returns `null` when nothing needed to change, otherwise the patched content.
  */
 export function normalizeCodexConfigContent(content: string): string | null {
-  // Match ONLY a standalone service_tier key line, anchored to the start of
-  // the line (multiline `m` flag) so that `priority` or `default` appearing
-  // inside an unrelated string value or comment is never touched.
+  // Match ONLY a standalone service_tier key line *and its line terminator*,
+  // anchored to the start of the line (multiline `m` flag) so an invalid line
+  // can be removed cleanly (line + newline) instead of leaving a blank line,
+  // and so `service_tier` text inside another key's value or a comment is
+  // never touched.
   //
-  // Pattern breakdown:
-  //   ^(\s*)            — leading whitespace / indentation (capture group 1)
-  //   service_tier      — literal key name
-  //   (\s*=\s*)         — = with optional surrounding whitespace (group 2)
-  //   (["'])(priority|default)\3
-  //                    — quoted stale value with matching quote (group 3)
-  //   (\s*(?:#.*)?)$    — optional trailing inline comment (group 4)
+  // Pattern breakdown (horizontal-whitespace class `[^\S\r\n]` never crosses
+  // a line boundary, unlike `\s`):
+  //   ^([^\S\r\n]*)             — indentation (group 1, horizontal ws only)
+  //   service_tier              — literal key name
+  //   ([^\S\r\n]*=[^\S\r\n]*)   — = with optional surrounding ws (group 2)
+  //   (["'])([^"'\r\n]*)\3      — quoted value (group 3 = quote, group 4 = value)
+  //   ([^\S\r\n]*(?:#[^\r\n]*)?) — trailing ws + optional inline comment (group 5)
+  //   (\r?\n|$)                 — the line terminator, or EOF (group 6)
   //
   // This deliberately avoids matching:
   //   - `some_key = "I need priority service_tier"`  (value of another key)
   //   - `# service_tier = "priority"`               (commented-out key)
-  //   - `service_tier = "flex"`                     (valid value — not matched)
-  //   - `service_tier = "fast"`                     (valid value — not matched)
+  // Valid lines (`"fast"` / `"flex"`) are matched but returned unchanged.
   const pattern =
-    /^(\s*)service_tier(\s*=\s*)(["'])(?:priority|default)\3(\s*(?:#.*)?)$/gm;
+    /^([^\S\r\n]*)service_tier([^\S\r\n]*=[^\S\r\n]*)(["'])([^"'\r\n]*)\3([^\S\r\n]*(?:#[^\r\n]*)?)(\r?\n|$)/gm;
 
   let changed = false;
   const patched = content.replace(
     pattern,
-    (_match, indent: string, eq: string, _quote: string, trail: string) => {
+    (match: string, _indent, _eq, _quote, value: string) => {
+      if (VALID_SERVICE_TIERS.has(value)) {
+        // Already valid — leave the line (and its terminator) verbatim.
+        return match;
+      }
       changed = true;
-      // Preserve indentation, spacing, and any trailing inline comment.
-      return `${indent}service_tier${eq}"fast"${trail}`;
+      // Drop the whole line so the Codex CLI falls back to its default tier.
+      return '';
     },
   );
 

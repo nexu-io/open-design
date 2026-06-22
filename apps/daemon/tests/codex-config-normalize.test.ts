@@ -1,18 +1,33 @@
-// Regression tests for codex-config-normalize.ts — fixes #4276.
+// Regression tests for codex-config-normalize.ts — originally #4276, extended
+// for the wildcard-removal fix (#3408 Slice 1 / fix_config).
 //
-// Codex CLI rejects stale service_tier values such as "priority" and
-// "default". "priority" was renamed to "fast" in a recent release, and some
-// installations still carry "default". These tests assert that:
+// Codex CLI rejects any service_tier value outside {fast, flex} with:
 //
-//   1. normalizeCodexConfigContent coerces "priority" → "fast" in-memory.
-//   2. normalizeCodexConfigFile writes back a patched config.toml only when
+//   Error loading config.toml: unknown variant '<value>', expected 'fast'
+//   or 'flex' in `service_tier`
+//
+// The original normalizer mapped a HARDCODED stale set ({priority, default})
+// to "fast" and left every other invalid value untouched — so each new stale
+// value the Codex app writes (measured in production after `default` was
+// already patched) keeps crashing the CLI until someone adds it to the map.
+// This is whack-a-mole.
+//
+// The fix replaces the stale-map strategy with a wildcard: ANY service_tier
+// value not in {fast, flex} has its line REMOVED, so the Codex CLI falls back
+// to its built-in default instead of crashing. These tests assert that:
+//
+//   1. normalizeCodexConfigContent REMOVES the service_tier line for any
+//      invalid value (priority, default, and previously-unhandled values such
+//      as "turbo"/"ultra"), in-memory.
+//   2. Valid values ("fast", "flex") are left verbatim (returns null).
+//   3. normalizeCodexConfigFile writes back a patched config.toml only when
 //      needed and leaves the rest of the file intact.
-//   3. Valid values ("fast", "flex") and unknown values are preserved as-is.
-//   4. BLOCKER 1 (regression): "priority" in unrelated string values or
-//      comments is NOT rewritten; only a standalone key line is touched.
+//   4. BLOCKER 1 (regression): an invalid value inside an unrelated string
+//      value or a comment is NOT touched; only a standalone key line is.
 //   5. BLOCKER 2 (regression): the write is atomic (temp-file + rename), so
 //      no temp-file litter is left behind; write failures are logged and do
 //      not throw.
+//   6. CRLF line endings around a removed line are preserved.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, statSync, readdirSync } from 'node:fs';
@@ -27,47 +42,52 @@ import {
 } from '../src/codex-config-normalize.js';
 
 // ---------------------------------------------------------------------------
-// normalizeCodexConfigContent — pure string-level normalization
+// normalizeCodexConfigContent — pure string-level normalization (remove-only)
 // ---------------------------------------------------------------------------
 
 describe('normalizeCodexConfigContent', () => {
-  it('replaces service_tier="priority" with service_tier="fast" (double quotes)', () => {
-    const input = `[model]\nservice_tier = "priority"\n`;
+  it('removes the service_tier line when the value is "priority" (double quotes)', () => {
+    const input = `[model]\nservice_tier = "priority"\nmodel = "gpt-5.5"\n`;
     const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`[model]\nservice_tier = "fast"\n`);
+    // The whole stale line is dropped (Codex uses its built-in default tier).
+    expect(result).toBe(`[model]\nmodel = "gpt-5.5"\n`);
   });
 
-  it('replaces service_tier="default" with service_tier="fast"', () => {
-    const input = `[model]\nservice_tier = "default"\n`;
+  it('removes the service_tier line when the value is "default"', () => {
+    const input = `[model]\nservice_tier = "default"\nmodel = "gpt-5.5"\n`;
     const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`[model]\nservice_tier = "fast"\n`);
+    expect(result).toBe(`[model]\nmodel = "gpt-5.5"\n`);
   });
 
-  it("replaces service_tier='priority' with service_tier=\"fast\" (single quotes)", () => {
+  it('RED SPEC (#3408 fix_config): removes a previously-unhandled invalid value ("turbo")', () => {
+    // Before the wildcard fix the stale map only knew {priority, default}, so
+    // "turbo" slipped through, returned null (no change), and the Codex CLI
+    // crashed with `unknown variant 'turbo'`. The wildcard fix removes it.
+    const input = `service_tier = "turbo"\n`;
+    expect(normalizeCodexConfigContent(input)).toBe('');
+  });
+
+  it('removes the service_tier line for any other arbitrary invalid value ("ultra")', () => {
+    const input = `service_tier = "ultra"\n`;
+    expect(normalizeCodexConfigContent(input)).toBe('');
+  });
+
+  it("removes the service_tier line for an invalid single-quoted value ('priority')", () => {
     const input = `service_tier = 'priority'`;
-    const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`service_tier = "fast"`);
+    expect(normalizeCodexConfigContent(input)).toBe('');
   });
 
-  it('preserves original spacing around the = sign (no normalization of whitespace)', () => {
-    // The new line-anchored pattern preserves the original = spacing.
-    const input = `service_tier="priority"`;
+  it('removes the service_tier line together with its trailing inline comment', () => {
+    const input = `service_tier = "priority" # set by fast-mode toggle\nmodel = "gpt-5.5"\n`;
     const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`service_tier="fast"`);
+    expect(result).toBe(`model = "gpt-5.5"\n`);
   });
 
-  it('preserves indentation when the key is inside a TOML table section', () => {
-    // Some TOML writers indent keys inside an inline table block.
-    const input = `[model]\n  service_tier = "priority"\n`;
+  it('preserves indentation context when removing an indented invalid line', () => {
+    const input = `[model]\n  service_tier = "priority"\n  model = "gpt-5.5"\n`;
     const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`[model]\n  service_tier = "fast"\n`);
-  });
-
-  it('preserves a trailing inline comment on the service_tier line', () => {
-    // BLOCKER 1 regression: inline comment must survive the replacement.
-    const input = `service_tier = "priority" # set by fast-mode toggle\n`;
-    const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`service_tier = "fast" # set by fast-mode toggle\n`);
+    // The indented stale line is removed; the rest keeps its indentation.
+    expect(result).toBe(`[model]\n  model = "gpt-5.5"\n`);
   });
 
   it('returns null (no change) when service_tier is already "fast"', () => {
@@ -85,13 +105,14 @@ describe('normalizeCodexConfigContent', () => {
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
-  it('returns null (no change) for an unknown service_tier value not in the stale map', () => {
-    // Unknown values are left as-is; the CLI will reject them with a clear message.
-    const input = `service_tier = "turbo"`;
-    expect(normalizeCodexConfigContent(input)).toBeNull();
+  it('keeps a valid value but removes a second invalid occurrence', () => {
+    // Mixed config: the valid line survives verbatim, the invalid one is dropped.
+    const input = `service_tier = "fast"\nservice_tier = "priority"\n`;
+    const result = normalizeCodexConfigContent(input);
+    expect(result).toBe(`service_tier = "fast"\n`);
   });
 
-  it('preserves all other config content when patching', () => {
+  it('preserves all other config content when removing the stale line', () => {
     const input = [
       '[model]',
       'model = "gpt-5.5"',
@@ -104,38 +125,38 @@ describe('normalizeCodexConfigContent', () => {
 
     const result = normalizeCodexConfigContent(input);
     expect(result).not.toBeNull();
-    expect(result).toContain('service_tier = "fast"');
+    // The stale line is gone entirely (no rewrite to "fast").
+    expect(result).not.toContain('service_tier');
+    expect(result).not.toContain('"priority"');
+    expect(result).not.toContain('"fast"');
+    // Everything else is preserved verbatim.
     expect(result).toContain('model = "gpt-5.5"');
     expect(result).toContain('max_tokens = 8192');
     expect(result).toContain('[history]');
     expect(result).toContain('limit = 100');
-    expect(result).not.toContain('"priority"');
   });
 
-  it('fixes every occurrence when service_tier appears more than once', () => {
-    // Unusual but possible in duplicated config sections.
-    const input = `service_tier = "priority"\nservice_tier = "priority"\n`;
+  it('removes every occurrence when multiple invalid service_tier lines exist', () => {
+    const input = `service_tier = "priority"\nservice_tier = "default"\n`;
     const result = normalizeCodexConfigContent(input);
-    expect(result).toBe(`service_tier = "fast"\nservice_tier = "fast"\n`);
+    expect(result).toBe('');
   });
 
   // -------------------------------------------------------------------------
   // BLOCKER 1 regression cases — line-anchored pattern must not corrupt data
   // -------------------------------------------------------------------------
 
-  it('BLOCKER 1: does NOT rewrite "priority" appearing inside an unrelated string value', () => {
-    // The word "priority" is embedded in a different key's value; only
-    // a standalone `service_tier = "priority"` line should be touched.
+  it('BLOCKER 1: does NOT touch "priority" appearing inside an unrelated string value', () => {
     const input = [
       'description = "use priority service_tier for high-load jobs"',
       'notes = "priority access required"',
       'service_tier = "fast"',
     ].join('\n');
-    // No stale service_tier key — should be a no-op.
+    // No invalid standalone service_tier key — should be a no-op.
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
-  it('BLOCKER 1: does NOT rewrite "default" appearing inside an unrelated string value', () => {
+  it('BLOCKER 1: does NOT touch "default" appearing inside an unrelated string value', () => {
     const input = [
       'description = "use default service_tier in old configs"',
       'service_tier = "fast"',
@@ -143,8 +164,7 @@ describe('normalizeCodexConfigContent', () => {
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
-  it('BLOCKER 1: does NOT rewrite "priority" that appears only in a comment', () => {
-    // A fully commented-out key line must not be rewritten.
+  it('BLOCKER 1: does NOT touch a fully commented-out service_tier line', () => {
     const input = [
       '# service_tier = "priority"',
       'service_tier = "fast"',
@@ -152,8 +172,7 @@ describe('normalizeCodexConfigContent', () => {
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
-  it('BLOCKER 1: rewrites a real key line even when "priority" also appears elsewhere', () => {
-    // The stale key line must still be caught; the unrelated occurrence is safe.
+  it('BLOCKER 1: removes the real invalid key line but preserves unrelated occurrences', () => {
     const input = [
       'notes = "priority tier deprecated"',
       'service_tier = "priority"',
@@ -161,8 +180,8 @@ describe('normalizeCodexConfigContent', () => {
     ].join('\n');
     const result = normalizeCodexConfigContent(input);
     expect(result).not.toBeNull();
-    // The real key is fixed.
-    expect(result).toContain('service_tier = "fast"');
+    // The real key line is gone.
+    expect(result).not.toMatch(/^service_tier/m);
     // The unrelated value and comment are unchanged.
     expect(result).toContain('notes = "priority tier deprecated"');
     expect(result).toContain('# service_tier = "priority"  (old value)');
@@ -176,40 +195,26 @@ describe('normalizeCodexConfigContent', () => {
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
-  it('BLOCKER 1: does not touch service_tier with an unrecognised value adjacent to "priority" text', () => {
-    const input = [
-      'tier_label = "priority-ish"',
-      'service_tier = "ultra"',
-    ].join('\n');
-    expect(normalizeCodexConfigContent(input)).toBeNull();
-  });
-
   // -------------------------------------------------------------------------
-  // FIX 2 regression: CRLF line endings must be preserved (#4276).
-  //
-  // config.toml files written by the Codex app on Windows use CRLF endings.
-  // The normalizer must coerce service_tier and preserve ALL \r\n sequences —
-  // no conversion to LF, no stray \r characters remaining.
+  // CRLF regression: config.toml files written by the Codex app on Windows use
+  // CRLF endings. Removing the stale line must preserve ALL surrounding \r\n
+  // sequences — no conversion to LF, no stray \r left behind.
   // -------------------------------------------------------------------------
 
-  it('FIX 2 CRLF regression: coerces service_tier="priority" to "fast" while preserving \\r\\n line endings', () => {
+  it('CRLF regression: removes the invalid line while preserving surrounding \\r\\n endings', () => {
     const crlfContent = '[model]\r\nservice_tier = "priority"\r\nmodel = "gpt-5.5"\r\n';
     const result = normalizeCodexConfigContent(crlfContent);
 
-    // A change was made.
     expect(result).not.toBeNull();
-    // The stale value is coerced.
-    expect(result).toContain('service_tier = "fast"');
-    // CRLF endings are preserved — no LF-only sequences introduced.
-    expect(result).toContain('\r\n');
+    // The stale line is removed.
+    expect(result).not.toContain('service_tier');
+    expect(result).not.toContain('"priority"');
+    // The exact surrounding CRLF structure is preserved.
+    expect(result).toBe('[model]\r\nmodel = "gpt-5.5"\r\n');
     // No stray bare \r without \n.
     expect(result).not.toMatch(/\r(?!\n)/);
-    // No LF without preceding \r (i.e. no naked LF introduced).
+    // No naked LF introduced.
     expect(result).not.toMatch(/(?<!\r)\n/);
-    // The rest of the content is intact.
-    expect(result).toContain('[model]\r\n');
-    expect(result).toContain('model = "gpt-5.5"\r\n');
-    expect(result).not.toContain('"priority"');
   });
 });
 
@@ -228,7 +233,7 @@ describe('normalizeCodexConfigFile', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('patches a config.toml that contains service_tier="priority" (bug #4276 regression)', async () => {
+  it('removes service_tier="priority" from config.toml (bug #4276 regression)', async () => {
     const configPath = join(tmpDir, 'config.toml');
     writeFileSync(
       configPath,
@@ -239,12 +244,12 @@ describe('normalizeCodexConfigFile', () => {
     await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
 
     const after = readFileSync(configPath, 'utf8');
-    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('service_tier');
     expect(after).not.toContain('"priority"');
     expect(after).toContain('model = "gpt-5.5"');
   });
 
-  it('patches a config.toml that contains service_tier="default"', async () => {
+  it('removes service_tier="default" from config.toml', async () => {
     const configPath = join(tmpDir, 'config.toml');
     writeFileSync(
       configPath,
@@ -255,8 +260,27 @@ describe('normalizeCodexConfigFile', () => {
     await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
 
     const after = readFileSync(configPath, 'utf8');
-    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('service_tier');
     expect(after).not.toContain('"default"');
+    expect(after).toContain('model = "gpt-5.5"');
+  });
+
+  it('RED SPEC (#3408 fix_config): removes a previously-unhandled value ("turbo") from config.toml', async () => {
+    // This is the production failure the wildcard fix targets: after `default`
+    // was added to the old stale map, other invalid values (measured ~50/day
+    // on 0.11.0) still crashed the CLI. The file-level path must remove them.
+    const configPath = join(tmpDir, 'config.toml');
+    writeFileSync(
+      configPath,
+      `[model]\nservice_tier = "turbo"\nmodel = "gpt-5.5"\n`,
+      'utf8',
+    );
+
+    await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
+
+    const after = readFileSync(configPath, 'utf8');
+    expect(after).not.toContain('service_tier');
+    expect(after).not.toContain('"turbo"');
     expect(after).toContain('model = "gpt-5.5"');
   });
 
@@ -270,13 +294,12 @@ describe('normalizeCodexConfigFile', () => {
 
     const after = readFileSync(configPath, 'utf8');
     expect(after).toBe(original);
-    // File was not rewritten (mtime unchanged within 1ms tolerance).
+    // File was not rewritten (mtime unchanged).
     const { mtimeMs: mtimeAfter } = statSync(configPath);
     expect(mtimeAfter).toBe(mtimeBefore);
   });
 
   it('does nothing when config.toml is absent (no throw)', async () => {
-    // Directory exists but no config.toml — must not throw.
     await expect(
       normalizeCodexConfigFile({ CODEX_HOME: tmpDir }),
     ).resolves.toBeUndefined();
@@ -284,7 +307,6 @@ describe('normalizeCodexConfigFile', () => {
 
   it('resolves config path via CODEX_HOME env var', () => {
     const p = resolveCodexConfigPath({ CODEX_HOME: '/custom/codex-home' });
-    // normalize() handles cross-platform path separators.
     expect(normalize(p)).toBe(normalize('/custom/codex-home/config.toml'));
   });
 
@@ -294,17 +316,15 @@ describe('normalizeCodexConfigFile', () => {
 
   it('BLOCKER 2: no temp-file litter remains after a successful atomic write', async () => {
     const configPath = join(tmpDir, 'config.toml');
-    writeFileSync(configPath, `service_tier = "priority"\n`, 'utf8');
+    writeFileSync(configPath, `service_tier = "priority"\nmodel = "gpt-5.5"\n`, 'utf8');
 
     await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
 
-    // The directory should contain exactly one file: config.toml.
     const files = readdirSync(tmpDir);
     expect(files).toEqual(['config.toml']);
   });
 
   it('BLOCKER 2: final config.toml content is correct and complete after atomic write', async () => {
-    // Verifies that the rename replaced the full content, not a partial write.
     const original = [
       '[model]',
       'model = "gpt-5.5"',
@@ -320,22 +340,17 @@ describe('normalizeCodexConfigFile', () => {
     await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
 
     const after = readFileSync(configPath, 'utf8');
-    // The patched key is updated.
-    expect(after).toContain('service_tier = "fast"');
+    // The stale line is removed (not rewritten to "fast").
+    expect(after).not.toContain('service_tier');
+    expect(after).not.toContain('"priority"');
     // All other content is preserved verbatim.
     expect(after).toContain('model = "gpt-5.5"');
     expect(after).toContain('max_tokens = 8192');
     expect(after).toContain('[history]');
     expect(after).toContain('limit = 100');
-    expect(after).not.toContain('"priority"');
   });
 
   it('BLOCKER 2: write failure is logged with console.warn and does not throw', async () => {
-    // Inject a stub IO where rename throws to simulate an atomic-write failure
-    // (e.g. cross-device rename, permission error). We verify:
-    //   (a) normalizeCodexConfigFile does not throw,
-    //   (b) console.warn is called with the expected prefix,
-    //   (c) the temp file is cleaned up (unlink is called).
     const configPath = join(tmpDir, 'config.toml');
     writeFileSync(configPath, `service_tier = "priority"\n`, 'utf8');
 
@@ -356,7 +371,6 @@ describe('normalizeCodexConfigFile', () => {
       '[codex-config-normalize] atomic write failed:',
       simulatedError,
     );
-    // The temp file cleanup was attempted.
     expect(unlinkCalls).toHaveLength(1);
     expect(unlinkCalls[0]).toMatch(/config\.toml\.[0-9a-f]+\.tmp$/);
 
@@ -364,24 +378,12 @@ describe('normalizeCodexConfigFile', () => {
   });
 
   // -------------------------------------------------------------------------
-  // FIX 1 regression: env-mismatch bug — CODEX_HOME from agentCliEnv must be
-  // respected (#4276).
-  //
-  // The call site in server.ts previously passed `process.env` directly.
-  // If a user configured CODEX_HOME via Open Design's agentCliEnv.codex, the
-  // normalizer would resolve the wrong path (the default ~/.codex/config.toml)
-  // and leave the real config at the user's CODEX_HOME untouched. This test
-  // verifies that normalizeCodexConfigFile resolves the path from whatever env
-  // is passed — including an overridden CODEX_HOME — so the call site fix
-  // (passing the merged spawn env instead of bare process.env) is covered.
+  // FIX 1 regression: env-mismatch — CODEX_HOME from agentCliEnv must be
+  // respected (#4276). The normalizer resolves the path from whatever env is
+  // passed, including an overridden CODEX_HOME.
   // -------------------------------------------------------------------------
 
   it('FIX 1 regression: patches config.toml at CODEX_HOME from a merged env, not bare process.env', async () => {
-    // Simulate an alternate CODEX_HOME the user configured via agentCliEnv.
-    // The stale config lives at the alternate location. If process.env were
-    // passed instead of the merged env (which carries CODEX_HOME), the file
-    // would not be found and would NOT be patched — this test would fail
-    // against the pre-fix call path.
     const altCodexHome = tmpDir;
     const configPath = join(altCodexHome, 'config.toml');
     writeFileSync(
@@ -390,9 +392,6 @@ describe('normalizeCodexConfigFile', () => {
       'utf8',
     );
 
-    // Pass a merged env that mirrors what the server.ts call site now passes:
-    // { ...process.env, ...(def.env || {}), ...configuredAgentEnv }
-    // where configuredAgentEnv carries CODEX_HOME pointing at altCodexHome.
     const mergedEnv: NodeJS.ProcessEnv = {
       ...process.env,
       CODEX_HOME: altCodexHome,
@@ -401,27 +400,16 @@ describe('normalizeCodexConfigFile', () => {
     await normalizeCodexConfigFile(mergedEnv);
 
     const after = readFileSync(configPath, 'utf8');
-    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('service_tier');
     expect(after).not.toContain('"priority"');
     expect(after).toContain('model = "gpt-5.5"');
   });
 
   // -------------------------------------------------------------------------
-  // FIX 3 regression: tilde CODEX_HOME mismatch — #4276
-  //
-  // The Codex child process sees an expanded absolute CODEX_HOME because
-  // spawnEnvForAgent calls expandConfiguredEnv which expands ~/. But
-  // resolveCodexConfigPath previously took env.CODEX_HOME literally, so
-  // CODEX_HOME="~/.codex-alt" resolved to the literal path "~/.codex-alt/
-  // config.toml" rather than "<homedir>/.codex-alt/config.toml". The config
-  // at the expanded location was therefore never found and never patched.
+  // FIX 3 regression: tilde CODEX_HOME mismatch — #4276.
   // -------------------------------------------------------------------------
 
   it('FIX 3 tilde regression: resolveCodexConfigPath expands ~/... to an absolute path', () => {
-    // resolveCodexConfigPath must expand "~/" to homedir() so the path it
-    // returns matches what the Codex child process sees after spawnEnvForAgent
-    // runs expandConfiguredEnv. Before this fix, the literal "~/" was passed
-    // directly to path.join, yielding a path that can never be found on disk.
     const home = homedir();
     const resolved = resolveCodexConfigPath({ CODEX_HOME: '~/.codex-alt' });
     expect(normalize(resolved)).toBe(
@@ -430,9 +418,6 @@ describe('normalizeCodexConfigFile', () => {
   });
 
   it('FIX 3 tilde regression: patches config.toml at the EXPANDED location when CODEX_HOME contains a tilde prefix', async () => {
-    // Place the stale config in a subdirectory of homedir so we can form a
-    // real tilde path. On all supported platforms homedir() is writable by
-    // the current user, so creating a nested temp directory there is safe.
     const home = homedir();
     const tildeTmpDir = mkdtempSync(join(home, '.od-codex-config-test-'));
     const configPath = join(tildeTmpDir, 'config.toml');
@@ -443,19 +428,13 @@ describe('normalizeCodexConfigFile', () => {
         'utf8',
       );
 
-      // Build the tilde path that maps to tildeTmpDir.
-      // path.relative(home, tildeTmpDir) → ".od-codex-config-test-XXXXXX"
       const relSuffix = tildeTmpDir.slice(home.length).replace(/\\/g, '/');
-      const tildeCodexHome = '~' + relSuffix; // e.g. "~/.od-codex-config-test-abc123"
+      const tildeCodexHome = '~' + relSuffix;
 
-      // Before the fix: resolveCodexConfigPath('~/.od-...') returned a literal
-      // "~/.od-.../config.toml" which does not exist → file NOT patched (RED).
-      // After the fix: resolveCodexConfigPath expands "~/" to homedir → correct
-      // absolute path → file IS patched (GREEN).
       await normalizeCodexConfigFile({ ...process.env, CODEX_HOME: tildeCodexHome });
 
       const after = readFileSync(configPath, 'utf8');
-      expect(after).toContain('service_tier = "fast"');
+      expect(after).not.toContain('service_tier');
       expect(after).not.toContain('"priority"');
       expect(after).toContain('model = "gpt-5.5"');
     } finally {
@@ -464,10 +443,6 @@ describe('normalizeCodexConfigFile', () => {
   });
 
   it('FIX 1 regression (negative): without CODEX_HOME in env, default path is used (not the alt location)', async () => {
-    // This confirms the env-mismatch: if process.env is passed and it does NOT
-    // carry CODEX_HOME, the normalizer looks at the default ~/.codex/config.toml,
-    // NOT at our tmpDir. The stale config at tmpDir is therefore NOT patched.
-    // This is the failure mode that was present before the server.ts fix.
     const altCodexHome = tmpDir;
     const configPath = join(altCodexHome, 'config.toml');
     writeFileSync(
@@ -476,8 +451,6 @@ describe('normalizeCodexConfigFile', () => {
       'utf8',
     );
 
-    // Pass an env WITHOUT CODEX_HOME — normalizer resolves ~/.codex/config.toml,
-    // which is not our tmpDir/config.toml. The file at tmpDir stays unchanged.
     const envWithoutCodexHome: NodeJS.ProcessEnv = { ...process.env };
     delete envWithoutCodexHome.CODEX_HOME;
 
