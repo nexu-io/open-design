@@ -16,6 +16,7 @@
 // translation.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -510,7 +511,7 @@ function buildOpenCodeExternalDirectoryAllowlist(
       (directories ?? [])
         .filter((dir) => typeof dir === 'string' && dir.trim().length > 0)
         .filter((dir) => path.isAbsolute(dir))
-        .map((dir) => normalizeAllowedDirectory(dir)),
+        .flatMap((dir) => normalizeAllowedDirectoryVariants(dir)),
     ),
   );
   if (normalized.length === 0) return null;
@@ -529,6 +530,17 @@ function normalizeAllowedDirectory(dir: string): string {
   const root = path.parse(resolved).root;
   if (resolved === root) return root;
   return resolved.replace(/[\\/]+$/, '');
+}
+
+function normalizeAllowedDirectoryVariants(dir: string): string[] {
+  const normalized = normalizeAllowedDirectory(dir);
+  let real: string | null = null;
+  try {
+    real = normalizeAllowedDirectory(realpathSync.native(dir));
+  } catch {
+    real = null;
+  }
+  return real && real !== normalized ? [normalized, real] : [normalized];
 }
 
 function joinPermissionGlob(dir: string, suffix: '*' | '**'): string {

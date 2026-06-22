@@ -85,6 +85,13 @@ interface DaemonRunRecord {
   reasoning?: string;
   skillId?: string;
   designSystemId?: string;
+  designSystemDigest?: string;
+  designSystemSelectionSource?: string;
+  promptCache?: {
+    stablePromptHash: string;
+    hit: boolean;
+    missReason: string | null;
+  };
   clientType?: 'desktop' | 'web' | 'unknown';
   promptTelemetry?: PromptStackTelemetry;
   projectAttachmentPaths?: string[];
@@ -240,6 +247,11 @@ function turnInfoFromRun(
   if (run.reasoning) turn.reasoning = run.reasoning;
   if (run.skillId) turn.skillId = run.skillId;
   if (run.designSystemId) turn.designSystemId = run.designSystemId;
+  if (run.designSystemDigest) turn.designSystemDigest = run.designSystemDigest;
+  if (run.designSystemSelectionSource) {
+    turn.designSystemSelectionSource = run.designSystemSelectionSource;
+  }
+  if (run.promptCache) turn.promptCache = run.promptCache;
   return Object.keys(turn).length > 0 ? turn : undefined;
 }
 

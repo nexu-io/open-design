@@ -87,6 +87,7 @@ type RunDeliveryTarget = 'managed-project' | 'external-project' | 'none';
 interface ProjectRecord {
   id: string;
   name: string;
+  designSystemId?: string | null;
   metadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
 }
@@ -138,6 +139,15 @@ interface ChatRun {
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
+  designSystemId?: string | null;
+  designSystemRequestedId?: string | null;
+  designSystemSelectionSource?: string | null;
+  designSystemDigest?: string | null;
+  promptCache?: {
+    stablePromptHash?: string;
+    hit?: boolean;
+    missReason?: string | null;
+  };
 }
 
 interface RunCreateMeta extends JsonRecord {
@@ -339,6 +349,56 @@ function toScenarioProjectMetadata(
     kind: metadata.kind as ContractProjectMetadata['kind'],
     ...(metadata.intent === 'live-artifact' ? { intent: metadata.intent } : {}),
   };
+}
+
+type DesignSystemSelectionSource = 'request' | 'plugin' | 'project' | 'app-default' | 'none';
+
+function normalizedDesignSystemId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function resolveEffectiveDesignSystemSelection({
+  requestDesignSystemId,
+  pluginDesignSystemId,
+  projectDesignSystemId,
+  appDefaultDesignSystemId,
+  allowAppDefault = true,
+}: {
+  requestDesignSystemId?: unknown;
+  pluginDesignSystemId?: unknown;
+  projectDesignSystemId?: unknown;
+  appDefaultDesignSystemId?: unknown;
+  allowAppDefault?: boolean;
+}): { id: string | null; source: DesignSystemSelectionSource } {
+  const requestId = normalizedDesignSystemId(requestDesignSystemId);
+  if (requestId) return { id: requestId, source: 'request' };
+
+  const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
+  if (pluginId) return { id: pluginId, source: 'plugin' };
+
+  const projectId = normalizedDesignSystemId(projectDesignSystemId);
+  if (projectId) return { id: projectId, source: 'project' };
+
+  if (allowAppDefault) {
+    const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
+    if (appDefaultId) return { id: appDefaultId, source: 'app-default' };
+  }
+
+  return { id: null, source: 'none' };
+}
+
+function designSystemIdFromPluginSnapshot(snapshot: unknown): string | null {
+  const items = (snapshot as { resolvedContext?: { items?: unknown } } | null | undefined)
+    ?.resolvedContext?.items;
+  if (!Array.isArray(items)) return null;
+  const designSystemItems = items.filter(
+    (item): item is { kind: string; id?: unknown; primary?: unknown } =>
+      item !== null &&
+      typeof item === 'object' &&
+      (item as { kind?: unknown }).kind === 'design-system',
+  );
+  const primary = designSystemItems.find((item) => item.primary === true);
+  return normalizedDesignSystemId(primary?.id ?? designSystemItems[0]?.id);
 }
 
 function routeParamId(req: ApiRequest): string | null {
@@ -689,6 +749,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const runProjectForAnalytics = requestProjectId
         ? toProjectRecord(getProject(db, requestProjectId))
         : null;
+      const analyticsDesignSystemSelection = resolveEffectiveDesignSystemSelection({
+        requestDesignSystemId: reqBody.designSystemId,
+        pluginDesignSystemId: resolvedSnapshot?.ok
+          ? designSystemIdFromPluginSnapshot(resolvedSnapshot.snapshot)
+          : null,
+        projectDesignSystemId: runProjectForAnalytics?.designSystemId,
+        appDefaultDesignSystemId: (appCfgForAnalytics as { designSystemId?: unknown }).designSystemId,
+        allowAppDefault: runProjectForAnalytics === null,
+      });
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind,
         projectMetadata: runProjectForAnalytics?.metadata,
@@ -740,12 +809,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         ...sessionDimensionProps,
-        design_system_id:
-          typeof reqBody.designSystemId === 'string'
-            ? reqBody.designSystemId
-            : undefined,
+        design_system_id: analyticsDesignSystemSelection.id ?? undefined,
+        design_system_selection_source: analyticsDesignSystemSelection.source,
         design_system_source:
-          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
+          analyticsDesignSystemSelection.id
             ? 'unknown'
             : 'not_applicable',
         ...(isDesignSystemRun ? {
@@ -906,6 +973,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           appVersion: design.getAppVersion(),
           properties: {
             ...baseProps,
+            design_system_id: run.designSystemId ?? undefined,
+            design_system_digest: run.designSystemDigest ?? undefined,
+            design_system_selection_source: run.designSystemSelectionSource ?? 'none',
+            stable_prompt_hash: run.promptCache?.stablePromptHash,
+            stable_prompt_cache_hit: run.promptCache?.hit,
+            stable_prompt_cache_miss_reason: run.promptCache?.missReason,
             area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),

@@ -155,6 +155,10 @@ export function createChatRunService({
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
     agentId: run.agentId,
+    designSystemId: run.designSystemId ?? null,
+    designSystemRequestedId: run.designSystemRequestedId ?? null,
+    designSystemSelectionSource: run.designSystemSelectionSource ?? null,
+    designSystemDigest: run.designSystemDigest ?? null,
     appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
     pluginId: run.pluginId ?? null,
     status: run.status,
@@ -174,6 +178,7 @@ export function createChatRunService({
     workspace: run.workspace ?? projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
+    ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 

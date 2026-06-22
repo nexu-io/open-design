@@ -20,9 +20,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
+  describeStablePromptCache,
+  designSystemIdFromPluginSnapshot,
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
+  resolveEffectiveDesignSystemSelection,
   resolveResearchCommandContract,
   startServer,
   validateCodexGeneratedImagesDir,
@@ -295,11 +298,18 @@ process.stdin.on('end', () => {
           };
         };
 
-        expect(parsed.permission?.external_directory).toMatchObject({
-          [effectiveCwd]: 'allow',
-          [`${effectiveCwd}/*`]: 'allow',
-          [`${effectiveCwd}/**`]: 'allow',
-        });
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const cwdAliases = new Set([effectiveCwd]);
+        if (effectiveCwd.startsWith('/private/var/')) {
+          cwdAliases.add(effectiveCwd.replace(/^\/private\/var\//, '/var/'));
+        }
+        const allowedCwd = [...cwdAliases].find(
+          (cwd) =>
+            externalDirectory[cwd] === 'allow' &&
+            externalDirectory[`${cwd}/*`] === 'allow' &&
+            externalDirectory[`${cwd}/**`] === 'allow',
+        );
+        expect(allowedCwd).toBeTruthy();
       },
     );
   });
@@ -2521,6 +2531,157 @@ process.stdin.on('end', () => {
       }
     }
   });
+
+  it('uses a project design system in sandboxed chat runs without an explicit run designSystemId', async () => {
+    const projectId = `project-ds-${randomUUID()}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Project DS fixture',
+        designSystemId: 'default',
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(projectResponse.ok).toBe(true);
+
+    const conversationId = `conv-${randomUUID()}`;
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Active design system') ? 'has-active-design-system' : 'missing-active-design-system',
+    prompt.includes('Treat the following DESIGN.md as authoritative') ? 'has-design-system-contract' : 'missing-design-system-contract',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            message: 'draft a branded artifact',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-active-design-system');
+        expect(body).toContain('has-design-system-contract');
+        expect(body).not.toContain('missing-active-design-system');
+        expect(body).not.toContain('missing-design-system-contract');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = await runsResponse.json() as {
+          runs: Array<{
+            designSystemId: string | null;
+            designSystemRequestedId: string | null;
+            designSystemSelectionSource: string | null;
+            designSystemDigest: string | null;
+            promptCache?: { hit: boolean; missReason: string | null };
+          }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          designSystemId: 'default',
+          designSystemRequestedId: 'default',
+          designSystemSelectionSource: 'project',
+          promptCache: { hit: false, missReason: 'new-session' },
+        });
+        expect(runsBody.runs[0]?.designSystemDigest).toMatch(/^[a-f0-9]{64}$/);
+      },
+    );
+  });
+
+  it('keeps requested design systems separate from missing injected design systems', async () => {
+    const missingDesignSystemId = `missing-ds-${randomUUID()}`;
+    const projectId = `project-missing-ds-${randomUUID()}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Missing project DS fixture',
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(projectResponse.ok).toBe(true);
+
+    const conversationId = `conv-${randomUUID()}`;
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Active design system') ? 'has-active-design-system' : 'missing-active-design-system',
+    prompt.includes('Treat the following DESIGN.md as authoritative') ? 'has-design-system-contract' : 'missing-design-system-contract',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            designSystemId: missingDesignSystemId,
+            message: 'draft a branded artifact',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('missing-design-system-contract');
+        expect(body).not.toContain('has-design-system-contract');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = await runsResponse.json() as {
+          runs: Array<{
+            designSystemId: string | null;
+            designSystemRequestedId: string | null;
+            designSystemSelectionSource: string | null;
+            designSystemDigest: string | null;
+          }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          designSystemId: null,
+          designSystemRequestedId: missingDesignSystemId,
+          designSystemSelectionSource: 'none',
+          designSystemDigest: null,
+        });
+      },
+    );
+  });
 });
 
 describe('daemon run creation during shutdown', () => {
@@ -2759,6 +2920,89 @@ describe('chat prompt helpers', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('resolves design-system selection precedence for run prompt composition', () => {
+    expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: 'request-ds',
+      pluginDesignSystemId: 'plugin-ds',
+      projectDesignSystemId: 'project-ds',
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'request-ds', source: 'request' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      pluginDesignSystemId: 'plugin-ds',
+      projectDesignSystemId: 'project-ds',
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'plugin-ds', source: 'plugin' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      projectDesignSystemId: 'project-ds',
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'project-ds', source: 'project' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      appDefaultDesignSystemId: 'default-ds',
+    })).toEqual({ id: 'default-ds', source: 'app-default' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      appDefaultDesignSystemId: 'default-ds',
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
+  });
+
+  it('extracts the primary design-system id from a plugin snapshot', () => {
+    expect(designSystemIdFromPluginSnapshot({
+      resolvedContext: {
+        items: [
+          { kind: 'skill', id: 'landing' },
+          { kind: 'design-system', id: 'secondary' },
+          { kind: 'design-system', id: 'primary', primary: true },
+        ],
+      },
+    })).toBe('primary');
+
+    expect(designSystemIdFromPluginSnapshot({
+      resolvedContext: {
+        items: [
+          { kind: 'design-system', id: 'fallback' },
+        ],
+      },
+    })).toBe('fallback');
+
+    expect(designSystemIdFromPluginSnapshot({ resolvedContext: { items: [] } })).toBeNull();
+  });
+
+  it('describes stable prompt cache hits and miss reasons', () => {
+    expect(describeStablePromptCache({
+      isResuming: false,
+      storedStablePromptHash: null,
+      currentStableHash: 'hash-a',
+    })).toEqual({
+      stablePromptHash: 'hash-a',
+      hit: false,
+      missReason: 'new-session',
+    });
+
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-a',
+    })).toEqual({
+      stablePromptHash: 'hash-a',
+      hit: true,
+      missReason: null,
+    });
+
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'stable-prompt-changed',
+    });
   });
 
   it('grants Codex the canonical validated generated_images dir', () => {

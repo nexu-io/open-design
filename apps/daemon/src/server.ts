@@ -150,6 +150,7 @@ import {
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
+  digestDesignSystemContext,
   LEGACY_DESIGN_SYSTEM_ARTIFACTS,
   linkUserDesignSystemProject,
   listDesignSystems,
@@ -794,6 +795,105 @@ export function resolveChatExtraAllowedDirs({
       ),
     ),
   );
+}
+
+export type DesignSystemSelectionSource =
+  | 'request'
+  | 'plugin'
+  | 'project'
+  | 'app-default'
+  | 'none';
+
+function normalizedDesignSystemId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+export function resolveEffectiveDesignSystemSelection({
+  requestDesignSystemId,
+  pluginDesignSystemId,
+  projectDesignSystemId,
+  appDefaultDesignSystemId,
+  allowAppDefault = true,
+}: {
+  requestDesignSystemId?: unknown;
+  pluginDesignSystemId?: unknown;
+  projectDesignSystemId?: unknown;
+  appDefaultDesignSystemId?: unknown;
+  allowAppDefault?: boolean;
+}): { id: string | null; source: DesignSystemSelectionSource } {
+  const requestId = normalizedDesignSystemId(requestDesignSystemId);
+  if (requestId) return { id: requestId, source: 'request' };
+
+  const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
+  if (pluginId) return { id: pluginId, source: 'plugin' };
+
+  const projectId = normalizedDesignSystemId(projectDesignSystemId);
+  if (projectId) return { id: projectId, source: 'project' };
+
+  if (allowAppDefault) {
+    const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
+    if (appDefaultId) return { id: appDefaultId, source: 'app-default' };
+  }
+
+  return { id: null, source: 'none' };
+}
+
+export function designSystemIdFromPluginSnapshot(snapshot: unknown): string | null {
+  const items = (snapshot as { resolvedContext?: { items?: unknown } } | null | undefined)
+    ?.resolvedContext?.items;
+  if (!Array.isArray(items)) return null;
+  const designSystemItems = items.filter(
+    (item): item is { kind: string; id?: unknown; primary?: unknown } =>
+      item !== null &&
+      typeof item === 'object' &&
+      (item as { kind?: unknown }).kind === 'design-system',
+  );
+  const primary = designSystemItems.find((item) => item.primary === true);
+  return normalizedDesignSystemId(primary?.id ?? designSystemItems[0]?.id);
+}
+
+export type StablePromptCacheMissReason =
+  | 'new-session'
+  | 'missing-stored-hash'
+  | 'stable-prompt-changed'
+  | null;
+
+export function describeStablePromptCache({
+  isResuming,
+  storedStablePromptHash,
+  currentStableHash,
+}: {
+  isResuming: boolean;
+  storedStablePromptHash: string | null;
+  currentStableHash: string;
+}): {
+  stablePromptHash: string;
+  hit: boolean;
+  missReason: StablePromptCacheMissReason;
+} {
+  if (!isResuming) {
+    return {
+      stablePromptHash: currentStableHash,
+      hit: false,
+      missReason: 'new-session',
+    };
+  }
+  if (storedStablePromptHash === currentStableHash) {
+    return {
+      stablePromptHash: currentStableHash,
+      hit: true,
+      missReason: null,
+    };
+  }
+  return {
+    stablePromptHash: currentStableHash,
+    hit: false,
+    missReason: storedStablePromptHash === null
+      ? 'missing-stored-hash'
+      : 'stable-prompt-changed',
+  };
 }
 
 export function resolveGrantedCodexImagegenOverride({
@@ -5683,12 +5783,39 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
+    let appConfigForPrompt = null;
+    try {
+      appConfigForPrompt = await readAppConfig(RUNTIME_DATA_DIR);
+    } catch (err) {
+      console.warn('[app-config] readAppConfig failed', err);
+    }
+    let pluginDesignSystemId = null;
+    if (
+      typeof appliedPluginSnapshotId === 'string' &&
+      appliedPluginSnapshotId.length > 0
+    ) {
+      try {
+        pluginDesignSystemId = designSystemIdFromPluginSnapshot(
+          getSnapshot(db, appliedPluginSnapshotId),
+        );
+      } catch (err) {
+        console.warn(
+          `[plugins] designSystem selection failed: ${err?.message ?? err}`,
+        );
+      }
+    }
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const effectiveDesignSystemId =
-      typeof designSystemId === 'string' && designSystemId
-        ? designSystemId
-        : project?.designSystemId;
+    const designSystemSelection = resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: designSystemId,
+      pluginDesignSystemId,
+      projectDesignSystemId: project?.designSystemId,
+      appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+      // A project row with designSystemId=null can mean the user picked
+      // "No design system"; do not reapply the global default behind their back.
+      allowAppDefault: project === null,
+    });
+    const effectiveDesignSystemId = designSystemSelection.id;
     const metadata = project?.metadata;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
@@ -5868,11 +5995,8 @@ export async function startServer({
 
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
-    try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-      if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
-    } catch (err) {
-      console.warn('[custom-instructions] readAppConfig failed', err);
+    if (appConfigForPrompt?.customInstructions) {
+      userInstructions = appConfigForPrompt.customInstructions;
     }
 
     let designSystemBody;
@@ -5898,6 +6022,8 @@ export async function startServer({
     let designSystemImportMode;
     let designSystemCraftApplies = [];
     let designSystemCraftExemptions = [];
+    let activeDesignSystemId = null;
+    let designSystemDigest = null;
     if (effectiveDesignSystemId) {
       let systems = await listAllDesignSystems();
       let summary = systems.find((s) => s.id === effectiveDesignSystemId);
@@ -5931,6 +6057,20 @@ export async function startServer({
         designSystemImportMode = assets.importMode;
         designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
         designSystemCraftExemptions = Array.isArray(assets.craftExemptions) ? assets.craftExemptions : [];
+        if (typeof designSystemBody === 'string' && designSystemBody.length > 0) {
+          activeDesignSystemId = effectiveDesignSystemId;
+          designSystemDigest = digestDesignSystemContext({
+            id: effectiveDesignSystemId,
+            title: designSystemTitle,
+            body: designSystemBody,
+            usageMd: designSystemUsageMd,
+            tokensCss: designSystemTokensCss,
+            componentsManifest: designSystemComponentsManifest,
+            fixtureHtml: designSystemFixtureHtml,
+            pullIndex: designSystemPullIndex,
+            importMode: designSystemImportMode,
+          });
+        }
       }
     }
 
@@ -6147,6 +6287,12 @@ export async function startServer({
       activeSkillDir,
       activeSkillDirs,
       critiqueShouldRun,
+      designSystemSelection: {
+        id: activeDesignSystemId,
+        requestedId: effectiveDesignSystemId,
+        source: activeDesignSystemId ? designSystemSelection.source : 'none',
+        digest: designSystemDigest,
+      },
       promptTelemetryParts: {
         skillPrompt: skillBody ?? '',
         designSystemPrompt: designSystemBody ?? '',
@@ -6569,6 +6715,7 @@ export async function startServer({
       prompt: daemonSystemPrompt,
       activeSkillDirs,
       critiqueShouldRun,
+      designSystemSelection,
       promptTelemetryParts,
     } =
       await composeDaemonSystemPrompt({
@@ -6587,6 +6734,11 @@ export async function startServer({
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
       });
+
+    run.designSystemId = designSystemSelection?.id ?? null;
+    run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
+    run.designSystemSelectionSource = designSystemSelection?.source ?? 'none';
+    run.designSystemDigest = designSystemSelection?.digest ?? null;
 
     // Make skill side files reachable through three layers, in order of
     // preference. The skill preamble emitted by `withSkillRootPreamble()`
@@ -6725,6 +6877,11 @@ export async function startServer({
       agentResumeCtx.storedStablePromptHash,
       currentStableHash,
     );
+    run.promptCache = describeStablePromptCache({
+      isResuming: agentResumeCtx.isResuming,
+      storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
+      currentStableHash,
+    });
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const titleGenerationRequested =
       titleGeneration &&

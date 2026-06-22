@@ -260,6 +260,16 @@ export interface TurnInfo {
   skillId?: string;
   /** Design system id selected for this turn (if any). */
   designSystemId?: string;
+  /** sha256 digest of the injected design-system prompt context. */
+  designSystemDigest?: string;
+  /** Source that supplied the effective design-system selection. */
+  designSystemSelectionSource?: string;
+  /** Resume-session stable prompt cache diagnostics. */
+  promptCache?: {
+    stablePromptHash: string;
+    hit: boolean;
+    missReason: string | null;
+  };
 }
 
 export interface ReportContext {
@@ -976,6 +986,8 @@ function buildTimingSpanBodies(
           model: ctx.turn?.model ?? 'unknown',
           skill_id: ctx.turn?.skillId ?? null,
           design_system_id: ctx.turn?.designSystemId ?? null,
+          design_system_digest: ctx.turn?.designSystemDigest ?? null,
+          prompt_cache_hit: ctx.turn?.promptCache?.hit ?? null,
           user_request_available: Boolean(ctx.message.prompt),
           attachment_refs:
             objectRefSummary(cappedManifestEntries(ctx.attachmentManifest)) ?? [],
@@ -1289,6 +1301,11 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     reasoning: ctx.turn?.reasoning,
     skillId: ctx.turn?.skillId,
     designSystemId: ctx.turn?.designSystemId,
+    designSystemDigest: ctx.turn?.designSystemDigest,
+    designSystemSelectionSource: ctx.turn?.designSystemSelectionSource,
+    stablePromptHash: ctx.turn?.promptCache?.stablePromptHash,
+    stablePromptCacheHit: ctx.turn?.promptCache?.hit,
+    stablePromptCacheMissReason: ctx.turn?.promptCache?.missReason,
     appVersion: ctx.runtime?.appVersion,
     appChannel: ctx.runtime?.appChannel,
     packaged: ctx.runtime?.packaged,
