@@ -180,6 +180,10 @@ function geminiJsonEventStreamHasVisibleAssistantText(
   ));
 }
 
+export function looksLikeGeminiJsonEventStream(text: string): boolean {
+  return isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text));
+}
+
 export function bufferedAntigravityGeminiFirstTokenAt(
   chunks: readonly BufferedStdoutChunk[],
 ): number | null {

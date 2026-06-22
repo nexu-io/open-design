@@ -85,6 +85,7 @@ import {
   assertValidRuntimeDefInactivityTimeoutMs,
   bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
+  looksLikeGeminiJsonEventStream,
   resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -114,6 +115,7 @@ export {
   assertValidRuntimeDefInactivityTimeoutMs,
   bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
+  looksLikeGeminiJsonEventStream,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
   resolveChatRunInactivityTimeoutMs,
@@ -7175,9 +7177,6 @@ export async function startServer({
     // guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    const looksLikeGeminiJsonEventStream = (text: string) => (
-      isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text))
-    );
     // Event types that count as "the agent actually produced something the
     // user can see." Lifecycle markers (`status`) and meter readings
     // (`usage`) deliberately do NOT count — a model can emit token-usage
