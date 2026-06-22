@@ -1996,17 +1996,29 @@ function AppInner() {
   // bootstrap effect picks up the patched fetch for its fan-out calls —
   // fetchAgentsStream / fetchSkills / listProjects all authenticate on the
   // first attempt instead of 401-ing with stale unauthenticated fetch.
+  // The token is injected ONLY on same-origin /api/* requests to avoid
+  // leaking the daemon bearer token to off-origin analytics or external API
+  // calls that the app also makes via window.fetch.
   const handleApiTokenSubmit = useCallback((token: string) => {
     apiTokenRef.current = token;
     setApiToken(token);
 
     const originalFetch = window.fetch.bind(window);
     window.fetch = ((input, init) => {
-      const headers = new Headers(init?.headers);
-      if (!headers.has('Authorization')) {
-        headers.set('Authorization', `Bearer ${token}`);
+      const url = new URL(
+        typeof input === 'string' ? input
+          : input instanceof Request ? input.url
+          : (input instanceof URL ? input.href : ''),
+        location.href,
+      );
+      if (url.origin === location.origin && url.pathname.startsWith('/api/')) {
+        const headers = new Headers(init?.headers);
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+        return originalFetch(input, { ...init, headers });
       }
-      return originalFetch(input, { ...init, headers });
+      return originalFetch(input, init);
     }) as typeof window.fetch;
 
     setNeedsToken(false);
