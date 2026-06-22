@@ -13,7 +13,7 @@ import {
 import {
   createDesignTokenEvidenceCollector,
   type DesignExtractReport,
-} from '../src/design-token-evidence.js';
+} from '../src/design-systems/token-evidence.js';
 
 function reportFrom(text: string): DesignExtractReport {
   const c = createDesignTokenEvidenceCollector();

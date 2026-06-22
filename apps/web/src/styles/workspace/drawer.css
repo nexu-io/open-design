@@ -685,6 +685,27 @@
   cursor: pointer;
 }
 .designs-select-toggle:hover { border-color: var(--border-strong); }
+.designs-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  min-height: 31px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease-out), opacity 120ms var(--ease-out);
+}
+.designs-refresh-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.designs-refresh-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
 .designs-select-bar {
   display: inline-flex;
   align-items: center;
@@ -775,6 +796,27 @@
   inset: 22%;
   width: 56%;
   height: 56%;
+  object-fit: contain;
+}
+/* Brand project cover: gradient background (inline) + a rounded logo tile that
+   mirrors the monogram glyph cards so brand kits read as neat miniatures. */
+.project-thumb-brand-logo {
+  width: 64px;
+  height: 64px;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.project-thumb-brand .project-thumb-brand-logo .thumb-media {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 .project-thumb-image .project-thumb-glyph,

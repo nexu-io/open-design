@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { SmokeSuite } from './smoke-suite.ts';
+import type { SmokeSuite } from './suite.ts';
 import { requestJson } from './http.ts';
 
 export type CodexPetSummary = {

@@ -235,6 +235,7 @@ export type WinUninstallResult = {
   markerPath: string;
   namespace: string;
   nsisLogPath: string;
+  removedCacheRoot: boolean;
   registryResiduesRemoved: string[];
   removedDataRoot: boolean;
   removedLogsRoot: boolean;
@@ -251,6 +252,7 @@ export type WinCleanupResult = {
   namespace: string;
   removedLauncherNamespaceRoot: boolean;
   removedOutputRoot: boolean;
+  removedCacheRoot: boolean;
   removedProductUserDataRoot: boolean;
   removedRuntimeNamespaceRoot: boolean;
   removalPlan: WinRemovalTarget[];
@@ -286,7 +288,7 @@ export type WinResidueObservation = {
 export type WinRemovalTarget = {
   exists: boolean;
   path: string;
-  scope: "data" | "logs" | "product-user-data" | "sidecars";
+  scope: "cache" | "data" | "logs" | "product-user-data" | "sidecars";
   willRemove: boolean;
 };
 

@@ -1005,10 +1005,6 @@
   color: var(--text);
   font-weight: 650;
 }
-.app .msg.user .role {
-  padding-right: 4px;
-  color: var(--text-soft);
-}
 .app .msg.assistant .role {
   align-items: center;
   gap: 8px;
@@ -2729,6 +2725,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* When the previewed design system is a brand, the rich Brand Kit card
+   (BrandPreviewCard, compact variant) owns the right pane and stretches to its
+   full width. */
+.project-ds-picker-preview-brand {
+  width: 100%;
 }
 .project-ds-picker-preview-head {
   display: flex;

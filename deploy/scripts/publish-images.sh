@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-REGISTRY="${REGISTRY:-docker.io}"
-IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-vanjayak}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-open-design}"
+REGISTRY="${REGISTRY:-ghcr.io}"
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-nexu-io}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-od}"
 NODE_BASE_IMAGE="${NODE_BASE_IMAGE:-docker.io/library/node:24-alpine}"
 RUNTIME_BASE_IMAGE="${RUNTIME_BASE_IMAGE:-docker.io/library/node:24-alpine}"
 PUSH_STRATEGY="${PUSH_STRATEGY:-skopeo}"
@@ -103,9 +103,9 @@ Options:
   --platforms <list>              default: linux/amd64,linux/arm64
   --arch <amd64|arm64>            publish a single platform as <tag>-<arch>
   --image_tag <tag>               default: latest
-  --registry <registry>           default: docker.io
-  --image_namespace <namespace>   default: vanjayak
-  --image_repository <name>       default: open-design
+  --registry <registry>           default: ghcr.io
+  --image_namespace <namespace>   default: nexu-io
+  --image_repository <name>       default: od
   --image <image-ref>             override full image ref
   --node_base_image <image-ref>   default: docker.io/library/node:24-alpine
   --runtime_base_image <image-ref> default: docker.io/library/node:24-alpine

@@ -33,6 +33,7 @@ export type ToolPackCliOptions = {
   namespace?: string;
   path?: string;
   portable?: boolean;
+  removeCache?: boolean;
   removeData?: boolean;
   removeLogs?: boolean;
   removeProductUserData?: boolean;
@@ -70,6 +71,7 @@ export type ToolPackConfig = {
   namespace: string;
   platform: ToolPackPlatform;
   portable: boolean;
+  removeCache?: boolean;
   removeData: boolean;
   removeLogs: boolean;
   removeProductUserData: boolean;
@@ -346,6 +348,7 @@ export function resolveToolPackConfig(
       cacheRoot,
       toolPackRoot,
     },
+    removeCache: options.removeCache === true,
     removeData: options.removeData === true,
     removeLogs: options.removeLogs === true,
     removeProductUserData: options.removeProductUserData === true,

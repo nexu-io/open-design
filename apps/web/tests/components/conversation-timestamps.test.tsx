@@ -69,6 +69,47 @@ describe('conversation timestamps', () => {
     expect(container.querySelector('.msg-time')).toBeNull();
   });
 
+  it('does not render the user-message "You" header or time stamp', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
+
+    const { container } = renderChatPane([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Create a landing page',
+        createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      },
+    ]);
+
+    const userMessage = container.querySelector('.msg.user');
+    expect(userMessage).not.toBeNull();
+    // Both redundant metadata elements are removed from the user message:
+    // the "You" role header and the time stamp beside the copy button.
+    expect(userMessage?.querySelector('.role')).toBeNull();
+    expect(container.querySelector('.user-actions-time')).toBeNull();
+  });
+
+  it('keeps a screen-reader-only sender label on user messages', () => {
+    const { container } = renderChatPane([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Create a landing page',
+        createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      },
+    ]);
+
+    const userMessage = container.querySelector('.msg.user');
+    expect(userMessage).not.toBeNull();
+    // The visible "You" header is gone, but assistive tech still needs to
+    // know the message is from the user — a visually-hidden sender label
+    // preserves that without re-adding visual noise.
+    const senderLabel = userMessage?.querySelector('.sr-only');
+    expect(senderLabel).not.toBeNull();
+    expect(senderLabel?.textContent).toBe('You');
+  });
+
   it('does not add day separators when a conversation crosses days', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-16T14:00:00Z'));

@@ -8,6 +8,7 @@ import {
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
+import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
@@ -189,7 +190,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
-      const sandboxReason = normalizedOrchestratorWorkspace
+      const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
         : sandboxImportedProjectRootUnavailableReason(normalizedPath);
       if (sandboxReason) {
@@ -323,7 +324,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
       }
-      const sandboxReason = normalizedOrchestratorWorkspace
+      const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
         : sandboxImportedProjectRootUnavailableReason(normalizedPath);
       if (sandboxReason) {
@@ -961,7 +962,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     redactSecrets,
   } = ctx.finalize;
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol } = req.body || {};
+    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol, reasoningExecution } = req.body || {};
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -1011,6 +1012,14 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           validated.error,
         );
       }
+      const reasoningDenial = authorizeReasoningEgress({
+        policy: reasoningExecution,
+        routeKind: 'finalize',
+        provider: protocol,
+        resolvedBaseUrl: effectiveBaseUrl,
+        model,
+      });
+      if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
       if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
       }

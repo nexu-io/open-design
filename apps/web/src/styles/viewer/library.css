@@ -1135,6 +1135,568 @@
   margin: 8px 0 12px;
 }
 
+.memory-create-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.memory-control-head {
+  align-items: center;
+  gap: 14px;
+}
+
+.memory-control-copy {
+  min-width: 0;
+}
+
+.memory-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.memory-top-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
+
+.memory-top-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 620;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-top-tab:hover {
+  color: var(--text);
+}
+
+.memory-top-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.memory-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-icon-action:hover,
+.memory-icon-action:focus-visible {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.memory-how-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.memory-auto-flow {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 620;
+  line-height: 1.2;
+}
+
+.memory-auto-flow strong {
+  color: var(--text);
+}
+
+.memory-how-copy {
+  max-width: 780px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Memories tab — the "Add or import" operations collapse into a disclosure so
+   the saved-memory list below is the immediate content (progressive
+   disclosure). Collapsed it is a thin summary bar; expanded it reveals the
+   Profile / manual / connected-app source panes. */
+.memory-add-disclosure {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-add-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.memory-add-summary:hover {
+  background: var(--bg-subtle);
+}
+
+.memory-add-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-panel));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 18%, var(--border-soft));
+}
+
+.memory-add-summary-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.memory-add-summary-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.memory-add-summary-copy small {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.memory-add-summary-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-add-summary.is-open .memory-add-summary-chevron {
+  transform: rotate(180deg);
+}
+
+.memory-add-disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
+.memory-action-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1700;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: color-mix(in srgb, var(--overlay-scrim, rgba(0, 0, 0, 0.42)) 72%, transparent);
+}
+
+.memory-action-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, calc(100vw - 48px));
+  height: min(720px, calc(100vh - 64px));
+  max-height: min(720px, calc(100vh - 64px));
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  box-shadow: 0 22px 70px color-mix(in srgb, var(--shadow-color, #000) 22%, transparent);
+}
+
+.memory-action-modal--advanced {
+  width: min(920px, calc(100vw - 48px));
+}
+
+.memory-action-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.memory-action-modal-head h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.memory-action-modal-head p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.memory-action-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 50%;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-action-modal-close:hover,
+.memory-action-modal-close:focus-visible {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.memory-action-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 18px 18px;
+}
+
+.memory-action-modal button.primary,
+.memory-action-modal button.ghost {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.memory-advanced-modal-body {
+  gap: 10px;
+}
+
+.memory-work-profile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin-top: 4px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-work-profile-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.memory-kicker {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.memory-work-profile h4,
+.memory-gateway-card h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.memory-work-profile p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.memory-brief-flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.memory-brief-flow span:last-child {
+  color: var(--text);
+}
+
+.memory-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.memory-guide-card,
+.memory-scenario-card {
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-guide-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  min-height: 128px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-guide-card:hover,
+.memory-scenario-card:hover {
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--bg-panel) 78%, var(--bg-subtle));
+  box-shadow: var(--shadow-xs);
+}
+
+.memory-guide-icon,
+.memory-scenario-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-panel));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 18%, var(--border-soft));
+}
+
+.memory-guide-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.memory-guide-step {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.memory-guide-copy strong,
+.memory-scenario-card strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.memory-guide-copy small,
+.memory-scenario-card small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.memory-guide-cta {
+  align-self: end;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.memory-gateway-card,
+.memory-scenario-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-gateway-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.memory-gateway-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.memory-gateway-example {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 10px;
+}
+
+.memory-gateway-example > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.memory-example-label {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.memory-gateway-example p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.memory-gateway-example pre {
+  overflow-x: auto;
+  margin: 0;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.memory-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.memory-scenario-card {
+  display: grid;
+  gap: 7px;
+  min-height: 154px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.memory-scenario-topline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.memory-scenario-label,
+.memory-scenario-count {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-scenario-count {
+  justify-self: end;
+  font-weight: 600;
+}
+
+.memory-scenario-card > span:last-child {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .memory-source-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1143,8 +1705,7 @@
 }
 
 .memory-source-tabs button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
   gap: 10px;
   min-height: 58px;
@@ -1199,6 +1760,7 @@
 .memory-source-tab-copy {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
   min-width: 0;
 }
@@ -1264,8 +1826,8 @@
 
 .memory-records-section .library-toolbar.is-row {
   gap: 10px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 4px;
+  border-bottom: 0;
 }
 
 .memory-management-counts {
@@ -1296,6 +1858,29 @@
   padding-top: 2px;
 }
 
+.memory-tree-advanced {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.memory-tree-advanced .library-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 12px;
+  border-color: var(--border-soft);
+  background: var(--bg-panel);
+}
+
+.memory-tree-advanced .library-card-action {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
 .memory-extraction-card {
   align-items: flex-start;
   background: var(--bg-panel);
@@ -1307,7 +1892,7 @@
 
 .memory-records-section .library-group-title {
   display: grid;
-  grid-template-columns: auto auto minmax(24px, 1fr);
+  grid-template-columns: auto auto;
   align-items: center;
   gap: 7px;
   margin: 0 0 1px;
@@ -1316,9 +1901,7 @@
 }
 
 .memory-records-section .library-group-title::after {
-  content: '';
-  height: 1px;
-  background: var(--border-soft);
+  display: none;
 }
 
 .memory-records-section .library-group-count {
@@ -1333,7 +1916,7 @@
   min-height: 58px;
   padding: 10px 12px 10px 14px;
   border-color: var(--border-soft);
-  background: var(--bg-panel);
+  background: color-mix(in oklab, var(--bg-panel) 84%, var(--bg-subtle));
   transition:
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -1380,8 +1963,17 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   justify-self: end;
+  opacity: 0.78;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-records-section .library-card:hover .memory-card-actions,
+.memory-records-section .library-card:focus-within .memory-card-actions,
+.memory-tree-child-row:hover .memory-card-actions,
+.memory-tree-child-row:focus-within .memory-card-actions {
+  opacity: 1;
 }
 
 .memory-tree-child-row {
@@ -1393,18 +1985,20 @@
 
 .memory-records-section .library-card-expand,
 .memory-records-section .library-card .library-card-action {
-  width: 30px;
-  height: 30px;
-  flex-basis: 30px;
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: color-mix(in oklab, var(--bg-panel) 88%, transparent);
+  color: var(--text-muted);
 }
 
 .memory-records-section .library-card-expand:hover,
 .memory-records-section .library-card .library-card-action:hover {
   border-color: var(--border);
   background: var(--bg-subtle);
+  color: var(--text);
 }
 
 .memory-records-section .library-preview {
@@ -1596,8 +2190,14 @@
 }
 
 .memory-source-action {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  gap: 6px;
   min-width: 136px;
+  min-height: 40px;
+  line-height: 1;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -2167,9 +2767,31 @@
 }
 
 @media (max-width: 760px) {
+  .memory-control-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .memory-header-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .memory-source-tabs,
-  .memory-manual-grid {
+  .memory-manual-grid,
+  .memory-guide-grid,
+  .memory-gateway-example,
+  .memory-scenario-grid {
     grid-template-columns: 1fr;
+  }
+
+  .memory-work-profile {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-brief-flow {
+    flex-wrap: wrap;
+    white-space: normal;
   }
 
   .memory-source-summary {
@@ -2217,6 +2839,17 @@
 
   .memory-card-actions {
     width: 100%;
+  }
+
+  .memory-action-modal-backdrop {
+    padding: 16px;
+  }
+
+  .memory-action-modal,
+  .memory-action-modal--advanced {
+    width: min(100%, calc(100vw - 32px));
+    height: calc(100vh - 32px);
+    max-height: calc(100vh - 32px);
   }
 }
 

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@open-design/components";
 import { projectKindToTracking } from "@open-design/contracts/analytics";
 import { useAnalytics } from "../analytics/provider";
@@ -39,6 +39,7 @@ type DesignListItem =
 	  };
 
 const DESIGNS_VIEW_STORAGE_KEY = "od:designs:view";
+const PROJECTS_AUTO_REFRESH_MS = 15000;
 
 export const STATUS_ORDER = [
 	"not_started",
@@ -71,6 +72,8 @@ interface Props {
 	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 	onRename?: (id: string, name: string) => void;
 	onNewProject?: () => void;
+	onRefresh?: () => Promise<void> | void;
+	isActive?: boolean;
 }
 
 export function DesignsTab({
@@ -82,6 +85,8 @@ export function DesignsTab({
 	onDelete,
 	onRename,
 	onNewProject,
+	onRefresh,
+	isActive = true,
 }: Props) {
 	const renameTitleId = useId();
 	const confirmTitleId = useId();
@@ -108,9 +113,16 @@ export function DesignsTab({
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
-	const deleteToastIdRef = useRef(0);
-	const [deleteToast, setDeleteToast] = useState<{ id: number; message: string } | null>(null);
+	const toastIdRef = useRef(0);
+	const [designsToast, setDesignsToast] = useState<{
+		id: number;
+		message: string;
+		role?: "status" | "alert";
+		tone?: "default" | "success" | "error";
+	} | null>(null);
+	const [projectsRefreshing, setProjectsRefreshing] = useState(false);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
+	const projectsRefreshInFlightRef = useRef(false);
 	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
 	const [renameInput, setRenameInput] = useState("");
 	const [confirmTarget, setConfirmTarget] = useState<{
@@ -163,6 +175,10 @@ export function DesignsTab({
 		void Promise.all(
 			projects.map(async (project) => {
 				const designSystemProject = isDesignSystemProject(project);
+				// Brand projects render a generated logo/monogram cover (see
+				// projectCover) instead of a raw HTML file preview, so skip the
+				// file scan entirely for them.
+				if (project.metadata?.kind === "brand") return [project.id, null] as const;
 				if (project.metadata?.entryFile && !designSystemProject) return [project.id, null] as const;
 				let files: Awaited<ReturnType<typeof fetchProjectFiles>>;
 				try {
@@ -261,6 +277,62 @@ export function DesignsTab({
 	useEffect(() => {
 		if (view === "kanban" && selectMode) exitSelectMode();
 	}, [selectMode, view]);
+
+	const refreshProjectsList = useCallback(
+		async (source: "manual" | "auto") => {
+			if (!onRefresh || projectsRefreshInFlightRef.current) return;
+			projectsRefreshInFlightRef.current = true;
+			setProjectsRefreshing(true);
+			if (source === "manual") {
+				trackProjectsListControlsClick(analytics.track, {
+					page_name: "projects",
+					area: "list_controls",
+					element: "refresh",
+				});
+			}
+			try {
+				await onRefresh();
+			} catch {
+				if (source === "manual") {
+					setDesignsToast({
+						id: (toastIdRef.current += 1),
+						message: t("liveArtifact.refresh.networkFailure"),
+						role: "alert",
+						tone: "error",
+					});
+				}
+			} finally {
+				projectsRefreshInFlightRef.current = false;
+				setProjectsRefreshing(false);
+			}
+		},
+		[analytics.track, onRefresh, t],
+	);
+
+	const refreshProjectsListRef = useRef(refreshProjectsList);
+	useEffect(() => {
+		refreshProjectsListRef.current = refreshProjectsList;
+	}, [refreshProjectsList]);
+
+	const hasProjectsRefresh = Boolean(onRefresh);
+	useEffect(() => {
+		if (!isActive || !hasProjectsRefresh) return;
+
+		const refreshIfVisible = () => {
+			if (document.visibilityState !== "visible") return;
+			void refreshProjectsListRef.current("auto");
+		};
+
+		refreshIfVisible();
+		const interval = window.setInterval(refreshIfVisible, PROJECTS_AUTO_REFRESH_MS);
+		window.addEventListener("focus", refreshIfVisible);
+		document.addEventListener("visibilitychange", refreshIfVisible);
+		return () => {
+			window.clearInterval(interval);
+			window.removeEventListener("focus", refreshIfVisible);
+			document.removeEventListener("visibilitychange", refreshIfVisible);
+		};
+	}, [hasProjectsRefresh, isActive]);
 
 	const filtered = useMemo(() => {
 		const q = filter.trim().toLowerCase();
@@ -384,9 +456,10 @@ export function DesignsTab({
 					failed > 0
 						? t("designs.deleteSelectedPartial", { deleted, failed })
 						: t("designs.deleteSelectedSuccess", { n: deleted });
-				setDeleteToast({
-					id: (deleteToastIdRef.current += 1),
+				setDesignsToast({
+					id: (toastIdRef.current += 1),
 					message,
+					tone: "success",
 				});
 			},
 		});
@@ -474,6 +547,35 @@ export function DesignsTab({
 							}}
 						/>
 					</div>
+					{onRefresh ? (
+						<button
+							type="button"
+							className="designs-refresh-button"
+							onClick={() => void refreshProjectsList("manual")}
+							disabled={projectsRefreshing}
+							title={
+								projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")
+							}
+							aria-label={
+								projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")
+							}
+						>
+							<Icon
+								name={projectsRefreshing ? "spinner" : "refresh"}
+								size={13}
+								className={projectsRefreshing ? "icon-spin" : undefined}
+							/>
+							<span>
+								{projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")}
+							</span>
+						</button>
+					) : null}
 					{view === "grid" && selectMode ? (
 						<div className="designs-select-bar" role="group">
 							<span className="designs-select-count">
@@ -785,7 +887,13 @@ export function DesignsTab({
 									style={cover.style}
 									aria-hidden
 								>
-									{(cover.kind === "image" || cover.kind === "logo") && cover.src ? (
+									{cover.kind === "brand" ? (
+										<ProjectBrandCover
+											brandId={cover.brandId}
+											host={cover.brandHost}
+											initial={cover.initial}
+										/>
+									) : (cover.kind === "image" || cover.kind === "logo") && cover.src ? (
 										<img className="thumb-media" src={cover.src} alt="" loading="lazy" />
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
@@ -997,11 +1105,13 @@ export function DesignsTab({
 				</Dialog>
 			) : null}
 			<AnimatePresence>
-				{deleteToast ? (
+				{designsToast ? (
 					<Toast
-						key={deleteToast.id}
-						message={deleteToast.message}
-						onDismiss={() => setDeleteToast(null)}
+						key={designsToast.id}
+						message={designsToast.message}
+						role={designsToast.role}
+						tone={designsToast.tone}
+						onDismiss={() => setDesignsToast(null)}
 					/>
 				) : null}
 			</AnimatePresence>
@@ -1074,10 +1184,12 @@ function projectCover(
 	project: Project,
 	override: { kind: "html" | "image" | "video" | "logo"; name: string } | null,
 ): {
-	kind: "image" | "video" | "html" | "logo" | "fallback";
+	kind: "image" | "video" | "html" | "logo" | "brand" | "fallback";
 	src?: string;
 	style: CSSProperties;
 	initial: string;
+	brandId?: string;
+	brandHost?: string;
 } {
 	let h = 0;
 	for (let i = 0; i < project.id.length; i++) {
@@ -1090,6 +1202,20 @@ function projectCover(
 	};
 	const trimmed = project.name.trim();
 	const initial = (trimmed ? Array.from(trimmed)[0]! : "?").toUpperCase();
+	const meta = project.metadata;
+	// Brand projects get a clean generated cover (extracted logo / site favicon
+	// / monogram) rather than a raw scaled-down HTML page, which reads as broken
+	// clipped text in the card. The brand color gradient mirrors the monogram
+	// cards so brand kits sit consistently in the grid.
+	if (meta?.kind === "brand") {
+		return {
+			kind: "brand",
+			style,
+			initial,
+			brandId: meta.brandId,
+			brandHost: brandHostname(meta.brandSourceUrl),
+		};
+	}
 	if (override) {
 		return {
 			kind: override.kind,
@@ -1098,7 +1224,6 @@ function projectCover(
 			initial,
 		};
 	}
-	const meta = project.metadata;
 	const entry = meta?.entryFile;
 	if (entry) {
 		const src = projectFileUrl(project.id, entry);
@@ -1109,7 +1234,67 @@ function projectCover(
 	return { kind: "fallback", style, initial };
 }
 
-type ProjectCategory = "prototype" | "live-artifact" | "slide" | "media";
+// Best-effort hostname for the brand cover's favicon fallback. Mirrors the
+// helper in BrandsTab; brand source URLs are always present in metadata even
+// before extraction finishes.
+function brandHostname(rawUrl: string | undefined): string | undefined {
+	if (!rawUrl) return undefined;
+	try {
+		return new URL(rawUrl).hostname.replace(/^www\./, "");
+	} catch {
+		const stripped = rawUrl
+			.replace(/^https?:\/\//, "")
+			.replace(/^www\./, "")
+			.split("/")[0];
+		return stripped || undefined;
+	}
+}
+
+// Brand project cover: shows the extracted brand logo when available, falling
+// back to the site favicon, then a monogram. The image error chain lets a card
+// degrade gracefully without leaving a broken image icon on the gradient.
+function ProjectBrandCover({
+	brandId,
+	host,
+	initial,
+}: {
+	brandId?: string;
+	host?: string;
+	initial: string;
+}) {
+	const sources = useMemo(() => {
+		const list: string[] = [];
+		if (brandId) list.push(`/api/brands/${encodeURIComponent(brandId)}/logo`);
+		if (host) {
+			list.push(
+				`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`,
+			);
+		}
+		return list;
+	}, [brandId, host]);
+	const sourceKey = sources.join("|");
+	const [index, setIndex] = useState(0);
+	useEffect(() => {
+		setIndex(0);
+	}, [sourceKey]);
+	const src = sources[index];
+	if (!src) {
+		return <span className="project-thumb-glyph">{initial}</span>;
+	}
+	return (
+		<span className="project-thumb-brand-logo">
+			<img
+				className="thumb-media"
+				src={src}
+				alt=""
+				loading="lazy"
+				onError={() => setIndex((current) => current + 1)}
+			/>
+		</span>
+	);
+}
+
+type ProjectCategory = "prototype" | "live-artifact" | "slide" | "media" | "brand";
 
 function projectCategory(project: Project): ProjectCategory {
 	const meta = project.metadata;
@@ -1117,6 +1302,7 @@ function projectCategory(project: Project): ProjectCategory {
 		return "live-artifact";
 	}
 	if (meta?.kind === "deck") return "slide";
+	if (meta?.kind === "brand") return "brand";
 	if (meta?.kind === "image" || meta?.kind === "video" || meta?.kind === "audio") {
 		return "media";
 	}
@@ -1130,6 +1316,8 @@ function ProjectTag({ category }: { category: ProjectCategory }) {
 			? t("designs.tagLiveArtifact")
 			: category === "slide"
 				? t("designs.tagSlide")
+				: category === "brand"
+					? "Brand"
 				: category === "media"
 					? t("designs.tagMedia")
 					: t("designs.tagPrototype");

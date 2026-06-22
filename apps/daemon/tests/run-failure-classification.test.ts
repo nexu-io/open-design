@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../src/integrations/vela-errors.js', () => ({
   classifyAmrAccountFailure(text: string) {
     const value = String(text || '').toLowerCase();
-    if (value.includes('insufficient balance')) {
+    // Mirror the real detector's signals exercised by these tests, including
+    // the Chinese vela pre-charge text (see integrations/vela-errors.test.ts).
+    if (
+      value.includes('insufficient balance') ||
+      value.includes('预扣费额度失败') ||
+      value.includes('余额不足') ||
+      value.includes('额度不足')
+    ) {
       return { code: 'AMR_INSUFFICIENT_BALANCE' as const };
     }
     if (value.includes('authentication required') || value.includes('not authenticated') || value.includes('unauthorized')) {
@@ -16,7 +23,11 @@ vi.mock('../src/integrations/vela-errors.js', () => ({
 vi.mock('../src/runtimes/auth.js', () => ({
   classifyAgentServiceFailure(text: string) {
     const value = String(text || '').toLowerCase();
-    if (value.includes('authentication required') || value.includes('not authenticated')) {
+    if (
+      value.includes('authentication required') ||
+      value.includes('not authenticated') ||
+      value.includes('invalid_api_key')
+    ) {
       return 'AGENT_AUTH_REQUIRED' as const;
     }
     if (value.includes('http 429') || value.includes('too many requests') || value.includes('session limit')) {
@@ -384,6 +395,24 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('maps AMR model catalog credential failures to auth instead of retryable routing', () => {
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        [
+          'json-rpc id 2: AMR model catalog is unavailable.',
+          'Error: list Link models: API request failed with status 401: invalid_api_key',
+        ].join('\n'),
+      ),
+    ).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'auth_required',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'login',
+    });
+  });
+
   it('maps AMR insufficient balance to recharge guidance', () => {
     expect(
       classify('AMR_INSUFFICIENT_BALANCE', 'insufficient wallet balance'),
@@ -734,5 +763,291 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       retryable: true,
       user_action: 'retry',
     });
+  });
+
+  it('classifies high-confidence Langfuse unknown samples into stable fields', () => {
+    expect(classify(null, 'Invalid API Key')).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'invalid_api_key',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'login',
+    });
+
+    expect(classify(null, 'Missing environment variable: `OPENAI_API_KEY`.')).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'missing_api_key',
+      user_action: 'login',
+    });
+
+    expect(
+      classify(
+        null,
+        'Your workspace is out of credits. Ask your workspace owner to refill in order to continue.',
+      ),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'workspace_credits_exhausted',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'recharge',
+    });
+
+    expect(
+      classify(
+        null,
+        'Agent "Claude Code" (`claude`) is not installed or not on PATH. Install it and refresh the agent list (GET /api/agents) before retrying.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cli_not_installed',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(
+      classify(
+        null,
+        'Claude Code on Windows requires git-bash (https://git-scm.com/download/win). If installed but not in PATH, set CLAUDE_CODE_GIT_BASH_PATH.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'git_bash_missing',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(classify(null, 'spawn failed: spawn EPERM')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'spawn_eperm',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(classify(null, "error: unknown option '--trust'")).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+
+    expect(
+      classify(null, 'Selected model is at capacity. Please try a different model.'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_high_demand',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(
+      classify(null, 'json-rpc id 2: AMR model catalog is temporarily unavailable. Please retry.'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_routing_error',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify(null, 'Qoder run failed: stop_sequence')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'qoder_stop_sequence',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify(null, 'ACP session exited before completion (code=1, signal=none)')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'agent_protocol_error',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+});
+
+function runtimeCloseEvent(reason: string): RunEventForFailureClassification {
+  return { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: reason } };
+}
+
+describe('execution_failed close-reason refinement', () => {
+  // A generic AGENT_EXECUTION_FAILED whose text matched no pattern, plus the
+  // runtime_close diagnostic the daemon stamps at finalize time.
+  const withCloseReason = (reason: string | null) =>
+    classify('AGENT_EXECUTION_FAILED', '', [
+      errorEvent('AGENT_EXECUTION_FAILED', ''),
+      ...(reason ? [runtimeCloseEvent(reason)] : []),
+    ]);
+
+  it('promotes a mid-stream agent error to stream_error', () => {
+    expect(withCloseReason('stream_error')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'stream_error',
+    });
+  });
+
+  it('promotes a bare non-zero exit to exit_nonzero', () => {
+    expect(withCloseReason('exit_nonzero')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'exit_nonzero',
+    });
+  });
+
+  it('promotes an ACP fatal close to fatal_rpc_error', () => {
+    expect(withCloseReason('fatal_rpc_error')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+    });
+  });
+
+  it('keeps the opaque execution_failed label when no runtime_close diagnostic is present', () => {
+    expect(withCloseReason(null)).toMatchObject({ failure_detail: 'execution_failed' });
+  });
+
+  it('keeps the opaque label for close reasons outside the three known shapes', () => {
+    expect(withCloseReason('unknown')).toMatchObject({ failure_detail: 'execution_failed' });
+  });
+
+  it('does not override an already-specific process_exit detail with the close reason', () => {
+    // AGENT_EXIT_1 classifies to the specific `exit_code` detail; a stream_error
+    // close reason must not relabel it — only the opaque bucket is refined.
+    expect(
+      classify('AGENT_EXIT_1', '', [
+        errorEvent('AGENT_EXIT_1', ''),
+        runtimeCloseEvent('stream_error'),
+      ]),
+    ).toMatchObject({ failure_category: 'process_exit', failure_detail: 'exit_code' });
+  });
+});
+
+// Reclassify AMR/vela upstream failures that currently fall into the opaque
+// `execution_failed` bucket. These carry the generic `AGENT_EXECUTION_FAILED`
+// error code, and the real cause is only in the (often Chinese) upstream error
+// text, so the English-only detectors miss them. Real production texts were
+// sampled from Langfuse (#3408 P1). Each must land in its true product-view
+// category instead of the engineering-view opaque bucket.
+describe('classifyRunFailure — AMR/vela reclassification out of execution_failed', () => {
+  it('classifies a vela Chinese pre-charge (insufficient balance) failure as insufficient_balance', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      '预扣费额度失败, 用户[141283]剩余额度: 💰0.040000, 需要预扣费额度: 💰0.060000 (request id: B202606220543379765673248268d9d6vVKaiRPCMA)',
+    );
+    expect(result?.failure_category).toBe('insufficient_balance');
+    expect(result?.failure_detail).toBe('amr_insufficient_balance');
+    expect(result?.user_action).toBe('recharge');
+  });
+
+  it('classifies a Chinese 429 rate-limit text as a retryable rate_limit_429', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      '429 您的账户已达到速率限制，请您控制请求频率',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('rate_limit_429');
+    expect(result?.retryable).toBe(true);
+  });
+
+  it('classifies a vela "model not in allowed list" rejection as model_unavailable', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'API Error: 400 model deepseek-v4-pro-202606 not in allowed list',
+    );
+    expect(result?.failure_category).toBe('model_unavailable');
+    expect(result?.failure_detail).toBe('model_not_found');
+    expect(result?.user_action).toBe('switch_model');
+  });
+});
+
+// The agent binary being absent at its resolved path also leaks into the opaque
+// execution_failed bucket (#3408 P1). Real production texts sampled from
+// Langfuse. These are an install/PATH problem, not an opaque engine failure.
+describe('classifyRunFailure — binary-not-found reclassification out of execution_failed', () => {
+  it('classifies a Windows "is not recognized as an internal or external command" as cli_not_installed', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      "'node' is not recognized as an internal or external command, operable program or batch file.",
+    );
+    expect(result?.failure_category).toBe('process_exit');
+    expect(result?.failure_detail).toBe('cli_not_installed');
+  });
+
+  it('classifies a "spawn <path> ENOENT" (missing executable) as cli_not_installed', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Error: spawn /opt/homebrew/lib/node_modules/@openai/codex/codex ENOENT',
+    );
+    expect(result?.failure_category).toBe('process_exit');
+    expect(result?.failure_detail).toBe('cli_not_installed');
+  });
+});
+
+// Batch A: more named causes that currently leak into execution_failed, routed
+// to existing categories. Real production texts sampled from Langfuse (#3408 P1).
+describe('classifyRunFailure — batch A reclassification out of execution_failed', () => {
+  it('classifies a local-runtime "Prefill context too large" as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'MLX prefill memory guard rejected this prompt: Prefill context too large for available memory (preflight safety margin)',
+    );
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('prompt_too_large');
+  });
+
+  it('classifies an ACP "thread/start failed" as agent_protocol_error', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Reading prompt from stdin... Error: thread/start: thread/start failed: failed to start session',
+    );
+    expect(result?.failure_category).toBe('process_exit');
+    expect(result?.failure_detail).toBe('agent_protocol_error');
+  });
+
+  it('classifies a vela "login fail: carry the API secret key" as an auth failure', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      "login fail: Please carry the API secret key in the 'Authorization' field of the request header (1004)",
+    );
+    expect(result?.failure_category).toBe('auth');
+  });
+
+  it('classifies a local model server with no model loaded (LM Studio) as local_model_not_loaded', () => {
+    // opencode pointed at a local LM Studio provider that has no model loaded.
+    // Independent of the model name we pass: the user must load a model first.
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      "No models loaded. Please load a model in the developer page or use the 'lms load' command.",
+    );
+    expect(result?.failure_category).toBe('model_unavailable');
+    expect(result?.failure_detail).toBe('local_model_not_loaded');
+    expect(result?.user_action).toBe('switch_model');
+  });
+
+  it('classifies a stale Claude session resume as a retryable session_resume_expired', () => {
+    // The daemon already cleared the stale session id; the next turn starts
+    // fresh. This is recoverable, not an opaque engine crash.
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+    );
+    expect(result?.failure_category).toBe('process_exit');
+    expect(result?.failure_detail).toBe('session_resume_expired');
+    expect(result?.retryable).toBe(true);
+    expect(result?.user_action).toBe('retry');
+  });
+
+  it('classifies the raw Claude CLI "no conversation found with session id" as session_resume_expired', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'no conversation found with session id 1d2c3b4a-0000-0000-0000-000000000000',
+    );
+    expect(result?.failure_category).toBe('process_exit');
+    expect(result?.failure_detail).toBe('session_resume_expired');
   });
 });

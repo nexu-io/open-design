@@ -32,6 +32,12 @@ import {
   stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
+import {
+  splitOnOdCards,
+  stripTrailingOpenOdCard,
+  type OdCard,
+} from "@open-design/contracts";
+import { OdCardView } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
@@ -45,6 +51,7 @@ import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
+import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
   isTodoWriteToolName,
   unfinishedTodosFromEvents,
@@ -75,7 +82,7 @@ export type QuestionFormOpenRequest = {
   submittedAnswers?: Record<string, string | string[]>;
 };
 
-const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
+const DISCORD_INVITE_URL = "https://discord.gg/9ptkbbqRu";
 
 interface ActionNotice {
   message: string;
@@ -417,12 +424,13 @@ function AssistantMessageImpl({
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
+  const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
   // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
   // we strip TodoWrite tool-groups out of the per-message flow to avoid the
   // same task list rendering twice.
   const settledUseIds = useMemo(
-    () => new Set(events.filter((e) => e.kind === "tool_use").map((e) => e.id)),
-    [events],
+    () => new Set(displayEvents.filter((e) => e.kind === "tool_use").map((e) => e.id)),
+    [displayEvents],
   );
   // Live code boxes (Write/Edit streaming) append after everything else.
   const liveCodeBlocks = useMemo<Block[]>(() => {
@@ -437,7 +445,7 @@ function AssistantMessageImpl({
   }, [streaming, liveToolInput, settledUseIds]);
   // Compose the block list, then run the strip/suppress pipeline once.
   const blocks = useMemo(() => {
-    const rawBlocks = [...buildBlocks(events), ...liveCodeBlocks];
+    const rawBlocks = [...buildBlocks(displayEvents), ...liveCodeBlocks];
     return placeConversationTodoCard(
       stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
       {
@@ -445,8 +453,8 @@ function AssistantMessageImpl({
         input: conversationTodoInput,
       },
     );
-  }, [events, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
-  const fileOps = useMemo(() => deriveFileOps(events), [events]);
+  }, [displayEvents, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
+  const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
     () =>
@@ -592,6 +600,9 @@ function AssistantMessageImpl({
   // start so switching project tabs or remounting the message cannot restart it.
   const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
   const preparing = streaming && !hasContent;
+  const preparingStatus = preparing && events.some((e) => e.kind === "status" && e.label === "thinking")
+    ? "thinking"
+    : "preparing";
 
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
@@ -757,6 +768,7 @@ function AssistantMessageImpl({
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
                   preparing,
+                  preparingStatus,
                   copyMarkdown,
                   onFork: canFork ? onForkFromMessage : undefined,
                   forking,
@@ -773,6 +785,7 @@ function AssistantMessageImpl({
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
                 preparing={preparing}
+                preparingStatus={preparingStatus}
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
@@ -955,6 +968,7 @@ interface AssistantFooterProps {
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
   // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
+  preparingStatus?: "preparing" | "thinking";
   copyMarkdown?: string;
   onFork?: () => void;
   forking?: boolean;
@@ -973,6 +987,7 @@ function AssistantFooter({
   hasUnfinishedTodos,
   hasEmptyResponse,
   preparing = false,
+  preparingStatus = "preparing",
   copyMarkdown,
   onFork,
   forking = false,
@@ -1011,7 +1026,9 @@ function AssistantFooter({
       <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
         {streaming
           ? preparing
-            ? t("assistant.statusPreparing")
+            ? preparingStatus === "thinking"
+              ? t("assistant.statusThinking")
+              : t("assistant.statusPreparing")
             : t("assistant.workingLabel")
           : hasEmptyResponse
           ? t("assistant.emptyResponseLabel")
@@ -1907,14 +1924,15 @@ function ProseBlock({
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; we surface a banner for it instead. The actual
-  // form streams into the right-hand Questions tab.
-  const { text: visibleText, hadOpenForm } = useMemo(
-    () =>
-      isLastAssistant && streaming
-        ? stripTrailingOpenQuestionForm(cleaned)
-        : { text: cleaned, hadOpenForm: false },
-    [cleaned, isLastAssistant, streaming],
-  );
+  // form streams into the right-hand Questions tab. A not-yet-closed
+  // `<od-card>{…` block is stripped the same way so its raw JSON doesn't flash
+  // before the close tag arrives (the card renders inline once complete).
+  const { text: visibleText, hadOpenForm } = useMemo(() => {
+    if (!(isLastAssistant && streaming)) return { text: cleaned, hadOpenForm: false };
+    const form = stripTrailingOpenQuestionForm(cleaned);
+    const card = stripTrailingOpenOdCard(form.text);
+    return { text: card.text, hadOpenForm: form.hadOpenForm };
+  }, [cleaned, isLastAssistant, streaming]);
   // While an `<artifact type="text/html">` is still streaming (no closing tag
   // yet), surface its body in a live code panel instead of leaking the raw
   // tag + half-written HTML as Markdown text. Once it closes, stripArtifact
@@ -1938,33 +1956,37 @@ function ProseBlock({
       onRequestOpenFile(path);
     };
   }, [onRequestOpenFile, projectFileNames, projectId]);
-  // Each text segment is further split on `<system-reminder>` blocks so
-  // those render as their own collapsible chip instead of raw markup.
-  const renderable = segments.flatMap(
-    (
-      seg,
-      idx
-    ): Array<
-      | { key: string; kind: "text"; text: string }
-      | { key: string; kind: "reminder"; text: string }
-      | { key: string; kind: "form"; form: QuestionForm }
-      | { key: string; kind: "suppressed-direction" }
-    > => {
-      if (seg.kind === "form") {
-        if (suppressDirectionForms && isDirectionForm(seg.form)) {
-          return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
-        }
-        return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+  // Each text segment is further split on `<od-card>` blocks (so memory cards
+  // render inline, composing with the surrounding question-form handling) and
+  // then on `<system-reminder>` blocks (so those render as their own
+  // collapsible chip instead of raw markup). Splitting od-cards BEFORE
+  // system-reminders keeps a card's JSON body out of the reminder scanner.
+  type Renderable =
+    | { key: string; kind: "text"; text: string }
+    | { key: string; kind: "reminder"; text: string }
+    | { key: string; kind: "form"; form: QuestionForm }
+    | { key: string; kind: "od-card"; card: OdCard }
+    | { key: string; kind: "suppressed-direction" };
+  const renderable = segments.flatMap((seg, idx): Renderable[] => {
+    if (seg.kind === "form") {
+      if (suppressDirectionForms && isDirectionForm(seg.form)) {
+        return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
       }
-      if (seg.text.trim().length === 0) return [];
-      const sub = splitSystemReminders(seg.text);
-      return sub.map((s, j) => ({
-        key: `t-${idx}-${j}`,
+      return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+    }
+    if (seg.text.trim().length === 0) return [];
+    return splitOnOdCards(seg.text).flatMap((cardSeg, c): Renderable[] => {
+      if (cardSeg.kind === "card") {
+        return [{ key: `c-${idx}-${c}`, kind: "od-card", card: cardSeg.card }];
+      }
+      if (cardSeg.text.trim().length === 0) return [];
+      return splitSystemReminders(cardSeg.text).map((s, j) => ({
+        key: `t-${idx}-${c}-${j}`,
         kind: s.kind,
         text: s.text,
       }));
-    }
-  );
+    });
+  });
   if (renderable.length === 0 && !live) return null;
   return (
     <div className="prose-block" data-stream-cursor={showStreamCursor && !live ? "true" : undefined}>
@@ -1978,6 +2000,9 @@ function ProseBlock({
               {renderMarkdown(seg.text, { onLinkClick })}
             </Fragment>
           );
+        }
+        if (seg.kind === "od-card") {
+          return <OdCardView key={seg.key} card={seg.card} />;
         }
         if (seg.kind === "suppressed-direction") {
           return (

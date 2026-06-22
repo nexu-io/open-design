@@ -261,6 +261,10 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       /actual\s+output path returned by the built-in imagegen result/,
     );
     expect(out).toContain('${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png');
+    expect(out).toContain('When the user asked for one image, produce exactly one final project image');
+    expect(out).toContain('If Codex built-in imagegen returns multiple candidate files, previews, or');
+    expect(out).toContain('select the single best match and import only that file into');
+    expect(out).toContain('Do not copy every generated variant');
     expect(out).toContain('verify the exact destination file exists under');
     expect(out).toMatch(
       /report the exact source path, destination path, and access\/copy\s+error/,

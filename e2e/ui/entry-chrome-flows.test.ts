@@ -1,7 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Request } from '@playwright/test';
 import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
@@ -63,6 +64,8 @@ const DESIGN_SYSTEMS = [
   },
 ] as const;
 
+test.describe.configure({ timeout: T.xlong });
+
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
@@ -112,6 +115,49 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
   await expect(settingsDialog.getByRole('button', { name: /hide pet picker/i })).toHaveCount(0);
   await expect(settingsDialog.getByRole('button', { name: /show pet picker/i })).toHaveCount(0);
+});
+
+test('[P0] @critical home hero submit creates a project and lands on a usable workspace', async ({ page }) => {
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"home-entry-workspace-smoke"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+  await input.fill('Create a risk dashboard workspace smoke.');
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await page.getByTestId('home-hero-submit').click();
+  const projectRequest = await projectRequestPromise;
+  const projectBody = projectRequest.postDataJSON() as {
+    pendingPrompt?: string;
+    metadata?: { kind?: string };
+  };
+  expect(projectBody.pendingPrompt).toBe('Create a risk dashboard workspace smoke.');
+  expect(typeof projectBody.metadata?.kind).toBe('string');
+
+  await expect(page).toHaveURL(/\/projects\//, { timeout: 15_000 });
+  await expect(page.getByTestId('project-title')).toBeVisible();
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
@@ -384,13 +430,13 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   await page.getByTestId('entry-help-trigger').click();
   const menu = page.locator('.entry-help-popover[role="menu"]');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toHaveAttribute(
+  await expect(menu.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i })).toHaveAttribute(
     'href',
-    'https://x.com/nexudotio',
+    'https://x.com/OpenDesignHQ',
   );
   await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/mHAjSMV6gz',
+    'https://discord.gg/9ptkbbqRu',
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();
@@ -1124,19 +1170,23 @@ test('[P0] @critical home Ask mode creates a chat conversation without the defau
   await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
 
   const input = page.getByTestId('home-hero-input');
-  await input.fill('Summarize the product positioning and point out gaps.');
+  const prompt =
+    'Turn this into an infographic: "5 habits of effective code reviewers — read the PR description first, review tests before implementation"';
+  await input.fill(prompt);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   await page.getByTestId('home-hero-submit').click();
 
   const request = await projectRequestPromise;
   const body = request.postDataJSON() as {
+    name?: string;
     pendingPrompt?: string;
     conversationMode?: string;
     pluginId?: string | null;
     metadata?: { kind?: string };
   };
-  expect(body.pendingPrompt).toBe('Summarize the product positioning and point out gaps.');
+  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
+  expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('chat');
   expect(body.pluginId).toBeUndefined();
   expect(body.metadata?.kind).toBe('other');
@@ -1426,6 +1476,7 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();

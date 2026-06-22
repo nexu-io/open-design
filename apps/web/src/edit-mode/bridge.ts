@@ -1,4 +1,5 @@
-export const MANUAL_EDIT_DISCOVERY_SELECTOR = 'main, nav, section, article, header, footer, div, h1, h2, h3, p, a, button, img, strong, span';
+export const MANUAL_EDIT_DISCOVERY_SELECTOR =
+  'main, nav, section, article, aside, header, footer, div, h1, h2, h3, h4, h5, h6, p, a, button, img, ul, ol, li, dl, dt, dd, table, thead, tbody, tfoot, tr, td, th, caption, blockquote, figure, figcaption, label, summary, pre, code, strong, em, b, i, small, mark, span';
 export const MANUAL_EDIT_SOURCE_PATH_ATTR = 'data-od-source-path';
 export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-sandbox-shim]',
@@ -9,6 +10,8 @@ export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-edit-bridge-style]',
   '[data-od-deck-fix]',
 ].join(',');
+
+export type ManualEditKind = 'text' | 'link' | 'image' | 'container';
 
 export function manualEditDomPathForElement(el: Element): string {
   const parts: number[] = [];
@@ -41,6 +44,40 @@ export function isMeaningfulManualEditElement(el: Element, rect: Pick<DOMRect, '
 
 export function isSourceMappableManualEditElement(el: Element): boolean {
   return el.hasAttribute('data-od-id') || el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
+}
+
+/**
+ * A "text leaf" carries visible text and has NO element children, so a click
+ * can drop a caret and the committed text round-trips through the source
+ * patcher. This — not the tag name — is what makes a bare `<div>Title</div>`,
+ * an `<li>`, a `<td>`, or an `<h4>` editable, exactly like a `<p>`.
+ *
+ * Elements with element children (even inline ones like `<strong>`/`<a>`) are
+ * deliberately NOT text leaves: `applyManualEditPatch` rejects a `set-text`
+ * patch whenever the target `hasElementChildren`, so offering a caret there
+ * would let the user type and then fail to persist. Those stay containers
+ * (style-only) until the patcher can persist nested markup.
+ */
+export function manualEditElementIsTextLeaf(el: Element): boolean {
+  const text = (el.textContent || '').trim();
+  if (!text) return false;
+  return el.children.length === 0;
+}
+
+/**
+ * Classify what a click on an element should do in manual edit mode. `text`
+ * and `link` drop a text caret (and still expose styles); `container` and
+ * `image` only select for styling. An explicit `data-od-edit` attribute always
+ * wins so authored markup can opt a node in or out.
+ */
+export function manualEditKindForElement(el: Element): ManualEditKind {
+  const explicit = el.getAttribute('data-od-edit');
+  if (explicit) return explicit as ManualEditKind;
+  const tag = el.tagName ? el.tagName.toLowerCase() : '';
+  if (tag === 'a') return 'link';
+  if (tag === 'img') return 'image';
+  if (manualEditElementIsTextLeaf(el)) return 'text';
+  return 'container';
 }
 
 export function buildManualEditKeyboardGuard(): string {
@@ -161,14 +198,19 @@ export function buildManualEditBridge(enabled: boolean): string {
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
   }
+  function isTextLeaf(el){
+    var text = (el.textContent || '').trim();
+    if (!text) return false;
+    return el.children.length === 0;
+  }
   function inferKind(el){
     var explicit = el.getAttribute('data-od-edit');
     if (explicit) return explicit;
     var tag = el.tagName ? el.tagName.toLowerCase() : '';
     if (tag === 'a') return 'link';
     if (tag === 'img') return 'image';
-    if (['section','main','nav','div','article','header','footer'].indexOf(tag) >= 0) return 'container';
-    return 'text';
+    if (isTextLeaf(el)) return 'text';
+    return 'container';
   }
   function labelFor(el, id, kind){
     var explicit = el.getAttribute('data-od-label');
@@ -321,8 +363,52 @@ export function buildManualEditBridge(enabled: boolean): string {
     } catch (e) {}
   }
   var guard = window.__odEditGuard || null;
+  // A single in-flight inline text edit. The session is deliberately NOT tied
+  // to iframe blur: moving the pointer to the host's floating inspector blurs
+  // the iframe, and committing/ending on blur is exactly the #3646 focus-loss
+  // bug. The session ends only on an explicit action — Enter, Escape, picking
+  // another target, clicking empty background, leaving edit mode, or an
+  // od-edit-text-finish message from the host.
+  var activeTextEdit = null;
+  function postTextSession(el, active, extra){
+    if (!el) return;
+    window.parent.postMessage(Object.assign({
+      type: 'od-edit-text-session',
+      id: stableId(el),
+      active: !!active
+    }, extra || {}), '*');
+  }
+  function finishActiveTextEdit(commit){
+    if (!activeTextEdit) return false;
+    var session = activeTextEdit;
+    activeTextEdit = null;
+    var el = session.el;
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('data-od-editing');
+    el.removeEventListener('keydown', session.onKey);
+    if (guard) guard.editingEl = null;
+    var value = (el.textContent || '').trim();
+    var changed = value !== session.originalText.trim();
+    if (commit && changed) {
+      window.parent.postMessage({
+        type: 'od-edit-text-commit',
+        id: stableId(el),
+        value: value
+      }, '*');
+    } else if (!commit) {
+      el.textContent = session.originalText;
+    }
+    postTextSession(el, false, { committed: !!commit, changed: changed });
+    return true;
+  }
   function makeEditable(el, clickEvent){
-    if (!el || el.getAttribute('contenteditable') === 'true') return;
+    if (!el) return;
+    if (activeTextEdit && activeTextEdit.el === el) {
+      placeCaretFromClick(clickEvent, el);
+      return;
+    }
+    if (activeTextEdit) finishActiveTextEdit(true);
+    if (el.getAttribute('contenteditable') === 'true') return;
     var originalText = el.textContent || '';
     clearSelectedTarget();
     el.setAttribute('contenteditable', 'plaintext-only');
@@ -333,35 +419,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     function onKey(ev){
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
-        finish(true);
-        try { el.blur(); } catch (e2) {}
+        finishActiveTextEdit(true);
       }
       if (ev.key === 'Escape') {
         ev.preventDefault();
-        finish(false);
-        try { el.blur(); } catch (e2) {}
+        finishActiveTextEdit(false);
       }
     }
+    activeTextEdit = { el: el, originalText: originalText, onKey: onKey };
     el.addEventListener('keydown', onKey);
-    function finish(commit){
-      el.removeAttribute('contenteditable');
-      el.removeAttribute('data-od-editing');
-      el.removeEventListener('blur', onBlur);
-      el.removeEventListener('keydown', onKey);
-      if (guard) guard.editingEl = null;
-      var value = (el.textContent || '').trim();
-      if (commit && value !== originalText.trim()) {
-        window.parent.postMessage({
-          type: 'od-edit-text-commit',
-          id: stableId(el),
-          value: value
-        }, '*');
-      } else if (!commit) {
-        el.textContent = originalText;
-      }
-    }
-    function onBlur(){ finish(true); }
-    el.addEventListener('blur', onBlur);
+    postTextSession(el, true);
   }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }
@@ -411,7 +478,12 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (ev.data.type === 'od-edit-mode') {
       enabled = !!ev.data.enabled;
       document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
-      if (!enabled) clearSelectedTarget();
+      if (!enabled) {
+        // Leaving edit mode commits the pending inline edit rather than
+        // dropping it (the #3647 exit-path regression).
+        finishActiveTextEdit(true);
+        clearSelectedTarget();
+      }
       if (enabled) setTimeout(postTargets, 0);
       return;
     }
@@ -429,6 +501,10 @@ export function buildManualEditBridge(enabled: boolean): string {
       applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version);
       return;
     }
+    if (ev.data.type === 'od-edit-text-finish') {
+      finishActiveTextEdit(ev.data.commit !== false);
+      return;
+    }
   });
   document.addEventListener('click', function(ev){
     if (!enabled) return;
@@ -438,10 +514,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = closestTarget(ev);
     if (!el) {
       // Clicking empty canvas (no source-mapped ancestor) is the gesture for
-      // page-level styles; the host decides whether to surface the card.
+      // page-level styles; commit any in-flight edit first so the host and
+      // iframe stay in sync, then let the host decide whether to surface the
+      // page-styles card.
+      if (activeTextEdit) finishActiveTextEdit(true);
       window.parent.postMessage({ type: 'od-edit-background' }, '*');
       return;
     }
+    // Switching to a different target commits the in-flight edit first, so the
+    // previous edit is never silently dropped.
+    if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     if (kind === 'text' || kind === 'link') {
@@ -451,6 +533,9 @@ export function buildManualEditBridge(enabled: boolean): string {
   }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;
+    // While editing, hovering must not retarget the inspector or surface a new
+    // affordance — that's the other half of the #3646 instability.
+    if (activeTextEdit) return;
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     var el = closestTarget(ev);
     if (!el) return;

@@ -152,9 +152,10 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       const home = homedir();
       const agentHomes = await resolveAgentHomes(options.dataDir);
       const browserUse = collectBrowserUseDiscoveryFacts();
+      const runEventSources = await buildRunEventLogSources(options.runsDir);
       const sources = [
         ...buildSidecarLogSources(options.runtime),
-        ...(await buildRunEventLogSources(options.runsDir)),
+        ...runEventSources,
         ...(await buildAgentCliLogSources({
           homeDir: home,
           dataDir: options.dataDir ?? null,
@@ -165,6 +166,20 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         })),
       ];
       const username = safeUsername();
+
+      // Surface "expected-but-empty" so a reader can tell a collection gap
+      // apart from "no runs happened". buildRunEventLogSources returns [] both
+      // when the dir is missing AND when persistence is off, adding no manifest
+      // entries — without this note an empty bundle looks like a clean run.
+      const warnings: string[] = [];
+      if (options.runtime == null) warnings.push(STANDALONE_LAUNCH_WARNING);
+      if (options.runsDir && runEventSources.length === 0) {
+        warnings.push(
+          `No per-run event logs found under ${options.runsDir}. Either no chat ` +
+            `runs have executed in this data dir, or run-event persistence is ` +
+            `disabled (server.ts createChatRunService runsLogDir).`,
+        );
+      }
 
       const result = await buildDiagnosticsZip({
         context: {
@@ -184,7 +199,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
             projectRoot: options.projectRoot,
             browserUse,
           },
-          warnings: options.runtime == null ? [STANDALONE_LAUNCH_WARNING] : undefined,
+          warnings: warnings.length > 0 ? warnings : undefined,
         },
         sources,
         redaction: { username },

@@ -45,6 +45,12 @@ const VISUAL_CONFIG = {
 const visualStableTimeoutMs = 10_000;
 const visualStableFrameCount = 3;
 
+function waitForVisualTimeout(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, visualStableTimeoutMs);
+  });
+}
+
 const MOCK_AGENT = {
   id: 'mock',
   name: 'Mock Agent',
@@ -52,6 +58,55 @@ const MOCK_AGENT = {
   available: true,
   version: 'test',
   models: [{ id: 'default', label: 'Default' }],
+} as const;
+
+export const VISUAL_CLI_AGENTS = [
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    bin: 'claude',
+    available: true,
+    version: '2.1.31',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'sonnet-alias', label: 'Sonnet (alias)' },
+      { id: 'opus-alias', label: 'Opus (alias)' },
+      { id: 'haiku-alias', label: 'Haiku (alias)' },
+      { id: 'sonnet-nightly', label: 'Sonnet Nightly' },
+      { id: 'opus-nightly', label: 'Opus Nightly' },
+      { id: 'sonnet-4.5', label: 'Sonnet 4.5' },
+      { id: 'opus-4.5', label: 'Opus 4.5' },
+    ],
+  },
+  {
+    id: 'codex',
+    name: 'Codex CLI',
+    bin: 'codex',
+    available: true,
+    version: '0.134.0',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.4', label: 'GPT-5.4' },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4-Mini' },
+      { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3-Codex-Spark' },
+      { id: 'gpt-5.3', label: 'GPT-5.3' },
+      { id: 'gpt-5.2', label: 'GPT-5.2' },
+    ],
+  },
+] as const;
+
+export const VISUAL_AMR_AGENT = {
+  id: 'amr',
+  name: 'Open Design AMR',
+  bin: 'vela',
+  available: true,
+  version: '0.1.0',
+  models: [
+    { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'deepseek-v3.2', label: 'DeepSeek V3.2' },
+    { id: 'glm-5.1', label: 'GLM 5.1' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  ],
 } as const;
 
 const VISUAL_PROJECTS = [
@@ -78,6 +133,35 @@ const VISUAL_PROJECTS = [
 ] as const;
 
 type VisualProject = (typeof VISUAL_PROJECTS)[number];
+
+const VISUAL_PROJECT_FILE_HTML =
+  '<!doctype html><html><body><main><h1>Visual CSS Smoke</h1><p>Workspace preview remains framed.</p></main></body></html>';
+
+const VISUAL_PROJECT_FILES = [
+  {
+    name: 'index.html',
+    path: 'index.html',
+    type: 'file',
+    size: VISUAL_PROJECT_FILE_HTML.length,
+    mtime: 1_700_000_200_000,
+    kind: 'html',
+    mime: 'text/html; charset=utf-8',
+    artifactKind: 'html',
+    artifactManifest: {
+      version: 1,
+      kind: 'html',
+      title: 'Visual CSS Smoke',
+      entry: 'index.html',
+      renderer: 'html',
+      status: 'complete',
+      exports: ['html', 'pdf', 'zip'],
+      primary: true,
+      createdAt: '2026-06-15T00:00:00.000Z',
+      updatedAt: '2026-06-15T00:00:00.000Z',
+      metadata: { identifier: 'visual-css-smoke', artifactType: 'text/html', inferred: false },
+    },
+  },
+] as const;
 
 type VisualPageOptions = {
   projects?: readonly VisualProject[];
@@ -216,6 +300,13 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { ok: true });
   });
 
+  await page.route('**/api/community/discord', async (route) => {
+    await fulfillGet(route, {
+      onlineCount: 0,
+      memberCount: 0,
+    });
+  });
+
   await page.route('**/api/integrations/vela/status', async (route) => {
     await fulfillGet(route, {
       loggedIn: false,
@@ -223,6 +314,10 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
       configPath: '/tmp/.amr/config.json',
       user: null,
     });
+  });
+
+  await page.route('**/api/media/providers/aihubmix/models**', async (route) => {
+    await fulfillGet(route, { models: [] });
   });
 
   await page.route(VISUAL_GITHUB_REPO_API, async (route) => {
@@ -238,6 +333,25 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects', async (route) => {
     await fulfillGet(route, { projects });
+  });
+
+  await page.route('**/api/projects/*/files', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await fulfillGet(route, { files: VISUAL_PROJECT_FILES });
+  });
+
+  await page.route('**/api/projects/*/raw/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: VISUAL_PROJECT_FILE_HTML,
+    });
   });
 
   await page.route('**/api/projects/*/upload', async (route) => {
@@ -432,6 +546,31 @@ export async function gotoVisualHome(page: Page): Promise<void> {
   await waitForVisualReady(page);
 }
 
+export async function gotoVisualWorkspace(page: Page): Promise<void> {
+  await page
+    .getByTestId('recent-projects-strip')
+    .locator('[data-project-id="visual-project-launchpad"]')
+    .click();
+  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+}
+
+export async function openAvatarMenu(page: Page): Promise<Locator> {
+  await page.locator('.avatar-menu .avatar-agent-trigger').click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+export async function openSettingsDetailsFromHeader(page: Page): Promise<Locator> {
+  await page.locator('.settings-icon-btn').click();
+  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 export async function waitForVisualFonts(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -483,23 +622,29 @@ export async function scrollVisualLocatorIntoStableView(
 }
 
 export async function waitForVisualStable(page: Page): Promise<void> {
-  await page.waitForLoadState('networkidle', { timeout: visualStableTimeoutMs }).catch(() => {});
+  // The app shell owns long-lived SSE channels such as /api/memory/events, so
+  // Playwright's networkidle state never represents visual readiness here.
   await waitForVisualFrameAssets(page);
   await waitForVisualLayoutStable(page);
 }
 
 async function waitForVisualFrameAssets(page: Page): Promise<void> {
-  for (const frame of page.frames()) {
-    await frame.evaluate(async () => {
-      await document.fonts.ready;
-      await Promise.all(
-        Array.from(document.images, async (image) => {
-          if (image.complete && image.naturalWidth > 0) return;
-          await image.decode().catch(() => {});
+  await Promise.all(
+    page.frames().map((frame) =>
+      Promise.race([
+        frame.evaluate(async () => {
+          await document.fonts.ready;
+          await Promise.all(
+            Array.from(document.images, async (image) => {
+              if (image.complete && image.naturalWidth > 0) return;
+              await image.decode().catch(() => {});
+            }),
+          );
         }),
-      );
-    }).catch(() => {});
-  }
+        waitForVisualTimeout(),
+      ]).catch(() => {}),
+    ),
+  );
 }
 
 async function waitForVisualLayoutStable(page: Page): Promise<void> {

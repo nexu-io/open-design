@@ -291,7 +291,7 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 tl;dr：好好提 PR、认真 review、在 [Discussions][discussions] / [Discord][discord] 多冒泡，剩下的自然会发生。
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/qhbcCH8Am4
+[discord]: https://discord.gg/9ptkbbqRu
 
 ---
 

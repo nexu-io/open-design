@@ -3,7 +3,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, test } from 'vitest';
 
-import { stageAmrImagePaths } from '../src/amr-image-staging.js';
+import { stageAmrImagePaths } from '../src/media/amr-image-staging.js';
 
 const tempDirs: string[] = [];
 

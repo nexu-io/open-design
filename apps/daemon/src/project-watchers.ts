@@ -53,7 +53,7 @@ export const DEFAULT_AWAIT_WRITE_FINISH = {
 };
 
 const registry = new Map<string, WatcherEntry>();
-const PREFERS_POLLING_IN_TESTS = process.env.NODE_ENV === 'test';
+const PREFERS_POLLING = process.env.OD_WATCHER_USE_POLLING === '1' || process.env.CHOKIDAR_USEPOLLING === '1';
 
 function isPollingFallbackError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException | undefined)?.code;
@@ -87,12 +87,12 @@ function makeEntry(dir: string, opts: Required<Pick<ProjectWatcherOptions, 'igno
   const subscribers = new Set<ProjectWatchCallback>();
   const entry: WatcherEntry = {
     dir,
-    watcher: createWatcher(dir, opts, PREFERS_POLLING_IN_TESTS),
+    watcher: createWatcher(dir, opts, PREFERS_POLLING),
     ready,
     subscribers,
     closing: null,
   };
-  let usingPollingFallback = PREFERS_POLLING_IN_TESTS;
+  let usingPollingFallback = PREFERS_POLLING;
   let switchingToPolling = false;
 
   const resolveReadyOnce = () => {

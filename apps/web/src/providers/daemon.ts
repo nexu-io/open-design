@@ -285,6 +285,7 @@ export interface DaemonStreamOptions {
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   mediaExecution?: MediaExecutionPolicy;
+  titleGeneration?: { enabled?: boolean };
   locale?: string;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
@@ -578,6 +579,7 @@ export async function streamViaDaemon({
   context,
   appliedPluginSnapshotId,
   mediaExecution,
+  titleGeneration,
   locale,
   initialLastEventId,
   onRunCreated,
@@ -614,6 +616,7 @@ export async function streamViaDaemon({
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
+    ...(titleGeneration?.enabled ? { titleGeneration: { enabled: true } } : {}),
     ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
@@ -744,6 +747,12 @@ export interface VelaLoginStatus {
   profile: string;
   user: VelaUser | null;
   configPath: string;
+  // Device-authorization details parsed from `vela login` output while a login
+  // is in flight, so the UI can offer a manual sign-in link when the browser
+  // did not auto-open. See parseVelaLoginActivation in the daemon's vela.ts.
+  activationUrl?: string;
+  userCode?: string;
+  browserOpenFailed?: boolean;
 }
 
 // AMR (vela) login surfaces three thin endpoints on the daemon:
@@ -782,12 +791,15 @@ export interface StartVelaLoginResult {
 
 export async function startVelaLogin(
   attribution?: AmrEntryAttribution | null,
+  odDeviceId?: string | null,
 ): Promise<StartVelaLoginResult> {
   try {
+    const loginAttribution =
+      attribution && odDeviceId ? { ...attribution, odDeviceId } : attribution;
     const resp = await fetch('/api/integrations/vela/login', {
       method: 'POST',
-      headers: attribution ? { 'Content-Type': 'application/json' } : undefined,
-      body: attribution ? JSON.stringify({ attribution }) : undefined,
+      headers: loginAttribution ? { 'Content-Type': 'application/json' } : undefined,
+      body: loginAttribution ? JSON.stringify({ attribution: loginAttribution }) : undefined,
     });
     if (resp.ok) {
       const body = (await resp.json()) as { pid?: number };
@@ -1198,6 +1210,9 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
   if (t === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
   }
+  if (t === 'conversation_title' && typeof data.title === 'string') {
+    return { kind: 'conversation_title', title: data.title };
+  }
   if (t === 'thinking_delta' && typeof data.delta === 'string') {
     return { kind: 'thinking', text: data.delta };
   }
@@ -1253,6 +1268,15 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       label: 'warning',
       detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated to prevent unauthorized instruction injection.`,
     };
+  }
+  if (t === 'tool_loop' && typeof data.toolName === 'string') {
+    const toolName = data.toolName;
+    const count = typeof data.count === 'number' ? data.count : 0;
+    const detail =
+      data.action === 'halt'
+        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
+        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
+    return { kind: 'status', label: 'warning', detail };
   }
   if (t === 'raw' && typeof data.line === 'string') {
     return { kind: 'raw', line: data.line };

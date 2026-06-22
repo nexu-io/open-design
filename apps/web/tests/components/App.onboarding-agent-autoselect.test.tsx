@@ -186,6 +186,26 @@ describe('App first-run agent auto-select', () => {
     vi.clearAllMocks();
   });
 
+  it('does not render the Home entry before first-run onboarding routing is known', async () => {
+    let resolveDaemonConfig!: (value: {}) => void;
+    mockedLoadConfig.mockReturnValue(firstRunConfig());
+    mockedFetchDaemonConfig.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDaemonConfig = resolve;
+      }),
+    );
+
+    render(<App />);
+
+    expect(screen.queryByTestId('agent-id')).toBeNull();
+    expect(screen.getByText('Loading workspace…')).toBeTruthy();
+
+    resolveDaemonConfig({});
+    await waitFor(() => {
+      expect(screen.getByTestId('onboarding-completed').textContent).toBe('false');
+    });
+  });
+
   it('does not auto-pick a default agent while first-run onboarding is in progress', async () => {
     const { syncConfigToDaemon } = await import('../../src/state/config');
     const mockedSync = vi.mocked(syncConfigToDaemon);

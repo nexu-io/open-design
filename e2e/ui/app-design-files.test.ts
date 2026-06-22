@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Locator, Page, Request, Response } from '@playwright/test';
@@ -10,7 +10,7 @@ const STORAGE_KEY = 'open-design:config';
 const TINY_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -469,6 +469,50 @@ test('[P1] design files page keeps the current single-file actions and context h
   await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
 
   await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
+});
+
+test('[P0] @critical file workspace restores HTML preview after switching through a source file', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('File workspace preview restore');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'dashboard.html',
+    '<!doctype html><html><body><main><h1>Risk Dashboard</h1><p>Preview survives file switches.</p></main></body></html>',
+  );
+  await seedProjectFile(page, projectId, 'logic.ts', 'export const riskScore = 17.3;\n');
+  await page.reload();
+  await expectWorkspaceReady(page);
+
+  await openDesignFile(page, 'dashboard.html');
+  await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    name: 'Risk Dashboard',
+  })).toBeVisible();
+
+  await page.getByTestId('design-files-tab').click();
+  const sourceRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: 'logic.ts',
+  });
+  await expect(sourceRow).toBeVisible();
+  await sourceRow.getByRole('button').first().click();
+  await clickDesignFilePreviewOpen(page);
+  await expect(page.getByRole('tab', { name: /logic\.ts/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.code-viewer')).toContainText('riskScore');
+
+  await page.getByRole('tab', { name: /dashboard\.html/i }).click();
+  await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    name: 'Risk Dashboard',
+  })).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
 async function runDesignFilesTabPersistenceFlow(page: Page) {

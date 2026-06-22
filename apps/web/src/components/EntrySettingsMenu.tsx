@@ -28,8 +28,8 @@ import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPres
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
 
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
-const X_URL = 'https://x.com/nexudotio';
+const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
+const X_URL = 'https://x.com/OpenDesignHQ';
 
 export type EntrySettingsSection =
   | 'execution'

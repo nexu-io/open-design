@@ -1,0 +1,478 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* fillHeight: pin everything but the gallery and let only the gallery scroll
+   inside a bounded-height parent (e.g. the New Brand modal). */
+.fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.fill .head,
+.fill .quickPicksSection,
+.fill .controls {
+  flex: 0 0 auto;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.subtext {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Quick-pick row ───────────────────────────────────────────────── */
+.quickPicksSection {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  align-items: center;
+}
+
+.compact .quickPicksSection {
+  align-items: stretch;
+}
+
+.quickPicksLabel {
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.quickPicks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.compact .quickPicks {
+  justify-content: flex-start;
+}
+
+.quickChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+
+.quickChip:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.quickChip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.quickChip:disabled {
+  cursor: default;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.quickName {
+  white-space: nowrap;
+}
+
+/* The clicked chip stays lit (not dimmed) while its extraction kicks off. */
+.chipLoading,
+.chipLoading:disabled {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* ── Controls: search + category chips ────────────────────────────── */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 340px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.compact .searchWrap {
+  margin: 0;
+  max-width: none;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 11px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 13.5px;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+
+.search::placeholder {
+  color: var(--text-faint);
+}
+
+.search:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.compact .categories {
+  justify-content: flex-start;
+}
+
+.categoryChip {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.categoryChip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.categoryChip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.categoryChipActive,
+.categoryChipActive:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* ── Gallery (scrolls on its own in fillHeight mode) ──────────────── */
+.scrollArea {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fill .scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  /* breathing room so cards and their hover lift never kiss the scrollbar */
+  padding: 2px 4px 4px 2px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+}
+
+.compact .grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.card:disabled {
+  cursor: default;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+/* The clicked card stays lit (not dimmed) and shows its spinner while the
+   extraction kicks off, so the click visibly registers. */
+.cardLoading,
+.cardLoading:disabled {
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+.cardThumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.favicon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.faviconFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-xs);
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.quickChip .favicon,
+.quickChip .faviconFallback {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.cardName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.cardCategory {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Extract affordance: slides up from the trailing edge on hover. */
+.extractPill {
+  position: absolute;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity var(--dur-enter) var(--ease-out),
+    transform var(--dur-enter) var(--ease-out);
+}
+
+.card:hover .extractPill,
+.card:focus-visible .extractPill {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Loading spinner + status line ────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: brandPickerSpin 0.7s linear infinite;
+}
+
+.cardThumb .spinner {
+  width: 20px;
+  height: 20px;
+}
+
+.quickChip .spinner {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes brandPickerSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.statusBusy,
+.statusError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.statusBusy {
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.statusError {
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  color: var(--red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quickChip,
+  .card,
+  .extractPill {
+    transition: none;
+  }
+  .quickChip:hover,
+  .card:hover {
+    transform: none;
+  }
+  .spinner {
+    animation-duration: 1.4s;
+  }
+}
+
+/* ── Show more ────────────────────────────────────────────────────── */
+.sentinel {
+  height: 1px;
+}
+
+.showMoreWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.showMore {
+  padding: 8px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.showMore:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.showMore:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

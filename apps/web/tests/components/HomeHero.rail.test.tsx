@@ -145,6 +145,8 @@ describe('HomeHero intent rail', () => {
     expect(screen.queryByTestId('home-hero-rail-video')).toBeNull();
     const node = screen.getByTestId('home-hero-active-type-chip');
     expect(node.getAttribute('data-chip-id')).toBe('video');
+    expect(node.className).toContain('is-active');
+    expect(node.getAttribute('aria-pressed')).toBe('true');
     expect(node.textContent).toContain('Video');
   });
 
@@ -393,6 +395,13 @@ describe('HomeHero intent rail', () => {
     expect(findChip('figma')?.action).toMatchObject({ kind: 'apply-figma-migration' });
     expect(findChip('folder')).toBeUndefined();
     expect(findChip('template')?.action).toMatchObject({ kind: 'open-template-picker' });
+  });
+
+  it('leads the create group with the Brand Kit chip and its own action discriminator', () => {
+    const createChips = HOME_HERO_CHIPS.filter((chip) => chip.group === 'create');
+    expect(createChips[0]?.id).toBe('create-brand-kit');
+    expect(findChip('create-brand-kit')?.action).toMatchObject({ kind: 'create-brand-kit' });
+    expect(findChip('create-brand-kit')?.icon).toBe('swatchbook');
   });
 
   it('media chips route to od-media-generation with the matching project kind', () => {

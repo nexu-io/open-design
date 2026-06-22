@@ -34,7 +34,7 @@ import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.j
 import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
-import { IMAGE_MODELS } from '../media-models.js';
+import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
@@ -166,6 +166,9 @@ type ProjectMetadata = {
   audioModel?: string | null;
   audioDuration?: number | null;
   voice?: string | null;
+  brandId?: string | null;
+  brandSourceUrl?: string | null;
+  brandDesignSystemId?: string | null;
   promptTemplate?: {
     id?: string | null;
     surface?: 'image' | 'video' | null;
@@ -436,6 +439,15 @@ export interface ComposeInput {
   // built-in identity charter but still defer to the brand's hard tokens
   // and the active skill's workflow. Empty/undefined skips the block.
   memoryBody?: string | undefined;
+  // Per-hook switches for the two-loop memory feature, mirrored from the
+  // memory config (`profileEnabled` / `rewriteEnabled` / `verifyEnabled`).
+  // An absent object — or an absent field — is treated as TRUE so callers
+  // with no memory config wired (and the contracts/BYOK fallback) keep the
+  // loops on by default. `rewrite` drives the PRE intent-gateway task-brief
+  // card; `verify` drives the POST self-verify scorecard. `profile` is
+  // consumed by the memory-body composer; it is accepted here only so the
+  // same object threads through unchanged.
+  memoryHooks?: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
   // Project-level metadata captured by the new-project panel. Drives the
   // agent's understanding of artifact kind, fidelity, speaker-notes intent
   // and animation intent. Missing fields here are exactly what the
@@ -523,6 +535,7 @@ export function composeSystemPrompt({
   craftBody,
   craftSections,
   memoryBody,
+  memoryHooks,
   metadata,
   template,
   audioVoiceOptions,
@@ -636,7 +649,29 @@ export function composeSystemPrompt({
 
   if (memoryBody && memoryBody.trim().length > 0) {
     parts.push(
-      `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\n${memoryBody.trim()}`,
+      `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\nUse memory as a task-intent gateway. When the user's request is short or underspecified, silently expand it into an internal task brief before acting: infer the task type, user/profile background, project/artifact context, delivery preferences, known feedback meanings, constraints, and validation/finish line. Proceed from that richer brief so the user does not need to repeat setup. Ask a clarifying question only when a critical target, permission, or conflict cannot be resolved from the current request plus memory. Do not dump the full internal brief unless the user asks to inspect it. Expanding intent this way changes only WHAT you know going in; it never shortcuts the standard build flow — you still plan with TodoWrite and still run the anti-slop / brand self-check on every artifact-producing turn.\n\n${memoryBody.trim()}`,
+    );
+
+    // Two-loop memory instruction blocks. These pair with the memory body
+    // above (Workstream 1A renders a `### Profile` first and a
+    // `### Verified rules` last), so they are only meaningful when memory
+    // is present. Each loop is independently gated by its config flag; an
+    // absent flag defaults ON. The card JSON examples below intentionally
+    // use no backticks so they stay literal inside the template strings.
+    if ((memoryHooks?.rewrite ?? true)) {
+      parts.push(
+        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
+      );
+    }
+
+    if ((memoryHooks?.verify ?? true)) {
+      parts.push(
+        `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
+      );
+    }
+
+    parts.push(
+      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
     );
   }
 
@@ -899,7 +934,7 @@ If the rules below tell you to plan with TodoWrite, write the plan as prose inst
 
 const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
 
-This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.com/invite/9ptkbbqRu.
+This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.gg/9ptkbbqRu.
 
 Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
 
@@ -1037,6 +1072,13 @@ Only if the built-in result does not return a usable path should you search
 \`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
 source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
 
+When the user asked for one image, produce exactly one final project image
+file. If Codex built-in imagegen returns multiple candidate files, previews, or
+variants, select the single best match and import only that file into
+\`$OD_PROJECT_DIR\`. Do not copy every generated variant, do not keep multiple
+final image files, and do not present multiple outputs unless the user
+explicitly asked for variants or more than one image.
+
 Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
 descriptive filename, then verify the exact destination file exists under
 \`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
@@ -1131,6 +1173,14 @@ function renderMetadataBlock(
     lines.push(
       '- **connector-source rule**: if the user names a connector/source (for example Notion) and daemon connector tools are available, list connectors before asking where the data comes from. When the named connector is `connected`, use its read-only tools and ask follow-up questions only for missing topic/page/database details, multiple equally plausible matches, or an unconnected/missing connector.',
     );
+  }
+  if (metadata.kind === 'brand') {
+    lines.push(
+      '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.',
+    );
+    if (metadata.brandId) lines.push(`- **brandId**: ${metadata.brandId}`);
+    if (metadata.brandSourceUrl) lines.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
+    if (metadata.brandDesignSystemId) lines.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);
   }
 
   if (metadata.kind === 'prototype') {

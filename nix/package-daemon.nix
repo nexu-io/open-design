@@ -9,6 +9,7 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
+  pnpmDepsSrc ? src,
   workspacePaths,
   makeWrapper,
   python3,
@@ -69,7 +70,8 @@ in
     # `fetchPnpmDeps` defaults to `pkgs.pnpm`; pin to the flake's
     # `pnpm_10` so the dep-fetch matches the install phase.
     pnpmDeps = fetchPnpmDeps {
-      inherit (finalAttrs) pname version src;
+      inherit (finalAttrs) pname version;
+      src = pnpmDepsSrc;
       hash = pnpmDepsHash;
       pnpm = pnpm_10;
       pnpmWorkspaces = pnpmWorkspaceFilters;
@@ -155,6 +157,26 @@ in
       # resolve sibling packages by relative paths, so we cannot prune to
       # just apps/daemon.
       cp -r . $out/lib/open-design/
+
+      # Runtime package exports point at dist/. Keep workspace package
+      # manifests for Node resolution and prune source/test/build config files
+      # before Nix fixup scans the output tree.
+      for target in ${lib.escapeShellArgs workspacePaths}; do
+        if [ "$target" = "apps/daemon" ]; then
+          find "$out/lib/open-design/$target" -mindepth 1 -maxdepth 1 \
+            ! -name dist \
+            ! -name bin \
+            ! -name node_modules \
+            ! -name package.json \
+            -exec rm -rf {} +
+        else
+          find "$out/lib/open-design/$target" -mindepth 1 -maxdepth 1 \
+            ! -name dist \
+            ! -name node_modules \
+            ! -name package.json \
+            -exec rm -rf {} +
+        fi
+      done
 
       # Root devDependencies expose non-daemon workspaces via pnpm symlinks,
       # but the daemon derivation intentionally filters those sources out
