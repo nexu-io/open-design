@@ -6959,7 +6959,13 @@ export async function startServer({
       destroyStream(child.stderr);
       destroyStream(child.stdin);
     };
-    const restartSameRunAfterRetry = () => {
+    // Synchronously detach the failed attempt: kill the old child and move the
+    // run back to `queued` *now*, even when the re-spawn is delayed by backoff.
+    // This must not be deferred — leaving the old child alive during the backoff
+    // window lets a follow-on signal (e.g. the inactivity watchdog's SIGTERM)
+    // drive a second close-handler pass that finalizes the run as failed before
+    // the retry ever spawns.
+    const tearDownAttemptForRetry = () => {
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
       destroyChildStdio(run.child);
@@ -6983,6 +6989,8 @@ export async function startServer({
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
+    };
+    const spawnRetryAttempt = () => {
       void startChatRun(chatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
@@ -6999,6 +7007,24 @@ export async function startServer({
         // cannot trigger another restart loop.
         finishWithRetryDecision('failed', 1, null);
       });
+    };
+    // Tear the failed attempt down now (moving the run to `queued`), then wait
+    // out the policy's backoff before re-spawning. Stays cancel-aware: a cancel
+    // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
+    // and finalizes the queued run, and the callback re-checks cancel/terminal
+    // state in case it fires first.
+    const scheduleRetryRestart = (delayMs) => {
+      tearDownAttemptForRetry();
+      const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
+      if (wait <= 0) {
+        spawnRetryAttempt();
+        return;
+      }
+      run.retryRestartTimer = setTimeout(() => {
+        run.retryRestartTimer = null;
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        spawnRetryAttempt();
+      }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
       const attemptCount = run.retryAttemptCount ?? 0;
@@ -7090,8 +7116,9 @@ export async function startServer({
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
+          retry_delay_ms: decision.retryDelayMs,
         });
-        restartSameRunAfterRetry();
+        scheduleRetryRestart(decision.retryDelayMs);
         return true;
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream

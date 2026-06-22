@@ -2784,6 +2784,8 @@ export interface RunRetryBaseProps {
 
 export interface RunRetryAttemptedProps extends RunRetryBaseProps {
   retry_reason: 'transient_failure';
+  // Backoff delay (ms) waited before this retry attempt was restarted.
+  retry_delay_ms?: number;
 }
 
 export interface RunRetryFinishedProps extends RunRetryBaseProps {

@@ -86,6 +86,7 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      retryRestartTimer: null,
       stdinOpen: false,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
@@ -329,10 +330,21 @@ export function createChatRunService({
     run.stdinOpen = false;
   };
 
+  // A same-run retry can be waiting out its backoff window (server.ts
+  // scheduleRetryRestart). Cancellation/shutdown must drop that pending restart
+  // so a cancelled run is not resurrected after the timer fires.
+  const clearPendingRetryRestart = (run) => {
+    if (run?.retryRestartTimer) {
+      clearTimeout(run.retryRestartTimer);
+      run.retryRestartTimer = null;
+    }
+  };
+
   const cancel = async (run) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
     run.cancelRequested = true;
     run.updatedAt = Date.now();
+    clearPendingRetryRestart(run);
     closeRunStdin(run);
     if (!run.child) {
       finish(run, 'canceled', null, 'SIGTERM');
@@ -375,6 +387,7 @@ export function createChatRunService({
     await Promise.all(activeRuns.map(async (run) => {
       run.cancelRequested = true;
       run.updatedAt = Date.now();
+      clearPendingRetryRestart(run);
       closeRunStdin(run);
       if (run.acpSession?.abort) {
         try {
