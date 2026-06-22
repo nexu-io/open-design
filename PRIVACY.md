@@ -17,9 +17,9 @@ It is an informed-disclosure notice with a single **I get it** acknowledgement,
 not an opt-in gate — and because telemetry is already enabled, the app may begin
 sending events (such as onboarding and UI-interaction events) from first launch.
 
-You stay in control: the banner footer and **Settings → Privacy** both expose a
-one-click opt-out, where each category below has its own toggle, and you can
-change your decision at any time.
+You stay in control: the banner footer tells you sharing is on and points you to
+**Settings → Privacy**, where you can turn telemetry off and toggle each category
+below — and you can change your decision at any time.
 
 ## What is collected
 
