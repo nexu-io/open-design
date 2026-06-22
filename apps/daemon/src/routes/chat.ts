@@ -87,42 +87,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     return false;
   };
 
-  // The canonical POST /api/runs handler lives in `server.ts` — it ran
-  // first in Express's registration order long before this file existed,
-  // so any handler we wired here was shadowed and never executed. Plugin
-  // snapshot resolution, clientType inference, and the daemon-side
-  // run_created/finished analytics all live in `server.ts` now.
-  // POST /api/chat is likewise owned by `server.ts`; keep the chat run
-  // launch path single-sourced so validation changes land on the live route.
-
-  app.get('/api/runs', (req, res) => {
-    const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
-    /** @type {import('@open-design/contracts').ChatRunListResponse} */
-    const body = { runs: runs.map(design.runs.statusBody) };
-    res.json(body);
-  });
-
-  app.get('/api/runs/:id', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(design.runs.statusBody(run));
-  });
-
-  app.get('/api/runs/:id/events', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.stream(run, req, res);
-  });
-
-  app.post('/api/runs/:id/cancel', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = await design.runs.cancel(run);
-    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true, run: status };
-    res.json(body);
-  });
+  // Run lifecycle routes live in `routes/runs.ts`; this file owns feedback,
+  // connection tests, critique handoff, and provider proxy routes.
 
   // Receives the user's thumbs-up/down (+ reason codes) for an assistant
   // turn and forwards it to Langfuse as a `score-create`. Web persists the

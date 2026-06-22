@@ -1029,4 +1029,29 @@ describe('structured agent stream fixtures', () => {
       durationMs: 1234,
     });
   });
+
+  it('routes GitHub Copilot failing tool executions through the tool-loop guard', () => {
+    const guard = createToolLoopGuard({ mode: 'halt' });
+    const handler = createCopilotStreamHandler((event: any) => {
+      if (event?.type === 'tool_use' && typeof event.id === 'string') {
+        guard.observeToolUse(event.id, event.name ?? 'tool', event.input);
+      } else if (event?.type === 'tool_result' && typeof event.toolUseId === 'string') {
+        guard.observeToolResult(event.toolUseId, Boolean(event.isError), event.content ?? '');
+      }
+    });
+
+    for (let i = 0; i < 8; i += 1) {
+      handler.feed(`${JSON.stringify({
+        type: 'tool.execution_start',
+        data: { toolCallId: `call-${i}`, toolName: 'Bash', arguments: { command: 'verify.sh' } },
+      })}\n`);
+      handler.feed(`${JSON.stringify({
+        type: 'tool.execution_complete',
+        data: { toolCallId: `call-${i}`, success: false, result: 'exit 1' },
+      })}\n`);
+    }
+    handler.flush();
+
+    expect(guard.halted).toBe(true);
+  });
 });

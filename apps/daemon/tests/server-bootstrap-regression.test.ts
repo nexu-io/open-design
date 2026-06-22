@@ -67,6 +67,16 @@ describe('server route inventory', () => {
       'GET /api/runs/:runId/devloop-iterations',
       'POST /api/runs/:runId/replay',
     ];
+    const runRouteKeys = [
+      'POST /api/runs',
+      'GET /api/runs',
+      'GET /api/runs/:id/result-package',
+      'GET /api/runs/:id',
+      'GET /api/runs/:id/events',
+      'GET /api/runs/:id/agui',
+      'POST /api/runs/:id/cancel',
+      'POST /api/chat',
+    ];
     const pluginEventRouteKeys = [
       'GET /api/plugins/events/snapshot',
       'GET /api/plugins/events/stats',
@@ -231,6 +241,7 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => automationRouteKeys.includes(key))).toEqual(automationRouteKeys);
     expect(routeKeys.filter((key) => velaRouteKeys.includes(key))).toEqual(velaRouteKeys);
     expect(routeKeys.filter((key) => genuiRouteKeys.includes(key))).toEqual(genuiRouteKeys);
+    expect(routeKeys.filter((key) => runRouteKeys.includes(key))).toEqual(runRouteKeys);
     expect(routeKeys.filter((key) => pluginEventRouteKeys.includes(key))).toEqual(pluginEventRouteKeys);
     expect(routeKeys.filter((key) => pluginLifecycleRouteKeys.includes(key))).toEqual(pluginLifecycleRouteKeys);
     expect(routeKeys.filter((key) => pluginAssetRouteKeys.includes(key))).toEqual(pluginAssetRouteKeys);
@@ -248,7 +259,7 @@ describe('server route inventory', () => {
 
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(routeKeys.indexOf('GET /api/health')).toBeLessThan(fallbackIndex);
-    expect(routeKeys.indexOf('GET /api/plugins/events/snapshot')).toBeLessThan(routeKeys.indexOf('POST /api/daemon/db/verify'));
+    expect(routeKeys.indexOf('POST /api/daemon/db/verify')).toBeLessThan(routeKeys.indexOf('GET /api/plugins/events/snapshot'));
     expect(routeKeys.indexOf('GET /api/plugins')).toBeLessThan(routeKeys.indexOf('GET /api/atoms'));
     expect(routeKeys.indexOf('GET /api/plugins/:id/preview')).toBeLessThan(fallbackIndex);
     expect(routeKeys.indexOf('GET /api/automation-source-packets')).toBeLessThan(
@@ -262,6 +273,8 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => key === 'GET /api/design-systems/:id')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'GET /api/design-systems/:id/preview')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'POST /api/projects/:id/upload')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'POST /api/runs')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'POST /api/chat')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'POST /api/media/tasks/:id/wait')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'GET /api/marketplaces')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'POST /api/projects/:id/plugins/share-tasks')).toHaveLength(1);

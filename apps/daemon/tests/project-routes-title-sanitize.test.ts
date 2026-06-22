@@ -8,15 +8,15 @@
  * the host page cannot access contentDocument.title after load. The daemon therefore
  * must rewrite <title> in the HTTP response body before the browser parses it.
  *
- * daemonSanitizeTitleInDoc (exported from project-routes.ts) is the function that
- * does this. It mirrors sanitizeTitleInDoc in apps/web/src/runtime/srcdoc.ts.
+ * daemonSanitizeTitleInDoc (exported from routes/project/index.ts) is the function
+ * that does this. It mirrors sanitizeTitleInDoc in apps/web/src/runtime/srcdoc.ts.
  *
  * Teams-disallowed character set (per maintainer lefarcen, issue #3918):
  *   : # % & * { } \ < > ? / + | "
  * Plus: leading/trailing spaces, and the sequence ~$
  */
 import { describe, expect, it } from 'vitest';
-import { daemonSanitizeTitleInDoc } from '../src/project-routes.js';
+import { daemonSanitizeTitleInDoc } from '../src/routes/project/index.js';
 
 // Characters that Microsoft Teams rejects in filenames.
 const TEAMS_DISALLOWED = /[:#%&*{}\\<>?/+|"]/;
