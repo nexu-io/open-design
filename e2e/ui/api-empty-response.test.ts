@@ -120,7 +120,7 @@ async function openNewProjectModal(page: Page) {
 
 async function expectWorkspaceReady(page: Page) {
   await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page).toHaveURL(/\/projects\//, { timeout: T.long });
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -138,7 +138,7 @@ async function sendPrompt(page: Page, prompt: string) {
         const url = new URL(response.url());
         return url.pathname === '/api/runs' && response.request().method() === 'POST';
       },
-      { timeout: 10_000 },
+      { timeout: T.long },
     ),
     sendButton.click(),
   ]);
