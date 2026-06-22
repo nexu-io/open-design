@@ -264,7 +264,56 @@ export function renderLinuxPackagedMainEntry(): string {
   return 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
 }
 
-export const LINUX_APPIMAGE_EXECUTABLE_ARGS = ["--"] as const;
+export function renderLinuxAppImageAppRun(): string {
+  return `#!/bin/bash
+set -e
+
+THIS="$0"
+args=("$@")
+NUMBER_OF_ARGS="$#"
+
+if [ -z "$APPDIR" ] ; then
+  path="$(dirname "$(readlink -f "\${THIS}")")"
+  while [[ "$path" != "" && ! -e "$path/AppRun" ]]; do
+    path=\${path%/*}
+  done
+  APPDIR="$path"
+fi
+
+export PATH="\${APPDIR}:\${APPDIR}/usr/sbin:\${PATH}"
+export XDG_DATA_DIRS="./share/:/usr/share/gnome:/usr/local/share/:/usr/share/:\${XDG_DATA_DIRS}"
+export LD_LIBRARY_PATH="\${APPDIR}/usr/lib:\${LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="\${APPDIR}"/usr/share/:"\${XDG_DATA_DIRS}":/usr/share/gnome/:/usr/local/share/:/usr/share/
+export GSETTINGS_SCHEMA_DIR="\${APPDIR}/usr/share/glib-2.0/schemas:\${GSETTINGS_SCHEMA_DIR}"
+
+BIN="$APPDIR/${PRODUCT_NAME}"
+
+if [ -z "$APPIMAGE_EXIT_AFTER_INSTALL" ] ; then
+  trap atexit EXIT
+fi
+
+isEulaAccepted=1
+
+atexit()
+{
+  if [ $isEulaAccepted == 1 ] ; then
+    unset ELECTRON_RUN_AS_NODE
+    if [ $NUMBER_OF_ARGS -eq 0 ] ; then
+      exec "$BIN"
+    else
+      exec "$BIN" "\${args[@]}"
+    fi
+  fi
+}
+
+if [ -z "$APPIMAGE" ] ; then
+  APPIMAGE="$APPDIR/AppRun"
+  # not running from within an AppImage; hence using the AppRun for Exec=
+fi
+`;
+}
+
+export const LINUX_APPIMAGE_EXECUTABLE_ARGS = ["--no-sandbox"] as const;
 
 export type AppImageProcessSnapshot = {
   pid: number;
@@ -292,6 +341,7 @@ export function matchesAppImageProcess(
 type LinuxPaths = {
   appBuilderConfigPath: string;
   appBuilderOutputRoot: string;
+  appImageAppRunPath: string;
   appImagePath: string;
   assembledAppRoot: string;
   assembledMainEntryPath: string;
@@ -323,6 +373,7 @@ function resolveLinuxPaths(config: ToolPackConfig): LinuxPaths {
   return {
     appBuilderConfigPath: join(namespaceRoot, "builder-config.json"),
     appBuilderOutputRoot,
+    appImageAppRunPath: join(namespaceRoot, "appimage", "AppRun"),
     appImagePath: "",
     assembledAppRoot: join(namespaceRoot, "assembled", "app"),
     assembledMainEntryPath: join(namespaceRoot, "assembled", "app", "main.cjs"),
@@ -535,6 +586,12 @@ async function writeAssembledApp(
   await runProductionInstall(paths.assembledAppRoot);
 }
 
+async function writeLinuxAppImageAppRun(paths: LinuxPaths): Promise<void> {
+  await mkdir(dirname(paths.appImageAppRunPath), { recursive: true });
+  await writeFile(paths.appImageAppRunPath, renderLinuxAppImageAppRun(), "utf8");
+  await chmod(paths.appImageAppRunPath, 0o755);
+}
+
 // --- Step 5: writeLinuxBuilderConfig helper ---
 
 async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
@@ -570,6 +627,16 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       { from: paths.resourceRoot, to: "open-design" },
       { from: paths.packagedConfigPath, to: "open-design-config.json" },
     ],
+    ...(config.to === "dir"
+      ? {}
+      : {
+          extraFiles: [
+            {
+              from: paths.appImageAppRunPath,
+              to: "AppRun",
+            },
+          ],
+        }),
     files: ["**/*", "!**/node_modules/.bin", "!**/node_modules/electron{,/**/*}"],
     icon: linuxResources.icon,
     linux: {
@@ -579,11 +646,9 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       synopsis: "Open Design",
       maintainer: "Open Design Contributors",
     },
-    // electron-builder's AppImage target injects `--no-sandbox` when
-    // executableArgs is unset. AppImageLauncher copies that embedded Exec line
-    // into its generated desktop entry, which breaks when the launch environment
-    // includes ELECTRON_RUN_AS_NODE. A non-empty end-of-options marker suppresses
-    // the default while still letting electron-builder append its `%U` placeholder.
+    // Keep the AppImage launch fallback explicit. Our top-level AppRun wrapper
+    // clears ELECTRON_RUN_AS_NODE before these Chromium flags reach Electron,
+    // including for AppImageLauncher-generated desktop entries.
     appImage: {
       executableArgs: [...LINUX_APPIMAGE_EXECUTABLE_ARGS],
     },
@@ -655,6 +720,9 @@ export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult
   await copyResourceTree(config, paths);
   const tarballs = await collectWorkspaceTarballs(config, paths);
   await writeAssembledApp(config, paths, tarballs);
+  if (config.to !== "dir") {
+    await writeLinuxAppImageAppRun(paths);
+  }
   await writeLinuxBuilderConfig(config, paths);
   await runElectronBuilderLinux(config, paths);
 

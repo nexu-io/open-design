@@ -33,6 +33,7 @@ import {
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
   resolveProductionInstallCommand,
@@ -626,8 +627,38 @@ describe("renderLinuxPackagedMainEntry", () => {
 });
 
 describe("LINUX_APPIMAGE_EXECUTABLE_ARGS", () => {
-  it("uses an end-of-options marker so electron-builder does not inject --no-sandbox", () => {
-    expect([...LINUX_APPIMAGE_EXECUTABLE_ARGS]).toEqual(["--"]);
+  it("keeps the AppImage no-sandbox fallback explicit for constrained Linux hosts", () => {
+    expect([...LINUX_APPIMAGE_EXECUTABLE_ARGS]).toEqual(["--no-sandbox"]);
+  });
+});
+
+describe("renderLinuxAppImageAppRun", () => {
+  it("unsets ELECTRON_RUN_AS_NODE before execing the Electron binary", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain("unset ELECTRON_RUN_AS_NODE");
+    expect(out.indexOf("unset ELECTRON_RUN_AS_NODE")).toBeLessThan(out.indexOf('exec "$BIN"'));
+    expect(out).toContain('BIN="$APPDIR/Open Design"');
+  });
+
+  it("preserves AppImageLauncher install-only behavior", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('if [ -z "$APPIMAGE_EXIT_AFTER_INSTALL" ] ; then');
+    expect(out).toContain("trap atexit EXIT");
+  });
+
+  it("passes desktop Exec arguments through to Electron", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('args=("$@")');
+    expect(out).toContain('exec "$BIN" "${args[@]}"');
+  });
+
+  it("sets APPIMAGE when running an extracted AppRun directly", () => {
+    const out = renderLinuxAppImageAppRun();
+
+    expect(out).toContain('APPIMAGE="$APPDIR/AppRun"');
   });
 });
 
