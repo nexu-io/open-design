@@ -353,6 +353,48 @@ function processExitDetail(
   return 'unknown';
 }
 
+// The daemon emits a `runtime_close` diagnostic into the run's event stream at
+// finalize time (see `deriveRpcCloseReason` in server.ts) carrying the mechanism
+// that ended the child as `rpc_close_reason`. When the agent-level error code is
+// the generic `AGENT_EXECUTION_FAILED` and no text pattern matched, this close
+// reason is the only remaining signal that distinguishes a mid-stream agent
+// error from a bare non-zero exit from an ACP fatal — so we surface it instead
+// of collapsing all three into one opaque `execution_failed` bucket.
+function readRuntimeCloseReason(
+  events: RunEventForFailureClassification[] = [],
+): string | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const rec = events[i];
+    if (!rec || rec.event !== 'diagnostic') continue;
+    const data = rec.data && typeof rec.data === 'object'
+      ? rec.data as Record<string, unknown>
+      : null;
+    if (data?.type === 'runtime_close' && typeof data.rpc_close_reason === 'string') {
+      return data.rpc_close_reason;
+    }
+  }
+  return null;
+}
+
+// Promote the opaque `execution_failed` detail to the specific close reason when
+// one of the three currently-unclassified shapes is present. Every other reason
+// (and a missing diagnostic) keeps the opaque label so the bucket never silently
+// absorbs a reason we haven't reasoned about.
+function executionFailedDetail(
+  events: RunEventForFailureClassification[] | undefined,
+): TrackingRunFailureDetail {
+  switch (readRuntimeCloseReason(events)) {
+    case 'stream_error':
+      return 'stream_error';
+    case 'exit_nonzero':
+      return 'exit_nonzero';
+    case 'fatal_rpc_error':
+      return 'fatal_rpc_error';
+    default:
+      return 'execution_failed';
+  }
+}
+
 /**
  * Whether a terminal failure can be recovered by RESUMING the agent's existing
  * CLI session (continue from where it left off) rather than restarting from
@@ -622,9 +664,12 @@ export function classifyRunFailure(
     errorCode === 'AGENT_TERMINATED_UNKNOWN' ||
     errorCode === 'AGENT_EXECUTION_FAILED'
   ) {
+    const baseDetail = processExitDetail(errorCode, text);
     return classification(
       'process_exit',
-      processExitDetail(errorCode, text),
+      // Only the generic AGENT_EXECUTION_FAILED catch-all is refined; the
+      // specific exit_code / terminated_unknown labels already carry meaning.
+      baseDetail === 'execution_failed' ? executionFailedDetail(input.events) : baseDetail,
       'child_close',
       retryableHint ?? false,
       retryableHint ? 'retry' : 'none',

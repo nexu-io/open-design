@@ -298,6 +298,9 @@ export type TrackingRunFailureDetail =
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
+  | 'stream_error'
+  | 'exit_nonzero'
+  | 'fatal_rpc_error'
   | 'execution_failed'
   | 'user_cancelled'
   | 'unknown';
