@@ -305,7 +305,7 @@ describe("tools-pack launcher payload archives", () => {
     }
   });
 
-  it.skipIf(process.platform !== "win32")("reuses the Windows payload base archive while overlaying beta metadata", async () => {
+  it.skipIf(process.platform !== "win32")("reuses the Windows payload archive when base and overlay metadata are unchanged", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-tools-pack-win-payload-cache-"));
     try {
       const namespace = "release-beta-win";
@@ -313,7 +313,7 @@ describe("tools-pack launcher payload archives", () => {
       const { builtApp, paths } = await writeFakeWinUnpackedApp(root, namespace, initialVersion);
       const cache = new ToolPackCache(join(root, "cache"));
 
-      for (const version of ["0.9.0-beta.1", "0.9.0-beta.2"]) {
+      for (const version of ["0.9.0-beta.1", "0.9.0-beta.2", "0.9.0-beta.2"]) {
         const config = makeConfig(root, "win", namespace, version);
         await writeFile(
           paths.packagedConfigPath,
@@ -331,7 +331,12 @@ describe("tools-pack launcher payload archives", () => {
       }
 
       const payloadCacheEntries = cache.report().entries.filter((entry) => entry.nodeId === "win.launcher-payload-base");
-      expect(payloadCacheEntries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
+      expect(payloadCacheEntries.map((entry) => entry.status)).toEqual(["miss", "hit", "hit"]);
+      const archiveCacheEntries = cache.report().entries.filter((entry) => entry.nodeId === "win.launcher-payload");
+      expect(archiveCacheEntries.map((entry) => entry.status)).toEqual(["miss", "miss", "hit"]);
+      expect(archiveCacheEntries.at(-1)?.materialized).toEqual([
+        expect.objectContaining({ from: "payload.7z", to: paths.launcherPayloadPath }),
+      ]);
 
       const extractRoot = join(root, "extracted");
       await mkdir(extractRoot, { recursive: true });
@@ -347,6 +352,45 @@ describe("tools-pack launcher payload archives", () => {
       expect(manifest.version).toBe("0.9.0-beta.2");
       expect(config.appVersion).toBe("0.9.0-beta.2");
       expect(packageJson.version).toBe("0.9.0-beta.2");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.skipIf(process.platform !== "win32")("can seed the Windows launcher payload from the NSIS base archive", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-tools-pack-win-payload-nsis-seed-"));
+    try {
+      const namespace = "release-beta-win";
+      const version = "0.9.0-beta.3";
+      const config = makeConfig(root, "win", namespace, version);
+      const { builtApp, paths } = await writeFakeWinUnpackedApp(root, namespace, version);
+      const cache = new ToolPackCache(join(root, "cache"));
+
+      await mkdir(join(paths.installerBasePayloadPath, ".."), { recursive: true });
+      await execFileAsync(winResources.sevenZipExe, [
+        "a",
+        "-t7z",
+        paths.installerBasePayloadPath,
+        "resources",
+      ], { cwd: paths.unpackedRoot, windowsHide: true });
+
+      await buildWinLauncherPayloadArchive(config, paths, builtApp, cache, { seedFromInstallerPayload: true });
+
+      expect(cache.report().entries.some((entry) => entry.nodeId === "win.launcher-payload-base")).toBe(false);
+      expect(cache.report().entries.some((entry) => entry.nodeId === "win.launcher-payload")).toBe(true);
+
+      const extractRoot = join(root, "extracted");
+      await mkdir(extractRoot, { recursive: true });
+      await execFileAsync(winResources.sevenZipExe, ["x", paths.launcherPayloadPath, `-o${extractRoot}`, "-y"]);
+
+      const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as { version: string };
+      const configJson = JSON.parse(
+        await readFile(join(extractRoot, "payload", "resources", "open-design-config.json"), "utf8"),
+      ) as { appVersion: string };
+      expect(manifest.version).toBe(version);
+      expect(configJson.appVersion).toBe(version);
+      await expectPathExists(join(extractRoot, "payload", "Open Design.exe"));
+      await expectPathExists(join(extractRoot, "payload", "resources"));
     } finally {
       await rm(root, { force: true, recursive: true });
     }

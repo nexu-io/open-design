@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
 import type { DesignSystemSummary } from './design-systems/index.js';
 import type { RoutineRoutesService } from './routes/routine.js';
+import type { OpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
@@ -87,6 +88,10 @@ export interface TelemetryDeps {
     customReason: string;
     scoreMetadata?: Record<string, unknown>;
   }) => Promise<{ status: 'accepted' | 'skipped_consent' | 'skipped_no_sink' }>;
+  reportRunCompletionTelemetryFallback: (...args: any[]) => any;
+  resolveRunProjectKindForAnalytics: (...args: any[]) => any;
+  runArtifactBaselines: any;
+  runRetryEventsForAnalytics: (...args: any[]) => any;
 }
 
 export interface ServerContext {
@@ -116,17 +121,20 @@ export interface ServerContext {
   nativeDialogs: any;
   research: any;
   mcp: any;
+  plugins: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
   projectPreviewScopes: ProjectPreviewScopeDeps;
-  telemetry?: TelemetryDeps;
+  telemetry: TelemetryDeps;
   validation: any;
   finalize: any;
   handoff: any;
   chat: any;
+  messages: any;
   agents: any;
   critique: any;
-  lifecycle?: {
+  openDesignPublicMetadata: OpenDesignPublicMetadataService;
+  lifecycle: {
     isDaemonShuttingDown: () => boolean;
   };
 }

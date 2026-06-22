@@ -453,7 +453,7 @@ jobs:
     name: Workspace unit tests
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -718,8 +718,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
-        with:
-          fetch-depth: 0
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace

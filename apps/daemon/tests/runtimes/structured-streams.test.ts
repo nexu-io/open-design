@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createClaudeStreamHandler } from '../../src/runtimes/claude-stream.js';
 import { createCopilotStreamHandler } from '../../src/copilot-stream.js';
 import { mapPiRpcEvent } from '../../src/pi-rpc.js';
+import { createToolLoopGuard } from '../../src/tool-loop-guard.js';
 
 describe('structured agent stream fixtures', () => {
   it('emits TodoWrite tool_use from Claude Code stream JSON', () => {
@@ -971,6 +972,38 @@ describe('structured agent stream fixtures', () => {
     });
   });
 
+  it('routes GitHub Copilot failing tool executions through the tool-loop guard', () => {
+    // Regression for PR #3375: Copilot's stream callback emitted agent events
+    // with a bare send('agent', …) that bypassed the guard, so a Copilot run
+    // could repeat a failing tool call indefinitely while other runtimes were
+    // stopped. The server now emits every agent event through one choke point
+    // that feeds the guard; this composes the real Copilot parser with the real
+    // guard the same way, so the runtime cannot silently drift out of coverage.
+    const guard = createToolLoopGuard({ mode: 'halt' });
+    const handler = createCopilotStreamHandler((event: any) => {
+      // Mirror server.ts emitAgentEvent's observation of tool events.
+      if (event?.type === 'tool_use' && typeof event.id === 'string') {
+        guard.observeToolUse(event.id, event.name ?? 'tool', event.input);
+      } else if (event?.type === 'tool_result' && typeof event.toolUseId === 'string') {
+        guard.observeToolResult(event.toolUseId, Boolean(event.isError), event.content ?? '');
+      }
+    });
+    // The same failing tool call, over and over, with no success between them.
+    for (let i = 0; i < 8; i += 1) {
+      handler.feed(`${JSON.stringify({
+        type: 'tool.execution_start',
+        data: { toolCallId: `call-${i}`, toolName: 'Bash', arguments: { command: 'verify.sh' } },
+      })}\n`);
+      handler.feed(`${JSON.stringify({
+        type: 'tool.execution_complete',
+        data: { toolCallId: `call-${i}`, success: false, result: 'exit 1' },
+      })}\n`);
+    }
+    handler.flush();
+
+    expect(guard.halted).toBe(true);
+  });
+
   it('emits GitHub Copilot CLI result usage tokens', () => {
     const events: unknown[] = [];
     const handler = createCopilotStreamHandler((event: unknown) => events.push(event));
@@ -995,5 +1028,30 @@ describe('structured agent stream fixtures', () => {
       stopReason: 'completed',
       durationMs: 1234,
     });
+  });
+
+  it('routes GitHub Copilot failing tool executions through the tool-loop guard', () => {
+    const guard = createToolLoopGuard({ mode: 'halt' });
+    const handler = createCopilotStreamHandler((event: any) => {
+      if (event?.type === 'tool_use' && typeof event.id === 'string') {
+        guard.observeToolUse(event.id, event.name ?? 'tool', event.input);
+      } else if (event?.type === 'tool_result' && typeof event.toolUseId === 'string') {
+        guard.observeToolResult(event.toolUseId, Boolean(event.isError), event.content ?? '');
+      }
+    });
+
+    for (let i = 0; i < 8; i += 1) {
+      handler.feed(`${JSON.stringify({
+        type: 'tool.execution_start',
+        data: { toolCallId: `call-${i}`, toolName: 'Bash', arguments: { command: 'verify.sh' } },
+      })}\n`);
+      handler.feed(`${JSON.stringify({
+        type: 'tool.execution_complete',
+        data: { toolCallId: `call-${i}`, success: false, result: 'exit 1' },
+      })}\n`);
+    }
+    handler.flush();
+
+    expect(guard.halted).toBe(true);
   });
 });

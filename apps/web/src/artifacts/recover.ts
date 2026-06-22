@@ -68,6 +68,21 @@ export function recoverHtmlArtifactFromPrecedingDocument({
   return validateHtmlArtifact(candidate).ok ? candidate : null;
 }
 
+/**
+ * Resolve the HTML that will actually be persisted for an artifact. When the
+ * model emits a prose-only `<artifact>` next to a complete `<html>` document in
+ * the same turn, recover the real document from the preceding text; otherwise
+ * keep the artifact body as-is.
+ *
+ * The same-turn dedup lookup and the persist path MUST resolve this
+ * identically. Feeding the lookup the raw prose summary while persisting the
+ * recovered document makes the normalized exact-match miss the same-turn Write
+ * file, so the recovered document persists a second time as a duplicate (#4318).
+ */
+export function resolvePersistedArtifactHtml(input: RecoverHtmlArtifactInput): string {
+  return recoverHtmlArtifactFromPrecedingDocument(input) ?? input.artifactHtml;
+}
+
 export function recoverStandaloneHtmlDocument(sourceText: string | null | undefined): string | null {
   const candidate = String(sourceText || '').replace(/^﻿/, '').trim();
   if (!/<\/html\s*>$/i.test(candidate)) return null;

@@ -25,8 +25,8 @@ const skills = getBundledPlugins()
   .filter((p) => p.bucket !== 'design-systems')
   .filter((p) => categorizePlugin(bundledRecordOf(p)) === null);
 
-const title = `${pcopy.tileSkills} · ${skills.length} · Open Design`;
-const description = pcopy.skillsLead;
+const title = pcopy.skillsMetaTitle(skills.length);
+const description = pcopy.skillsMetaDescription;
 
 const jsonLd = {
   '@context': 'https://schema.org',

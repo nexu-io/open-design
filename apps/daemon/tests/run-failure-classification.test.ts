@@ -865,3 +865,57 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     });
   });
 });
+
+function runtimeCloseEvent(reason: string): RunEventForFailureClassification {
+  return { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: reason } };
+}
+
+describe('execution_failed close-reason refinement', () => {
+  // A generic AGENT_EXECUTION_FAILED whose text matched no pattern, plus the
+  // runtime_close diagnostic the daemon stamps at finalize time.
+  const withCloseReason = (reason: string | null) =>
+    classify('AGENT_EXECUTION_FAILED', '', [
+      errorEvent('AGENT_EXECUTION_FAILED', ''),
+      ...(reason ? [runtimeCloseEvent(reason)] : []),
+    ]);
+
+  it('promotes a mid-stream agent error to stream_error', () => {
+    expect(withCloseReason('stream_error')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'stream_error',
+    });
+  });
+
+  it('promotes a bare non-zero exit to exit_nonzero', () => {
+    expect(withCloseReason('exit_nonzero')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'exit_nonzero',
+    });
+  });
+
+  it('promotes an ACP fatal close to fatal_rpc_error', () => {
+    expect(withCloseReason('fatal_rpc_error')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+    });
+  });
+
+  it('keeps the opaque execution_failed label when no runtime_close diagnostic is present', () => {
+    expect(withCloseReason(null)).toMatchObject({ failure_detail: 'execution_failed' });
+  });
+
+  it('keeps the opaque label for close reasons outside the three known shapes', () => {
+    expect(withCloseReason('unknown')).toMatchObject({ failure_detail: 'execution_failed' });
+  });
+
+  it('does not override an already-specific process_exit detail with the close reason', () => {
+    // AGENT_EXIT_1 classifies to the specific `exit_code` detail; a stream_error
+    // close reason must not relabel it — only the opaque bucket is refined.
+    expect(
+      classify('AGENT_EXIT_1', '', [
+        errorEvent('AGENT_EXIT_1', ''),
+        runtimeCloseEvent('stream_error'),
+      ]),
+    ).toMatchObject({ failure_category: 'process_exit', failure_detail: 'exit_code' });
+  });
+});
