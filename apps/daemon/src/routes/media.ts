@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { Express } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
-import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media-policy.js';
+import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import type { RouteDeps } from '../server-context.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 import {
@@ -9,7 +9,7 @@ import {
   parseAIHubMixCatalog,
   AIHUBMIX_DEFAULT_BASE_URL,
   type AIHubMixCatalogType,
-} from '../aihubmix.js';
+} from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 import type { ToolTokenGrant } from '../tool-tokens.js';
 

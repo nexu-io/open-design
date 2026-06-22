@@ -194,6 +194,14 @@ export function resolveRunFailureUi(
       secondaryRetry: false,
     };
   }
+  if (code === 'AGENT_PROMPT_TOO_LARGE') {
+    return {
+      titleKey: genericTitleKey(code),
+      primaryAction: 'retry',
+      messageKey: genericMessageKey(code),
+      secondaryRetry: false,
+    };
+  }
   return {
     titleKey: officialAgentTitleKey(code),
     primaryAction: 'switch-to-amr',

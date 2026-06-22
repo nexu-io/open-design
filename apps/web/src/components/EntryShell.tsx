@@ -16,8 +16,6 @@ import {
   useState,
   type CSSProperties,
   type Dispatch,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
   type SetStateAction,
 } from 'react';
 import {
@@ -103,6 +101,7 @@ import {
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
+import { LanguageMenu } from './LanguageMenu';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
 import {
@@ -197,13 +196,6 @@ const NEWSLETTER_SUBSCRIBE_URL =
 const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
-
-const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
-  { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
-  { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { id: 'glm-5.1', label: 'GLM 5.1' },
-];
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
@@ -697,6 +689,7 @@ export function EntryShell({
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
             onFinish={finishOnboarding}
+            onThemeChange={onThemeChange}
           />
         </main>
       </div>
@@ -940,6 +933,7 @@ function OnboardingView({
   onConfigPersist,
   onRefreshAgents,
   onFinish,
+  onThemeChange,
 }: {
   config: AppConfig;
   providerModelsCache?: ProviderModelsCache;
@@ -958,29 +952,26 @@ function OnboardingView({
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   onFinish: () => void;
+  onThemeChange: (theme: AppTheme) => void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
-  // Furthest step the user has legitimately reached. The stepper lets you jump
-  // back to any already-visited step, but never *forward* past it — forward
-  // progress only happens through the gated Continue CTA (which itself can't
-  // leave the Connect step until a runtime is ready). This keeps the wizard
-  // strictly sequential and, unlike gating the stepper on the async AMR
-  // login probe, never flickers disabled→enabled while that status resolves.
-  const [maxStepReached, setMaxStepReached] = useState(0);
-  useEffect(() => {
-    setMaxStepReached((reached) => Math.max(reached, step));
-  }, [step]);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  // Connect step (step 0) faces: the minimal cloud sign-in landing (null), or
+  // a single dedicated setup page for the local CLI or BYOK that the landing's
+  // two secondary links open directly. AMR has no card anymore — it signs in
+  // straight from the landing's primary button.
+  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
+  // 初始登录状态是否已拉到（无论登录与否）。登录页按钮用它判断是否还在「加载中…」。
+  const [amrStatusResolved, setAmrStatusResolved] = useState(false);
   // True while the one-shot AMR re-probe (fired when the cold-start stream
   // settled without surfacing AMR) is in flight. Combined with
   // `agentsLoading`, this is the full window during which AMR availability
   // is still undecided — and the AMR cloud card renders its skeleton.
-  const [amrRefreshPending, setAmrRefreshPending] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
@@ -1093,33 +1084,8 @@ function OnboardingView({
   const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
   const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
-  // AMR availability is still undecided while the cold-start stream runs or
-  // the one-shot re-probe is in flight. During that window we show the AMR
-  // cloud card in a skeleton state rather than hiding it (the gap users hit
-  // today: card absent for several seconds, then it pops in). Once detection
-  // settles, the card is either real (amrAgent) or omitted.
-  const amrDetecting = !amrAgent && (agentsLoading || amrRefreshPending);
-  const showAmrCloudOption = amrAgent !== null;
   const amrSignedIn = amrStatus?.loggedIn === true;
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
-  const amrAgentChoice = config.agentModels?.amr ?? {};
-  const amrModels =
-    amrAgent?.models && amrAgent.models.length > 0
-      ? amrAgent.models
-      : ONBOARDING_AMR_MODEL_OPTIONS;
-  const amrModelsSource =
-    amrAgent?.models && amrAgent.models.length > 0
-      ? amrAgent.modelsSource ?? 'fallback'
-      : 'fallback';
-  const amrKnownModelIds = amrModels.map((model) => model.id);
-  const amrConfiguredModel =
-    typeof amrAgentChoice.model === 'string' && amrAgentChoice.model
-      ? amrAgentChoice.model
-      : null;
-  const amrSelectedModel =
-    amrConfiguredModel && amrKnownModelIds.includes(amrConfiguredModel)
-      ? amrConfiguredModel
-      : amrModels[0]?.id ?? '';
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
   // Connect-step (step 0) gate. Continue may only advance once the selected
@@ -1210,26 +1176,28 @@ function OnboardingView({
 
   useEffect(() => {
     // The cold-start stream finished without AMR. Re-probe once before we
-    // conclude AMR is unavailable, and keep the card in its skeleton state
-    // for the duration so it doesn't flash out-and-back-in.
+    // conclude AMR is unavailable, so the cloud sign-in stays usable even when
+    // AMR was slow to surface in the initial agent list.
     if (amrAgent || amrAgentRefreshAttemptedRef.current || agentsLoading) return;
     amrAgentRefreshAttemptedRef.current = true;
-    setAmrRefreshPending(true);
-    void Promise.resolve(onRefreshAgents())
-      .catch(() => undefined)
-      .finally(() => setAmrRefreshPending(false));
+    void Promise.resolve(onRefreshAgents()).catch(() => undefined);
   }, [amrAgent, agentsLoading, onRefreshAgents]);
 
   useEffect(() => {
-    if (!amrAgent) return;
+    // 挂载时立即拉取登录状态（与 agent 列表加载并行，不再等 amrAgent），
+    // 让登录页按钮尽快从「加载中…」settle 到「登录」/「继续（已登录）」。
     let cancelled = false;
-    void fetchVelaLoginStatus().then((next) => {
-      if (!cancelled && next) setAmrStatus(next);
-    });
+    void fetchVelaLoginStatus()
+      .then((next) => {
+        if (!cancelled && next) setAmrStatus(next);
+      })
+      .finally(() => {
+        if (!cancelled) setAmrStatusResolved(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [amrAgent]);
+  }, []);
 
   useEffect(() => {
     if (runtime === 'amr') return;
@@ -1401,43 +1369,11 @@ function OnboardingView({
   ];
   const isLastStep = step === steps.length - 1;
 
-  const runtimeItems: Array<{
-    id: 'local' | 'byok';
-    icon: 'hammer' | 'sliders';
-    title: string;
-    body: string;
-    onSelect: () => void;
-  }> = [
-    {
-      id: 'local',
-      icon: 'hammer',
-      title: t('settings.onboardingLocalTitle'),
-      body: t('settings.onboardingLocalBody'),
-      onSelect: () => {
-        emitOnboardingClick('local_coding_agent', 'select_runtime', {
-          runtime_type: 'local_cli',
-        });
-        void scanCliAgents({ preferExisting: true });
-      },
-    },
-    {
-      id: 'byok',
-      icon: 'sliders',
-      title: t('settings.onboardingByokTitle'),
-      body: t('settings.onboardingByokBody'),
-      onSelect: () => {
-        emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-        setRuntime('byok');
-        onModeChange('api');
-      },
-    },
-  ];
-
   const roleOptions = [
+    { value: 'agency', label: t('settings.onboardingRoleAgency') },
     { value: 'pm', label: t('settings.onboardingRolePm') },
     { value: 'designer', label: t('settings.onboardingRoleDesigner') },
     { value: 'engineer', label: t('settings.onboardingRoleEngineer') },
-    { value: 'marketing', label: t('settings.onboardingRoleMarketing') },
     { value: 'growth', label: t('settings.onboardingRoleGrowth') },
     { value: 'ops', label: t('settings.onboardingRoleOps') },
     { value: 'founder', label: t('settings.onboardingRoleFounder') },
@@ -1698,6 +1634,34 @@ function OnboardingView({
     }
     emitOnboardingClick('continue', 'continue');
     setStep((current) => current + 1);
+  }
+
+  // Cloud-landing primary CTA: pick the AMR cloud runtime and kick off the
+  // Open Design Cloud sign-in in one gesture. Mirrors the AMR card's
+  // selection side effects (mode/agent) followed by the AMR-sign-in path that
+  // the runtime chooser's gated Continue uses, so a successful login advances
+  // to the next onboarding step exactly the same way.
+  async function handleCloudSignIn() {
+    if (amrLoginPending || amrLoginCancelPending) return;
+    const cardAttribution = recordAmrEntry(
+      analytics.track,
+      'onboarding_amr_card',
+      new Date(),
+      { metricsConsent: config.telemetry?.metrics === true },
+    );
+    setRuntime('amr');
+    onModeChange('daemon');
+    onAgentChange('amr');
+    const attribution = recordAmrEntry(
+      analytics.track,
+      'onboarding_amr_sign_in_continue',
+      new Date(),
+      {
+        metricsConsent: config.telemetry?.metrics === true,
+        reuseExistingFrom: ['onboarding_amr_card'],
+      },
+    ) ?? cardAttribution;
+    await handleAmrSignInToContinue(attribution);
   }
 
   async function handleAmrSignInToContinue(
@@ -2075,6 +2039,155 @@ function OnboardingView({
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
 
+  // Connect step, default face: a minimal, centered Open Design Cloud sign-in
+  // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
+  // link into the full runtime chooser, and a top-left language/theme bar.
+  if (step === 0 && connectExpanded === null) {
+    const activeTheme: AppTheme = config.theme ?? 'system';
+    // Resolve what the user is actually *seeing* right now: an explicit dark,
+    // or system that currently maps to the OS's dark preference. The toggle
+    // then flips straight to the opposite explicit theme, so every click
+    // produces a visible change — no dead first click on `system → light`
+    // (both light) before `light → dark` finally darkens on the second.
+    const resolvedDark =
+      activeTheme === 'dark' ||
+      (activeTheme === 'system' &&
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const themeIcon: 'sun' | 'moon' = resolvedDark ? 'moon' : 'sun';
+    const cloudBusy = amrLoginPending;
+    // 登录态尚未拉到时显示「加载中…」并禁用，避免先闪一下「登录」再翻成「继续（已登录）」。
+    // 现在状态在挂载时就并行拉取，所以这个窗口很短。
+    const amrStatusResolving = !amrStatusResolved;
+    return (
+      <section
+        className="onboarding-view onboarding-view--cloud"
+        aria-label={t('settings.welcomeTitle')}
+      >
+        <div className="onboarding-cloud__topbar">
+          <LanguageMenu compact />
+          <button
+            type="button"
+            className="onboarding-cloud__theme"
+            aria-label={resolvedDark ? t('settings.themeLight') : t('settings.themeDark')}
+            title={resolvedDark ? t('settings.themeLight') : t('settings.themeDark')}
+            onClick={() => onThemeChange(resolvedDark ? 'light' : 'dark')}
+          >
+            <Icon name={themeIcon} size={25} />
+          </button>
+        </div>
+        <div className="onboarding-cloud__center">
+          <span
+            className="onboarding-cloud__logo"
+            role="img"
+            aria-label="Open Design"
+          />
+          <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
+          <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
+          <button
+            type="button"
+            className="onboarding-cloud__primary"
+            onClick={() => {
+              if (amrStatusResolving) return;
+              if (amrSignedIn) {
+                // 已登录：不再触发登录，但仍记一次 AMR 归因，否则
+                // “已登录直接继续”的用户在 AMR 归因漏斗里会整段隐形
+                // （登录流程的用户由 handleCloudSignIn 记录）。
+                recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
+                  metricsConsent: config.telemetry?.metrics === true,
+                });
+                // Pin the runtime explicitly (mirroring handleCloudSignIn)
+                // rather than leaning on the amrAgent effect, so the
+                // completion event records runtime_type='amr_cloud' even if
+                // amrAgent hasn't resolved yet when Continue is clicked.
+                setRuntime('amr');
+                onModeChange('daemon');
+                onAgentChange('amr');
+                recordAmrEntry(
+                  analytics.track,
+                  'onboarding_amr_sign_in_continue',
+                  new Date(),
+                  {
+                    metricsConsent: config.telemetry?.metrics === true,
+                    reuseExistingFrom: ['onboarding_amr_card'],
+                  },
+                );
+                setStep((current) => current + 1);
+                return;
+              }
+              void handleCloudSignIn();
+            }}
+            disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
+            aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
+          >
+            <Icon name="orbit" size={17} />
+            <span>
+              {cloudBusy
+                ? t('settings.amrSigningIn')
+                : amrStatusResolving
+                  ? t('common.loading')
+                  : amrSignedIn
+                    ? t('settings.onboardingCloudContinue')
+                    : t('settings.onboardingCloudSignIn')}
+            </span>
+          </button>
+          {amrLoginError ? (
+            <span className="onboarding-cloud__error" role="alert">
+              {amrLoginError}
+            </span>
+          ) : null}
+          {cloudBusy ? (
+            <button
+              type="button"
+              className="onboarding-cloud__cancel"
+              onClick={handleCancelAmrLogin}
+              disabled={amrLoginCancelPending}
+            >
+              {t('settings.amrCancelSignIn')}
+            </button>
+          ) : (
+            <div className="onboarding-cloud__alts">
+              <button
+                type="button"
+                className="onboarding-cloud__secondary"
+                onClick={() => {
+                  emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                    runtime_type: 'local_cli',
+                  });
+                  setRuntime('local');
+                  onModeChange('daemon');
+                  void scanCliAgents({ preferExisting: true });
+                  setConnectExpanded('local');
+                }}
+              >
+                {t('settings.onboardingLocalTitle')}
+              </button>
+              <span className="onboarding-cloud__alts-or">
+                {t('settings.onboardingCloudOr')}
+              </span>
+              <button
+                type="button"
+                className="onboarding-cloud__secondary"
+                onClick={() => {
+                  emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                  setRuntime('byok');
+                  onModeChange('api');
+                  setConnectExpanded('byok');
+                }}
+              >
+                {t('settings.onboardingByokTitle')}
+              </button>
+            </div>
+          )}
+        </div>
+        <footer className="onboarding-cloud__footer">
+          © {new Date().getFullYear()} Open Design · {t('settings.onboardingCloudRights')}
+        </footer>
+      </section>
+    );
+  }
+
   return (
     <section className="onboarding-view" aria-label={t('settings.welcomeTitle')}>
       {t('settings.welcomeKicker') || t('settings.welcomeSubtitle') ? (
@@ -2085,105 +2198,32 @@ function OnboardingView({
           {t('settings.welcomeSubtitle') ? <p>{t('settings.welcomeSubtitle')}</p> : null}
         </header>
       ) : null}
-      <ol className="onboarding-view__steps" aria-label={t('settings.welcomeTitle')}>
-        {steps.map((label, index) => (
-          <li
-            key={label}
-            className={[
-              index === step ? 'is-active' : '',
-              index < step ? 'is-done' : '',
-              index <= maxStepReached ? 'is-reached' : 'is-upcoming',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <span>{index + 1}</span>
-            <button
-              type="button"
-              onClick={() => setStep(index)}
-              disabled={
-                onboardingNavigationLocked ||
-                index > maxStepReached ||
-                (index > 0 && !connectStepRuntimeReady)
-              }
-            >
-              {label}
-            </button>
-          </li>
-        ))}
-      </ol>
       <div className="onboarding-view__body">
         <div className="onboarding-view__content">
           {step === 0 ? (
             <div className="onboarding-view__panel">
+              <button
+                type="button"
+                className="onboarding-view__back-to-cloud"
+                onClick={() => setConnectExpanded(null)}
+              >
+                <Icon name="chevron-left" size={14} />
+                <span>{t('settings.onboardingBack')}</span>
+              </button>
               <OnboardingPanelHeader
-                title={t('settings.onboardingConnectTitle')}
-                body={t('settings.onboardingConnectBody')}
+                title={
+                  connectExpanded === 'byok'
+                    ? t('settings.onboardingByokTitle')
+                    : t('settings.onboardingLocalTitle')
+                }
+                body={
+                  connectExpanded === 'byok'
+                    ? t('settings.onboardingByokBody')
+                    : t('settings.onboardingLocalBody')
+                }
               />
               <div className="onboarding-view__runtime-stack">
-                {showAmrCloudOption ? (
-                  <div className="onboarding-view__amr-cloud-card">
-                    <OnboardingChoiceCard
-                      icon="orbit"
-                      agentIconId="amr"
-                      title={t('settings.amrCloud')}
-                      body={t('settings.onboardingExecutionBody')}
-                      benefits={[
-                        t('settings.onboardingAmrCloudBenefitOfficial'),
-                        t('settings.onboardingAmrCloudBenefitReady'),
-                        t('settings.onboardingAmrCloudBenefitModels'),
-                        t('settings.onboardingAmrCloudBenefitPricing'),
-                      ]}
-                      upcomingLabel={t('settings.onboardingAmrCloudUpcomingLabel')}
-                      upcomingBenefits={[
-                        t('settings.onboardingAmrCloudUpcomingImageVideo'),
-                        t('settings.onboardingAmrCloudUpcomingSkills'),
-                        t('settings.onboardingAmrCloudUpcomingRouting'),
-                      ]}
-                      benefitPlacement="aside"
-                      metaLabel="AMR v0.1.0"
-                      modelSlot={
-                        amrModels.length > 0 ? (
-                          <OnboardingAmrModelSelect
-                            models={amrModels}
-                            modelsSource={amrModelsSource}
-                            selectedModel={amrSelectedModel}
-                            onSelectModel={(model) => onAgentModelChange('amr', { model })}
-                          />
-                        ) : null
-                      }
-                      variant="amr"
-                      featured
-                      selected={runtime === 'amr'}
-                      onClick={() => {
-                        recordAmrEntry(
-                          analytics.track,
-                          'onboarding_amr_card',
-                          new Date(),
-                          { metricsConsent: config.telemetry?.metrics === true },
-                        );
-                        setRuntime('amr');
-                        onModeChange('daemon');
-                        onAgentChange('amr');
-                      }}
-                    />
-                  </div>
-                ) : amrDetecting ? (
-                  <OnboardingAmrCloudSkeleton />
-                ) : null}
-                <div className="onboarding-view__alternatives">
-                  {runtimeItems.map((item) => (
-                    <OnboardingChoiceCard
-                      key={item.id}
-                      icon={item.icon}
-                      title={item.title}
-                      body={item.body}
-                      selected={runtime === item.id}
-                      onClick={item.onSelect}
-                    />
-                  ))}
-                </div>
-                {runtime === 'local' ? (
+                {connectExpanded === 'local' ? (
                   <OnboardingCliSetupPanel
                     agents={visibleAgents}
                     daemonLive={daemonLive}
@@ -2203,7 +2243,7 @@ function OnboardingView({
                     }}
                   />
                 ) : null}
-                {runtime === 'byok' ? (
+                {connectExpanded === 'byok' ? (
                   <OnboardingByokSetupPanel
                     apiProtocol={apiProtocol}
                     apiKey={config.apiKey}
@@ -2249,14 +2289,22 @@ function OnboardingView({
 
           {step === 1 ? (
             <div className="onboarding-view__panel">
+              <button
+                type="button"
+                className="onboarding-view__back-to-cloud"
+                onClick={handleBackWithTracking}
+                disabled={onboardingNavigationLocked}
+              >
+                <Icon name="chevron-left" size={14} />
+                <span>{t('settings.onboardingBack')}</span>
+              </button>
               <OnboardingPanelHeader
                 title={t('settings.onboardingProfileTitle')}
                 body={t('settings.onboardingProfileBody')}
               />
               <div className="onboarding-view__form-grid">
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingRoleLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.role}
                   options={roleOptions}
                   onChange={(value) => {
@@ -2268,9 +2316,8 @@ function OnboardingView({
                     setProfile((current) => ({ ...current, role: value }));
                   }}
                 />
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingOrgSizeLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.orgSize}
                   options={orgSizeOptions}
                   onChange={(value) => {
@@ -2282,9 +2329,8 @@ function OnboardingView({
                     setProfile((current) => ({ ...current, orgSize: value }));
                   }}
                 />
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingUseCaseLabel')}
-                  placeholder={t('settings.onboardingSelectMultiplePlaceholder')}
                   value={profile.useCase}
                   options={useCaseOptions}
                   multiple
@@ -2308,9 +2354,8 @@ function OnboardingView({
                     setProfile((current) => ({ ...current, useCase: value }));
                   }}
                 />
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingSourceLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.source}
                   options={sourceOptions}
                   onChange={(value) => {
@@ -2328,6 +2373,15 @@ function OnboardingView({
 
           {step === 2 ? (
             <div className="onboarding-view__panel onboarding-view__panel--newsletter">
+              <button
+                type="button"
+                className="onboarding-view__back-to-cloud"
+                onClick={handleBackWithTracking}
+                disabled={onboardingNavigationLocked}
+              >
+                <Icon name="chevron-left" size={14} />
+                <span>{t('settings.onboardingBack')}</span>
+              </button>
               <OnboardingPanelHeader
                 title={t('settings.onboardingNewsletterTitle')}
                 body={t('settings.onboardingNewsletterBody')}
@@ -2356,16 +2410,6 @@ function OnboardingView({
               <span className="onboarding-view__action-status is-error" role="alert">
                 {amrLoginError}
               </span>
-            ) : null}
-            {step > 0 ? (
-              <button
-                type="button"
-                className="onboarding-view__secondary"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
-              >
-                {t('settings.onboardingBack')}
-              </button>
             ) : null}
             {step === 0 && amrLoginPending ? (
               <button
@@ -2495,82 +2539,6 @@ function OnboardingCliSetupPanel({
       ) : null}
     </div>
   );
-}
-
-function OnboardingAmrModelSelect({
-  models,
-  modelsSource,
-  selectedModel,
-  onSelectModel,
-}: {
-  models: NonNullable<AgentInfo['models']>;
-  modelsSource: AgentInfo['modelsSource'];
-  selectedModel: string;
-  onSelectModel: (model: string) => void;
-}) {
-  const t = useT();
-  const modelSource = modelsSource ?? 'fallback';
-  const displayModels = models.map((model) => ({
-    value: model.id,
-    label: formatOnboardingAmrModelLabel(model),
-  }));
-  const modelSourceLabel = t('settings.onboardingAmrModelSourceLabel');
-  return (
-    <div
-      className="onboarding-view__model-picker"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <OnboardingDropdown
-        label={`${t('settings.modelPicker')} · ${modelSourceLabel}`}
-        placeholder={t('settings.modelSourceFallback')}
-        value={selectedModel}
-        options={displayModels}
-        onChange={onSelectModel}
-        searchable
-        searchPlaceholder={t('newproj.modelSearch')}
-        sourceTone={modelSource}
-      />
-    </div>
-  );
-}
-
-function formatOnboardingAmrModelLabel(
-  model: NonNullable<AgentInfo['models']>[number],
-): string {
-  const label = model.label?.trim();
-  if (label && label !== model.id && !/^[a-z0-9._-]+$/.test(label)) {
-    return label;
-  }
-  return model.id
-    .split('-')
-    .filter(Boolean)
-    .map(formatModelToken)
-    .join(' ');
-}
-
-function formatModelToken(token: string): string {
-  const lower = token.toLowerCase();
-  const known: Record<string, string> = {
-    claude: 'Claude',
-    opus: 'Opus',
-    sonnet: 'Sonnet',
-    haiku: 'Haiku',
-    deepseek: 'DeepSeek',
-    gemini: 'Gemini',
-    glm: 'GLM',
-    gpt: 'GPT',
-    oss: 'OSS',
-    kimi: 'Kimi',
-    minimax: 'MiniMax',
-    mimo: 'MiMo',
-    qwen3: 'Qwen3',
-    seed: 'Seed',
-  };
-  if (known[lower]) return known[lower];
-  if (/^v\d/i.test(token)) return token.toUpperCase();
-  if (/^\d+b$/i.test(token) || /^a\d+b$/i.test(token)) return token.toUpperCase();
-  if (/^\d+(\.\d+)*$/.test(token)) return token;
-  return token.charAt(0).toUpperCase() + token.slice(1);
 }
 
 function OnboardingByokSetupPanel({
@@ -2886,6 +2854,66 @@ function OnboardingPanelHeader({ title, body }: { title: string; body: string })
   );
 }
 
+type OnboardingChipFieldProps =
+  | {
+      label: string;
+      options: Array<{ value: string; label: string }>;
+      value: string;
+      onChange: (value: string) => void;
+      multiple?: false;
+    }
+  | {
+      label: string;
+      options: Array<{ value: string; label: string }>;
+      value: string[];
+      onChange: (value: string[]) => void;
+      multiple: true;
+    };
+
+// Profile fields render their options as a flat row of toggleable chips
+// instead of a dropdown, so a pick is one tap with every choice already in
+// view. Single-select chips behave as a radio (re-tapping clears); multi
+// select chips toggle independently.
+function OnboardingChipField(props: OnboardingChipFieldProps) {
+  const { label, options } = props;
+  const selected: string[] = props.multiple
+    ? props.value
+    : props.value
+      ? [props.value]
+      : [];
+  return (
+    <div className="onboarding-chip-field">
+      <span className="onboarding-chip-field__label">{label}</span>
+      <div className="onboarding-chip-field__chips">
+        {options.map((option) => {
+          const active = selected.includes(option.value);
+          return (
+            <button
+              type="button"
+              key={option.value}
+              className={`onboarding-chip${active ? ' is-selected' : ''}`}
+              aria-pressed={active}
+              onClick={() => {
+                if (props.multiple) {
+                  props.onChange(
+                    active
+                      ? props.value.filter((value) => value !== option.value)
+                      : [...props.value, option.value],
+                  );
+                } else {
+                  props.onChange(active ? '' : option.value);
+                }
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type OnboardingDropdownBaseProps = {
   label: string;
   placeholder: string;
@@ -3132,201 +3160,4 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
 // The AMR brand (icon + name) is known up-front and rendered solid; only the
 // version meta, benefit list, and model picker — the parts that depend on the
 // probe result — shimmer. Non-interactive and announced via role="status".
-function OnboardingAmrCloudSkeleton() {
-  const t = useT();
-  return (
-    <div className="onboarding-view__amr-cloud-card">
-      <div
-        className="onboarding-view__card onboarding-view__card--featured onboarding-view__card--amr onboarding-view__card--benefit-aside onboarding-view__card--skeleton"
-        role="status"
-        aria-busy="true"
-        aria-label={t('common.loading')}
-      >
-        <span className="onboarding-view__identity">
-          <span className="onboarding-view__icon onboarding-view__icon--asset">
-            <AgentIcon id="amr" size={52} className="onboarding-view__agent-logo" />
-          </span>
-          <span className="onboarding-view__card-copy">
-            <span className="onboarding-view__card-top">
-              <strong>{t('settings.amrCloud')}</strong>
-            </span>
-            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--meta" />
-          </span>
-        </span>
-        <span className="onboarding-view__benefit-aside" aria-hidden="true">
-          <span className="onboarding-view__benefit-stack onboarding-view__benefit-stack--skeleton">
-            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
-            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
-            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
-            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
-          </span>
-        </span>
-        <span className="onboarding-view__card-model" aria-hidden="true">
-          <span className="onboarding-view__skeleton-model">
-            <span className="onboarding-view__skeleton-model-label" />
-            <span className="onboarding-view__skeleton-model-bar" />
-          </span>
-        </span>
-      </div>
-    </div>
-  );
-}
 
-function OnboardingChoiceCard({
-  icon,
-  agentIconId,
-  title,
-  body,
-  benefits,
-  upcomingLabel,
-  upcomingBenefits,
-  benefitPlacement = 'copy',
-  metaLabel,
-  modelSlot,
-  actionLabel,
-  selected,
-  badge,
-  statusSlot,
-  featured,
-  variant,
-  onClick,
-}: {
-  icon: 'orbit' | 'hammer' | 'sliders' | 'github' | 'upload' | 'sparkles';
-  agentIconId?: string;
-  title: string;
-  body: string;
-  benefits?: string[];
-  upcomingLabel?: string;
-  upcomingBenefits?: string[];
-  benefitPlacement?: 'copy' | 'aside';
-  metaLabel?: string;
-  modelSlot?: ReactNode;
-  actionLabel?: string;
-  selected: boolean;
-  badge?: string;
-  statusSlot?: ReactNode;
-  featured?: boolean;
-  variant?: 'amr';
-  onClick: () => void;
-}) {
-  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.target !== event.currentTarget) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    onClick();
-  }
-
-  const hasBenefits =
-    (benefits && benefits.length > 0) ||
-    (upcomingBenefits && upcomingBenefits.length > 0);
-  const benefitStack = hasBenefits ? (
-    <span className="onboarding-view__benefit-stack">
-      {benefits && benefits.length > 0 ? (
-        <span className="onboarding-view__benefits">
-          {benefits.map((item, index) => (
-            <span
-              key={item}
-              className={`onboarding-view__benefit${
-                index >= 2 ? ' onboarding-view__benefit--hero' : ''
-              }`}
-            >
-              {item}
-            </span>
-          ))}
-        </span>
-      ) : null}
-      {upcomingBenefits && upcomingBenefits.length > 0 ? (
-        <span className="onboarding-view__upcoming-benefits">
-          {upcomingLabel ? (
-            <span className="onboarding-view__upcoming-label">{upcomingLabel}</span>
-          ) : null}
-          {upcomingBenefits.map((item) => (
-            <span key={item} className="onboarding-view__benefit onboarding-view__benefit--upcoming">
-              {item}
-            </span>
-          ))}
-        </span>
-      ) : null}
-    </span>
-  ) : null;
-  const modelUnderLogo = variant === 'amr' && modelSlot;
-  const iconNode = (
-    <span
-      className={
-        'onboarding-view__icon' +
-        (agentIconId ? ' onboarding-view__icon--asset' : '')
-      }
-    >
-      {agentIconId ? (
-        <AgentIcon
-          id={agentIconId}
-          size={featured ? 52 : 40}
-          className="onboarding-view__agent-logo"
-        />
-      ) : (
-        <Icon name={icon} size={18} />
-      )}
-    </span>
-  );
-  const copyNode = (
-    <span className="onboarding-view__card-copy">
-      <span className="onboarding-view__card-top">
-        <strong>{title}</strong>
-        {badge ? <span className="onboarding-view__badge">{badge}</span> : null}
-      </span>
-      {metaLabel ? <span className="onboarding-view__card-meta">{metaLabel}</span> : null}
-      {modelUnderLogo ? null : modelSlot}
-      {benefitPlacement === 'copy' && benefitStack ? (
-        benefitStack
-      ) : !modelSlot ? (
-        <small>{body}</small>
-      ) : null}
-    </span>
-  );
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      className={`onboarding-view__card${selected ? ' is-selected' : ''}${
-        featured ? ' onboarding-view__card--featured' : ''
-      }${variant ? ` onboarding-view__card--${variant}` : ''}${
-        benefitPlacement === 'aside' ? ' onboarding-view__card--benefit-aside' : ''
-      }`}
-      onClick={onClick}
-      onKeyDown={handleKeyDown}
-      aria-pressed={selected}
-    >
-      {variant === 'amr' ? (
-        <span className="onboarding-view__identity">
-          {iconNode}
-          {copyNode}
-        </span>
-      ) : (
-        <>
-          {iconNode}
-          {copyNode}
-        </>
-      )}
-      {modelUnderLogo ? (
-        <span className="onboarding-view__card-model">
-          {modelSlot}
-        </span>
-      ) : null}
-      {benefitPlacement === 'aside' && benefitStack ? (
-        <span className="onboarding-view__benefit-aside">{benefitStack}</span>
-      ) : null}
-      {statusSlot ? (
-        <span className="onboarding-view__card-status">
-          {statusSlot}
-        </span>
-      ) : null}
-      {actionLabel ? <span className="onboarding-view__card-action">{actionLabel}</span> : null}
-      {selected ? (
-        <span className="onboarding-view__check">
-          <Icon name="check" size={14} />
-        </span>
-      ) : null}
-    </div>
-  );
-}

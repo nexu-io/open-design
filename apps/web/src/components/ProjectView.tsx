@@ -14,7 +14,7 @@ import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
-import { recoverHtmlArtifactFromPrecedingDocument, recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument } from '../artifacts/recover';
+import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
 import {
   findFirstQuestionForm,
@@ -78,7 +78,13 @@ import {
   trackComposerBarClick,
   trackDesignSystemApplyResult,
   trackPageView,
+  trackRunCreated,
+  trackRunFinished,
 } from '../analytics/events';
+import {
+  buildByokRunCreatedProps,
+  buildByokRunFinishedProps,
+} from '../analytics/byok-run';
 import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
@@ -1807,12 +1813,12 @@ export function ProjectView({
       sourceText?: string,
       options: { pointerMinMtime?: number } = {},
     ) => {
-      const recoveredHtml = recoverHtmlArtifactFromPrecedingDocument({
+      const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
         sourceText,
       });
-      const artifactToPersist = recoveredHtml ? { ...art, html: recoveredHtml } : art;
+      const artifactToPersist = persistedHtml === art.html ? art : { ...art, html: persistedHtml };
       const baseName = artifactBaseNameFor(art);
       const ext = artifactExtensionFor(art);
       // Pick a name that doesn't collide with an existing project file.
@@ -2951,10 +2957,13 @@ export function ProjectView({
                     nextFiles,
                     { minMtime: runStartedAt },
                   ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
-                    artifactHtml: artifactToPersist.html,
+                    artifactHtml: resolvePersistedArtifactHtml({
+                      artifactHtml: artifactToPersist.html,
+                      identifier: artifactToPersist.identifier,
+                      sourceText: replayedContent,
+                    }),
                     producedFiles: producedBeforeFallback,
                     readProjectHtml,
-                    allowAnyHtmlWrite: message.agentId === 'claude',
                   });
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
@@ -3967,10 +3976,13 @@ export function ProjectView({
             if (artifactToPersist?.html) {
               const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
               const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                artifactHtml: artifactToPersist.html,
+                artifactHtml: resolvePersistedArtifactHtml({
+                  artifactHtml: artifactToPersist.html,
+                  identifier: artifactToPersist.identifier,
+                  sourceText: finalText,
+                }),
                 producedFiles: producedBeforeFallback,
                 readProjectHtml,
-                allowAnyHtmlWrite: assistantAgentId === 'claude',
               });
               if (sameTurnHtmlWrite) {
                 savedArtifactRef.current = sameTurnHtmlWrite.name;
@@ -4096,6 +4108,12 @@ export function ProjectView({
             ? { turnIndex: sessionTurn.turnIndex, isFirstRun: sessionTurn.isFirstRun }
             : {}),
           hasExistingArtifact,
+          // This branch only runs in daemon (local-execution) mode, so the
+          // runtime is the bundled AMR cloud agent or a local coding CLI —
+          // never BYOK (that path streams client-side, below). Hand the daemon
+          // the authoritative value so run_created/run_finished split AMR vs
+          // CLI without relying on its agent-id re-derivation.
+          runtimeType: config.agentId === 'amr' ? ('amr_cloud' as const) : ('local_cli' as const),
         };
         void streamViaDaemon({
           agentId: config.agentId,
@@ -4226,7 +4244,45 @@ export function ProjectView({
           { omitNativeImageAttachments: usesAnthropicProxy(config) },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
+        // BYOK runs stream client-side and never reach the daemon, so the
+        // daemon's authoritative run_created/run_finished are never emitted for
+        // them. Emit them here so BYOK runs are counted in the run funnel; the
+        // `runtime_type='byok'` rides on these events from the registered
+        // super-property. The run id is client-generated (there is no daemon
+        // run record). See analytics/byok-run.ts.
+        const byokRunId = randomUUID();
+        const byokRunBase = {
+          projectId: project.id,
+          conversationId: runConversationId,
+          runId: byokRunId,
+          projectKind: null,
+          hasAttachment: runAttachments.length > 0,
+          userQueryTokens: userText.length > 0 ? Math.ceil(userText.length / 4) : 0,
+          model: config.model,
+          apiProtocol: config.apiProtocol,
+          skillId: project.skillId ?? null,
+          sessionMode: (runSessionMode === 'design' ? 'design' : 'ask') as
+            | 'design'
+            | 'ask',
+        };
+        trackRunCreated(analytics.track, buildByokRunCreatedProps(byokRunBase));
+        const byokRunStartedAt = startedAt;
         let accumulatedAssistantText = '';
+        const emitByokRunFinished = (
+          result: 'success' | 'failed' | 'cancelled',
+          artifactCount: number,
+        ): void => {
+          trackRunFinished(
+            analytics.track,
+            buildByokRunFinishedProps({
+              ...byokRunBase,
+              result,
+              artifactCount,
+              askedUserQuestion: accumulatedAssistantText.includes('<question-form'),
+              totalDurationMs: Math.max(0, Date.now() - byokRunStartedAt),
+            }),
+          );
+        };
         void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
           onDelta: (delta) => {
             accumulatedAssistantText += delta;
@@ -4235,6 +4291,23 @@ export function ProjectView({
           },
           onDone: () => {
             handlers.onDone();
+            // Count artifacts produced this turn from the project file diff,
+            // mirroring the daemon's run_finished artifact_count. The
+            // artifact-count refresh is best-effort: a rejected refetch must
+            // NOT swallow run_finished, or a successful BYOK turn leaves the
+            // funnel hanging at run_created — the exact gap this path closes.
+            void (async () => {
+              let artifactCount = 0;
+              try {
+                const files = await refreshProjectFiles();
+                artifactCount = (computeProducedFiles(beforeFileNames, files) ?? []).filter(
+                  (f) => Boolean(f.artifactManifest),
+                ).length;
+              } catch {
+                // Refresh failed — still emit run_finished with a 0 count.
+              }
+              emitByokRunFinished('success', artifactCount);
+            })();
             const assistantText = accumulatedAssistantText.trim();
             if (userText.length === 0 || assistantText.length === 0) return;
             void fetch('/api/memory/extract', {
@@ -4251,7 +4324,10 @@ export function ProjectView({
               // Best-effort: see comment above on the pre-turn call.
             });
           },
-          onError: handlers.onError,
+          onError: (err: Error) => {
+            handlers.onError(err);
+            emitByokRunFinished(controller.signal.aborted ? 'cancelled' : 'failed', 0);
+          },
         }, {
           projectId: project.id,
           // SenseAudio BYOK chat reads this to pre-fill the tool param's
@@ -6567,6 +6643,13 @@ function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   if (!message.runId) return false;
   if (message.runStatus !== 'succeeded') return false;
   if (message.content.trim().length > 0) return false;
+  if (
+    message.startedAt == null
+    && !message.preTurnFileNames?.length
+    && textContentFromAgentEvents(message.events).trim().length === 0
+  ) {
+    return false;
+  }
   return !(message.producedFiles?.length);
 }
 
@@ -6841,24 +6924,30 @@ export async function findSameTurnHtmlWriteForRecoveredArtifact({
   artifactHtml,
   producedFiles,
   readProjectHtml,
-  allowAnyHtmlWrite = false,
 }: {
   artifactHtml: string;
   producedFiles: readonly ProjectFile[];
   readProjectHtml: (name: string) => Promise<string | null>;
-  allowAnyHtmlWrite?: boolean;
 }): Promise<ProjectFile | null> {
   const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
   if (!recovered) return null;
   const candidates = producedFiles.filter(isHtmlProjectFile);
-  for (const file of candidates) {
-    const text = await readProjectHtml(file.name);
-    if (normalizeHtmlForRecoveredArtifactComparison(text) === recovered) {
-      return file;
-    }
-  }
-  if (allowAnyHtmlWrite) return candidates[0] ?? null;
-  return null;
+  if (candidates.length === 0) return null;
+  const contents = await Promise.all(candidates.map((file) => readProjectHtml(file.name)));
+  const normalized = contents.map(normalizeHtmlForRecoveredArtifactComparison);
+  // Bind only on an exact normalized-content match. This is inherently
+  // agent-agnostic (#4308): whenever a filesystem-backed CLI writes an HTML
+  // file and echoes the same document as an artifact, the normalized contents
+  // are equal and we suppress the duplicate — no Claude-specific gate needed.
+  //
+  // We deliberately do NOT bind on a content *mismatch*. A differing same-turn
+  // HTML file is a genuinely different document and must persist on its own.
+  // A blind single-file bind also mis-fired across queued runs: the pre-turn
+  // file snapshot for a queued run can predate the previous run's persist, so
+  // computeProducedFiles() reports that earlier artifact as "produced this
+  // turn" and we'd bind the echo to the wrong, unrelated file.
+  const exact = candidates.find((_file, i) => normalized[i] === recovered);
+  return exact ?? null;
 }
 
 function isHtmlProjectFile(file: ProjectFile): boolean {

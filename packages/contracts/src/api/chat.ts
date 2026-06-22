@@ -13,6 +13,7 @@ import type { RunContextSelection } from './context.js';
 import type { MediaExecutionPolicy } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
+import type { TrackingRuntimeType } from '../analytics/public-params.js';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat';
@@ -155,6 +156,11 @@ export interface ChatAnalyticsHints {
   turnIndex?: number;
   isFirstRun?: boolean;
   hasExistingArtifact?: boolean;
+  // Active execution runtime for THIS run, computed client-side at launch
+  // (the only layer that can tell BYOK from amr_cloud). The daemon stamps it
+  // onto run_created / run_finished, overriding its own BYOK-blind
+  // derivation. Omitted means "let the daemon keep its derived value".
+  runtimeType?: TrackingRuntimeType;
 }
 
 export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {

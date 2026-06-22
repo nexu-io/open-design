@@ -34,7 +34,7 @@ import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.j
 import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
-import { IMAGE_MODELS } from '../media-models.js';
+import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
@@ -1036,6 +1036,13 @@ output path returned by the built-in imagegen result as the source file first.
 Only if the built-in result does not return a usable path should you search
 \`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
 source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
+
+When the user asked for one image, produce exactly one final project image
+file. If Codex built-in imagegen returns multiple candidate files, previews, or
+variants, select the single best match and import only that file into
+\`$OD_PROJECT_DIR\`. Do not copy every generated variant, do not keep multiple
+final image files, and do not present multiple outputs unless the user
+explicitly asked for variants or more than one image.
 
 Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
 descriptive filename, then verify the exact destination file exists under

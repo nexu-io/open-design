@@ -10,7 +10,7 @@ import { Icon } from './Icon';
  * fight for visual weight, but remains discoverable for first-time users
  * who'd rather not dig into the settings dialog just to swap languages.
  */
-export function LanguageMenu() {
+export function LanguageMenu({ compact = false }: { compact?: boolean } = {}) {
   const { locale, setLocale } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -37,20 +37,25 @@ export function LanguageMenu() {
     <div className="lang-menu-wrap" ref={wrapRef}>
       <button
         type="button"
-        className="foot-pill lang-pill"
+        className={`foot-pill lang-pill${compact ? ' lang-pill--compact' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={compact ? LOCALE_LABEL[locale] : undefined}
         onClick={() => setOpen((v) => !v)}
         title={LOCALE_LABEL[locale]}
       >
-        <Icon name="languages" size={12} />
-        <span>{LOCALE_LABEL[locale]}</span>
-        <Icon name="chevron-down" size={11} />
+        <Icon name="languages" size={compact ? 20 : 12} />
+        {compact ? null : (
+          <>
+            <span>{LOCALE_LABEL[locale]}</span>
+            <Icon name="chevron-down" size={11} />
+          </>
+        )}
       </button>
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="lang-menu-popover"
+            className={`lang-menu-popover${compact ? ' lang-menu-popover--compact' : ''}`}
             role="menu"
             variants={popoverIn}
             initial="hidden"

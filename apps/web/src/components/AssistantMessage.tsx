@@ -44,6 +44,7 @@ import { NextStepActions } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
+import { resolveRunFailureUi } from "../runtime/amr-guidance";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
@@ -55,6 +56,7 @@ import type { Dict } from "../i18n/types";
 import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
 import { AgentIcon } from "./AgentIcon";
 import { filterImplicitProducedFiles } from "../produced-files";
+import { RunFailurePanel } from "./RunFailurePanel";
 import type {
   AgentEvent,
   ChatMessage,
@@ -417,6 +419,29 @@ function AssistantMessageImpl({
   toolboxSkillNames,
 }: Props) {
   const t = useT();
+  const [messageRunErrorExpandedKey, setMessageRunErrorExpandedKey] =
+    useState<string | null>(null);
+  const [messageRunErrorCopiedKey, setMessageRunErrorCopiedKey] =
+    useState<string | null>(null);
+  const messageRunErrorCopyTimerRef = useRef<number | null>(null);
+  const copyMessageRunError = useCallback(async (key: string, text: string) => {
+    const ok = await copyToClipboard(text);
+    if (!ok) return;
+    if (messageRunErrorCopyTimerRef.current != null) {
+      window.clearTimeout(messageRunErrorCopyTimerRef.current);
+    }
+    setMessageRunErrorCopiedKey(key);
+    messageRunErrorCopyTimerRef.current = window.setTimeout(() => {
+      messageRunErrorCopyTimerRef.current = null;
+      setMessageRunErrorCopiedKey(null);
+    }, 1600);
+  }, []);
+  useEffect(() => () => {
+    if (messageRunErrorCopyTimerRef.current != null) {
+      window.clearTimeout(messageRunErrorCopyTimerRef.current);
+      messageRunErrorCopyTimerRef.current = null;
+    }
+  }, []);
   const events = message.events ?? [];
   const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
   // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
@@ -679,12 +704,43 @@ function AssistantMessageImpl({
             );
           }
           if (b.kind === "status") {
-            // Suppress this message's gray error pill ONLY when ChatPane is
-            // rendering the top-level error card for it (the last failed run).
-            // Other failed turns — older history, or once a follow-up makes
-            // this no longer the last assistant message — keep their pill so
-            // the error detail still survives reload / history review.
-            if (b.label === "error" && message.id === errorCardOwnerId) return null;
+            if (b.label === "error") {
+              // ChatPane renders the latest failed run's actionable top-level
+              // card. Historical failures still render the same neutral card
+              // here so older turns do not fall back to the legacy red pill.
+              if (message.id === errorCardOwnerId) return null;
+              const failureUi = resolveRunFailureUi(b.code, message.agentId);
+              const rawError =
+                b.detail?.trim() ||
+                b.code?.trim() ||
+                t("chat.runError.description.generic");
+              const panelKey = `${message.id}:${i}:${b.code ?? ""}:${rawError}`;
+              return (
+                <RunFailurePanel
+                  key={i}
+                  title={t(failureUi.titleKey)}
+                  description={t(failureUi.messageKey)}
+                  rawError={rawError}
+                  rawLabel={t("chat.runError.rawLabel")}
+                  expandLabel={t("chat.runError.rawExpand")}
+                  collapseLabel={t("chat.runError.rawCollapse")}
+                  copyLabel={t("chat.copyErrorDiagnostic")}
+                  copiedLabel={t("chat.copyDone")}
+                  tone={
+                    failureUi.primaryAction === "authorize" ||
+                    failureUi.primaryAction === "recharge"
+                      ? "brand"
+                      : "error"
+                  }
+                  copied={messageRunErrorCopiedKey === panelKey}
+                  rawExpanded={messageRunErrorExpandedKey === panelKey}
+                  onRawExpandedChange={(expanded) => {
+                    setMessageRunErrorExpandedKey(expanded ? panelKey : null);
+                  }}
+                  onCopy={() => void copyMessageRunError(panelKey, rawError)}
+                />
+              );
+            }
             // The pre-output "initializing" status is surfaced by the footer's
             // shimmering "Preparing…" label instead of its own pill.
             if (b.label === "initializing") return null;
@@ -2618,7 +2674,12 @@ type Block =
       confidence?: number | undefined;
       draftPath?: string | null | undefined;
     }
-  | { kind: "status"; label: string; detail?: string | undefined };
+  | {
+      kind: "status";
+      label: string;
+      detail?: string | undefined;
+      code?: string | undefined;
+    };
 
 /**
  * Walk the event stream and build the rendering layout list. We additionally
@@ -2754,9 +2815,10 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         // (e.g. `claude-opus-4-7-high`) is silently replaced in the badge
         // by the stale initial default (`swe-1-6-fast`).
         last.detail = ev.detail;
+        last.code = ev.code;
         continue;
       }
-      out.push({ kind: "status", label: ev.label, detail: ev.detail });
+      out.push({ kind: "status", label: ev.label, detail: ev.detail, code: ev.code });
       continue;
     }
   }

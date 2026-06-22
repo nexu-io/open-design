@@ -43,7 +43,6 @@ import {
 } from '../design-system-auto-prompt';
 import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
-import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrLoginPill } from './AmrLoginPill';
@@ -71,6 +70,7 @@ import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
+import { RunFailurePanel } from './RunFailurePanel';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -3217,93 +3217,6 @@ function CommentSection({
   );
 }
 
-function RunFailurePanel({
-  title,
-  description,
-  rawError,
-  rawLabel,
-  expandLabel,
-  collapseLabel,
-  copyLabel,
-  copiedLabel,
-  tone = 'error',
-  copied,
-  rawExpanded,
-  onRawExpandedChange,
-  onCopy,
-  children,
-}: {
-  title: string;
-  description: string;
-  rawError: string;
-  rawLabel: string;
-  expandLabel: string;
-  collapseLabel: string;
-  copyLabel: string;
-  copiedLabel: string;
-  tone?: 'error' | 'brand';
-  copied: boolean;
-  rawExpanded: boolean;
-  onRawExpandedChange: (expanded: boolean) => void;
-  onCopy: () => void;
-  children?: ReactNode;
-}) {
-  const source = rawError.trim();
-  const sourcePeek = source.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
-  const copyTitle = copied ? copiedLabel : copyLabel;
-
-  return (
-    <section className="run-error" data-tone={tone} aria-live="polite">
-      <div className="run-error__main">
-        <span className="run-error__icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </span>
-        <div className="run-error__copy">
-          <p className="run-error__title">{title}</p>
-          <p className="run-error__desc">{description}</p>
-          {children ? (
-            <div className="run-error__actions">{children}</div>
-          ) : null}
-        </div>
-      </div>
-      <div className={`run-error__source${rawExpanded ? ' is-open' : ''}`}>
-        <div className="run-error__source-head">
-          <button
-            type="button"
-            className="run-error__source-bar"
-            onClick={() => onRawExpandedChange(!rawExpanded)}
-            aria-expanded={rawExpanded}
-            aria-label={rawExpanded ? collapseLabel : expandLabel}
-          >
-            <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
-              <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="run-error__source-label">{rawLabel}</span>
-            {sourcePeek ? (
-              <span className="run-error__source-peek">{sourcePeek}</span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            className="run-error__source-copy"
-            onClick={onCopy}
-            aria-label={copyTitle}
-            title={copyTitle}
-          >
-            <Icon name={copied ? 'check' : 'copy'} size={13} />
-          </button>
-        </div>
-        <div className="run-error__source-full">
-          <pre>{source}</pre>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
 }
@@ -3514,13 +3427,10 @@ function UserMessageImpl({
   }
 
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
-  const ts = messageTime(message);
 
   return (
     <div className="msg user">
-      <div className="role">
-        <span>{t('chat.you')}</span>
-      </div>
+      <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
           {message.sessionMode ? (
@@ -3609,15 +3519,6 @@ function UserMessageImpl({
         <div className="user-text-wrap">
           <div className="user-text user-bubble">{message.content}</div>
           <div className="user-actions">
-            {ts ? (
-              <time
-                className="user-actions-time"
-                dateTime={new Date(ts).toISOString()}
-                title={exactDateTime(ts)}
-              >
-                {shortTime(ts)}
-              </time>
-            ) : null}
             <button
               type="button"
               className="ghost user-copy-btn"

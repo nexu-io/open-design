@@ -1493,6 +1493,87 @@ describe('ProjectView daemon cleanup', () => {
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('replays a legacy terminal succeeded row when agent events still contain the artifact', async () => {
+    const runCreatedAt = Date.now();
+    const existingArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 1);
+    const artifactEvent = {
+      kind: 'text',
+      text:
+        '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke"><h1>Real Daemon Smoke</h1></artifact>',
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-legacy-replay',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        events: [artifactEvent],
+        runId: 'run-legacy-replay',
+        runStatus: 'succeeded',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([existingArtifact]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-legacy-replay',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-legacy-replay'));
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-1',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-legacy-replay',
+          content: artifactEvent.text,
+          producedFiles: [existingArtifact],
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(writeProjectTextFile).not.toHaveBeenCalled();
+  });
+
   it('keeps reload artifact recovery retryable after a transient persistence miss', async () => {
     const runCreatedAt = Date.now();
     const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);

@@ -123,6 +123,7 @@ const blog = defineCollection({
       category: z.enum(['Product', 'Guides', 'Use cases', 'Community']),
       readingTime: z.number().int().positive(),
       summary: z.string(),
+      author: z.string().optional(),
       i18n: z
         .record(
           z.string(),

@@ -10,14 +10,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import {
-  defaultScenarioPluginIdForProjectMetadata,
-  type OpenDesignDiscordPresenceResponse,
-  type OpenDesignGithubLatestReleaseResponse,
-  type OpenDesignGithubRepoResponse,
-  PLUGIN_SHARE_ACTION_PLUGIN_IDS,
-  RUN_RESULT_PACKAGE_SCHEMA,
-} from '@open-design/contracts';
+import { PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
 import {
   composeSystemPrompt,
   renderCodexImagegenOverride,
@@ -74,7 +67,7 @@ import {
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
-import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
@@ -98,7 +91,6 @@ import {
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import {
-  readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
@@ -132,6 +124,7 @@ export {
   signDesktopImportToken,
   verifyDesktopImportToken,
 } from './desktop-auth.js';
+import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   findSkillById,
   listSkills,
@@ -147,7 +140,7 @@ import {
   createPluginAssetCache,
   isCacheableExternalUrl,
 } from './plugin-asset-cache.js';
-import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media-policy.js';
+import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media/policy.js';
 import {
   applySandboxRuntimeEnv,
   ensureSandboxRuntimeDirs,
@@ -168,9 +161,9 @@ import {
   resolveDesignSystemAssets,
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
-} from './design-systems.js';
-import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
-import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
+} from './design-systems/index.js';
+import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -211,11 +204,12 @@ import {
 import { composeMemoryBody, extractFromMessage } from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
-import { stageAmrImagePaths } from './amr-image-staging.js';
+import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
-import { createClaudeStreamHandler } from './claude-stream.js';
+import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
+import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
@@ -223,9 +217,6 @@ import { runOrchestrator } from './critique/orchestrator.js';
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
-import { getCritiqueMetrics, register } from './metrics/index.js';
-import { readConformanceHistory } from './critique/conformance-history.js';
-import { evaluateRollout } from './critique/ratchet.js';
 import {
   isCritiqueEnabled,
   parseEnvEnabled,
@@ -234,7 +225,7 @@ import {
 } from './critique/rollout.js';
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import {
   antigravityAuthGuidance,
   antigravityQuotaGuidance,
@@ -244,51 +235,34 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
-import { createQoderStreamHandler } from './qoder-stream.js';
+import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
-import { renderDesignSystemPreview } from './design-system-preview.js';
-import { renderDesignSystemShowcase } from './design-system-showcase.js';
-import { createChatRunService } from './runs.js';
+import { renderDesignSystemPreview } from './design-systems/preview.js';
+import { renderDesignSystemShowcase } from './design-systems/showcase.js';
+import { createChatRunService } from './runtimes/runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
-  hasExplicitRequestedModelForAnalytics,
   scanRunEventsForUsageAnalytics,
-  summarizeRunTimingAnalytics,
 } from './run-analytics-observability.js';
-import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
   countNewArtifacts,
-  deriveActivationMilestones,
   didRunCreateDesignSystemFile,
-  runAskedUserQuestion,
-} from './run-artifacts.js';
+} from './runtimes/run-artifacts.js';
 import {
-  reportRunCompletedFromDaemon,
-  reportRunFeedbackFromDaemon,
-} from './langfuse-bridge.js';
-import {
-  deriveLangfuseDeliveryState,
-  readTelemetrySinkConfig,
-} from './langfuse-trace.js';
+  createRunArtifactBaselines,
+  snapshotProjectArtifacts,
+} from './run-artifact-fs.js';
+import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
-import {
-  createAnalyticsService,
-  newInsertId,
-  readAnalyticsContext,
-  readPublicConfigResponse,
-} from './analytics.js';
-import { observePendingInstallerApplyAttempts } from './update-apply-observations.js';
+import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
-  deriveConfigureGlobals,
   modelIdForTracking,
   projectKindToTracking,
-  sessionModeToTracking,
-  type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -298,7 +272,7 @@ import {
   validateBaseUrl,
   validateBaseUrlResolved,
 } from './connectionTest.js';
-import { listProviderModels } from './providerModels.js';
+import { listProviderModels } from './integrations/provider-models.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import {
   defaultBaseUrlForFinalizeProtocol,
@@ -312,8 +286,8 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
-import { generateMedia } from './media.js';
-import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
+import { generateMedia } from './media/index.js';
+import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import { openBrowser } from './browser-open.js';
@@ -325,8 +299,8 @@ import {
   MEDIA_PROVIDERS,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
-} from './media-models.js';
-import { readMaskedConfig, writeConfig } from './media-config.js';
+} from './media/models.js';
+import { readMaskedConfig, writeConfig } from './media/config.js';
 import {
   deleteMediaTask,
   getMediaTask,
@@ -335,7 +309,7 @@ import {
   listRecentMediaTasks,
   reconcileMediaTasksOnBoot,
   updateMediaTask,
-} from './media-tasks.js';
+} from './media/tasks.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -346,9 +320,7 @@ import {
   writeMcpConfig,
 } from './mcp-config.js';
 import {
-  parseRunToolBundleForRequest,
   resolveExternalMcpServersForRun,
-  validateRunToolBundleForAgent,
 } from './run-tool-bundle.js';
 import {
   beginAuth,
@@ -404,9 +376,8 @@ import {
   writeProjectFile,
   reconcileHtmlArtifactManifest,
 } from './projects.js';
-import { validateArtifactManifestInput } from './artifact-manifest.js';
-import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
-import { readCurrentAppVersionInfo } from './app-version.js';
+import { validateArtifactManifestInput } from './artifacts/manifest.js';
+import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
 import {
   appendMessageAgentEvent,
   appendMessageStatusEvent,
@@ -482,6 +453,7 @@ import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
+import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
 import { registerHostToolsRoutes } from './routes/host-tools.js';
@@ -494,19 +466,23 @@ import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
-import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
+import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './routes/project/index.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
-import { registerChatRoutes } from './chat-routes.js';
-import { registerTerminalRoutes } from './terminal-routes.js';
+import { registerChatRoutes } from './routes/chat.js';
+import { registerRunRoutes } from './routes/runs.js';
+import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
-import { registerSocialShareRoutes } from './social-share-routes.js';
+import { registerSocialShareRoutes } from './routes/social-share.js';
+import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerMemoryRoutes } from './routes/memory.js';
+import { registerTelemetryRoutes } from './routes/telemetry.js';
 import { registerAtomRoutes, registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
+import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
@@ -539,6 +515,8 @@ import {
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
 } from './origin-validation.js';
+import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -1664,7 +1642,7 @@ function emitLiveArtifactRefreshEvent(grant, payload) {
 
 // Broadcast an event to every SSE subscriber currently watching the given
 // project's `/api/projects/:id/events` stream. The payload's `type` field
-// becomes the SSE event name (see project-routes.ts). Used for live-artifact
+// becomes the SSE event name (see routes/project/index.ts). Used for live-artifact
 // events and `conversation-created` events emitted by routine runs (#1361).
 function emitProjectEvent(projectId, payload) {
   const sinks = activeProjectEventSinks.get(projectId);
@@ -1694,6 +1672,14 @@ const promptFileBootstrap = (fp) =>
 // surfaces immediately as a boot-time RangeError instead of silently at
 // run time. Default: enabled=false (M0 dark launch).
 const critiqueCfg = loadCritiqueConfigFromEnv();
+// Per-run baselines of the project's artifact files, captured before the agent
+// runs and diffed at run-finish to derive `artifact_count` agent-agnostically
+// (see `run-artifact-fs.ts`). Keyed by run id because the run-start scope and
+// the run-finished analytics scope are different closures. The registry also
+// flags runs that overlapped another run in the same cwd as `contended`; those
+// must not trust the whole-tree diff (it would cross-attribute writes) and fall
+// back to the per-run tool-stream count.
+const runArtifactBaselines = createRunArtifactBaselines();
 // Tracks adapter streamFormat values that have already received a one-time
 // warning explaining why the Critique Theater orchestrator was bypassed.
 // Adapter denylist for orchestrator routing is implicit: anything that is
@@ -2566,7 +2552,7 @@ function runSseEventToPersistedAgentEvent(event, data) {
   return daemonAgentPayloadToPersistedAgentEvent(data);
 }
 
-function daemonAgentPayloadToPersistedAgentEvent(data) {
+export function daemonAgentPayloadToPersistedAgentEvent(data) {
   const type = data?.type;
   if (type === 'status' && typeof data.label === 'string') {
     const detail =
@@ -2649,6 +2635,20 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
       label: 'warning',
       detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated at this point to prevent unauthorized instruction injection. See issue #3247.`,
     };
+  }
+  // Persist tool-loop warnings/halts so the signal survives a reload or history
+  // replay. Without this the event is transient-only, and in
+  // OD_TOOL_LOOP_GUARD=warn (no terminal TOOL_LOOP_DETECTED error) the user
+  // would lose the only record that a loop was detected. Mirrors the live
+  // mapping in apps/web/src/providers/daemon.ts so replayed and live views match.
+  if (type === 'tool_loop' && typeof data.toolName === 'string') {
+    const toolName = data.toolName;
+    const count = typeof data.count === 'number' ? data.count : 0;
+    const detail =
+      data.action === 'halt'
+        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
+        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
+    return { kind: 'status', label: 'warning', detail };
   }
   if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
   return null;
@@ -3395,202 +3395,6 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-}
-
-const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
-const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
-const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
-const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
-const OPEN_DESIGN_DISCORD_INVITE_CODE = '9ptkbbqRu';
-const OPEN_DESIGN_DISCORD_INVITE_URL = `https://discord.gg/${OPEN_DESIGN_DISCORD_INVITE_CODE}`;
-const OPEN_DESIGN_DISCORD_INVITE_API = `https://discord.com/api/v10/invites/${OPEN_DESIGN_DISCORD_INVITE_CODE}?with_counts=true`;
-const OPEN_DESIGN_DISCORD_CACHE_TTL_MS = 5 * 60 * 1000;
-const OPEN_DESIGN_DISCORD_TIMEOUT_MS = 4_000;
-
-let openDesignGithubRepoCache = null;
-let openDesignGithubRepoInflight = null;
-let openDesignGithubLatestReleaseCache = null;
-let openDesignGithubLatestReleaseInflight = null;
-let openDesignDiscordPresenceCache = null;
-let openDesignDiscordPresenceInflight = null;
-
-async function readOpenDesignGithubRepoStats() {
-  const now = Date.now();
-  if (
-    openDesignGithubRepoCache &&
-    now - openDesignGithubRepoCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
-  ) {
-    return { ...openDesignGithubRepoCache, stale: false };
-  }
-
-  if (openDesignGithubRepoInflight) {
-    return openDesignGithubRepoInflight;
-  }
-
-  openDesignGithubRepoInflight = (async () => {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
-    try {
-      const response = await fetch(OPEN_DESIGN_GITHUB_REPO_API, {
-        headers: {
-          accept: 'application/vnd.github+json',
-          'user-agent': 'open-design-daemon',
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`GitHub repo metadata request failed with HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const count = payload && typeof payload.stargazers_count === 'number'
-        ? payload.stargazers_count
-        : null;
-      if (!Number.isFinite(count) || count == null || count < 0) {
-        throw new Error('GitHub repo metadata did not include a numeric stargazers_count');
-      }
-      openDesignGithubRepoCache = {
-        stargazersCount: count,
-        fetchedAt: Date.now(),
-      };
-      return { ...openDesignGithubRepoCache, stale: false };
-    } catch (error) {
-      if (openDesignGithubRepoCache) {
-        return { ...openDesignGithubRepoCache, stale: true };
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      openDesignGithubRepoInflight = null;
-    }
-  })();
-
-  return openDesignGithubRepoInflight;
-}
-
-async function readOpenDesignLatestReleaseInfo() {
-  const now = Date.now();
-  if (
-    openDesignGithubLatestReleaseCache &&
-    now - openDesignGithubLatestReleaseCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
-  ) {
-    return { ...openDesignGithubLatestReleaseCache, stale: false };
-  }
-
-  if (openDesignGithubLatestReleaseInflight) {
-    return openDesignGithubLatestReleaseInflight;
-  }
-
-  openDesignGithubLatestReleaseInflight = (async () => {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
-    try {
-      const response = await fetch(OPEN_DESIGN_GITHUB_RELEASE_LATEST_API, {
-        headers: {
-          accept: 'application/vnd.github+json',
-          'user-agent': 'open-design-daemon',
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`GitHub latest release request failed with HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const tagName = payload && typeof payload.tag_name === 'string' ? payload.tag_name : null;
-      const htmlUrl = payload && typeof payload.html_url === 'string' ? payload.html_url : null;
-      if (!tagName || !htmlUrl) {
-        throw new Error('GitHub latest release metadata did not include tag_name/html_url');
-      }
-      openDesignGithubLatestReleaseCache = {
-        tagName,
-        htmlUrl,
-        fetchedAt: Date.now(),
-      };
-      return { ...openDesignGithubLatestReleaseCache, stale: false };
-    } catch (error) {
-      if (openDesignGithubLatestReleaseCache) {
-        return { ...openDesignGithubLatestReleaseCache, stale: true };
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      openDesignGithubLatestReleaseInflight = null;
-    }
-  })();
-
-  return openDesignGithubLatestReleaseInflight;
-}
-
-async function readOpenDesignDiscordPresence() {
-  const now = Date.now();
-  if (
-    openDesignDiscordPresenceCache &&
-    now - openDesignDiscordPresenceCache.fetchedAt < OPEN_DESIGN_DISCORD_CACHE_TTL_MS
-  ) {
-    return { ...openDesignDiscordPresenceCache, stale: false };
-  }
-
-  if (openDesignDiscordPresenceInflight) {
-    return openDesignDiscordPresenceInflight;
-  }
-
-  openDesignDiscordPresenceInflight = (async () => {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_DISCORD_TIMEOUT_MS);
-    try {
-      const response = await fetch(OPEN_DESIGN_DISCORD_INVITE_API, {
-        headers: {
-          accept: 'application/json',
-          'user-agent': 'open-design-daemon',
-        },
-        signal: ctrl.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`Discord invite metadata request failed with HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const profile = payload && typeof payload.profile === 'object' ? payload.profile : null;
-      const onlineCount =
-        typeof payload?.approximate_presence_count === 'number'
-          ? payload.approximate_presence_count
-          : typeof profile?.online_count === 'number'
-            ? profile.online_count
-            : null;
-      const memberCount =
-        typeof payload?.approximate_member_count === 'number'
-          ? payload.approximate_member_count
-          : typeof profile?.member_count === 'number'
-            ? profile.member_count
-            : null;
-
-      if (
-        !Number.isFinite(onlineCount) ||
-        onlineCount == null ||
-        onlineCount < 0 ||
-        !Number.isFinite(memberCount) ||
-        memberCount == null ||
-        memberCount < 0
-      ) {
-        throw new Error('Discord invite metadata did not include numeric member counts');
-      }
-
-      openDesignDiscordPresenceCache = {
-        onlineCount,
-        memberCount,
-        fetchedAt: Date.now(),
-      };
-      return { ...openDesignDiscordPresenceCache, stale: false };
-    } catch (error) {
-      if (openDesignDiscordPresenceCache) {
-        return { ...openDesignDiscordPresenceCache, stale: true };
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      openDesignDiscordPresenceInflight = null;
-    }
-  })();
-
-  return openDesignDiscordPresenceInflight;
 }
 
 function bearerTokenFromRequest(req) {
@@ -4428,12 +4232,14 @@ export async function startServer({
   // purely additive: when present, every /api/* request must carry a
   // matching `Authorization: Bearer <token>` header (loopback origins
   // are exempted so the desktop UI keeps working).
-  const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
-  if (!isLoopbackHostname(host) && apiToken.length === 0) {
+  const apiToken = apiTokenFromEnv();
+  const apiAuthDisabled = isApiAuthDisabled();
+  if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
     throw new Error(
       `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
       `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
-      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
+      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.) ` +
+      `Set OD_DISABLE_API_AUTH=1 only when a trusted reverse proxy already authenticates every request.`,
     );
   }
 
@@ -4444,7 +4250,8 @@ export async function startServer({
 
   // Plan §3.K1 — bearer-token middleware.
   //
-  // Active only when OD_API_TOKEN is set. Loopback origins skip the
+  // Active only when OD_API_TOKEN is set and API auth is not disabled.
+  // Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
   // value matching `OD_API_TOKEN`. Health / readiness / version remain
@@ -4453,7 +4260,7 @@ export async function startServer({
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
-  if (apiToken.length > 0) {
+  if (isApiTokenMiddlewareEnabled()) {
     const openProbePaths = new Set([
       '/health',
       '/api/health',
@@ -4760,7 +4567,7 @@ export async function startServer({
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -4983,311 +4790,6 @@ export async function startServer({
     app.use(express.static(STATIC_DIR));
   }
 
-  app.get('/api/health', async (_req, res) => {
-    const versionInfo = await readCurrentAppVersionInfo();
-    res.json({ ok: true, version: versionInfo.version });
-  });
-
-  app.get('/api/ready', async (_req, res) => {
-    const versionInfo = await readCurrentAppVersionInfo();
-    const ready = !daemonShuttingDown;
-    res.status(ready ? 200 : 503).json({
-      ok: ready,
-      ready,
-      version: versionInfo.version,
-    });
-  });
-
-  app.get('/api/version', async (_req, res) => {
-    const version = await readCurrentAppVersionInfo();
-    res.json({ version });
-  });
-
-  app.get('/api/github/open-design', async (_req, res) => {
-    try {
-      const stats = await readOpenDesignGithubRepoStats();
-      const payload = /** @type {OpenDesignGithubRepoResponse} */ ({
-        repo: 'nexu-io/open-design',
-        stargazers_count: stats.stargazersCount,
-        fetchedAt: stats.fetchedAt,
-        stale: stats.stale,
-      });
-      res.json(payload);
-    } catch (error) {
-      res.status(502).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  app.get('/api/github/open-design/releases/latest', async (_req, res) => {
-    try {
-      const release = await readOpenDesignLatestReleaseInfo();
-      const payload = /** @type {OpenDesignGithubLatestReleaseResponse} */ ({
-        repo: 'nexu-io/open-design',
-        tag_name: release.tagName,
-        html_url: release.htmlUrl,
-        fetchedAt: release.fetchedAt,
-        stale: release.stale,
-      });
-      res.json(payload);
-    } catch (error) {
-      res.status(502).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  app.get('/api/community/discord', async (_req, res) => {
-    try {
-      const presence = await readOpenDesignDiscordPresence();
-      const payload = /** @type {OpenDesignDiscordPresenceResponse} */ ({
-        inviteCode: OPEN_DESIGN_DISCORD_INVITE_CODE,
-        inviteUrl: OPEN_DESIGN_DISCORD_INVITE_URL,
-        onlineCount: presence.onlineCount,
-        memberCount: presence.memberCount,
-        fetchedAt: presence.fetchedAt,
-        stale: presence.stale,
-      });
-      res.json(payload);
-    } catch (error) {
-      res.status(502).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  // Plan §3.F2 / spec §11.7 — daemon lifecycle status. Returns the
-  // host / port the server is bound to plus the data dir,
-  // so `od daemon status --json` can render a one-shot health snapshot
-  // without depending on /api/version's content shape.
-  app.get('/api/daemon/status', async (_req, res) => {
-    const versionInfo = await readCurrentAppVersionInfo();
-    res.json({
-      ok: true,
-      version: versionInfo.version,
-      bindHost: host,
-      port: resolvedPort,
-      dataDir: RUNTIME_DATA_DIR,
-      mediaConfigDir: process.env.OD_MEDIA_CONFIG_DIR ?? null,
-      sandboxMode: SANDBOX_RUNTIME.enabled,
-      sandbox: SANDBOX_RUNTIME.enabled
-        ? { enabled: true, roots: SANDBOX_RUNTIME.roots }
-        : { enabled: false },
-      pid: process.pid,
-      shuttingDown: daemonShuttingDown,
-      installedPlugins: (() => {
-        try {
-          return (db.prepare('SELECT COUNT(*) AS n FROM installed_plugins').get())?.n ?? 0;
-        } catch {
-          return 0;
-        }
-      })(),
-    });
-  });
-
-  // Plan §3.GG1 — `od daemon db status`. Inventory of the SQLite
-  // backend: file path, size on disk (primary + WAL + SHM), schema
-  // version (the user_version PRAGMA we use for migrations), and
-  // per-table row counts. Useful for ops sanity-checking
-  // deployments + comparing 'expected' vs. 'actual' table rosters.
-  app.get('/api/daemon/db', async (_req, res) => {
-    try {
-      const { inspectSqliteDatabase } = await import('./storage/db-inspect.js');
-      const file = path.join(RUNTIME_DATA_DIR, 'app.sqlite');
-      const report = await inspectSqliteDatabase({ db, file });
-      res.json(report);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  registerPluginEventRoutes(app, {
-    http: { requireLocalDaemonRequest },
-  });
-
-  // Plan §3.NN1 — `od plugin events purge`. Operator escape
-  // hatch for resetting the in-memory ring buffer. Loopback-only
-  // because clearing the buffer drops audit history; an operator
-  // with shell access to the daemon machine should be the only
-  // one allowed to invoke. Returns the pre-purge stats so the
-  // caller can confirm what they discarded.
-  // PR #3157: surface the Antigravity OAuth flow as a one-click action
-  // in the chat's AGENT_AUTH_REQUIRED banner. agy's `-p` print mode
-  // can't complete the Google Sign-In flow on its own (no input field
-  // for the auth code), so OD opens a system Terminal running `agy`
-  // for the user; they finish OAuth there, then retry the chat. The
-  // endpoint is loopback-gated and only supports antigravity because
-  // (a) we hardcode `agy` as the command, and (b) opening a new
-  // Terminal window is a visible side effect we don't want anyone
-  // hand-rolling for every agent that ships a CLI.
-  app.post('/api/agents/:agentId/oauth-launch', requireLocalDaemonRequest, async (req, res) => {
-    const agentId = req.params.agentId;
-    if (agentId !== 'antigravity') {
-      return res.status(400).json({
-        ok: false,
-        error: `oauth-launch is only supported for antigravity, got ${agentId}`,
-      });
-    }
-    try {
-      const { launchAgentInSystemTerminal } = await import('./runtimes/terminal-launch.js');
-      const result = await launchAgentInSystemTerminal('agy');
-      if (result.ok) {
-        return res.json({ ok: true, platform: result.platform, via: result.via });
-      }
-      return res.status(500).json({
-        ok: false,
-        platform: result.platform,
-        error: result.reason,
-      });
-    } catch (err) {
-      return res.status(500).json({
-        ok: false,
-        error: String(err),
-      });
-    }
-  });
-
-
-  // Plan §3.LL1 — `od daemon db verify`. Runs SQLite
-  // PRAGMA integrity_check (or quick_check when ?quick=1) +
-  // PRAGMA foreign_key_check, returns a structured issues[]
-  // report. Loopback-only via requireLocalDaemonRequest because
-  // the result reveals storage-layer state.
-  app.post('/api/daemon/db/verify', requireLocalDaemonRequest, async (req, res) => {
-    try {
-      const { verifySqliteIntegrity } = await import('./storage/db-inspect.js');
-      const quick = String(req.query.quick ?? '').toLowerCase();
-      const report = verifySqliteIntegrity({ db, quick: quick === '1' || quick === 'true' });
-      res.json(report);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.HH2 — `od daemon db vacuum`. Runs SQLite VACUUM to
-  // reclaim space after large delete batches (snapshot prune,
-  // plugin uninstall, etc.). Reports before / after sizes so the
-  // operator sees the reclamation, plus elapsed ms so a slow
-  // VACUUM on a big DB is visible.
-  app.post('/api/daemon/db/vacuum', requireLocalDaemonRequest, async (_req, res) => {
-    try {
-      const { inspectSqliteDatabase } = await import('./storage/db-inspect.js');
-      const file = path.join(RUNTIME_DATA_DIR, 'app.sqlite');
-      const before = await inspectSqliteDatabase({ db, file });
-      const startedAt = Date.now();
-      // VACUUM cannot run inside an active transaction; better-sqlite3
-      // exposes it as a regular pragma exec.
-      db.exec('VACUUM');
-      const elapsedMs = Date.now() - startedAt;
-      const after = await inspectSqliteDatabase({ db, file });
-      res.json({
-        ok: true,
-        beforeBytes: before.sizeBytes,
-        afterBytes:  after.sizeBytes,
-        reclaimedBytes: Math.max(0, before.sizeBytes - after.sizeBytes),
-        elapsedMs,
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.F2 — graceful shutdown. The CLI calls this from
-  // `od daemon stop`; the actual close path goes through the same
-  // SIGTERM-equivalent flow as a parent-process kill (the boot wrapper
-  // in cli.ts wires the process listeners). 202 Accepted because the
-  // shutdown completes after the response flush.
-  app.post('/api/daemon/shutdown', requireLocalDaemonRequest, (_req, res) => {
-    res.status(202).json({ ok: true, scheduled: true });
-    setImmediate(() => {
-      try {
-        process.emit('SIGTERM');
-      } catch {
-        // Best-effort; if the listener was removed (or the process is
-        // mid-shutdown already) the kernel SIGTERM falls back below.
-      }
-    });
-  });
-
-  // Prometheus scrape endpoint (Phase 12). Returns the full exposition
-  // format string. Operators put this behind their existing auth proxy;
-  // there is no built-in authn on the daemon HTTP server. To disable
-  // the endpoint entirely (air-gapped installs, regulatory contexts),
-  // set `OD_METRICS_ENDPOINT=disabled`; the route is registered only
-  // when that env value is not the literal string 'disabled'.
-  if (process.env.OD_METRICS_ENDPOINT !== 'disabled') {
-    app.get('/api/metrics', async (_req, res) => {
-      res.setHeader('Content-Type', register.contentType);
-      res.send(await getCritiqueMetrics());
-    });
-  }
-
-  // Phase 16 ratchet endpoint. Returns the rolling conformance window
-  // and the ratchet's current recommendation. Operator-driven by
-  // design: the recommendation does not flip OD_CRITIQUE_ROLLOUT_PHASE
-  // automatically, it surfaces so a deploy-pipeline follow-up can
-  // consume it. Tunables come from query string; defaults are the
-  // spec values (14 days, 0.90 shipped, 0.95 clean-parse).
-  // Codex + lefarcen P1 on PR #1499: clamp query inputs before the
-  // evaluator sees them so a request like `?windowDays=0` falls back to
-  // the spec default rather than producing a zero-evidence promotion.
-  // The evaluator also defends at its own entry; both are intentional
-  // (belt + suspenders) so a future caller that bypasses this route
-  // cannot reach an unguarded code path either.
-  const parsePositiveInt = (raw: unknown, fallback: number): number => {
-    if (typeof raw !== 'string' || raw.length === 0) return fallback;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
-  };
-  const parseRate = (raw: unknown, fallback: number): number => {
-    if (typeof raw !== 'string' || raw.length === 0) return fallback;
-    const n = Number(raw);
-    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
-  };
-  app.get('/api/critique/conformance', async (req, res) => {
-    try {
-      const windowDays = parsePositiveInt(req.query.windowDays, 14);
-      const shippedThreshold = parseRate(req.query.shippedThreshold, 0.90);
-      const cleanParseThreshold = parseRate(req.query.cleanParseThreshold, 0.95);
-      const history = await readConformanceHistory(RUNTIME_DATA_DIR, windowDays);
-      const decision = evaluateRollout({
-        current: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
-        history,
-        windowDays,
-        shippedThreshold,
-        cleanParseThreshold,
-      });
-      res.json({ window: { days: windowDays, history }, decision });
-    } catch (err) {
-      sendApiError(res, 500, 'INTERNAL_ERROR', err instanceof Error ? err.message : String(err));
-    }
-  });
-
-  registerConnectorRoutes(app, {
-    sendApiError,
-    authorizeToolRequest,
-    projectsRoot: PROJECTS_DIR,
-    requireLocalDaemonRequest,
-    composio: composioConnectorProvider,
-  });
-
-  // Gate the diagnostics export behind requireLocalDaemonRequest so it stays
-  // unreachable when daemon binds to a non-loopback address (Tailscale,
-  // 0.0.0.0, etc.). The bundle contains daemon/web/desktop logs, host
-  // metadata, and crash reports — same threat tier as connector / live-
-  // artifact endpoints, which all use the same guard.
-  app.get(
-    DIAGNOSTICS_EXPORT_PATH,
-    requireLocalDaemonRequest,
-    createDiagnosticsExportHandler({
-      runtime,
-      projectRoot: PROJECT_ROOT,
-      runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
-      dataDir: RUNTIME_DATA_DIR,
-    }),
-  );
-
   // ---- Projects (DB-backed) -------------------------------------------------
 
 
@@ -5305,14 +4807,18 @@ export async function startServer({
   // on garnet (with baseDir privilege check, linkedDirs validation,
   // template snapshot seeding, plugin snapshot resolution with default
   // scenario fallback) is intentionally dropped here. main moved project
-  // route registration into `./project-routes.js` via PR #1043, so the
+  // route registration into `./routes/project/index.js` via PR #1043, so the
   // simple project-create surface is wired through `registerProjectRoutes`
   // further down. Plugin-snapshot-resolution / default-scenario-fallback
-  // from garnet need to be re-integrated into project-routes.ts as a
+  // from garnet need to be re-integrated into routes/project/index.ts as a
   // follow-up — see reconcile decision log.
   // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
-  const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
+  const telemetry = registerTelemetryRoutes(app, {
+    dataDir: RUNTIME_DATA_DIR,
+    readAppConfig,
+  });
+  const { analyticsService } = telemetry;
   const design = {
     runs: createChatRunService({
       createSseResponse,
@@ -5320,7 +4826,7 @@ export async function startServer({
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
     }),
     analytics: analyticsService,
-    getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
+    getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
     readAnalyticsContext,
   };
 
@@ -5328,194 +4834,18 @@ export async function startServer({
   // killed on daemon shutdown — see shutdownDaemonRuns below.
   const terminalService = createTerminalService();
 
-  // PostHog runtime config.
-  //
-  // - `enabled` reflects ONLY the user's consent toggle (Privacy → "Share
-  //   usage data"). When false, posthog-js's full autocapture/$pageview/
-  //   $autocapture pipeline must stay off — that's the privacy contract.
-  //
-  // - `key` and `host` are populated whenever the server has a build-time
-  //   POSTHOG_KEY, regardless of consent. The error-tracking module
-  //   (apps/web/src/analytics/error-tracking.ts) reads them to ship
-  //   `$exception` events directly to the ingest endpoint, bypassing the
-  //   consent gate. Product decision: error reports always flow so we
-  //   don't lose ground truth on stability — see the privacy section of
-  //   Settings → Privacy for the user-facing copy.
-  //
-  // - When the build itself has no POSTHOG_KEY (forks, PR builds, OSS
-  //   contributors), `key` and `host` are null and even the error
-  //   pipeline becomes a no-op.
-  app.get('/api/analytics/config', async (_req, res) => {
-    const baseline = readPublicConfigResponse();
-    if (!baseline.enabled) {
-      // No build-time key → nothing to report on, consent or not.
-      res.json(baseline);
-      return;
-    }
-    try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-      const consentGranted = appCfg.telemetry?.metrics === true;
-      // Echo the installationId so the web client uses the same anonymous
-      // id PostHog already saw on prior runs (and that Langfuse uses too).
-      const installationId =
-        typeof appCfg.installationId === 'string' && appCfg.installationId
-          ? appCfg.installationId
-          : null;
-      res.json({
-        enabled: consentGranted,
-        env: baseline.env,
-        key: baseline.key,
-        host: baseline.host,
-        installationId,
-      });
-    } catch {
-      // If the config file is unreadable, fail closed for analytics but
-      // still let the error tracker run — exception reports are the most
-      // valuable signal in a degraded-state scenario.
-      res.json({
-        enabled: false,
-        env: baseline.env,
-        key: baseline.key,
-        host: baseline.host,
-        installationId: null,
-      });
-    }
-  });
-
-  // Cross-process safety-event bridge. Used by:
-  //   - Electron main process (renderer crash via render-process-gone)
-  //   - Any future helper / sidecar that needs to report a safety event
-  //     without owning its own posthog-node client
-  //
-  // The route DOES NOT check the user's analytics consent: this is the
-  // same "safety telemetry always flows" contract the web error-tracking
-  // module relies on. If POSTHOG_KEY is not set on the daemon (fork
-  // builds), captureSafety is a no-op on NOOP_SERVICE.
-  app.post('/api/observability/event', express.json({ limit: '64kb' }), (req, res) => {
-    const body = (req.body ?? {}) as Partial<ObservabilityEventRequest>;
-    const eventName = typeof body.event === 'string' ? body.event.trim() : '';
-    if (!eventName) {
-      res.status(400).json({ error: 'missing or invalid `event` field' });
-      return;
-    }
-    const properties =
-      body.properties != null && typeof body.properties === 'object' && !Array.isArray(body.properties)
-        ? (body.properties as Record<string, unknown>)
-        : {};
-    analyticsService.captureSafety({
-      eventName,
-      appVersion: cachedAppVersion?.version ?? '0.0.0',
-      properties,
-    });
-    res.json({ ok: true });
-  });
-
-  // Daemon-side uncaught errors. Without these, a crash in any daemon
-  // request handler or background task leaves no PostHog signal — the
-  // user sees a 500 (or worse, a connection drop) and we see nothing.
-  // Both listeners install AFTER the analyticsService is created so the
-  // captureSafety dispatch path is guaranteed to be ready.
-  //
-  // IMPORTANT — these handlers MUST keep Node's fatal-exit semantics.
-  // Installing an `uncaughtException` listener silences Node's default
-  // crash/exit path, and Node 15+ does the same for `unhandledRejection`
-  // when a listener is present (the `--unhandled-rejections=throw` mode
-  // only fires when nothing has subscribed). We bounded-flush posthog-
-  // node and then call `process.exit(1)` explicitly so the supervisor
-  // (pm2, packaged updater, dev `tools-dev`) gets a fresh process and
-  // we don't leave a half-broken daemon answering requests with state
-  // corruption. See codex review on PR #2527 (Siri-Ray).
-  const FATAL_FLUSH_TIMEOUT_MS = 1000;
-  let fatalShuttingDown = false;
-  const triggerFatalShutdown = (
-    eventName: string,
-    properties: Record<string, unknown>,
-  ): void => {
-    if (fatalShuttingDown) return;
-    fatalShuttingDown = true;
-    // CRITICAL — wait for captureSafety to ENQUEUE the event in
-    // posthog-node's local buffer before starting shutdown(). The
-    // captureSafety implementation does an `await readInstallationIdSafe()`
-    // before calling `client.capture()`; a sync fire-and-forget here would
-    // race shutdown() ahead of that await, drain an empty queue, and lose
-    // the crash event itself. See codex review on PR #2527 (Siri-Ray).
-    const flushSequence = (async () => {
-      try {
-        await analyticsService.captureSafety({
-          eventName,
-          appVersion: cachedAppVersion?.version ?? '0.0.0',
-          properties,
-        });
-      } catch {
-        // capture must never block the exit path
-      }
-      await analyticsService.shutdown();
-    })();
-    // Race the enqueue+shutdown sequence against a bounded timeout. If
-    // posthog-node hangs on a slow flush (or the installationId read
-    // hangs on the filesystem) we still die in bounded time — the
-    // supervisor will restart us, which is the whole point.
-    void Promise.race([
-      flushSequence,
-      new Promise<void>((resolve) => {
-        const handle = setTimeout(resolve, FATAL_FLUSH_TIMEOUT_MS);
-        handle.unref?.();
-      }),
-    ]).finally(() => {
-      process.exitCode = 1;
-      process.exit(1);
-    });
-  };
-  process.on('uncaughtException', (error) => {
-    triggerFatalShutdown('daemon_uncaught_exception', {
-      error_message: error?.message ?? String(error),
-      error_name: error?.name ?? 'Error',
-      // Stack truncation: 8 KB ceiling to keep the ingest payload bounded
-      // even when the stack contains huge native frames. Most actionable
-      // stacks fit in well under 2 KB.
-      error_stack: typeof error?.stack === 'string' ? error.stack.slice(0, 8192) : undefined,
-    });
-  });
-  process.on('unhandledRejection', (reason) => {
-    const asError = reason instanceof Error ? reason : null;
-    triggerFatalShutdown('daemon_unhandled_rejection', {
-      error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
-      error_name: asError?.name ?? 'NonErrorRejection',
-      error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
-    });
-  });
-
   // Tracks runs whose finalized assistant message has already been forwarded
   // to Langfuse so repeated message updates only emit one final trace per run.
   // Terminal fallback reports intentionally do not claim this set; a delayed
   // telemetry-finalized message can still replace the synthetic fallback.
   const reportedRuns = new Set();
 
-  // App-version snapshot read once at server start for Langfuse trace metadata.
-  let cachedAppVersion = null;
-  void (async () => {
-    try {
-      cachedAppVersion = await readCurrentAppVersionInfo();
-      await observePendingInstallerApplyAttempts({
-        analytics: analyticsService,
-        appVersion: cachedAppVersion.version,
-        currentChannel: cachedAppVersion.channel,
-        currentVersion: cachedAppVersion.version,
-        dataRoot: RUNTIME_DATA_DIR,
-        logger: console,
-        namespace: process.env[SIDECAR_ENV.NAMESPACE] ?? SIDECAR_DEFAULTS.namespace,
-      });
-    } catch {
-      // Telemetry is best-effort; appVersion is omitted when unavailable.
-    }
-  })();
-
   const reportFinalizedMessage = createFinalizedMessageTelemetryReporter({
     design,
     db,
     dataDir: RUNTIME_DATA_DIR,
     reportedRuns,
-    getAppVersion: () => cachedAppVersion,
+    getAppVersion: telemetry.getCachedAppVersion,
   });
   const reportRunCompletionTelemetryFallback = ({
     analyticsContext,
@@ -5554,18 +4884,7 @@ export async function startServer({
     timer.unref?.();
   };
 
-  const reportFeedback = (req: {
-    runId: string;
-    rating: 'positive' | 'negative';
-    reasonCodes: string[];
-    hasCustomReason: boolean;
-    customReason: string;
-    scoreMetadata?: Record<string, unknown>;
-  }) =>
-    reportRunFeedbackFromDaemon({
-      dataDir: RUNTIME_DATA_DIR,
-      ...req,
-    });
+  const reportFeedback = telemetry.reportFeedback;
 
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
@@ -5611,6 +4930,72 @@ export async function startServer({
     BUNDLED_PETS_DIR,
     OD_BIN,
   };
+
+  app.get('/api/health', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    res.json({ ok: true, version: versionInfo.version });
+  });
+
+  app.get('/api/ready', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    const ready = !daemonShuttingDown;
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      ready,
+      version: versionInfo.version,
+    });
+  });
+
+  app.get('/api/version', async (_req, res) => {
+    const version = await readCurrentAppVersionInfo();
+    res.json({ version });
+  });
+
+  registerDaemonRoutes(app, {
+    db,
+    paths: { RUNTIME_DATA_DIR },
+    http: { requireLocalDaemonRequest, sendApiError },
+    host,
+    getResolvedPort: () => resolvedPort,
+    getDaemonShuttingDown: () => daemonShuttingDown,
+    sandboxRuntime: SANDBOX_RUNTIME,
+    env: process.env,
+  });
+
+  const openDesignPublicMetadata = createOpenDesignPublicMetadataService();
+  registerOpenDesignPublicMetadataRoutes(app, {
+    http: httpDeps,
+    openDesignPublicMetadata,
+  });
+
+  registerPluginEventRoutes(app, {
+    http: { requireLocalDaemonRequest },
+  });
+
+  registerConnectorRoutes(app, {
+    sendApiError,
+    authorizeToolRequest,
+    projectsRoot: PROJECTS_DIR,
+    requireLocalDaemonRequest,
+    composio: composioConnectorProvider,
+  });
+
+  // Gate the diagnostics export behind requireLocalDaemonRequest so it stays
+  // unreachable when daemon binds to a non-loopback address (Tailscale,
+  // 0.0.0.0, etc.). The bundle contains daemon/web/desktop logs, host
+  // metadata, and crash reports — same threat tier as connector / live-
+  // artifact endpoints, which all use the same guard.
+  app.get(
+    DIAGNOSTICS_EXPORT_PATH,
+    requireLocalDaemonRequest,
+    createDiagnosticsExportHandler({
+      runtime,
+      projectRoot: PROJECT_ROOT,
+      runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      dataDir: RUNTIME_DATA_DIR,
+    }),
+  );
+
   const nodeDeps = { fs, path };
   const idDeps = { randomId, randomUUID };
   const uploadDeps = { upload, importUpload, handleProjectUpload };
@@ -5990,291 +5375,6 @@ export async function startServer({
     conversations: conversationDeps,
     research: researchDeps,
   });
-
-  app.delete('/api/projects/:id', async (req, res) => {
-    try {
-      dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      /** @type {import('@open-design/contracts').OkResponse} */
-      const body = { ok: true };
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // SSE stream of file-changed events for a project. Drives preview live-reload.
-  // Receipt of a `file-changed` event triggers a file-list refresh, which
-  // propagates new mtimes through to FileViewer iframes (the URL-load
-  // `?v=${mtime}` cache-bust from PR #384 then reloads the iframe automatically).
-  // Subscribers come and go as users open/close project tabs; the underlying
-  // chokidar watcher is refcounted in project-watchers.ts so we never hold
-  // descriptors for projects no UI is looking at.
-  app.get('/api/projects/:id/events', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    }
-    let sub;
-    try {
-      const sse = createSseResponse(res);
-      const projectEventSink = (payload) => {
-        sse.send(payload.type, payload);
-      };
-      let sinks = activeProjectEventSinks.get(req.params.id);
-      if (!sinks) {
-        sinks = new Set();
-        activeProjectEventSinks.set(req.params.id, sinks);
-      }
-      sinks.add(projectEventSink);
-      const watchProject = getProject(db, req.params.id);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
-        sse.send('file-changed', evt);
-      }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
-      const cleanup = () => {
-        if (sub) {
-          const { unsubscribe } = sub;
-          sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
-        }
-        const currentSinks = activeProjectEventSinks.get(req.params.id);
-        currentSinks?.delete(projectEventSink);
-        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
-      };
-      res.on('close', cleanup);
-      res.on('finish', cleanup);
-    } catch (err) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
-      if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-    }
-  });
-
-  // ---- Conversations --------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    res.json({ conversations: listConversations(db, req.params.id) });
-  });
-
-  app.post('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
-    const now = Date.now();
-    const hasExplicitSessionMode = Boolean(
-      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
-    );
-    const requestedForkMessageId =
-      typeof forkAfterMessageId === 'string' && forkAfterMessageId
-        ? forkAfterMessageId
-        : null;
-    const sourceConversation =
-      typeof seedFromConversationId === 'string' && seedFromConversationId
-        ? getConversation(db, seedFromConversationId)
-        : null;
-    let seedMessages = [];
-    if (sourceConversation && sourceConversation.projectId === req.params.id) {
-      seedMessages = listMessages(db, seedFromConversationId);
-      if (requestedForkMessageId) {
-        const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
-        if (forkIndex < 0) {
-          return res.status(404).json({ error: 'fork message not found' });
-        }
-        seedMessages = seedMessages.slice(0, forkIndex + 1);
-      }
-    } else if (requestedForkMessageId) {
-      return res.status(404).json({ error: 'fork source conversation not found' });
-    }
-    const sessionMode =
-      hasExplicitSessionMode
-        ? normalizeConversationSessionMode(req.body.sessionMode)
-        : sourceConversation && sourceConversation.projectId === req.params.id
-          ? normalizeConversationSessionMode(sourceConversation.sessionMode)
-          : 'design';
-    const conv = insertConversation(db, {
-      id: randomId(),
-      projectId: req.params.id,
-      title: typeof title === 'string' ? title.trim() || null : null,
-      sessionMode,
-      createdAt: now,
-      updatedAt: now,
-    });
-    if (conv && seedMessages.length > 0) {
-      for (const m of seedMessages) {
-        upsertMessage(db, conv.id, {
-          ...m,
-          id: randomId(),
-          runId: undefined,
-          runStatus: undefined,
-          lastRunEventId: undefined,
-        });
-      }
-    }
-    res.json({ conversation: conv });
-  });
-
-  app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    const updated = updateConversation(db, req.params.cid, req.body || {});
-    res.json({ conversation: updated });
-  });
-
-  app.delete('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'not found' });
-    }
-    deleteConversation(db, req.params.cid);
-    res.json({ ok: true });
-  });
-
-  // ---- Messages -------------------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({ messages: listMessages(db, req.params.cid) });
-  });
-
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    const m = req.body || {};
-    if (m.id && m.id !== req.params.mid) {
-      return res.status(400).json({ error: 'id mismatch' });
-    }
-    const saved = upsertMessage(db, req.params.cid, {
-      ...m,
-      id: req.params.mid,
-    });
-    // Bump the parent project's updatedAt so the project list re-orders.
-    updateProject(db, req.params.id, {});
-    reportFinalizedMessage(saved, m, {
-      analyticsContext: readAnalyticsContext(req),
-      projectId: req.params.id,
-      conversationId: req.params.cid,
-    });
-    res.json({ message: saved });
-  });
-
-  // ---- Preview comments ----------------------------------------------------
-
-  app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    res.json({
-      comments: listPreviewComments(db, req.params.id, req.params.cid),
-    });
-  });
-
-  app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    try {
-      const comment = upsertPreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.body || {},
-      );
-      updateProject(db, req.params.id, {});
-      res.json({ comment });
-    } catch (err) {
-      res.status(400).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.patch(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      try {
-        const comment = updatePreviewCommentStatus(
-          db,
-          req.params.id,
-          req.params.cid,
-          req.params.commentId,
-          req.body?.status,
-        );
-        if (!comment)
-          return res.status(404).json({ error: 'comment not found' });
-        updateProject(db, req.params.id, {});
-        res.json({ comment });
-      } catch (err) {
-        res.status(400).json({ error: String(err?.message || err) });
-      }
-    },
-  );
-
-  app.delete(
-    '/api/projects/:id/conversations/:cid/comments/:commentId',
-    (req, res) => {
-      const conv = getConversation(db, req.params.cid);
-      if (!conv || conv.projectId !== req.params.id) {
-        return res.status(404).json({ error: 'conversation not found' });
-      }
-      const ok = deletePreviewComment(
-        db,
-        req.params.id,
-        req.params.cid,
-        req.params.commentId,
-      );
-      if (!ok) return res.status(404).json({ error: 'comment not found' });
-      updateProject(db, req.params.id, {});
-      res.json({ ok: true });
-    },
-  );
-
-  async function resolveAmrModelProbe() {
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-    const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-    const def = getAgentDef('amr');
-    if (!def) throw new Error('AMR runtime definition is missing');
-    const agentLaunch = resolveAgentLaunch(def, configuredEnv);
-    const launchPath = agentLaunch.launchPath ?? agentLaunch.selectedPath;
-    if (!launchPath) throw new Error('AMR vela binary could not be resolved');
-    const env = applyAgentLaunchEnv(
-      spawnEnvForAgent(
-        def.id,
-        {
-          ...process.env,
-          ...(def.env || {}),
-        },
-        configuredEnv,
-        undefined,
-      ),
-      agentLaunch,
-    );
-    const credentialRevision = readVelaCredentialRevision(process.env, configuredEnv);
-    const cacheKey = JSON.stringify({
-      launchPath,
-      home: env.HOME ?? env.USERPROFILE ?? '',
-      openDesignAmrProfile: env.OPEN_DESIGN_AMR_PROFILE ?? '',
-      velaProfile: env.VELA_PROFILE ?? '',
-      velaLinkUrl: env.VELA_LINK_URL ?? '',
-      velaRuntimeKey: env.VELA_RUNTIME_KEY ?? '',
-      velaOpencodeBin: env.VELA_OPENCODE_BIN ?? '',
-      credentialRevision,
-    });
-    return { launchPath, env, configuredEnv, cacheKey };
-  }
 
   registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
@@ -7543,6 +6643,18 @@ export async function startServer({
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
+    // Baseline the project's artifact files before the agent runs, so the
+    // run-finished handler can diff against them and report `artifact_count`
+    // for ANY agent (not just claude_code). Only for real project runs: a
+    // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
+    // not the user's artifacts — those fall back to the tool-stream count.
+    if (run?.id && cwd) {
+      try {
+        runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
+      } catch {
+        // Snapshotting is best-effort; finish falls back to the tool-stream count.
+      }
+    }
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -7852,7 +6964,13 @@ export async function startServer({
       destroyStream(child.stderr);
       destroyStream(child.stdin);
     };
-    const restartSameRunAfterRetry = () => {
+    // Synchronously detach the failed attempt: kill the old child and move the
+    // run back to `queued` *now*, even when the re-spawn is delayed by backoff.
+    // This must not be deferred — leaving the old child alive during the backoff
+    // window lets a follow-on signal (e.g. the inactivity watchdog's SIGTERM)
+    // drive a second close-handler pass that finalizes the run as failed before
+    // the retry ever spawns.
+    const tearDownAttemptForRetry = () => {
       // Release the previous child's stdio streams before letting the
       // reference drop — see destroyChildStdio for rationale.
       destroyChildStdio(run.child);
@@ -7876,6 +6994,8 @@ export async function startServer({
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
+    };
+    const spawnRetryAttempt = () => {
       void startChatRun(chatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
@@ -7892,6 +7012,24 @@ export async function startServer({
         // cannot trigger another restart loop.
         finishWithRetryDecision('failed', 1, null);
       });
+    };
+    // Tear the failed attempt down now (moving the run to `queued`), then wait
+    // out the policy's backoff before re-spawning. Stays cancel-aware: a cancel
+    // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
+    // and finalizes the queued run, and the callback re-checks cancel/terminal
+    // state in case it fires first.
+    const scheduleRetryRestart = (delayMs) => {
+      tearDownAttemptForRetry();
+      const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
+      if (wait <= 0) {
+        spawnRetryAttempt();
+        return;
+      }
+      run.retryRestartTimer = setTimeout(() => {
+        run.retryRestartTimer = null;
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        spawnRetryAttempt();
+      }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
       const attemptCount = run.retryAttemptCount ?? 0;
@@ -7983,8 +7121,9 @@ export async function startServer({
         design.runs.emit(run, 'run_retry_attempted', {
           ...retryAnalyticsBase(decision, failure, errorCode),
           retry_reason: decision.retryReason,
+          retry_delay_ms: decision.retryDelayMs,
         });
-        restartSameRunAfterRetry();
+        scheduleRetryRestart(decision.retryDelayMs);
         return true;
       }
       // Resume-on-failure: a terminal *resumable* failure (transient mid-stream
@@ -8253,7 +7392,7 @@ export async function startServer({
       // of fail-closing; vela's own `session/set_model` remains the final gate.
       let liveModels = [];
       try {
-        const probe = await resolveAmrModelProbe();
+        const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
         const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
@@ -8374,13 +7513,14 @@ export async function startServer({
       if (promptFile) promptFile.cleanup().catch(() => {});
     };
 
-    // Codex CLI parses config.toml before processing any -c overrides. A
-    // stale `service_tier = "priority"` (written by the Codex app's fast-mode
-    // toggle before the value was renamed to "fast") causes an immediate parse
-    // error and exit-1 before any work starts. Normalize it in-place so the
-    // launch succeeds. Errors are silently swallowed — a missing or read-only
-    // config.toml is fine, and the Codex CLI still surfaces the original error
-    // if the write fails. See issue #4276.
+    // Codex CLI parses config.toml before processing any -c overrides. An
+    // invalid `service_tier` value (the Codex app has written "priority",
+    // "default", and other values the CLI rejects) causes an immediate parse
+    // error and exit-1 before any work starts. Normalize it in-place — any
+    // value outside {fast,flex} has its line removed so the CLI uses its
+    // built-in default — so the launch succeeds. Errors are silently swallowed
+    // — a missing or read-only config.toml is fine, and the Codex CLI still
+    // surfaces the original error if the write fails. See issue #4276 / #3408.
     if (def.id === 'codex') {
       const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
       // Route through spawnEnvForAgent so resolveCodexConfigPath sees the same
@@ -9237,6 +8377,30 @@ export async function startServer({
         firstTokenAt: timestamp,
       };
     };
+    // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
+    // `cliReadyAt` is the first well-formed adapter output and is stamped for
+    // every runtime family from its own decode choke point: first JSONL line
+    // (claude-stream-json), first decoded stream event (json-event-stream /
+    // qoder / pi-rpc), first non-empty stdout chunk (plain), or first ACP
+    // JSON-RPC message (acp-json-rpc). `sessionInitDoneAt` is only observable
+    // for ACP (the resume/`session/new` ack); for stream/plain families that
+    // gap is folded into `spawn_to_first_token_remainder_ms` rather than
+    // anchored to a fabricated marker. Both are first-write-wins like
+    // `firstTokenAt` so a later chunk cannot move an already-stamped boundary.
+    const noteCliReadyAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.cliReadyAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        cliReadyAt: timestamp,
+      };
+    };
+    const noteSessionInitDoneAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.sessionInitDoneAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        sessionInitDoneAt: timestamp,
+      };
+    };
     const noteFirstTokenFromAgentEvent = (ev) => {
       if (ev?.type && FIRST_TOKEN_AGENT_EVENT_TYPES.has(ev.type)) {
         noteFirstTokenAt();
@@ -9330,6 +8494,85 @@ export async function startServer({
       scheduleForcedChildShutdown();
     }
 
+    // Per-run tool-loop guard. Agents sometimes fixate on a failing tool call
+    // and grind through dozens of identical attempts (e.g. re-running an Edit
+    // whose `old_string` never matches, or a shell assertion against an element
+    // that does not exist). Unlike the BYOK proxy path — bounded by
+    // MAX_BYOK_TOOL_LOOPS — the autonomous chat agents had no such bound. This
+    // guard observes the normalized tool_use/tool_result events EVERY agent
+    // path emits, so one instance covers Claude, Codex/OpenCode, Copilot, ACP,
+    // … It emits a one-shot `tool_loop` warning, then (in halt mode) terminates
+    // the run at a hard ceiling. Mode via OD_TOOL_LOOP_GUARD (halt|warn|off).
+    const toolLoopGuard = createToolLoopGuard({ mode: resolveToolLoopMode() });
+    let toolLoopAbortFired = false;
+
+    // Idempotent — both agent-event paths (sendAgentEvent, the Claude
+    // stream-json callback) can route a halt verdict here.
+    function abortForToolLoop(verdict: ToolLoopVerdict) {
+      if (toolLoopAbortFired) return;
+      toolLoopAbortFired = true;
+      send(
+        'error',
+        createSseErrorPayload(
+          'TOOL_LOOP_DETECTED',
+          `Run terminated: the agent repeated a failing ${verdict.toolName} call ` +
+            `${verdict.count}× without progress (\`${verdict.signature}\`). Re-check the ` +
+            'actual target — the file, the element, the command — before retrying ' +
+            'instead of resubmitting the same turn.',
+          { retryable: true },
+        ),
+      );
+      if (acpSession?.abort) {
+        try {
+          acpSession.abort();
+        } catch {
+          // ignore — best-effort
+        }
+      }
+      // Route through signalChild (not a bare child.kill) so the halt escalates
+      // to the whole process group when one exists, matching abortForRoleMarker,
+      // cancel, and the inactivity watchdog. A bare child.kill leaves Bash/build
+      // grandchildren alive to keep mutating the workspace until the forced
+      // shutdown fires — exactly the loop class this guard is meant to stop.
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+      scheduleForcedChildShutdown();
+    }
+
+    // Feed a normalized agent event into the loop guard and act on a verdict.
+    // Safe to call for every event; non-tool events are ignored. Emit the
+    // `tool_loop` warning to the UI/CLI, and on a halt verdict tear the run
+    // down so it cannot keep grinding.
+    function observeToolEventForLoop(ev: any) {
+      if (!ev || typeof ev !== 'object') return;
+      if (ev.type === 'tool_use' && typeof ev.id === 'string') {
+        toolLoopGuard.observeToolUse(ev.id, typeof ev.name === 'string' ? ev.name : 'tool', ev.input);
+        return;
+      }
+      if (ev.type === 'tool_result' && typeof ev.toolUseId === 'string') {
+        const verdict = toolLoopGuard.observeToolResult(
+          ev.toolUseId,
+          Boolean(ev.isError),
+          typeof ev.content === 'string' ? ev.content : '',
+        );
+        if (verdict) {
+          send('agent', verdict);
+          if (verdict.action === 'halt') abortForToolLoop(verdict);
+        }
+      }
+    }
+
+    // Single choke point for emitting an agent event to the client. EVERY
+    // stream handler (sendAgentEvent, the Claude callback, Copilot, ACP, …)
+    // emits through here, never via a bare send('agent', …), so the tool-loop
+    // guard sees every runtime's tool activity and no handler can drift out of
+    // coverage. observe runs AFTER the send so a `tool_loop` warning/halt
+    // follows the result that triggered it in the stream. (PR #3375 review:
+    // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
+    function emitAgentEvent(ev: any) {
+      send('agent', ev);
+      observeToolEventForLoop(ev);
+    }
+
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
@@ -9373,6 +8616,9 @@ export async function startServer({
         }));
         return;
       }
+      // First well-formed decoded stream event = CLI ready for the
+      // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
+      noteCliReadyAt();
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -9387,7 +8633,7 @@ export async function startServer({
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
       }
-      send('agent', ev);
+      emitAgentEvent(ev);
     };
     const parseBufferedAntigravityGeminiJsonEventStream = () => {
       if (
@@ -9410,6 +8656,9 @@ export async function startServer({
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
+        // First parsed claude-stream-json event = CLI ready (#3408 §4); the
+        // init/system line arrives well before the model's first token.
+        noteCliReadyAt();
         if (ev?.type === 'error') {
           if (agentStreamError) return;
           flushVisibleAgentStderr();
@@ -9456,12 +8705,12 @@ export async function startServer({
           const visibleDelta = titleMarkerStripper.strip(ev.delta);
           if (visibleDelta) {
             noteFirstTokenAt();
-            send('agent', { ...ev, delta: visibleDelta });
+            emitAgentEvent({ ...ev, delta: visibleDelta });
           }
           return;
         }
         noteFirstTokenFromAgentEvent(ev);
-        send('agent', ev);
+        emitAgentEvent(ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
         // run-scoped guard above, so its `fabricated_role_marker` events
         // surface here directly from the stream handler, not via
@@ -9501,7 +8750,7 @@ export async function startServer({
           return;
         }
         noteFirstTokenFromAgentEvent(ev);
-        send('agent', ev);
+        emitAgentEvent(ev);
       });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
@@ -9569,6 +8818,8 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        onCliReady: () => noteCliReadyAt(),
+        onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
@@ -9596,8 +8847,12 @@ export async function startServer({
             }
             return;
           }
-          if (event === 'agent') noteFirstTokenFromAgentEvent(data);
-          send(event, data);
+          if (event === 'agent') {
+            noteFirstTokenFromAgentEvent(data);
+            emitAgentEvent(data);
+          } else {
+            send(event, data);
+          }
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
@@ -9634,6 +8889,10 @@ export async function startServer({
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
         const text = typeof chunk === 'string' ? chunk : String(chunk);
+        // First non-empty stdout chunk = CLI ready for the plain family
+        // (#3408 §4 marker). A plain adapter has no structured preamble, so
+        // this typically coincides with its first model output.
+        if (text.length > 0) noteCliReadyAt();
         const visibleText = titleMarkerStripper.strip(text);
         const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
@@ -10235,969 +9494,31 @@ export async function startServer({
     };
   });
 
-  function runToolBundleDeliveryTargetForProject(projectId, metadata) {
-    if (typeof projectId !== 'string' || !projectId || !isSafeId(projectId)) {
-      return 'none';
-    }
-    try {
-      const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata, {
-        allowUnavailableSandboxImportedProject: true,
-      });
-      return isManagedProjectCwd(cwd, PROJECTS_DIR) ? 'managed-project' : 'external-project';
-    } catch {
-      return 'none';
-    }
-  }
-
-  app.post('/api/runs', async (req, res) => {
-    if (daemonShuttingDown) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
-    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
-    if (!toolBundle.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
-    }
-    // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
-    // before the run is created. The resolver returns null when the body
-    // does not mention a plugin (legacy runs unchanged), an error envelope
-    // for missing-input / capability / not-found / stale, or an ok result
-    // whose `snapshotId` is pinned onto the run object so downstream
-    // code (system prompt block, tool tokens, replay) can reach it.
-    //
-    // Stage A of plugin-driven-flow-plan: when neither the body nor the
-    // project carries plugin info we fall back to the bundled scenario
-    // plugin for the project's metadata kind/intent so direct callers
-    // (CLI / SDK / agent-headless runs) get the same auto-binding the
-    // web create flow already produces. The fallback is silent — a
-    // bundled scenario that is not installed leaves the run plugin-less,
-    // which matches the legacy path.
-    let resolvedSnapshot = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      let registryView;
-      try {
-        registryView = await loadPluginRegistryView();
-      } catch (err) {
-        return res.status(500).json({ error: String(err) });
-      }
-      const explicitPlugin =
-        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
-      let runResolveBody = requestBody;
-      if (!explicitPlugin) {
-        const projectRow = getProject(db, requestBody.projectId);
-        const hasPin =
-          typeof projectRow?.appliedPluginSnapshotId === 'string'
-          && projectRow.appliedPluginSnapshotId.length > 0;
-        if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
-          if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-            runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
-          }
-        }
-      }
-      const resolved = resolvePluginSnapshot({
-        db,
-        body: runResolveBody,
-        projectId: requestBody.projectId,
-        conversationId: typeof requestBody.conversationId === 'string'
-          ? requestBody.conversationId
-          : null,
-        registry: registryView,
-        connectorProbe: buildConnectorProbe(connectorService),
-      });
-      if (resolved && !resolved.ok) {
-        if (!explicitPlugin) {
-          console.warn(
-            `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
-          );
-        } else {
-          return res.status(resolved.status).json(resolved.body);
-        }
-      } else {
-        resolvedSnapshot = resolved;
-      }
-    }
-    const meta = {
-      ...requestBody,
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-    };
-    if (resolvedSnapshot?.ok) {
-      meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
-      if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
-      if (typeof meta.message !== 'string' || meta.message.trim().length === 0) {
-        const renderedQuery = renderPluginBriefTemplate(
-          resolvedSnapshot.snapshot.query,
-          resolvedSnapshot.snapshot.inputs,
-        ).trim();
-        if (renderedQuery.length > 0) meta.message = renderedQuery;
-      }
-    }
-    let runProject = null;
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      try {
-        runProject = getProject(db, meta.projectId);
-        assertSandboxProjectRootAvailable(runProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
-    // MCP / SDK callers may omit agentId. Resolve it before any run-create
-    // side effects so unsupported run-scoped tool bundles can fail cleanly.
-    if (typeof meta.agentId !== 'string' || !meta.agentId) {
-      try {
-        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
-        const agents = await detectAgents(appCfg.agentCliEnv ?? {}).catch(() => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        if (cfgAgent && cfgAgentAvailable) {
-          meta.agentId = cfgAgent;
-        } else {
-          const firstAvailable = agents.find((a) => a.available)?.id ?? null;
-          if (firstAvailable) meta.agentId = firstAvailable;
-        }
-      } catch (err) {
-        console.warn('[runs] agent id fallback failed', err);
-      }
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          meta.projectId,
-          runProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    if (runProject?.metadata) {
-      meta.projectMetadata = runProject.metadata;
-    }
-    // MCP / SDK callers POST /api/runs with just a projectId — no
-    // conversationId, no pre-created assistantMessageId — because they
-    // don't know about OD's chat-row lifecycle. The web flow
-    // (POST /api/chat) on the other hand creates both client-side and
-    // passes them in. Without binding the run to a conversation and
-    // pre-pinning an assistant message row, the OD studio page for
-    // the project shows an empty chat panel — the user has no way to
-    // see what the outer agent asked or what the inner agent replied,
-    // even though the run finished and produced files.
-    //
-    // Fall back here: pick the project's default conversation (the
-    // one create_project seeded), write a user message with the
-    // prompt as content, and synthesize an assistantMessageId so the
-    // pin helper below will insert the empty assistant row. From that
-    // point on, the existing appendMessageAgentEvent path accumulates
-    // every text_delta into the assistant row's content — same as web
-    // chat.
-    if (
-      typeof meta.projectId === 'string' &&
-      meta.projectId &&
-      (typeof meta.conversationId !== 'string' || !meta.conversationId)
-    ) {
-      try {
-        const convs = listConversations(db, meta.projectId);
-        // listConversations is ordered for the UI by recent activity; this
-        // fallback must bind to the seeded default conversation instead.
-        const defaultConv = Array.isArray(convs) && convs.length > 0
-          ? [...convs].sort((a, b) => {
-              const aCreated = Number(a?.createdAt);
-              const bCreated = Number(b?.createdAt);
-              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-                return aCreated - bCreated;
-              }
-              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-            })[0]
-          : null;
-        if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
-          meta.conversationId = defaultConv.id;
-          if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
-            meta.assistantMessageId = randomUUID();
-          }
-          const promptForUserMessage =
-            typeof meta.message === 'string' && meta.message.trim().length > 0
-              ? meta.message
-              : null;
-          if (promptForUserMessage) {
-            upsertMessage(db, defaultConv.id, {
-              id: randomUUID(),
-              role: 'user',
-              content: promptForUserMessage,
-              startedAt: Date.now(),
-              endedAt: Date.now(),
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('[runs] mcp conversation fallback failed', err);
-      }
-    }
-    const run = design.runs.create(meta);
-    try {
-      pinAssistantMessageOnRunCreate(db, run);
-    } catch (err) {
-      console.warn('[runs] message create pin failed', err);
-    }
-    // Capture clientType for downstream telemetry (Langfuse uses it on
-    // run-completed metadata; PostHog gets it via the request header
-    // bridge). Prefer the explicit `x-od-client` header from desktop /
-    // web sidecars, fall back to user-agent detection. Without this the
-    // run object's `clientType` stays undefined and Langfuse traces lose
-    // the surface dimension.
-    const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
-    if (declaredClient === 'desktop' || declaredClient === 'web') {
-      run.clientType = declaredClient;
-    } else {
-      const ua = String(req.get('user-agent') ?? '');
-      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
-    }
-    if (resolvedSnapshot?.ok) {
-      try {
-        const { linkSnapshotToRun } = await import('./plugins/snapshots.js');
-        linkSnapshotToRun(db, resolvedSnapshot.snapshotId, run.id);
-      } catch {
-        // Linking is best-effort here; in-memory run still carries the id.
-      }
-    }
-    /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
-    const body = {
-      runId: run.id,
-      // Surface the bound conversation/message so MCP / SDK callers
-      // who did not provide them get back the daemon-resolved values
-      // (used for building studio deep links and threading chat
-      // history). Always nullable so the contract stays additive.
-      conversationId: run.conversationId ?? null,
-      assistantMessageId: run.assistantMessageId ?? null,
-      ...(resolvedSnapshot?.ok
-        ? {
-            appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
-            pluginId: resolvedSnapshot.snapshot.pluginId,
-          }
-        : {}),
-    };
-    res.status(202).json(body);
-    // Plan §3.I1 / spec §10.1 — fire the pipeline schedule on the run's
-    // SSE stream BEFORE the agent process is started. The first
-    // pipeline_stage_started event is emitted synchronously (before
-    // the first await inside runPipelineForRun), so any SSE consumer
-    // that subscribes between create() and start() sees a stage event
-    // ahead of the agent's message_chunk stream — exactly what §8 e2e-3
-    // expects. The stub stage runner returns immediately so a
-    // non-loop pipeline walks through every stage in O(stages) time;
-    // the audit row in `run_devloop_iterations` records the timeline.
-    if (resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
-      firePipelineForRun({
-        run,
-        snapshot: resolvedSnapshot.snapshot,
-        runs: design.runs,
-        db,
-      });
-    }
-    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    if (run.projectId && run.conversationId) {
-      try {
-        const project = getProject(db, run.projectId);
-        const projectRoot = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
-        detectSkillPluginCandidateOnRunSuccess(db, design.runs, run, req.body || {}, projectRoot);
-      } catch (err) {
-        console.warn('[plugins] skill candidate hook setup failed', err);
-      }
-    }
-    design.runs.start(run, () => startChatRun(meta, run));
-
-    // Analytics v2: emit run_created (daemon-side authoritative) and
-    // schedule run_finished on terminal state. The matching `chat-routes.ts`
-    // handler is shadowed by this earlier registration in Express; emit
-    // here so PostHog actually receives the event. Both fire under the
-    // same insert_id prefix so any web-side mirror dedupes by $insert_id.
-    const analyticsContext = readAnalyticsContext(req);
-    if (analyticsContext) {
-      run.analyticsContext = analyticsContext;
-    }
-    design.runs.wait(run).then((status: { status: string }) => {
-      reportRunCompletionTelemetryFallback({
-        analyticsContext: analyticsContext ?? null,
-        run,
-        status: status.status,
-      });
-    }).catch(() => {
-      // wait() can't reject in current runs.ts impl, but guard anyway.
-    });
-    if (analyticsContext) {
-      const reqBody = (req.body || {}) as Record<string, unknown>;
-      const runInsertId = newInsertId();
-      // Configure-state triplet — v2 schema requires every event to carry
-      // these so PostHog dashboards can split run lifecycle by execution
-      // setup. Web-side captures inherit them from a PostHog global
-      // register, but daemon-side captures (run_created/run_finished) need
-      // to populate them at capture time. Best-effort derivation from
-      // `detectAgents()` + the request's `agentId`:
-      //   - has_available_configure_cli: any CLI on PATH appears installed
-      //   - configure_type: 'local_cli' when the run targets an installed
-      //     CLI, otherwise 'unknown' (BYOK keys live in the web client
-      //     storage and are not visible to the daemon at this layer)
-      //   - configure_availability: 'available' when the requested CLI is
-      //     installed; 'unavailable' when it's known but not installed;
-      //     'unknown' otherwise
-      const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
-        () => ({} as Record<string, unknown>),
-      );
-      const detectedAgentsForAnalytics = await detectAgents(
-        (appCfgForAnalytics as { agentCliEnv?: Record<string, unknown> }).agentCliEnv ?? {},
-      ).catch(() => [] as Array<{ id: string; available: boolean }>);
-      // BYOK credentials live in the web client (localStorage / store) and
-      // are not visible to the daemon at this layer, so we pass
-      // `byokConfigured: undefined` and let the helper fall back to the
-      // installed-CLI signal. Web-side captures use the same helper with
-      // the full credential view to keep dashboards aligned.
-      //
-      // `mode: 'daemon'` pins the call into the helper's daemon branch so
-      // `configure_availability` is judged from the requested agent's
-      // install status (not the cohort-wide "any CLI installed?" fallback).
-      // Without it, a run for an uninstalled agent would still report
-      // `available` whenever any unrelated CLI was on PATH — see PR #2285
-      // review.
-      // AMR sign-in state is daemon-visible (vela's config file or the
-      // Settings-backed VELA_RUNTIME_KEY/VELA_LINK_URL env config), so the
-      // server-side captures can fill `amrAuthorized` even though BYOK
-      // stays web-only. Merge the configured AMR env exactly like the
-      // /api/integrations/vela/status route and the run launcher do —
-      // env-configured users are signed in to the UI, and dropping the
-      // configured env here would keep reporting them as 'none'.
-      const velaStatusForAnalytics = (() => {
-        try {
-          const configuredAmrEnv = agentCliEnvForAgent(
-            (appCfgForAnalytics as {
-              agentCliEnv?: Parameters<typeof agentCliEnvForAgent>[0];
-            }).agentCliEnv,
-            'amr',
-          );
-          return readVelaLoginStatus(process.env, configuredAmrEnv);
-        } catch {
-          return null;
-        }
-      })();
-      const configureGlobals = deriveConfigureGlobals({
-        mode: 'daemon',
-        agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        agents: detectedAgentsForAnalytics,
-        amrAuthorized: velaStatusForAnalytics?.loggedIn === true,
-      });
-      const promptText =
-        typeof reqBody.currentPrompt === 'string'
-          ? reqBody.currentPrompt
-          : typeof reqBody.message === 'string'
-            ? reqBody.message
-            : '';
-      const userQueryTokens = promptText.length > 0
-        ? Math.ceil(promptText.length / 4)
-        : 0;
-      // Optional analytics context the client may attach to a run.
-      // Used to thread the DS run variant (`design_system_project` /
-      // `design_system_generation` page+area, `project_kind=design_system`,
-      // entry_from values like `design_system_create`) plus per-source
-      // counts onto run_created / run_finished. Behavior never depends on
-      // these; only PostHog props do.
-      const analyticsHints =
-        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
-          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
-          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
-          : {};
-      const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
-        ? analyticsHints.entryFrom
-        : undefined;
-      const hintProjectKind = typeof analyticsHints.projectKind === 'string'
-        ? analyticsHints.projectKind
-        : null;
-      // Session-dimension hints (client-computed, behavior-irrelevant): the
-      // 0-based run turn index within the browser analytics session, whether
-      // it's the session's first run, and whether the project already had a
-      // generated artifact (run is an edit, not a first creation).
-      const hintTurnIndex = typeof analyticsHints.turnIndex === 'number'
-        ? analyticsHints.turnIndex
-        : undefined;
-      const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
-        ? analyticsHints.isFirstRun
-        : undefined;
-      const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
-        ? analyticsHints.hasExistingArtifact
-        : undefined;
-      const sessionDimensionProps = {
-        ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
-        ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
-        ...(hintHasExistingArtifact !== undefined
-          ? { has_existing_artifact: hintHasExistingArtifact }
-          : {}),
-      };
-      const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
-      const runProject = requestProjectId ? getProject(db, requestProjectId) : null;
-      const runProjectKind = resolveRunProjectKindForAnalytics({
-        hintProjectKind,
-        projectMetadata: runProject?.metadata,
-      });
-      const dsRunContext =
-        analyticsHints.designSystemRunContext
-          && typeof analyticsHints.designSystemRunContext === 'object'
-          ? (analyticsHints.designSystemRunContext as Record<string, unknown>)
-          : {};
-      const isDesignSystemRun =
-        runProjectKind === 'design_system'
-        || hintEntryFrom === 'design_system_create'
-        || hintEntryFrom === 'onboarding_design_system'
-        || hintEntryFrom === 'regenerate_from_review';
-      // Only fields the current `/api/runs` create payload actually
-      // sends. The v2 schema documents extended context props
-      // (entry_from / project_kind / target_platforms / fidelity /
-      // companion_surfaces / connectors / use_speaker_notes /
-      // include_animations / reference_template / aspect /
-      // project_source) — most aren't on the wire yet, but
-      // project_kind falls back to the stored project metadata so ordinary
-      // project runs are classified even when callers do not send
-      // `analyticsHints`. Other dimensions stay omitted until follow-up PRs
-      // thread them through.
-      // Per-turn capability sets: MCP servers live under the nested
-      // `context` selection; skills are sent top-level. Both are arrays of
-      // ids on the wire; coerce defensively so a malformed payload never
-      // throws inside the capture path.
-      const reqContext =
-        reqBody.context && typeof reqBody.context === 'object'
-          ? (reqBody.context as Record<string, unknown>)
-          : {};
-      const runMcpServerIds = Array.isArray(reqContext.mcpServerIds)
-        ? (reqContext.mcpServerIds as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          )
-        : [];
-      const runTurnSkillIds = Array.isArray(reqBody.skillIds)
-        ? (reqBody.skillIds as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          )
-        : [];
-      // `skill_ids` is the full per-send skill context, so fold in the
-      // project-bound persistent `skillId` (also reported singularly as
-      // `skill_id`) alongside the staged one-turn skills — otherwise a normal
-      // project run with a persisted skill but no staged skills would emit
-      // `skill_ids=[]` and undercount in dashboards that read the array.
-      const runSkillIds = [
-        ...new Set(
-          [reqBody.skillId, ...runTurnSkillIds].filter(
-            (id): id is string => typeof id === 'string' && id.length > 0,
-          ),
-        ),
-      ];
-      const baseProps: Record<string, unknown> = {
-        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
-        area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
-        ...configureGlobals,
-        ...amrUserIdForRunAnalytics(velaStatusForAnalytics),
-        project_id: requestProjectId,
-        conversation_id:
-          typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
-        run_id: run.id,
-        project_kind: runProjectKind,
-        ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
-        ...sessionDimensionProps,
-        design_system_id:
-          typeof reqBody.designSystemId === 'string'
-            ? reqBody.designSystemId
-            : undefined,
-        // `design_system_source` is required in the v2 contract
-        // (RunCreatedProps / RunFinishedProps). The daemon doesn't see
-        // whether the chosen design system was the workspace default,
-        // a user pick, or template-inherited — that signal lives only
-        // in the web client. Derive what we honestly know from the
-        // wire payload: 'not_applicable' when no design system was
-        // selected, 'unknown' otherwise. A follow-up that threads
-        // `designSystemSource` through `CreateRunRequest` can replace
-        // this with the precise value. See PR #2285 review 2026-05-20
-        // 04:35 for the rationale.
-        design_system_source:
-          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
-            ? 'unknown'
-            : 'not_applicable',
-        ...(isDesignSystemRun ? {
-          ds_source_origin: typeof dsRunContext.origin === 'string'
-            ? dsRunContext.origin
-            : undefined,
-          source_count: typeof dsRunContext.sourceCount === 'number'
-            ? dsRunContext.sourceCount
-            : undefined,
-          has_brand_description: typeof dsRunContext.hasBrandDescription === 'boolean'
-            ? dsRunContext.hasBrandDescription
-            : undefined,
-          brand_description_length_bucket:
-            typeof dsRunContext.brandDescriptionLengthBucket === 'string'
-              ? dsRunContext.brandDescriptionLengthBucket
-              : undefined,
-          github_repo_count: typeof dsRunContext.githubRepoCount === 'number'
-            ? dsRunContext.githubRepoCount
-            : undefined,
-          local_folder_count: typeof dsRunContext.localFolderCount === 'number'
-            ? dsRunContext.localFolderCount
-            : undefined,
-          fig_file_count: typeof dsRunContext.figFileCount === 'number'
-            ? dsRunContext.figFileCount
-            : undefined,
-          asset_file_count: typeof dsRunContext.assetFileCount === 'number'
-            ? dsRunContext.assetFileCount
-            : undefined,
-        } : {}),
-        has_attachment: Array.isArray(reqBody.attachments)
-          ? (reqBody.attachments as unknown[]).length > 0
-          : false,
-        user_query_tokens: userQueryTokens,
-        // `modelIdForTracking` buckets null/empty into `'default'` so the
-        // PostHog `model_id` column always has an analysable value. The
-        // user-picked model only lands here on `run_created` (the agent
-        // hasn't initialised yet); `run_finished` below upgrades this to
-        // the agent-reported model when available.
-        model_id: modelIdForTracking(
-          typeof reqBody.model === 'string' ? reqBody.model : null,
-        ),
-        agent_provider_id: agentIdToTracking(
-          typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        ),
-        skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
-        // Per-send composer context (v2 spec: every prompt records mode +
-        // which model/cli/mcp/skill/plugin/design-system it ran with). Mode,
-        // plugin, and the MCP/skill sets weren't on `run_created` before; the
-        // values are all on the create payload, so populate them here. The
-        // legacy singular `mcp_id` becomes the first enabled server for
-        // back-compat; `mcp_ids` carries the full set.
-        // Only composer-originated runs have an ask/design mode. DS-generation
-        // runs never go through the composer, so omit `session_mode` for them
-        // rather than defaulting them to `ask` and polluting mode dashboards.
-        ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'
-          ? { session_mode: sessionModeToTracking(reqBody.sessionMode) }
-          : {}),
-        plugin_id: resolvedSnapshot?.ok
-          ? resolvedSnapshot.snapshot.pluginId
-          : typeof reqBody.pluginId === 'string'
-            ? reqBody.pluginId
-            : null,
-        mcp_ids: runMcpServerIds,
-        mcp_id: runMcpServerIds[0] ?? null,
-        skill_ids: runSkillIds,
-        token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
-      };
-      design.analytics.capture({
-        eventName: 'run_created',
-        context: analyticsContext,
-        appVersion: design.getAppVersion(),
-        properties: baseProps,
-        insertId: runInsertId,
-      });
-      design.runs.wait(run).then(async (status: {
-        status: string;
-        error?: string | null;
-        errorCode?: string | null;
-        exitCode?: number | null;
-        signal?: string | null;
-      }) => {
-        // Langfuse eligibility must be re-derived at completion time, not
-        // reused from a launch-time snapshot. A long-running run can have the
-        // user flip telemetry consent or the relay config mid-flight; the
-        // Langfuse sink (`reportRunCompletedFromDaemon`) re-reads app config
-        // when the run ends, so PostHog's `langfuse_expected` /
-        // `langfuse_delivery_status` / `langfuse_drop_reason` must read the
-        // same completion-time eligibility to stay aligned. See PR #3412
-        // review.
-        const appCfgAtFinish = await readAppConfig(RUNTIME_DATA_DIR).catch(
-          () => ({} as Record<string, unknown>),
-        );
-        const langfuseDeliveryForAnalytics = deriveLangfuseDeliveryState(
-          (appCfgAtFinish as { telemetry?: Record<string, unknown> }).telemetry ?? {},
-          readTelemetrySinkConfig(),
-        );
-        // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
-        // it always returns a non-empty string so dashboards keyed on
-        // `error_code` never see a blank cell. Live in `run-result.ts`
-        // with unit coverage for the fall-through cases (ACP fatal,
-        // child close without error event, etc.).
-        const result = runResultFromStatus(status.status);
-        const errorCode = deriveRunErrorCode(status);
-        const failure = classifyRunFailure({
-          result,
-          status,
-          ...(errorCode ? { errorCode } : {}),
-          agentId: run.agentId,
-          events: run.events,
-        });
-        // ACP reports { type:'status', label:'model', model:<id> } after
-        // session/new; stream adapters report { type:'status',
-        // label:'initializing', model:<id> } at run start. The scan must
-        // not short-circuit on usage before reaching the model signal —
-        // see `scanRunEventsForFinishedProps` for the invariant.
-        const usageAnalytics = scanRunEventsForUsageAnalytics(
-          run.events,
-          reqBody.model,
-          userQueryTokens,
-        );
-        const analyticsCapturedAt = Date.now();
-        const timingAnalytics = summarizeRunTimingAnalytics({
-          runCreatedAt: run.createdAt,
-          runUpdatedAt: run.updatedAt,
-          analyticsCapturedAt,
-          telemetry: run.analyticsTelemetry,
-          events: run.events,
-        });
-        const artifactCount = countNewArtifacts(run.events);
-        const designSystemCreated = didRunCreateDesignSystemFile(run.events);
-        const previewModuleCount = countDesignSystemPreviewModules(run.events);
-        // First-touch activation milestones (first-artifact / first-design-
-        // system observed since this stamp shipped — NOT first-ever; see
-        // `deriveActivationMilestones`) written to the PostHog person record
-        // via `$set_once` below. Derived from this same run-outcome snapshot so
-        // the milestone lands at the exact success moment without a second
-        // event; `$set_once` keeps it pinned to the first qualifying run.
-        const activationMilestones = deriveActivationMilestones({
-          result,
-          artifactCount,
-          designSystemCreated,
-          // Gate the DS milestone on the same `isDesignSystemRun` condition the
-          // `run_finished.design_system_created` field uses below, so a plain
-          // chat run that writes a `DESIGN.md` doesn't overstate DS activation.
-          isDesignSystemRun,
-          capturedAtIso: new Date(analyticsCapturedAt).toISOString(),
-        });
-        const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
-          events: run.events,
-          exitCode: status.exitCode ?? null,
-          signal: status.signal ?? null,
-          cancelRequested: !!run.cancelRequested,
-          firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
-          artifactWriteSeen: artifactCount > 0 || designSystemCreated || previewModuleCount > 0,
-        });
-        const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
-          ? modelIdForTracking(reqBody.model)
-          : modelIdForTracking(usageAnalytics.agent_reported_model);
-        for (const [index, retryEvent] of runRetryEventsForAnalytics(run.events).entries()) {
-          design.analytics.capture({
-            eventName: retryEvent.event,
-            context: analyticsContext,
-            appVersion: design.getAppVersion(),
-            properties: retryEvent.data,
-            insertId: `${runInsertId}-${retryEvent.event}-${index}`,
-          });
-        }
-        design.analytics.capture({
-          eventName: 'run_finished',
-          context: analyticsContext,
-          appVersion: design.getAppVersion(),
-          properties: {
-            ...baseProps,
-            // `area` flips on run_finished: chat_panel runs publish
-            // under `chat_panel`, DS runs stay on
-            // `design_system_generation` to match the run_created shape.
-            area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
-            result,
-            // PostHog person-property milestones. `$set_once` only writes a
-            // key that doesn't already exist, so the timestamp pins to the
-            // user's FIRST qualifying run observed since rollout (true
-            // first-ever only for users who onboard after rollout; the
-            // installed base gets their next qualifying run — see
-            // `deriveActivationMilestones`). Omitted when no milestone crossed.
-            ...(activationMilestones ? { $set_once: activationMilestones } : {}),
-            // `model_id` upgrades the request-side value with the
-            // agent-reported model on terminal state; see
-            // `finishedModelId` derivation above.
-            model_id: finishedModelId,
-            // Incremental count of `.html` paths the run produced or
-            // modified, deduped per file. Replaces the hard-coded `0`
-            // that masked the "did this run actually generate an
-            // artifact?" funnel on PostHog. See `run-artifacts.ts`
-            // for the dedup semantics; tested in
-            // `tests/run-artifacts.test.ts`.
-            artifact_count: artifactCount,
-            // True when the run raised a `<question-form>` clarification.
-            // Clarification turns inherently produce no artifact, so the
-            // dashboard excludes them from the "run finished -> has artifact"
-            // funnel instead of counting them as failures. See
-            // `run-artifacts.ts`; tested in `tests/run-artifacts.test.ts`.
-            asked_user_question: runAskedUserQuestion(run.events),
-            retry_attempt_count: run.retryAttemptCount ?? 0,
-            retry_final_result: run.retryFinalResult ?? 'not_attempted',
-            ...(run.retrySuppressedReason
-              ? { retry_suppressed_reason: run.retrySuppressedReason }
-              : {}),
-            ...(isDesignSystemRun ? {
-              // DS runs land a `DESIGN.md` write when generation
-              // succeeded; the run-artifacts inspector reuses the
-              // same Write/Edit pairing it already does for HTML
-              // artifact counts, just keyed on `DESIGN.md`.
-              design_system_created: designSystemCreated,
-              preview_module_count: previewModuleCount,
-              // `missing_font_count` defaults to 0 — the agent flow
-              // doesn't emit a structured "missing fonts" signal yet.
-              // Kept on the wire so the dashboard has the column from
-              // day one; can be sourced later from a font-audit hook.
-              missing_font_count: 0,
-            } : {}),
-            ...timingAnalytics,
-            ...diagnosticsAnalytics,
-            langfuse_trace_id: run.id,
-            ...langfuseDeliveryForAnalytics,
-            ...(errorCode ? { error_code: errorCode } : {}),
-            ...(failure ?? {}),
-            ...(usageAnalytics.input_tokens !== undefined
-              ? { input_tokens: usageAnalytics.input_tokens }
-              : {}),
-            ...(usageAnalytics.input_tokens_provider !== undefined
-              ? { input_tokens_provider: usageAnalytics.input_tokens_provider }
-              : {}),
-            ...(usageAnalytics.input_tokens_effective !== undefined
-              ? { input_tokens_effective: usageAnalytics.input_tokens_effective }
-              : {}),
-            ...(usageAnalytics.output_tokens !== undefined
-              ? { output_tokens: usageAnalytics.output_tokens }
-              : {}),
-            ...(usageAnalytics.total_tokens !== undefined
-              ? { total_tokens: usageAnalytics.total_tokens }
-              : {}),
-            ...(usageAnalytics.cache_read_input_tokens !== undefined
-              ? { cache_read_input_tokens: usageAnalytics.cache_read_input_tokens }
-              : {}),
-            ...(usageAnalytics.cache_creation_input_tokens !== undefined
-              ? {
-                  cache_creation_input_tokens:
-                    usageAnalytics.cache_creation_input_tokens,
-                }
-              : {}),
-            ...(usageAnalytics.uncached_input_tokens !== undefined
-              ? { uncached_input_tokens: usageAnalytics.uncached_input_tokens }
-              : {}),
-            ...(usageAnalytics.estimated_context_tokens !== undefined
-              ? { estimated_context_tokens: usageAnalytics.estimated_context_tokens }
-              : {}),
-            ...(usageAnalytics.cache_hit_ratio !== undefined
-              ? { cache_hit_ratio: usageAnalytics.cache_hit_ratio }
-              : {}),
-            cache_token_source: usageAnalytics.cache_token_source,
-            token_count_source: usageAnalytics.token_count_source,
-          },
-          insertId: `${runInsertId}-finish`,
-        });
-      }).catch(() => {
-        // wait() can't reject in current runs.ts impl, but guard anyway.
-      });
-    }
-  });
-
-  app.get('/api/runs', (req, res) => {
-    const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
-    /** @type {import('@open-design/contracts').ChatRunListResponse} */
-    const body = { runs: runs.map(design.runs.statusBody) };
-    res.json(body);
-  });
-
-  app.get('/api/runs/:id/result-package', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = design.runs.statusBody(run);
-    const project = run.projectId ? getProject(db, run.projectId) : null;
-    let files: any[] = [];
-    if (project) {
-      const packageMetadata = run.projectMetadata ?? null;
-      try {
-        if (status.workspace?.storage?.kind === 'folder-backed') {
-          const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, packageMetadata);
-          const projectRootStat = await fs.promises.stat(projectRoot);
-          if (!projectRootStat.isDirectory()) {
-            throw new Error('workspace root is not a directory');
-          }
-        }
-        files = await listFiles(PROJECTS_DIR, project.id, { metadata: packageMetadata });
-      } catch (err) {
-        return sendApiError(
-          res,
-          500,
-          'WORKSPACE_ENUMERATION_FAILED',
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-    const artifacts = files
-      .filter((file) => file?.artifactManifest && typeof file.artifactManifest === 'object')
-      .map((file) => ({
-        file: file.name,
-        kind: typeof file.artifactManifest.kind === 'string'
-          ? file.artifactManifest.kind
-          : file.artifactKind ?? null,
-        renderer: typeof file.artifactManifest.renderer === 'string'
-          ? file.artifactManifest.renderer
-          : null,
-        title: typeof file.artifactManifest.title === 'string'
-          ? file.artifactManifest.title
-          : file.name,
-        status: typeof file.artifactManifest.status === 'string'
-          ? file.artifactManifest.status
-          : null,
-        manifest: file.artifactManifest,
-      }));
-    res.json({
-      schema: RUN_RESULT_PACKAGE_SCHEMA,
-      run: {
-        id: status.id,
-        status: status.status,
-        projectId: status.projectId,
-        conversationId: status.conversationId,
-        assistantMessageId: status.assistantMessageId,
-        agentId: status.agentId,
-        createdAt: status.createdAt,
-        updatedAt: status.updatedAt,
-        cancelRequested: status.cancelRequested,
-        exitCode: status.exitCode,
-        signal: status.signal,
-        error: status.error,
-        errorCode: status.errorCode,
-      },
-      workspace: status.workspace,
-      events: {
-        logPath: status.eventsLogPath,
-      },
-      project: project
-        ? {
-            id: project.id,
-            name: project.name,
-            fileCount: files.length,
-          }
-        : null,
-      artifacts,
-    });
-  });
-
-  app.get('/api/runs/:id', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(design.runs.statusBody(run));
-  });
-
-  app.get('/api/runs/:id/events', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.stream(run, req, res);
-  });
-
-  // Phase 4 / spec §10.3.5 — AG-UI canonical stream.
-  //
-  // Same data plane as /api/runs/:id/events but every record passes
-  // through `encodeOdEventForAgui` first so an external CopilotKit /
-  // AG-UI client can consume the run unmodified. Events the encoder
-  // can't map are dropped; the SSE stream stays canonical even when
-  // OD adds internal-only events later.
-  app.get('/api/runs/:id/agui', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const { encodeOdEventForAgui } = await import('@open-design/agui-adapter');
-    const sse = createSseResponse(res);
-    const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
-    const emitMapped = (record) => {
-      const mapped = encodeOdEventForAgui(
-        { kind: record.event, ...(record.data ?? {}) },
-        { runId: run.id, seq: record.id, now: Date.now() },
-      );
-      if (mapped) sse.send(mapped.kind, mapped, record.id);
-    };
-    for (const record of run.events) {
-      if (!Number.isFinite(lastEventId) || record.id > lastEventId) emitMapped(record);
-    }
-    if (design.runs.isTerminal(run.status)) {
-      sse.end();
-      return;
-    }
-    // Mirror runs.stream's subscriber pattern but route through the
-    // adapter. We attach a thin wrapper to run.clients so the existing
-    // emit() loop reaches us; the wrapper only implements the
-    // {send,end,cleanup} surface the runs service uses.
-    const adapterClient = {
-      send: (event, data, id) => {
-        const mapped = encodeOdEventForAgui(
-          { kind: event, ...(data ?? {}) },
-          { runId: run.id, seq: id, now: Date.now() },
-        );
-        if (mapped) sse.send(mapped.kind, mapped, id);
-      },
-      end:     () => sse.end(),
-      cleanup: () => sse.cleanup?.(),
-    };
-    run.clients.add(adapterClient);
-    res.on('close', () => {
-      run.clients.delete(adapterClient);
-      sse.cleanup?.();
-    });
-  });
-
-  app.post('/api/runs/:id/cancel', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = await design.runs.cancel(run);
-    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true, run: status };
-    res.json(body);
-  });
-
-  app.post('/api/chat', (req, res) => {
-    if (daemonShuttingDown) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
-    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
-    if (!toolBundle.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
-    }
-    let chatProject = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      try {
-        chatProject = getProject(db, requestBody.projectId);
-        assertSandboxProjectRootAvailable(chatProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          requestBody.projectId,
-          chatProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    const meta = {
-      ...requestBody,
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
-    };
-    const run = design.runs.create(meta);
-    design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(meta, run));
+  registerRunRoutes(app, {
+    db,
+    design,
+    http: httpDeps,
+    paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
+    agents: { detectAgents, getAgentDef },
+    chat: { startChatRun },
+    lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
+    plugins: {
+      connectorService,
+      detectSkillPluginCandidateOnRunSuccess,
+      firePipelineForRun,
+      loadPluginRegistryView,
+      renderPluginBriefTemplate,
+    },
+    telemetry: {
+      reportRunCompletionTelemetryFallback,
+      resolveRunProjectKindForAnalytics,
+      runArtifactBaselines,
+      runRetryEventsForAnalytics,
+    },
+    messages: {
+      pinAssistantMessageOnRunCreate,
+      reconcileAssistantMessageOnRunEnd,
+    },
   });
 
   // Each routine fire resolves an agent, prepares project/conversation state,
@@ -11572,6 +9893,13 @@ export async function startServer({
     nativeDialogs: nativeDialogDeps,
     research: researchDeps,
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
+    plugins: {
+      connectorService,
+      detectSkillPluginCandidateOnRunSuccess,
+      firePipelineForRun,
+      loadPluginRegistryView,
+      renderPluginBriefTemplate,
+    },
     resources: {
       listAllSkills,
       listAllDesignTemplates,
@@ -11585,8 +9913,13 @@ export async function startServer({
     finalize: finalizeDeps,
     handoff: handoffDeps,
     chat: { startChatRun },
+    messages: {
+      pinAssistantMessageOnRunCreate,
+      reconcileAssistantMessageOnRunEnd,
+    },
     agents: agentDeps,
     critique: critiqueDeps,
+    openDesignPublicMetadata,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
   });
 

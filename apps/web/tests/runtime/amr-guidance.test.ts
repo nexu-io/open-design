@@ -51,6 +51,16 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
+  it('keeps prompt-too-large failures on shrink-and-retry guidance', () => {
+    const ui = resolveRunFailureUi('AGENT_PROMPT_TOO_LARGE', 'claude');
+    expect(ui).toMatchObject({
+      titleKey: 'chat.runError.title.promptTooLarge',
+      primaryAction: 'retry',
+      messageKey: 'chat.runError.description.promptTooLarge',
+      secondaryRetry: false,
+    });
+  });
+
   it('localizes a mid-stream connection drop for any agent, no AMR promotion', () => {
     for (const agent of ['claude', 'codex', null]) {
       const ui = resolveRunFailureUi('AGENT_CONNECTION_DROPPED', agent);

@@ -757,4 +757,165 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       user_action: 'retry',
     });
   });
+
+  it('classifies high-confidence Langfuse unknown samples into stable fields', () => {
+    expect(classify(null, 'Invalid API Key')).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'invalid_api_key',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'login',
+    });
+
+    expect(classify(null, 'Missing environment variable: `OPENAI_API_KEY`.')).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'missing_api_key',
+      user_action: 'login',
+    });
+
+    expect(
+      classify(
+        null,
+        'Your workspace is out of credits. Ask your workspace owner to refill in order to continue.',
+      ),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'workspace_credits_exhausted',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'recharge',
+    });
+
+    expect(
+      classify(
+        null,
+        'Agent "Claude Code" (`claude`) is not installed or not on PATH. Install it and refresh the agent list (GET /api/agents) before retrying.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cli_not_installed',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(
+      classify(
+        null,
+        'Claude Code on Windows requires git-bash (https://git-scm.com/download/win). If installed but not in PATH, set CLAUDE_CODE_GIT_BASH_PATH.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'git_bash_missing',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(classify(null, 'spawn failed: spawn EPERM')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'spawn_eperm',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(classify(null, "error: unknown option '--trust'")).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+
+    expect(
+      classify(null, 'Selected model is at capacity. Please try a different model.'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_high_demand',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(
+      classify(null, 'json-rpc id 2: AMR model catalog is temporarily unavailable. Please retry.'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_routing_error',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify(null, 'Qoder run failed: stop_sequence')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'qoder_stop_sequence',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify(null, 'ACP session exited before completion (code=1, signal=none)')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'agent_protocol_error',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+});
+
+function runtimeCloseEvent(reason: string): RunEventForFailureClassification {
+  return { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: reason } };
+}
+
+describe('execution_failed close-reason refinement', () => {
+  // A generic AGENT_EXECUTION_FAILED whose text matched no pattern, plus the
+  // runtime_close diagnostic the daemon stamps at finalize time.
+  const withCloseReason = (reason: string | null) =>
+    classify('AGENT_EXECUTION_FAILED', '', [
+      errorEvent('AGENT_EXECUTION_FAILED', ''),
+      ...(reason ? [runtimeCloseEvent(reason)] : []),
+    ]);
+
+  it('promotes a mid-stream agent error to stream_error', () => {
+    expect(withCloseReason('stream_error')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'stream_error',
+    });
+  });
+
+  it('promotes a bare non-zero exit to exit_nonzero', () => {
+    expect(withCloseReason('exit_nonzero')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'exit_nonzero',
+    });
+  });
+
+  it('promotes an ACP fatal close to fatal_rpc_error', () => {
+    expect(withCloseReason('fatal_rpc_error')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+    });
+  });
+
+  it('keeps the opaque execution_failed label when no runtime_close diagnostic is present', () => {
+    expect(withCloseReason(null)).toMatchObject({ failure_detail: 'execution_failed' });
+  });
+
+  it('keeps the opaque label for close reasons outside the three known shapes', () => {
+    expect(withCloseReason('unknown')).toMatchObject({ failure_detail: 'execution_failed' });
+  });
+
+  it('does not override an already-specific process_exit detail with the close reason', () => {
+    // AGENT_EXIT_1 classifies to the specific `exit_code` detail; a stream_error
+    // close reason must not relabel it — only the opaque bucket is refined.
+    expect(
+      classify('AGENT_EXIT_1', '', [
+        errorEvent('AGENT_EXIT_1', ''),
+        runtimeCloseEvent('stream_error'),
+      ]),
+    ).toMatchObject({ failure_category: 'process_exit', failure_detail: 'exit_code' });
+  });
 });

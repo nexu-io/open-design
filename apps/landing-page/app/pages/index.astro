@@ -30,12 +30,15 @@ import {
 } from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
+import { clampDescription } from '../_lib/clamp-description';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const { title, description } = getHomeSeo(locale, counts);
+// Clamp the meta/OG/Twitter description; the full string still feeds JSON-LD.
+const metaDescription = clampDescription(description);
 const canonical = new URL(localePath(locale), Astro.site).toString();
 const origin = Astro.site?.toString() ?? 'https://open-design.ai/';
 const logoUrl = new URL('/android-chrome-512x512.png', Astro.site).toString();
@@ -151,7 +154,7 @@ const matterRuntime = readFileSync(
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#efe7d2" />
     <title>{title}</title>
-    <meta name="description" content={description} />
+    <meta name="description" content={metaDescription} />
     <link rel="canonical" href={canonical} />
     {alternateLinks.map((entry) => (
       <link rel="alternate" hreflang={entry.hreflang} href={entry.href} />
@@ -184,7 +187,7 @@ const matterRuntime = readFileSync(
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
     <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogDefaultImage} />
     <meta property="og:image:width" content={String(OG_IMAGE_WIDTH)} />
@@ -197,7 +200,7 @@ const matterRuntime = readFileSync(
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
+    <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={ogDefaultImage} />
 
     {/*
@@ -265,11 +268,17 @@ const matterRuntime = readFileSync(
               const blur = 11;
               const blend = 'difference';
               const inset = Math.min(w, h) * (borderRatio * 0.5);
+              // Opaque black (#000), NOT transparent (#0000): a transparent->red
+              // stop interpolates with straight alpha, so over black the R
+              // channel comes out quadratic (255*t^2) and its 0.5 neutral point
+              // lands at ~29% instead of 50%, shifting the refraction to one
+              // side. Opaque stops give a linear ramp centered at 50%. (Mirror
+              // of the same map builder in _components/header-enhancer.astro.)
               const svg =
                 '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
                   '<defs>' +
-                    '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
-                    '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+                    '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+                    '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
                   '</defs>' +
                   '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
                   '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +

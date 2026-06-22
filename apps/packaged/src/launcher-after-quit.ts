@@ -3,7 +3,13 @@ import { join } from "node:path";
 
 import { waitForProcessExit } from "@open-design/platform";
 import type { LauncherAfterQuitRequest } from "@open-design/launcher-proto";
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_MESSAGES, type DesktopStatusSnapshot } from "@open-design/sidecar-proto";
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MESSAGES,
+  type AppKey,
+  type DesktopStatusSnapshot,
+} from "@open-design/sidecar-proto";
 import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -11,7 +17,7 @@ import type { PackagedNamespacePaths } from "./paths.js";
 type LauncherAfterQuitLogger = Pick<Console, "warn"> & Partial<Pick<Console, "info">>;
 
 export type LauncherExistingDesktopGateResult =
-  | { action: "continue"; reason: "inspect-failed" | "not-running" }
+  | { action: "continue"; reason: "inspect-failed" | "not-running" | "stale-sidecar" }
   | { action: "exit"; reason: "existing-focused" | "existing-focus-failed" };
 
 async function writeLauncherAfterQuitLog(paths: PackagedNamespacePaths, message: string): Promise<void> {
@@ -47,10 +53,12 @@ export async function inspectExistingDesktopForLauncher(
     logger?: LauncherAfterQuitLogger;
     paths: PackagedNamespacePaths;
     requestIpc?: typeof requestJsonIpc;
+    waitForExit?: typeof waitForProcessExit;
   },
 ): Promise<LauncherExistingDesktopGateResult> {
   const logger = options.logger ?? console;
   const requestIpc = options.requestIpc ?? requestJsonIpc;
+  const waitForExit = options.waitForExit ?? waitForProcessExit;
   const ipcPath = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -73,6 +81,48 @@ export async function inspectExistingDesktopForLauncher(
   if (status.state !== "running") {
     await writeLauncherAfterQuitLog(options.paths, `inspect-not-running namespace=${namespace} state=${status.state}`);
     return { action: "continue", reason: "not-running" };
+  }
+
+  const staleSidecars: AppKey[] = [];
+  for (const app of [APP_KEYS.DAEMON, APP_KEYS.WEB]) {
+    const sidecarIpcPath = resolveAppIpcPath({
+      app,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace,
+    });
+    const sidecarStatus = await requestIpc<{ url?: unknown }>(
+      sidecarIpcPath,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 350 },
+    ).catch(() => null);
+    if (typeof sidecarStatus?.url !== "string" || sidecarStatus.url.length === 0) {
+      staleSidecars.push(app);
+    }
+  }
+
+  if (staleSidecars.length > 0) {
+    const pid = typeof status.pid === "number" ? status.pid : null;
+    await writeLauncherAfterQuitLog(
+      options.paths,
+      `inspect-found-existing namespace=${namespace} action=restart reason=stale-sidecar apps=${staleSidecars.join(",")} pid=${pid ?? "unknown"}`,
+    );
+    try {
+      await requestIpc(ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 800 });
+    } catch (error) {
+      const message = `inspect-found-existing namespace=${namespace} shutdown=failed reason=stale-sidecar error=${error instanceof Error ? error.message : String(error)}`;
+      await writeLauncherAfterQuitLog(options.paths, message);
+      logger.warn(`[open-design launcher] ${message}`);
+      return { action: "exit", reason: "existing-focus-failed" };
+    }
+    if (pid != null) {
+      const exited = await waitForExit(pid, 5000);
+      await writeLauncherAfterQuitLog(
+        options.paths,
+        `inspect-found-existing namespace=${namespace} shutdown=${exited ? "exited" : "timed-out"} reason=stale-sidecar pid=${pid}`,
+      );
+      if (!exited) return { action: "exit", reason: "existing-focus-failed" };
+    }
+    return { action: "continue", reason: "stale-sidecar" };
   }
 
   try {

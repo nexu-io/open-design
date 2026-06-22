@@ -9,7 +9,7 @@ import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-cli-help.js';
-import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
+import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
@@ -1220,7 +1220,7 @@ function exitWithStructuredError({ code, message, data }) {
 //   { error: { code, message, ... } }  — newer routes using sendApiError
 //   { error: '<message>' }             — older flat-string routes
 //                                         (e.g. POST /api/templates at
-//                                         project-routes.ts:667-680)
+//                                         routes/project/index.ts)
 // Normalize so a flat-string body still surfaces its message to the
 // structured envelope instead of collapsing to `HTTP <status>: `, which
 // would drop the only diagnostic the daemon actually returned to a
@@ -6576,7 +6576,7 @@ Imports a shadcn registry item as an Open Design design system.
 // Renames an editable (user-created) design system via PATCH
 // /api/design-systems/:id. Built-in systems are read-only and the daemon
 // returns 404, surfaced here as a structured failure. Arg parsing lives in
-// design-system-rename-args.ts so it can be unit-tested.
+// rename-args.ts so it can be unit-tested.
 async function runDesignSystemRename(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

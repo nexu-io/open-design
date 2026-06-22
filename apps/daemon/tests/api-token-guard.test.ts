@@ -14,10 +14,12 @@
 
 import type http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
 import { startServer } from '../src/server.js';
 
 const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
 const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
+const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
 
 let server: http.Server | undefined;
 let baseUrl = '';
@@ -32,6 +34,8 @@ afterEach(async () => {
   else process.env.OD_API_TOKEN = PREVIOUS_TOKEN;
   if (PREVIOUS_HOST === undefined) delete process.env.OD_BIND_HOST;
   else process.env.OD_BIND_HOST = PREVIOUS_HOST;
+  if (PREVIOUS_DISABLE_API_AUTH === undefined) delete process.env.OD_DISABLE_API_AUTH;
+  else process.env.OD_DISABLE_API_AUTH = PREVIOUS_DISABLE_API_AUTH;
 });
 
 describe('bound-API-token guard', () => {
@@ -54,6 +58,17 @@ describe('bound-API-token guard', () => {
     shutdown = started.shutdown;
     baseUrl = started.url;
     expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
+  });
+
+  it('starts on a public host without OD_API_TOKEN when OD_DISABLE_API_AUTH=1', async () => {
+    delete process.env.OD_API_TOKEN;
+    process.env.OD_DISABLE_API_AUTH = '1';
+    const started = (await startServer({ port: 0, host: '0.0.0.0', returnServer: true })) as {
+      server: http.Server;
+      shutdown?: () => Promise<void> | void;
+    };
+    server = started.server;
+    shutdown = started.shutdown;
   });
 });
 
@@ -82,5 +97,21 @@ describe('bearer middleware', () => {
       const resp = await fetch(`${baseUrl}${path}`);
       expect(resp.status).toBe(200);
     }
+  });
+
+  it('disables bearer middleware when OD_DISABLE_API_AUTH=1 even if OD_API_TOKEN is set', () => {
+    expect(
+      isApiTokenMiddlewareEnabled({
+        ...process.env,
+        OD_API_TOKEN: 'secret-test-token',
+        OD_DISABLE_API_AUTH: '1',
+      }),
+    ).toBe(false);
+    expect(
+      isApiAuthDisabled({
+        ...process.env,
+        OD_DISABLE_API_AUTH: '1',
+      }),
+    ).toBe(true);
   });
 });

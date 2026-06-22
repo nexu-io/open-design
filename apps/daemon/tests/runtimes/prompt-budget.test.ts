@@ -67,7 +67,7 @@ test('deepseek declares a conservative argv-byte budget for the prompt', () => {
 // real spawn would surface a generic ENAMETOOLONG / E2BIG.
 test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prompts through', () => {
   const oversized = 'x'.repeat(deepseekMaxPromptArgBytes + 1);
-  const flagged = checkPromptArgvBudget(deepseek, oversized);
+  const flagged = checkPromptArgvBudget(deepseek, oversized, 'win32');
   assert.ok(flagged, 'oversized prompts must trip the argv-byte guard');
   assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
   assert.equal(flagged.limit, deepseekMaxPromptArgBytes);
@@ -91,14 +91,53 @@ test('checkPromptArgvBudget flags oversized DeepSeek prompts and lets short prom
   const cjkOversized = '汉'.repeat(
     Math.ceil(deepseekMaxPromptArgBytes / 3) + 1,
   );
-  const cjkFlagged = checkPromptArgvBudget(deepseek, cjkOversized);
+  const cjkFlagged = checkPromptArgvBudget(deepseek, cjkOversized, 'win32');
   assert.ok(cjkFlagged, 'byte-counted UTF-8 prompts must also trip the guard');
   assert.equal(cjkFlagged.code, 'AGENT_PROMPT_TOO_LARGE');
 });
 
+// Issue #4473: `maxPromptArgBytes` (30 KB) is derived from Windows'
+// ~32 KB CreateProcess command-line limit. On POSIX the per-arg ceiling is
+// far higher (Linux MAX_ARG_STRLEN 128 KB; macOS ARG_MAX 256 KB total), and
+// the *real* Windows command-line cap is guarded precisely post-buildArgs by
+// checkWindowsCmdShim/DirectExeCommandLineBudget. Applying the conservative
+// Windows byte budget unconditionally on macOS/Linux false-positives on
+// normal design projects (system prompt + DESIGN.md + skills ≈ 50-70 KB),
+// surfacing as a confusing "prompt too long" even though the OS would accept
+// the argv. The budget must be platform-aware.
+test('checkPromptArgvBudget does not false-positive on POSIX where argv ceilings are far higher (#4473)', () => {
+  // 50 KB: over the Windows-derived 30 KB budget, far under POSIX ceilings.
+  const fiftyKb = 'x'.repeat(50_000);
+  assert.equal(
+    checkPromptArgvBudget(deepseek, fiftyKb, 'linux'),
+    null,
+    'Linux must not flag a 50 KB argv prompt (well under MAX_ARG_STRLEN)',
+  );
+  assert.equal(
+    checkPromptArgvBudget(deepseek, fiftyKb, 'darwin'),
+    null,
+    'macOS must not flag a 50 KB argv prompt (well under ARG_MAX)',
+  );
+
+  // Windows still enforces the conservative budget — its real command-line
+  // cap is ~32 KB, so a 50 KB argv prompt genuinely cannot spawn there.
+  const win = checkPromptArgvBudget(deepseek, fiftyKb, 'win32');
+  assert.ok(win, 'Windows must still flag a 50 KB argv prompt');
+  assert.equal(win.code, 'AGENT_PROMPT_TOO_LARGE');
+
+  // POSIX still guards a genuinely enormous prompt near the per-arg ceiling,
+  // so a runaway prompt fails fast with the actionable message instead of a
+  // generic spawn E2BIG.
+  const huge = 'x'.repeat(200_000);
+  assert.ok(
+    checkPromptArgvBudget(deepseek, huge, 'linux'),
+    'POSIX must still flag a 200 KB argv prompt near MAX_ARG_STRLEN',
+  );
+});
+
 test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts', () => {
   const oversized = 'x'.repeat(deepseekMaxPromptArgBytes + 1);
-  const flagged = checkPromptArgvBudget(deepseek, oversized);
+  const flagged = checkPromptArgvBudget(deepseek, oversized, 'win32');
 
   assert.ok(flagged, 'oversized DeepSeek prompts must return a diagnostic');
   assert.match(flagged.message, /DeepSeek TUI/);
@@ -111,7 +150,7 @@ test('Kimi prompt mode declares and enforces an argv-byte budget', () => {
   assert.equal(kimi.maxPromptArgBytes, 30_000);
 
   const oversized = 'x'.repeat(kimi.maxPromptArgBytes + 1);
-  const flagged = checkPromptArgvBudget(kimi, oversized);
+  const flagged = checkPromptArgvBudget(kimi, oversized, 'win32');
   assert.ok(flagged, 'oversized Kimi prompts must trip the argv-byte guard');
   assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
   assert.equal(flagged.limit, kimi.maxPromptArgBytes);

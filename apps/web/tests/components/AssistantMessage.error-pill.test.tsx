@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
 
 /**
- * The per-message gray "error" status pill is suppressed ONLY for the failed
- * run that ChatPane renders its top-level error card for (errorCardOwnerId).
- * Other failed turns — older history, or once a follow-up makes this no longer
- * the last assistant message — must keep their pill so the error detail still
- * survives reload / history review (regression: #3083 review).
+ * ChatPane renders the latest failed run's actionable top-level error card.
+ * Historical failed turns render the same neutral .run-error panel in the
+ * message body so chat history does not fall back to the legacy error pill.
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
@@ -38,15 +36,15 @@ function failedMessage(): ChatMessage {
     startedAt: 1700000000,
     endedAt: 1700000005,
     events: [
-      { kind: 'status', label: 'error', detail: 'boom-401' },
+      { kind: 'status', label: 'error', detail: 'boom-401', code: 'AGENT_AUTH_REQUIRED' },
     ] as ChatMessage['events'],
     producedFiles: [],
   } as ChatMessage;
 }
 
-describe('AssistantMessage error-pill suppression', () => {
-  it('keeps the error pill when this message does NOT own the top-level card', () => {
-    render(
+describe('AssistantMessage run-error rendering', () => {
+  it('renders the unified error card when this message does NOT own the top-level card', () => {
+    const { container } = render(
       <AssistantMessage
         message={failedMessage()}
         streaming={false}
@@ -55,11 +53,13 @@ describe('AssistantMessage error-pill suppression', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.getByText('boom-401')).toBeTruthy();
+    expect(container.querySelector('.run-error')).toBeTruthy();
+    expect(container.querySelector('.status-pill')).toBeNull();
+    expect(screen.getAllByText('boom-401').length).toBeGreaterThan(0);
   });
 
-  it('keeps the pill for a non-last failed run even when another message owns the card', () => {
-    render(
+  it('renders the unified error card for a non-last failed run when another message owns the card', () => {
+    const { container } = render(
       <AssistantMessage
         message={failedMessage()}
         streaming={false}
@@ -68,11 +68,13 @@ describe('AssistantMessage error-pill suppression', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.getByText('boom-401')).toBeTruthy();
+    expect(container.querySelector('.run-error')).toBeTruthy();
+    expect(container.querySelector('.status-pill')).toBeNull();
+    expect(screen.getAllByText('boom-401').length).toBeGreaterThan(0);
   });
 
-  it('suppresses the pill only for the message that owns the top-level card', () => {
-    render(
+  it('suppresses the in-message card for the message that owns the top-level card', () => {
+    const { container } = render(
       <AssistantMessage
         message={failedMessage()}
         streaming={false}
@@ -81,6 +83,8 @@ describe('AssistantMessage error-pill suppression', () => {
         onFeedback={vi.fn()}
       />,
     );
+    expect(container.querySelector('.run-error')).toBeNull();
+    expect(container.querySelector('.status-pill')).toBeNull();
     expect(screen.queryByText('boom-401')).toBeNull();
   });
 });
