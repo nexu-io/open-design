@@ -31,9 +31,13 @@ function parseEnvLines(stdout: string): EnvLines {
     get(key: string): string | undefined {
       const found = lines.find((l) => l.startsWith(key));
       if (!found) return undefined;
-      // YAML list format: "      - OD_FOO=bar" or "- OD_FOO='bar'" or "- OD_FOO=\"bar\""
-      const match = found.match(/OD_\w+=(.*)$/);
-      return match ? match[1].replace(/^['"](.*)['"]$/, '$1') : undefined;
+      // List format: "      - OD_FOO=bar" or "- OD_FOO='bar'" or "- OD_FOO=\"bar\""
+      const listMatch = found.match(new RegExp(`${key}=(.*)$`));
+      if (listMatch) return listMatch[1].replace(/^['"](.*)['"]$/, '$1');
+      // YAML mapping format: "      OD_FOO: bar" or "OD_FOO: \"bar\"" or "OD_FOO: 'bar'"
+      const yamlMatch = found.match(new RegExp(`${key}:\\s*(.*)$`));
+      if (yamlMatch) return yamlMatch[1].replace(/^['"](.*)['"]$/, '$1');
+      return undefined;
     },
   };
 }
