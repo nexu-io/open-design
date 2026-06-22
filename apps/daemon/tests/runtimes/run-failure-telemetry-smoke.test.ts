@@ -189,6 +189,106 @@ describe('run failure telemetry smoke', () => {
     }
   });
 
+  it('reclassifies upstream + install/env failures end-to-end through a real daemon run (#3408 P1)', async () => {
+    // End-to-end proof for the reclassification: a real agent process emits the
+    // production error text (or fails to spawn), the daemon records it into the
+    // run's events.jsonl, and classifyRunFailure (on the REAL recorded events,
+    // not a hand-built input) must land it in the correct category instead of
+    // the opaque execution_failed bucket. Generous inactivity timeout so the
+    // 100ms exit always wins the race (this test is not about timeouts).
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-reclassify-bin-'));
+    await writeFakeClaude(
+      binDir,
+      'amr-balance',
+      '预扣费额度失败, 用户[141283]剩余额度: 💰0.040000, 需要预扣费额度: 💰0.060000 (request id: Babc)',
+    );
+    await writeFakeClaude(binDir, 'amr-ratelimit', '429 您的账户已达到速率限制，请您控制请求频率');
+    await writeFakeClaude(binDir, 'amr-model', 'API Error: 400 model deepseek-v4-pro-202606 not in allowed list');
+    await writeFakeClaude(
+      binDir,
+      'env-node-path',
+      "'node' is not recognized as an internal or external command, operable program or batch file.",
+    );
+    // The agent itself reports a missing vendored sub-binary (real codex shape).
+    await writeFakeClaude(
+      binDir,
+      'env-spawn-enoent',
+      'Error: spawn /opt/homebrew/lib/node_modules/@openai/codex/codex ENOENT',
+    );
+    await writeFakeClaude(
+      binDir,
+      'a-prefill',
+      'MLX prefill memory guard rejected this prompt: Prefill context too large for available memory',
+    );
+    await writeFakeClaude(
+      binDir,
+      'a-thread-start',
+      'Reading prompt from stdin... Error: thread/start: thread/start failed: failed to start session',
+    );
+    await writeFakeClaude(
+      binDir,
+      'a-auth',
+      "login fail: Please carry the API secret key in the 'Authorization' field of the request header (1004)",
+    );
+    await writeFakeClaude(
+      binDir,
+      'a-lmstudio',
+      "No models loaded. Please load a model in the developer page or use the 'lms load' command.",
+    );
+    await writeFakeClaude(
+      binDir,
+      'a-resume-expired',
+      'no conversation found with session id 1d2c3b4a-0000-0000-0000-000000000000',
+    );
+
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '5000';
+    delete process.env.POSTHOG_KEY;
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const cases = [
+      { bin: 'amr-balance', category: 'insufficient_balance', detail: 'amr_insufficient_balance' },
+      { bin: 'amr-ratelimit', category: 'rate_limit', detail: 'rate_limit_429' },
+      { bin: 'amr-model', category: 'model_unavailable', detail: 'model_not_found' },
+      { bin: 'env-node-path', category: 'process_exit', detail: 'cli_not_installed' },
+      { bin: 'env-spawn-enoent', category: 'process_exit', detail: 'cli_not_installed' },
+      { bin: 'a-prefill', category: 'prompt_too_large', detail: 'prompt_too_large' },
+      { bin: 'a-thread-start', category: 'process_exit', detail: 'agent_protocol_error' },
+      { bin: 'a-auth', category: 'auth', detail: 'auth_required' },
+      { bin: 'a-lmstudio', category: 'model_unavailable', detail: 'local_model_not_loaded' },
+      { bin: 'a-resume-expired', category: 'process_exit', detail: 'session_resume_expired' },
+    ] as const;
+
+    for (const item of cases) {
+      await putConfig(started.url, {
+        agentId: 'claude',
+        agentCliEnv: { claude: { CLAUDE_BIN: path.join(binDir, item.bin) } },
+      });
+      const run = await createAndWaitForRun(started.url, {
+        caseId: item.bin,
+        agentId: 'claude',
+        message: `od-amr-reclassify-${item.bin}`,
+      });
+      const events = await readRunEvents(run.eventsLogPath);
+      const errorCode = deriveRunErrorCode(run);
+      const failure = classifyRunFailure({
+        result: runResultFromStatus(run.status),
+        status: run,
+        ...(errorCode ? { errorCode } : {}),
+        agentId: run.agentId,
+        events,
+      });
+      expect(run.status, item.bin).toBe('failed');
+      // The reclassification must NOT leave it in the opaque bucket.
+      expect(failure?.failure_detail, item.bin).not.toBe('execution_failed');
+      expect(failure?.failure_category, item.bin).toBe(item.category);
+      expect(failure?.failure_detail, item.bin).toBe(item.detail);
+    }
+  });
+
   it('reports the terminal Langfuse fallback for headerless run requests', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-failure-fallback-bin-'));
     await writeFakeClaude(binDir, 'claude-terminal-failure', 'terminal fallback smoke failure');

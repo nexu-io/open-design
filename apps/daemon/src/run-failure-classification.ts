@@ -121,6 +121,14 @@ function isHardQuotaText(text: string): boolean {
     .test(text);
 }
 
+// A transient, retryable rate limit (distinct from a hard quota). vela/upstream
+// returns this in Chinese ("速率限制" / "请求频率"), which the English-only
+// quota check above misses, so it currently leaks into execution_failed.
+function isRateLimitText(text: string): boolean {
+  return /(速率限制|控制请求频率|请求(?:过于)?频繁|rate[ _-]?limit|too many requests)/i
+    .test(text);
+}
+
 function isWorkspaceCreditsText(text: string): boolean {
   return /\b(?:your )?workspace is out of credits\b|\badd credits to continue\b|\bask your workspace owner to refill\b/i
     .test(text);
@@ -156,7 +164,12 @@ function isAgentConfigInvalidText(text: string): boolean {
 }
 
 function isCliNotInstalledText(text: string): boolean {
-  return /\bnot installed|not on PATH|cannot find the path specified|system cannot find the path specified\b/i
+  // Also covers the agent binary being absent at its resolved path:
+  //   - Windows shell "'node' is not recognized as an internal or external command"
+  //   - Node "Error: spawn <path> ENOENT" (the executable file does not exist —
+  //     distinct from spawn EPERM/EBADF/ENOEXEC where the file exists but can't run)
+  // Both currently leak into the opaque execution_failed bucket (#3408 P1).
+  return /\bnot installed|not on PATH|cannot find the path specified|system cannot find the path specified|is not recognized as an internal or external command|\bspawn\b[^\n]*\bENOENT\b/i
     .test(text);
 }
 
@@ -173,6 +186,7 @@ function isAgentProtocolErrorText(text: string): boolean {
   return /\bjson-rpc id \d+: Internal error\b/i.test(text) ||
     /\bACP session exited before completion\b/i.test(text) ||
     /\bQoder run failed: (?:stop_sequence|end_turn)\b/i.test(text) ||
+    /\bthread\/start failed\b/i.test(text) ||
     /\bfailed to parse request\b/i.test(text);
 }
 
@@ -186,12 +200,26 @@ function isPermissionRequestNotFoundText(text: string): boolean {
 }
 
 function isAuthDetailText(text: string): boolean {
-  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required)\b/i
+  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required|carry the api (?:secret )?key)\b/i
     .test(text);
 }
 
+// A resume target that no longer exists. Matches both the daemon's own
+// surfaced message and the Claude CLI's raw "session not found" shapes.
+function isSessionResumeExpiredText(text: string): boolean {
+  // Tightly anchored to Claude's actual resume-miss shapes. The session-id form
+  // requires the id token immediately before "not found" so it cannot bridge an
+  // unrelated "session …" and a far-away "404 Not Found" (e.g. opencode 4xx).
+  return /\bsession could not be resumed\b/i.test(text) ||
+    /\bno conversation found with session id\b/i.test(text) ||
+    /\bno session found\b/i.test(text) ||
+    /\bsession [\w-]+ not found\b/i.test(text);
+}
+
 function isPromptTooLargeText(text: string): boolean {
-  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|reduce the length of (?:the )?(?:messages|input prompt))\b/i
+  // `prefill context too large` is the local-runtime (MLX) shape of the same
+  // "the prompt does not fit" failure that currently leaks into execution_failed.
+  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt))\b/i
     .test(text);
 }
 
@@ -210,13 +238,19 @@ function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
     return 'cli_version_incompatible';
   }
   if (/\bmodel is disabled\b/i.test(text)) return 'model_disabled';
+  // A local model server (e.g. LM Studio, reached via opencode's own provider
+  // config) is up but has no model loaded. Not a model we picked wrong — the
+  // user must load a model in the local app first (`lms load`). User-action,
+  // not an engine bug, so it should not sit in the opaque execution_failed
+  // bucket. (#3408 P1)
+  if (/\bno models loaded\b|\blms load\b/i.test(text)) return 'local_model_not_loaded';
   if (/\b(no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
   }
   if (/\b(model .*not supported|requested model is not supported|supported api model names|not supported when using codex)\b/i.test(text)) {
     return 'model_not_supported';
   }
-  if (/\b(model (?:is )?(?:unavailable|not available|unsupported|not found)|selected model is not available|not have access|no access|model .*not found|no healthy deployments)\b/i.test(text)) {
+  if (/\b(model (?:is )?(?:unavailable|not available|unsupported|not found)|selected model is not available|not have access|no access|model .*not found|no healthy deployments|model .*not in (?:the )?allowed list)\b/i.test(text)) {
     return 'model_not_found';
   }
   return null;
@@ -499,6 +533,22 @@ export function classifyRunFailure(
     );
   }
 
+  // A `--resume <id>` whose stored session no longer resolves (Claude's 30-day
+  // cleanupPeriodDays prune, a CLAUDE_CONFIG_DIR change, a cwd/worktree change,
+  // or a prior run killed before the session was flushed). The daemon already
+  // clears the stale id so the next turn starts fresh — this is a recoverable
+  // session-lifecycle failure, not an opaque engine crash, so name it and mark
+  // it retryable instead of letting it sit in execution_failed. (#3408 P1)
+  if (isSessionResumeExpiredText(text)) {
+    return classification(
+      'process_exit',
+      'session_resume_expired',
+      'session_init',
+      true,
+      'retry',
+    );
+  }
+
   if (errorCode === 'AGENT_UNAVAILABLE') {
     return classification(
       'process_exit',
@@ -570,7 +620,7 @@ export function classifyRunFailure(
     );
   }
 
-  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text)) {
+  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
     const retryable = retryableHint ?? !isHardQuotaText(text);
     return classification(
       'rate_limit',
