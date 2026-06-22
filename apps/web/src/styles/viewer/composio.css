@@ -331,12 +331,12 @@
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.present-exit:hover { background: white; }
+.present-exit:hover { background: var(--bg-muted); }
 
 /* Picker (legacy in some surfaces) */
 .picker {
