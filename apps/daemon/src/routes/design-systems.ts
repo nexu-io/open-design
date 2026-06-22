@@ -8,13 +8,13 @@ import type {
   DesignSystemRevision,
   DesignSystemSummary,
   UserDesignSystemInput,
-} from '../design-systems.js';
-import type { DesignTokenContractRebuildPreparation } from '../design-token-contract-rebuild.js';
+} from '../design-systems/index.js';
+import type { DesignTokenContractRebuildPreparation } from '../design-systems/token-contract-rebuild.js';
 import type {
   DesignSystemGenerationJob,
   DesignSystemRevisionInput,
   DesignSystemTokenContractRebuildInput,
-} from '../design-system-generation-jobs.js';
+} from '../design-systems/generation-jobs.js';
 import type { openDatabase } from '../db.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
 

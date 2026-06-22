@@ -358,6 +358,72 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
   await expect.poll(() => providerModelRequests.length).toBe(1);
 });
 
+test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI model list', async ({ page }) => {
+  const providerModelRequests: Array<Record<string, unknown>> = [];
+  await page.route('**/api/provider/models', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    providerModelRequests.push(payload);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 15,
+        models: [
+          { id: 'account-only-model', label: 'Account Only Model' },
+        ],
+      }),
+    });
+  });
+
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  const apiKeyInput = dialog.getByLabel('API key');
+  const modelSelect = modelCombobox(dialog);
+
+  await apiKeyInput.fill('sk-openai-test');
+  await apiKeyInput.blur();
+  await expect.poll(() => providerModelRequests.length).toBe(1);
+
+  await modelSelect.click();
+  await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', {
+    name: 'Account Only Model (account-only-model)',
+  })).toBeVisible();
+  await dialog.getByRole('heading', { name: 'OpenAI API' }).click();
+  await expect(page.locator(MODEL_POPOVER_SELECTOR)).toHaveCount(0);
+
+  await expect(apiKeyInput).toBeVisible();
+  await apiKeyInput.fill('');
+  await apiKeyInput.blur();
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiKey: '',
+    model: 'gpt-4o',
+  });
+
+  await modelSelect.click();
+  const popover = page.locator(MODEL_POPOVER_SELECTOR).last();
+  await expect(popover.getByText('gpt-4o', { exact: true })).toBeVisible();
+  await expect(popover.getByText('gpt-4o-mini', { exact: true })).toBeVisible();
+  await expect(popover.getByRole('option', { name: 'Account Only Model (account-only-model)' })).toHaveCount(0);
+});
+
 
 test('[P0] @critical BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
@@ -678,4 +744,77 @@ test('[P0] @critical saving Local CLI updates the entry status pill with the sel
   await expect(executionPill).toContainText(LOCAL_CLI_LABEL);
   await expect(executionPill).toContainText('Codex CLI');
   await expect(executionPill).toContainText('default');
+});
+
+test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated after reopening', async ({ page }) => {
+  test.setTimeout(60_000);
+  await openExecutionSettingsWithAgents(
+    page,
+    {
+      mode: 'api',
+      apiKey: 'sk-openai-test',
+      apiProtocol: 'openai',
+      apiVersion: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+      agentCliEnv: {},
+    },
+    [
+      {
+        id: 'codex',
+        name: 'Codex CLI',
+        bin: 'codex',
+        available: true,
+        version: '0.80.0',
+        models: [
+          { id: 'default', label: 'Default' },
+          { id: 'gpt-5.5', label: 'GPT 5.5' },
+        ],
+      },
+    ],
+  );
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
+  await dialog.getByTestId('settings-agent-select-codex').click();
+  await dialog.getByRole('combobox', { name: 'Model', exact: true }).click();
+  await page.getByTestId('settings-agent-model-popover-codex').getByRole('option', { name: /GPT 5\.5/i }).click();
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    mode: 'daemon',
+    agentId: 'codex',
+    agentModels: {
+      codex: { model: 'gpt-5.5' },
+    },
+  });
+
+  await dialog.getByRole('tab', { name: 'BYOK' }).click();
+  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+  await modelCombobox(dialog).click();
+  await page.getByTestId('settings-byok-model-popover').getByRole('option', { name: /^gpt-4o-mini$/i }).click();
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    mode: 'api',
+    model: 'gpt-4o-mini',
+    agentModels: {
+      codex: { model: 'gpt-5.5' },
+    },
+  });
+
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await openSettingsDialogFromEntry(page);
+  const reopened = page.getByRole('dialog');
+  await expect(reopened.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expectModelComboboxText(reopened, /gpt-4o-mini/i);
+
+  await reopened.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
+  await reopened.getByTestId('settings-agent-select-codex').click();
+  await expect(reopened.getByRole('combobox', { name: 'Model', exact: true })).toContainText(/GPT 5\.5/i);
 });

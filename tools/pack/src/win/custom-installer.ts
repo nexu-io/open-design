@@ -5,7 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import type { ToolPackConfig } from "../config.js";
-import { buildInitialLauncherRuntimeDescriptor, resolveToolPackLauncherLayout } from "../launcher-layout.js";
+import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { winResources } from "../resources.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
@@ -32,6 +32,9 @@ const WIN_NSIS_OVERLAY_RELATIVE_PATHS = [
   "resources/app/package.json",
   "resources/open-design-config.json",
 ] as const;
+
+export const WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS = ["-t7z", "-m0=LZMA2", "-mx=1", "-mf=off"] as const;
+const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 300_000;
 
 function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
@@ -92,9 +95,10 @@ function createNsisLangString(
 
 function createLauncherRuntimeSyncScript(
   config: ToolPackConfig,
-  packagedVersion: string,
   runtimePath: string,
   attemptsPath: string,
+  cleanupPath: string,
+  helperScriptPath: string,
 ): string {
   if (config.portable) {
     return `
@@ -102,26 +106,186 @@ Function SyncLauncherRuntime
 FunctionEnd
 `;
   }
-  const descriptor = buildInitialLauncherRuntimeDescriptor(config, packagedVersion);
-  const descriptorJson = JSON.stringify(descriptor, null, 2).split("\n");
-  const runtimeDir = escapeNsisString(dirname(runtimePath));
+  const helperFileName = escapeNsisString(helperScriptPath.split(/[\\/]/).at(-1) ?? "sync-launcher-runtime.ps1");
   const escapedRuntimePath = escapeNsisString(runtimePath);
   const escapedAttemptsPath = escapeNsisString(attemptsPath);
+  const escapedCleanupPath = escapeNsisString(cleanupPath);
+  const escapedChannel = escapeNsisString(resolveToolPackLauncherLayout(config).channel);
+  const escapedNamespace = escapeNsisString(config.namespace);
 
   return `
 Function SyncLauncherRuntime
   Push $0
-  CreateDirectory "${runtimeDir}"
-  FileOpen $0 "${escapedRuntimePath}" w
-  IfErrors done
-${descriptorJson.map((line) => `  FileWrite $0 "${escapeNsisString(line)}$\\r$\\n"`).join("\n")}
-  FileClose $0
-  Delete "${escapedAttemptsPath}"
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\${helperFileName}" "${escapeNsisString(helperScriptPath)}"
+  nsExec::ExecToLog 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\${helperFileName}" -RuntimePath "${escapedRuntimePath}" -AttemptsPath "${escapedAttemptsPath}" -CleanupPath "${escapedCleanupPath}" -Channel "${escapedChannel}" -Namespace "${escapedNamespace}" -Version "\${APP_VERSION}"'
+  Pop $0
+  Push "launcher runtime sync exit=$0"
+  Call LogInstallerEvent
+  \${If} $0 != "0"
+    DetailPrint "launcher runtime sync failed with exit code $0"
+    Abort
+  \${EndIf}
   Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"
   Call LogInstallerEvent
-done:
   Pop $0
 FunctionEnd
+`;
+}
+
+export function createLauncherRuntimeSyncPowerShellScript(): string {
+  return `param(
+  [Parameter(Mandatory = $true)][string]$RuntimePath,
+  [Parameter(Mandatory = $true)][string]$AttemptsPath,
+  [Parameter(Mandatory = $true)][string]$CleanupPath,
+  [Parameter(Mandatory = $true)][string]$Channel,
+  [Parameter(Mandatory = $true)][string]$Namespace,
+  [Parameter(Mandatory = $true)][string]$Version
+)
+
+$ErrorActionPreference = "Stop"
+
+function Parse-ComparableLauncherVersion {
+  param([Parameter(Mandatory = $true)][string]$Value)
+  $cleaned = ($Value.Trim() -replace '^v', '') -split '\\+', 2 | Select-Object -First 1
+  $nightly = [regex]::Match($cleaned, '^(\\d+)\\.(\\d+)\\.(\\d+)\\.nightly\\.(\\d+)$', 'IgnoreCase')
+  if ($nightly.Success) {
+    return [pscustomobject]@{
+      "Nums" = @([int]$nightly.Groups[1].Value, [int]$nightly.Groups[2].Value, [int]$nightly.Groups[3].Value)
+      "Pre" = @('nightly', $nightly.Groups[4].Value)
+    }
+  }
+
+  $separator = $cleaned.IndexOf('-')
+  $core = if ($separator -lt 0) { $cleaned } else { $cleaned.Substring(0, $separator) }
+  $pre = if ($separator -lt 0) { @() } else { $cleaned.Substring($separator + 1).Split('.') }
+  $parts = $core.Split('.')
+  $nums = @()
+  for ($index = 0; $index -lt 3; $index += 1) {
+    $part = if ($index -lt $parts.Count) { $parts[$index] } else { '' }
+    if ($part -match '^\\d+$') { $nums += [int]$part } else { $nums += 0 }
+  }
+  return [pscustomobject]@{ "Nums" = @($nums); "Pre" = @($pre) }
+}
+
+function Compare-LauncherIdentifier {
+  param([Parameter(Mandatory = $true)][string]$Left, [Parameter(Mandatory = $true)][string]$Right)
+  $leftIsNumber = $Left -match '^\\d+$'
+  $rightIsNumber = $Right -match '^\\d+$'
+  if ($leftIsNumber -and $rightIsNumber) { return [Math]::Sign(([int]$Left) - ([int]$Right)) }
+  if ($leftIsNumber) { return -1 }
+  if ($rightIsNumber) { return 1 }
+  return [Math]::Sign([string]::Compare($Left, $Right, [StringComparison]::Ordinal))
+}
+
+function Compare-LauncherVersions {
+  param([Parameter(Mandatory = $true)][string]$Left, [Parameter(Mandatory = $true)][string]$Right)
+  $leftParsed = Parse-ComparableLauncherVersion $Left
+  $rightParsed = Parse-ComparableLauncherVersion $Right
+  for ($index = 0; $index -lt 3; $index += 1) {
+    $delta = $leftParsed.Nums[$index] - $rightParsed.Nums[$index]
+    if ($delta -ne 0) { return [Math]::Sign($delta) }
+  }
+  if ($leftParsed.Pre.Count -eq 0 -and $rightParsed.Pre.Count -eq 0) { return 0 }
+  if ($leftParsed.Pre.Count -eq 0) { return 1 }
+  if ($rightParsed.Pre.Count -eq 0) { return -1 }
+  $max = [Math]::Max($leftParsed.Pre.Count, $rightParsed.Pre.Count)
+  for ($index = 0; $index -lt $max; $index += 1) {
+    if ($index -ge $leftParsed.Pre.Count) { return -1 }
+    if ($index -ge $rightParsed.Pre.Count) { return 1 }
+    $delta = Compare-LauncherIdentifier ([string]$leftParsed.Pre[$index]) ([string]$rightParsed.Pre[$index])
+    if ($delta -ne 0) { return $delta }
+  }
+  return 0
+}
+
+function New-CleanupEntry {
+  param(
+    [Parameter(Mandatory = $true)][string]$EntryVersion,
+    [Parameter(Mandatory = $true)][int]$EntryGeneration,
+    [Parameter(Mandatory = $true)][string]$EntryReason,
+    [Parameter(Mandatory = $true)][string]$EntryState,
+    [Parameter(Mandatory = $true)][string]$UpdatedAt
+  )
+  $entry = New-Object PSObject
+  $entry | Add-Member -NotePropertyName "generation" -NotePropertyValue $EntryGeneration
+  $entry | Add-Member -NotePropertyName "reason" -NotePropertyValue $EntryReason
+  $entry | Add-Member -NotePropertyName "state" -NotePropertyValue $EntryState
+  $entry | Add-Member -NotePropertyName "updatedAt" -NotePropertyValue $UpdatedAt
+  $entry | Add-Member -NotePropertyName "version" -NotePropertyValue $EntryVersion
+  return $entry
+}
+
+function Get-PointerGeneration {
+  param($Pointer)
+  if ($null -eq $Pointer -or $null -eq $Pointer.generation) { return 0 }
+  try {
+    $generation = [int]$Pointer.generation
+    if ($generation -lt 0) { return 0 }
+    return $generation
+  } catch {
+    return 0
+  }
+}
+
+$previousRuntime = $null
+if (Test-Path -LiteralPath $RuntimePath) {
+  try {
+    $previousRuntime = Get-Content -LiteralPath $RuntimePath -Raw | ConvertFrom-Json
+  } catch {
+    $previousRuntime = $null
+  }
+}
+
+$updatedAt = (Get-Date).ToUniversalTime().ToString("o")
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$pointer = [ordered]@{ "generation" = 0; "version" = $Version }
+$runtime = [ordered]@{
+  "active" = $pointer
+  "channel" = $Channel
+  "lastSuccessful" = $pointer
+  "namespace" = $Namespace
+  "schemaVersion" = 1
+  "updatedAt" = $updatedAt
+}
+
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $RuntimePath) | Out-Null
+[System.IO.File]::WriteAllText($RuntimePath, (($runtime | ConvertTo-Json -Depth 8) + [Environment]::NewLine), $utf8NoBom)
+Remove-Item -LiteralPath $AttemptsPath -Force -ErrorAction SilentlyContinue
+
+if ($null -ne $previousRuntime) {
+  $deprecatedByVersion = @{}
+  foreach ($pointerCandidate in @($previousRuntime.active, $previousRuntime.lastSuccessful)) {
+    if ($null -eq $pointerCandidate -or [string]::IsNullOrWhiteSpace([string]$pointerCandidate.version)) { continue }
+    $candidateVersion = [string]$pointerCandidate.version
+    if ((Compare-LauncherVersions $candidateVersion $Version) -ge 0) { continue }
+    $generation = Get-PointerGeneration $pointerCandidate
+    if ($deprecatedByVersion.ContainsKey($candidateVersion)) {
+      $existing = $deprecatedByVersion[$candidateVersion]
+      if ($generation -gt [int]$existing.generation) {
+        $deprecatedByVersion[$candidateVersion] = New-CleanupEntry $candidateVersion $generation 'older-than-bound-package' 'deprecated' $updatedAt
+      }
+    } else {
+      $deprecatedByVersion[$candidateVersion] = New-CleanupEntry $candidateVersion $generation 'older-than-bound-package' 'deprecated' $updatedAt
+    }
+  }
+
+  if ($deprecatedByVersion.Count -gt 0) {
+    $versions = @()
+    $versions += @($deprecatedByVersion.Values | Sort-Object -Property version)
+    $versions += New-CleanupEntry $Version 0 'current-bound-package' 'retained' $updatedAt
+    $cleanup = [ordered]@{
+      "channel" = $Channel
+      "currentVersion" = $Version
+      "namespace" = $Namespace
+      "updatedAt" = $updatedAt
+      "version" = 1
+      "versions" = $versions
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $CleanupPath) | Out-Null
+    [System.IO.File]::WriteAllText($CleanupPath, (($cleanup | ConvertTo-Json -Depth 8) + [Environment]::NewLine), $utf8NoBom)
+  }
+}
 `;
 }
 
@@ -254,11 +418,17 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const appPathsKey = escapeNsisString(identity.appPathsKey);
   const namespace = escapeNsisString(config.namespace);
   const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
+  const localCacheRoot = `${localDataRoot}\\cache`;
+  const localUpdateDownloadsRoot = `${localDataRoot}\\updates\\downloads`;
+  const localUpdateReleasesRoot = `${localDataRoot}\\updates\\releases`;
+  const localUpdateStagingRoot = `${localDataRoot}\\updates\\staging`;
   const nsisLogPath = escapeNsisString(paths.nsisLogPath);
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
+  const launcherRuntimeSyncScriptPath = join(dirname(paths.installerScriptPath), "sync-launcher-runtime.ps1");
 
   await mkdir(dirname(paths.installerScriptPath), { recursive: true });
   await writeFile(runningInstancesScriptPath, createRunningInstancesScript(), "utf8");
+  await writeFile(launcherRuntimeSyncScriptPath, createLauncherRuntimeSyncPowerShellScript(), "utf8");
   const script = `Unicode true
 ManifestDPIAware true
 RequestExecutionLevel user
@@ -325,6 +495,7 @@ ${createNsisLanguageInserts()}
 ${createNsisLangString("CreateDesktopShortcut", "Create desktop shortcut", { LANG_SIMPCHINESE: "创建桌面快捷方式" })}
 ${createNsisLangString("LaunchApp", `Launch ${productName}`, { LANG_SIMPCHINESE: `启动 ${productName}` })}
 ${createNsisLangString("RemoveDesktopShortcut", "Remove desktop shortcut", { LANG_SIMPCHINESE: "删除桌面快捷方式" })}
+${createNsisLangString("RemoveCacheData", "Delete downloaded update and cache files", { LANG_SIMPCHINESE: "删除已下载的更新和缓存文件" })}
 ${createNsisLangString("RemoveLocalData", "Delete local data for this installation", { LANG_SIMPCHINESE: "删除此安装的本地数据" })}
 ${createNsisLangString("UninstallOptionsTitle", "Uninstall options", { LANG_SIMPCHINESE: "卸载选项" })}
 ${createNsisLangString("UninstallOptionsSubtitle", "Choose which local items to remove.", { LANG_SIMPCHINESE: "选择要删除的本地项目。" })}
@@ -338,8 +509,10 @@ ${createNsisLangString("ExistingInstallMessage", `${productName} is already inst
 ${createNsisLangString("ExistingInstallSilentOverwrite", "Existing installation found; silent install will overwrite it.", { LANG_SIMPCHINESE: "发现已有安装；静默安装将覆盖它。" })}
 
 Var RemoveDesktopShortcutCheckbox
+Var RemoveCacheDataCheckbox
 Var RemoveLocalDataCheckbox
 Var RemoveDesktopShortcutState
+Var RemoveCacheDataState
 Var RemoveLocalDataState
 Var RunningInstancesOutput
 Var ExistingInstallLocation
@@ -387,7 +560,13 @@ write:
   Call LogInstallerEvent
 FunctionEnd
 
-${createLauncherRuntimeSyncScript(config, packagedVersion, launcher.paths.runtimePath, launcher.paths.attemptsPath)}
+${createLauncherRuntimeSyncScript(
+  config,
+  launcher.paths.runtimePath,
+  launcher.paths.attemptsPath,
+  launcher.paths.cleanupPath,
+  launcherRuntimeSyncScriptPath,
+)}
 
 Function un.LogInstallerEvent
   Exch $0
@@ -418,6 +597,7 @@ FunctionEnd
 
 Function un.onInit
   StrCpy $RemoveDesktopShortcutState "\${BST_CHECKED}"
+  StrCpy $RemoveCacheDataState "\${BST_CHECKED}"
   StrCpy $RemoveLocalDataState 0
 FunctionEnd
 
@@ -660,7 +840,11 @@ Function un.UninstallOptionsPage
   Pop $RemoveDesktopShortcutCheckbox
   \${NSD_Check} $RemoveDesktopShortcutCheckbox
 
-  \${NSD_CreateCheckbox} 0 18u 100% 12u "$(RemoveLocalData)"
+  \${NSD_CreateCheckbox} 0 18u 100% 12u "$(RemoveCacheData)"
+  Pop $RemoveCacheDataCheckbox
+  \${NSD_Check} $RemoveCacheDataCheckbox
+
+  \${NSD_CreateCheckbox} 0 36u 100% 12u "$(RemoveLocalData)"
   Pop $RemoveLocalDataCheckbox
 
   nsDialogs::Show
@@ -669,9 +853,11 @@ FunctionEnd
 
 Function un.UninstallOptionsPageLeave
   StrCpy $RemoveDesktopShortcutState "\${BST_CHECKED}"
+  StrCpy $RemoveCacheDataState "\${BST_CHECKED}"
   StrCpy $RemoveLocalDataState 0
   IfSilent done
   \${NSD_GetState} $RemoveDesktopShortcutCheckbox $RemoveDesktopShortcutState
+  \${NSD_GetState} $RemoveCacheDataCheckbox $RemoveCacheDataState
   \${NSD_GetState} $RemoveLocalDataCheckbox $RemoveLocalDataState
 done:
 FunctionEnd
@@ -696,6 +882,41 @@ Function un.RemoveLocalDataRoot
   Call un.LogInstallerEvent
   Pop $0
   !insertmacro UN_LOG_PATH_STATE "local_data_after_remove" "${localDataRoot}"
+FunctionEnd
+
+Function un.RemoveCacheDataRoots
+  !insertmacro UN_LOG_PATH_STATE "cache_root_before_remove" "${localCacheRoot}"
+  !insertmacro UN_LOG_PATH_STATE "update_downloads_before_remove" "${localUpdateDownloadsRoot}"
+  !insertmacro UN_LOG_PATH_STATE "update_releases_before_remove" "${localUpdateReleasesRoot}"
+  !insertmacro UN_LOG_PATH_STATE "update_staging_before_remove" "${localUpdateStagingRoot}"
+  Push $0
+  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "${localCacheRoot}" rmdir /s /q "\\\\?\\${localCacheRoot}"'
+  Pop $0
+  Push "cache root remove exit=$0"
+  Call un.LogInstallerEvent
+  Pop $0
+  Push $0
+  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "${localUpdateDownloadsRoot}" rmdir /s /q "\\\\?\\${localUpdateDownloadsRoot}"'
+  Pop $0
+  Push "update downloads remove exit=$0"
+  Call un.LogInstallerEvent
+  Pop $0
+  Push $0
+  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "${localUpdateReleasesRoot}" rmdir /s /q "\\\\?\\${localUpdateReleasesRoot}"'
+  Pop $0
+  Push "update releases remove exit=$0"
+  Call un.LogInstallerEvent
+  Pop $0
+  Push $0
+  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "${localUpdateStagingRoot}" rmdir /s /q "\\\\?\\${localUpdateStagingRoot}"'
+  Pop $0
+  Push "update staging remove exit=$0"
+  Call un.LogInstallerEvent
+  Pop $0
+  !insertmacro UN_LOG_PATH_STATE "cache_root_after_remove" "${localCacheRoot}"
+  !insertmacro UN_LOG_PATH_STATE "update_downloads_after_remove" "${localUpdateDownloadsRoot}"
+  !insertmacro UN_LOG_PATH_STATE "update_releases_after_remove" "${localUpdateReleasesRoot}"
+  !insertmacro UN_LOG_PATH_STATE "update_staging_after_remove" "${localUpdateStagingRoot}"
 FunctionEnd
 
 Section "Install"
@@ -787,6 +1008,9 @@ after_desktop_shortcut:
   DeleteRegKey HKCU "${appPathsKey}"
   Push "event=registry_after_delete key=${registryKey} appPathsKey=${appPathsKey}"
   Call un.LogInstallerEvent
+  \${If} $RemoveCacheDataState == \${BST_CHECKED}
+    Call un.RemoveCacheDataRoots
+  \${EndIf}
   \${If} $RemoveLocalDataState == \${BST_CHECKED}
     Call un.RemoveLocalDataRoot
   \${EndIf}
@@ -840,7 +1064,7 @@ function createWinNsisTimingHelpers() {
     phase: string,
     command: string,
     args: string[],
-    options: { cwd: string; outputPath?: string },
+    options: { cwd: string; outputPath?: string; timeoutMs?: number },
   ): Promise<void> => {
     const startedAt = Date.now();
     const details: Record<string, unknown> = {
@@ -852,6 +1076,7 @@ function createWinNsisTimingHelpers() {
     try {
       const result = await execFileAsync(command, args, {
         cwd: options.cwd,
+        timeout: options.timeoutMs,
         windowsHide: true,
       });
       details.stdoutBytes = result.stdout.length;
@@ -865,10 +1090,16 @@ function createWinNsisTimingHelpers() {
       logWinInstallerProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
       timings.push({ details, durationMs: Date.now() - startedAt, phase });
     } catch (error) {
-      const failure = error as { code?: unknown; stderr?: unknown; stdout?: unknown };
+      const failure = error as { code?: unknown; killed?: unknown; signal?: unknown; stderr?: unknown; stdout?: unknown };
       details.code = failure.code;
+      details.killed = failure.killed;
+      details.signal = failure.signal;
       details.stdoutTail = typeof failure.stdout === "string" ? failure.stdout.slice(-2000) : undefined;
       details.stderrTail = typeof failure.stderr === "string" ? failure.stderr.slice(-2000) : undefined;
+      if (options.outputPath != null && await pathExists(options.outputPath)) {
+        details.outputBytes = (await stat(options.outputPath)).size;
+        details.outputPath = options.outputPath;
+      }
       logWinInstallerProgress("segment:failed", {
         durationMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error),
@@ -903,7 +1134,7 @@ async function buildWinNsisPayloadArchive(
       `${phasePrefix}:process`,
       winResources.sevenZipExe,
       archiveArgs,
-      { cwd: builtApp.unpackedRoot, outputPath },
+      { cwd: builtApp.unpackedRoot, outputPath, timeoutMs: WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS },
     );
   });
   return timings;
@@ -930,9 +1161,7 @@ export async function buildWinNsisBasePayload(
     "nsis:payload-base-7z",
     [
       "a",
-      "-t7z",
-      "-mx=1",
-      "-ms=off",
+      ...WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS,
       paths.installerBasePayloadPath,
       ".\\*",
       ...WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => `-x!${normalizeArchivePath(relativePath)}`),
@@ -966,13 +1195,11 @@ export async function buildWinNsisOverlayPayload(
         winResources.sevenZipExe,
         [
           "a",
-          "-t7z",
-          "-mx=1",
-          "-ms=off",
+          ...WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS,
           paths.installerOverlayPayloadPath,
           ".\\*",
         ],
-        { cwd: stageRoot, outputPath: paths.installerOverlayPayloadPath },
+        { cwd: stageRoot, outputPath: paths.installerOverlayPayloadPath, timeoutMs: WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS },
       );
     });
   } finally {

@@ -6,10 +6,10 @@ import {
   type ChatSessionMode,
   type PluginManifest,
 } from '@open-design/contracts';
-import { createProjectArtifactFile } from './artifact-create.js';
-import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
-import { ArtifactRegressionError } from './artifact-stub-guard.js';
-import { listDesignSystems } from './design-systems.js';
+import { createProjectArtifactFile } from './artifacts/create.js';
+import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
+import { ArtifactRegressionError } from './artifacts/stub-guard.js';
+import { listDesignSystems } from './design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
@@ -755,6 +755,151 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
     return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
+}
+
+// ---------------------------------------------------------------------------
+// Teams-safe title sanitization for the URL-load preview path (issue #3918).
+//
+// When a user prints an HTML preview via Cmd+P → "Save as PDF", Chromium uses
+// the iframe's document <title> as the default filename. The URL-load iframe
+// uses sandbox="allow-scripts allow-downloads" (no allow-same-origin), so the
+// host page cannot access contentDocument to rewrite the title after load.
+// Instead we rewrite it here, in the daemon response, before the browser
+// parses the document. The web srcDoc path has its own sanitizeTitleInDoc in
+// apps/web/src/runtime/srcdoc.ts — keep the two in sync when the logic changes.
+// ---------------------------------------------------------------------------
+
+/** Named non-ASCII entities common in business/design document titles. */
+const DAEMON_NAMED_ENTITY_MAP: Record<string, string> = {
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
+  aelig: 'æ', ccedil: 'ç',
+  egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
+  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï',
+  eth: 'ð', ntilde: 'ñ',
+  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø',
+  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü',
+  yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
+  AElig: 'Æ', Ccedil: 'Ç',
+  Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
+  Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï',
+  ETH: 'Ð', Ntilde: 'Ñ',
+  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', Oslash: 'Ø',
+  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü',
+  Yacute: 'Ý', THORN: 'Þ',
+  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’',
+  ldquo: '“', rdquo: '”', hellip: '…', trade: '™', reg: '®',
+  copy: '©', deg: '°', euro: '€', pound: '£', yen: '¥',
+};
+
+function daemonSafeFromCodePoint(cp: number): string {
+  if (cp < 0 || cp > 0x10ffff) return '�';
+  return String.fromCodePoint(cp);
+}
+
+function daemonDecodeHtmlEntitiesForTitle(encoded: string): string {
+  return encoded
+    .replace(/&([A-Za-z]+);/g, (match: string, name: string) => DAEMON_NAMED_ENTITY_MAP[name] ?? match)
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_: string, n: string) => daemonSafeFromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_: string, h: string) => daemonSafeFromCodePoint(parseInt(h, 16)));
+}
+
+function daemonSanitizePreviewTitle(text: string): string {
+  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
+  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
+  let result = text.trim();
+  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
+  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
+  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
+  let prev: string;
+  do {
+    prev = result;
+    result = result.replace(/^~\$/, '').trim();
+  } while (result !== prev);
+  // Replace each disallowed character (or run of them) with a single hyphen.
+  // Character class: : # % & * { } \ < > ? / + | "
+  // eslint-disable-next-line no-useless-escape
+  result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
+  // Final trim to remove any spaces exposed by the substitution.
+  return result.trim();
+}
+
+/**
+ * Find the offset of the first real `<title>` tag in html[0..searchLimit)
+ * that is not inside an HTML comment or a `<script>`/`<style>` block.
+ * Returns -1 if no real title is found.
+ */
+function daemonFindRealTitleOffset(html: string, searchLimit: number): number {
+  let i = 0;
+  const limit = Math.min(html.length, searchLimit);
+  while (i < limit) {
+    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
+      const end = html.indexOf('-->', i + 4);
+      if (end < 0) return -1;
+      i = end + 3;
+      continue;
+    }
+    if (html.charCodeAt(i) === 60 /* < */) {
+      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
+      if (tagMatch) {
+        const closingTag = `</${tagMatch[1]}`;
+        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
+        if (end < 0) return -1;
+        const closeEnd = html.indexOf('>', end);
+        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
+        continue;
+      }
+    }
+    if (html.charCodeAt(i) === 60 /* < */) {
+      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+/**
+ * Rewrite the `<title>` in html so the resulting PDF filename is Teams-safe.
+ * Only the real `<head>` title is changed; `<title>` inside comments or script
+ * blocks is left untouched. Mirrors sanitizeTitleInDoc in srcdoc.ts.
+ *
+ * Exported for unit testing; not part of the public API surface.
+ */
+export function daemonSanitizeTitleInDoc(html: string): string {
+  const lower = html.toLowerCase();
+  const bodyStart = lower.indexOf('<body');
+  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
+  const searchLimit = headEnd >= 0
+    ? headEnd + 7
+    : bodyStart >= 0
+      ? bodyStart
+      : html.length;
+
+  const titleStart = daemonFindRealTitleOffset(html, searchLimit);
+  if (titleStart < 0) return html;
+
+  const openTagEnd = html.indexOf('>', titleStart);
+  if (openTagEnd < 0) return html;
+
+  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
+  if (closingTagStart < 0) return html;
+
+  const closingTagEnd = html.indexOf('>', closingTagStart);
+  if (closingTagEnd < 0) return html;
+
+  const openTag = html.slice(titleStart, openTagEnd + 1);
+  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
+  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+
+  const decoded = daemonDecodeHtmlEntitiesForTitle(rawContent);
+  const safe = daemonSanitizePreviewTitle(decoded);
+
+  return html.slice(0, titleStart) + openTag + safe + closeTag + html.slice(closingTagEnd + 1);
 }
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
@@ -2364,6 +2509,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             /^text\/html(?:;|$)/i.test(file.mime)
           ) {
             let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
+            // Sanitize the <title> so Cmd+P → "Save as PDF" produces a
+            // Teams-safe filename. The URL-load iframe uses sandbox without
+            // allow-same-origin, so the host cannot rewrite contentDocument.title
+            // after load — we must do it here in the response. The srcDoc path
+            // has its own sanitization in buildSrcdoc (apps/web/src/runtime/srcdoc.ts).
+            html = daemonSanitizeTitleInDoc(html);
             if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'scroll');
             }

@@ -358,6 +358,25 @@ function proposalActionLabel(action: AutomationEvolutionProposal['action'], t: T
   return t('automations.proposalActionPromote');
 }
 
+function mergeAutomationProposals(
+  current: AutomationEvolutionProposal[],
+  incoming: AutomationEvolutionProposal[],
+): AutomationEvolutionProposal[] {
+  const merged = new Map(current.map((proposal) => [proposal.id, proposal]));
+  for (const proposal of incoming) {
+    merged.set(proposal.id, proposal);
+  }
+  return Array.from(merged.values()).sort((a, b) => {
+    const bTime = Date.parse(b.createdAt);
+    const aTime = Date.parse(a.createdAt);
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  });
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -411,7 +430,8 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     [templates, templateFilter],
   );
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<{ proposalRefreshFailed: boolean }> => {
+    let proposalRefreshFailed = false;
     try {
       const templateRequest = fetch('/api/automation-templates')
         .then(async (res) => {
@@ -421,10 +441,16 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         .catch(() => null);
       const proposalRequest = fetch('/api/automation-proposals?status=pending-review')
         .then(async (res) => {
-          if (!res.ok) return null;
+          if (!res.ok) {
+            proposalRefreshFailed = true;
+            return null;
+          }
           return (await res.json()) as AutomationEvolutionProposalListResponse;
         })
-        .catch(() => null);
+        .catch(() => {
+          proposalRefreshFailed = true;
+          return null;
+        });
       const [rRes, pRes, tJson, proposalJson] = await Promise.all([
         fetch('/api/routines'),
         fetch('/api/projects'),
@@ -451,10 +477,11 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       }
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
+    return { proposalRefreshFailed };
   }, []);
 
   useEffect(() => {
@@ -499,7 +526,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setProposalBusyId(null);
     }
@@ -528,7 +555,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       setExpandedId(id);
       setHistoryTick((tick) => tick + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -545,9 +572,23 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `crystallize failed: ${res.status}`);
       }
-      await refresh();
+      const json = (await res.json()) as RoutineRunCrystallizeResponse;
+      const createdProposals = Array.isArray(json.proposals) ? json.proposals : [];
+      if (createdProposals.length > 0) {
+        setProposals((current) => mergeAutomationProposals(current, createdProposals));
+      }
+      const { proposalRefreshFailed } = await refresh();
+      if (proposalRefreshFailed) {
+        setError(
+          createdProposals.length > 0
+            ? t('automations.crystallizePartialSuccess')
+            : t('automations.crystallizeRefreshFailed'),
+        );
+      } else if (createdProposals.length === 0) {
+        setError(t('automations.crystallizeNoProposals'));
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(t('automations.crystallizeFailed', { error: errorMessage(err) }));
     } finally {
       setCrystallizingRunId(null);
     }
@@ -567,7 +608,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       }
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -586,7 +627,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       if (expandedId === id) setExpandedId(null);
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     } finally {
       setBusyId(null);
     }

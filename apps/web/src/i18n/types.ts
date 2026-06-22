@@ -136,6 +136,13 @@ export interface Dict {
   'settings.onboardingNewsletterBody': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
+  'settings.onboardingCloudTitle': string;
+  'settings.onboardingCloudBody': string;
+  'settings.onboardingCloudSignIn': string;
+  'settings.onboardingCloudContinue': string;
+  'settings.onboardingCloudAlternative': string;
+  'settings.onboardingCloudOr': string;
+  'settings.onboardingCloudRights': string;
   'settings.onboardingGateTooltipNoRuntime': string;
   'settings.onboardingGateTooltipAmr': string;
   'settings.onboardingGateTooltipLocal': string;
@@ -180,7 +187,7 @@ export interface Dict {
   'settings.onboardingRolePm': string;
   'settings.onboardingRoleDesigner': string;
   'settings.onboardingRoleEngineer': string;
-  'settings.onboardingRoleMarketing': string;
+  'settings.onboardingRoleAgency': string;
   'settings.onboardingRoleGrowth': string;
   'settings.onboardingRoleOps': string;
   'settings.onboardingRoleFounder': string;
@@ -209,7 +216,6 @@ export interface Dict {
   'settings.onboardingBack': string;
   'settings.onboardingContinue': string;
   'settings.onboardingFinish': string;
-  'settings.onboardingSkip': string;
   'settings.kicker': string;
   'settings.title': string;
   'settings.subtitle': string;
@@ -1447,6 +1453,10 @@ export interface Dict {
   'automations.crystallize': string;
   'automations.crystallizing': string;
   'automations.crystallizeTitle': string;
+  'automations.crystallizeFailed': string;
+  'automations.crystallizePartialSuccess': string;
+  'automations.crystallizeRefreshFailed': string;
+  'automations.crystallizeNoProposals': string;
   'automations.openConversation': string;
   'automations.runHistoryAria': string;
   'automations.proposalsAria': string;

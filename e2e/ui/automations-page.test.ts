@@ -180,10 +180,13 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toContainText('No templates in this category yet.');
   });
 
-  test('[P0] creates an automation from the page and runs it into a project conversation', async ({ page }) => {
+  test('[P0] @critical creates an automation from the page and runs it into a project conversation', async ({ page }) => {
     await seedAutomationsBase(page);
 
-    const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
+    const projects = [
+      { id: 'proj-1', name: 'Routine Test Project' },
+      { id: 'proj-run', name: 'Automation Run Project' },
+    ];
     let routines: Array<Record<string, unknown>> = [];
     const createBodies: Array<Record<string, unknown>> = [];
 
@@ -307,6 +310,19 @@ test.describe('Automations page', () => {
     const row = view.locator('.automation-row', { hasText: 'Weekly digest' }).first();
     await row.getByRole('button', { name: 'Run' }).click();
     await expect(page).toHaveURL(/\/projects\/proj-run/);
+
+    await page.goto('/tasks', { waitUntil: 'domcontentloaded' });
+    await waitForLoadingToClear(page);
+    const refreshedView = page.getByTestId('tasks-view');
+    const refreshedRow = refreshedView.locator('.automation-row', { hasText: 'Weekly digest' }).first();
+    await expect(refreshedRow).toContainText(/Queued|Running|Manual/i);
+    await expect(refreshedRow.getByRole('button', { name: /Open result/i })).toBeVisible();
+
+    await page.reload();
+    await waitForLoadingToClear(page);
+    const reloadedRow = page.getByTestId('tasks-view').locator('.automation-row', { hasText: 'Weekly digest' }).first();
+    await expect(reloadedRow).toContainText(/Queued|Running|Manual/i);
+    await expect(reloadedRow.getByRole('button', { name: /Open result/i })).toBeVisible();
   });
 
   test('[P1] places a newly created automation at the top of the list and highlights it', async ({ page }) => {
@@ -1513,7 +1529,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toHaveCount(0);
   });
 
-  test('[P1] creates an automation from a catalog template with derived prompt context', async ({ page }) => {
+  test('[P0] @critical creates an automation from a catalog template with derived prompt context', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const createBodies: Array<Record<string, unknown>> = [];

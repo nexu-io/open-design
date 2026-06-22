@@ -5,6 +5,7 @@ import {
   gotoVisualHome,
   gotoVisualWorkspace,
   openAvatarMenu,
+  openSettingsDetailsFromHeader,
   VISUAL_AMR_AGENT,
   VISUAL_CLI_AGENTS,
   waitForVisualFonts,
@@ -34,6 +35,38 @@ test('[P2] captures the workspace staged contexts surface', async ({ page }) => 
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-workspace-staged-contexts');
+});
+
+test('[P1] @critical captures CSS hotspot workspace, preview, and settings surfaces', async ({ page }) => {
+  test.setTimeout(90_000);
+
+  await configureVisualPage(page);
+  await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
+
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await waitForVisualFonts(page);
+  await captureVisual(page, 'visual-critical-workspace');
+
+  await page.getByTestId('design-files-tab').click();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  const fileRow = page.getByTestId('design-file-row-index.html');
+  await expect(fileRow).toBeVisible();
+  await fileRow.getByRole('button').first().click();
+  const preview = page.getByTestId('design-file-preview');
+  await expect(preview).toBeVisible();
+  await preview.getByRole('button', { name: /^Open$/ }).click();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+      name: 'Visual CSS Smoke',
+    }),
+  ).toBeVisible();
+  await captureVisual(page, 'visual-critical-workspace-preview');
+
+  const dialog = await openSettingsDetailsFromHeader(page);
+  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  await captureVisual(page, 'visual-critical-settings');
 });
 
 test('[P2] captures the topbar execution switcher surface', async ({ page }) => {
