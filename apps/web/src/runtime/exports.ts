@@ -1035,6 +1035,67 @@ export async function exportAsPdf(
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+/**
+ * A reported print size is only usable when both dimensions are positive,
+ * finite numbers. The desktop bridge (apps/desktop/src/main/pdf-export.ts
+ * inferPageSize) sizes the PDF page to this; a zero/invalid size makes it
+ * fall back to measuring the wrapper viewport, which — per that function's
+ * own docs — blanks artifacts whose visible content sits below the fold.
+ * Exported so the injected handshake/cache scripts and unit tests share one
+ * definition. See issue #4458.
+ */
+export function isUsablePrintSize(width: unknown, height: unknown): boolean {
+  return (
+    typeof width === 'number' &&
+    typeof height === 'number' &&
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+  );
+}
+
+/**
+ * Poll `measure` once per animation frame until it returns a usable
+ * (positive, finite) size, then call `report` with it. Bounded by
+ * `maxFrames`: a genuinely empty artifact never gains a usable size, so the
+ * last measurement is reported best-effort rather than hanging the desktop
+ * readiness handshake forever.
+ *
+ * This fixes one #4458 blank-PDF path: the in-iframe handshake used to
+ * report the content size after a fixed two animation frames, which can fire
+ * before a heavier artifact has finished layout (size still 0). The desktop
+ * bridge then has no usable `__odPrintSize`, falls back to the wrapper
+ * viewport, and prints a blank page. Waiting for a non-zero size avoids that.
+ *
+ * Injected into the handshake via `toString()`; the function is self-contained
+ * (no references to other module symbols) so production minification cannot
+ * break the injected copy. The `raf` seam keeps it unit-testable.
+ */
+export function reportPrintSizeWhenStable(
+  measure: () => { width: number; height: number },
+  report: (size: { width: number; height: number }) => void,
+  maxFrames: number,
+  raf: (cb: () => void) => void = (cb) => requestAnimationFrame(() => cb()),
+): void {
+  const usable = (w: number, h: number): boolean =>
+    typeof w === 'number' &&
+    typeof h === 'number' &&
+    Number.isFinite(w) &&
+    Number.isFinite(h) &&
+    w > 0 &&
+    h > 0;
+  const step = (remaining: number): void => {
+    const size = measure();
+    if (usable(size.width, size.height) || remaining <= 0) {
+      report(size);
+      return;
+    }
+    raf(() => step(remaining - 1));
+  };
+  step(maxFrames);
+}
+
 function injectPrintScript(doc: string, title: string): string {
   const safeTitle = JSON.stringify(title || 'artifact');
   // Browser fallback PDF export shares the same print-readiness signal as the
@@ -1071,7 +1132,7 @@ function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // The nonce is a per-export random UUID that verifies the readiness signal
   // came from our injected handshake, not a spoofed message from untrusted
   // artifact code.
-  const script = `<script data-od-print-ready>(function(){window.parent.postMessage({type:'OD_PRINT_READY_STARTED',nonce:'${nonce}'},'*');function waitForImages(){var imgs=Array.from(document.images).filter(function(img){if(img.loading==='lazy')img.loading='eager';return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}function cssUrlValues(value){var urls=[];if(!value||value==='none')return urls;value.replace(/url\\((['"]?)(.*?)\\1\\)/g,function(_,q,rawUrl){if(rawUrl&&!/^data:/i.test(rawUrl))urls.push(rawUrl);return''});return urls}function waitForCssBackgroundImages(){var urls=new Set();Array.from(document.querySelectorAll('*')).forEach(function(el){var style=window.getComputedStyle(el);cssUrlValues(style.backgroundImage).forEach(function(url){urls.add(url)});cssUrlValues(style.borderImageSource).forEach(function(url){urls.add(url)});cssUrlValues(style.listStyleImage).forEach(function(url){urls.add(url)})});return Promise.all(Array.from(urls).map(function(url){return new Promise(function(r){var img=new Image();img.onload=r;img.onerror=r;img.src=url})}))}function nextFrame(){return new Promise(function(r){requestAnimationFrame(function(){r(true)})})}Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){return Promise.all([waitForImages(),waitForCssBackgroundImages()])}).then(nextFrame).then(nextFrame).then(function(){var de=document.documentElement;var b=document.body||de;var w=Math.max(de.scrollWidth,b.scrollWidth,de.offsetWidth,b.offsetWidth);var h=Math.max(de.scrollHeight,b.scrollHeight,de.offsetHeight,b.offsetHeight);window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}',width:w,height:h},'*')})})();<\/script>`;
+  const script = `<script data-od-print-ready>(function(){window.parent.postMessage({type:'OD_PRINT_READY_STARTED',nonce:'${nonce}'},'*');function waitForImages(){var imgs=Array.from(document.images).filter(function(img){if(img.loading==='lazy')img.loading='eager';return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}function cssUrlValues(value){var urls=[];if(!value||value==='none')return urls;value.replace(/url\\((['"]?)(.*?)\\1\\)/g,function(_,q,rawUrl){if(rawUrl&&!/^data:/i.test(rawUrl))urls.push(rawUrl);return''});return urls}function waitForCssBackgroundImages(){var urls=new Set();Array.from(document.querySelectorAll('*')).forEach(function(el){var style=window.getComputedStyle(el);cssUrlValues(style.backgroundImage).forEach(function(url){urls.add(url)});cssUrlValues(style.borderImageSource).forEach(function(url){urls.add(url)});cssUrlValues(style.listStyleImage).forEach(function(url){urls.add(url)})});return Promise.all(Array.from(urls).map(function(url){return new Promise(function(r){var img=new Image();img.onload=r;img.onerror=r;img.src=url})}))}function nextFrame(){return new Promise(function(r){requestAnimationFrame(function(){r(true)})})}Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){return Promise.all([waitForImages(),waitForCssBackgroundImages()])}).then(nextFrame).then(nextFrame).then(function(){var __odReport=${reportPrintSizeWhenStable.toString()};function measure(){var de=document.documentElement;var b=document.body||de;return {width:Math.max(de.scrollWidth,b.scrollWidth,de.offsetWidth,b.offsetWidth),height:Math.max(de.scrollHeight,b.scrollHeight,de.offsetHeight,b.offsetHeight)}}__odReport(measure,function(size){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}',width:size.width,height:size.height},'*')},30)})})();<\/script>`;
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${script}</head>`);
   if (/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, `${script}</body>`);
   return doc + script;
@@ -1087,7 +1148,7 @@ function injectParentPrintReadyCache(doc: string, nonce: string): string {
   // either signal. window.__odPrintReadyStarted distinguishes a live handshake
   // from a CSP-blocked one so the browser fallback can preserve the historical
   // quick print path when the inner script never runs.
-  const script = `<script>window.__odPrintReady=false;window.__odPrintReadyStarted=false;window.__odPrintSize=null;window.addEventListener('message',function(e){if(e.data&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0]))){if(e.data.type==='OD_PRINT_READY_STARTED'){window.__odPrintReadyStarted=true;return}if(e.data.type==='OD_PRINT_READY'){window.__odPrintReady=true;if(Number.isFinite(e.data.width)&&Number.isFinite(e.data.height)&&e.data.width>0&&e.data.height>0)window.__odPrintSize={width:e.data.width,height:e.data.height}}}});<\/script>`;
+  const script = `<script>window.__odPrintReady=false;window.__odPrintReadyStarted=false;window.__odPrintSize=null;var __odUsable=${isUsablePrintSize.toString()};window.addEventListener('message',function(e){if(e.data&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0]))){if(e.data.type==='OD_PRINT_READY_STARTED'){window.__odPrintReadyStarted=true;return}if(e.data.type==='OD_PRINT_READY'){window.__odPrintReady=true;if(__odUsable(e.data.width,e.data.height))window.__odPrintSize={width:e.data.width,height:e.data.height}}}});<\/script>`;
   if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
   return script + doc;
 }
