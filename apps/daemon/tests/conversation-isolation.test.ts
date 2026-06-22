@@ -11,13 +11,13 @@ import path from 'node:path';
 
 import {
   closeDatabase,
+  getAgentSession,
   getConversation,
   insertConversation,
   insertProject,
   openDatabase,
   upsertAgentSession,
 } from '../src/db.js';
-import { resolveAgentResumeContext } from '../src/agent-session-resume.js';
 import { isCrossProjectConversation } from '../src/conversation-isolation.js';
 
 describe('isCrossProjectConversation', () => {
@@ -71,14 +71,10 @@ describe('project isolation guard against cross-project session resume (#4594)',
       sessionId: 'godot-session',
     });
 
-    // The leak this guards against: the resume lookup is keyed only on the
-    // conversation, so it would hand a run the Godot session regardless of which
-    // project the run targets.
-    const resume = resolveAgentResumeContext(db, {
-      conversationId: 'conv-godot',
-      agentId: 'claude',
-    });
-    expect(resume.resumeSessionId).toBe('godot-session');
+    // The leak this guards against: the agent session is keyed only on the
+    // (conversation, agent), so it would be handed to any run citing that
+    // conversation regardless of which project the run targets.
+    expect(getAgentSession(db, 'conv-godot', 'claude')).toBe('godot-session');
 
     const conversation = getConversation(db, 'conv-godot');
     expect(conversation?.projectId).toBe('proj-godot');

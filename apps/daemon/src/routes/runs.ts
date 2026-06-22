@@ -31,7 +31,8 @@ import {
   readCodexRolloutFirstCall,
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
-import { getProject, listConversations, updateProject, upsertMessage } from '../db.js';
+import { getConversation, getProject, listConversations, updateProject, upsertMessage } from '../db.js';
+import { isCrossProjectConversation } from '../conversation-isolation.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,
@@ -481,6 +482,34 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    // Project isolation (#4594): reject a run whose conversation belongs to a
+    // different project BEFORE any plugin-snapshot linking, run creation, or
+    // assistant-message pinning can write state against the foreign
+    // conversation. The chat-run path has a matching guard before session
+    // resume, but it runs after this route already persists; refusing here
+    // keeps the mismatch from contaminating the other project's conversation
+    // at all.
+    if (
+      typeof requestBody.conversationId === 'string' &&
+      requestBody.conversationId &&
+      typeof requestBody.projectId === 'string' &&
+      requestBody.projectId
+    ) {
+      const requestedConversation = getConversation(db, requestBody.conversationId);
+      if (
+        isCrossProjectConversation(
+          requestedConversation?.projectId,
+          requestBody.projectId,
+        )
+      ) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          `conversation ${requestBody.conversationId} belongs to a different project than ${requestBody.projectId}`,
+        );
+      }
     }
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {

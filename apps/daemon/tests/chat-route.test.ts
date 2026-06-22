@@ -442,6 +442,67 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('refuses POST /api/runs when the conversation belongs to a different project and writes no foreign state (#4594)', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for project-isolation tests');
+    }
+    const projectA = `proj-${randomUUID()}`;
+    const projectB = `proj-${randomUUID()}`;
+
+    // Project A and its auto-created default conversation.
+    const createA = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectA, name: 'Project A (iOS)' }),
+    });
+    expect(createA.ok).toBe(true);
+    const convResp = await fetch(`${baseUrl}/api/projects/${projectA}/conversations`);
+    const convBody = (await convResp.json()) as { conversations: Array<{ id: string }> };
+    const conversationA = convBody.conversations[0]?.id;
+    expect(conversationA).toBeTruthy();
+
+    // Project B is the run target.
+    const createB = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectB, name: 'Project B (Godot)' }),
+    });
+    expect(createB.ok).toBe(true);
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    const countMessages = (conversationId: string): number => {
+      const sqlite = new Database(dbFile, { readonly: true });
+      try {
+        const row = sqlite
+          .prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?')
+          .get(conversationId) as { n: number };
+        return row.n;
+      } finally {
+        sqlite.close();
+      }
+    };
+
+    const before = countMessages(conversationA!);
+
+    // A run for project B that cites project A's conversation must be refused
+    // before any state is written against project A's conversation.
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        projectId: projectB,
+        conversationId: conversationA,
+        message: 'create a screen',
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('BAD_REQUEST');
+
+    // No assistant/user message may have been pinned into the foreign conversation.
+    expect(countMessages(conversationA!)).toBe(before);
+  });
+
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
