@@ -32,6 +32,12 @@ import {
   stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
+import {
+  splitOnOdCards,
+  stripTrailingOpenOdCard,
+  type OdCard,
+} from "@open-design/contracts";
+import { OdCardView } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
@@ -1918,14 +1924,15 @@ function ProseBlock({
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; we surface a banner for it instead. The actual
-  // form streams into the right-hand Questions tab.
-  const { text: visibleText, hadOpenForm } = useMemo(
-    () =>
-      isLastAssistant && streaming
-        ? stripTrailingOpenQuestionForm(cleaned)
-        : { text: cleaned, hadOpenForm: false },
-    [cleaned, isLastAssistant, streaming],
-  );
+  // form streams into the right-hand Questions tab. A not-yet-closed
+  // `<od-card>{…` block is stripped the same way so its raw JSON doesn't flash
+  // before the close tag arrives (the card renders inline once complete).
+  const { text: visibleText, hadOpenForm } = useMemo(() => {
+    if (!(isLastAssistant && streaming)) return { text: cleaned, hadOpenForm: false };
+    const form = stripTrailingOpenQuestionForm(cleaned);
+    const card = stripTrailingOpenOdCard(form.text);
+    return { text: card.text, hadOpenForm: form.hadOpenForm };
+  }, [cleaned, isLastAssistant, streaming]);
   // While an `<artifact type="text/html">` is still streaming (no closing tag
   // yet), surface its body in a live code panel instead of leaking the raw
   // tag + half-written HTML as Markdown text. Once it closes, stripArtifact
@@ -1949,33 +1956,37 @@ function ProseBlock({
       onRequestOpenFile(path);
     };
   }, [onRequestOpenFile, projectFileNames, projectId]);
-  // Each text segment is further split on `<system-reminder>` blocks so
-  // those render as their own collapsible chip instead of raw markup.
-  const renderable = segments.flatMap(
-    (
-      seg,
-      idx
-    ): Array<
-      | { key: string; kind: "text"; text: string }
-      | { key: string; kind: "reminder"; text: string }
-      | { key: string; kind: "form"; form: QuestionForm }
-      | { key: string; kind: "suppressed-direction" }
-    > => {
-      if (seg.kind === "form") {
-        if (suppressDirectionForms && isDirectionForm(seg.form)) {
-          return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
-        }
-        return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+  // Each text segment is further split on `<od-card>` blocks (so memory cards
+  // render inline, composing with the surrounding question-form handling) and
+  // then on `<system-reminder>` blocks (so those render as their own
+  // collapsible chip instead of raw markup). Splitting od-cards BEFORE
+  // system-reminders keeps a card's JSON body out of the reminder scanner.
+  type Renderable =
+    | { key: string; kind: "text"; text: string }
+    | { key: string; kind: "reminder"; text: string }
+    | { key: string; kind: "form"; form: QuestionForm }
+    | { key: string; kind: "od-card"; card: OdCard }
+    | { key: string; kind: "suppressed-direction" };
+  const renderable = segments.flatMap((seg, idx): Renderable[] => {
+    if (seg.kind === "form") {
+      if (suppressDirectionForms && isDirectionForm(seg.form)) {
+        return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
       }
-      if (seg.text.trim().length === 0) return [];
-      const sub = splitSystemReminders(seg.text);
-      return sub.map((s, j) => ({
-        key: `t-${idx}-${j}`,
+      return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+    }
+    if (seg.text.trim().length === 0) return [];
+    return splitOnOdCards(seg.text).flatMap((cardSeg, c): Renderable[] => {
+      if (cardSeg.kind === "card") {
+        return [{ key: `c-${idx}-${c}`, kind: "od-card", card: cardSeg.card }];
+      }
+      if (cardSeg.text.trim().length === 0) return [];
+      return splitSystemReminders(cardSeg.text).map((s, j) => ({
+        key: `t-${idx}-${c}-${j}`,
         kind: s.kind,
         text: s.text,
       }));
-    }
-  );
+    });
+  });
   if (renderable.length === 0 && !live) return null;
   return (
     <div className="prose-block" data-stream-cursor={showStreamCursor && !live ? "true" : undefined}>
@@ -1989,6 +2000,9 @@ function ProseBlock({
               {renderMarkdown(seg.text, { onLinkClick })}
             </Fragment>
           );
+        }
+        if (seg.kind === "od-card") {
+          return <OdCardView key={seg.key} card={seg.card} />;
         }
         if (seg.kind === "suppressed-direction") {
           return (

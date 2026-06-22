@@ -1,0 +1,100 @@
+/* Pluggable-hooks panel — a quiet list of toggles, one row per hook, with a
+ * one-line explanation. Light/white surface to match Memory settings. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.headIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-default, #fff);
+  color: var(--accent, #5b5bd6);
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted, #6b6b6b);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+}
+
+.row:first-child {
+  border-top: none;
+}
+
+.rowIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-default, #fff);
+  color: var(--text-muted, #6b6b6b);
+}
+
+.rowCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rowDesc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted, #6b6b6b);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}

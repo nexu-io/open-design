@@ -52,7 +52,7 @@ vi.mock('../../src/components/EntryView', () => ({
       ok: true;
       projectId: string;
     }) => Promise<void> | void;
-    onOpenProject: (id: string) => void;
+    onOpenProject: (id: string) => Promise<boolean> | boolean | void;
     onRefreshAgents: () => void | Promise<void>;
     agents: AgentInfo[];
     projects: Project[];
@@ -104,6 +104,9 @@ vi.mock('../../src/components/EntryView', () => ({
       </button>
       <button type="button" onClick={() => void onRefreshAgents()}>
         Refresh agents
+      </button>
+      <button type="button" onClick={() => void onOpenProject('project-missing')}>
+        Open missing project
       </button>
       <div data-testid="entry-agent-list">
         {agents.map((agent) => (
@@ -893,5 +896,22 @@ describe('App project creation routing', () => {
     // The handoff failed, so the staged attachments must NOT be uploaded into
     // the managed `.od/projects/<id>` root the user did not pick.
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a toast instead of silently bouncing when opening a missing project', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockResolvedValue(null);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain(
+        'This project has been deleted or no longer exists.',
+      );
+    });
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByTestId('project-view')).toBeNull();
   });
 });

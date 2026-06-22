@@ -19,6 +19,8 @@ import {
   localizeDesignSystemSummary,
 } from '../i18n/content';
 import { fetchDesignSystemPreview } from '../providers/registry';
+import { useBrandsByDesignSystemId } from '../runtime/brands';
+import { BrandPreviewCard } from './BrandPreviewCard';
 import { Icon } from './Icon';
 
 interface PopoverAnchor {
@@ -71,6 +73,12 @@ export function DesignSystemPicker({
     () => designSystems.find((d) => d.id === selectedId) ?? null,
     [designSystems, selectedId],
   );
+
+  // Map each `user:<id>` design system to its backing brand so a selected /
+  // hovered brand previews the rich Brand Kit card instead of the thin
+  // design-system summary. Fetched lazily on first open; a non-brand system
+  // (bundled / imported) is absent from the map and keeps the thin preview.
+  const brandsByDesignSystem = useBrandsByDesignSystemId(open);
 
   useEffect(() => {
     if (!open) return;
@@ -331,6 +339,16 @@ export function DesignSystemPicker({
                     <p className="project-ds-picker-preview-summary">
                       {t('designSystemPicker.noneSummary')}
                     </p>
+                  </div>
+                ) : previewSystem && brandsByDesignSystem.get(previewSystem.id) ? (
+                  <div
+                    className="project-ds-picker-preview-brand"
+                    data-testid="project-ds-picker-preview-brand"
+                  >
+                    <BrandPreviewCard
+                      variant="compact"
+                      summary={brandsByDesignSystem.get(previewSystem.id)!}
+                    />
                   </div>
                 ) : previewSystem ? (
                   <>

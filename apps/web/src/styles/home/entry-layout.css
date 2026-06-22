@@ -1894,6 +1894,30 @@
   color: var(--text-strong);
 }
 
+/* Brand mark above the welcome heading — the app icon in a soft rounded
+   chip, mirroring the home-hero brand lockup. */
+.onboarding-view__hero-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+  border-radius: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  padding: 8px;
+}
+.onboarding-view__hero-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .onboarding-view__kicker {
   font-size: 11px;
   font-weight: 700;
@@ -1919,20 +1943,26 @@
 }
 
 .onboarding-view__steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  width: min(860px, 100%);
-  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: min(620px, 100%);
+  margin: -4px 0 6px;
   padding: 0;
+  border: 0;
+  border-radius: 0;
   list-style: none;
   justify-self: center;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Segmented progress indicator: a horizontal bar per step with the label
    below it. Bars read as progress, not as clickable cards — upcoming steps
    are clearly muted and non-interactive. */
 .onboarding-view__steps li {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -3150,6 +3180,66 @@
   color: var(--accent-strong);
 }
 
+/* Step 2 memory callout — makes it explicit that the answers above are saved
+   to Memory, and sells the compounding benefit of letting it learn. */
+.onboarding-view__memory-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-panel));
+}
+.onboarding-view__memory-callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-panel));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.onboarding-view__memory-callout-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.onboarding-view__memory-callout-body strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.onboarding-view__memory-callout-body p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.onboarding-view__memory-benefits {
+  display: grid;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.onboarding-view__memory-benefits li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.onboarding-view__memory-benefits li svg {
+  color: var(--accent);
+}
+
 .onboarding-view__email-field {
   display: grid;
   gap: 8px;
@@ -3163,7 +3253,8 @@
   font-weight: 700;
 }
 
-.onboarding-view__email-input {
+.onboarding-view__email-input,
+.onboarding-view__brand-url-input {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--border);
@@ -3177,11 +3268,13 @@
   transition: border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.onboarding-view__email-input::placeholder {
+.onboarding-view__email-input::placeholder,
+.onboarding-view__brand-url-input::placeholder {
   color: var(--text-muted);
 }
 
-.onboarding-view__email-input:focus-visible {
+.onboarding-view__email-input:focus-visible,
+.onboarding-view__brand-url-input:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
@@ -3600,7 +3693,25 @@
   }
 
   .onboarding-view__steps {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 8px;
+    width: min(360px, 100%);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .onboarding-view__steps li {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  }
+
+  .onboarding-view__steps li:not(:last-child)::after {
+    display: none;
   }
 
   .onboarding-view__card {
@@ -3647,7 +3758,25 @@
   }
 
   .onboarding-view__steps {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 8px;
+    width: min(360px, 100%);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .onboarding-view__steps li {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  }
+
+  .onboarding-view__steps li:not(:last-child)::after {
+    display: none;
   }
 
   .onboarding-view__ds-points {

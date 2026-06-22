@@ -388,6 +388,35 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     vi.unstubAllGlobals();
   });
 
+  it('collapses the settings sidebar and toggles fullscreen from dialog chrome', () => {
+    const { container } = renderSettingsDialog();
+    const dialog = screen.getByRole('dialog');
+    const sidebar = container.querySelector('#settings-sidebar');
+
+    expect(dialog.classList.contains('settings-sidebar-collapsed')).toBe(false);
+    expect(sidebar?.getAttribute('aria-hidden')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse settings sidebar' }));
+    expect(dialog.classList.contains('settings-sidebar-collapsed')).toBe(true);
+    expect(sidebar?.getAttribute('aria-hidden')).toBe('true');
+    expect(
+      screen
+        .getByRole('button', { name: 'Expand settings sidebar' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand settings sidebar' }));
+    expect(dialog.classList.contains('settings-sidebar-collapsed')).toBe(false);
+    expect(sidebar?.getAttribute('aria-hidden')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
+    expect(dialog.classList.contains('settings-fullscreen')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
+    expect(dialog.classList.contains('settings-fullscreen')).toBe(false);
+  });
+
   it('renders BYOK protocol tabs and toggles API key visibility', () => {
     renderSettingsDialog();
 

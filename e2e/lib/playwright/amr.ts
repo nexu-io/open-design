@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { T } from '@/timeouts';
 
 export const STORAGE_KEY = 'open-design:config';
 export const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
 export const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 export async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
 }
 
 export async function dismissPrivacyDialog(page: Page) {

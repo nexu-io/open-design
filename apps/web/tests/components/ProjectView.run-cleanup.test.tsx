@@ -968,6 +968,93 @@ describe('ProjectView daemon cleanup', () => {
     )).toBe(true);
   });
 
+  it('does not seed audit repair prompt for manual design-system runs without auto-repair budget', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue({
+      ok: false,
+      projectPath: '/tmp/ds',
+      filesInspected: 12,
+      errors: [{
+        severity: 'error',
+        code: 'ui_kit_index_missing_runtime_bootstrap',
+        message: 'ui_kits/app/index.html must mount the kit.',
+        path: 'ui_kits/app/index.html',
+      }],
+      warnings: [],
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onDone: () => void };
+      onRunCreated?: (runId: string) => void;
+    }) => {
+      options.onRunCreated?.('run-ds-manual');
+      options.handlers.onDone();
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{
+          id: 'project-ds-manual',
+          name: 'Manual Design System',
+          skillId: null,
+          designSystemId: 'user:manual-ds',
+          metadata: {
+            importedFrom: 'design-system',
+            entryFile: 'DESIGN.md',
+            sourceFileName: 'user:manual-ds',
+          },
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    await chatProps.onSend!('Update the design system', [], []);
+
+    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-manual'));
+    await waitFor(() => {
+      expect(saveMessage.mock.calls.some((call) =>
+        call[2]?.role === 'assistant'
+        && call[2]?.events?.some((event: { kind?: string; label?: string; detail?: string }) =>
+          event.kind === 'status'
+          && event.label === 'audit'
+          && event.detail?.includes('Package audit found 1 error'),
+        ),
+      )).toBe(true);
+    });
+    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds-manual')).toBeNull();
+    expect(chatPaneSpy.mock.calls.some(
+      (call) => typeof call[0]?.initialDraft === 'string'
+        && call[0].initialDraft.includes('Fix the design-system package audit findings below.'),
+    )).toBe(false);
+  });
+
   it('clears design-system auto-repair budget when the first audit passes', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);

@@ -481,4 +481,34 @@ describe('memory routes', () => {
     const json = await res.json() as { error: string };
     expect(json.error).toBe('memory not found');
   });
+
+  it('distils annotations into heuristic rule proposals (THREAD 1)', async () => {
+    // No provider configured in the test env, so the LLM pass returns [] and
+    // the endpoint falls back to the heuristic proposals.
+    const res = await fetch(`${baseUrl}/api/memory/rules/suggest`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        annotations: [
+          { note: 'Primary buttons must use the brand teal', targetLabel: 'CTA' },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as {
+      proposals: Array<{ name: string; assertion: string; check: string }>;
+      attemptedLLM: boolean;
+      source: string;
+    };
+    expect(json.proposals.length).toBe(1);
+    expect(json.proposals[0]?.assertion).toBe('Primary buttons must use the brand teal');
+    expect(json.source).toBe('heuristic');
+  });
+
+  it('exposes an empty verification history before any enforced turn (THREAD 2)', async () => {
+    const res = await fetch(`${baseUrl}/api/memory/verifications`);
+    expect(res.status).toBe(200);
+    const json = await res.json() as { verifications: unknown[] };
+    expect(Array.isArray(json.verifications)).toBe(true);
+  });
 });

@@ -55,6 +55,8 @@ import {
   useAIHubMixAudioModels,
 } from '../media/aihubmix-image-models';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
+import { useBrandsByDesignSystemId } from '../runtime/brands';
+import { BrandPreviewCard } from './BrandPreviewCard';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
@@ -1999,6 +2001,7 @@ function DesignSystemPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -2016,6 +2019,12 @@ function DesignSystemPicker({
     width: number;
     maxHeight: number;
   } | null>(null);
+
+  // Upgrade the popover's thin list to the rich Brand Kit card whenever the
+  // hovered / selected row is a finalized brand (`user:<id>` design system).
+  // Fetched lazily on first open; non-brand systems are absent and the popover
+  // stays a plain list. See `DesignSystemPicker.tsx` for the same wiring.
+  const brandsByDesignSystem = useBrandsByDesignSystemId(open);
 
   const byId = useMemo(() => {
     const map = new Map<string, DesignSystemSummary>();
@@ -2057,7 +2066,10 @@ function DesignSystemPicker({
   }, [ordered, query]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setHoveredId(null);
+      return;
+    }
     const t = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(t);
   }, [open]);
@@ -2171,6 +2183,12 @@ function DesignSystemPicker({
   const extraCount = Math.max(0, selectedIds.length - 1);
   const isDefault = !!primary && primary.id === defaultDesignSystemId;
 
+  // The hovered row wins over the current selection so scrubbing the list
+  // previews each brand; falling back to the primary pick keeps the rich card
+  // visible while the pointer rests outside the list.
+  const previewId = hoveredId ?? primaryId;
+  const previewBrand = previewId ? brandsByDesignSystem.get(previewId) ?? null : null;
+
   if (loading && designSystems.length === 0) {
     return (
       <div className="newproj-section">
@@ -2221,113 +2239,125 @@ function DesignSystemPicker({
       </button>
       {open && anchor && typeof document !== 'undefined'
         ? createPortal(
-        <div
-          ref={popoverRef}
-          className="ds-picker-popover ds-picker-popover-portal"
-          role="listbox"
-          data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
-          style={{
-            top: anchor.top,
-            bottom: anchor.bottom,
-            left: anchor.left,
-            width: anchor.width,
-            maxHeight: anchor.maxHeight,
-          }}
-        >
-          <div className="ds-picker-head">
-            <input
-              ref={searchRef}
-              data-testid="design-system-search"
-              className="ds-picker-search"
-              placeholder={t('newproj.dsSearch')}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
             <div
-              className="ds-picker-mode"
-              role="tablist"
-              aria-label={t('newproj.dsModeAria')}
+              ref={popoverRef}
+              className="ds-picker-popover-portal"
+              data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
+              style={{
+                top: anchor.top,
+                bottom: anchor.bottom,
+                left: anchor.left,
+                width: anchor.width,
+                maxHeight: anchor.maxHeight,
+              }}
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={!multi}
-                className={`ds-picker-mode-btn${!multi ? ' active' : ''}`}
-                onClick={() => {
-                  onChangeMulti(false);
-                  if (selectedIds.length > 1) onChange(selectedIds.slice(0, 1));
-                }}
-              >
-                {t('newproj.dsModeSingle')}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={multi}
-                className={`ds-picker-mode-btn${multi ? ' active' : ''}`}
-                onClick={() => onChangeMulti(true)}
-              >
-                {t('newproj.dsModeMulti')}
-              </button>
-            </div>
-          </div>
-          <div className="ds-picker-list ds-picker-list-design-systems">
-            <DsPickerItem
-              active={selectedIds.length === 0}
-              multi={multi}
-              onClick={clearAll}
-              avatar={<NoneAvatar />}
-              title={t('newproj.dsNoneTitle')}
-              subtitle={t('newproj.dsNoneSub')}
-            />
-            {filtered.length === 0 ? (
-              <div className="ds-picker-empty">
-                {t('newproj.dsEmpty', { query })}
-              </div>
-            ) : (
-              filtered.map((d) => {
-                const active = selectedIds.includes(d.id);
-                const order = active ? selectedIds.indexOf(d.id) : -1;
-                return (
-                  <DsPickerItem
-                    key={d.id}
-                    active={active}
-                    multi={multi}
-                    order={order}
-                    onClick={() => toggle(d.id)}
-                    avatar={<DesignSystemAvatar system={d} />}
-                    title={d.title}
-                    badge={
-                      d.id === defaultDesignSystemId
-                        ? t('newproj.dsBadgeDefault')
-                        : undefined
-                    }
-                    subtitle={d.summary || d.category || ''}
+              <div className="ds-picker-popover" role="listbox">
+                <div className="ds-picker-head">
+                  <input
+                    ref={searchRef}
+                    data-testid="design-system-search"
+                    className="ds-picker-search"
+                    placeholder={t('newproj.dsSearch')}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
                   />
-                );
-              })
-            )}
-          </div>
-          {multi && selectedIds.length > 1 ? (
-            <div className="ds-picker-foot">
-              <span className="ds-picker-foot-text">
-                <strong>{primary?.title ?? t('newproj.dsPrimaryFallback')}</strong>{' '}
-                {extraCount === 1
-                  ? t('newproj.dsFootSingular')
-                  : t('newproj.dsFootPlural')}
-              </span>
-              <button
-                type="button"
-                className="ds-picker-clear"
-                onClick={clearAll}
-              >
-                {t('newproj.dsFootClear')}
-              </button>
-            </div>
-          ) : null}
-        </div>,
-          document.body,
-        )
+                  <div
+                    className="ds-picker-mode"
+                    role="tablist"
+                    aria-label={t('newproj.dsModeAria')}
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={!multi}
+                      className={`ds-picker-mode-btn${!multi ? ' active' : ''}`}
+                      onClick={() => {
+                        onChangeMulti(false);
+                        if (selectedIds.length > 1) onChange(selectedIds.slice(0, 1));
+                      }}
+                    >
+                      {t('newproj.dsModeSingle')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={multi}
+                      className={`ds-picker-mode-btn${multi ? ' active' : ''}`}
+                      onClick={() => onChangeMulti(true)}
+                    >
+                      {t('newproj.dsModeMulti')}
+                    </button>
+                  </div>
+                </div>
+                <div className="ds-picker-list ds-picker-list-design-systems">
+                  <DsPickerItem
+                    active={selectedIds.length === 0}
+                    multi={multi}
+                    onClick={clearAll}
+                    avatar={<NoneAvatar />}
+                    title={t('newproj.dsNoneTitle')}
+                    subtitle={t('newproj.dsNoneSub')}
+                  />
+                  {filtered.length === 0 ? (
+                    <div className="ds-picker-empty">
+                      {t('newproj.dsEmpty', { query })}
+                    </div>
+                  ) : (
+                    filtered.map((d) => {
+                      const active = selectedIds.includes(d.id);
+                      const order = active ? selectedIds.indexOf(d.id) : -1;
+                      return (
+                        <DsPickerItem
+                          key={d.id}
+                          active={active}
+                          multi={multi}
+                          order={order}
+                          onClick={() => toggle(d.id)}
+                          onMouseEnter={() => setHoveredId(d.id)}
+                          onMouseLeave={() => setHoveredId(null)}
+                          avatar={<DesignSystemAvatar system={d} />}
+                          title={d.title}
+                          badge={
+                            d.id === defaultDesignSystemId
+                              ? t('newproj.dsBadgeDefault')
+                              : undefined
+                          }
+                          subtitle={d.summary || d.category || ''}
+                        />
+                      );
+                    })
+                  )}
+                </div>
+                {multi && selectedIds.length > 1 ? (
+                  <div className="ds-picker-foot">
+                    <span className="ds-picker-foot-text">
+                      <strong>{primary?.title ?? t('newproj.dsPrimaryFallback')}</strong>{' '}
+                      {extraCount === 1
+                        ? t('newproj.dsFootSingular')
+                        : t('newproj.dsFootPlural')}
+                    </span>
+                    <button
+                      type="button"
+                      className="ds-picker-clear"
+                      onClick={clearAll}
+                    >
+                      {t('newproj.dsFootClear')}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {previewBrand ? (
+                <aside
+                  className="ds-picker-brand-flyout"
+                  data-testid="new-project-ds-brand-flyout"
+                  aria-label={t('brandDetail.identity')}
+                >
+                  <BrandPreviewCard variant="compact" summary={previewBrand} />
+                </aside>
+              ) : null}
+            </div>,
+            document.body,
+          )
         : null}
     </div>
   );
@@ -2338,6 +2368,8 @@ function DsPickerItem({
   multi,
   order,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
   avatar,
   title,
   subtitle,
@@ -2347,6 +2379,8 @@ function DsPickerItem({
   multi: boolean;
   order?: number;
   onClick: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   avatar: React.ReactNode;
   title: string;
   subtitle: string;
@@ -2359,6 +2393,9 @@ function DsPickerItem({
       aria-selected={active}
       className={`ds-picker-item${active ? ' active' : ''}`}
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onFocus={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <span className="ds-picker-item-avatar">{avatar}</span>
       <span className="ds-picker-item-text">

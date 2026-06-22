@@ -3,6 +3,7 @@ import type {
   ApplyResult,
   ChatSessionMode,
   InstalledPluginRecord,
+  ProjectKind,
   ProjectMetadata,
 } from '@open-design/contracts';
 import {
@@ -43,7 +44,7 @@ export interface PluginLoopSubmit {
   // Null means the caller did not stamp an explicit kind. HomeView's
   // free-form fallback uses `other` and binds the hidden od-default
   // router plugin so the agent asks for the exact task type in-chat.
-  projectKind?: 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other' | null;
+  projectKind?: ProjectKind | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;
   // Single-use desktop token minted for `workingDir` when the folder was

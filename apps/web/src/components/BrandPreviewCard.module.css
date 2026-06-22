@@ -1,0 +1,940 @@
+/* Rich brand preview card. Shared by the Brand Kit tab ('panel' variant) and
+   every design-system picker popover ('compact' variant). The panel layout
+   matches the full Brand Kit detail; the compact layout trims sizing so the
+   identity / logo / typography / palette read cleanly inside a narrow popover
+   preview pane. */
+.previewInner {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+  animation: previewIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 208px;
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 140% at 50% -10%, var(--bg-subtle) 0%, var(--bg) 70%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-strong) 4%, transparent);
+}
+
+.coverLogo {
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+}
+
+.coverLogoFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  font-size: 44px;
+  font-weight: 680;
+}
+
+.previewHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.previewHeadText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.previewTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.previewName {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.previewTagline {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.previewDomain {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+.previewDomain:hover {
+  color: var(--accent);
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.badgeBusy {
+  color: var(--amber);
+  background: var(--amber-bg);
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--border));
+}
+
+.badgeFailed {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red-border);
+}
+
+.badgeNeedsInput {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.previewActions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.missingProjectNotice {
+  padding: 10px 12px;
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius);
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ── Detail sections ──────────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 660;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* A subtle inline section-header affordance (e.g. "Show all"). */
+.sectionAction {
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: opacity var(--dur-quick) var(--ease-out);
+}
+
+.sectionAction:hover {
+  opacity: 0.78;
+}
+
+.subTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 620;
+  color: var(--text-soft);
+}
+
+/* ── Logo section ─────────────────────────────────────────────────── */
+.logoStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 158px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.logoStageImg {
+  max-width: 100%;
+  max-height: 96px;
+  object-fit: contain;
+}
+
+.logoThumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.logoThumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+
+.logoThumb:hover {
+  border-color: var(--accent);
+}
+
+.logoThumbActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.logoThumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.logoNotes {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* ── Typography: big "Ag" specimen tiles ──────────────────────────── */
+.fontTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.fontTile {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.fontTileAg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 104px;
+  font-size: 56px;
+  line-height: 1;
+  color: var(--text-strong);
+  background: var(--bg);
+}
+
+.fontTileMeta {
+  padding: 9px 12px 11px;
+}
+
+.fontTileName {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.fontTileRole {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.fontList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fontItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fontItemHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.fontRole {
+  font-size: 11px;
+  font-weight: 660;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.fontFamily {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.fontWeights {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.fontSpecimen {
+  font-size: 30px;
+  line-height: 1.2;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Palette: swatches with role + usage ──────────────────────────── */
+.paletteGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.swatch {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.swatchChip {
+  display: flex;
+  align-items: flex-end;
+  height: 84px;
+  padding: 8px;
+}
+
+.swatchHex {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.swatchBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px 12px;
+}
+
+.swatchName {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-strong);
+}
+
+.swatchRole {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.swatchUsage {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* ── Voice & tone ─────────────────────────────────────────────────── */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.aesthetic {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.pillars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.pillars li {
+  position: relative;
+  padding-left: 14px;
+  line-height: 1.5;
+}
+
+.pillars li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.vocab {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.vocabCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vocabUse,
+.vocabAvoid {
+  font-size: 12px;
+  font-weight: 660;
+}
+
+.vocabUse {
+  color: var(--green, #3d7a4f);
+}
+
+.vocabAvoid {
+  color: var(--red);
+}
+
+.vocabVals {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ── Imagery & layout ─────────────────────────────────────────────── */
+.imageryLine {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.imageryKey {
+  font-weight: 640;
+  color: var(--text-strong);
+}
+
+.imageryKeyAvoid {
+  font-weight: 640;
+  color: var(--red);
+}
+
+.posture {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.postureList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Imagery samples gallery ──────────────────────────────────────── */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.shot {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  transition: border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.shot:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.shotFrame {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 4 / 3;
+  background: var(--bg);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.shotFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.shot:hover .shotFrame img {
+  transform: scale(1.04);
+}
+
+.shotMeta {
+  padding: 8px 11px 10px;
+}
+
+.shotCap {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-strong);
+}
+
+.shotKind {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* ── Design system preview ────────────────────────────────────────── */
+.dsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dsOpen {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+.dsOpen:hover {
+  color: var(--accent);
+}
+
+.dsFrameWrap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.dsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dsTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.dsTab {
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.dsTab:hover {
+  color: var(--text-strong);
+}
+
+.dsTabActive,
+.dsTabActive:hover {
+  background: var(--bg-panel);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.dsCap {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.dsFrame {
+  width: 100%;
+  height: 520px;
+  border: 0;
+  display: block;
+  background: #fff;
+}
+
+.dsTokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.tokSwatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.tokText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.tokKey {
+  font-size: 11px;
+  font-weight: 660;
+  color: var(--text-strong);
+}
+
+.tokHex {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tokValue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 660;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Brand assets grid ────────────────────────────────────────────── */
+.assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.asset {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.asset:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.assetFrame {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.assetFrame iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  border: 0;
+  transform: scale(0.5);
+  transform-origin: top left;
+  pointer-events: none;
+  background: #fff;
+}
+
+.assetMeta {
+  padding: 11px 13px;
+}
+
+.assetName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* Image lightbox overlay. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  background: rgba(10, 10, 12, 0.74);
+  backdrop-filter: blur(3px);
+  animation: lightboxIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes lightboxIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lightboxImg {
+  max-width: min(1100px, 92vw);
+  max-height: 86vh;
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  animation: lightboxImgIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes lightboxImgIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lightboxClose {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+.lightboxClose:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* ══ Compact variant ══════════════════════════════════════════════════
+   Trims the panel layout to read cleanly inside a narrow picker popover
+   preview pane (~220-260px). Keeps cover / identity / typography / palette
+   single-column with reduced sizing. */
+.compact {
+  gap: 12px;
+  max-width: none;
+  padding: 0;
+  animation: none;
+}
+
+.compact .cover {
+  height: 96px;
+  padding: 16px;
+  border-radius: var(--radius);
+}
+
+.compact .coverLogo {
+  max-height: 64px;
+}
+
+.compact .coverLogoFallback {
+  width: 56px;
+  height: 56px;
+  font-size: 26px;
+}
+
+.compact .previewHead {
+  gap: 8px;
+}
+
+.compact .previewName {
+  font-size: 15px;
+}
+
+.compact .previewTagline {
+  font-size: 12px;
+}
+
+.compact .section {
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: var(--radius);
+}
+
+.compact .description {
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.compact .fontTiles {
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.compact .fontTileAg {
+  height: 64px;
+  font-size: 34px;
+}
+
+.compact .fontTileMeta {
+  padding: 6px 8px 8px;
+}
+
+.compact .fontTileName {
+  font-size: 11.5px;
+}
+
+.compact .paletteGrid {
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 8px;
+}
+
+.compact .swatchChip {
+  height: 48px;
+  padding: 6px;
+}
+
+.compact .swatchBody {
+  padding: 6px 8px 8px;
+}
+
+.compact .swatchName {
+  font-size: 11.5px;
+}

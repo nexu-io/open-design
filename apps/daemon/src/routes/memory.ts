@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { MEMORY_TYPES } from '@open-design/contracts';
 import type { RouteDeps } from '../server-context.js';
 
 import {
@@ -24,6 +25,12 @@ import {
   removeExtraction as removeMemoryExtraction,
 } from '../memory-extractions.js';
 import {
+  clearVerifications as clearMemoryVerifications,
+  listVerifications as listMemoryVerifications,
+  removeVerification as removeMemoryVerification,
+} from '../memory-verify.js';
+import { distillRulesFromAnnotations } from '../memory-rules.js';
+import {
   extractMemoryFromConnectors,
   suggestMemoryFromConnectors,
 } from '../memory-connectors.js';
@@ -31,7 +38,13 @@ import {
 export interface RegisterMemoryRoutesDeps extends RouteDeps<'http' | 'paths' | 'appConfig'> {}
 
 type UnknownRecord = Record<string, unknown>;
-type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
+type MemoryType =
+  | 'user'
+  | 'feedback'
+  | 'project'
+  | 'reference'
+  | 'profile'
+  | 'rule';
 type MemoryExtractionProvider = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
 
 interface MemoryExtractionPatch {
@@ -45,6 +58,10 @@ interface MemoryExtractionPatch {
 interface MemoryConfigPatch {
   enabled?: boolean;
   chatExtractionEnabled?: boolean;
+  /** Two-loop memory per-hook toggles (default-on; omit to leave unchanged). */
+  profileEnabled?: boolean;
+  rewriteEnabled?: boolean;
+  verifyEnabled?: boolean;
   extraction?: MemoryExtractionPatch | null;
 }
 
@@ -70,7 +87,12 @@ function errorMessage(err: unknown): string {
 }
 
 function isMemoryType(value: unknown): value is MemoryType {
-  return value === 'user' || value === 'feedback' || value === 'project' || value === 'reference';
+  // Sourced from the shared contract so the new `profile` / `rule` buckets
+  // can't be rejected here while the type union already allows them.
+  return (
+    typeof value === 'string'
+    && (MEMORY_TYPES as readonly string[]).includes(value)
+  );
 }
 
 function isExtractionProvider(value: unknown): value is MemoryExtractionProvider {
@@ -102,6 +124,9 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       res.json({
         enabled: config.enabled,
         chatExtractionEnabled: config.chatExtractionEnabled,
+        profileEnabled: config.profileEnabled,
+        rewriteEnabled: config.rewriteEnabled,
+        verifyEnabled: config.verifyEnabled,
         rootDir: memoryDir(RUNTIME_DATA_DIR),
         index,
         entries,
@@ -165,6 +190,15 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
       if (typeof body.chatExtractionEnabled === 'boolean') {
         patch.chatExtractionEnabled = body.chatExtractionEnabled;
+      }
+      if (typeof body.profileEnabled === 'boolean') {
+        patch.profileEnabled = body.profileEnabled;
+      }
+      if (typeof body.rewriteEnabled === 'boolean') {
+        patch.rewriteEnabled = body.rewriteEnabled;
+      }
+      if (typeof body.verifyEnabled === 'boolean') {
+        patch.verifyEnabled = body.verifyEnabled;
       }
       // Three-state extraction handling so the UI can: (a) leave the
       // override alone (omit `extraction`), (b) clear it back to
@@ -231,6 +265,9 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       res.json({
         enabled: next.enabled,
         chatExtractionEnabled: next.chatExtractionEnabled,
+        profileEnabled: next.profileEnabled,
+        rewriteEnabled: next.rewriteEnabled,
+        verifyEnabled: next.verifyEnabled,
         extraction: maskMemoryExtractionConfig(next.extraction),
       });
     } catch (err) {
@@ -256,11 +293,19 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
     const onExtraction = (event: unknown) => {
       sse.send('extraction', event);
     };
+    // `verify` events carry POST self-verify enforcement outcomes (THREAD 2),
+    // one per enforced turn. Multiplexed on the same connection as `change`
+    // and `extraction` so the settings panel opens a single stream.
+    const onVerify = (event: unknown) => {
+      sse.send('verify', event);
+    };
     memoryEvents.on('change', onChange);
     memoryEvents.on('extraction', onExtraction);
+    memoryEvents.on('verify', onVerify);
     res.on('close', () => {
       memoryEvents.off('change', onChange);
       memoryEvents.off('extraction', onExtraction);
+      memoryEvents.off('verify', onVerify);
     });
   });
 
@@ -292,6 +337,93 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
     try {
       const removed = removeMemoryExtraction(req.params.id);
       res.json({ removed });
+    } catch (err) {
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Recent POST self-verify enforcement outcomes (THREAD 2; newest first,
+  // capped server-side). Surfaces `missing` (model skipped the scorecard) and
+  // `fail` (a rule failed or was left uncovered) so the user can see that
+  // verification is actually enforced, not honour-system.
+  app.get('/api/memory/verifications', async (_req, res) => {
+    try {
+      res.json({ verifications: listMemoryVerifications() });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Drop the entire verification history. Registered BEFORE the `:id`
+  // catch-all so a literal "/api/memory/verifications" can be cleared.
+  app.delete('/api/memory/verifications', async (_req, res) => {
+    try {
+      const removed = clearMemoryVerifications();
+      res.json({ removed });
+    } catch (err) {
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  app.delete('/api/memory/verifications/:id', async (req, res) => {
+    try {
+      const removed = removeMemoryVerification(req.params.id);
+      res.json({ removed });
+    } catch (err) {
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Distil a batch of in-canvas/in-deck annotations into candidate rule
+  // proposals (THREAD 1). Display-only: the response feeds the existing
+  // rule-proposal Keep gate; nothing is written until the user confirms a
+  // proposal through `POST /api/memory` (`type: 'rule'`). Runs a heuristic
+  // pass always, and an LLM pass when an extraction provider is configured.
+  app.post('/api/memory/rules/suggest', async (req, res) => {
+    try {
+      const body = asRecord(req.body);
+      const rawAnnotations = Array.isArray(body.annotations) ? body.annotations : [];
+      const annotations = rawAnnotations
+        .map((item: unknown) => {
+          const a = asRecord(item);
+          const note = typeof a.note === 'string' ? a.note : '';
+          if (!note.trim()) return null;
+          return {
+            note,
+            ...(typeof a.targetLabel === 'string' ? { targetLabel: a.targetLabel } : {}),
+            ...(typeof a.filePath === 'string' ? { filePath: a.filePath } : {}),
+            ...(typeof a.currentText === 'string' ? { currentText: a.currentText } : {}),
+            ...(typeof a.selectionKind === 'string' ? { selectionKind: a.selectionKind } : {}),
+            ...(typeof a.htmlHint === 'string' ? { htmlHint: a.htmlHint } : {}),
+          };
+        })
+        .filter((a): a is { note: string } => a !== null);
+      const appConfig = (await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}))) as MemoryAppConfigLike;
+      const chatAgentId =
+        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
+          ? body.chatAgentId.trim()
+          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
+            ? appConfig.agentId.trim()
+            : null;
+      const chatModel =
+        typeof body.chatModel === 'string' && body.chatModel.trim()
+          ? body.chatModel.trim()
+          : (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
+            ? appConfig.agentModels[chatAgentId].model ?? null
+            : null);
+      const result = await distillRulesFromAnnotations(
+        RUNTIME_DATA_DIR,
+        { annotations },
+        {
+          projectRoot: PROJECT_ROOT,
+          ...(chatAgentId ? { chatAgentId } : {}),
+          ...(chatModel ? { chatModel } : {}),
+          ...(body.chatProvider && typeof body.chatProvider === 'object'
+            ? { chatProvider: body.chatProvider }
+            : {}),
+        },
+      );
+      res.json(result);
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });
     }

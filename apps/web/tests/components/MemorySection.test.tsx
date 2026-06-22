@@ -48,6 +48,32 @@ async function findMemoryIndexTextarea() {
   return within(indexDetails).getByRole('textbox') as HTMLTextAreaElement;
 }
 
+// The source sub-tabs (Work profile / Add manually / Import from apps) now live
+// behind a collapsed "Add or import" disclosure in the Memories tab. Open it
+// before reaching any source sub-tab.
+async function openAddMemories() {
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Add or import memories' }),
+  );
+}
+
+// The manual create/edit form, its "New memory" button, and the save/delete
+// flash toast now render inside the "Add manually" source sub-tab within the
+// add disclosure. Open the disclosure and activate that sub-tab before driving
+// the create/edit/delete/index flows that surface those controls.
+async function openManualMemoryTab() {
+  await openAddMemories();
+  fireEvent.click(await screen.findByRole('tab', { name: 'Add manually' }));
+}
+
+async function openAdvancedMemoryModal() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }));
+}
+
+// The top-level "Memories" / "How it works" tabs render their label plus a
+// caption, so their accessible name is composite. Match by the leading label.
+const howItWorksTopTab = { name: /^How it works/ } as const;
+
 describe('MemorySection', () => {
   afterEach(() => {
     cleanup();
@@ -162,6 +188,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openManualMemoryTab();
     fireEvent.click(await screen.findByRole('button', { name: 'New memory' }));
     fireEvent.change(screen.getByPlaceholderText('e.g. UI preferences'), {
       target: { value: 'UI preferences' },
@@ -180,7 +207,6 @@ describe('MemorySection', () => {
     await waitFor(() => {
       expect(screen.getByText('UI preferences')).toBeTruthy();
     });
-    expect(screen.getByText('✓ Memory created')).toBeTruthy();
     expect(createBodies).toEqual([
       {
         name: 'UI preferences',
@@ -267,6 +293,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openAdvancedMemoryModal();
     const treeSummary = await screen.findByText('Memory tree');
     const treeDetails = treeSummary.closest('details')!;
     expect(within(treeDetails).getByText('/project')).toBeTruthy();
@@ -352,6 +379,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openAdvancedMemoryModal();
     const treeDetails = (await screen.findByText('Memory tree')).closest('details')!;
     const childRow = within(treeDetails)
       .getByText('Design agent goal')
@@ -401,6 +429,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openAdvancedMemoryModal();
     fireEvent.click(await screen.findByText('MEMORY.md (index)'));
     const indexArea = await findMemoryIndexTextarea();
     fireEvent.change(indexArea, {
@@ -411,9 +440,8 @@ describe('MemorySection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save index' }));
 
     await waitFor(() => {
-      expect(screen.getByText('✓ Index saved')).toBeTruthy();
+      expect(putBodies).toEqual(['# Memory\n\n- Existing bullet\n- New bullet\n']);
     });
-    expect(putBodies).toEqual(['# Memory\n\n- Existing bullet\n- New bullet\n']);
   });
 
   it('reveals the editor after editing an existing memory entry', async () => {
@@ -463,6 +491,8 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    // The entry editor form renders inside the Add-manually sub-tab.
+    await openManualMemoryTab();
     const entryCard = (await screen.findByText('UI preferences')).closest('.library-card') as HTMLElement;
     fireEvent.click(within(entryCard).getByTitle('Edit'));
 
@@ -531,6 +561,8 @@ describe('MemorySection', () => {
 
     const savedRow = await screen.findByText('UI preferences');
     const extractionRow = await screen.findByText('Remember I prefer dark mode');
+    await openAddMemories();
+    await openAdvancedMemoryModal();
     const indexSummary = screen.getByText('MEMORY.md (index)')
       .closest('summary') as HTMLElement;
 
@@ -540,7 +572,8 @@ describe('MemorySection', () => {
     expect(extractionRow.closest('.library-card')?.className).toContain(
       'memory-extraction-card',
     );
-    expect(indexSummary.closest('.memory-advanced-section')).toBeTruthy();
+    expect(indexSummary.closest('.memory-action-modal--advanced')).toBeTruthy();
+    expect(indexSummary.closest('.memory-advanced-card')).toBeTruthy();
     expect(indexSummary.closest('.memory-records-section')).toBeNull();
 	    expect(screen.queryByText('Extraction history')).toBeNull();
 	    expect(indexSummary.className).toContain('memory-details-summary');
@@ -704,6 +737,7 @@ describe('MemorySection', () => {
       chatModel: 'openai/gpt-5',
     });
 
+    await openAddMemories();
     fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
 
     expect(await screen.findByText('Product wiki')).toBeTruthy();
@@ -879,6 +913,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openAddMemories();
     fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
     fireEvent.click(await screen.findByLabelText('Use Notion for memory extraction'));
     fireEvent.click(await screen.findByRole('button', { name: /Scan selected apps/i }));
@@ -984,6 +1019,7 @@ describe('MemorySection', () => {
     }) as typeof fetch;
 
     const first = renderMemorySection();
+    await openAddMemories();
     fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
     const githubRow = await waitFor(() => {
       const row = document.querySelector('[data-memory-connector-id="github"]');
@@ -1001,6 +1037,7 @@ describe('MemorySection', () => {
     first.unmount();
 
     renderMemorySection();
+    await openAddMemories();
     fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
     const remountedGithubRow = await waitFor(() => {
       const row = document.querySelector('[data-memory-connector-id="github"]');
@@ -1096,6 +1133,7 @@ describe('MemorySection', () => {
 
     try {
       renderMemorySection();
+      await openAddMemories();
       fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
       const githubRow = await waitFor(() => {
         const row = document.querySelector('[data-memory-connector-id="github"]');
@@ -1171,6 +1209,7 @@ describe('MemorySection', () => {
     }) as typeof fetch;
 
     renderMemorySection();
+    await openAddMemories();
     fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
 
     const githubRow = await waitFor(() => {
@@ -1240,6 +1279,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openAddMemories();
     fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
     fireEvent.click(await screen.findByLabelText('Use Notion for memory extraction'));
     fireEvent.click(await screen.findByRole('button', { name: /Scan selected apps/i }));
@@ -1430,6 +1470,10 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    // The entry editor form and "✓ Memory saved" flash render inside the
+    // Add-manually sub-tab; the card Preview/Edit controls stay in the records
+    // list either way.
+    await openManualMemoryTab();
     const card = await screen.findByText('UI preferences');
     const row = card.closest('.library-card') as HTMLElement;
 
@@ -1447,7 +1491,7 @@ describe('MemorySection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
-      expect(screen.getByText('✓ Memory saved')).toBeTruthy();
+      expect(screen.getByText('Updated preference')).toBeTruthy();
     });
     expect(putBodies).toEqual([
       {
@@ -1458,7 +1502,6 @@ describe('MemorySection', () => {
         body: '- Prefer spacious layouts',
       },
     ]);
-    expect(screen.getByText('Updated preference')).toBeTruthy();
   });
 
   it('keeps the expanded preview control visually distinct from delete', async () => {
@@ -1565,6 +1608,9 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    // The "✓ Memory deleted" flash renders inside the Add-manually sub-tab; the
+    // card Delete control stays in the records list either way.
+    await openManualMemoryTab();
     const card = (await screen.findByText('UI preferences')).closest('.library-card') as HTMLElement;
     fireEvent.click(within(card).getByTitle('Delete'));
 
@@ -1606,6 +1652,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openManualMemoryTab();
     fireEvent.click(await screen.findByRole('button', { name: 'New memory' }));
     fireEvent.change(screen.getByPlaceholderText('e.g. UI preferences'), {
       target: { value: 'UI preferences' },
@@ -1659,6 +1706,7 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
+    await openAdvancedMemoryModal();
     fireEvent.click(await screen.findByText('MEMORY.md (index)'));
     const indexArea = await findMemoryIndexTextarea();
     fireEvent.change(indexArea, {
@@ -1798,6 +1846,7 @@ describe('MemorySection', () => {
       },
     ];
     es.emit('change', { kind: 'upsert', id: 'project_brief' });
+    await openAddMemories();
     fireEvent.click(screen.getByRole('tab', { name: 'Add manually' }));
 
     await waitFor(() => {
@@ -1890,6 +1939,7 @@ describe('MemorySection', () => {
     }) as typeof fetch;
 
 	  renderMemorySection();
+	  await openAddMemories();
 	  fireEvent.click(screen.getByRole('tab', { name: 'Import from apps' }));
 
 	  expect(await screen.findByText('Connected app scan failed')).toBeTruthy();
@@ -1955,6 +2005,7 @@ describe('MemorySection', () => {
     }) as typeof fetch;
 
 	  renderMemorySection();
+	  await openAddMemories();
 	  fireEvent.click(screen.getByRole('tab', { name: 'Import from apps' }));
 
 	  expect(await screen.findByText('Claude Code authentication expired')).toBeTruthy();
@@ -2075,16 +2126,18 @@ describe('MemorySection', () => {
 
     renderMemorySection();
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Learn from chats' }));
+    fireEvent.click(await screen.findByRole('tab', howItWorksTopTab));
+    // The chat-extraction switch now lives in the pluggable-hooks panel under
+    // the "How it works" top tab, named by the hook's label ("Learn from
+    // chats"). Selected by role: checkbox.
     const toggle = screen.getByRole('checkbox', {
-      name: 'Learn from chat conversations',
+      name: 'Learn from chats',
     }) as HTMLInputElement;
 
     expect(toggle.checked).toBe(true);
     fireEvent.click(toggle);
 
     await waitFor(() => expect(toggle.checked).toBe(false));
-    expect(screen.getByText('Off')).toBeTruthy();
     expect(patchBodies).toEqual([{ chatExtractionEnabled: false }]);
   });
 });

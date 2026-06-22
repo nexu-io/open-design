@@ -1,0 +1,97 @@
+/* Structured profile editor — light/white form rhythm matching the rest of
+ * the Memory settings surface. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.headIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.04));
+  color: var(--accent, #5b5bd6);
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted, #6b6b6b);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The two multiline fields (aesthetic, goals) span the full width so their
+ * textareas have room to breathe. They are the last items in their rows. */
+.field:nth-child(5),
+.field:nth-child(8) {
+  grid-column: 1 / -1;
+}
+
+.fieldLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted, #888);
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.savedPill {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1f7d5c;
+}
+
+@media (max-width: 560px) {
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

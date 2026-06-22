@@ -798,6 +798,27 @@
   height: 56%;
   object-fit: contain;
 }
+/* Brand project cover: gradient background (inline) + a rounded logo tile that
+   mirrors the monogram glyph cards so brand kits read as neat miniatures. */
+.project-thumb-brand-logo {
+  width: 64px;
+  height: 64px;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.project-thumb-brand .project-thumb-brand-logo .thumb-media {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .project-thumb-image .project-thumb-glyph,
 .project-thumb-video .project-thumb-glyph,
 .project-thumb-html .project-thumb-glyph,

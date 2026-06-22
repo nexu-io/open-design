@@ -1669,13 +1669,10 @@ export function DesignSystemDetailView({
                 );
               }
               const repairPrompt = audit ? buildDesignSystemPackageAuditRepairPrompt(audit) : null;
-              if (repairPrompt) {
-                setChatSeed({ id: `audit-${Date.now()}`, text: repairPrompt });
-              }
               if (auditSummary) {
                 setStatusLine(
                   repairPrompt
-                    ? `${auditSummary} The next repair prompt is ready in chat.`
+                    ? `${auditSummary} Review the audit details before running a repair.`
                     : `Workspace updated. ${auditSummary}`,
                 );
               } else {

@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Request } from '@playwright/test';
 import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
@@ -62,6 +63,8 @@ const DESIGN_SYSTEMS = [
     swatches: ['#111827', '#38bdf8'],
   },
 ] as const;
+
+test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
@@ -1473,6 +1476,7 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();

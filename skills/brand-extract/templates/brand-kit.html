@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Brand Kit</title>
+<!--
+  Self-contained brand-kit page. The daemon's brand-kit renderer replaces the
+  payload token in the script tag below with a JSON blob { status, brand,
+  assets }. Everything renders from that single embedded object — no external
+  requests, so it works under the FileViewer's sandboxed URL-load iframe.
+  While status is "extracting" the page softly reloads itself so the user
+  watches the kit fill in as the agent writes brand.json and re-renders.
+-->
+<script id="od-brand-payload" type="application/json">__OD_BRAND_PAYLOAD__</script>
+<!-- Self-hosted @font-face rules (replaced with the brand's fonts/ manifest, or
+     emptied when no webfonts were harvested) so specimens render for real. -->
+<style data-brand-fonts>__OD_BRAND_FONTFACE__</style>
+<style>
+  :root {
+    --paper: #faf9f5;
+    --surface: #ffffff;
+    --ink: #1a1a18;
+    --ink-mute: #57564f;
+    --ink-faint: #8a887f;
+    --line: #e7e5dc;
+    --line-soft: #efeee7;
+    --accent: #c96442;
+    --ok: #3d7a4f;
+    --err: #b4453a;
+    --radius: 14px;
+    --font-display: ui-serif, Georgia, 'Times New Roman', serif;
+    --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 96px; }
+  a { color: inherit; }
+
+  header.kit-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .kit-title { font-family: var(--font-display); font-size: 40px; line-height: 1.05; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  .kit-tagline { margin: 6px 0 0; font-size: 18px; color: var(--ink-mute); }
+  .kit-source { margin-top: 6px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-faint); text-decoration: none; }
+  .kit-source:hover { color: var(--accent); }
+  .head-actions { display: flex; align-items: center; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 7px 12px; font-size: 13px; text-decoration: none; cursor: pointer; transition: border-color .14s ease; }
+  .btn:hover { border-color: var(--accent); }
+
+  .status-pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 12px; font-weight: 500; border: 1px solid var(--line); background: var(--surface); color: var(--ink-mute); }
+  .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .status-pill.extracting .dot { animation: pulse 1.1s ease-in-out infinite; }
+  .status-pill.ready .dot { background: var(--ok); }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .35; transform: scale(.7);} }
+
+  .sec { margin-top: 40px; }
+  .sec-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint); margin: 0 0 12px; }
+  .grid-2 { display: grid; gap: 28px; grid-template-columns: 1fr; }
+  .grid-top { display: grid; gap: 28px; grid-template-columns: 1fr; }
+  @media (min-width: 860px) {
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .grid-top { grid-template-columns: 1fr 2fr; }
+  }
+  .card { border: 1px solid var(--line-soft); background: var(--surface); border-radius: var(--radius); padding: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+
+  /* Logo */
+  .logo-stage { display: flex; min-height: 158px; align-items: center; justify-content: center; border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 28px; }
+  .logo-stage img { max-height: 92px; max-width: 100%; object-fit: contain; }
+  .logo-empty { display: flex; min-height: 158px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--ink-faint); font-size: 14px; }
+  .logo-thumbs { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .logo-thumb { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line-soft); border-radius: 9px; padding: 6px; cursor: pointer; }
+  .logo-thumb.active { border-color: var(--accent); }
+  .logo-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .logo-notes { margin-top: 10px; font-size: 12px; color: var(--ink-faint); }
+
+  /* Type */
+  .type-row { border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface); padding: 16px 18px; }
+  .type-row + .type-row { margin-top: 12px; }
+  .type-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+  .type-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); }
+  .type-font { font-size: 12px; color: var(--ink-mute); text-align: right; }
+  .type-font .dim { color: var(--ink-faint); }
+  .type-sample { margin: 8px 0 0; line-height: 1.1; }
+
+  /* Palette */
+  .palette { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+  @media (min-width: 560px) { .palette { grid-template-columns: repeat(4, 1fr); } }
+  @media (min-width: 920px) { .palette { grid-template-columns: repeat(7, 1fr); } }
+  .swatch { overflow: hidden; border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+  .swatch-chip { height: 92px; display: flex; align-items: flex-end; padding: 8px; }
+  .swatch-chip .hex { font-family: var(--font-mono); font-size: 11px; }
+  .swatch-body { padding: 9px 10px 11px; }
+  .swatch-name { font-size: 13px; font-weight: 500; line-height: 1.2; }
+  .swatch-role { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
+  .swatch-usage { font-size: 11px; color: var(--ink-mute); margin-top: 5px; line-height: 1.35; }
+
+  /* Voice */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
+  .voice-tone { margin: 12px 0 0; font-size: 14px; color: var(--ink-mute); line-height: 1.55; }
+  .pillars { margin: 12px 0 0; padding: 0; list-style: none; font-size: 14px; }
+  .pillars li { display: flex; gap: 8px; margin-top: 4px; }
+  .vocab { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px solid var(--line-soft); padding-top: 12px; font-size: 12px; }
+  .vocab .k { font-weight: 600; }
+  .vocab .use .k { color: var(--ok); }
+  .vocab .avoid .k { color: var(--err); }
+  .vocab .v { margin-top: 4px; color: var(--ink-mute); }
+
+  /* Imagery */
+  .imagery p { margin: 0; font-size: 14px; }
+  .imagery p + p { margin-top: 6px; color: var(--ink-mute); }
+  .imagery .k { font-weight: 600; color: var(--ink); }
+  .posture { margin-top: 12px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+  .posture ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--ink-mute); }
+  .posture ul li { margin-top: 2px; }
+
+  /* Design system */
+  .ds-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  .ds-sub { margin: 2px 0 0; font-size: 13px; color: var(--ink-mute); }
+  .ds-frame-wrap { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+  .ds-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line-soft); padding: 7px 10px; }
+  .ds-tabs { display: flex; gap: 4px; }
+  .ds-tab { border: 0; background: transparent; cursor: pointer; border-radius: 8px; padding: 4px 11px; font-size: 13px; color: var(--ink-mute); font-family: inherit; }
+  .ds-tab.active { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--line); }
+  .ds-cap { font-size: 11px; color: var(--ink-faint); }
+  .ds-frame { width: 100%; height: 520px; border: 0; display: block; background: #fff; }
+  .ds-tokens { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .tok { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-soft); background: var(--surface); border-radius: 10px; padding: 5px 11px 5px 5px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+  .tok .sw { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0,0,0,.1); }
+  .tok .val { display: flex; min-width: 26px; height: 26px; align-items: center; justify-content: center; padding: 0 6px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+  .tok .k { font-size: 11px; font-weight: 600; line-height: 1.1; }
+  .tok .h { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); line-height: 1.1; }
+
+  /* Brand assets */
+  .assets { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 620px) { .assets { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 920px) { .assets { grid-template-columns: 1fr 1fr 1fr; } }
+  .asset { border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface); overflow: hidden; text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: border-color .14s ease, transform .14s ease; }
+  .asset:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .asset.pending { opacity: .55; pointer-events: none; }
+  .asset-frame { aspect-ratio: 16 / 10; background: var(--line-soft); position: relative; overflow: hidden; }
+  .asset-frame iframe { position: absolute; top: 0; left: 0; width: 200%; height: 200%; border: 0; transform: scale(.5); transform-origin: top left; pointer-events: none; background: #fff; }
+  .asset-meta { padding: 11px 13px; }
+  .asset-name { font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .asset-name .open { font-size: 11px; color: var(--accent); }
+  .asset-desc { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+
+  /* Hero banner — surfaces the first harvested brand image for visual richness */
+  .kit-hero { margin-top: 22px; border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; background: var(--line-soft); aspect-ratio: 16 / 5; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+  .kit-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* Font specimen tiles — a big "Ag" glyph per real family, in its own face */
+  .fonts { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); margin-bottom: 14px; }
+  @media (min-width: 560px) { .fonts { grid-template-columns: repeat(3, 1fr); } }
+  .font-tile { border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+  .font-tile .ag { display: flex; align-items: center; justify-content: center; height: 104px; font-size: 56px; line-height: 1; color: var(--ink); background: var(--line-soft); }
+  .font-tile .ft-meta { padding: 9px 11px 11px; }
+  .font-tile .ft-name { font-size: 13px; font-weight: 600; line-height: 1.2; }
+  .font-tile .ft-role { font-size: 11px; color: var(--ink-faint); margin-top: 1px; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* Images gallery — a thumbnail grid of representative brand imagery */
+  .gallery { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+  @media (min-width: 560px) { .gallery { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 920px) { .gallery { grid-template-columns: repeat(4, 1fr); } }
+  .shot { border: 1px solid var(--line-soft); border-radius: 12px; background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.03); transition: border-color .14s ease, transform .14s ease; }
+  .shot:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .shot-frame { aspect-ratio: 4 / 3; background: var(--line-soft); }
+  .shot-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shot-meta { padding: 8px 10px 10px; }
+  .shot-cap { font-size: 12px; font-weight: 500; line-height: 1.25; }
+  .shot-kind { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
+  .shot { cursor: pointer; }
+  .shot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .gallery-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .view-all { border: 1px solid var(--line); background: var(--surface); color: var(--ink-mute); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: border-color .2s cubic-bezier(.23,1,.32,1), color .2s cubic-bezier(.23,1,.32,1); }
+  .view-all:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Brand-asset tiles are clickable (open an in-page preview modal). */
+  .asset[data-asset-href] { cursor: pointer; }
+  .asset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* In-page preview overlays — the kit runs in a sandboxed iframe (no top
+     navigation), so image enlargement and asset previews happen as DOM
+     overlays. Ease-out cubic-bezier(.23,1,.32,1); enter ~200ms / exit ~140ms. */
+  .ov { position: fixed; inset: 0; z-index: 60; display: none; }
+  .ov.open { display: block; }
+  .ov-back { position: absolute; inset: 0; background: rgba(20,19,17,.74); opacity: 0; transition: opacity .14s cubic-bezier(.23,1,.32,1); }
+  .ov.in .ov-back { opacity: 1; transition-duration: .2s; }
+  .ov-panel { position: absolute; opacity: 0; transform: scale(.92); transition: opacity .14s cubic-bezier(.23,1,.32,1), transform .14s cubic-bezier(.23,1,.32,1); }
+  .ov.in .ov-panel { opacity: 1; transform: scale(1); transition-duration: .2s; }
+  .ov-close { position: absolute; top: 14px; right: 16px; z-index: 2; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: rgba(255,255,255,.92); color: #1a1a18; font-size: 22px; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.22); }
+  .ov-close:hover { background: #fff; }
+  .icon-x { border: 0; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: var(--ink-mute); padding: 4px 9px; border-radius: 8px; }
+  .icon-x:hover { background: var(--line-soft); color: var(--ink); }
+
+  /* Lightbox */
+  #ov-light { z-index: 70; }
+  #ov-light .ov-panel { top: 50%; left: 50%; transform: translate(-50%,-50%) scale(.92); display: flex; flex-direction: column; align-items: center; }
+  #ov-light.in .ov-panel { transform: translate(-50%,-50%) scale(1); }
+  #ov-light img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,.5); background: #fff; }
+  .light-cap { margin-top: 12px; color: rgba(255,255,255,.92); font-size: 13px; text-align: center; max-width: 80vw; }
+  .light-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border: 0; border-radius: 999px; background: rgba(255,255,255,.88); color: #1a1a18; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 12px rgba(0,0,0,.28); }
+  .light-nav:hover { background: #fff; }
+  .light-prev { left: 3vw; }
+  .light-next { right: 3vw; }
+
+  /* Masonry "view all" modal */
+  #ov-grid .ov-panel { top: 4vh; left: 50%; transform: translate(-50%,0) scale(.96); width: min(980px, 92vw); height: 92vh; background: var(--paper); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 16px 60px rgba(0,0,0,.42); }
+  #ov-grid.in .ov-panel { transform: translate(-50%,0) scale(1); }
+  .grid-bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  .grid-bar h3 { margin: 0; font-family: var(--font-display); font-size: 18px; }
+  .grid-scroll { overflow-y: auto; padding: 16px 20px 28px; }
+  .masonry { columns: 2; column-gap: 12px; }
+  @media (min-width: 560px) { .masonry { columns: 3; } }
+  @media (min-width: 860px) { .masonry { columns: 4; } }
+  .masonry .m-item { break-inside: avoid; margin: 0 0 12px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line-soft); background: var(--surface); cursor: pointer; transition: transform .2s cubic-bezier(.23,1,.32,1); }
+  .masonry .m-item:hover { transform: translateY(-2px); }
+  .masonry .m-item img { width: 100%; display: block; }
+
+  /* Asset preview modal */
+  #ov-asset .ov-panel { top: 4vh; left: 50%; transform: translate(-50%,0) scale(.96); width: min(1120px, 94vw); height: 92vh; background: #fff; border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 16px 60px rgba(0,0,0,.42); }
+  #ov-asset.in .ov-panel { transform: translate(-50%,0) scale(1); }
+  .asset-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .asset-bar .ab-title { font-size: 14px; font-weight: 600; }
+  .asset-bar .ab-sub { font-size: 12px; color: var(--ink-faint); margin-left: 8px; font-weight: 400; }
+  .asset-modal-frame { flex: 1; width: 100%; border: 0; display: block; background: #fff; }
+
+  /* skeleton */
+  .skel { background: linear-gradient(90deg, var(--line-soft) 25%, #f6f5ef 37%, var(--line-soft) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  .skel-line { height: 12px; margin-top: 8px; }
+  .muted { color: var(--ink-faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<script>
+(function () {
+  function payload() {
+    var el = document.getElementById('od-brand-payload');
+    try { return JSON.parse(el && el.textContent ? el.textContent : '{}'); }
+    catch (e) { return {}; }
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  function arr(v) { return Array.isArray(v) ? v : []; }
+  function role(brand, r, fb) {
+    var c = arr(brand.colors).find(function (x) { return x && x.role === r; });
+    return c && c.hex ? c.hex : fb;
+  }
+  function isLight(hex) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex || '')) return true;
+    var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return (r*0.299 + g*0.587 + b*0.114) > 150;
+  }
+  function fontStack(spec) {
+    var fams = [spec && spec.family].concat(arr(spec && spec.fallbacks)).filter(Boolean);
+    if (!fams.length) fams = ['ui-sans-serif','system-ui','sans-serif'];
+    return fams.map(function (f) { return /\s/.test(f) ? '"' + f + '"' : f; }).join(', ');
+  }
+
+  var data = payload();
+  var brand = data.brand || {};
+  var status = data.status || 'extracting';
+  var assets = arr(data.assets);
+  var extracting = status === 'extracting';
+
+  var colors = arr(brand.colors);
+  var bg = role(brand, 'background', '#ffffff');
+  var fg = role(brand, 'foreground', '#1a1a18');
+  var muted = role(brand, 'muted', '#57564f');
+  var accent = role(brand, 'accent', '#c96442');
+
+  // Apply brand accent/ink to the page chrome so the kit feels on-brand.
+  document.documentElement.style.setProperty('--accent', accent);
+
+  var typo = brand.typography || {};
+  var googleLinks = [typo.display, typo.body, typo.mono]
+    .map(function (s) { return s && s.googleFontsUrl; })
+    .filter(function (u, i, a) { return u && a.indexOf(u) === i; });
+  googleLinks.forEach(function (u) {
+    var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = u; document.head.appendChild(l);
+  });
+
+  function sectionTitle(t) { return '<h2 class="sec-title">' + esc(t) + '</h2>'; }
+
+  function logoHtml() {
+    // Resilient candidate list: primary first when present, otherwise fall back
+    // to the alternates so a populated `alternates` still renders a real mark.
+    // De-dupe so the primary doesn't double up as a thumbnail.
+    var primary = brand.logo && brand.logo.primary;
+    var cands = [primary].concat(arr(brand.logo && brand.logo.alternates))
+      .filter(Boolean)
+      .filter(function (c, i, a) { return a.indexOf(c) === i; });
+    if (!cands.length) {
+      return '<div class="logo-empty">' + (extracting
+        ? '<div class="skel" style="width:60%;height:48px"></div><span class="muted">Looking for a logo…</span>'
+        : 'No logo found') + '</div>';
+    }
+    var thumbs = cands.length > 1 ? '<div class="logo-thumbs">' + cands.map(function (c, i) {
+      return '<button class="logo-thumb' + (i===0?' active':'') + '" data-src="' + esc(c) + '" style="background:' + esc(bg) + '"><img src="' + esc(c) + '" alt=""></button>';
+    }).join('') + '</div>' : '';
+    var notes = brand.logo && brand.logo.notes ? '<p class="logo-notes">' + esc(brand.logo.notes) + '</p>' : '';
+    return '<div class="logo-stage" id="logo-stage" style="background:' + esc(bg) + '">' +
+      '<img id="logo-img" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || 'logo') + '"></div>' + thumbs + notes;
+  }
+
+  // Big "Ag" specimen tile per real family (display / body / mono), each set in
+  // its own face via the injected @font-face / googleFontsUrl — matches the
+  // Lovart 字体 tiles. Empty until at least one family is known.
+  function fontTilesHtml() {
+    var tiles = [
+      { role: 'Display', spec: typo.display },
+      { role: 'Body', spec: typo.body },
+    ];
+    if (typo.mono) tiles.push({ role: 'Mono', spec: typo.mono });
+    tiles = tiles.filter(function (t) { return t.spec && t.spec.family; });
+    if (!tiles.length) return '';
+    return '<div class="fonts">' + tiles.map(function (t) {
+      return '<div class="font-tile">' +
+        '<div class="ag" style="font-family:' + fontStack(t.spec) + '">Ag</div>' +
+        '<div class="ft-meta"><div class="ft-name">' + esc(t.spec.family) + '</div>' +
+        '<div class="ft-role">' + esc(t.role) + '</div></div></div>';
+    }).join('') + '</div>';
+  }
+
+  function imagerySamples() {
+    return arr(brand.imagery && brand.imagery.samples).filter(function (s) { return s && s.file; });
+  }
+
+  // Thumbnail grid of representative imagery harvested from the site. Relative
+  // `imagery/<file>` paths resolve under the FileViewer raw URL. Every thumb is
+  // clickable to open the lightbox; a "View all" entry opens a masonry modal
+  // with the full set. Empty (so the text-only imagery card stays) when no
+  // samples were saved.
+  function galleryHtml() {
+    var samples = imagerySamples();
+    if (!samples.length) return '';
+    var viewAll = samples.length > 6
+      ? '<button class="view-all" id="gallery-view-all" type="button">View all (' + samples.length + ') →</button>'
+      : '';
+    return '<section class="sec">' +
+      '<div class="gallery-head"><h2 class="sec-title" style="margin:0">Images</h2>' + viewAll + '</div>' +
+      '<div class="gallery">' + samples.map(function (s, i) {
+        var cap = s.caption || s.kind || '';
+        var sub = (s.caption && s.kind) ? s.kind : '';
+        var meta = cap ? '<div class="shot-meta"><div class="shot-cap">' + esc(cap) + '</div>' +
+          (sub ? '<div class="shot-kind">' + esc(sub) + '</div>' : '') + '</div>' : '';
+        return '<div class="shot" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || 'Image') + '"><div class="shot-frame">' +
+          '<img src="' + esc(s.file) + '" alt="' + esc(cap || brand.name || '') + '" loading="lazy"></div>' + meta + '</div>';
+      }).join('') + '</div></section>';
+  }
+
+  // Optional hero band: surfaces the first harvested image for visual richness.
+  function heroHtml() {
+    var samples = imagerySamples();
+    if (!samples.length) return '';
+    return '<div class="kit-hero"><img src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
+  }
+
+  function typeHtml() {
+    var rows = [
+      { label: 'Display', spec: typo.display, sample: brand.name || 'Aa', size: '40px', weight: 600, color: fg },
+      { label: 'Body', spec: typo.body, sample: brand.tagline || brand.description || 'The quick brown fox jumps over the lazy dog.', size: '17px', weight: 400, color: muted },
+    ];
+    if (typo.mono) rows.push({ label: 'Mono', spec: typo.mono, sample: 'const brand = await extract(url);', size: '14px', weight: 400, color: fg });
+    if (!typo.display && !typo.body) {
+      return '<div class="type-row"><div class="skel skel-line" style="width:50%"></div><div class="skel" style="height:34px;margin-top:10px;width:70%"></div></div>';
+    }
+    return rows.map(function (r) {
+      var spec = r.spec || {};
+      var note = spec.googleFontsUrl ? '' : ' <span class="dim">· proprietary, shown via fallback</span>';
+      var weights = arr(spec.weights).length ? ' · ' + arr(spec.weights).join('/') : '';
+      return '<div class="type-row"><div class="type-meta">' +
+        '<span class="type-label">' + esc(r.label) + '</span>' +
+        '<span class="type-font">' + esc(spec.family || '—') + esc(weights) + note + '</span></div>' +
+        '<p class="type-sample" style="font-family:' + fontStack(spec) + ';font-size:' + r.size + ';font-weight:' + r.weight + ';color:' + esc(r.color) + '">' + esc(r.sample) + '</p></div>';
+    }).join('');
+  }
+
+  function paletteHtml() {
+    if (!colors.length) {
+      var sk = '';
+      for (var i = 0; i < 7; i++) sk += '<div class="swatch"><div class="skel" style="height:92px"></div><div class="swatch-body"><div class="skel skel-line" style="width:70%"></div></div></div>';
+      return '<div class="palette">' + sk + '</div>';
+    }
+    return '<div class="palette">' + colors.map(function (c) {
+      var light = isLight(c.hex);
+      return '<div class="swatch"><div class="swatch-chip" style="background:' + esc(c.hex) + '">' +
+        '<span class="hex" style="color:' + (light ? 'rgba(0,0,0,.65)' : 'rgba(255,255,255,.9)') + '">' + esc(c.hex) + '</span></div>' +
+        '<div class="swatch-body"><div class="swatch-name">' + esc(c.name || c.role) + '</div>' +
+        '<div class="swatch-role">' + esc(c.role || '') + '</div>' +
+        (c.usage ? '<div class="swatch-usage">' + esc(c.usage) + '</div>' : '') + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function voiceHtml() {
+    var v = brand.voice || {};
+    if (!arr(v.adjectives).length && !v.tone) {
+      return '<div class="card"><div class="skel skel-line" style="width:40%"></div><div class="skel skel-line" style="width:85%"></div><div class="skel skel-line" style="width:75%"></div></div>';
+    }
+    var chips = arr(v.adjectives).map(function (a) {
+      return '<span class="chip" style="background:' + esc(accent) + '1f;color:' + esc(accent) + '">' + esc(a) + '</span>';
+    }).join('');
+    var pillars = arr(v.messagingPillars).length ? '<ul class="pillars">' + arr(v.messagingPillars).map(function (p) {
+      return '<li><span style="color:' + esc(accent) + '">—</span><span>' + esc(p) + '</span></li>';
+    }).join('') + '</ul>' : '';
+    var vocab = (v.vocabulary && (arr(v.vocabulary.use).length || arr(v.vocabulary.avoid).length))
+      ? '<div class="vocab"><div class="use"><div class="k">Use</div><div class="v">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
+        '<div class="avoid"><div class="k">Avoid</div><div class="v">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
+    return '<div class="card"><div class="chips">' + chips + '</div>' +
+      (v.tone ? '<p class="voice-tone">' + esc(v.tone) + '</p>' : '') + pillars + vocab + '</div>';
+  }
+
+  function imageryHtml() {
+    var im = brand.imagery || {};
+    var lay = brand.layout || {};
+    if (!im.style && !arr(lay.postureRules).length) {
+      return '<div class="card"><div class="skel skel-line" style="width:90%"></div><div class="skel skel-line" style="width:70%"></div></div>';
+    }
+    var posture = arr(lay.postureRules).length ? '<div class="posture"><div class="type-label">Layout posture</div><ul>' +
+      arr(lay.postureRules).map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul></div>' : '';
+    return '<div class="card imagery">' +
+      (im.style ? '<p>' + esc(im.style) + '</p>' : '') +
+      (arr(im.subjects).length ? '<p><span class="k">Subjects:</span> ' + esc(arr(im.subjects).join(', ')) + '</p>' : '') +
+      (im.treatment ? '<p><span class="k">Treatment:</span> ' + esc(im.treatment) + '</p>' : '') +
+      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">Avoid:</span> ' + esc(arr(im.avoid).join(', ')) + '</p>' : '') +
+      posture + '</div>';
+  }
+
+  function tokenChip(label, hex) {
+    return '<div class="tok"><span class="sw" style="background:' + esc(hex) + '"></span>' +
+      '<span><span class="k">' + esc(label) + '</span><span class="h">' + esc(hex) + '</span></span></div>';
+  }
+  function valueChip(label, value) {
+    return '<div class="tok"><span class="val">' + esc(value) + '</span><span class="k">' + esc(label) + '</span></div>';
+  }
+
+  function designSystemHtml() {
+    var sys = data.system;
+    if (!sys || !sys.kitHref) return '';
+    var t = sys.tokens || {};
+    var tokens = '';
+    if (t.colorPrimary) {
+      tokens = '<div class="ds-tokens">' +
+        tokenChip('colorPrimary', t.colorPrimary) +
+        (t.colorPrimaryBg ? tokenChip('colorPrimaryBg', t.colorPrimaryBg) : '') +
+        (t.colorPrimaryHover ? tokenChip('colorPrimaryHover', t.colorPrimaryHover) : '') +
+        (t.colorPrimaryActive ? tokenChip('colorPrimaryActive', t.colorPrimaryActive) : '') +
+        (t.fontSize != null ? valueChip('fontSize', String(t.fontSize)) : '') +
+        (t.borderRadius != null ? valueChip('borderRadius', String(t.borderRadius)) : '') +
+        '</div>';
+    }
+    var themes = arr(sys.themes).length ? arr(sys.themes).join(' · ') : 'default · dark · compact';
+    var openLink = sys.indexHref ? '<a class="btn" href="' + esc(sys.indexHref) + '" target="_top">Open full system ↗</a>' : '';
+    return '<section class="sec"><div class="ds-head"><div>' +
+        '<h2 class="sec-title">Design system</h2>' +
+        '<p class="ds-sub">Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.</p>' +
+      '</div>' + openLink + '</div>' +
+      '<div class="ds-frame-wrap"><div class="ds-bar">' +
+        '<div class="ds-tabs" id="ds-tabs">' +
+          '<button class="ds-tab active" data-kit="' + esc(sys.kitHref) + '">Light</button>' +
+          (sys.kitDarkHref ? '<button class="ds-tab" data-kit="' + esc(sys.kitDarkHref) + '">Dark</button>' : '') +
+        '</div>' +
+        '<span class="ds-cap">system/kit.html · themes: ' + esc(themes) + '</span>' +
+      '</div>' +
+      '<iframe id="ds-frame" class="ds-frame" src="' + esc(sys.kitHref) + '" loading="lazy" sandbox="" title="Component kit"></iframe></div>' +
+      tokens + '</section>';
+  }
+
+  function assetsHtml() {
+    if (!assets.length) return '';
+    return '<section class="sec">' + sectionTitle('Brand assets') +
+      '<p class="muted" style="margin:-6px 0 14px">' + (extracting
+        ? 'Generated once extraction finishes — click any tile to preview the full page.'
+        : 'Click any tile to preview the full page; everything is colored from this one brand.') + '</p>' +
+      '<div class="assets">' + assets.map(function (a) {
+        var pending = !a.available;
+        var inner = pending
+          ? '<div class="asset-frame"><div class="skel" style="position:absolute;inset:0"></div></div>'
+          : '<div class="asset-frame"><iframe src="' + esc(a.href) + '" loading="lazy" tabindex="-1" aria-hidden="true"></iframe></div>';
+        // Clicking a tile opens its full page in an in-page modal iframe — the
+        // kit is sandboxed with no top navigation, so a plain link cannot
+        // navigate. Data attributes carry what the modal needs.
+        var attrs = pending
+          ? ''
+          : ' data-asset-href="' + esc(a.href) + '" data-asset-label="' + esc(a.label) +
+            '" data-asset-desc="' + esc(a.desc || '') + '" tabindex="0" role="button"';
+        return '<div class="asset' + (pending ? ' pending' : '') + '"' + attrs + '>' + inner +
+          '<div class="asset-meta"><div class="asset-name">' + esc(a.label) + (pending ? '' : '<span class="open">Preview →</span>') + '</div>' +
+          (a.desc ? '<div class="asset-desc">' + esc(a.desc) + '</div>' : '') + '</div></div>';
+      }).join('') + '</div></section>';
+  }
+
+  var systemHref = (data.system && data.system.indexHref) || null;
+  var brandMdHref = (data.brandMd && data.brandMd.href) || null;
+
+  var html = '' +
+    '<header class="kit-head"><div>' +
+      '<h1 class="kit-title" style="font-family:' + fontStack(typo.display || {}) + '">' + esc(brand.name || (data.host || 'Brand')) + '</h1>' +
+      (brand.tagline ? '<p class="kit-tagline">' + esc(brand.tagline) + '</p>' : '') +
+      (brand.sourceUrl ? '<a class="kit-source" href="' + esc(brand.sourceUrl) + '" target="_top">' + esc(brand.sourceUrl) + ' ↗</a>' : '') +
+    '</div><div class="head-actions">' +
+      '<span class="status-pill ' + (extracting ? 'extracting' : 'ready') + '"><span class="dot"></span>' + (extracting ? 'Extracting…' : 'Brand ready') + '</span>' +
+      (brandMdHref ? '<a class="btn" href="' + esc(brandMdHref) + '" target="_top">BRAND.md</a>' : '') +
+      (systemHref ? '<a class="btn" href="' + esc(systemHref) + '" target="_top">Design system ↗</a>' : '') +
+    '</div></header>' +
+    heroHtml() +
+    '<div class="sec grid-top"><section><h2 class="sec-title">Logo</h2>' + logoHtml() + '</section>' +
+      '<section><h2 class="sec-title">Typography</h2>' + fontTilesHtml() + typeHtml() + '</section></div>' +
+    '<section class="sec">' + sectionTitle('Palette') + paletteHtml() + '</section>' +
+    '<div class="sec grid-2"><section><h2 class="sec-title">Voice &amp; tone</h2>' + voiceHtml() + '</section>' +
+      '<section><h2 class="sec-title">Imagery &amp; layout</h2>' + imageryHtml() + '</section></div>' +
+    galleryHtml() +
+    designSystemHtml() +
+    assetsHtml();
+
+  document.getElementById('root').innerHTML = html;
+
+  // Logo thumbnail switcher.
+  var img = document.getElementById('logo-img');
+  Array.prototype.forEach.call(document.querySelectorAll('.logo-thumb'), function (b) {
+    b.addEventListener('click', function () {
+      if (img) img.src = b.getAttribute('data-src');
+      Array.prototype.forEach.call(document.querySelectorAll('.logo-thumb'), function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+    });
+  });
+
+  // Design-system Light/Dark kit toggle — swaps the iframe src in place.
+  var dsTabs = document.getElementById('ds-tabs');
+  var dsFrame = document.getElementById('ds-frame');
+  if (dsTabs && dsFrame) {
+    Array.prototype.forEach.call(dsTabs.querySelectorAll('.ds-tab'), function (b) {
+      b.addEventListener('click', function () {
+        dsFrame.src = b.getAttribute('data-kit');
+        Array.prototype.forEach.call(dsTabs.querySelectorAll('.ds-tab'), function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+      });
+    });
+  }
+
+  // ---- In-page preview overlays (lightbox / masonry / asset modal) ----
+  // The kit runs in a sandboxed iframe with no top-navigation, so enlarging an
+  // image and previewing a brand asset's full page must happen as in-page DOM
+  // overlays rather than real navigation.
+  var SAMPLES = imagerySamples();
+  var ovStack = [];
+
+  function mkOverlay(id) {
+    var ov = document.createElement('div');
+    ov.className = 'ov';
+    ov.id = id;
+    var back = document.createElement('div');
+    back.className = 'ov-back';
+    ov.appendChild(back);
+    back.addEventListener('click', function () { closeOverlay(ov); });
+    document.body.appendChild(ov);
+    return ov;
+  }
+  function openOverlay(ov) {
+    if (ovStack.indexOf(ov) === -1) ovStack.push(ov);
+    ov.classList.add('open');
+    // Two frames so the browser registers the pre-transition state first.
+    requestAnimationFrame(function () { requestAnimationFrame(function () { ov.classList.add('in'); }); });
+  }
+  function closeOverlay(ov) {
+    ov.classList.remove('in');
+    var i = ovStack.indexOf(ov);
+    if (i !== -1) ovStack.splice(i, 1);
+    setTimeout(function () { if (!ov.classList.contains('in')) ov.classList.remove('open'); }, 160);
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && ovStack.length) closeOverlay(ovStack[ovStack.length - 1]);
+  });
+
+  // Lightbox: a single enlarged image with optional prev/next + caption.
+  var lightOv = null, lightImg = null, lightCap = null, lightIdx = 0;
+  function buildLight() {
+    if (lightOv) return;
+    lightOv = mkOverlay('ov-light');
+    var panel = document.createElement('div');
+    panel.className = 'ov-panel';
+    lightImg = document.createElement('img');
+    lightCap = document.createElement('div');
+    lightCap.className = 'light-cap';
+    panel.appendChild(lightImg);
+    panel.appendChild(lightCap);
+    lightOv.appendChild(panel);
+    var close = document.createElement('button');
+    close.className = 'ov-close';
+    close.type = 'button';
+    close.innerHTML = '&times;';
+    close.setAttribute('aria-label', 'Close');
+    close.addEventListener('click', function () { closeOverlay(lightOv); });
+    lightOv.appendChild(close);
+    if (SAMPLES.length > 1) {
+      var prev = document.createElement('button');
+      prev.className = 'light-nav light-prev';
+      prev.type = 'button';
+      prev.innerHTML = '\u2039';
+      prev.setAttribute('aria-label', 'Previous image');
+      prev.addEventListener('click', function (e) { e.stopPropagation(); showLight(lightIdx - 1); });
+      var next = document.createElement('button');
+      next.className = 'light-nav light-next';
+      next.type = 'button';
+      next.innerHTML = '\u203a';
+      next.setAttribute('aria-label', 'Next image');
+      next.addEventListener('click', function (e) { e.stopPropagation(); showLight(lightIdx + 1); });
+      lightOv.appendChild(prev);
+      lightOv.appendChild(next);
+    }
+  }
+  function showLight(idx) {
+    if (!SAMPLES.length) return;
+    buildLight();
+    lightIdx = (idx % SAMPLES.length + SAMPLES.length) % SAMPLES.length;
+    var s = SAMPLES[lightIdx];
+    lightImg.src = s.file;
+    lightImg.alt = s.caption || brand.name || '';
+    lightCap.textContent = s.caption || s.kind || '';
+    openOverlay(lightOv);
+  }
+
+  // Masonry "view all" modal: every image in a waterfall (column) layout.
+  var gridOv = null;
+  function buildGrid() {
+    if (gridOv) return;
+    gridOv = mkOverlay('ov-grid');
+    var panel = document.createElement('div');
+    panel.className = 'ov-panel';
+    var bar = document.createElement('div');
+    bar.className = 'grid-bar';
+    var h = document.createElement('h3');
+    h.textContent = 'All images · ' + SAMPLES.length;
+    var x = document.createElement('button');
+    x.className = 'icon-x';
+    x.type = 'button';
+    x.innerHTML = '&times;';
+    x.setAttribute('aria-label', 'Close');
+    x.addEventListener('click', function () { closeOverlay(gridOv); });
+    bar.appendChild(h);
+    bar.appendChild(x);
+    var scroll = document.createElement('div');
+    scroll.className = 'grid-scroll';
+    var mas = document.createElement('div');
+    mas.className = 'masonry';
+    SAMPLES.forEach(function (s, i) {
+      var item = document.createElement('div');
+      item.className = 'm-item';
+      var im = document.createElement('img');
+      im.src = s.file;
+      im.alt = s.caption || '';
+      im.loading = 'lazy';
+      item.appendChild(im);
+      item.addEventListener('click', function () { showLight(i); });
+      mas.appendChild(item);
+    });
+    scroll.appendChild(mas);
+    panel.appendChild(bar);
+    panel.appendChild(scroll);
+    gridOv.appendChild(panel);
+  }
+  function openGrid() { buildGrid(); openOverlay(gridOv); }
+
+  // Asset preview modal: the asset's full page in an iframe (relative src
+  // resolves under the kit's raw URL load).
+  var assetOv = null, assetFrame = null, assetTitle = null, assetSub = null;
+  function buildAsset() {
+    if (assetOv) return;
+    assetOv = mkOverlay('ov-asset');
+    var panel = document.createElement('div');
+    panel.className = 'ov-panel';
+    var bar = document.createElement('div');
+    bar.className = 'asset-bar';
+    var left = document.createElement('div');
+    assetTitle = document.createElement('span');
+    assetTitle.className = 'ab-title';
+    assetSub = document.createElement('span');
+    assetSub.className = 'ab-sub';
+    left.appendChild(assetTitle);
+    left.appendChild(assetSub);
+    var x = document.createElement('button');
+    x.className = 'icon-x';
+    x.type = 'button';
+    x.innerHTML = '&times;';
+    x.setAttribute('aria-label', 'Close');
+    x.addEventListener('click', function () { closeOverlay(assetOv); });
+    bar.appendChild(left);
+    bar.appendChild(x);
+    assetFrame = document.createElement('iframe');
+    assetFrame.className = 'asset-modal-frame';
+    assetFrame.title = 'Asset preview';
+    panel.appendChild(bar);
+    panel.appendChild(assetFrame);
+    assetOv.appendChild(panel);
+  }
+  function openAsset(href, label, desc) {
+    if (!href) return;
+    buildAsset();
+    assetTitle.textContent = label || 'Preview';
+    assetSub.textContent = desc || '';
+    assetFrame.src = href;
+    openOverlay(assetOv);
+  }
+
+  // Wire imagery thumbnails → lightbox (click + keyboard).
+  Array.prototype.forEach.call(document.querySelectorAll('.shot[data-idx]'), function (el) {
+    var idx = Number(el.getAttribute('data-idx')) || 0;
+    el.addEventListener('click', function () { showLight(idx); });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showLight(idx); }
+    });
+  });
+  var viewAllBtn = document.getElementById('gallery-view-all');
+  if (viewAllBtn) viewAllBtn.addEventListener('click', openGrid);
+
+  // Wire brand-asset tiles → in-page full preview modal (click + keyboard).
+  Array.prototype.forEach.call(document.querySelectorAll('.asset[data-asset-href]'), function (el) {
+    var open = function () {
+      openAsset(el.getAttribute('data-asset-href'), el.getAttribute('data-asset-label'), el.getAttribute('data-asset-desc'));
+    };
+    el.addEventListener('click', open);
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
+
+  // While extraction is live, softly reload so the page fills in as the agent
+  // updates brand.json + re-runs `od brand preview`. Stops the moment the
+  // payload reports a ready brand. While a preview overlay is open the reload
+  // is deferred (re-armed) so it never yanks the lightbox / asset modal out
+  // from under the user mid-interaction.
+  if (extracting) {
+    var armReload = function () {
+      setTimeout(function () {
+        if (ovStack.length) { armReload(); return; }
+        try { location.reload(); } catch (e) {}
+      }, 3500);
+    };
+    armReload();
+  }
+})();
+</script>
+</body>
+</html>

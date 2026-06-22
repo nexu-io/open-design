@@ -397,6 +397,13 @@ describe('HomeHero intent rail', () => {
     expect(findChip('template')?.action).toMatchObject({ kind: 'open-template-picker' });
   });
 
+  it('leads the create group with the Brand Kit chip and its own action discriminator', () => {
+    const createChips = HOME_HERO_CHIPS.filter((chip) => chip.group === 'create');
+    expect(createChips[0]?.id).toBe('create-brand-kit');
+    expect(findChip('create-brand-kit')?.action).toMatchObject({ kind: 'create-brand-kit' });
+    expect(findChip('create-brand-kit')?.icon).toBe('swatchbook');
+  });
+
   it('media chips route to od-media-generation with the matching project kind', () => {
     expect(findChip('image')?.action).toMatchObject({
       kind: 'apply-scenario',

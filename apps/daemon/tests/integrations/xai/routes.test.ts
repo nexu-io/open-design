@@ -94,6 +94,7 @@ async function startTestApp(projectRoot: string): Promise<TestApp> {
   };
   const pathDeps = {
     ARTIFACTS_DIR: '',
+    BRANDS_DIR: '',
     BUNDLED_PETS_DIR: '',
     DESIGN_SYSTEMS_DIR: '',
     DESIGN_TEMPLATES_DIR: '',
