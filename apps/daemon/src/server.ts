@@ -8345,6 +8345,30 @@ export async function startServer({
         firstTokenAt: timestamp,
       };
     };
+    // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
+    // `cliReadyAt` is the first well-formed adapter output and is stamped for
+    // every runtime family from its own decode choke point: first JSONL line
+    // (claude-stream-json), first decoded stream event (json-event-stream /
+    // qoder / pi-rpc), first non-empty stdout chunk (plain), or first ACP
+    // JSON-RPC message (acp-json-rpc). `sessionInitDoneAt` is only observable
+    // for ACP (the resume/`session/new` ack); for stream/plain families that
+    // gap is folded into `spawn_to_first_token_remainder_ms` rather than
+    // anchored to a fabricated marker. Both are first-write-wins like
+    // `firstTokenAt` so a later chunk cannot move an already-stamped boundary.
+    const noteCliReadyAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.cliReadyAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        cliReadyAt: timestamp,
+      };
+    };
+    const noteSessionInitDoneAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.sessionInitDoneAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        sessionInitDoneAt: timestamp,
+      };
+    };
     const noteFirstTokenFromAgentEvent = (ev) => {
       if (ev?.type && FIRST_TOKEN_AGENT_EVENT_TYPES.has(ev.type)) {
         noteFirstTokenAt();
@@ -8560,6 +8584,9 @@ export async function startServer({
         }));
         return;
       }
+      // First well-formed decoded stream event = CLI ready for the
+      // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
+      noteCliReadyAt();
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -8597,6 +8624,9 @@ export async function startServer({
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
+        // First parsed claude-stream-json event = CLI ready (#3408 §4); the
+        // init/system line arrives well before the model's first token.
+        noteCliReadyAt();
         if (ev?.type === 'error') {
           if (agentStreamError) return;
           flushVisibleAgentStderr();
@@ -8756,6 +8786,8 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        onCliReady: () => noteCliReadyAt(),
+        onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
@@ -8825,6 +8857,10 @@ export async function startServer({
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
         const text = typeof chunk === 'string' ? chunk : String(chunk);
+        // First non-empty stdout chunk = CLI ready for the plain family
+        // (#3408 §4 marker). A plain adapter has no structured preamble, so
+        // this typically coincides with its first model output.
+        if (text.length > 0) noteCliReadyAt();
         const visibleText = titleMarkerStripper.strip(text);
         const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {

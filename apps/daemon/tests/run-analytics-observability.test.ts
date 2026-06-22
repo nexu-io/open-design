@@ -647,12 +647,76 @@ describe('summarizeRunTimingAnalytics', () => {
       process_spawn_duration_ms: 60,
       time_to_first_token_ms: 1300,
       spawn_to_first_token_ms: 740,
+      // No subsegment markers were observed, so the whole spawn->first-token
+      // span is unattributed and falls into the remainder.
+      spawn_to_first_token_remainder_ms: 740,
       generation_duration_ms: 5500,
       tool_call_count: 2,
       tool_duration_ms: 650,
       finalize_duration_ms: 20,
       total_duration_ms: 7020,
     });
+  });
+
+  it('splits spawn->first-token into subsegments that sum back exactly', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 8_000,
+      analyticsCapturedAt: 8_020,
+      telemetry: {
+        startChatRunStartedAt: 1_200,
+        processSpawnStartedAt: 1_700,
+        processSpawnedAt: 1_760,
+        // 1760 -> 1900 cli-ready, 1900 -> 2100 session-init, 2100 -> 2500 model.
+        cliReadyAt: 1_900,
+        sessionInitDoneAt: 2_100,
+        firstTokenAt: 2_500,
+      },
+      events: [],
+    });
+
+    expect(result.spawn_to_first_token_ms).toBe(740);
+    expect(result.cli_ready_ms).toBe(140);
+    expect(result.session_init_ms).toBe(200);
+    expect(result.model_first_token_ms).toBe(400);
+    expect(result.spawn_to_first_token_remainder_ms).toBe(0);
+    // The auditable invariant: the four parts reconstruct the parent span.
+    expect(
+      (result.cli_ready_ms ?? 0) +
+        (result.session_init_ms ?? 0) +
+        (result.model_first_token_ms ?? 0) +
+        (result.spawn_to_first_token_remainder_ms ?? 0),
+    ).toBe(result.spawn_to_first_token_ms);
+  });
+
+  it('folds an unobservable session-init boundary into the remainder', () => {
+    // Stream/plain families stamp cliReadyAt but never sessionInitDoneAt, so
+    // session_init/model_first_token stay undefined and their time rolls into
+    // the remainder while the sum invariant still holds.
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 8_000,
+      analyticsCapturedAt: 8_020,
+      telemetry: {
+        startChatRunStartedAt: 1_200,
+        processSpawnedAt: 1_760,
+        cliReadyAt: 1_900,
+        firstTokenAt: 2_500,
+      },
+      events: [],
+    });
+
+    expect(result.spawn_to_first_token_ms).toBe(740);
+    expect(result.cli_ready_ms).toBe(140);
+    expect(result.session_init_ms).toBeUndefined();
+    expect(result.model_first_token_ms).toBeUndefined();
+    expect(result.spawn_to_first_token_remainder_ms).toBe(600);
+    expect(
+      (result.cli_ready_ms ?? 0) +
+        (result.session_init_ms ?? 0) +
+        (result.model_first_token_ms ?? 0) +
+        (result.spawn_to_first_token_remainder_ms ?? 0),
+    ).toBe(result.spawn_to_first_token_ms);
   });
 
   it('drops negative timing segments and ignores orphan tool results', () => {

@@ -2719,6 +2719,14 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   process_spawn_duration_ms?: number;
   time_to_first_token_ms?: number;
   spawn_to_first_token_ms?: number;
+  // `spawn_to_first_token_ms` split into auditable subsegments so dashboards
+  // can separate local CLI startup from session handshake from provider
+  // first-token latency. The four parts sum back to `spawn_to_first_token_ms`
+  // (absent subsegments count as 0 and roll into the remainder).
+  cli_ready_ms?: number;
+  session_init_ms?: number;
+  model_first_token_ms?: number;
+  spawn_to_first_token_remainder_ms?: number;
   generation_duration_ms?: number;
   tool_call_count?: number;
   tool_duration_ms?: number;
