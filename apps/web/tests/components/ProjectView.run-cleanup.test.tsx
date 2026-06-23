@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { ComponentProps } from 'react';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -706,6 +707,91 @@ describe('ProjectView daemon cleanup', () => {
       expect(seededCall).toBeUndefined();
     } finally {
       window.sessionStorage.removeItem('od:auto-send-first:project-2');
+    }
+  });
+
+  it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    chatPaneSpy.mockClear();
+    const onClearPendingPrompt = vi.fn();
+    window.sessionStorage.setItem('od:auto-send-first:project-hydrating', '1');
+
+    const baseProps = {
+      project: {
+        id: 'project-hydrating',
+        name: 'Ramp.com Design System',
+        skillId: null,
+        designSystemId: null,
+      } as never,
+      routeFileName: null,
+      config: { mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never,
+      agents: [{ id: 'agent-1', name: 'OpenCode', models: [] } as never],
+      skills: [],
+      designTemplates: [],
+      designSystems: [],
+      daemonLive: true,
+      onModeChange: () => {},
+      onAgentChange: () => {},
+      onAgentModelChange: () => {},
+      onRefreshAgents: () => {},
+      onOpenSettings: () => {},
+      onBack: () => {},
+      onClearPendingPrompt,
+      onTouchProject: () => {},
+      onProjectChange: () => {},
+      onProjectsRefresh: () => {},
+    } satisfies ComponentProps<typeof ProjectView>;
+
+    try {
+      const view = render(<ProjectView {...baseProps} />);
+
+      await waitFor(() => {
+        expect(chatPaneSpy).toHaveBeenCalled();
+        expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+      });
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+      expect(onClearPendingPrompt).not.toHaveBeenCalled();
+      expect(window.sessionStorage.getItem('od:auto-send-first:project-hydrating')).toBe('1');
+
+      view.rerender(
+        <ProjectView
+          {...baseProps}
+          project={{
+            id: 'project-hydrating',
+            name: 'Ramp.com Design System',
+            skillId: null,
+            designSystemId: null,
+            createdAt: 1,
+            updatedAt: 1,
+            pendingPrompt: 'Extract ramp.com into a design system.',
+          }}
+        />,
+      );
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      expect(onClearPendingPrompt).toHaveBeenCalledTimes(1);
+      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+        history: [
+          expect.objectContaining({
+            role: 'user',
+            content: 'Extract ramp.com into a design system.',
+          }),
+        ],
+      });
+      expect(window.sessionStorage.getItem('od:auto-send-first:project-hydrating')).toBeNull();
+    } finally {
+      window.sessionStorage.removeItem('od:auto-send-first:project-hydrating');
     }
   });
 

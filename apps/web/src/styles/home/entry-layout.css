@@ -3247,6 +3247,29 @@
   margin-top: 16px;
 }
 
+.onboarding-view__brand-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.onboarding-view__brand-action-row .onboarding-view__mini-button {
+  grid-column: 2;
+  width: 360px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0 28px;
+  font-size: 13px;
+}
+
+.onboarding-view__brand-action-row .onboarding-view__secondary {
+  grid-column: 3;
+  justify-self: end;
+}
+
 .onboarding-view__email-label {
   color: var(--text-strong);
   font-size: 12px;

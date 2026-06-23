@@ -814,6 +814,52 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
   });
 
+  it('does not show a memory-saved callout on the About you step before choices are submitted', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Continue \(signed in\)/i }));
+
+    expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    expect(screen.queryByText('Saved to your Memory')).toBeNull();
+  });
+
+  it('shows a Back control on the brand extraction onboarding step', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Continue \(signed in\)/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Extract your design system' })).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /^Back$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Finish setup/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Skip for now/i })).toBeNull();
+  });
+
   it('tracks onboarding page views and about-you submission payload on completion', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
