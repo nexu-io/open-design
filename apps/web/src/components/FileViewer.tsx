@@ -4898,7 +4898,19 @@ function HtmlViewer({
   // clears source to null on the srcDoc path.  The fetch effect restores this
   // value if fetchProjectFileText returns null (non-2xx / transient network
   // error), so the iframe never goes blank on a failed reload attempt.
-  const prevSourceBeforeReloadRef = useRef<string | null>(null);
+  //
+  // The snapshot is keyed by projectId + fileName so that:
+  //   (a) a rapid second Reload click — which sees source===null from the
+  //       first click's setSource(null) — does not overwrite the ref with null
+  //       and destroy the fallback (double-click race, PR #4652 review);
+  //   (b) switching to a different file while a reload fetch is in flight
+  //       does not restore the previous file's HTML into the new preview
+  //       (file-switch contamination race, PR #4652 review).
+  const prevSourceBeforeReloadRef = useRef<{
+    source: string;
+    projectId: string;
+    fileName: string;
+  } | null>(null);
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
@@ -5206,6 +5218,14 @@ function HtmlViewer({
     if (fileChanged) {
       setSource(null);
       sourceRef.current = null;
+      // Note: prevSourceBeforeReloadRef is NOT cleared here.  The identity
+      // check in the null-restore branch below (snap.projectId + snap.fileName
+      // vs. current projectId + file.name) already prevents a stale snapshot
+      // from being applied to a different file.  Keeping the ref non-null
+      // across the file-switch lets the [projectId, file.name] effect (which
+      // runs after this effect) detect that a reload was in progress and
+      // preserve sourceEverLoadedRef so the iframe stays visible instead of
+      // flipping to the loading skeleton (PR #4652 review).
     }
     let cancelled = false;
     // Cache-bust the fetch on every mtime / reload / files-refresh bump.
@@ -5228,9 +5248,20 @@ function HtmlViewer({
         // restore the pre-reload source so the iframe doesn't go blank.
         // prevSourceBeforeReloadRef is null on a normal file-change fetch,
         // so this branch is a no-op outside of the Reload failure case.
-        if (prevSourceBeforeReloadRef.current != null) {
-          setSource(prevSourceBeforeReloadRef.current);
-          sourceRef.current = prevSourceBeforeReloadRef.current;
+        //
+        // Guard: only restore if the snapshot was taken for the current
+        // file.  A file-switch clears the ref (see fileChanged block above),
+        // but we double-check the identity here to prevent cross-file
+        // contamination in case the ref was not yet cleared by the time this
+        // async callback fires (file-switch race, PR #4652 review).
+        const snap = prevSourceBeforeReloadRef.current;
+        if (
+          snap != null &&
+          snap.projectId === projectId &&
+          snap.fileName === file.name
+        ) {
+          setSource(snap.source);
+          sourceRef.current = snap.source;
           prevSourceBeforeReloadRef.current = null;
         }
         return;
@@ -5394,7 +5425,17 @@ function HtmlViewer({
     // sentinel stays true from the previous file, the render guard skips the
     // skeleton, and a slow fetch leaves the user staring at a blank iframe
     // instead of the loading indicator (codex P2 finding, issue #4650).
-    sourceEverLoadedRef.current = false;
+    //
+    // Skip the reset when a reload was in progress at the moment of the file
+    // switch (prevSourceBeforeReloadRef holds a snapshot iff Reload was clicked
+    // and the fetch has not yet resolved).  In that state the user was already
+    // in "viewing mode"; hiding the iframe with the loading skeleton would be
+    // jarring.  The main fetch effect's fileChanged block clears the ref, so
+    // this carve-out is self-cleaning and only applies to the single transition
+    // render immediately after the file prop changes (PR #4652 review).
+    if (prevSourceBeforeReloadRef.current === null) {
+      sourceEverLoadedRef.current = false;
+    }
   }, [projectId, file.name]);
   const activePreviewSrcUrl = (
     previewSrcUrl === effectiveBasePreviewSrcUrl ||
@@ -7303,7 +7344,21 @@ function HtmlViewer({
       // Without this, a failed reload leaves source null and the iframe blank
       // because the existing keep-last-good guard in the fetch effect has
       // nothing to fall back to (PR #4652).
-      prevSourceBeforeReloadRef.current = source;
+      //
+      // Only overwrite the ref when source is non-null: if a rapid second
+      // Reload click fires while source is already null (cleared by the first
+      // click), we must NOT overwrite the ref — doing so would discard the
+      // genuine last-good snapshot that the first click stored, and the
+      // restore path would have nothing to fall back to (double-click race,
+      // PR #4652 review).  The snapshot is keyed with the current file
+      // identity so the restore guard can reject stale cross-file snapshots.
+      if (source !== null) {
+        prevSourceBeforeReloadRef.current = {
+          source,
+          projectId,
+          fileName: file.name,
+        };
+      }
       // Clear source synchronously so previewSource becomes null and the
       // srcDoc memo recomputes to '' before the async re-fetch resolves.
       // Without this, the remounted iframe carries stale srcdoc content
