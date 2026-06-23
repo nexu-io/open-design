@@ -1,11 +1,19 @@
 name: bake-plugin-previews
 
-# Pre-render the home gallery's plugin previews to small H.264 clips + posters.
-# We bake ALL plugins every run; the script's content-hash skip (manifest hash +
-# BAKE_VERSION) makes that cheap — only plugins whose page actually changed are
-# re-rendered and re-uploaded. Runs post-merge (so fork contributions are covered
-# with full secrets) and nightly as a self-healing sweep. Until a plugin is baked
-# the gallery falls back to its live example.html iframe, so there is no gap.
+# Post-merge + nightly bake of the home gallery's plugin previews.
+#
+# Role after the pipeline rework (specs/change/20260618-plugin-preview-bake-
+# pipeline/spec.md): this workflow is the UPLOADER + FORK PATH + nightly
+# BACKSTOP, no longer the primary way a manifest lands.
+#   - Internal (same-repo) plugin changes refresh their own preview inside the
+#     author's PR via bake-plugin-previews-pr.yml, so by merge time the manifest
+#     is usually already current and this run only ensures the clips are on R2.
+#   - Fork contributions cannot bake in-PR (no secrets), so their manifest is
+#     refreshed here, post-merge.
+#   - Nightly re-runs catch transient bake failures and BAKE_VERSION bumps.
+# When it does need to land a manifest, it opens ONE rolling review PR (it cannot
+# push to protected main directly). Until a plugin is baked the gallery falls
+# back to its live example.html iframe, so there is no gap.
 
 on:
   push:
@@ -18,7 +26,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write # push the manifest branch
+  contents: write # push the rolling manifest branch
   pull-requests: write # open the review PR (gh pr create needs this; unset perms default to none)
 
 concurrency:
@@ -37,79 +45,31 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Install ffmpeg + CJK fonts + puppeteer-core
-        run: |
-          sudo apt-get update
-          # ffmpeg encodes the clips; the Noto CJK + emoji fonts give headless
-          # Chrome a real CJK/emoji fallback so templates that rely on system
-          # fonts for 中文/日本語/한국어 (or load Noto SC from Google Fonts but
-          # race) render glyphs instead of missing-glyph tofu boxes.
-          sudo apt-get install -y ffmpeg fonts-noto-cjk fonts-noto-color-emoji
-          # npm chokes on the workspace:* root manifest; use pnpm to drop
-          # puppeteer-core into the workspace node_modules (CI-only, not committed).
-          pnpm add -w puppeteer-core
+      - name: Render previews + publish clips to R2 (main only)
+        uses: ./.github/actions/bake-previews
+        with:
+          upload: ${{ github.ref == 'refs/heads/main' }}
+          r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
+          r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
+          r2-bucket: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
+          r2-endpoint: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
 
-      - name: Build daemon + tools
-        run: |
-          pnpm --filter "./packages/**" build
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/tools-dev build
-
-      - name: Start daemon
-        run: |
-          pnpm tools-dev start daemon --namespace ci --daemon-port 17470
-          for _ in $(seq 1 60); do
-            if curl -sf -o /dev/null http://127.0.0.1:17470/api/plugins; then
-              echo "daemon ready"; exit 0
-            fi
-            sleep 2
-          done
-          echo "daemon did not become ready" >&2; exit 1
-
-      - name: Bake (content-hash skip reuses unchanged plugins)
-        env:
-          BASE_URL: http://127.0.0.1:17470
-          # The CI clips live on R2, not on disk, so trust the manifest hash.
-          PREVIEW_REMOTE: '1'
-        run: |
-          CHROME="$(which google-chrome || which google-chrome-stable || which chromium-browser)"
-          export CHROME
-          echo "resolved CHROME=$CHROME"
-          mkdir -p .tmp/plugin-previews
-          # Seed with the committed manifest so the hash skip can reuse entries.
-          cp data/plugin-previews/manifest.json .tmp/plugin-previews/manifest.json
-          node scripts/bake-plugin-previews.mjs --out .tmp/plugin-previews
-
-      - name: Upload clips to R2
-        if: ${{ github.ref == 'refs/heads/main' }} # only publish from main
-        # Publishes to the repository-assets R2 bucket; the deployed daemon must
-        # set OD_PLUGIN_PREVIEWS_BASE_URL to
-        # https://repo-assets.open-design.ai/plugin-previews so its bakedPreview
-        # URLs point here (CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN).
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
-          AWS_DEFAULT_REGION: auto
-          AWS_EC2_METADATA_DISABLED: 'true'
-          R2_BUCKET: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
-        run: |
-          endpoint="${R2_ENDPOINT%/}"
-          # cp (not sync --delete) so untouched clips already on R2 stay put.
-          # Filenames are content-hashed, so the clips are immutable — let the
-          # CDN cache them forever (a content change ships a new filename).
-          aws s3 cp .tmp/plugin-previews "s3://$R2_BUCKET/plugin-previews/" \
-            --recursive --no-progress \
-            --endpoint-url "$endpoint" \
-            --cache-control "public, max-age=31536000, immutable" \
-            --exclude manifest.json
-
-      - name: Open manifest PR for review
+      - name: Open or update the rolling manifest PR for review
         if: ${{ github.ref == 'refs/heads/main' }} # branch debug runs skip publishing
         # The clips are already on R2; the manifest is version-pinned (it ships
         # with the build), so it must land on main through a reviewed PR rather
-        # than a direct push to protected main. Fires only when a plugin actually
-        # changed (hash skip + diff guard), so this is quiet in steady state.
+        # than a direct push to protected main.
+        #
+        # Two guards keep this quiet and tidy (spec slice 1):
+        #   1. Open a PR only when a `previews` entry actually changed. The
+        #      manifest's `generatedAt` timestamp moves every run, so the old
+        #      whole-file `git diff` opened a noise PR every time (e.g. #4261).
+        #      scripts/plugin-previews-diff.mjs compares only the `previews`
+        #      subtree.
+        #   2. Use ONE rolling branch (`chore/plugin-previews`) and force-update
+        #      the existing open PR in place, instead of stacking a fresh
+        #      `chore/plugin-previews-<run_id>` branch + PR per run (which built
+        #      the backlog this rework removes).
         #
         # NOTE: a GITHUB_TOKEN-authored PR does not trigger pull_request CI; set a
         # PAT/app token secret PREVIEW_BAKE_TOKEN so the PR runs checks + can be
@@ -117,22 +77,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PREVIEW_BAKE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          cp .tmp/plugin-previews/manifest.json data/plugin-previews/manifest.json
-          if git diff --quiet -- data/plugin-previews/manifest.json; then
-            echo "manifest unchanged — nothing to review"; exit 0
-          fi
-          BRANCH="chore/plugin-previews-${{ github.run_id }}"
+          OLD=data/plugin-previews/manifest.json
+          NEW=.tmp/plugin-previews/manifest.json
+          # Capture on its own line so `set -e` surfaces a helper error (the diff
+          # script exits 2 on bad args / unreadable manifest) instead of command
+          # substitution swallowing it into the test and silently skipping the PR.
+          diff_result="$(node scripts/plugin-previews-diff.mjs "$OLD" "$NEW")"
+          case "$diff_result" in
+            changed) ;;
+            unchanged) echo "previews unchanged (only generatedAt moved) — nothing to review"; exit 0 ;;
+            *) echo "unexpected diff result: '$diff_result'" >&2; exit 1 ;;
+          esac
+          cp "$NEW" "$OLD"
+          BRANCH="chore/plugin-previews"
           git config user.name "open-design-bot"
           git config user.email "bot@open-design.ai"
-          git checkout -b "$BRANCH"
-          git add data/plugin-previews/manifest.json
+          # Rebuild the rolling branch from the current main HEAD + this manifest,
+          # so it always carries exactly the freshest manifest on top of main.
+          git checkout -B "$BRANCH"
+          git add "$OLD"
           git commit -m "chore(plugin-previews): refresh baked preview manifest"
-          git push origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" \
-            --title "chore(plugin-previews): refresh baked preview manifest" \
-            --reviewer lefarcen \
-            --body "Automated by the bake-plugin-previews workflow: preview clips were re-rendered and uploaded to R2; this updates data/plugin-previews/manifest.json to match (the clips live on R2 and are not committed). @lefarcen please review and merge."
-
-      - name: Stop daemon
-        if: always()
-        run: pnpm tools-dev stop --namespace ci || true
+          # Bot-owned branch; force-push is safe (nobody else writes it).
+          git push --force origin "$BRANCH"
+          # Reuse the existing open PR (force-push already refreshed it); only
+          # create one if none is open.
+          if [ "$(gh pr view "$BRANCH" --json state --jq '.state' 2>/dev/null)" = "OPEN" ]; then
+            echo "rolling PR already open for $BRANCH — force-push refreshed it in place"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(plugin-previews): refresh baked preview manifest" \
+              --reviewer lefarcen \
+              --body "Automated by the bake-plugin-previews workflow: preview clips were re-rendered and uploaded to R2; this updates data/plugin-previews/manifest.json to match (the clips live on R2 and are not committed). This is a single **rolling** PR — each bake force-updates it in place rather than stacking a new PR per run. @lefarcen please review and merge."
+          fi

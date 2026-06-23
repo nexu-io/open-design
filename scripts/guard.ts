@@ -94,6 +94,14 @@ const residualAllowedExactPaths = new Set([
   // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
   // the CI environment and never pulled into the daemon/web TS build or bundle.
   "scripts/bake-plugin-previews.mjs",
+  // Manifest diff guard + its node:test coverage. Run directly by Node from the
+  // bake workflows (no TS build step there) to decide whether a `previews` entry
+  // actually changed, ignoring the per-run `generatedAt` timestamp.
+  "scripts/plugin-previews-diff.mjs",
+  "scripts/plugin-previews-diff.test.mjs",
+  // CI-only R2 garbage collector for orphaned preview clips + its node:test.
+  "scripts/plugin-previews-gc.mjs",
+  "scripts/plugin-previews-gc.test.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",

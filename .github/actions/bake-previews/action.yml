@@ -1,0 +1,111 @@
+name: Bake plugin previews
+description: >-
+  Render the home-gallery plugin previews to H.264 clips + posters into
+  .tmp/plugin-previews (content-hash skip reuses unchanged plugins) and, when
+  asked, publish the clips to the repository-assets R2 bucket. The caller owns
+  what happens to the resulting manifest (rolling PR, commit-to-branch, etc.).
+  Shared by the post-merge, pre-merge, and release-cut bake workflows so the
+  heavy render core lives in exactly one place.
+
+inputs:
+  upload:
+    description: When 'true', publish the freshly rendered clips to R2.
+    required: false
+    default: 'false'
+  r2-access-key-id:
+    description: R2 access key id (required when upload is true).
+    required: false
+    default: ''
+  r2-secret-access-key:
+    description: R2 secret access key (required when upload is true).
+    required: false
+    default: ''
+  r2-bucket:
+    description: R2 bucket name (required when upload is true).
+    required: false
+    default: ''
+  r2-endpoint:
+    description: R2 S3 endpoint URL (required when upload is true).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install ffmpeg + CJK fonts + puppeteer-core
+      shell: bash
+      run: |
+        sudo apt-get update
+        # ffmpeg encodes the clips; the Noto CJK + emoji fonts give headless
+        # Chrome a real CJK/emoji fallback so templates that rely on system
+        # fonts for 中文/日本語/한국어 (or load Noto SC from Google Fonts but
+        # race) render glyphs instead of missing-glyph tofu boxes.
+        sudo apt-get install -y ffmpeg fonts-noto-cjk fonts-noto-color-emoji
+        # npm chokes on the workspace:* root manifest; use pnpm to drop
+        # puppeteer-core into the workspace node_modules (CI-only, not committed).
+        pnpm add -w puppeteer-core
+
+    - name: Build daemon + tools
+      shell: bash
+      run: |
+        pnpm --filter "./packages/**" build
+        pnpm --filter @open-design/daemon build
+        pnpm --filter @open-design/tools-dev build
+
+    - name: Start daemon
+      shell: bash
+      run: |
+        pnpm tools-dev start daemon --namespace ci --daemon-port 17470
+        for _ in $(seq 1 60); do
+          if curl -sf -o /dev/null http://127.0.0.1:17470/api/plugins; then
+            echo "daemon ready"; exit 0
+          fi
+          sleep 2
+        done
+        echo "daemon did not become ready" >&2; exit 1
+
+    - name: Bake (content-hash skip reuses unchanged plugins)
+      shell: bash
+      env:
+        BASE_URL: http://127.0.0.1:17470
+        # The CI clips live on R2, not on disk, so trust the manifest hash.
+        PREVIEW_REMOTE: '1'
+      run: |
+        CHROME="$(which google-chrome || which google-chrome-stable || which chromium-browser)"
+        export CHROME
+        echo "resolved CHROME=$CHROME"
+        mkdir -p .tmp/plugin-previews
+        # Seed with the committed manifest so the hash skip can reuse entries.
+        cp data/plugin-previews/manifest.json .tmp/plugin-previews/manifest.json
+        node scripts/bake-plugin-previews.mjs --out .tmp/plugin-previews
+
+    - name: Upload clips to R2
+      if: ${{ inputs.upload == 'true' }}
+      shell: bash
+      # Publishes to the repository-assets R2 bucket; the deployed daemon must
+      # set OD_PLUGIN_PREVIEWS_BASE_URL to
+      # https://repo-assets.open-design.ai/plugin-previews so its bakedPreview
+      # URLs point here (CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN).
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
+        AWS_DEFAULT_REGION: auto
+        AWS_EC2_METADATA_DISABLED: 'true'
+        R2_BUCKET: ${{ inputs.r2-bucket }}
+        R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+      run: |
+        endpoint="${R2_ENDPOINT%/}"
+        # cp (not sync --delete) so untouched clips already on R2 stay put.
+        # Keys are content-addressed (<id>/<fingerprint>/preview.mp4), so the
+        # clips are immutable — let the CDN cache them forever (a content change
+        # ships a new directory). Garbage collection is a separate scheduled job.
+        aws s3 cp .tmp/plugin-previews "s3://$R2_BUCKET/plugin-previews/" \
+          --recursive --no-progress \
+          --endpoint-url "$endpoint" \
+          --cache-control "public, max-age=31536000, immutable" \
+          --exclude manifest.json
+
+    - name: Stop daemon
+      if: always()
+      shell: bash
+      run: pnpm tools-dev stop --namespace ci || true
