@@ -1,5 +1,7 @@
 # P1 — 엔진/두뇌 심 (BrainProvider) Implementation Plan
 
+> ⚠️ **OBSOLETE (2026-06-23)** — "단일 마케팅 제품" 결정으로 BrainProvider DI 폐기. P1은 `startChatRun` god-function + lockstep 3곳 → `shouldRunReview()` 수렴 **리팩터만**으로 축소(도메인 디렉터리 이동·도메인무관 인터페이스 없음). 이 플랜은 두 번째 버티컬 등장 시 참고용 보관. 새 P1 경량 플랜은 별도 작성 예정. 근거: `DECISIONS.md` 2026-06-23.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 데몬에 `BrainProvider` 의존 역전 심을 도입해 도메인 로직(시스템 프롬프트 조립, 검수 게이트, atom 카탈로그)을 엔진에서 분리하되, 기본 두뇌(`default-design-brain`)로 **기존 동작을 100% 보존**한다.

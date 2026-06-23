@@ -1,6 +1,11 @@
 node_modules/
 dist/
 out/
+
+# Braze fork: bodoc real catalog (custom events / attributes / deeplinks) may
+# contain internal/PII data — domain reference input only, never committed.
+/BRAZE-BODOC-CATALOG.md
+
 .next/
 .next-*/
 .tmp/
