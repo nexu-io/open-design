@@ -1380,7 +1380,15 @@ async function resetPackagedRuntimeNamespaceRoot(namespaceRoot: string): Promise
 // sign-in landing. Clearing `user-data/` alongside `data/` gives the same
 // true-first-run guarantee the mac smoke gets from removing the entire root.
 async function resetPackagedRuntimeDataRoot(): Promise<void> {
-  const entries = await readdir(runtimeNamespaceRoot).catch(() => [] as string[]);
+  // A missing root means the namespace has no runtime state yet — already a
+  // fresh first-run, nothing to wipe. Any OTHER readdir failure (permissions,
+  // I/O) is a real problem that must surface loudly: swallowing it would turn
+  // the reset into a silent no-op and let stale state through, defeating the
+  // very guarantee this helper exists to make.
+  const entries = await readdir(runtimeNamespaceRoot).catch((error: NodeJS.ErrnoException) => {
+    if (error?.code === 'ENOENT') return [] as string[];
+    throw error;
+  });
   await Promise.all(
     entries
       .filter((entry) => entry !== 'install')
