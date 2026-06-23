@@ -155,8 +155,8 @@ export function ManualEditPanel({
               type="button"
               className="manual-edit-titlebar-close"
               style={{ position: 'static' }}
-              aria-label="Undo"
-              title="Undo"
+              aria-label={t('manualEdit.undo')}
+              title={t('manualEdit.undo')}
               disabled={!canUndo || busy}
               onClick={onUndo}
             >
@@ -166,8 +166,8 @@ export function ManualEditPanel({
               type="button"
               className="manual-edit-titlebar-close"
               style={{ position: 'static' }}
-              aria-label="Redo"
-              title="Redo"
+              aria-label={t('manualEdit.redo')}
+              title={t('manualEdit.redo')}
               disabled={!canRedo || busy}
               onClick={onRedo}
             >
