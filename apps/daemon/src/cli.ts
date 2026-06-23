@@ -214,6 +214,17 @@ const MEMORY_STRING_FLAGS = new Set([
 const MEMORY_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+// `od braze …` drives the Braze IAM authoring flow headlessly. Both the web UI
+// and this CLI surface call the same /api/braze/* endpoints (AGENTS.md dual-track).
+const BRAZE_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'conversation', 'title', 'goal', 'brand',
+  'format', 'delivery', 'trigger', 'custom-event', 'segment', 'tone',
+  'emphasis', 'variants', 'plan-file', 'reason', 'variant', 'artifact',
+  'status',
+]);
+const BRAZE_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json',
+]);
 const SHARE_STRING_FLAGS = new Set([
   'daemon-url', 'url', 'title', 'text', 'copy-text', 'locale', 'platform',
 ]);
@@ -281,6 +292,7 @@ const SUBCOMMAND_MAP = {
   version: runVersion,
   doctor: runDoctor,
   config: runConfig,
+  braze: runBraze,
 };
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
@@ -7950,6 +7962,387 @@ async function runAutomation(args) {
     default:
       console.error(`unknown subcommand: od automation ${sub}`);
       printAutomationHelp();
+      process.exit(2);
+  }
+}
+
+function printBrazeHelp() {
+  console.log(`Usage:
+  od braze list --project <id> [--json]
+  od braze get <messageId> [--json]
+  od braze create --project <id> --conversation <id> --title "<t>"
+                  [--goal "<g>"] [--brand <id>] [--json]
+  od braze interview <messageId> --format <slideup|modal|fullscreen|custom_html>
+                     --delivery <action_based|scheduled>
+                     --trigger <session_start|push_click|any_purchase|specific_purchase|custom_event>
+                     [--custom-event <name>] [--segment "<cond>"] [--tone "<t>"]
+                     [--emphasis "<a>,<b>"] [--variants <n>] [--json]
+  od braze plan <messageId> --plan-file <path|->   [--json]
+  od braze confirm <messageId> [--json]
+  od braze reject  <messageId> --reason "<why>" [--json]
+  od braze produce <messageId> --variant <variantId> --artifact <path> [--json]
+  od braze variant <messageId> --variant <variantId>
+                   [--status <pending|produced|editing|done>]
+                   [--artifact <path>] [--json]
+  od braze delete  <messageId> [--json]
+
+Output:
+  Plain text: tab-separated rows for list, human-readable lines for get / mutations.
+  --json     Raw JSON for any subcommand.
+  --plan-file accepts a file path or - to read from stdin.
+  Designed so external agents (hermes-agent, openclaw, scripted jobs)
+  can drive the full Braze IAM authoring lifecycle headlessly.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.`);
+}
+
+async function runBraze(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printBrazeHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  let flags;
+  try {
+    flags = parseFlags(rest, {
+      string: BRAZE_STRING_FLAGS,
+      boolean: BRAZE_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+
+  const writeJson = (data) =>
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+
+  // 양수(positional) 인자에서 첫 번째 값(messageId)을 추출
+  const positionalArgs = (values) => {
+    const out = [];
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i];
+      if (!value) continue;
+      if (value.startsWith('--')) {
+        const eq = value.indexOf('=');
+        const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
+        if (eq < 0 && BRAZE_STRING_FLAGS.has(key)) i++;
+        continue;
+      }
+      out.push(value);
+    }
+    return out;
+  };
+
+  const requireMessageId = (label) => {
+    const id = positionalArgs(rest)[0];
+    if (!id) {
+      console.error(`Usage: od braze ${label} <messageId>`);
+      process.exit(2);
+    }
+    return id;
+  };
+
+  switch (sub) {
+    case 'list': {
+      const projectId = flags.project ?? '';
+      if (!projectId) {
+        console.error('--project is required');
+        process.exit(2);
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages?projectId=${encodeURIComponent(projectId)}`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      const messages = data.messages ?? [];
+      if (messages.length === 0) {
+        console.log('No Braze messages for this project.');
+        return;
+      }
+      console.log('# id\ttitle\tstatus\tiamFormat\tvariantCount');
+      for (const m of messages) {
+        console.log([
+          m.id,
+          m.title,
+          m.status,
+          m.iamFormat,
+          m.variantCount,
+        ].join('\t'));
+      }
+      return;
+    }
+    case 'get': {
+      const id = requireMessageId('get');
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      const m = data.message;
+      console.log(`id\t${m.id}`);
+      console.log(`title\t${m.title}`);
+      console.log(`status\t${m.status}`);
+      console.log(`iamFormat\t${m.iamFormat ?? ''}`);
+      console.log(`deliveryModel\t${m.deliveryModel ?? ''}`);
+      console.log(`triggerEvent\t${m.triggerEvent ?? ''}`);
+      console.log(`variantCount\t${m.variantCount}`);
+      if (m.goal) console.log(`goal\t${m.goal}`);
+      if (m.tone) console.log(`tone\t${m.tone}`);
+      if (m.segment) console.log(`segment\t${JSON.stringify(m.segment)}`);
+      const variants = m.variants ?? [];
+      if (variants.length > 0) {
+        console.log('# variant-id\tlabel\tstatus\tartifactPath');
+        for (const v of variants) {
+          console.log([v.id, v.label, v.status, v.artifactPath ?? ''].join('\t'));
+        }
+      }
+      return;
+    }
+    case 'create': {
+      const projectId = flags.project ?? '';
+      const conversationId = flags.conversation ?? '';
+      const title = flags.title ?? '';
+      if (!projectId || !conversationId || !title) {
+        console.error('--project, --conversation, and --title are required');
+        process.exit(2);
+      }
+      const body: Record<string, unknown> = { projectId, conversationId, title };
+      if (flags.goal) body.goal = flags.goal;
+      if (flags.brand) body.brandId = flags.brand;
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      const m = data.message;
+      console.log(`[braze] created ${m.id}`);
+      console.log(`status\t${m.status}`);
+      return;
+    }
+    case 'interview': {
+      const id = requireMessageId('interview');
+      if (!flags.format || !flags.delivery || !flags.trigger) {
+        console.error('--format, --delivery, and --trigger are required');
+        process.exit(2);
+      }
+      // buildBrazeInterviewBody은 braze-cli-args.ts에서 가져온 순수 헬퍼 사용
+      const { buildBrazeInterviewBody } = await import('./braze-cli-args.js');
+      const interviewBody = buildBrazeInterviewBody(flags);
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}/interview`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(interviewBody),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      console.log(`[braze] interview submitted for ${id}`);
+      console.log(`status\t${data.message?.status}`);
+      return;
+    }
+    case 'plan': {
+      const id = requireMessageId('plan');
+      const planFilePath = flags['plan-file'] ?? '';
+      if (!planFilePath) {
+        console.error('--plan-file is required (use - to read from stdin)');
+        process.exit(2);
+      }
+      let planText: string;
+      if (planFilePath === '-') {
+        // stdin から読み込む — readPromptFromFlags と同パターン
+        planText = await new Promise<string>((resolve, reject) => {
+          let buf = '';
+          process.stdin.setEncoding('utf8');
+          process.stdin.on('data', (chunk) => { buf += chunk; });
+          process.stdin.on('end', () => resolve(buf));
+          process.stdin.on('error', reject);
+        });
+      } else {
+        const { readFile } = await import('node:fs/promises');
+        planText = await readFile(planFilePath, 'utf8');
+      }
+      let plan: unknown;
+      try {
+        plan = JSON.parse(planText);
+      } catch {
+        console.error('--plan-file content must be valid JSON (braze_plan_v1)');
+        process.exit(2);
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}/plan`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ plan }),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      console.log(`[braze] plan updated for ${id}`);
+      console.log(`status\t${data.message?.status}`);
+      return;
+    }
+    case 'confirm': {
+      const id = requireMessageId('confirm');
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}/plan/decision`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ decision: 'confirm' }),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      console.log(`[braze] plan confirmed for ${id}`);
+      console.log(`status\t${data.message?.status}`);
+      return;
+    }
+    case 'reject': {
+      const id = requireMessageId('reject');
+      const reason = flags.reason ?? '';
+      if (!reason) {
+        console.error('--reason is required');
+        process.exit(2);
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}/plan/decision`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ decision: 'reject', reason }),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      console.log(`[braze] plan rejected for ${id}`);
+      console.log(`status\t${data.message?.status}`);
+      return;
+    }
+    case 'produce': {
+      const id = requireMessageId('produce');
+      const variantId = flags.variant ?? '';
+      const artifactPath = flags.artifact ?? '';
+      if (!variantId || !artifactPath) {
+        console.error('--variant and --artifact are required');
+        process.exit(2);
+      }
+      let resp;
+      try {
+        resp = await fetch(
+          `${base}/api/braze/messages/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/produce`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ artifactPath }),
+          },
+        );
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      console.log(`[braze] variant ${variantId} produced for message ${id}`);
+      console.log(`status\t${data.message?.status}`);
+      return;
+    }
+    case 'variant': {
+      const id = requireMessageId('variant');
+      const variantId = flags.variant ?? '';
+      if (!variantId) {
+        console.error('--variant is required');
+        process.exit(2);
+      }
+      // 제공된 필드만 patch에 포함 — exactOptionalPropertyTypes 패턴 준수
+      const patch: Record<string, unknown> = {};
+      if (flags.status !== undefined) patch.status = flags.status;
+      if (flags.artifact !== undefined) patch.artifactPath = flags.artifact;
+      if (Object.keys(patch).length === 0) {
+        console.error('at least one of --status or --artifact is required');
+        process.exit(2);
+      }
+      let resp;
+      try {
+        resp = await fetch(
+          `${base}/api/braze/messages/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(patch),
+          },
+        );
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
+      console.log(`[braze] variant ${variantId} updated for message ${id}`);
+      console.log(`status\t${data.message?.status}`);
+      return;
+    }
+    case 'delete': {
+      const id = requireMessageId('delete');
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      if (flags.json) return writeJson({ ok: true, id });
+      console.log(`[braze] deleted ${id}`);
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od braze ${sub}`);
+      printBrazeHelp();
       process.exit(2);
   }
 }
