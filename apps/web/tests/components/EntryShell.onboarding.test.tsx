@@ -1578,4 +1578,71 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(skipClicks).toHaveLength(0);
     expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
   });
+  it('renders install cards in the Local CLI empty state so users can act without leaving onboarding (#4662)', async () => {
+    // Red spec for #4662. Pre-fix, the Local CLI onboarding empty state was
+    // one sentence ("No agents detected yet …") plus a Rescan button — a
+    // dead end when nothing is installed. The fix surfaces the supported-but-
+    // unavailable agents as install cards so the user can hit Install/Docs
+    // from the same screen instead of bouncing to Settings.
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding({
+      // Daemon scan returns supported CLIs whose binaries aren't on PATH;
+      // each carries an `available: false`, plus install + docs URLs. The
+      // empty state must surface BOTH cards (Settings' richer diagnostics
+      // are intentionally out of scope for onboarding).
+      agents: [
+        cliAgent({
+          id: 'claude',
+          name: 'Claude Code',
+          available: false,
+          version: null,
+          installUrl: 'https://docs.anthropic.com/install',
+          docsUrl: 'https://docs.anthropic.com/',
+        }),
+        cliAgent({
+          id: 'codex',
+          name: 'Codex',
+          available: false,
+          version: null,
+          installUrl: 'https://openai.com/codex-install',
+        }),
+      ],
+      onRefreshAgents: vi.fn(() => [
+        cliAgent({ id: 'claude', name: 'Claude Code', available: false }),
+        cliAgent({ id: 'codex', name: 'Codex', available: false }),
+      ]),
+    });
+    await act(async () => {});
+
+    // Expand the Local panel from the landing.
+    fireEvent.click(await screen.findByRole('button', { name: /Local coding agent/i }));
+    await act(async () => {});
+
+    // The empty headline is still shown — the install cards augment, not
+    // replace, the original "rescan after installing" affordance.
+    await waitFor(() => {
+      expect(screen.getByText(/No agents detected yet/i)).toBeTruthy();
+    });
+
+    // Both unavailable agents render as install items. Each item shows the
+    // agent's display name and, when an installUrl is present, an Install
+    // link pointing at that URL.
+    const claudeItem = screen.getByRole('listitem', { name: /Claude Code · not installed/i });
+    expect(claudeItem.textContent).toContain('Claude Code');
+    const claudeInstall = claudeItem.querySelector('a[href="https://docs.anthropic.com/install"]') as HTMLAnchorElement | null;
+    expect(claudeInstall).not.toBeNull();
+    expect(claudeInstall!.textContent).toContain('Install');
+    // Docs link is optional — when supplied, it sits next to Install.
+    const claudeDocs = claudeItem.querySelector('a[href="https://docs.anthropic.com/"]');
+    expect(claudeDocs).not.toBeNull();
+
+    const codexItem = screen.getByRole('listitem', { name: /Codex · not installed/i });
+    const codexInstall = codexItem.querySelector('a[href="https://openai.com/codex-install"]');
+    expect(codexInstall).not.toBeNull();
+    // Codex was registered without a docsUrl — confirm we don't render a
+    // dangling link to nowhere.
+    expect(codexItem.querySelectorAll('a').length).toBe(1);
+  });
 });

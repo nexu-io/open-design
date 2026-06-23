@@ -118,6 +118,11 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
+import {
+  AGENT_SHORT_DESCRIPTIONS,
+  displayAgentName,
+  sanitizeHttpsUrl,
+} from '../utils/agentInstall';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -321,16 +326,6 @@ function codexPathStrings(locale: Locale) {
     failedFallback: (configuredPath: string, detectedPath: string) =>
       `Configured Codex path failed: ${configuredPath}. This test succeeded with the PATH Codex CLI at ${detectedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`,
   };
-}
-
-function sanitizeHttpsUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 type RescanNotice =
@@ -584,27 +579,6 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
   },
 };
 
-const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
-  claude: 'Anthropic official CLI',
-  codex: 'OpenAI official CLI',
-  'cursor-agent': 'Cursor command line',
-  gemini: 'Google official CLI',
-  opencode: 'Open-source agent CLI',
-  qwen: 'Qwen coding CLI',
-  copilot: 'GitHub coding CLI',
-  devin: 'Cognition terminal CLI',
-  kimi: 'Moonshot Kimi CLI',
-  qoder: 'Alibaba coding CLI',
-  pi: 'Inflection chat CLI',
-  kiro: 'Kiro agent CLI',
-  kilo: 'Kilo Code CLI',
-  vibe: 'Mistral open-source CLI',
-  deepseek: 'DeepSeek terminal UI',
-  hermes: 'ACP agent CLI',
-  'grok-build': 'xAI coding CLI',
-  reasonix: 'DeepSeek native coding CLI',
-};
-
 function cleanAgentVersionLabel(
   name: string,
   version: string | null | undefined,
@@ -615,10 +589,6 @@ function cleanAgentVersionLabel(
     .replace(new RegExp(`\\s*\\(${escapedName}\\)\\s*$`, 'i'), '')
     .replace(new RegExp(`\\s+${escapedName}\\s*$`, 'i'), '')
     .trim();
-}
-
-function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [

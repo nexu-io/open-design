@@ -150,6 +150,11 @@ import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
+  AGENT_SHORT_DESCRIPTIONS,
+  displayAgentName,
+  sanitizeHttpsUrl,
+} from '../utils/agentInstall';
+import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
@@ -1157,6 +1162,16 @@ function OnboardingView({
       provider.baseUrl === (config.apiProviderBaseUrl ?? config.baseUrl),
   ) ?? null;
   const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
+  // When the scan returns zero usable agents, onboarding still needs to tell
+  // the user which CLIs are supported and how to install them — otherwise the
+  // step is a dead end with just a Rescan button (#4662). The daemon's
+  // /api/agents endpoint returns the full supported roster (each entry carries
+  // `available`, `installUrl`, `docsUrl`, `diagnostics`), so the unavailable
+  // subset IS the onboarding install list. AMR is filtered out because it
+  // has its own cloud-style onboarding card upstream of the Local CLI step.
+  const unavailableCliAgents = agents.filter(
+    (agent) => !agent.available && agent.id !== 'amr',
+  );
   const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
   const amrSignedIn = amrStatus?.loggedIn === true;
@@ -2349,6 +2364,7 @@ function OnboardingView({
                 {connectExpanded === 'local' ? (
                   <OnboardingCliSetupPanel
                     agents={visibleAgents}
+                    unavailableAgents={unavailableCliAgents}
                     daemonLive={daemonLive}
                     selectedAgentId={config.agentId}
                     selectedAgent={selectedAgent}
@@ -2678,6 +2694,7 @@ function OnboardingView({
 
 function OnboardingCliSetupPanel({
   agents,
+  unavailableAgents,
   daemonLive,
   selectedAgentId,
   selectedAgent,
@@ -2689,6 +2706,7 @@ function OnboardingCliSetupPanel({
   onSelectModel,
 }: {
   agents: AgentInfo[];
+  unavailableAgents: AgentInfo[];
   daemonLive: boolean;
   selectedAgentId: string | null;
   selectedAgent: AgentInfo | null;
@@ -2753,7 +2771,59 @@ function OnboardingCliSetupPanel({
       ) : null}
       {showEmpty ? (
         <div className="onboarding-view__empty-slice">
-          {t('settings.noAgentsDetected')}
+          <p className="onboarding-view__empty-headline">
+            {t('settings.noAgentsDetected')}
+          </p>
+          {unavailableAgents.length > 0 ? (
+            <ul
+              className="onboarding-view__install-list"
+              aria-label={t('settings.localCli')}
+            >
+              {unavailableAgents.map((agent) => {
+                const installUrl = sanitizeHttpsUrl(agent.installUrl);
+                const docsUrl = sanitizeHttpsUrl(agent.docsUrl);
+                const description = AGENT_SHORT_DESCRIPTIONS[agent.id];
+                const agentName = displayAgentName(agent);
+                return (
+                  <li
+                    key={agent.id}
+                    className="onboarding-view__install-item"
+                    aria-label={`${agentName} · ${t('common.notInstalled')}`}
+                  >
+                    <AgentIcon id={agent.id} size={22} />
+                    <div className="onboarding-view__install-body">
+                      <strong>{agentName}</strong>
+                      {description ? <small>{description}</small> : null}
+                    </div>
+                    {installUrl || docsUrl ? (
+                      <div className="onboarding-view__install-actions">
+                        {docsUrl ? (
+                          <a
+                            href={docsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="onboarding-view__install-link onboarding-view__install-link--muted"
+                          >
+                            {t('settings.agentInstall.docs')}
+                          </a>
+                        ) : null}
+                        {installUrl ? (
+                          <a
+                            href={installUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="onboarding-view__install-link"
+                          >
+                            {t('settings.agentInstall.install')}
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </div>
       ) : null}
       {selectedAgent && modelOptions.length > 0 ? (
