@@ -5226,14 +5226,11 @@ function HtmlViewer({
     if (fileChanged) {
       setSource(null);
       sourceRef.current = null;
-      // Note: prevSourceBeforeReloadRef is NOT cleared here.  The identity
-      // check in the null-restore branch below (snap.projectId + snap.fileName
-      // vs. current projectId + file.name) already prevents a stale snapshot
-      // from being applied to a different file.  Keeping the ref non-null
-      // across the file-switch lets the [projectId, file.name] effect (which
-      // runs after this effect) detect that a reload was in progress and
-      // preserve sourceEverLoadedRef so the iframe stays visible instead of
-      // flipping to the loading skeleton (PR #4652 review).
+      // Note: prevSourceBeforeReloadRef is cleared by the [projectId,
+      // file.name] reset effect that runs on file/project switch.  The
+      // identity check in the null-restore branch below is defense-in-depth
+      // for races where an in-flight async callback fires after the file
+      // switches but before the effect has run.
     }
     let cancelled = false;
     // Cache-bust the fetch on every mtime / reload / files-refresh bump.
@@ -5449,6 +5446,7 @@ function HtmlViewer({
     // third-pass review, PerishCode finding).
     sourceEverLoadedRef.current = false;
     lastGoodSourceForRoutingRef.current = null;
+    prevSourceBeforeReloadRef.current = null;
   }, [projectId, file.name]);
   const activePreviewSrcUrl = (
     previewSrcUrl === effectiveBasePreviewSrcUrl ||
