@@ -824,6 +824,9 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
           cache-from: type=gha
 
   validate:

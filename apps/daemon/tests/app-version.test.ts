@@ -75,11 +75,11 @@ describe('app version helpers', () => {
     }).channel).toBe('beta');
   });
 
-  it('infers dotted nightly and preview release channels from app versions', () => {
+  it('infers prerelease and preview release channels from app versions', () => {
     expect(resolveAppVersionInfo({
-      packageMetadata: { version: '0.8.0.nightly.2' },
+      packageMetadata: { version: '0.8.0-prerelease.2' },
       env: {},
-    }).channel).toBe('nightly');
+    }).channel).toBe('prerelease');
     expect(resolveAppVersionInfo({
       packageMetadata: { version: '0.8.0-preview.1' },
       env: {},

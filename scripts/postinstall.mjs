@@ -8,6 +8,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
 const buildTargets = [
+  "packages/release",
   "packages/contracts",
   "packages/components",
   "packages/platform",
@@ -23,6 +24,7 @@ const buildTargets = [
   "apps/daemon",
   "tools/dev",
   "tools/pack",
+  "tools/release",
   "tools/serve",
 ];
 

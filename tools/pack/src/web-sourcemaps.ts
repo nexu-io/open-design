@@ -53,7 +53,7 @@ export interface WebSourcemapOptions {
    * Optional release version to associate with the uploaded chunks. Falls
    * back to `config.appVersion` when omitted; if neither is set the CLI
    * derives one from git, which is fine but less precise than passing a
-   * real semver/nightly identifier from the release workflow.
+   * real semver/prerelease identifier from the release workflow.
    */
   releaseVersion?: string;
 }

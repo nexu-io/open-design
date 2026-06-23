@@ -109,6 +109,9 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
+  // Checked-in bin shim so pnpm can link `tools-release` before dist output exists.
+  "tools/release/bin/tools-release.mjs",
+  "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
@@ -923,6 +926,7 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
+  ["release", "directory"],
   ["serve", "directory"],
 ]);
 
@@ -937,7 +941,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and serve/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, release/, and serve/`);
       continue;
     }
 

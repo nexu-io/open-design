@@ -28,6 +28,9 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
+  "dependencies": {
+    "@open-design/release": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",

@@ -76,10 +76,10 @@ describe('update apply observations', () => {
     });
   });
 
-  it('normalizes nightly and preview observation channels without collapsing them to beta', () => {
-    expect(normalizeUpdateObservationChannel('0.8.0.nightly.2')).toBe('nightly');
+  it('normalizes prerelease and preview observation channels without collapsing them to beta', () => {
+    expect(normalizeUpdateObservationChannel('0.8.0-prerelease.2')).toBe('prerelease');
     expect(normalizeUpdateObservationChannel('0.8.0-preview.2')).toBe('preview');
-    expect(normalizeUpdateObservationChannel('0.8.0', 'nightly')).toBe('nightly');
+    expect(normalizeUpdateObservationChannel('0.8.0', 'prerelease')).toBe('prerelease');
   });
 
   it('submits one sanitized analytics event and marks delivery metadata', async () => {

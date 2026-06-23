@@ -19,6 +19,7 @@ import { winResources } from "../src/resources.js";
 import {
   buildWinLauncherPayloadArchive,
   buildWinLauncherPayloadManifest,
+  validateWinLauncherPayloadArchive,
 } from "../src/win/payload.js";
 import type { WinBuiltAppManifest, WinPaths } from "../src/win/types.js";
 
@@ -300,6 +301,38 @@ describe("tools-pack launcher payload archives", () => {
       expect(manifest.version).toBe(version);
       await expectPathExists(join(extractRoot, "payload", "Open Design.exe"));
       await expectPathExists(join(extractRoot, "payload", "resources", "open-design-config.json"));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.skipIf(process.platform !== "win32")("validates Windows launcher payload archives", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-tools-pack-win-payload-validate-"));
+    try {
+      const namespace = "release-beta-win";
+      const version = "0.9.0-beta.2";
+      const config = makeConfig(root, "win", namespace, version);
+      const { builtApp, paths } = await writeFakeWinUnpackedApp(root, namespace, version);
+      await buildWinLauncherPayloadArchive(config, paths, builtApp);
+
+      await expect(validateWinLauncherPayloadArchive({
+        expectedVersion: version,
+        namespace,
+        payloadPath: paths.launcherPayloadPath,
+        workspaceRoot: root,
+      })).resolves.toMatchObject({
+        manifest: {
+          namespace,
+          version,
+        },
+        valid: true,
+      });
+      await expect(validateWinLauncherPayloadArchive({
+        expectedVersion: "0.9.0-beta.3",
+        namespace,
+        payloadPath: paths.launcherPayloadPath,
+        workspaceRoot: root,
+      })).rejects.toThrow("launcher payload manifest version expected");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

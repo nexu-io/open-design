@@ -1,5 +1,4 @@
 name: release-prerelease
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,20 +12,1260 @@ on:
         required: false
         type: string
         default: ""
-
+      win_x64_smoke_mode:
+        description: "Windows x64 smoke coverage."
+        required: true
+        type: choice
+        options:
+          - skip
+          - core
+          - full
+        default: core
+      win_x64_update_metadata_url:
+        description: "Optional external updater metadata URL for full Windows x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+      win_x64_update_target_version:
+        description: "Optional external updater target version expected by full Windows x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      ref:
+        description: "Optional git ref to build. Empty builds the caller's ref."
+        required: false
+        type: string
+        default: ""
+      release_version:
+        description: "Base version (x.y.z). Required when ref is not release/vX.Y.Z."
+        required: false
+        type: string
+        default: ""
+      win_x64_smoke_mode:
+        description: "Windows x64 smoke coverage: skip, core, or full."
+        required: false
+        type: string
+        default: "core"
+      win_x64_update_metadata_url:
+        description: "Optional external updater metadata URL for full Windows x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+      win_x64_update_target_version:
+        description: "Optional external updater target version expected by full Windows x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+    outputs:
+      release_version:
+        description: "The prerelease version that was built."
+        value: ${{ jobs.metadata.outputs.release_version }}
+      channel:
+        description: "The prerelease channel."
+        value: ${{ jobs.metadata.outputs.channel }}
+      branch:
+        description: "The branch that was built."
+        value: ${{ jobs.metadata.outputs.branch }}
+      commit:
+        description: "The commit SHA that was built."
+        value: ${{ jobs.metadata.outputs.commit }}
+      previous_commit:
+        description: "Commit SHA of the previously published prerelease; empty on cold start."
+        value: ${{ jobs.metadata.outputs.previous_commit }}
+      version_metadata_url:
+        description: "Public R2 URL of this build's version metadata.json."
+        value: ${{ jobs.publish.outputs.version_metadata_url }}
+      mac_arm64_url:
+        description: "macOS arm64 dmg download URL."
+        value: ${{ jobs.publish.outputs.mac_arm64_url }}
+      mac_intel_url:
+        description: "macOS x64 dmg download URL."
+        value: ${{ jobs.publish.outputs.mac_intel_url }}
+      win_url:
+        description: "Windows x64 installer download URL."
+        value: ${{ jobs.publish.outputs.win_url }}
+      linux_url:
+        description: "Linux x64 AppImage download URL."
+        value: ${{ jobs.publish.outputs.linux_url }}
 permissions:
+  actions: write
   contents: read
-
+concurrency:
+  group: open-design-release-prerelease
+  cancel-in-progress: false
+env:
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  # PostHog product-analytics ingest. Defined as repository secret + var
+  # so official builds ship with analytics enabled; PR builds and forks
+  # without these run the daemon in no-op analytics mode (events never
+  # leave the user's machine, /api/analytics/config returns enabled=false).
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+  # PostHog Error tracking sourcemap upload. Personal API key (phx_...) and
+  # project ID let tools-pack's web-sourcemaps step ship browser sourcemaps
+  # to PostHog after `next build` and before the .map files are stripped
+  # from the packaged bundle. Missing in PR/fork builds → upload is skipped
+  # and the helper still strips .map to keep source out of the installer.
+  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
 jobs:
-  placeholder:
-    name: Registered workflow placeholder
+  metadata:
+    name: Prepare prerelease metadata
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OPEN_DESIGN_PRERELEASE_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/prerelease/latest/metadata.json
+      OPEN_DESIGN_RELEASE_CHANNEL: prerelease
+      OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}
+    outputs:
+      base_version: ${{ steps.prerelease.outputs.base_version }}
+      branch: ${{ steps.prerelease.outputs.branch }}
+      channel: ${{ steps.prerelease.outputs.channel }}
+      commit: ${{ steps.prerelease.outputs.commit }}
+      github_release_enabled: ${{ steps.prerelease.outputs.github_release_enabled }}
+      latest_stable: ${{ steps.prerelease.outputs.latest_stable }}
+      previous_commit: ${{ steps.prev.outputs.previous_commit }}
+      prerelease_number: ${{ steps.prerelease.outputs.prerelease_number }}
+      prerelease_version: ${{ steps.prerelease.outputs.prerelease_version }}
+      release_number: ${{ steps.prerelease.outputs.release_number }}
+      release_name: ${{ steps.prerelease.outputs.release_name }}
+      release_version: ${{ steps.prerelease.outputs.release_version }}
+      state_source: ${{ steps.prerelease.outputs.state_source }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve built commit
+        run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Capture previous prerelease commit
+        id: prev
+        run: |
+          set -euo pipefail
+          prev="$(curl -fsSL "$OPEN_DESIGN_PRERELEASE_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
+          echo "previous prerelease commit: ${prev:-<none>}"
+          echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
+      - name: Prepare prerelease release metadata
+        id: prerelease
+        env:
+          GITHUB_SHA: ${{ env.BUILT_SHA }}
+          GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+        run: pnpm exec tools-release prepare prerelease
+      - name: Validate R2 prerelease access
+        env:
+          GITHUB_SHA: ${{ env.BUILT_SHA }}
+          R2_ACCESS_PROBE_NAME: release-prerelease
+          RELEASE_CHANNEL: prerelease
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release check-storage
+  verify:
+    name: Verify build (typecheck + tests)
+    needs: metadata
     runs-on: ubuntu-latest
     steps:
-      - name: Explain placeholder
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build daemon and desktop (typecheck dependencies)
         run: |
-          cat <<'EOF'
-          This placeholder exists on the default branch so GitHub registers
-          release-prerelease for workflow_dispatch. Dispatch a branch that
-          contains the full release-prerelease.yml implementation to run the
-          actual prerelease validation and publish workflow.
-          EOF
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+      - name: Typecheck workspaces
+        run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
+      - name: Check repository layout policies
+        run: pnpm guard
+  build_mac:
+    name: Build prerelease mac arm64
+    needs: [metadata, verify]
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Compute mac_arm64 tools-pack cache key
+        id: mac_arm64_tools_pack_cache_key
+        env:
+          MAC_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-prerelease.yml', '.github/scripts/release/cache/mac.sh') }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MAC_TOOLS_PACK_ORIGIN_KEY" ]; then
+            echo "mac_arm64 tools-pack cache origin key is empty" >&2
+            exit 1
+          fi
+          prefix="tools-pack-mac-v1-prerelease-${RUNNER_OS}-arm64-"
+          {
+            echo "origin=$MAC_TOOLS_PACK_ORIGIN_KEY"
+            echo "prefix=$prefix"
+            echo "key=$prefix$MAC_TOOLS_PACK_ORIGIN_KEY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore mac_arm64 tools-pack cache
+        id: mac_arm64_tools_pack_cache_restore
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.mac_arm64_tools_pack_cache_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.mac_arm64_tools_pack_cache_key.outputs.prefix }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Inspect mac Electron framework symlinks
+        run: |
+          set -euo pipefail
+          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
+          missing_links=0
+          for link in \
+            "$framework/Electron Framework" \
+            "$framework/Helpers" \
+            "$framework/Libraries" \
+            "$framework/Resources" \
+            "$framework/Versions/Current"; do
+            if [ ! -L "$link" ]; then
+              echo "::warning::Expected Electron framework symlink, got non-symlink: $link"
+              missing_links=1
+            fi
+          done
+          if [ "$missing_links" -ne 0 ]; then
+            ls -la "$framework" >&2 || true
+            ls -la "$framework/Versions" >&2 || true
+            echo "Continuing into tools-pack because electron-builder is the source of truth for whether packaging actually works."
+          fi
+      - name: Prepare Apple signing certificate
+        env:
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
+            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+          fi
+          {
+            echo "CSC_LINK=$cert_path"
+            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Build prerelease mac artifacts
+        id: mac_arm64_tools_pack_build
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
+          rm -rf "$RUNNER_TEMP/tools-pack"
+          : > "$RUNNER_TEMP/release-build/mac_arm64/build.log"
+          build_args=(
+            exec tools-pack mac build
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace release-prerelease
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --mac-compression normal
+            --to all
+            --json
+            --signed
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output"
+            exit "$build_status"
+          fi
+      - name: Retry prerelease mac_arm64 without restored cache
+        if: ${{ steps.mac_arm64_tools_pack_build.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/tools-pack-cache"
+          mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
+          pnpm exec tools-pack mac cleanup --dir "$RUNNER_TEMP/tools-pack" --namespace release-prerelease --json
+          : > "$RUNNER_TEMP/release-build/mac_arm64/build.log"
+          build_args=(
+            exec tools-pack mac build
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace release-prerelease
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --mac-compression normal
+            --to all
+            --json
+            --signed
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output"
+            exit "$build_status"
+          fi
+
+      - name: Delete failed mac_arm64 tools-pack cache
+        if: ${{ steps.mac_arm64_tools_pack_build.outcome == 'failure' && steps.mac_arm64_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          matched_key="${{ steps.mac_arm64_tools_pack_cache_restore.outputs.cache-matched-key }}"
+          cache_ids="$(gh cache list --key "$matched_key" --limit 100 --json id,key,ref --jq ".[] | select(.key == \"$matched_key\") | .id")"
+          count=0
+          while IFS= read -r cache_id; do
+            if [ -n "$cache_id" ]; then
+              gh cache delete "$cache_id"
+              count=$((count + 1))
+            fi
+          done <<< "$cache_ids"
+          echo "deletedFailedCacheKey=$matched_key count=$count"
+
+      - name: Capture mac framework diagnostics
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
+          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
+          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-prerelease/builder/mac-arm64/Open Design Prerelease.app/Contents/Frameworks/Electron Framework.framework"
+          dump_framework() {
+            local label="$1"
+            local framework="$2"
+            echo "## $label"
+            echo "path=$framework"
+            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
+              echo "missing"
+              return 0
+            fi
+            echo "### top-level"
+            ls -la "$framework" || true
+            echo "### symlinks"
+            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
+              printf '%s -> %s\n' "$link" "$(readlink "$link")"
+            done || true
+            echo "### selected stat"
+            for path in \
+              "$framework" \
+              "$framework/Electron Framework" \
+              "$framework/Versions" \
+              "$framework/Versions/Current" \
+              "$framework/Versions/Current/Electron Framework" \
+              "$framework/Versions/A" \
+              "$framework/Versions/A/Electron Framework" \
+              "$framework/Resources" \
+              "$framework/Versions/A/Resources/Info.plist"; do
+              if [ -e "$path" ] || [ -L "$path" ]; then
+                stat -f '%Sp %HT %N' "$path" || true
+              else
+                echo "missing: $path"
+              fi
+            done
+            echo "### plist"
+            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
+            echo "### codesign display"
+            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework" 2>&1 || true
+          }
+          {
+            date -u
+            if [ -n "$source_framework" ]; then
+              dump_framework "source Electron Framework" "$source_framework"
+            else
+              echo "## source Electron Framework"
+              echo "resolve failed"
+              cat "$source_resolve_log" || true
+            fi
+            dump_framework "built Electron Framework" "$built_framework"
+          } > "$output"
+          cat "$output"
+      - name: Upload mac build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-build-diagnostics
+          path: |
+            ${{ runner.temp }}/release-build/mac_arm64/build.log
+            ${{ runner.temp }}/release-build/mac_arm64/build.json
+            ${{ runner.temp }}/mac-framework-diagnostics.txt
+          if-no-files-found: warn
+      - name: Smoke prerelease mac packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+      - name: Write mac_arm64 release report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_arm64/report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.md
+          RELEASE_SMOKE_MODE: core
+          RELEASE_TARGET: mac_arm64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: mac_arm64 prerelease build
+        run: pnpm exec tools-release write-report
+
+      - name: Publish mac_arm64 report summary
+        if: ${{ always() }}
+        run: cat "${{ runner.temp }}/release-report/mac_arm64/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mac e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac_arm64
+          if-no-files-found: warn
+      - name: Prune mac_arm64 tools-pack cache
+        continue-on-error: true
+        run: bash .github/scripts/release/cache/mac.sh
+
+      - name: Save mac_arm64 tools-pack cache
+        if: ${{ success() && (steps.mac_arm64_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.mac_arm64_tools_pack_build.outcome == 'failure') }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.mac_arm64_tools_pack_cache_key.outputs.key }}
+
+      - name: Retain recent mac_arm64 tools-pack caches
+        if: ${{ success() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prefix="${{ steps.mac_arm64_tools_pack_cache_key.outputs.prefix }}"
+          keep=3
+          cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
+          count=0
+          while IFS= read -r cache_id; do
+            if [ -n "$cache_id" ]; then
+              gh cache delete "$cache_id"
+              count=$((count + 1))
+            fi
+          done <<< "$cache_ids"
+          echo "actionsCachePrefix=$prefix deleted=$count"
+
+      - name: Prepare mac prerelease assets
+        env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease
+          RELEASE_NOTES: Open Design Prerelease ${{ needs.metadata.outputs.release_version }}
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: mac_arm64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: bash tools/release/scripts/prepare-platform-assets.sh
+      - name: Publish mac prerelease platform
+        env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
+          RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip
+          RELEASE_SIGNED: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: mac_arm64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: pnpm exec tools-release publish-platform
+      - name: Upload mac prerelease publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-arm64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
+          if-no-files-found: error
+          retention-days: 1
+  build_mac_intel:
+    name: Build prerelease mac intel x64
+    needs: [metadata, verify]
+    runs-on: macos-15-intel
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Compute mac_x64 tools-pack cache key
+        id: mac_x64_tools_pack_cache_key
+        env:
+          MAC_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-prerelease.yml', '.github/scripts/release/cache/mac.sh') }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MAC_TOOLS_PACK_ORIGIN_KEY" ]; then
+            echo "mac_x64 tools-pack cache origin key is empty" >&2
+            exit 1
+          fi
+          prefix="tools-pack-mac-v1-prerelease-${RUNNER_OS}-x64-"
+          {
+            echo "origin=$MAC_TOOLS_PACK_ORIGIN_KEY"
+            echo "prefix=$prefix"
+            echo "key=$prefix$MAC_TOOLS_PACK_ORIGIN_KEY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore mac_x64 tools-pack cache
+        id: mac_x64_tools_pack_cache_restore
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.mac_x64_tools_pack_cache_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.mac_x64_tools_pack_cache_key.outputs.prefix }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare Apple signing certificate
+        env:
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
+            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+          fi
+          {
+            echo "CSC_LINK=$cert_path"
+            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Build prerelease mac intel artifacts
+        id: mac_x64_tools_pack_build
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-build/mac_x64"
+          rm -rf "$RUNNER_TEMP/tools-pack"
+          : > "$RUNNER_TEMP/release-build/mac_x64/build.log"
+          build_args=(
+            exec tools-pack mac build
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace release-prerelease-intel
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --mac-compression normal
+            --to all
+            --json
+            --signed
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output"
+            exit "$build_status"
+          fi
+
+      - name: Retry prerelease mac_x64 without restored cache
+        if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/tools-pack-cache"
+          mkdir -p "$RUNNER_TEMP/release-build/mac_x64"
+          pnpm exec tools-pack mac cleanup --dir "$RUNNER_TEMP/tools-pack" --namespace release-prerelease-intel --json
+          : > "$RUNNER_TEMP/release-build/mac_x64/build.log"
+          build_args=(
+            exec tools-pack mac build
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace release-prerelease-intel
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --mac-compression normal
+            --to all
+            --json
+            --signed
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output"
+            exit "$build_status"
+          fi
+
+      - name: Delete failed mac_x64 tools-pack cache
+        if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' && steps.mac_x64_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          matched_key="${{ steps.mac_x64_tools_pack_cache_restore.outputs.cache-matched-key }}"
+          cache_ids="$(gh cache list --key "$matched_key" --limit 100 --json id,key,ref --jq ".[] | select(.key == \"$matched_key\") | .id")"
+          count=0
+          while IFS= read -r cache_id; do
+            if [ -n "$cache_id" ]; then
+              gh cache delete "$cache_id"
+              count=$((count + 1))
+            fi
+          done <<< "$cache_ids"
+          echo "deletedFailedCacheKey=$matched_key count=$count"
+
+      - name: Write mac_x64 release report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_x64/build.log
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-intel
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_x64/report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.md
+          RELEASE_SMOKE_MODE: skip
+          RELEASE_TARGET: mac_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: mac_x64 prerelease build
+        run: pnpm exec tools-release write-report
+
+      - name: Publish mac_x64 report summary
+        if: ${{ always() }}
+        run: cat "${{ runner.temp }}/release-report/mac_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prune mac_x64 tools-pack cache
+        continue-on-error: true
+        run: bash .github/scripts/release/cache/mac.sh
+
+      - name: Save mac_x64 tools-pack cache
+        if: ${{ success() && (steps.mac_x64_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.mac_x64_tools_pack_build.outcome == 'failure') }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.mac_x64_tools_pack_cache_key.outputs.key }}
+
+      - name: Retain recent mac_x64 tools-pack caches
+        if: ${{ success() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prefix="${{ steps.mac_x64_tools_pack_cache_key.outputs.prefix }}"
+          keep=3
+          cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
+          count=0
+          while IFS= read -r cache_id; do
+            if [ -n "$cache_id" ]; then
+              gh cache delete "$cache_id"
+              count=$((count + 1))
+            fi
+          done <<< "$cache_ids"
+          echo "actionsCachePrefix=$prefix deleted=$count"
+
+      - name: Prepare mac intel prerelease assets
+        env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_x64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-intel
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: mac_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: bash tools/release/scripts/prepare-platform-assets.sh
+      - name: Publish mac intel prerelease platform
+        env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_x64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_x64-report.zip
+          RELEASE_SIGNED: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: mac_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: pnpm exec tools-release publish-platform
+      - name: Upload mac intel prerelease publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
+          if-no-files-found: error
+          retention-days: 1
+  build_win:
+    name: Build prerelease win x64
+    needs: [metadata, verify]
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Compute Windows tools-pack cache key
+        id: win_tools_pack_cache_key
+        shell: pwsh
+        env:
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-prerelease.yml', '.github/scripts/release/cache/win.ps1') }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
+            throw "Windows tools-pack cache origin key is empty"
+          }
+          $prefix = "tools-pack-win-v1-prerelease-$env:RUNNER_OS-"
+          "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Restore Windows tools-pack cache
+        id: win_tools_pack_cache_restore
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            exit 0
+          }
+          choco install nsis -y --no-progress
+      - name: Build prerelease windows artifacts
+        id: win_tools_pack_build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toolsPackDir = "${{ runner.temp }}/tools-pack"
+          $cacheDir = "${{ runner.temp }}/tools-pack-cache"
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "release-build\win_x64\build.json"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $buildJsonPath) | Out-Null
+          pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace release-prerelease-win --json
+          $buildArgs = @(
+            "exec", "tools-pack", "win", "build",
+            "--dir", $toolsPackDir,
+            "--cache-dir", $cacheDir,
+            "--namespace", "release-prerelease-win",
+            "--portable",
+            "--app-version", "${{ needs.metadata.outputs.release_version }}",
+            "--to", "all",
+            "--json"
+          )
+          "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          try {
+            $buildOutput = pnpm @buildArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows tools-pack cached build exited with code $LASTEXITCODE"
+            }
+          } catch {
+            Write-Warning "Windows tools-pack cached build failed; removing restored cache and retrying without cache."
+            "cache_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
+            pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace release-prerelease-win --json
+            $buildOutput = pnpm exec tools-pack win build `
+              --dir $toolsPackDir `
+              --cache-dir $cacheDir `
+              --namespace release-prerelease-win `
+              --portable `
+              --app-version "${{ needs.metadata.outputs.release_version }}" `
+              --to all `
+              --json
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"
+            }
+          }
+          $buildOutput | Set-Content -Path $buildJsonPath
+          $build = $buildOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.release_version }}" --json
+          $buildOutput
+      - name: Delete failed Windows tools-pack cache
+        if: ${{ steps.win_tools_pack_build.outputs.cache_failed == 'true' && steps.win_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $matchedKey = "${{ steps.win_tools_pack_cache_restore.outputs.cache-matched-key }}"
+          $caches = @(gh cache list --key $matchedKey --limit 100 --json id,key,ref | ConvertFrom-Json | Where-Object { $_.key -eq $matchedKey })
+          foreach ($cache in $caches) {
+            gh cache delete $cache.id
+          }
+          "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
+      - name: Build prerelease win_x64 update fixture
+        if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
+          if (-not $match.Success) { throw "full Windows smoke requires a counted prerelease version; got ${{ needs.metadata.outputs.release_version }}" }
+          $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-prerelease-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
+          $updateOutput = pnpm.cmd @buildArgs
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
+          $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
+          $updateBuild = $updateOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
+      - name: Smoke prerelease windows packaged runtime
+        if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-win
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}
+          OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+      - name: Write win_x64 release report
+        if: ${{ always() }}
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_BUILD_TARGET: all
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-win
+          RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
+          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
+          RELEASE_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
+          RELEASE_TARGET: win_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: win_x64 prerelease build
+        run: pnpm exec tools-release write-report
+
+      - name: Publish win_x64 report summary
+        if: ${{ always() }}
+        shell: pwsh
+        run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload windows e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-win-e2e-report
+          path: ${{ runner.temp }}\release-report\win_x64
+          if-no-files-found: warn
+      - name: Prune Windows tools-pack cache
+        shell: pwsh
+        continue-on-error: true
+        run: ./.github/scripts/release/cache/win.ps1
+      - name: Save Windows tools-pack cache
+        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outputs.cache_failed == 'true') }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+      - name: Retain recent Windows tools-pack caches
+        if: ${{ success() }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
+          $keep = 3
+          $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
+          $stale = @($caches | Select-Object -Skip $keep)
+          foreach ($cache in $stale) {
+            gh cache delete $cache.id
+          }
+          "actionsCachePrefix=$prefix kept=$([Math]::Min($caches.Count, $keep)) deleted=$($stale.Count)"
+      - name: Prepare windows prerelease assets
+        shell: pwsh
+        run: |
+          tools\release\scripts\prepare-platform-assets.ps1 `
+            -ReleaseTarget win_x64 `
+            -ReleaseAssetsDir "${{ runner.temp }}\release-assets\win_x64" `
+            -BuildJsonPath "${{ runner.temp }}\release-build\win_x64\build.json" `
+            -ReleaseNamespace release-prerelease-win `
+            -ReleaseVersion "${{ needs.metadata.outputs.release_version }}" `
+            -ReleaseAssetSuffix "" `
+            -ReleaseChannel prerelease `
+            -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
+            -ReleaseNotes "Open Design Prerelease ${{ needs.metadata.outputs.release_version }}" `
+            -IncludeZip $true
+      - name: Publish windows prerelease platform
+        env:
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets\win_x64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          RELEASE_SIGNED: "false"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: win_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          WIN_INCLUDE_ZIP: "true"
+        run: pnpm exec tools-release publish-platform
+      - name: Upload windows prerelease publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-win-x64-publish-manifest
+          path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
+          if-no-files-found: error
+          retention-days: 1
+  build_linux:
+    name: Build prerelease linux x64
+    needs: [metadata, verify]
+    if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build prerelease linux artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack linux build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-prerelease-linux \
+            --portable \
+            --app-version "${{ needs.metadata.outputs.release_version }}" \
+            --to appimage \
+            --containerized \
+            --json
+      - name: Prepare linux prerelease assets
+        env:
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/linux_x64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_NAMESPACE: release-prerelease-linux
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: linux_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: bash tools/release/scripts/prepare-platform-assets.sh
+      - name: Publish linux prerelease platform
+        env:
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/linux_x64
+          RELEASE_CHANNEL: prerelease
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SIGNED: "false"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: linux_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: pnpm exec tools-release publish-platform
+      - name: Upload linux prerelease publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-linux-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
+          if-no-files-found: error
+          retention-days: 1
+  publish:
+    name: Publish prerelease release
+    needs:
+      - metadata
+      - verify
+      - build_mac
+      - build_mac_intel
+      - build_win
+      - build_linux
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.result == 'success' &&
+        needs.verify.result == 'success' &&
+        needs.build_mac.result == 'success' &&
+        needs.build_mac_intel.result == 'success' &&
+        needs.build_win.result == 'success' &&
+        (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
+      }}
+    runs-on: ubuntu-latest
+    outputs:
+      version_metadata_url: ${{ steps.outputs.outputs.version_metadata_url }}
+      mac_arm64_url: ${{ steps.outputs.outputs.mac_arm64_dmg_url }}
+      mac_intel_url: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
+      win_url: ${{ steps.outputs.outputs.win_x64_installer_url }}
+      linux_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
+      BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+      BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
+      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
+      ENABLE_MAC: "true"
+      ENABLE_MAC_INTEL: "true"
+      ENABLE_WIN: "true"
+      GITHUB_RELEASE_ENABLED: "false"
+      MAC_INTEL_SIGNED: "true"
+      RELEASE_CHANNEL: prerelease
+      RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
+      RELEASE_SIGNED: "true"
+      RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+      REPORT_MODE: zip
+      STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Download mac prerelease publish manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-prerelease-mac-arm64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+      - name: Download mac intel prerelease publish manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-prerelease-mac-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+      - name: Download windows prerelease publish manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-prerelease-win-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+      - name: Download linux prerelease publish manifest
+        if: ${{ needs.build_linux.result == 'success' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-prerelease-linux-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish prerelease metadata
+        env:
+          BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_MAC_ARM64: "true"
+          ENABLE_MAC_X64: "true"
+          ENABLE_WIN_X64: "true"
+          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
+          MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
+          MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_CHANNEL: prerelease
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SIGNED: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+          WIN_X64_RESULT: ${{ needs.build_win.result }}
+        run: pnpm exec tools-release publish-metadata
+      - name: Read metadata outputs
+        id: outputs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-metadata/outputs.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+      - name: Verify prerelease metadata
+        env:
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_MAC_ARM64: "true"
+          ENABLE_MAC_X64: "true"
+          ENABLE_WIN_X64: "true"
+          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
+          MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
+          MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
+          RELEASE_CHANNEL: prerelease
+          RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          WIN_X64_RESULT: ${{ needs.build_win.result }}
+        run: pnpm exec tools-release verify-metadata
+      - name: Write prerelease metadata summary
+        env:
+          RELEASE_CHANNEL: prerelease
+          RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-metadata/summary.md
+        run: pnpm exec tools-release summary-metadata
+      - name: Publish summary
+        run: cat "${{ runner.temp }}/release-metadata/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Cleanup workflow artifacts
+        if: ${{ success() }}
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh
+  cleanup_partial_release_assets:
+    name: Cleanup unpublished prerelease asset artifacts
+    needs:
+      - build_mac
+      - build_mac_intel
+      - build_win
+      - build_linux
+      - publish
+    if: ${{ always() && needs.publish.result != 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+
+      - name: Delete unpublished prerelease asset artifacts
+        env:
+          ARTIFACT_CLEANUP_DESCRIPTION: intermediate prerelease asset Actions artifacts from this unpublished run. Canonical manual downloads are only the R2 links in a successful publish summary
+          ARTIFACT_NAME_REGEX: "-release-assets$"
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh

@@ -1,5 +1,6 @@
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { access, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
@@ -18,6 +19,7 @@ import {
   type LauncherAttemptDescriptor,
   type LauncherTargetSelection,
 } from "@open-design/launcher-proto";
+import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import type { PackagedConfig, PackagedWebOutputMode, RawPackagedConfig } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -38,6 +40,7 @@ type LauncherPayloadManifest = {
 export type PackagedLauncherRuntime = {
   config: PackagedConfig;
   descriptor: LauncherRuntimeDescriptor;
+  electronNodeCommand: string | null;
   installedLaunchPath: string | null;
   launcherPaths: LauncherPaths;
   paths: PackagedNamespacePaths;
@@ -71,6 +74,11 @@ type LauncherCleanupEntry = {
   version: string;
 };
 
+type ResolvedPayloadConfig = {
+  config: PackagedConfig;
+  electronNodeCommand: string | null;
+};
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -81,16 +89,9 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 function inferLauncherChannel(config: Pick<PackagedConfig, "appVersion" | "namespace">): LauncherChannel {
-  const version = config.appVersion;
-  if (version != null) {
-    if (/-preview\./.test(version)) return "preview";
-    if (/-beta\.|beta-nightly\./.test(version)) return "beta";
-    if (/-nightly\.|\.nightly\./.test(version)) return "nightly";
-  }
-  if (config.namespace.includes("preview")) return "preview";
-  if (config.namespace.includes("nightly")) return "nightly";
-  if (config.namespace.includes("beta")) return "beta";
-  return "stable";
+  return releaseChannelFromVersion(config.appVersion)
+    ?? releaseChannelFromNamespace(config.namespace, "default")
+    ?? "stable";
 }
 
 function parsePayloadManifest(raw: unknown, expected: {
@@ -188,11 +189,56 @@ async function resolveOptionalPayloadEntry(resourcesPath: string, relative: stri
   return (await pathExists(entry)) ? entry : null;
 }
 
+async function resolveOptionalVersionEntry(versionRoot: string, relative: string | undefined): Promise<string | null> {
+  if (relative == null || relative.length === 0) return null;
+  const entry = join(versionRoot, relative);
+  return (await pathExists(entry)) ? entry : null;
+}
+
+async function resolveWindowsPayloadDirectoryAlias(
+  versionPaths: LauncherVersionPaths,
+  kind: string,
+  targetRoot: string | null,
+): Promise<string | null> {
+  if (targetRoot == null) return null;
+  if (process.platform !== "win32") return targetRoot;
+
+  const aliasId = createHash("sha256").update(targetRoot).digest("hex").slice(0, 16);
+  const aliasRoot = join(versionPaths.root, kind, aliasId);
+  if (await pathExists(aliasRoot)) return aliasRoot;
+
+  try {
+    await mkdir(dirname(aliasRoot), { recursive: true });
+    await symlink(targetRoot, aliasRoot, "junction");
+    return aliasRoot;
+  } catch {
+    return targetRoot;
+  }
+}
+
+async function resolveWindowsElectronNodeCommand(versionPaths: LauncherVersionPaths, executablePath: string | null): Promise<string | null> {
+  const executableRoot = executablePath == null ? null : dirname(executablePath);
+  const aliasRoot = await resolveWindowsPayloadDirectoryAlias(versionPaths, "en", executableRoot);
+  return executablePath == null || aliasRoot == null
+    ? null
+    : join(aliasRoot, basename(executablePath));
+}
+
+async function resolveWindowsWebStandaloneRoot(
+  versionPaths: LauncherVersionPaths,
+  platform: LauncherPayloadManifest["platform"],
+  webStandaloneRoot: string | null,
+): Promise<string | null> {
+  return platform === "win32"
+    ? await resolveWindowsPayloadDirectoryAlias(versionPaths, "ws", webStandaloneRoot)
+    : webStandaloneRoot;
+}
+
 async function resolvePayloadConfig(
   config: PackagedConfig,
   versionPaths: LauncherVersionPaths,
   channel: LauncherChannel,
-): Promise<PackagedConfig | null> {
+): Promise<ResolvedPayloadConfig | null> {
   if (!(await pathExists(versionPaths.manifestPath))) return null;
   const manifest = parsePayloadManifest(await readJsonFile<unknown>(versionPaths.manifestPath), {
     channel,
@@ -216,17 +262,32 @@ async function resolvePayloadConfig(
       ? join("open-design", "bin", process.platform === "win32" ? "node.exe" : "node")
       : raw.nodeCommandRelative;
   const nodeCommand = await resolveOptionalPayloadEntry(resourcesPath, relativeNodeCommand);
+  const electronNodeCommand = manifest.platform === "win32"
+    ? await resolveWindowsElectronNodeCommand(
+      versionPaths,
+      await resolveOptionalVersionEntry(versionPaths.versionRoot, manifest.entry.executable),
+    )
+    : null;
+  const rawWebStandaloneRoot = raw.webStandaloneRoot == null || raw.webStandaloneRoot.length === 0
+    ? webOutputMode === "standalone" ? join(resourcesPath, "open-design-web-standalone") : null
+    : raw.webStandaloneRoot;
+  const webStandaloneRoot = await resolveWindowsWebStandaloneRoot(
+    versionPaths,
+    manifest.platform,
+    rawWebStandaloneRoot,
+  );
   return {
-    ...config,
-    appVersion: raw.appVersion?.trim() || manifest.version,
-    daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
-    nodeCommand,
-    resourceRoot,
-    webOutputMode: webOutputMode as PackagedWebOutputMode,
-    webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
-    webStandaloneRoot: raw.webStandaloneRoot == null || raw.webStandaloneRoot.length === 0
-      ? webOutputMode === "standalone" ? join(resourcesPath, "open-design-web-standalone") : null
-      : raw.webStandaloneRoot,
+    config: {
+      ...config,
+      appVersion: raw.appVersion?.trim() || manifest.version,
+      daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
+      nodeCommand,
+      resourceRoot,
+      webOutputMode: webOutputMode as PackagedWebOutputMode,
+      webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
+      webStandaloneRoot,
+    },
+    electronNodeCommand,
   };
 }
 
@@ -372,11 +433,12 @@ export async function resolvePackagedLauncherRuntime(
         } satisfies LauncherAttemptDescriptor);
       }
       return {
-        config: payloadConfig,
+        config: payloadConfig.config,
         descriptor,
+        electronNodeCommand: payloadConfig.electronNodeCommand,
         installedLaunchPath: persistedInstall?.launchPath ?? currentPackageLaunchPath,
         launcherPaths,
-        paths: { ...paths, resourceRoot: payloadConfig.resourceRoot },
+        paths: { ...paths, resourceRoot: payloadConfig.config.resourceRoot },
         selection,
         source: "payload",
         targetVersion: selection.pointer.version,
@@ -387,6 +449,7 @@ export async function resolvePackagedLauncherRuntime(
   return {
     config,
     descriptor,
+    electronNodeCommand: null,
     installedLaunchPath: (await writeLauncherInstallDescriptor(
       launcherPaths,
       channel,

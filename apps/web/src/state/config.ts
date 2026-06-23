@@ -93,7 +93,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   // remains the one-click opt-out. Without these defaults the gate at
   // `daemon/src/analytics.ts` (`if (telemetry?.metrics !== true) return`)
   // dropped every event fired during onboarding because no consent
-  // existed yet — observed live on the nightly.10 QA run, which left
+  // existed yet — observed live on the prerelease.10 QA run, which left
   // zero `page_view pn=onboarding` rows on PostHog despite the user
   // completing the flow.
   telemetry: { metrics: true, content: true },

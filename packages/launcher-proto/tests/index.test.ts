@@ -7,7 +7,6 @@ import {
   LauncherProtocolError,
   buildLauncherAfterQuitArgs,
   compareLauncherVersions,
-  hasCountedLauncherPrerelease,
   parseLauncherAfterQuitArgs,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
@@ -30,6 +29,13 @@ describe("launcher protocol paths", () => {
     expect(paths.downloadsRoot).toBe(join(paths.namespaceRoot, "updates", "downloads"));
     expect(paths.stagingRoot).toBe(join(paths.namespaceRoot, "updates", "staging"));
     expect(paths.releasesRoot).toBe(join(paths.namespaceRoot, "updates", "releases"));
+  });
+
+  it("resolves the self-hosted betas launcher channel", () => {
+    const paths = resolveLauncherPaths({ channel: "betas", namespace: "release-betas-win", root });
+
+    expect(paths.namespaceRoot).toBe(join(root, "launcher", "channels", "betas", "namespaces", "release-betas-win"));
+    expect(paths.runtimePath).toBe(join(paths.namespaceRoot, "runtime.json"));
   });
 
   it("resolves payload version paths without allowing path traversal", () => {
@@ -179,11 +185,5 @@ describe("launcher version comparison", () => {
     expect(compareLauncherVersions("1.0.0.nightly.2", "1.0.0.nightly.1")).toBe(1);
     expect(compareLauncherVersions("1.0.0", "1.0.0-beta.9")).toBe(1);
     expect(compareLauncherVersions("1.0.0-beta.1", "1.0.0")).toBe(-1);
-  });
-
-  it("detects counted prereleases for channel fallback compatibility", () => {
-    expect(hasCountedLauncherPrerelease("1.0.0-rc.1")).toBe(true);
-    expect(hasCountedLauncherPrerelease("1.0.0")).toBe(false);
-    expect(hasCountedLauncherPrerelease("1.0.0-rc")).toBe(false);
   });
 });

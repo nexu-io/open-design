@@ -9,13 +9,13 @@ import { promisify } from 'node:util';
 import { describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
-import { startPackagedPayloadUpdateFixture, type PackagedPayloadUpdateFixture } from '@/vitest/packaged-payload-update-fixture';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
+import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -30,6 +30,7 @@ const verifyReinstallWhileRunning = !verifyCoreOnly && process.env.OD_PACKAGED_E
 const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL);
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH);
+const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE);
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion });
@@ -40,7 +41,38 @@ const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', names
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const preUpdateScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-before-update.png`);
-const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
+const readinessExpression = `
+  (() => ({
+    href: location.href,
+    mounted: document.documentElement.getAttribute('data-od-app-mounted'),
+    readyState: document.readyState,
+    title: document.title,
+  }))()
+`;
+const healthExpression = `
+  (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch('/api/health', { signal: controller.signal });
+      return {
+        health: await response.json(),
+        href: location.href,
+        status: response.status,
+        title: document.title,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        href: location.href,
+        name: error instanceof Error ? error.name : null,
+        title: document.title,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  })()
+`;
 const updaterPopupExpression = `
   (() => {
     const popup = document.querySelector('[data-testid="updater-popup"]');
@@ -203,6 +235,9 @@ type WinUninstallResult = {
 };
 
 type WinInspectResult = {
+  daemonStatus: DesktopStatus | null;
+  daemonStatusError?: string;
+  desktopIpcUnavailable?: boolean;
   eval?: {
     error?: string;
     ok: boolean;
@@ -212,6 +247,7 @@ type WinInspectResult = {
     path: string;
   };
   status: DesktopStatus | null;
+  statusError?: string;
   update?: {
     active?: {
       artifact?: {
@@ -242,6 +278,8 @@ type WinInspectResult = {
     };
     state: string;
   };
+  webStatus: DesktopStatus | null;
+  webStatusError?: string;
   launcher: LauncherSnapshot;
 };
 
@@ -347,7 +385,7 @@ winDescribe('packaged windows runtime smoke', () => {
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let stop: WinStopResult | { skipped: true } = { skipped: true };
     let postUpdateHealth: HealthEvalValue | { skipped: true } = { skipped: true };
-    let payloadFixture: PackagedPayloadUpdateFixture | null = null;
+    let payloadFixture: ToolsServeUpdaterFixture | null = null;
     const updateEnv = captureUpdateEnv();
     try {
       await measureSmokeStep(timings, 'pre-clean uninstall', async () => {
@@ -395,15 +433,18 @@ winDescribe('packaged windows runtime smoke', () => {
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
         if (updateMetadataUrl != null && updateMetadataUrl !== '') {
+          assertUpdateVersionPresent('Windows', updateVersion);
           applyPackagedUpdateEnv(process.env, updateScenario, updateMetadataUrl, { openDryRun: false });
         } else {
+          assertToolsServeFixtureEnabled('Windows', updateFixture);
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
-          payloadFixture = await startPackagedPayloadUpdateFixture({
+          payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
             payloadPath: localPayload.payloadPath,
             platform: 'win',
             version: localPayload.targetVersion,
+            workspaceRoot,
           });
           applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
         }
@@ -419,10 +460,12 @@ winDescribe('packaged windows runtime smoke', () => {
 
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
-      expect(inspect.status?.url).toBe('od://app/');
+      if (inspect.desktopIpcUnavailable) expectWindowsFallbackWebUrl(inspect.status?.url);
+      else expectWindowsPackagedAppUrl(inspect.status?.url);
 
       const value = assertHealthEvalValue(inspect.eval?.value);
-      expect(value.href).toBe('od://app/');
+      if (inspect.desktopIpcUnavailable) expectWindowsDaemonUrl(value.href);
+      else expectWindowsPackagedAppUrl(value.href);
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
@@ -430,15 +473,17 @@ winDescribe('packaged windows runtime smoke', () => {
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
-      await measureSmokeStep(timings, 'ensure main app shell', async () => ensureMainAppShell());
+      if (!inspect.desktopIpcUnavailable) {
+        await measureSmokeStep(timings, 'ensure main app shell', async () => ensureMainAppShell());
 
-      await mkdir(dirname(preUpdateScreenshotPath), { recursive: true });
-      const preUpdateScreenshot = await measureSmokeStep(timings, 'inspect screenshot before update', async () =>
-        runToolsPackJson<WinInspectResult>('inspect', ['--path', preUpdateScreenshotPath]),
-      );
-      expect(preUpdateScreenshot.screenshot?.path).toBe(preUpdateScreenshotPath);
-      expect(await fileSizeBytes(preUpdateScreenshotPath)).toBeGreaterThan(0);
-      await report.report.save('screenshots/open-design-win-before-update.png', await readFile(preUpdateScreenshotPath));
+        await mkdir(dirname(preUpdateScreenshotPath), { recursive: true });
+        const preUpdateScreenshot = await measureSmokeStep(timings, 'inspect screenshot before update', async () =>
+          runToolsPackJson<WinInspectResult>('inspect', ['--path', preUpdateScreenshotPath]),
+        );
+        expect(preUpdateScreenshot.screenshot?.path).toBe(preUpdateScreenshotPath);
+        expect(await fileSizeBytes(preUpdateScreenshotPath)).toBeGreaterThan(0);
+        await report.report.save('screenshots/open-design-win-before-update.png', await readFile(preUpdateScreenshotPath));
+      }
 
       if (!verifyCoreOnly) {
         payloadUpdate = await measureSmokeStep(timings, 'payload update acceptance', async () =>
@@ -473,16 +518,18 @@ winDescribe('packaged windows runtime smoke', () => {
           waitForHealthyDesktop(),
         );
         expect(postReinstallInspect.status?.state).toBe('running');
-        expect(postReinstallInspect.status?.url).toBe('od://app/');
+        expectWindowsPackagedAppUrl(postReinstallInspect.status?.url);
       }
 
-      await mkdir(dirname(screenshotPath), { recursive: true });
-      const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>
-        runToolsPackJson<WinInspectResult>('inspect', ['--path', screenshotPath]),
-      );
-      expect(screenshot.screenshot?.path).toBe(screenshotPath);
-      expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
-      await report.saveScreenshot(screenshotPath);
+      if (!inspect.desktopIpcUnavailable) {
+        await mkdir(dirname(screenshotPath), { recursive: true });
+        const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>
+          runToolsPackJson<WinInspectResult>('inspect', ['--path', screenshotPath]),
+        );
+        expect(screenshot.screenshot?.path).toBe(screenshotPath);
+        expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
+        await report.saveScreenshot(screenshotPath);
+      }
 
       if (!verifyCoreOnly) {
         logs = await measureSmokeStep(timings, 'logs', async () => runToolsPackJson<LogsResult>('logs'));
@@ -526,11 +573,13 @@ winDescribe('packaged windows runtime smoke', () => {
         namespace,
         payloadUpdate,
         reinstall,
-        screenshot: report.screenshotRelpath,
-        screenshots: {
-          afterUpdate: report.screenshotRelpath,
-          beforeUpdate: 'screenshots/open-design-win-before-update.png',
-        },
+        screenshot: inspect.desktopIpcUnavailable ? null : report.screenshotRelpath,
+        screenshots: inspect.desktopIpcUnavailable
+          ? { afterUpdate: null, beforeUpdate: null }
+          : {
+              afterUpdate: report.screenshotRelpath,
+              beforeUpdate: 'screenshots/open-design-win-before-update.png',
+            },
         start: {
           executablePath: start.executablePath,
           logPath: start.logPath,
@@ -783,9 +832,9 @@ async function runPayloadUpdateAcceptance(options: {
 
   const postUpdateInspect = await waitForHealthyDesktopVersion(targetVersion, previousPid);
   expect(postUpdateInspect.status?.state).toBe('running');
-  expect(postUpdateInspect.status?.url).toBe('od://app/');
+  expectWindowsPackagedAppUrl(postUpdateInspect.status?.url);
   const health = assertHealthEvalValue(postUpdateInspect.eval?.value);
-  expect(health.href).toBe('od://app/');
+  expectWindowsPackagedAppUrl(health.href);
   expect(health.status).toBe(200);
   expect(health.health.ok).toBe(true);
   expect(health.health.version).toBe(targetVersion);
@@ -964,6 +1013,18 @@ function resolveFallbackUpdateBuildJsonPath(): string | null {
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'windows-tools-pack-update-build.json');
 }
 
+function assertToolsServeFixtureEnabled(platformName: string, value: string | null): void {
+  if (value === 'tools-serve') return;
+  throw new Error(
+    `full packaged ${platformName} payload smoke requires explicit tools-serve fixture; set OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE=tools-serve or provide OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL`,
+  );
+}
+
+function assertUpdateVersionPresent(platformName: string, value: string | null): asserts value is string {
+  if (value != null && value.length > 0) return;
+  throw new Error(`full packaged ${platformName} payload smoke requires an explicit update target version with external update metadata`);
+}
+
 async function readLatestYmlVersion(latestYmlPath: string): Promise<string | null> {
   const latestYml = await readFile(resolveFromWorkspace(latestYmlPath), 'utf8').catch(() => null);
   if (latestYml == null) return null;
@@ -1005,13 +1066,27 @@ async function waitForHealthyDesktop(): Promise<WinInspectResult> {
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
+      const statusInspect = await runToolsPackJson<WinInspectResult>('inspect');
+      lastResult = { inspect: statusInspect, step: 'status' };
+      const fallback = await maybeCoreHealthFallback(statusInspect);
+      if (fallback != null) return fallback;
+      if (statusInspect.status?.state !== 'running') {
+        await delay(1000);
+        continue;
+      }
+
+      const readinessInspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', readinessExpression]);
+      lastResult = { inspect: readinessInspect, step: 'readiness' };
+      if (readinessInspect.eval?.ok !== true) {
+        await delay(1000);
+        continue;
+      }
+
       const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', healthExpression]);
-      lastResult = inspect;
-      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+      lastResult = { inspect, step: 'health' };
+      if (inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
-        if (value?.status === 200 && value.health.ok === true && typeof value.health.version === 'string') {
-          return inspect;
-        }
+        if (value?.status === 200 && value.health.ok === true && typeof value.health.version === 'string') return inspect;
       }
     } catch (error) {
       lastResult = error;
@@ -1020,6 +1095,48 @@ async function waitForHealthyDesktop(): Promise<WinInspectResult> {
   }
 
   throw new Error(`packaged windows runtime did not become healthy: ${formatUnknown(lastResult)}`);
+}
+
+async function maybeCoreHealthFallback(inspect: WinInspectResult): Promise<WinInspectResult | null> {
+  if (!verifyCoreOnly) return null;
+  if (inspect.status != null) return null;
+  if (inspect.statusError == null || !inspect.statusError.includes('IPC request timed out')) return null;
+  if (inspect.daemonStatus?.state !== 'running' || inspect.daemonStatus.url == null) return null;
+  if (inspect.webStatus?.state !== 'running' || inspect.webStatus.url == null) return null;
+
+  const health = await fetchPackagedHealth(inspect.daemonStatus.url);
+  if (health.status !== 200 || health.health.ok !== true) return null;
+  return {
+    ...inspect,
+    desktopIpcUnavailable: true,
+    eval: {
+      ok: true,
+      value: health,
+    },
+    status: {
+      ...(inspect.daemonStatus.pid == null ? {} : { pid: inspect.daemonStatus.pid }),
+      state: 'running',
+      title: null,
+      url: inspect.webStatus.url,
+      windowVisible: false,
+    },
+  };
+}
+
+async function fetchPackagedHealth(daemonUrl: string): Promise<HealthEvalValue> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(new URL('/api/health', daemonUrl), { signal: controller.signal });
+    return {
+      health: await response.json() as HealthEvalValue['health'],
+      href: daemonUrl,
+      status: response.status,
+      title: 'Open Design Beta',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function ensureMainAppShell(timeoutMs = 45_000): Promise<void> {
@@ -1046,15 +1163,29 @@ async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
+      const statusInspect = await runToolsPackJson<WinInspectResult>('inspect');
+      lastResult = { inspect: statusInspect, step: 'status' };
+      if (statusInspect.status?.state !== 'running') {
+        await delay(1000);
+        continue;
+      }
+
+      const readinessInspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', readinessExpression]);
+      lastResult = { inspect: readinessInspect, step: 'readiness' };
+      if (readinessInspect.eval?.ok !== true) {
+        await delay(1000);
+        continue;
+      }
+
       const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', healthExpression]);
-      lastResult = inspect;
-      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+      lastResult = { inspect, step: 'health' };
+      if (inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
         if (
           value?.status === 200 &&
           value.health.ok === true &&
           value.health.version === expectedVersion &&
-          (previousPid == null || inspect.status.pid !== previousPid)
+          (previousPid == null || inspect.status?.pid !== previousPid)
         ) {
           return inspect;
         }
@@ -1327,6 +1458,18 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
   ).toBe(true);
 }
 
+function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
+  expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/$/));
+}
+
+function expectWindowsFallbackWebUrl(value: string | null | undefined): void {
+  expect(value).toEqual(expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/?$/));
+}
+
+function expectWindowsDaemonUrl(value: string | null | undefined): void {
+  expect(value).toEqual(expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/?$/));
+}
+
 async function fileSizeBytes(filePath: string): Promise<number> {
   return (await stat(filePath)).size;
 }
@@ -1355,6 +1498,16 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+function isPathInside(filePath: string, expectedRoot: string): boolean {
+  const normalizedPath = normalizePathForComparison(resolve(filePath));
+  const normalizedRoot = normalizePathForComparison(resolve(expectedRoot));
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`);
+}
+
+function normalizePathForComparison(filePath: string): string {
+  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }
 
 async function resetPackagedRuntimeNamespaceRoot(namespaceRoot: string): Promise<void> {

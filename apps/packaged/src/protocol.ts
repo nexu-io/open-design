@@ -2,6 +2,7 @@ import { protocol } from "electron";
 
 const OD_SCHEME = "od";
 const OD_ENTRY_URL = `${OD_SCHEME}://app/`;
+type OdProtocolFetch = (request: Request) => Promise<Response>;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -66,7 +67,7 @@ function buildProxyErrorResponse(error: unknown, target: string): Response {
 export async function handleOdRequest(
   request: Request,
   webRuntimeUrl: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: OdProtocolFetch = fetch,
 ): Promise<Response> {
   const target = toWebRuntimeUrl(webRuntimeUrl, request.url);
   try {
