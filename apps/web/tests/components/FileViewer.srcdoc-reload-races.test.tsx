@@ -324,6 +324,86 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   });
 
   // ---------------------------------------------------------------------------
+  // Race 4 (P2): routing decision must not flip to URL-load during the
+  // source=null window opened by a Reload click on an artifact whose srcDoc
+  // path is driven by a source-derived predicate (htmlNeedsSandboxShim).
+  // ---------------------------------------------------------------------------
+  it('keeps the srcDoc iframe active (does not flip to URL-load) while source is null after a Reload click on an htmlNeedsSandboxShim artifact', async () => {
+    // An HTML file that uses localStorage — triggers htmlNeedsSandboxShim and
+    // therefore forces the srcDoc path (forceInline=true).  No .slide class so
+    // looksLikeDeck stays false and isDeck is passed as false; the ONLY reason
+    // this file takes the srcDoc path is the sandbox-shim predicate.
+    const shimFile: ProjectFile = {
+      name: 'app.html',
+      path: 'app.html',
+      type: 'file',
+      size: 512,
+      mtime: 1710000001,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const shimHtml =
+      '<html><body><script>localStorage.setItem("key","val");</script><p>loaded</p></body></html>';
+
+    // Step 1: mount with shimHtml — source is non-null, needsSandboxShim=true,
+    // forceInline=true, useUrlLoadPreview=false → srcDoc iframe is active.
+    vi.stubGlobal('fetch', fetchReturning(shimHtml));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={shimFile}
+        isDeck={false}
+      />,
+    );
+
+    // Wait for the source fetch to resolve so the component has non-null source.
+    await waitFor(() => {
+      // The srcDoc iframe is active: its testid is 'artifact-preview-frame'
+      // (not 'artifact-preview-frame-srcdoc') when useUrlLoadPreview=false.
+      const frame = screen.queryByTestId('artifact-preview-frame');
+      expect(frame).not.toBeNull();
+      expect((frame as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+
+    // Step 2: click Reload — source goes null synchronously.  Without the fix,
+    // needsSandboxShim(null)=false → forceInline flips → useUrlLoadPreview
+    // becomes true → the URL-load iframe hijacks testid 'artifact-preview-frame'
+    // and the srcDoc iframe is renamed to 'artifact-preview-frame-srcdoc'.
+    const { handle: reloadHandle, stub: reloadStub } = deferredFetch();
+    vi.stubGlobal('fetch', reloadStub);
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    });
+
+    // Step 3: assert BEFORE the fetch resolves — this is the reload window
+    // where the source=null race can expose the bug.
+    //
+    // The srcDoc iframe must remain the active iframe: its testid stays
+    // 'artifact-preview-frame' and its data-od-render-mode is 'srcdoc'.
+    // If the routing flipped, a URL-load iframe would have taken the
+    // 'artifact-preview-frame' testid and data-od-active='true' instead.
+    const activeFrame = screen.getByTestId('artifact-preview-frame');
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+
+    // Confirm the URL-load iframe is NOT the active one (it would carry
+    // data-od-render-mode='url-load' and data-od-active='true' on a buggy build).
+    const urlLoadFrame = screen.queryByTestId('artifact-preview-frame-url-load');
+    if (urlLoadFrame) {
+      expect(urlLoadFrame.getAttribute('data-od-active')).toBe('false');
+    }
+
+    // Drain the deferred fetch so it doesn't leak into subsequent tests.
+    await act(async () => {
+      reloadHandle.resolve(shimHtml);
+      await Promise.resolve();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Race 3: stale snapshot must not survive an identity-mismatched fetch
   // ---------------------------------------------------------------------------
   it('does not restore the reload snapshot on a later normal failed load after an identity-mismatched fetch left the ref un-cleared', async () => {
