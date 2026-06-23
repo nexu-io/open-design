@@ -552,4 +552,183 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Race P2 (Codex P2 #5): canceled-fetch ref leak
+  //
+  // Sequence:
+  //   1. Mount file A ("A-V1"), wait for it to load.
+  //   2. Click Reload on A — prevSourceBeforeReloadRef captures {A, A-V1},
+  //      source goes null, A-reload fetch is in flight (deferred).
+  //   3. Switch to file B — A's in-flight fetch is canceled (cancelled=true);
+  //      the .then() callback returns early without touching the ref, so
+  //      prevSourceBeforeReloadRef remains armed with the A-V1 snapshot.
+  //   4. Switch back to A before B's fetch resolves (B fetch also deferred) —
+  //      B's fetch is also canceled (cancelled=true), ref still armed.
+  //   5. A's new fetch returns null (500) — a normal failed load, NOT a
+  //      Reload click.  On the buggy build the identity check passes
+  //      (snap.fileName='deck-a.html' === file.name='deck-a.html') and
+  //      setSource(snap.source) restores "A-V1" from the stale snapshot.
+  //
+  // The fix: clear prevSourceBeforeReloadRef in the [projectId, file.name]
+  // effect (the per-file reset that also clears sourceEverLoadedRef), so the
+  // ref cannot outlive a file-identity change regardless of fetch-cancel order.
+  // ---------------------------------------------------------------------------
+  it('does not restore the reload snapshot on a normal failed load after B fetch was canceled and the ref was never cleared by a callback', async () => {
+    const fileA = deckFile({ name: 'deck-a.html', path: 'deck-a.html' });
+    const fileB = deckFile({ name: 'deck-b.html', path: 'deck-b.html' });
+
+    const RAW_A = `/api/projects/project-1/raw/deck-a.html`;
+    const RAW_B = `/api/projects/project-1/raw/deck-b.html`;
+
+    const htmlA = deckHtml('A-V1-CONTENT');
+
+    // Step 1: mount with File A and wait for "A-V1-CONTENT" to appear.
+    vi.stubGlobal('fetch', fetchReturning(htmlA));
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={fileA}
+        isDeck
+      />,
+    );
+
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('A-V1-CONTENT');
+    });
+
+    // Step 2: click Reload on File A.
+    // prevSourceBeforeReloadRef now = { source: htmlA, projectId, fileName: 'deck-a.html' }.
+    // source goes null; A-reload fetch deferred (in flight, never resolved).
+    let resolveAReloadFetch!: (resp: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(RAW_A)) {
+          return new Promise<Response>((ok) => {
+            resolveAReloadFetch = ok;
+          });
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    });
+
+    // Step 3: switch to file B while A-reload fetch is still in flight.
+    // B's fetch is also deferred — it will never resolve in this test.
+    // Switching files sets cancelled=true for A's fetch; the .then() callback
+    // skips all branches (returns at "if (cancelled) return") so the ref stays
+    // armed.  The [projectId, file.name] effect runs and resets
+    // sourceEverLoadedRef (and lastGoodSourceForRoutingRef) — but on the buggy
+    // build it does NOT clear prevSourceBeforeReloadRef.
+    let resolveBFetch!: (resp: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(RAW_B)) {
+          return new Promise<Response>((ok) => {
+            resolveBFetch = ok;
+          });
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    act(() => {
+      rerender(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={fileB}
+          isDeck
+        />,
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Step 4: switch back to File A before B's fetch resolves.
+    // B's fetch is canceled (cancelled=true for B's effect cleanup).
+    // A's new fetch returns null (500) immediately — this is a NORMAL failed
+    // load, not a Reload-triggered fetch.  The Reload button was NOT clicked.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(RAW_A)) {
+          return new Response('', { status: 500 });
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    act(() => {
+      rerender(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={fileA}
+          isDeck
+        />,
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // --- KEY ASSERTION ---
+    // No Reload click happened for this A load.  prevSourceBeforeReloadRef
+    // must have been invalidated when the file identity changed (A→B step 3
+    // or B→A step 4).  A normal 500 response must NOT restore "A-V1-CONTENT".
+    //
+    // On the buggy build: the ref was left armed by the canceled-fetch path
+    // (B's .then() never ran), the identity check passes (A===A), and
+    // setSource(snap.source) wrongly surfaces "A-V1-CONTENT" in the srcdoc.
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+    expect(screen.queryByText(/A-V1-CONTENT/)).toBeNull();
+
+    // Drain deferred fetches so they don't leak into subsequent tests.
+    if (resolveAReloadFetch) {
+      act(() => {
+        resolveAReloadFetch(new Response('', { status: 500 }));
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+    if (resolveBFetch) {
+      act(() => {
+        resolveBFetch(new Response('', { status: 500 }));
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+  });
 });
