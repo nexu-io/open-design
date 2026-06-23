@@ -1,3 +1,5 @@
+import type { ReleaseChannel } from "@open-design/release";
+
 export const OPEN_DESIGN_HOST_GLOBAL = "__od__";
 export const OPEN_DESIGN_HOST_VERSION = 2;
 
@@ -126,7 +128,7 @@ export type OpenDesignHostUpdaterState =
   (typeof OPEN_DESIGN_HOST_UPDATER_STATES)[keyof typeof OPEN_DESIGN_HOST_UPDATER_STATES];
 
 export type OpenDesignHostUpdaterMode = "js-incremental" | "package-launcher";
-export type OpenDesignHostUpdaterChannel = "beta" | "nightly" | "preview" | "stable";
+export type OpenDesignHostUpdaterChannel = ReleaseChannel;
 
 export type OpenDesignHostUpdaterActionOptions = {
   payload?: Record<string, unknown>;

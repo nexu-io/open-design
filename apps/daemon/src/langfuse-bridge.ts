@@ -448,6 +448,7 @@ function collectAgentEvents(
 ): AgentEventSummary[] {
   const out: AgentEventSummary[] = [];
   const statusCounts = new Map<string, number>();
+  const diagnosticCounts = new Map<string, number>();
   let thinkingCount = 0;
   let usageCount = 0;
   const source =
@@ -470,6 +471,19 @@ function collectAgentEvents(
           costUsd?: unknown;
           durationMs?: unknown;
           stopReason?: unknown;
+          name?: unknown;
+          source?: unknown;
+          reason?: unknown;
+          shape?: unknown;
+          elapsedMs?: unknown;
+          suppressedChars?: unknown;
+          suppressedChunks?: unknown;
+          openedBlocks?: unknown;
+          closedBlocks?: unknown;
+          fileCount?: unknown;
+          files?: unknown;
+          pendingCandidateChars?: unknown;
+          suppressing?: unknown;
         }
       | null
       | undefined;
@@ -527,6 +541,42 @@ function collectAgentEvents(
           ...(typeof data.stopReason === 'string'
             ? { stop_reason: data.stopReason }
             : {}),
+        },
+      });
+    } else if (type === 'diagnostic') {
+      if (!data) continue;
+      const diagnosticName =
+        typeof data.name === 'string' && data.name.length > 0
+          ? data.name
+          : 'runtime_diagnostic';
+      const index = diagnosticCounts.get(diagnosticName) ?? 0;
+      diagnosticCounts.set(diagnosticName, index + 1);
+      out.push({
+        id: `diagnostic-${diagnosticName}-${index}`,
+        name: `agent-diagnostic:${diagnosticName}`,
+        timestamp,
+        input: eventInput('diagnostic'),
+        output: {
+          name: diagnosticName,
+          ...(typeof data.source === 'string' ? { source: data.source } : {}),
+          ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
+          ...(typeof data.elapsedMs === 'number' ? { elapsed_ms: data.elapsedMs } : {}),
+          ...(typeof data.suppressedChars === 'number' ? { suppressed_chars: data.suppressedChars } : {}),
+          ...(typeof data.suppressedChunks === 'number' ? { suppressed_chunks: data.suppressedChunks } : {}),
+          ...(typeof data.openedBlocks === 'number' ? { opened_blocks: data.openedBlocks } : {}),
+          ...(typeof data.closedBlocks === 'number' ? { closed_blocks: data.closedBlocks } : {}),
+          ...(typeof data.fileCount === 'number' ? { file_count: data.fileCount } : {}),
+          ...(Array.isArray(data.files)
+            ? { files: data.files.filter((file) => typeof file === 'string').slice(0, 8) }
+            : {}),
+          ...(typeof data.pendingCandidateChars === 'number'
+            ? { pending_candidate_chars: data.pendingCandidateChars }
+            : {}),
+          ...(typeof data.suppressing === 'boolean' ? { suppressing: data.suppressing } : {}),
+          ...(data.shape && typeof data.shape === 'object' ? { shape: data.shape } : {}),
+        },
+        metadata: {
+          diagnostic_name: diagnosticName,
         },
       });
     }

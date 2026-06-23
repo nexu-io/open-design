@@ -152,35 +152,39 @@ function changedPullRequestFiles(): string[] {
     throw new Error("pull_request event payload did not include pull_request.number");
   }
 
-  const stdout = execFileSync(
-    "gh",
-    ["api", "--paginate", `repos/${repository}/pulls/${prNumber}/files`, "--jq", ".[].filename"],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-  );
+  const stdout = runGh(["api", "--paginate", `repos/${repository}/pulls/${prNumber}/files`, "--jq", ".[].filename"]);
   return stdout.split(/\r?\n/).filter(Boolean);
 }
 
 function changedManualFiles(): string[] {
   const repository = requiredEnv("GITHUB_REPOSITORY");
   const sha = requiredEnv("GITHUB_SHA");
-  const stdout = execFileSync(
-    "gh",
-    [
-      "api",
-      "--paginate",
-      `repos/${repository}/compare/main...${sha}`,
-      "--jq",
-      '(.files // [])[] | select(.status != "removed") | .filename',
-    ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-  );
+  const stdout = runGh([
+    "api",
+    "--paginate",
+    `repos/${repository}/compare/main...${sha}`,
+    "--jq",
+    '(.files // [])[] | select(.status != "removed") | .filename',
+  ]);
   return stdout.split(/\r?\n/).filter(Boolean);
+}
+
+function runGh(args: string[]): string {
+  const nodeScript = process.env.OPEN_DESIGN_GH_NODE_SCRIPT;
+  if (nodeScript != null && nodeScript.length > 0) {
+    return execFileSync(process.execPath, [nodeScript, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+  }
+  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
 function applyChangedFile(file: string, target: ScopeOutputs): void {
   if (
     startsWithAny(file, [
       "apps/daemon/",
+      "packages/release/",
       "packages/contracts/",
       "packages/platform/",
       "packages/sidecar/",
@@ -193,6 +197,7 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
   if (
     startsWithAny(file, [
       "apps/web/",
+      "packages/release/",
       "packages/components/",
       "packages/contracts/",
       "packages/host/",
@@ -218,6 +223,7 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
       "tools/pack/",
       "apps/packaged/",
       "apps/desktop/",
+      "packages/release/",
       "packages/components/",
       "packages/host/",
       "packages/platform/",
@@ -274,6 +280,7 @@ function isUiP0RelevantFile(file: string): boolean {
     startsWithAny(file, [
       "apps/web/",
       "apps/daemon/",
+      "packages/release/",
       "packages/components/",
       "packages/contracts/",
       "packages/host/",
@@ -344,6 +351,7 @@ function isNixRelevantFile(file: string): boolean {
   return (
     startsWithAny(file, [
       "nix/",
+      "packages/release/",
     ]) ||
     [
       "package.json",
@@ -376,9 +384,6 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
       ".github/workflows/landing-page-staging.yml",
       ".github/workflows/landing-page-production.yml",
       ".github/workflows/blog-indexing-on-deploy.yml",
-      ".github/workflows/blog-indexing-monitor.yml",
-      ".github/workflows/blog-3day-report.yml",
-      ".github/workflows/seo-daily-report.yml",
       ".github/workflows/autofix.atom.yml",
       ".github/workflows/comment.atom.yml",
       ".github/workflows/report.atom.yml",

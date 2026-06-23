@@ -1,0 +1,175 @@
+name: backport-automerge
+# Auto-merge a clean backport PR once its CI is green — and ping Feishu if its CI fails.
+#
+# release/v* is protected (PR required) but has no required status check and no merge queue,
+# so neither GitHub auto-merge nor enqueuePullRequest applies. Instead we react to ci.yml
+# finishing for a backport-* branch:
+#   - CI success + clean (non-draft) PR  -> squash-merge it (App token, so the push to
+#     release/* re-triggers notify-release-feishu / the nightly).
+#   - CI failure                         -> Feishu ping for manual follow-up.
+#   - conflict (draft PR)                -> left for a human; release-gate blocks the release
+#                                           until it lands.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write   # github-actions[bot] approves the bot's own clean backport (Approve step)
+
+jobs:
+  followup:
+    # Only react to CI that ran for a *pull request* on a backport-* branch — never a push or
+    # manual dispatch — so a non-PR run can't reach the App-token / Feishu steps below.
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' && startsWith(github.event.workflow_run.head_branch, 'backport-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Resolve the backport PR for this run
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          # Authoritative run -> PR association from GitHub (populated for same-repo PRs; empty
+          # for forks, which we never auto-merge anyway).
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -euo pipefail
+          # Pick the run's own PR that targets a release/* branch at exactly the SHA CI ran on —
+          # bound to workflow_run.pull_requests, not a branch-name guess.
+          num="$(printf '%s' "$RUN_PRS" | jq -r --arg sha "$HEAD_SHA" \
+                  '[.[] | select(.base.ref | startswith("release/v")) | select(.head.sha == $sha)][0].number // empty')"
+          if [ -z "$num" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Run has no associated release/* PR at $HEAD_SHA — skipping"
+            exit 0
+          fi
+          row="$(gh pr view "$num" --repo "$REPO" \
+                  --json number,baseRefName,isDraft,title,author,isCrossRepository,headRefOid)"
+          # "Pristine" = every commit on the branch was committed by github-actions[bot] — the
+          # untouched korthout cherry-pick of code already reviewed on main. If a human pushed any
+          # commit (resolving a conflict, fixing a failing test), that commit's committer is NOT
+          # github-actions[bot], so pristine=false and the auto-approve/merge below are skipped:
+          # those commits were never reviewed, so the PR must go through human review instead.
+          # Paginate across ALL commits (--paginate) — a >100-commit PR must not pass on the
+          # strength of its first page; one non-bot committer anywhere fails it. Count the lines
+          # that do NOT equal the literal bot login (-F/-x; the [..] is not a regex class) with
+          # grep -c, whose count semantics are portable (unlike `grep -qv`, whose early-exit status
+          # is unreliable across BSD/GNU).
+          # Fail closed on a partial/failed lookup: --paginate may emit several pages and THEN fail
+          # on a later one; `|| true` would keep that partial output and could read all-bot. Capture
+          # gh's exit status via `if !` and blank the list on any failure, so pristine needs a
+          # complete, successful enumeration of every commit.
+          if ! logins="$(gh api "repos/$REPO/pulls/$num/commits?per_page=100" --paginate \
+                          --jq '.[].committer.login // "none"' 2>/dev/null)"; then
+            logins=""
+          fi
+          nonbot="$(printf '%s\n' "$logins" | grep -Fvxc 'github-actions[bot]' || true)"
+          if [ -n "$logins" ] && [ "${nonbot:-1}" = "0" ]; then
+            pristine=true
+          else
+            pristine=false
+          fi
+          {
+            echo "found=true"
+            echo "number=$(printf '%s' "$row" | jq -r .number)"
+            echo "base=$(printf '%s' "$row" | jq -r .baseRefName)"
+            echo "draft=$(printf '%s' "$row" | jq -r .isDraft)"
+            echo "title=$(printf '%s' "$row" | jq -r .title)"
+            echo "author=$(printf '%s' "$row" | jq -r '.author.login')"
+            echo "cross=$(printf '%s' "$row" | jq -r '.isCrossRepository')"
+            echo "head_oid=$(printf '%s' "$row" | jq -r '.headRefOid')"
+            echo "pristine=$pristine"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Approve the clean backport (release bot, CI green)
+        # release/v* requires 1 approving review. The diff was already reviewed + approved on
+        # main; this is a mechanical, conflict-free cherry-pick by the release bot with green CI.
+        # Approve as github-actions[bot] — a DIFFERENT identity than the App that authored the PR
+        # (an author can't approve its own PR) — under the SAME bot-identity + SHA + CI gates as
+        # the merge below, so only the release bot's own verified backports are auto-approved.
+        # pristine == 'true' is critical here: it means NO human commit was pushed, so the diff is
+        # exactly what was already reviewed on main. If a human resolved a conflict or fixed CI,
+        # pristine is false and this skips — that unreviewed code must get a real human review.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh pr review "$NUM" --repo "$REPO" --approve \
+            --body "Auto-approved: clean cherry-pick by the release bot of code already reviewed on main, CI green. (release/v* requires one approval.)"
+
+      - name: Auto-merge clean backport on green CI
+        # Guards (release/v* has no required checks, so this workflow IS the gate):
+        #  - author == the release bot and same-repo (not a fork) — so a stranger can't get a
+        #    branch named backport-* auto-merged with the App token.
+        #  - PR head == the exact SHA CI passed on (head_oid == workflow_run.head_sha), and
+        #    --match-head-commit re-checks at merge time — so a commit pushed after CI went
+        #    green is never merged untested.
+        #  - pristine == 'true' — every commit was committed by github-actions[bot], i.e. nobody
+        #    pushed human commits on top of the cherry-pick. Once a human touches the branch the
+        #    diff is no longer the reviewed-on-main code, so we fall back to human review.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+          BASE: ${{ steps.pr.outputs.base }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "CI green on $HEAD_SHA — squash-merging clean backport PR #$NUM into $BASE"
+          gh pr merge "$NUM" --repo "$REPO" --squash --delete-branch --match-head-commit "$HEAD_SHA"
+
+      - name: Notify Feishu on failed backport CI
+        # Same identity gates as the merge step: only ping for a genuine bot backport from the
+        # same repo, so a fork / non-bot PR named backport-* can't spam the release group.
+        if: ${{ steps.pr.outputs.found == 'true' && steps.pr.outputs.author == 'app/open-design-release-bot' && steps.pr.outputs.cross == 'false' && github.event.workflow_run.conclusion == 'failure' }}
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NUM: ${{ steps.pr.outputs.number }}
+          BASE: ${{ steps.pr.outputs.base }}
+          TITLE: ${{ steps.pr.outputs.title }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          python3 - <<'PY'
+          import os, time, hmac, hashlib, base64, json, urllib.request
+          wh = os.environ.get("FEISHU_WEBHOOK", "")
+          if not wh:
+              raise SystemExit(0)
+          secret = os.environ.get("FEISHU_SIGN_SECRET", "")
+          text = (f"⚠️ backport PR #{os.environ['NUM']} CI 失败（目标 {os.environ['BASE']}）\n"
+                  f"{os.environ.get('TITLE','')}\n需要人工跟进：{os.environ.get('RUN_URL','')}")
+          body = {"msg_type": "text", "content": {"text": text}}
+          if secret:
+              ts = str(int(time.time()))
+              sign = base64.b64encode(hmac.new(f"{ts}\n{secret}".encode(), b"", hashlib.sha256).digest()).decode()
+              body = {"timestamp": ts, "sign": sign, **body}
+          req = urllib.request.Request(wh, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+          print(urllib.request.urlopen(req).read().decode())
+          PY

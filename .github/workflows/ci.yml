@@ -824,6 +824,9 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
           cache-from: type=gha
 
   validate:
@@ -885,6 +888,47 @@ jobs:
             echo "$required_misses"
             exit 1
           fi
+
+      - name: Block merge while the needs-validation label is present
+        # Hard gate: a PR that still carries `needs-validation` must not merge. Fails closed —
+        # any label-lookup error blocks rather than silently waving the merge through. Respects
+        # the skip-validation override implicitly (that override means needs-validation is never
+        # added). On pull_request the labels come straight from the event payload (no API call);
+        # on merge_group we resolve every PR in the queued group.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if printf '%s' "$PR_LABELS" | jq -e 'index("needs-validation")' >/dev/null; then
+              echo "::error::PR still has 'needs-validation' — validate (/explore Pass or manual QA) and remove the label before merging."
+              exit 1
+            fi
+          elif [ "$EVENT_NAME" = "merge_group" ]; then
+            # Fail closed: capture each gh result into a plain assignment so a failed lookup
+            # trips set -e / pipefail and blocks the merge. Do NOT put the gh call in an `if`
+            # condition — a nonzero exit there is swallowed (read as "no label") and waves the
+            # merge through.
+            shas="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" --jq '.commits[].sha')"
+            prs=""
+            for s in $shas; do
+              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"
+              prs="$(printf '%s\n%s\n' "$prs" "$pulls")"
+            done
+            for pr in $(printf '%s\n' "$prs" | sort -u | grep -E '^[0-9]+$'); do
+              labels="$(gh pr view "$pr" --repo "$REPO" --json labels --jq '.labels[].name')"
+              if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
+                echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
+                exit 1
+              fi
+            done
+          fi
+          echo "No 'needs-validation' label in scope — clear to merge."
 
   runtime_summary:
     name: Runtime summary

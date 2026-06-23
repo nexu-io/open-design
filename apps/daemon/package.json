@@ -39,6 +39,7 @@
     "@open-design/diagnostics": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
+    "@open-design/release": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",

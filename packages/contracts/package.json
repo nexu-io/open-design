@@ -69,6 +69,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/release": "workspace:*",
     "zod": "3.25.76"
   },
   "devDependencies": {

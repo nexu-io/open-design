@@ -1,14 +1,14 @@
 /* Pluggable-hooks panel — a quiet list of toggles, one row per hook, with a
- * one-line explanation. Light/white surface to match Memory settings. */
+ * one-line explanation. */
 
 .panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-md, 10px);
-  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  background: var(--bg-subtle);
 }
 
 .head {
@@ -25,8 +25,8 @@
   height: 28px;
   flex: 0 0 auto;
   border-radius: var(--radius-md, 8px);
-  background: var(--bg-default, #fff);
-  color: var(--accent, #5b5bd6);
+  background: var(--bg-panel);
+  color: var(--accent);
 }
 
 .title {
@@ -39,7 +39,7 @@
   margin: 2px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 .list {
@@ -55,7 +55,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+  border-top: 1px solid var(--border-soft, var(--border));
 }
 
 .row:first-child {
@@ -70,8 +70,8 @@
   height: 24px;
   flex: 0 0 auto;
   border-radius: var(--radius-sm, 6px);
-  background: var(--bg-default, #fff);
-  color: var(--text-muted, #6b6b6b);
+  background: var(--bg-panel);
+  color: var(--text-muted);
 }
 
 .rowCopy {
@@ -90,7 +90,7 @@
 .rowDesc {
   font-size: 12px;
   line-height: 1.4;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 .toggle {

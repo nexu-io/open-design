@@ -46,8 +46,8 @@ function channelLabelFor(channel: string | null | undefined): string | null {
   switch (channel) {
     case 'beta':
       return 'Beta channel';
-    case 'nightly':
-      return 'Nightly channel';
+    case 'prerelease':
+      return 'Prerelease channel';
     case 'preview':
       return 'Preview channel';
     case 'stable':

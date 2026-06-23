@@ -121,4 +121,4 @@ jobs:
           STREAM_LABEL: "每日定时"
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types .github/scripts/release/feishu/notify.ts
+        run: node --experimental-strip-types tools/release/src/notifications/feishu.ts
