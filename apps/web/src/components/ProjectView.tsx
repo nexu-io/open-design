@@ -2622,11 +2622,18 @@ export function ProjectView({
   // MAX_TRANSIENT_RETRIES we add to completedReattachRunsRef to avoid spinning.
   const MAX_TRANSIENT_RETRIES = 2;
 
+  // Reset transient retry counts when the conversation or daemon connection
+  // changes so stale counts from a previous session do not bleed in.  This
+  // must be a separate effect keyed only on those two values; placing the
+  // reset inside the reattach effect (which also depends on recoveryTick and
+  // messages) would zero the counts every time the timer-driven recoveryTick
+  // bumped, preventing attempts >= MAX_TRANSIENT_RETRIES from ever holding.
+  useEffect(() => {
+    transientFailedRetriesRef.current = new Map();
+  }, [activeConversationId, daemonLive]);
+
   useEffect(() => {
     if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
-    // Reset transient retry state whenever we enter a new conversation or the
-    // daemon reconnects, so stale counts from a previous session don't bleed in.
-    transientFailedRetriesRef.current = new Map();
     let cancelled = false;
     const reattachConversationId = activeConversationId;
 
@@ -2737,6 +2744,8 @@ export function ProjectView({
             const attempts = transientFailedRetriesRef.current.get(runId) ?? 0;
             if (attempts >= MAX_TRANSIENT_RETRIES) {
               // Cap reached — treat as authoritative completion so we stop retrying.
+              // Clear the Map entry so it doesn't accumulate stale entries.
+              transientFailedRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
             } else {
               transientFailedRetriesRef.current.set(runId, attempts + 1);
@@ -2770,6 +2779,8 @@ export function ProjectView({
               true,
             );
           }
+          // Clear stale retry count — this run is authoritatively done.
+          transientFailedRetriesRef.current.delete(runId);
           completedReattachRunsRef.current.add(runId);
           continue;
         }
@@ -2867,6 +2878,8 @@ export function ProjectView({
               );
             }
             await auditDesignSystemWorkspaceAfterRun(message.id);
+            // Clear stale retry count for successfully recovered run.
+            transientFailedRetriesRef.current.delete(runId);
             completedReattachRunsRef.current.add(runId);
             onProjectsRefresh();
             continue;
@@ -3005,6 +3018,8 @@ export function ProjectView({
               if (runMayFinalize) textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
+              // Clear stale retry count for successfully recovered run.
+              transientFailedRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -3183,6 +3198,8 @@ export function ProjectView({
                   })();
                 }
               }
+              // Clear stale retry count for successfully recovered run.
+              transientFailedRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -3205,6 +3222,8 @@ export function ProjectView({
             if (runStatus === 'canceled') {
               textBuffer.cancel();
               unregisterTextBuffer();
+              // Clear stale retry count for canceled run.
+              transientFailedRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
