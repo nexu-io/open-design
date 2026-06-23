@@ -2643,8 +2643,20 @@ export function ProjectView({
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
 
+        // A message whose run_status was spuriously written as 'failed' before
+        // the page reloaded (e.g. the SSE reconnect fallback fired while the
+        // daemon run was still in flight) must still be reattached when the
+        // actual daemon run succeeded.  Detect this by checking for a 'failed'
+        // message that has a runId but no content and no produced files — the
+        // daemon's authoritative status is fetched below and the message is
+        // updated to reflect it.
         const needsFullReplay =
-          isActiveRunStatus(message.runStatus) || shouldReplayTerminalRunMessage(message);
+          isActiveRunStatus(message.runStatus) ||
+          shouldReplayTerminalRunMessage(message) ||
+          (message.runStatus === 'failed' &&
+            !!message.runId &&
+            !message.content &&
+            !(message.producedFiles?.length));
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
