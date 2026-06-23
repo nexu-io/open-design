@@ -2087,16 +2087,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           : [],
       [mention, mentionQuery, connectors],
     );
-    // Already-staged skills drop out of the suggestion list (carried over
-    // from main) so the @-popover keeps moving forward as the user picks.
+    // The ids staged for the current turn. Drives both the @-popover's
+    // suggestion filter (staged skills drop out so the picker keeps moving
+    // forward as the user picks) and its active indicator, so removing a
+    // skill from the draft immediately clears that skill's checkmark.
+    const stagedSkillIds = useMemo(
+      () => new Set(stagedSkills.map((s) => s.id)),
+      [stagedSkills],
+    );
     const filteredSkills = useMemo(() => {
       if (!mention) return [];
-      const stagedSkillIds = new Set(stagedSkills.map((s) => s.id));
       return skills
         .filter((s) => !stagedSkillIds.has(s.id))
         .filter((s) => skillMatchesQuery(s, mentionQuery))
         .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery));
-    }, [mention, mentionQuery, skills, stagedSkills]);
+    }, [mention, mentionQuery, skills, stagedSkillIds]);
     const hasComposerPayload =
       draft.trim().length > 0 || staged.length > 0 || currentCommentAttachments().length > 0;
     const showStopButton = streaming && !hasComposerPayload;
@@ -2257,7 +2262,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 setMentionIndex(0);
               }}
               activeIndex={mentionIndex}
-              currentSkillId={currentSkillId}
+              stagedSkillIds={stagedSkillIds}
               onPickFile={insertMention}
               onPickWorkspaceContext={insertWorkspaceMention}
               onPickPlugin={(record) => void insertPluginMention(record)}
@@ -4519,7 +4524,7 @@ function MentionPopover({
   tab,
   onTabChange,
   activeIndex,
-  currentSkillId,
+  stagedSkillIds,
   onPickFile,
   onPickWorkspaceContext,
   onPickPlugin,
@@ -4537,7 +4542,7 @@ function MentionPopover({
   tab: MentionTab;
   onTabChange: (tab: MentionTab) => void;
   activeIndex: number;
-  currentSkillId: string | null;
+  stagedSkillIds: Set<string>;
   onPickFile: (path: string) => void;
   onPickWorkspaceContext: (item: WorkspaceContextItem) => void;
   onPickPlugin: (record: InstalledPluginRecord) => void;
@@ -4707,7 +4712,7 @@ function MentionPopover({
               const flat = optionIndex;
               optionIndex += 1;
               const rowActive = flat === activeIndex;
-              const isCurrent = skill.id === currentSkillId;
+              const isCurrent = stagedSkillIds.has(skill.id);
               return (
                 <button
                   key={`skill-${skill.id}`}

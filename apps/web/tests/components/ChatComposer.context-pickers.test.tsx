@@ -452,6 +452,36 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
+  // Regression for #3189: the picker's active marker must come from the skills
+  // staged in the current draft, not the project's persistent applied skill.
+  it('clears the active skill marker after the staged skill is removed from the draft', async () => {
+    // currentSkillId mirrors the project's persistent applied skill — the value
+    // that drove the stale checkmark before the fix. Point it at the skill we
+    // stage then remove, so the picker would still flag it as active if it kept
+    // keying off currentSkillId instead of the staged set.
+    renderComposer({ currentSkillId: 'deck-builder' });
+    await flushMounts();
+
+    // Stage the skill via @ search.
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    fireEvent.click(screen.getByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('@Deck Builder');
+
+    // Remove it from the draft.
+    fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+
+    // Reopen the picker: the skill reappears and must NOT show the active
+    // marker, since it is no longer staged in the draft.
+    await typeAndSettle('@deck');
+    await waitFor(() => expect(screen.getByText('Deck Builder')).toBeTruthy());
+    const skillRow = screen.getByText('Deck Builder').closest('button');
+    expect(skillRow).toBeTruthy();
+    expect(skillRow?.textContent).not.toContain('Active');
+  });
+
   it('shows all matching skills and ranks exact prefix matches first', async () => {
     skills = [
       makeSkill({
