@@ -167,14 +167,14 @@ export interface BrazePlanDecisionRequest {
 }
 
 // Records a produced HTML file against a variant (status → produced).
+// variantId is taken from the URL path (:variantId) — not from the body.
 export interface BrazeVariantProduceRequest {
-  variantId: string;
   artifactPath: string;
 }
 
 // Edit-loop update for a single variant (status → editing/produced/done).
+// variantId is taken from the URL path (:variantId) — not from the body.
 export interface BrazeVariantUpdateRequest {
-  variantId: string;
   status?: BrazeVariantStatus;
   artifactPath?: string;
 }

@@ -82,9 +82,19 @@ export function registerBrazeRoutes(app: Express, ctx: RegisterBrazeRoutesDeps) 
 
   // Submit interview answers. Seeds targeting/creative fields and moves
   // interviewing → plan_draft so the agent can author the plan.
+  // Guard: only allowed from `interviewing` or `plan_draft` — prevents resetting
+  // a confirmed/produced/done message back to plan_draft.
   app.post('/api/braze/messages/:id/interview', (req, res) => {
     const message = getBrazeMessage(db, req.params.id);
     if (!message) return sendApiError(res, 404, 'NOT_FOUND', 'braze message not found');
+    if (message.status !== 'interviewing' && message.status !== 'plan_draft') {
+      return sendApiError(
+        res,
+        409,
+        'CONFLICT',
+        `interview is only allowed when status is 'interviewing' or 'plan_draft' (current: '${message.status}')`,
+      );
+    }
     const body = (req.body ?? {}) as Partial<BrazeInterviewRequest>;
     if (!body.iamFormat || !body.deliveryModel || !body.triggerEvent) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'iamFormat, deliveryModel and triggerEvent are required');

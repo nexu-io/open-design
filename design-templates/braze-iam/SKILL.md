@@ -55,10 +55,17 @@ Braze Custom-HTML IAM을 **브랜드-어그노스틱 워크플로우**로 제작
 ### od braze 상태 초기화
 
 ```bash
-od braze create --project <project_id> --title "<IAM 목적 한 줄>" --format custom_html
+od braze create \
+  --project <project_id> \
+  --conversation <conversation_id> \
+  --title "<IAM 목적 한 줄>" \
+  [--goal "<목적 한 줄>"] \
+  [--brand <brand_id>] \
+  [--json]
 # → braze_message_id 반환 (이후 모든 단계에 사용)
 ```
 
+- `<conversation_id>` 는 스킬 런 컨텍스트(run context)에서 OD 대화 id를 읽는다.
 - `braze_message_id` 를 환경변수 또는 작업 노트에 기록한다
 - `status` → `interviewing` 상태로 전환
 
@@ -157,13 +164,34 @@ Read: design-systems/<brand>/DESIGN.md
 - BRAZE-DOMAIN §5.2 5종 중 후보 1~2개 명시: Session Start / Push Click / Any Purchase / Specific Purchase / Custom Event
 - 기획안에만 기록, 실제 설정은 Braze 콘솔에서 담당자가 수행
 
+인터뷰 응답을 수집한 뒤 아래 CLI로 daemon에 등록한다:
+
 ```bash
 od braze interview <braze_message_id> \
-  --purpose "<q-purpose>" \
-  --target "<q-target>" \
-  --format "<q-format>" \
-  --tone "<q-tone>"
+  --format <slideup|modal|fullscreen|custom_html> \
+  --delivery <action_based|scheduled> \
+  --trigger <session_start|push_click|any_purchase|specific_purchase|custom_event> \
+  [--custom-event <catalog_event_name>]  # trigger=custom_event 일 때만 \
+  [--segment "<condition>"] \
+  [--tone "<tone>"] \
+  [--emphasis "<a>,<b>"] \
+  [--variants <n>] \
+  [--json]
 ```
+
+**플래그 매핑 (인터뷰 4축 → CLI 플래그)**:
+
+| 인터뷰 질문 | CLI 플래그 | 비고 |
+|---|---|---|
+| `q-format` (IAM 사이즈/레이아웃) | `--format` | **필수** (`modal`/`fullscreen`/`custom_html` 권장 — 슬라이드업 HTML IAM 제약 있음) |
+| `q-tone` (톤 &amp; 무드) | `--tone` | 선택 |
+| `q-target` (타겟 세그먼트) | `--segment "<condition>"` | 선택; Braze 세그먼트 조건 문자열 |
+| `q-purpose` (목적) | 기획안 `summary`/`--emphasis` 로 녹인다 | `--purpose`/`--target` 플래그는 존재하지 않음 |
+
+**필수 플래그 기본값 가이드**:
+- `--delivery`: 트리거 기반 발화 = `action_based` (기본 권장), 예약 발송 = `scheduled`
+- `--trigger`: 캠페인 목적에서 후보 1개를 Claude가 추론해 기입 (예: 신규 온보딩 → `session_start`). 기획안에 후보 목록을 명시하고 **Braze 콘솔에서 담당자가 최종 확정**한다고 명기할 것.
+- `delivery`/`trigger` 값은 후보(candidate)이며, 실제 발화 설정은 Braze 대시보드에서 수행한다.
 
 ---
 
@@ -399,12 +427,20 @@ brazeBridge.BridgeReady(function() {
 
 P0 발견 시 → 해당 variant 수정 후 재확인.
 
+variant UUID를 알아야 produce를 호출할 수 있다. 먼저 `od braze get`으로 UUID를 확인한다:
+
 ```bash
-od braze produce <braze_message_id> \
-  --variant A --artifact <path/to/variant-a.html>
-od braze produce <braze_message_id> \
-  --variant B --artifact <path/to/variant-b.html>
+# 1) variant UUID 조회
+od braze get <braze_message_id> --json
+# 출력 예: "variants": [{"id": "<uuid-A>", "label": "A", ...}, {"id": "<uuid-B>", "label": "B", ...}]
+
+# 2) 각 variant의 UUID(id)로 produce 호출
+od braze produce <braze_message_id> --variant <uuid-A> --artifact <path/to/variant-a.html>
+od braze produce <braze_message_id> --variant <uuid-B> --artifact <path/to/variant-b.html>
 ```
+
+> **중요**: `--variant` 에는 레이블("A"/"B")이 아닌 UUID `id` 값을 전달한다.
+> `od braze get <messageId> --json` 으로 각 variant의 `id` 필드를 먼저 확인할 것.
 
 ---
 
@@ -431,8 +467,11 @@ od braze produce <braze_message_id> \
 
 두 variant 파일이 FileViewer iframe에서 렌더된다 (OD produced-file 아티팩트, DATA-MODEL-BRAZE §2-A).
 
+variant 목록 및 상태 확인은 `od braze get`을 사용한다:
+
 ```bash
-od braze variant <braze_message_id> --list
+od braze get <braze_message_id> [--json]
+# → 메시지 상태 + variants 배열(id, label, status, artifactPath) 출력
 ```
 
 ### Braze 대시보드 핸드오프 안내
@@ -448,11 +487,13 @@ HTML IAM은 REST API로 전송 불가 (BRAZE-DOMAIN §4.1-4.2). 수동 핸드오
 
 > **JS 게이트 주의**: HTML IAM JS 실행에는 Web SDK 초기화 시 `allowUserSuppliedJavascript: true` 필요 (BRAZE-DOMAIN §2.1). SDK 버전 floor: Swift 5.0.0+ / Web 2.5.0+ / Android 8.0.0+. 구버전 유저는 조용히 제외됨.
 
-```bash
-od braze variant <braze_message_id> --status done
-```
+각 variant를 완료 처리할 때는 UUID `id`를 사용한다:
 
-> ⚠️ `--status done` 플래그 형식은 daemon CLI 구현에 따라 다를 수 있다. 실제 사용 전 `od braze variant --help` 또는 daemon CLI 소스(apps/daemon/src/cli.ts)로 정확한 플래그를 확인할 것.
+```bash
+# variant UUID는 `od braze get <messageId> --json` 으로 조회
+od braze variant <braze_message_id> --variant <uuid-A> --status done
+od braze variant <braze_message_id> --variant <uuid-B> --status done
+```
 
 완료 메시지:
 ```
