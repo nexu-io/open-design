@@ -4894,6 +4894,11 @@ function HtmlViewer({
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
+  // Holds the last-good source snapshot taken just before reloadHtmlPreview
+  // clears source to null on the srcDoc path.  The fetch effect restores this
+  // value if fetchProjectFileText returns null (non-2xx / transient network
+  // error), so the iframe never goes blank on a failed reload attempt.
+  const prevSourceBeforeReloadRef = useRef<string | null>(null);
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
@@ -5217,7 +5222,20 @@ function HtmlViewer({
       // Chokidar emits agent rewrites as unlink+add+change bursts; a
       // transient null mid-burst would blank source → srcDoc empty →
       // shell stays on prior frame. Keep the last good text instead.
-      if (text == null) return;
+      if (text == null) {
+        // A srcDoc Reload may have cleared source to null just before this
+        // fetch resolved.  If the fetch failed (non-2xx, network error),
+        // restore the pre-reload source so the iframe doesn't go blank.
+        // prevSourceBeforeReloadRef is null on a normal file-change fetch,
+        // so this branch is a no-op outside of the Reload failure case.
+        if (prevSourceBeforeReloadRef.current != null) {
+          setSource(prevSourceBeforeReloadRef.current);
+          sourceRef.current = prevSourceBeforeReloadRef.current;
+          prevSourceBeforeReloadRef.current = null;
+        }
+        return;
+      }
+      prevSourceBeforeReloadRef.current = null;
       sourceEverLoadedRef.current = true;
       setSource(text);
       sourceRef.current = text;
@@ -7280,6 +7298,12 @@ function HtmlViewer({
     setInlinedSource(null);
     setReloadKey((key) => key + 1);
     if (!useUrlLoadPreview) {
+      // Capture the current source so the fetch effect can restore it if
+      // fetchProjectFileText returns null (non-2xx / transient network error).
+      // Without this, a failed reload leaves source null and the iframe blank
+      // because the existing keep-last-good guard in the fetch effect has
+      // nothing to fall back to (PR #4652).
+      prevSourceBeforeReloadRef.current = source;
       // Clear source synchronously so previewSource becomes null and the
       // srcDoc memo recomputes to '' before the async re-fetch resolves.
       // Without this, the remounted iframe carries stale srcdoc content
