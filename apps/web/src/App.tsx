@@ -2068,6 +2068,16 @@ function AppInner() {
       return originalFetch(input, init);
     }) as typeof window.fetch;
 
+    // Mint the same httpOnly cookie the bootstrap path creates, so
+    // browser-direct navigations to guarded static routes (iframes,
+    // images, plugin previews, frame assets) authenticate via the
+    // cookie instead of requiring a manually-set Authorization header
+    // that only fetch() can carry.
+    fetch('/api/auth/set-token-cookie', { method: 'POST' }).catch(() => {
+      // Cookie is a convenience — non-fetch loads may fail, but the
+      // app continues to work through the fetch override.
+    });
+
     setVerifyingToken(false);
     setNeedsToken(false);
   }, []);

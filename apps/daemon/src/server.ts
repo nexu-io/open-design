@@ -3758,6 +3758,25 @@ export async function startServer({
       });
       res.json({ ok: true });
     });
+
+    // POST /api/auth/set-token-cookie — called by the frontend ApiTokenPrompt
+    // after the user enters a token manually.  The bearer middleware (above)
+    // has already validated the Bearer token before reaching this handler,
+    // so we only need to mint the same httpOnly cookie the bootstrap flow
+    // creates.  Without this cookie, browser-direct navigations to guarded
+    // static routes (/artifacts/*, /plugin-previews/*, /frames/*) would 401
+    // because those loads carry no Authorization header.
+    app.post('/api/auth/set-token-cookie', (req, res) => {
+      const cookieSecure = process.env.OD_PUBLIC_BASE_URL?.startsWith('https://') ?? (req.secure || false);
+      res.cookie('od-api-token', apiToken, {
+        httpOnly: true,
+        sameSite: 'strict',
+        path: '/',
+        secure: cookieSecure,
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+      res.json({ ok: true });
+    });
   }
 
   // ---- Projects (DB-backed) -------------------------------------------------

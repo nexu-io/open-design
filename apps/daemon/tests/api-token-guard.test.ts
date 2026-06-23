@@ -134,4 +134,76 @@ describe('bearer middleware', () => {
     expect(resp.statusCode).toBe(200);
     resp.resume();
   });
+
+  it('POST /api/auth/set-token-cookie sets od-api-token cookie with valid bearer', async () => {
+    const url = new URL(baseUrl);
+    // Use http.request with a public-domain Host header so the
+    // middleware actively verifies the Bearer token before the
+    // handler sets the cookie.
+    const resp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/auth/set-token-cookie',
+        method: 'POST',
+        headers: {
+          Host: `example.com:${url.port}`,
+          Authorization: 'Bearer secret-test-token',
+        },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    expect(resp.statusCode).toBe(200);
+    const body = await new Response(resp).json();
+    expect(body as Record<string, unknown>).toEqual({ ok: true });
+
+    // Verify the Set-Cookie header contains the httpOnly cookie
+    const setCookie = resp.headers['set-cookie'] || resp.headers['Set-Cookie'] || '';
+    const cookieHeader = Array.isArray(setCookie) ? setCookie.join(', ') : String(setCookie);
+    expect(cookieHeader).toContain('od-api-token=');
+    expect(cookieHeader).toContain('HttpOnly');
+    expect(cookieHeader).toContain('SameSite=Strict');
+    expect(cookieHeader).toContain('Path=/');
+  });
+
+  it('POST /api/auth/set-token-cookie rejects without bearer', async () => {
+    const url = new URL(baseUrl);
+    // Use http.request with a public-domain Host header so
+    // isLocalConnection returns false and the middleware actively
+    // checks the Bearer token.
+    const resp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/auth/set-token-cookie',
+        method: 'POST',
+        headers: { Host: `example.com:${url.port}` },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    expect(resp.statusCode).toBe(401);
+    resp.resume();
+  });
+
+  it('POST /api/auth/set-token-cookie rejects with wrong bearer', async () => {
+    const url = new URL(baseUrl);
+    const resp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/auth/set-token-cookie',
+        method: 'POST',
+        headers: {
+          Host: `example.com:${url.port}`,
+          Authorization: 'Bearer wrong-token',
+        },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    expect(resp.statusCode).toBe(401);
+    resp.resume();
+  });
 });
