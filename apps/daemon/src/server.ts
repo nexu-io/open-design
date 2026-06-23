@@ -197,6 +197,7 @@ import {
   rememberLiveModels,
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
+  resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
@@ -4866,6 +4867,12 @@ export async function startServer({
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
+    safeModel = resolveModelForServiceTier(
+      def,
+      safeModel,
+      typeof serviceTier === 'string' ? serviceTier : null,
+      requestedLiveModelScope,
+    );
     const safeServiceTier =
       typeof serviceTier === 'string' &&
       isKnownServiceTier(def, safeModel, serviceTier, requestedLiveModelScope)

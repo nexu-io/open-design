@@ -33,6 +33,7 @@ import {
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
+import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -327,7 +328,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
               : undefined;
           const requestedModel =
             typeof body.model === 'string' ? body.model : configuredModel;
-          const safeModel =
+          let safeModel =
             def && typeof requestedModel === 'string'
               ? isKnownModel(def, requestedModel)
                 ? requestedModel
@@ -349,6 +350,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             Array.isArray(def.reasoningOptions)
               ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
               : undefined;
+          safeModel = def
+            ? resolveModelForServiceTier(
+                def,
+                safeModel,
+                typeof body.serviceTier === 'string' ? body.serviceTier : null,
+              ) ?? undefined
+            : safeModel;
           const safeServiceTier =
             def &&
             typeof body.serviceTier === 'string' &&

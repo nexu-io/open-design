@@ -1069,6 +1069,60 @@ process.exit(0);
     }
   });
 
+  it('keeps service tier overrides when /api/runs omits model and settings has none', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, { agentModels: null });
+      await withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          await fetch(`${baseUrl}/api/agents`);
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      );
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
+    }
+  });
+
   it('allows plugin authoring to succeed when the requested generated-plugin artifacts exist before close', async () => {
     const projectId = `proj-plugin-authoring-success-${randomUUID()}`;
 
