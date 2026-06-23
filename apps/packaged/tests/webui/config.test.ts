@@ -158,6 +158,23 @@ describe("resolveDisplayHost", () => {
     >;
     expect(resolveDisplayHost("0.0.0.0", loopbackOnly)).toBe("localhost");
   });
+
+  it("falls back to a real non-internal IPv6 for `::` when no IPv4 exists (IPv6-only host)", () => {
+    // An IPv6-only deployment binding `::` (IPv6 any-host) must advertise a
+    // routable v6 address, not collapse to a loopback-only "localhost" URL.
+    // Link-local fe80::/10 is unusable without a zone id, so it is skipped.
+    const ipv6Only = {
+      lo: [{ family: "IPv6", address: "::1", internal: true }],
+      eth0: [
+        { family: "IPv6", address: "fe80::1", internal: false },
+        { family: "IPv6", address: "2001:db8::5", internal: false },
+      ],
+    } as unknown as ReturnType<typeof import("node:os").networkInterfaces>;
+    expect(resolveDisplayHost("::", ipv6Only)).toBe("2001:db8::5");
+    // `0.0.0.0` is an IPv4 any-host bind; an IPv6 display address would be the
+    // wrong family, so it must still collapse to localhost.
+    expect(resolveDisplayHost("0.0.0.0", ipv6Only)).toBe("localhost");
+  });
 });
 
 describe("resolveDaemonProxyHost", () => {
@@ -166,10 +183,17 @@ describe("resolveDaemonProxyHost", () => {
     expect(resolveDaemonProxyHost("fd00::10")).toBe("fd00::10");
   });
 
-  it("returns null for loopback, bind-all, empty, and unset hosts (web keeps 127.0.0.1)", () => {
-    for (const host of [null, undefined, "", "127.0.0.1", "127.0.0.5", "localhost", "::1", "0.0.0.0", "::"]) {
+  it("returns null for loopback, IPv4 bind-all, empty, and unset hosts (web keeps 127.0.0.1)", () => {
+    for (const host of [null, undefined, "", "127.0.0.1", "127.0.0.5", "localhost", "::1", "0.0.0.0"]) {
       expect(resolveDaemonProxyHost(host), `host=${String(host)}`).toBeNull();
     }
+  });
+
+  it("returns the IPv6 loopback (::1) for an IPv6 any-host bind (::) so /api reaches the right loopback family", () => {
+    // `::` keeps loopback listening, but the web child's default 127.0.0.1
+    // proxy target is the WRONG family on an IPv6-only stack. Point it at ::1.
+    expect(resolveDaemonProxyHost("::")).toBe("::1");
+    expect(resolveDaemonProxyHost("[::]")).toBe("::1");
   });
 });
 

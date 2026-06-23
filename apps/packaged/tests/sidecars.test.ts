@@ -737,8 +737,8 @@ describe('buildPackagedWebSpawnEnv', () => {
     expect(env.OD_PORT).toBe('7457');
   });
 
-  it('omits OD_DAEMON_HOST for loopback, bind-all, and unset hosts (web defaults to 127.0.0.1)', () => {
-    for (const bindHost of [undefined, null, '', '127.0.0.1', 'localhost', '0.0.0.0', '::']) {
+  it('omits OD_DAEMON_HOST for loopback, IPv4 bind-all, and unset hosts (web defaults to 127.0.0.1)', () => {
+    for (const bindHost of [undefined, null, '', '127.0.0.1', 'localhost', '0.0.0.0']) {
       const env = buildPackagedWebSpawnEnv({
         daemonUrl: 'http://127.0.0.1:7456',
         webStandaloneRoot: null,
@@ -747,5 +747,17 @@ describe('buildPackagedWebSpawnEnv', () => {
       });
       expect(env.OD_DAEMON_HOST, `bindHost=${String(bindHost)}`).toBeUndefined();
     }
+  });
+
+  it('points the web proxy at the IPv6 loopback (::1) for an IPv6 any-host daemon bind (::)', () => {
+    // `::` keeps loopback listening, but the web child's default 127.0.0.1 is
+    // the wrong loopback family on an IPv6-only stack, so /api must target ::1.
+    const env = buildPackagedWebSpawnEnv({
+      daemonUrl: 'http://127.0.0.1:7457',
+      webStandaloneRoot: null,
+      webOutputMode: 'server',
+      network: { bindHost: '::', webPort: 0 },
+    });
+    expect(env.OD_DAEMON_HOST).toBe('::1');
   });
 });

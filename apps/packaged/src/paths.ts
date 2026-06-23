@@ -132,8 +132,13 @@ export function resolveWebuiNamespacesRoot(input: {
     }
     return join(expanded, "namespaces");
   }
+  // Per the XDG Base Directory spec a relative XDG_DATA_HOME is invalid and must
+  // be ignored. Honoring it would build a cwd-relative namespaces/log/runtime
+  // tree under whichever directory happened to invoke the launcher — the same
+  // hazard the OD_DATA_DIR absolute-path guard above rejects. A relative (or
+  // empty) value falls back to $HOME/.local/share, never to cwd.
   const xdg = input.xdgDataHome?.trim();
-  const dataBase = xdg && xdg.length > 0 ? xdg : join(input.home, ".local", "share");
+  const dataBase = xdg && xdg.length > 0 && isAbsolute(xdg) ? xdg : join(input.home, ".local", "share");
   return join(dataBase, "open-design", "namespaces");
 }
 

@@ -172,7 +172,11 @@ export function defaultWebuiConfigFileContents(): string {
 // Maps the *bind* host to a host a browser can actually open. A bind-all host
 // (0.0.0.0 / ::) is not browsable, so we surface the machine's first
 // non-internal LAN IPv4 instead; loopback binds show as "localhost"; a concrete
-// host passes through. Interfaces are injectable for tests.
+// host passes through. For an IPv6 any-host bind (`::`) with no usable IPv4, we
+// fall back to a real non-internal IPv6 address rather than collapsing to
+// loopback — otherwise an IPv6-only deployment advertises a local-only URL even
+// though the daemon is reachable on a routable v6. Link-local fe80::/10 is
+// skipped (unusable without a zone id). Interfaces are injectable for tests.
 export function resolveDisplayHost(
   host: string,
   interfaces: ReturnType<typeof networkInterfaces> = networkInterfaces(),
@@ -180,11 +184,21 @@ export function resolveDisplayHost(
   const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
   const isBindAll = normalized === "0.0.0.0" || normalized === "::" || normalized === "";
   if (isBindAll) {
+    let ipv6Fallback: string | null = null;
     for (const addrs of Object.values(interfaces)) {
       for (const addr of addrs ?? []) {
-        if (addr.family === "IPv4" && !addr.internal) return addr.address;
+        if (addr.internal) continue;
+        // A real LAN IPv4 is the most broadly browsable, so it wins for every
+        // bind-all host.
+        if (addr.family === "IPv4") return addr.address;
+        if (addr.family === "IPv6" && ipv6Fallback == null && !addr.address.toLowerCase().startsWith("fe80:")) {
+          ipv6Fallback = addr.address;
+        }
       }
     }
+    // Only an IPv6 any-host bind (`::`) is actually listening on IPv6; for a
+    // `0.0.0.0` bind an IPv6 display address would be the wrong family.
+    if (normalized === "::" && ipv6Fallback != null) return ipv6Fallback;
     return "localhost";
   }
   return isLoopbackHost(host) ? "localhost" : host;
@@ -193,13 +207,17 @@ export function resolveDisplayHost(
 // Maps the daemon's *bind* host to the host the web sidecar must use to reach
 // it. When the daemon binds a concrete non-loopback address (e.g.
 // `--host 192.168.1.10`) loopback is not listening, so the web proxy must
-// target that address. A bind-all host (0.0.0.0 / ::) keeps loopback listening
-// and is not itself a connectable target, and a loopback bind is already
-// loopback — both resolve to null so the web child keeps its 127.0.0.1 default.
+// target that address. An IPv4 bind-all host (`0.0.0.0` / empty) keeps the
+// IPv4 loopback listening, so the web child's `127.0.0.1` default already
+// works → null. An IPv6 any-host bind (`::`) also keeps loopback listening, but
+// the web child's default `127.0.0.1` is the WRONG loopback family on an
+// IPv6-only stack, so target the IPv6 loopback `::1` explicitly. A concrete
+// loopback bind is already loopback → null.
 export function resolveDaemonProxyHost(host: string | null | undefined): string | null {
   if (host == null) return null;
   const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "" || normalized === "0.0.0.0" || normalized === "::") return null;
+  if (normalized === "::") return "::1";
+  if (normalized === "" || normalized === "0.0.0.0") return null;
   if (isLoopbackHost(host)) return null;
   return host;
 }

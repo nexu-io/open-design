@@ -260,6 +260,24 @@ describe("resolveWebuiNamespacesRoot", () => {
     );
   });
 
+  // Per the XDG Base Directory spec a relative XDG_DATA_HOME is invalid and must
+  // be ignored — honoring it would fork launcher runtime/log state under whatever
+  // cwd happened to invoke the script, the same hazard the OD_DATA_DIR guard
+  // rejects. A relative XDG falls back to ~/.local/share, never to cwd.
+  it("ignores a relative XDG_DATA_HOME and falls back to ~/.local/share", () => {
+    expect(resolveWebuiNamespacesRoot({ xdgDataHome: join("rel", "xdg"), home: HOME })).toBe(
+      join(HOME, ".local", "share", "open-design", "namespaces"),
+    );
+    expect(resolveWebuiNamespacesRoot({ xdgDataHome: "xdgdata", home: HOME })).toBe(
+      join(HOME, ".local", "share", "open-design", "namespaces"),
+    );
+    // An absolute XDG_DATA_HOME is still honored.
+    const absXdg = join("/var", "lib", "xdg");
+    expect(resolveWebuiNamespacesRoot({ xdgDataHome: absXdg, home: HOME })).toBe(
+      join(absXdg, "open-design", "namespaces"),
+    );
+  });
+
   // A relative OD_DATA_DIR (or a relative dataDir the launcher copies into
   // OD_DATA_DIR) must fail fast through the SAME guard as resolvePackagedDataRoot,
   // not silently build a cwd-relative namespaces/log/runtime tree.
