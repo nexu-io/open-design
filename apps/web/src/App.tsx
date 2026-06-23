@@ -2072,10 +2072,12 @@ function AppInner() {
     // browser-direct navigations to guarded static routes (iframes,
     // images, plugin previews, frame assets) authenticate via the
     // cookie instead of requiring a manually-set Authorization header
-    // that only fetch() can carry.
-    fetch('/api/auth/set-token-cookie', { method: 'POST' }).catch(() => {
-      // Cookie is a convenience — non-fetch loads may fail, but the
-      // app continues to work through the fetch override.
+    // that only fetch() can carry.  Await it so setNeedsToken(false)
+    // — which remounts the real app and may immediately load guarded
+    // iframes/images — only fires after the browser has the cookie.
+    await fetch('/api/auth/set-token-cookie', { method: 'POST' }).catch(() => {
+      // Cookie is a convenience — non-fetch loads fall back to 401
+      // but the app continues to work through the fetch override.
     });
 
     setVerifyingToken(false);

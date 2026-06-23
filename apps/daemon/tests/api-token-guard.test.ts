@@ -206,4 +206,56 @@ describe('bearer middleware', () => {
     expect(resp.statusCode).toBe(401);
     resp.resume();
   });
+
+  it('guarded static route loads after set-token-cookie mints the cookie', async () => {
+    const url = new URL(baseUrl);
+
+    // Step 1: mint the cookie via POST /api/auth/set-token-cookie
+    const cookieResp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/auth/set-token-cookie',
+        method: 'POST',
+        headers: {
+          Host: `example.com:${url.port}`,
+          Authorization: 'Bearer secret-test-token',
+        },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    const rawCookie = (Array.isArray(cookieResp.headers['set-cookie'])
+      ? cookieResp.headers['set-cookie'][0]
+      : cookieResp.headers['set-cookie']) as string | undefined;
+    expect(rawCookie).toBeDefined();
+    // Strip attributes (HttpOnly, Path, SameSite) — the browser only sends
+    // the name=value portion on subsequent requests.
+    const cookieValue = rawCookie!.split(';')[0];
+    expect(cookieValue).toMatch(/^od-api-token=.+/);
+    cookieResp.resume();
+
+    // Step 2: immediately request a guarded static asset with the cookie
+    // but NO Bearer header — simulate the browser navigation race.
+    // If the cookie is not yet set the response is 401; if it IS set
+    // the guard passes and express.static returns 404 (no such file).
+    const staticResp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/frames/nonexistent-test-file',
+        method: 'GET',
+        headers: {
+          Host: `example.com:${url.port}`,
+          Cookie: cookieValue!,
+        },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    // 401 = the guard rejected (failure); 404 = guard passed (success)
+    expect(staticResp.statusCode).not.toBe(401);
+    expect(staticResp.statusCode).toBe(404);
+    staticResp.resume();
+  });
 });
