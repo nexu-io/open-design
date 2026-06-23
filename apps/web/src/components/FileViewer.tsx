@@ -5263,6 +5263,12 @@ function HtmlViewer({
           setSource(snap.source);
           sourceRef.current = snap.source;
           prevSourceBeforeReloadRef.current = null;
+        } else if (snap != null) {
+          // Identity mismatch: the snapshot belongs to a different file or
+          // project. Clear it now so it cannot leak forward and be consumed by
+          // a later normal failed load on the original file (PR #4652
+          // third-pass review, Codex P2 finding).
+          prevSourceBeforeReloadRef.current = null;
         }
         return;
       }
@@ -5426,16 +5432,12 @@ function HtmlViewer({
     // skeleton, and a slow fetch leaves the user staring at a blank iframe
     // instead of the loading indicator (codex P2 finding, issue #4650).
     //
-    // Skip the reset when a reload was in progress at the moment of the file
-    // switch (prevSourceBeforeReloadRef holds a snapshot iff Reload was clicked
-    // and the fetch has not yet resolved).  In that state the user was already
-    // in "viewing mode"; hiding the iframe with the loading skeleton would be
-    // jarring.  The main fetch effect's fileChanged block clears the ref, so
-    // this carve-out is self-cleaning and only applies to the single transition
-    // render immediately after the file prop changes (PR #4652 review).
-    if (prevSourceBeforeReloadRef.current === null) {
-      sourceEverLoadedRef.current = false;
-    }
+    // The snapshot ref (prevSourceBeforeReloadRef) is the restore branch only —
+    // it must NOT gate this sentinel. Keeping the guard caused a new file's
+    // preview to bypass the loading skeleton entirely and mount an empty srcDoc
+    // iframe when a reload snapshot was non-null at switch time (PR #4652
+    // third-pass review, PerishCode finding).
+    sourceEverLoadedRef.current = false;
   }, [projectId, file.name]);
   const activePreviewSrcUrl = (
     previewSrcUrl === effectiveBasePreviewSrcUrl ||
