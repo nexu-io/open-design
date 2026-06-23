@@ -2,7 +2,7 @@
 // Race condition regression tests for the prevSourceBeforeReloadRef approach
 // introduced in commit 65fe10d1a (PR #4652).
 //
-// Two distinct races are covered:
+// Three distinct races are covered:
 //
 // Race 1 — double-click failure:
 //   The fallback ref is overwritten with null on the second click (because
@@ -10,10 +10,22 @@
 //   fetch fails there is nothing left to restore.  The user sees a blank
 //   preview instead of their last good HTML.
 //
-// Race 2 — file-switch contamination:
+// Race 2 — file-switch contamination + loading state:
 //   The ref is not scoped to the current file, so when the user switches to a
 //   new file while a reload fetch is in flight, a failed fetch for the new
 //   file restores the *previous* file's HTML into the new preview.
+//   Additionally, the sourceEverLoadedRef sentinel stays true after a file
+//   switch when a reload snapshot is present, so the new file B never shows
+//   the loading skeleton while its fetch is in flight — it shows a blank
+//   iframe instead.
+//
+// Race 3 — stale snapshot leaked by identity-mismatched fetch:
+//   When the user switches to file B while a reload fetch is in flight,
+//   B's fetch returns null.  The identity check (snap.fileName='A',
+//   file.name='B') fails and the restore-branch returns without clearing
+//   prevSourceBeforeReloadRef.  The old snapshot stays armed, so navigating
+//   back to file A on a later normal failed load (no Reload click) wrongly
+//   restores the old A snapshot instead of showing the loading indicator.
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -173,9 +185,9 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   });
 
   // ---------------------------------------------------------------------------
-  // Race 2: file-switch contaminates the new file's preview with old HTML
+  // Race 2: file-switch shows loading state, not blank iframe or old HTML
   // ---------------------------------------------------------------------------
-  it('does not restore File A HTML into File B preview when the user switches files while a reload fetch is in flight', async () => {
+  it('shows the loading indicator for File B (not a blank iframe or File A HTML) when the user switches files while a reload fetch is in flight and File B source is unavailable', async () => {
     // Build two distinct deck files rooted at different raw URLs so fetch
     // mocks can distinguish them.
     const fileA = deckFile({ name: 'deck-a.html', path: 'deck-a.html' });
@@ -278,17 +290,23 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       await Promise.resolve();
     });
 
-    // --- KEY ASSERTION ---
-    // File B's preview must never show File A's HTML.  On the buggy branch the
-    // ref still holds "FILE-A-HTML" and is scoped to the component instance,
-    // not to the specific file — so when File B's fetch fails, the restore
-    // path writes the old File A content into File B's srcdoc.
-    const srcdoc = srcDocFrame().getAttribute('srcDoc') ?? '';
-    expect(srcdoc).not.toContain('FILE-A-HTML');
+    // --- KEY ASSERTIONS ---
+    //
+    // 1. File B's source is null and has never been loaded, so the loading
+    //    skeleton must be visible.  On the buggy branch sourceEverLoadedRef
+    //    is still true from File A (the if-guard at ~5436 skips the reset
+    //    when a reload snapshot is present), so the component skips the
+    //    skeleton and renders the iframe instead — with File A's HTML if the
+    //    restore-branch fires, or a blank srcdoc otherwise.
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
 
-    // Additionally confirm File B's label is not silently coming from a
-    // successful fetch that would mask the bug.
-    expect(srcdoc).not.toContain('file-b-html');
+    // 2. The srcdoc iframe itself must NOT be present while the loading state
+    //    is active — a blank <iframe srcDoc=""> is not an acceptable stand-in
+    //    for the loading indicator.
+    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+
+    // 3. The loading indicator text must not contain File A's HTML content.
+    expect(screen.queryByText(/FILE-A-HTML/)).toBeNull();
 
     // Resolve the stale File A fetch last (it should be discarded, not applied
     // to the now-File-B viewer).
@@ -299,10 +317,159 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       await act(async () => {
         await Promise.resolve();
       });
-      // After the stale resolution, File A's HTML must still not appear.
-      expect(srcDocFrame().getAttribute('srcDoc') ?? '').not.toContain(
-        'FILE-A-HTML',
+      // After the stale resolution, File A's HTML must still not appear in
+      // any rendered element.
+      expect(screen.queryByText(/FILE-A-HTML/)).toBeNull();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race 3: stale snapshot must not survive an identity-mismatched fetch
+  // ---------------------------------------------------------------------------
+  it('does not restore the reload snapshot on a later normal failed load after an identity-mismatched fetch left the ref un-cleared', async () => {
+    const fileA = deckFile({ name: 'deck-a.html', path: 'deck-a.html' });
+    const fileB = deckFile({ name: 'deck-b.html', path: 'deck-b.html' });
+
+    const RAW_A = `/api/projects/project-1/raw/deck-a.html`;
+    const RAW_B = `/api/projects/project-1/raw/deck-b.html`;
+
+    const htmlA = deckHtml('V1-CONTENT');
+
+    // Step 1: mount with File A and wait for "V1-CONTENT" to appear.
+    vi.stubGlobal('fetch', fetchReturning(htmlA));
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={fileA}
+        isDeck
+      />,
+    );
+
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('V1-CONTENT');
+    });
+
+    // Step 2: click Reload on File A.
+    // prevSourceBeforeReloadRef is now { source: htmlA, projectId, fileName: 'deck-a.html' }.
+    // source goes null; fetch for A is in flight (deferred).
+    let resolveFileAReloadFetch!: (resp: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(RAW_A)) {
+          return new Promise<Response>((ok) => {
+            resolveFileAReloadFetch = ok;
+          });
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    });
+
+    // Step 3: switch to File B while the File A reload fetch is still in
+    // flight.  File B's fetch returns null (500) immediately, triggering the
+    // identity-mismatch branch.  On the buggy implementation the mismatch
+    // branch returns early WITHOUT clearing prevSourceBeforeReloadRef, leaving
+    // the stale snapshot armed.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(RAW_B)) {
+          return new Response('', { status: 500 });
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    act(() => {
+      rerender(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={fileB}
+          isDeck
+        />,
       );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Step 4: switch back to File A.  File A's fetch returns null (500) — a
+    // normal failed load, NOT a Reload click.  On the buggy implementation
+    // prevSourceBeforeReloadRef is still non-null (leaked from step 2),
+    // the identity check passes (projectId + fileName both match A again),
+    // and the snapshot "V1-CONTENT" is incorrectly restored into the srcdoc.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(RAW_A)) {
+          return new Response('', { status: 500 });
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    act(() => {
+      rerender(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={fileA}
+          isDeck
+        />,
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // --- KEY ASSERTION ---
+    // The stale snapshot must NOT be restored.  A normal failed load with no
+    // active Reload click must show the loading indicator, not old content.
+    // On the buggy branch the leaked ref satisfies the identity check and
+    // setSource(snap.source) is called, surfacing "V1-CONTENT" instead of the
+    // skeleton.
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+
+    // Also confirm the stale HTML is not present anywhere in the rendered DOM.
+    expect(screen.queryByText(/V1-CONTENT/)).toBeNull();
+
+    // Drain the in-flight File A reload fetch so it doesn't leak into other
+    // tests (it was started in step 2 and never resolved).
+    if (resolveFileAReloadFetch) {
+      act(() => {
+        resolveFileAReloadFetch(new Response('', { status: 500 }));
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
     }
   });
 });
