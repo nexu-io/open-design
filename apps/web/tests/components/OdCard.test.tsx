@@ -42,6 +42,29 @@ function renderRuleCard(card: OdCardRuleProposal = RULE_CARD, instanceScope = 's
   );
 }
 
+function memoryListResponse(entries: Array<{ id: string; name: string; type: string }> = []) {
+  return new Response(JSON.stringify({ entries }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function savedRuleResponse(id = 'rule_palette_only') {
+  return new Response(JSON.stringify({
+    entry: {
+      id,
+      name: 'Palette only',
+      description: 'Only use the brand palette.',
+      type: 'rule',
+      body: 'Assertion: Every CSS color must match a brand token.',
+      updatedAt: 1,
+    },
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   vi.restoreAllMocks();
@@ -83,10 +106,15 @@ describe('OdCard brand browser assist', () => {
 
 describe('OdCard rule proposal decisions', () => {
   it('keeps the saved state after the card remounts', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
-    );
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
+      if (url === '/api/memory') {
+        return Promise.resolve(memoryListResponse([
+          { id: 'rule_palette_only', name: 'Palette only', type: 'rule' },
+        ]));
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }));
 
     const first = renderRuleCard();
     fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
@@ -102,7 +130,37 @@ describe('OdCard rule proposal decisions', () => {
     expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
   });
 
+  it('reverts stale saved decisions when memory is unavailable', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = renderRuleCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
+    });
+    first.unmount();
+
+    renderRuleCard();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Keep' })).toBeTruthy();
+    });
+    expect(screen.getByText('Palette only')).toBeTruthy();
+    expect(screen.queryByText('Saved “Palette only” as a rule')).toBeNull();
+    expect(window.localStorage.length).toBe(0);
+  });
+
   it('keeps the discarded state after the card remounts', () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url === '/api/memory') return Promise.resolve(memoryListResponse([]));
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }));
+
     const first = renderRuleCard();
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
 
@@ -113,6 +171,24 @@ describe('OdCard rule proposal decisions', () => {
 
     expect(screen.queryByText('Palette only')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
+  });
+
+  it('reverts stale discarded decisions when memory is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+
+    const first = renderRuleCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+    expect(screen.queryByText('Palette only')).toBeNull();
+    first.unmount();
+
+    renderRuleCard();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Keep' })).toBeTruthy();
+    });
+    expect(screen.getByText('Palette only')).toBeTruthy();
+    expect(window.localStorage.length).toBe(0);
   });
 
   it('does not reuse discarded decisions across scoped card instances', () => {
