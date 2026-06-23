@@ -1,0 +1,334 @@
+/*
+ * Role: BrazeSection 컴포넌트 전용 스타일
+ * Key Features: 메시지 목록, 상태 배지, 상세 패널, 변형 목록
+ * Notes: 전역 스타일 없음 — CSS Modules 로 완전 격리
+ */
+
+/* 메인 섹션 래퍼: Automations 탭의 .automations-view 패턴을 따름 */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 28px;
+  min-height: 0;
+}
+
+/* 헤더 영역 */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text));
+  opacity: 0.7;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  margin: 0;
+}
+
+.lede {
+  font-size: 13px;
+  color: var(--text-muted, var(--text));
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+/* 프로젝트 선택 드롭다운 */
+.projectPicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.projectPickerLabel {
+  font-weight: 500;
+  color: var(--text-muted, var(--text));
+  white-space: nowrap;
+}
+
+.projectPickerSelect {
+  flex: 1 1 auto;
+  max-width: 320px;
+  background: var(--bg-input, var(--bg-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* 에러/빈 상태 */
+.notice {
+  padding: 10px 14px;
+  border-radius: var(--radius, 6px);
+  font-size: 13px;
+  background: color-mix(in srgb, var(--danger, #d9534f) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger, #d9534f) 25%, var(--border));
+  color: var(--text);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--text-muted, var(--text));
+}
+
+.emptyTitle {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.loading {
+  padding: 16px 0;
+  font-size: 13px;
+  color: var(--text-muted, var(--text));
+}
+
+/* 메시지 목록 */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 개별 메시지 행 */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  background: var(--bg-panel, var(--bg));
+  /* enter 애니메이션: ease-out, 200ms (AGENTS.md 애니메이션 철학 준수) */
+  animation: rowFadeIn 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes rowFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rowMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rowTitle {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted, var(--text));
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 상태 배지 */
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* 배지 색상: 진행 단계 별 색조 */
+.badgeInterviewing {
+  background: color-mix(in srgb, var(--accent, #6366f1) 15%, transparent);
+  color: var(--accent, #6366f1);
+}
+
+.badgeDraft {
+  background: color-mix(in srgb, var(--warning, #d9a441) 15%, transparent);
+  color: color-mix(in srgb, var(--warning, #d9a441) 80%, var(--text));
+}
+
+.badgeConfirmed {
+  background: color-mix(in srgb, var(--accent, #6366f1) 10%, transparent);
+  color: var(--accent, #6366f1);
+}
+
+.badgeProducing {
+  background: color-mix(in srgb, var(--accent, #6366f1) 10%, transparent);
+  color: var(--accent, #6366f1);
+}
+
+.badgeProduced {
+  background: color-mix(in srgb, var(--success, #22c55e) 12%, transparent);
+  color: color-mix(in srgb, var(--success, #22c55e) 80%, var(--text));
+}
+
+.badgeEditing {
+  background: color-mix(in srgb, var(--warning, #d9a441) 12%, transparent);
+  color: color-mix(in srgb, var(--warning, #d9a441) 80%, var(--text));
+}
+
+.badgeDone {
+  background: color-mix(in srgb, var(--success, #22c55e) 15%, transparent);
+  color: color-mix(in srgb, var(--success, #22c55e) 80%, var(--text));
+}
+
+/* "Questions 탭 대기 중" 힌트 */
+.awaitingHint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--accent, #6366f1);
+  font-style: italic;
+}
+
+/* 상세 패널 */
+.detail {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  background: var(--bg-panel, var(--bg));
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* enter 애니메이션 */
+  animation: rowFadeIn 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detailTitle {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
+}
+
+/* 기획안 카드 */
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.planSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.planSectionLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text));
+}
+
+.planSectionBody {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.planList {
+  list-style: disc;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* 변형(Variant) 목록 */
+.variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.variantsTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.variantList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.variant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  background: var(--bg-subtle, var(--bg));
+  font-size: 13px;
+}
+
+.variantLabel {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 20px;
+}
+
+.variantStatus {
+  flex: 1 1 auto;
+  color: var(--text-muted, var(--text));
+  font-size: 12px;
+}

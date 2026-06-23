@@ -3181,4 +3181,39 @@ export interface Dict {
   'diagnostics.exporting': string;
   'diagnostics.exportSuccess': string;
   'diagnostics.exportFailed': string;
+
+  // Braze IAM 패널 (BrazeSection — TasksView 내 섹션)
+  'braze.title': string;
+  'braze.eyebrow': string;
+  'braze.lede': string;
+  'braze.loading': string;
+  'braze.error': string;
+  'braze.emptyTitle': string;
+  'braze.emptyBody': string;
+  'braze.pickProject': string;
+  'braze.pickProjectLabel': string;
+  'braze.messageCount': string;
+  'braze.variantCount': string;
+  'braze.updatedAt': string;
+  'braze.openDetail': string;
+  'braze.closeDetail': string;
+  'braze.deleteAria': string;
+  'braze.deleteTitle': string;
+  'braze.deleteConfirm': string;
+  'braze.deleting': string;
+  'braze.planSummaryTitle': string;
+  'braze.planEmphasisTitle': string;
+  'braze.planTargetingTitle': string;
+  'braze.planCtaTitle': string;
+  'braze.planVariantsTitle': string;
+  'braze.variantsTitle': string;
+  'braze.variantOpenAria': string;
+  'braze.awaitingAnswerHint': string;
+  'braze.status.interviewing': string;
+  'braze.status.plan_draft': string;
+  'braze.status.plan_confirmed': string;
+  'braze.status.producing': string;
+  'braze.status.produced': string;
+  'braze.status.editing': string;
+  'braze.status.done': string;
 }

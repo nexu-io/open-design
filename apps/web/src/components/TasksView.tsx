@@ -29,6 +29,7 @@ import {
   type AutomationTemplate,
   type AutomationTemplateKind,
 } from './NewAutomationModal';
+import { BrazeSection } from './BrazeSection';
 
 type ProjectSummary = { id: string; name: string };
 type TemplateFilter =
@@ -968,6 +969,9 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           })();
         }}
       />
+
+      {/* Braze IAM 섹션: 프로젝트 별 IAM 메시지 목록·상세·삭제 */}
+      <BrazeSection projects={projects} />
     </section>
   );
 }
