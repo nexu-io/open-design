@@ -47,6 +47,13 @@ function savedRuleResponse(id = 'rule_palette_only') {
   });
 }
 
+function memoryFailureResponse() {
+  return new Response(JSON.stringify({ error: 'memory list failed' }), {
+    status: 500,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   vi.restoreAllMocks();
@@ -84,9 +91,10 @@ describe('OdCard rule proposal decisions', () => {
     expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
   });
 
-  it('reverts stale saved decisions when memory is unavailable', async () => {
+  it('reverts stale saved decisions when the memory entry is absent', async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
+      if (url === '/api/memory') return Promise.resolve(memoryListResponse([]));
       return Promise.resolve(new Response(null, { status: 404 }));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -109,6 +117,32 @@ describe('OdCard rule proposal decisions', () => {
     expect(window.localStorage.length).toBe(0);
   });
 
+  it('keeps saved decisions when memory validation fails', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/memory' && init?.method === 'POST') return Promise.resolve(savedRuleResponse());
+      if (url === '/api/memory') return Promise.resolve(memoryFailureResponse());
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = renderRuleCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
+    });
+    first.unmount();
+
+    renderRuleCard();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/memory');
+    });
+    expect(screen.getByText('Saved “Palette only” as a rule')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
+    expect(window.localStorage.length).toBe(1);
+  });
+
   it('keeps the discarded state after the card remounts', () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (url === '/api/memory') return Promise.resolve(memoryListResponse([]));
@@ -127,8 +161,9 @@ describe('OdCard rule proposal decisions', () => {
     expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
   });
 
-  it('reverts stale discarded decisions when memory is unavailable', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+  it('keeps discarded decisions when memory validation fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(memoryFailureResponse());
+    vi.stubGlobal('fetch', fetchMock);
 
     const first = renderRuleCard();
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
@@ -139,10 +174,11 @@ describe('OdCard rule proposal decisions', () => {
     renderRuleCard();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Keep' })).toBeTruthy();
+      expect(fetchMock).toHaveBeenCalledWith('/api/memory');
     });
-    expect(screen.getByText('Palette only')).toBeTruthy();
-    expect(window.localStorage.length).toBe(0);
+    expect(screen.queryByText('Palette only')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
+    expect(window.localStorage.length).toBe(1);
   });
 
   it('does not reuse discarded decisions across scoped card instances', () => {
