@@ -149,17 +149,43 @@ export function ManualEditPanel({
             </button>
           ) : null}
           <span title={panelTitle}>{panelTitle}</span>
-          {onExit ? (
+          
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', alignItems: 'center' }}>
             <button
               type="button"
               className="manual-edit-titlebar-close"
-              aria-label={t('manualEdit.closePanel')}
-              title={t('manualEdit.closePanel')}
-              onClick={onExit}
+              style={{ position: 'static' }}
+              aria-label="Undo"
+              title="Undo"
+              disabled={!canUndo || busy}
+              onClick={onUndo}
             >
-              <Icon name="close" size={16} />
+              <Icon name="undo" size={16} />
             </button>
-          ) : null}
+            <button
+              type="button"
+              className="manual-edit-titlebar-close"
+              style={{ position: 'static' }}
+              aria-label="Redo"
+              title="Redo"
+              disabled={!canRedo || busy}
+              onClick={onRedo}
+            >
+              <Icon name="redo" size={16} />
+            </button>
+            {onExit ? (
+              <button
+                type="button"
+                className="manual-edit-titlebar-close"
+                style={{ position: 'static' }}
+                aria-label={t('manualEdit.closePanel')}
+                title={t('manualEdit.closePanel')}
+                onClick={onExit}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="manual-edit-scroll">
           {targetForInspector ? (
@@ -267,23 +293,27 @@ export function ManualEditPanel({
                   {t('ds.reset')}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="manual-edit-footer-btn subtle"
-                disabled={busy}
-                onClick={onCancelDraft}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="manual-edit-footer-btn primary"
-                disabled={busy}
-                onClick={onSaveDraft}
-              >
-                {t('common.save')}
-              </button>
             </div>
+            {targetForInspector ? (
+              <div className="manual-edit-footer-right">
+                <button
+                  type="button"
+                  className="manual-edit-footer-btn subtle"
+                  disabled={busy}
+                  onClick={onCancelDraft}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="manual-edit-footer-btn primary"
+                  disabled={busy}
+                  onClick={onSaveDraft}
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {error ? <div className="manual-edit-error">{error}</div> : null}
