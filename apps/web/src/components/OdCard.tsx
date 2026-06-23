@@ -123,11 +123,13 @@ async function validateCachedRuleProposalDecision(
   if (decision.status === 'idle') return decision;
 
   const resp = await fetch('/api/memory');
-  if (!resp.ok) return { status: 'idle' };
+  if (!resp.ok) return null;
   if (decision.status === 'discarded') return decision;
 
-  const body = await resp.json() as { entries?: unknown };
-  const entries = Array.isArray(body.entries) ? body.entries as MemoryEntrySummaryLike[] : [];
+  const body = await resp.json().catch(() => null) as { entries?: unknown } | null;
+  if (!Array.isArray(body?.entries)) return null;
+
+  const entries = body.entries as MemoryEntrySummaryLike[];
   return entries.some((entry) => isMatchingRuleEntry(decision, entry)) ? decision : { status: 'idle' };
 }
 
@@ -346,8 +348,7 @@ function RuleProposalCard({
         }
       })
       .catch(() => {
-        // Keep the cached state on transient validation failures. Non-OK daemon
-        // responses above are treated as an authoritative cache invalidation.
+        // Keep the cached state on transient validation failures.
       });
     return () => {
       cancelled = true;
