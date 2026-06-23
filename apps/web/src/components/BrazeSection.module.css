@@ -1,6 +1,6 @@
 /*
  * Role: BrazeSection 컴포넌트 전용 스타일
- * Key Features: 메시지 목록, 상태 배지, 상세 패널, 변형 목록
+ * Key Features: 메시지 목록, 상태 배지(메시지+변형), 상세 패널 전체폭 확장, 변형 목록
  * Notes: 전역 스타일 없음 — CSS Modules 로 완전 격리
  */
 
@@ -20,6 +20,13 @@
   gap: 4px;
 }
 
+/* 제목 + 메시지 수 카운트를 수평 배치 */
+.heroRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .eyebrow {
   font-size: 11px;
   font-weight: 600;
@@ -35,6 +42,13 @@
   line-height: 1.2;
   color: var(--text);
   margin: 0;
+}
+
+/* 헤더 옆 메시지 수 레이블 */
+.messageCount {
+  font-size: 13px;
+  color: var(--text-muted, var(--text));
+  font-weight: 400;
 }
 
 .lede {
@@ -111,10 +125,14 @@
   gap: 8px;
 }
 
-/* 개별 메시지 행 */
+/* 개별 메시지 행
+ * Fix 2: flex-wrap: wrap 추가 — MessageDetail 이 별도 3번째 컬럼이 아닌
+ * 새 줄에 전체 폭으로 렌더되도록. enter 애니메이션 준수.
+ */
 .row {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;     /* Fix 2: 상세 패널을 아래 행으로 밀어냄 */
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--border);
@@ -215,6 +233,13 @@
   color: color-mix(in srgb, var(--success, #22c55e) 80%, var(--text));
 }
 
+/* pending: plan_confirmed 후 produce 전 대기 상태 (BrazeVariantStatus 전용) */
+.badgePending {
+  background: var(--bg-subtle, var(--bg));
+  color: var(--text-muted, var(--text));
+  border: 1px solid var(--border);
+}
+
 /* "Questions 탭 대기 중" 힌트 */
 .awaitingHint {
   display: flex;
@@ -225,11 +250,15 @@
   font-style: italic;
 }
 
-/* 상세 패널 */
+/* 상세 패널
+ * Fix 2: flex-basis: 100% — .row 가 flex-wrap: wrap 이므로 이 요소가
+ * 타이틀+액션 행 다음에 전체 너비로 확장됨.
+ */
 .detail {
+  flex-basis: 100%;    /* Fix 2: 전체 폭으로 확장 */
   border: 1px solid var(--border);
   border-radius: var(--radius, 6px);
-  background: var(--bg-panel, var(--bg));
+  background: var(--bg-subtle, var(--bg-panel));
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -250,6 +279,12 @@
   font-weight: 700;
   margin: 0;
   color: var(--text);
+}
+
+/* 상세 패널 내 로딩 인디케이터 */
+.detailLoading {
+  font-size: 12px;
+  color: var(--text-muted, var(--text));
 }
 
 /* 기획안 카드 */

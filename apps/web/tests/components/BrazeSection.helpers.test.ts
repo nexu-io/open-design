@@ -1,18 +1,19 @@
 // @vitest-environment node
 // Role: braze-helpers 의 순수 함수 TDD 검증
-// Key Features: statusToBadge, isAwaitingAnswer, isVariantOpenable 에 대한 red→green 테스트
+// Key Features: statusToBadge, variantStatusToBadge, isAwaitingAnswer, isVariantOpenable
 // Dependencies: vitest, braze-helpers
 
 import { describe, expect, it } from 'vitest';
-import type { BrazeMessageStatus } from '@open-design/contracts';
+import type { BrazeMessageStatus, BrazeVariantStatus } from '@open-design/contracts';
 import {
   statusToBadge,
+  variantStatusToBadge,
   isAwaitingAnswer,
   isVariantOpenable,
   statusI18nKey,
 } from '../../src/components/braze-helpers';
 
-// --- statusToBadge ---
+// --- statusToBadge (BrazeMessageStatus → badge) ---
 describe('statusToBadge', () => {
   // 모든 BrazeMessageStatus 값을 정확한 배지로 변환해야 함
   it.each([
@@ -32,8 +33,37 @@ describe('statusToBadge', () => {
 
   // 알 수 없는 상태 값은 'draft' 로 안전하게 폴백해야 함
   it('unknown status falls back to draft', () => {
-    // TypeScript 타입을 우회해 런타임 fallback 검증
     expect(statusToBadge('totally_unknown' as BrazeMessageStatus)).toBe('draft');
+  });
+});
+
+// --- variantStatusToBadge (BrazeVariantStatus → badge) ---
+// Fix 1 회귀 방지: pending 이 BrazeMessageStatus 에 없어서 as 캐스팅하면
+// STATUS_I18N_KEY['pending'] === undefined → t(undefined) 가 'undefined' 렌더.
+// variantStatusToBadge 는 BrazeVariantStatus 를 직접 받아 이 문제를 방지한다.
+describe('variantStatusToBadge', () => {
+  it.each([
+    ['pending', 'pending'],
+    ['produced', 'produced'],
+    ['editing', 'editing'],
+    ['done', 'done'],
+  ] as [BrazeVariantStatus, string][])(
+    'variant status %s → badge %s',
+    (status, expected) => {
+      expect(variantStatusToBadge(status)).toBe(expected);
+    },
+  );
+
+  // pending 은 반드시 'pending' 배지여야 함 — 절대 'undefined' 나 'draft' 가 아님
+  it('pending variant maps to pending badge (not draft or undefined)', () => {
+    const result = variantStatusToBadge('pending');
+    expect(result).toBe('pending');
+    expect(result).not.toBe('draft');
+  });
+
+  // 알 수 없는 variant 상태는 'pending' 폴백
+  it('unknown variant status falls back to pending', () => {
+    expect(variantStatusToBadge('unknown' as BrazeVariantStatus)).toBe('pending');
   });
 });
 

@@ -1,5 +1,5 @@
 // Role: Braze IAM 메시지 모니터/관리 패널 (TasksView 내 섹션)
-// Key Features: 메시지 목록, 상태 배지, 상세 패널(기획안+변형), 삭제, 파일뷰어 연동
+// Key Features: 메시지 목록, 상태 배지(메시지/변형 분리), 상세 패널(GET :id 신선 fetch), 삭제, FileViewer 연동
 // Dependencies: @open-design/contracts, @open-design/components, braze-helpers
 // Notes: 인터뷰·계획 확인은 question-form + Questions 탭 전용 — 이 컴포넌트는 읽기/삭제만
 
@@ -11,6 +11,7 @@ import type {
   BrazePlanCta,
   BrazePlanVariant,
   BrazeVariant,
+  BrazeVariantStatus,
 } from '@open-design/contracts';
 import { Button, VisuallyHidden } from '@open-design/components';
 
@@ -20,9 +21,11 @@ import { Icon } from './Icon';
 import { navigate } from '../router';
 import {
   statusToBadge,
+  variantStatusToBadge,
   isAwaitingAnswer,
   isVariantOpenable,
   formatBrazeDate,
+  type BrazeBadgeVariant,
 } from './braze-helpers';
 
 import styles from './BrazeSection.module.css';
@@ -36,9 +39,9 @@ interface BrazeSectionProps {
   initialProjectId?: string;
 }
 
-// 배지 CSS 클래스 이름 매핑 — statusToBadge 리턴값과 1:1 대응
-// Record 의 value 를 string 으로 강제해 TS2322 방지
-const BADGE_CLASS: Record<ReturnType<typeof statusToBadge>, string> = {
+// 배지 CSS 클래스 이름 매핑 — BrazeBadgeVariant 와 1:1 대응
+// CSS Module 클래스가 undefined 일 수 없도록 as string 캐스팅
+const BADGE_CLASS: Record<BrazeBadgeVariant, string> = {
   interviewing: styles.badgeInterviewing as string,
   draft: styles.badgeDraft as string,
   confirmed: styles.badgeConfirmed as string,
@@ -46,11 +49,11 @@ const BADGE_CLASS: Record<ReturnType<typeof statusToBadge>, string> = {
   produced: styles.badgeProduced as string,
   editing: styles.badgeEditing as string,
   done: styles.badgeDone as string,
+  pending: styles.badgePending as string,
 };
 
-// 각 BrazeMessageStatus 에 대응하는 i18n 키 매핑
-// Dict 의 타입 안정성 보장을 위해 명시적 Record 사용
-const STATUS_I18N_KEY: Record<BrazeMessageStatus, keyof Dict> = {
+// 메시지 상태 → i18n 키 (keyof Dict 로 타입 안전)
+const MSG_STATUS_I18N: Record<BrazeMessageStatus, keyof Dict> = {
   interviewing: 'braze.status.interviewing',
   plan_draft: 'braze.status.plan_draft',
   plan_confirmed: 'braze.status.plan_confirmed',
@@ -60,13 +63,31 @@ const STATUS_I18N_KEY: Record<BrazeMessageStatus, keyof Dict> = {
   done: 'braze.status.done',
 };
 
-function StatusBadge({ status }: { status: BrazeMessageStatus }) {
+// 변형 상태 → i18n 키 — pending 포함, BrazeMessageStatus 와 완전 분리
+const VARIANT_STATUS_I18N: Record<BrazeVariantStatus, keyof Dict> = {
+  pending: 'braze.status.pending',
+  produced: 'braze.status.produced',
+  editing: 'braze.status.editing',
+  done: 'braze.status.done',
+};
+
+function MessageStatusBadge({ status }: { status: BrazeMessageStatus }) {
   const t = useT();
   const badge = statusToBadge(status);
-  const label = t(STATUS_I18N_KEY[status]);
   return (
     <span className={`${styles.badge} ${BADGE_CLASS[badge]}`}>
-      {label}
+      {t(MSG_STATUS_I18N[status])}
+    </span>
+  );
+}
+
+// 변형 전용 배지 — BrazeVariantStatus 를 직접 받아 as 캐스팅 없이 처리
+function VariantStatusBadge({ status }: { status: BrazeVariantStatus }) {
+  const t = useT();
+  const badge = variantStatusToBadge(status);
+  return (
+    <span className={`${styles.badge} ${BADGE_CLASS[badge]}`}>
+      {t(VARIANT_STATUS_I18N[status])}
     </span>
   );
 }
@@ -157,8 +178,8 @@ function VariantList({
             <li key={v.id} className={styles.variant}>
               <span className={styles.variantLabel}>{v.label}</span>
               <span className={styles.variantStatus}>
-                {/* variant status (produced/editing/done) 를 메시지 상태로 맵핑 */}
-                <StatusBadge status={v.status as BrazeMessageStatus} />
+                {/* BrazeVariantStatus 타입 그대로 전달 — as 캐스팅 없음 */}
+                <VariantStatusBadge status={v.status} />
               </span>
               {openable ? (
                 <Button
@@ -186,15 +207,36 @@ function VariantList({
   );
 }
 
-// 상세 패널 (선택된 메시지의 기획안 + 변형 목록)
+// 상세 패널 — GET /api/braze/messages/:id 로 신선한 데이터 fetch
+// 목록 항목을 fallback 으로 사용하고, fetch 완료 시 덮어씀
 function MessageDetail({
-  message,
+  fallback,
   onClose,
 }: {
-  message: BrazeMessage;
+  fallback: BrazeMessage;
   onClose: () => void;
 }) {
   const t = useT();
+  const [message, setMessage] = useState<BrazeMessage>(fallback);
+  const [detailLoading, setDetailLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetailLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/braze/messages/${fallback.id}`);
+        if (!res.ok) return; // 실패 시 fallback 유지
+        const json = (await res.json()) as { message: BrazeMessage };
+        if (!cancelled && json.message) setMessage(json.message);
+      } catch {
+        // 네트워크 오류 시 목록 항목(fallback) 그대로 표시
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fallback.id]);
 
   return (
     <div className={styles.detail} role="region" aria-label={message.title}>
@@ -215,6 +257,10 @@ function MessageDetail({
           {t('braze.awaitingAnswerHint')}
         </p>
       )}
+
+      {detailLoading ? (
+        <div className={styles.detailLoading}>{t('braze.loading')}</div>
+      ) : null}
 
       {message.plan ? <PlanCard plan={message.plan} /> : null}
 
@@ -237,7 +283,8 @@ export function BrazeSection({ projects = [], initialProjectId }: BrazeSectionPr
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const selectedMessage = messages.find((m) => m.id === selectedId) ?? null;
+  // 목록 항목을 fallback 으로 사용 (상세 fetch 전 즉각 렌더)
+  const fallbackMessage = messages.find((m) => m.id === selectedId) ?? null;
 
   const refresh = useCallback(async (pid: string) => {
     if (!pid) return;
@@ -286,10 +333,17 @@ export function BrazeSection({ projects = [], initialProjectId }: BrazeSectionPr
 
   return (
     <section className={styles.root} aria-labelledby="braze-section-title">
-      {/* 헤더 */}
+      {/* 헤더 — 메시지 수를 braze.messageCount 로 표시 (Fix 3: 사용되지 않던 키 활용) */}
       <header className={styles.hero}>
         <span className={styles.eyebrow}>{t('braze.eyebrow')}</span>
-        <h2 id="braze-section-title" className={styles.title}>{t('braze.title')}</h2>
+        <div className={styles.heroRow}>
+          <h2 id="braze-section-title" className={styles.title}>{t('braze.title')}</h2>
+          {messages.length > 0 && (
+            <span className={styles.messageCount}>
+              {t('braze.messageCount', { n: messages.length })}
+            </span>
+          )}
+        </div>
         <p className={styles.lede}>{t('braze.lede')}</p>
       </header>
 
@@ -337,10 +391,11 @@ export function BrazeSection({ projects = [], initialProjectId }: BrazeSectionPr
             const isSelected = selectedId === msg.id;
             return (
               <li key={msg.id} className={styles.row}>
+                {/* 행 주요 정보 */}
                 <div className={styles.rowMain}>
                   <span className={styles.rowTitle}>{msg.title}</span>
                   <div className={styles.rowMeta}>
-                    <StatusBadge status={msg.status} />
+                    <MessageStatusBadge status={msg.status} />
                     <span aria-hidden="true">·</span>
                     <span>{msg.iamFormat}</span>
                     {msg.variants.length > 0 && (
@@ -355,8 +410,9 @@ export function BrazeSection({ projects = [], initialProjectId }: BrazeSectionPr
                     <span>{t('braze.updatedAt', { when: formatBrazeDate(msg.updatedAt) })}</span>
                   </div>
                 </div>
+                {/* 행 액션 */}
                 <div className={styles.rowActions}>
-                  {/* 상세 패널 토글 — chevron-down 만 있으므로 회전 CSS 로 up 표현 */}
+                  {/* 상세 패널 토글 — chevron-down 을 CSS rotate 로 up 표현 */}
                   <Button
                     variant="ghost"
                     onClick={() => setSelectedId(isSelected ? null : msg.id)}
@@ -382,10 +438,10 @@ export function BrazeSection({ projects = [], initialProjectId }: BrazeSectionPr
                     <VisuallyHidden>{t('braze.deleteAria')}</VisuallyHidden>
                   </Button>
                 </div>
-                {/* 상세 패널 인라인 확장 */}
-                {isSelected && selectedMessage ? (
+                {/* 상세 패널: flex-basis 100% 로 전체 폭 차지 (Fix 2) */}
+                {isSelected && fallbackMessage ? (
                   <MessageDetail
-                    message={selectedMessage}
+                    fallback={fallbackMessage}
                     onClose={() => setSelectedId(null)}
                   />
                 ) : null}

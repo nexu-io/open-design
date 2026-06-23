@@ -3084,4 +3084,5 @@ export const esES: Dict = {
   'braze.status.produced': 'Produced',
   'braze.status.editing': 'Editing',
   'braze.status.done': 'Done',
+  'braze.status.pending': 'Pending',
 };

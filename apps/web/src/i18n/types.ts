@@ -3216,4 +3216,6 @@ export interface Dict {
   'braze.status.produced': string;
   'braze.status.editing': string;
   'braze.status.done': string;
+  // BrazeVariantStatus 전용 — 메시지 상태에는 없는 pending
+  'braze.status.pending': string;
 }
