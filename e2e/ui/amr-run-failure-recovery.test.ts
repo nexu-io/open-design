@@ -6,6 +6,7 @@ import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 
 import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
+import { runErrorCard } from '@/playwright/chat';
 import { createFakeAgentRuntimes } from '@/playwright/fake-agents';
 import {
   createProjectViaApi,
@@ -384,8 +385,8 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
 
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure before switch smoke');
-  await expect(page.locator('.msg.error')).toContainText(
-    /isn't authorized yet|Authorize it and this run retries automatically/i,
+  await expect(runErrorCard(page)).toContainText(
+    /Open Design agent isn't signed in yet|AMR sign-in is required/i,
     { timeout: 15_000 },
   );
   await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();

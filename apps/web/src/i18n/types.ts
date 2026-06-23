@@ -298,9 +298,6 @@ export interface Dict {
   'settings.amrActivationHint': string;
   'settings.amrActivationBrowserFailed': string;
   'settings.amrActivationOpen': string;
-  'settings.amrActivationCopyCode': string;
-  'settings.amrActivationCopy': string;
-  'settings.amrActivationCopied': string;
   'settings.amrCancelSignIn': string;
   'settings.amrAccountStatus': string;
   'settings.amrConsole': string;
@@ -2082,6 +2079,18 @@ export interface Dict {
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
+  'chat.runError.title.authRequired': string;
+  'chat.runError.title.balance': string;
+  'chat.runError.title.connectionDropped': string;
+  'chat.runError.title.signInRequired': string;
+  'chat.runError.title.rateLimited': string;
+  'chat.runError.title.generic': string;
+  'chat.runError.signInMessage.amr': string;
+  'chat.runError.signInMessage.other': string;
+  'chat.runError.agentFallback': string;
+  'chat.runError.sourceLabel': string;
+  'chat.runError.sourceExpandAria': string;
+  'chat.runError.sourceCollapseAria': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;

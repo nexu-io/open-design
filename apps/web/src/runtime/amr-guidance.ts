@@ -74,14 +74,32 @@ export type RunFailurePrimaryAction =
   | 'launch-terminal-switch-model';
 
 // i18n keys for the gray-card text override (null = show the raw error).
+// Keys ending in a value with `{agent}` are interpolated at render time via
+// t(key, { agent }) (see ChatPane displayError).
 export type RunFailureMessageKey =
   | 'chat.amrError.authMessage'
   | 'chat.amrError.balanceMessage'
   | 'chat.connectionDropped'
+  | 'chat.runError.signInMessage.amr'
+  | 'chat.runError.signInMessage.other'
   | null;
+
+// i18n keys for the unified error card's TITLE (the "error type" line above the
+// detail message). Frontend-only mapping from error code → human-readable type;
+// the daemon does not yet emit a type name (the raw status label is just the
+// word "error"). A full backend type ⇄ frontend pairing is a later effort.
+export type RunFailureTitleKey =
+  | 'chat.runError.title.authRequired'
+  | 'chat.runError.title.balance'
+  | 'chat.runError.title.connectionDropped'
+  | 'chat.runError.title.signInRequired'
+  | 'chat.runError.title.rateLimited'
+  | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
   primaryAction: RunFailurePrimaryAction;
+  // Title shown above the detail message — names the failure type.
+  titleKey: RunFailureTitleKey;
   // Override the gray error card's text (e.g. AMR auth / balance get a clearer
   // explanation than the raw upstream string).
   messageKey: RunFailureMessageKey;
@@ -106,7 +124,12 @@ export function resolveRunFailureUi(
     if (code === 'AMR_AUTH_REQUIRED') {
       return {
         primaryAction: 'authorize',
-        messageKey: 'chat.amrError.authMessage',
+        // PRD「需要登录」type — shared title with the non-AMR sign-in case.
+        titleKey: 'chat.runError.title.signInRequired',
+        // "Open Design 智能体尚未登录，前往登录即可正常使用" — single CTA, no
+        // AMR promotion (the agent already IS AMR). The authorize action reuses
+        // the inline AmrLoginPill (sign-in + auto-retry on success).
+        messageKey: 'chat.runError.signInMessage.amr',
         secondaryRetry: false,
         showSwitchCard: false,
       };
@@ -114,6 +137,7 @@ export function resolveRunFailureUi(
     if (code === 'AMR_INSUFFICIENT_BALANCE') {
       return {
         primaryAction: 'recharge',
+        titleKey: 'chat.runError.title.balance',
         messageKey: 'chat.amrError.balanceMessage',
         secondaryRetry: true,
         showSwitchCard: false,
@@ -121,6 +145,7 @@ export function resolveRunFailureUi(
     }
     return {
       primaryAction: 'retry',
+      titleKey: 'chat.runError.title.generic',
       messageKey: null,
       secondaryRetry: false,
       showSwitchCard: false,
@@ -136,6 +161,7 @@ export function resolveRunFailureUi(
     if (code === 'AGENT_AUTH_REQUIRED') {
       return {
         primaryAction: 'launch-terminal-auth',
+        titleKey: 'chat.runError.title.signInRequired',
         messageKey: null,
         secondaryRetry: true,
         showSwitchCard: false,
@@ -147,6 +173,7 @@ export function resolveRunFailureUi(
     if (code === 'RATE_LIMITED') {
       return {
         primaryAction: 'launch-terminal-switch-model',
+        titleKey: 'chat.runError.title.rateLimited',
         messageKey: null,
         secondaryRetry: true,
         showSwitchCard: false,
@@ -160,14 +187,30 @@ export function resolveRunFailureUi(
   if (code === 'AGENT_CONNECTION_DROPPED') {
     return {
       primaryAction: 'retry',
+      titleKey: 'chat.runError.title.connectionDropped',
       messageKey: 'chat.connectionDropped',
       secondaryRetry: false,
       showSwitchCard: false,
     };
   }
+  // Non-AMR sign-in required (any non-amr, non-antigravity agent — those two are
+  // handled above). The agent's login lives in the user's own terminal, so Open
+  // Design can't sign in for them: surface a "{agent} 尚未登录，请本地检查登录状态"
+  // message, offer Retry as the primary action (re-run after they log in
+  // locally), and promote AMR as the steadier alternative via the switch card.
+  if (code === 'AGENT_AUTH_REQUIRED' || code === 'UNAUTHORIZED') {
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.signInRequired',
+      messageKey: 'chat.runError.signInMessage.other',
+      secondaryRetry: false,
+      showSwitchCard: true,
+    };
+  }
   const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
   return {
     primaryAction: 'retry',
+    titleKey: 'chat.runError.title.generic',
     messageKey: null,
     secondaryRetry: false,
     showSwitchCard: promote,

@@ -1541,34 +1541,6 @@
 .amr-login-activation__open:hover {
   background: var(--accent-strong, var(--accent));
 }
-.amr-login-activation__code {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-}
-.amr-login-activation__code:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-}
-.amr-login-activation__code-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: inherit;
-}
-.amr-login-activation__code-action {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent-strong, var(--accent));
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 .agent-card-amr-auth .amr-login-pill-badge {
   flex: 0 0 auto;
   padding: 1px 5px;
