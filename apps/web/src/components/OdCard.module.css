@@ -1,14 +1,14 @@
 /*
  * Inline <od-card> rendering — the display-only memory cards interleaved with
- * assistant prose. Light/white surfaces, low chrome: these sit inside the chat
- * flow so they must read as quiet annotations, not heavy panels. Animation
+ * assistant prose. Quiet themed surfaces keep these inside the chat flow as
+ * annotations, not heavy panels. Animation
  * easing follows the repo convention (ease-out cubic-bezier).
  */
 
 .card {
   margin: 6px 0;
   font-size: 13px;
-  color: var(--text-default, var(--text, #1a1a1a));
+  color: var(--text);
 }
 
 /* ----- task-brief: collapsed chip → expandable brief --------------------- */
@@ -19,10 +19,10 @@
   gap: 7px;
   max-width: 100%;
   padding: 5px 10px;
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-pill, 999px);
-  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
-  color: var(--text-default, var(--text, #1a1a1a));
+  background: var(--bg-subtle);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
   transition:
@@ -31,13 +31,13 @@
 }
 
 .briefChip:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
-  border-color: var(--border, rgba(0, 0, 0, 0.16));
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
 }
 
 .briefChipIcon {
   display: inline-flex;
-  color: var(--accent, #5b5bd6);
+  color: var(--accent);
 }
 
 .briefChipLabel {
@@ -50,20 +50,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 .briefChipChevron {
   display: inline-flex;
-  color: var(--text-faint, #999);
+  color: var(--text-faint);
 }
 
 .briefBody {
   margin-top: 8px;
   padding: 12px 14px;
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-md, 8px);
-  background: var(--bg-default, #fff);
+  background: var(--bg-panel);
 }
 
 .briefTitle {
@@ -88,14 +88,14 @@
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   align-self: baseline;
   padding-top: 1px;
 }
 
 .briefField dd {
   margin: 0;
-  color: var(--text-default, var(--text, #1a1a1a));
+  color: var(--text);
   line-height: 1.45;
 }
 
@@ -103,7 +103,7 @@
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 /* ----- memory-applied: one-line chip with type-dotted refs --------------- */
@@ -114,14 +114,14 @@
   flex-wrap: wrap;
   gap: 6px 10px;
   padding: 6px 10px;
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-md, 8px);
-  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  background: var(--bg-subtle);
 }
 
 .appliedIcon {
   display: inline-flex;
-  color: var(--accent, #5b5bd6);
+  color: var(--accent);
 }
 
 .appliedSummary {
@@ -139,7 +139,7 @@
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 .refDot {
@@ -147,7 +147,7 @@
   height: 7px;
   border-radius: 50%;
   flex: 0 0 auto;
-  background: var(--text-faint, #999);
+  background: var(--text-faint);
 }
 
 .refName {
@@ -156,31 +156,31 @@
 
 /* Category dots — quiet, distinguishable hues for each memory bucket. */
 .dotProfile {
-  background: #7c6cf0;
+  background: var(--purple);
 }
 .dotUser {
-  background: #3b82c4;
+  background: var(--blue);
 }
 .dotFeedback {
-  background: #d98324;
+  background: var(--amber);
 }
 .dotProject {
-  background: #2fa37a;
+  background: var(--green);
 }
 .dotReference {
-  background: #8a8f98;
+  background: var(--text-soft);
 }
 .dotRule {
-  background: #c2476a;
+  background: var(--accent);
 }
 
 /* ----- verify-scorecard: status header over rubric rows ------------------ */
 
 .scorecard {
   padding: 12px 14px;
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-md, 8px);
-  background: var(--bg-default, #fff);
+  background: var(--bg-panel);
 }
 
 .scorecardHead {
@@ -200,23 +200,23 @@
   font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--text-muted, #555);
+  background: var(--bg-fill-tertiary);
+  color: var(--text-muted);
 }
 
 .pillPass {
-  background: rgba(47, 163, 122, 0.14);
-  color: #1f7d5c;
+  background: var(--green-bg);
+  color: var(--green);
 }
 
 .pillPartial {
-  background: rgba(217, 131, 36, 0.16);
-  color: #a4631a;
+  background: var(--amber-bg);
+  color: var(--amber);
 }
 
 .pillFail {
-  background: rgba(194, 71, 106, 0.14);
-  color: var(--text-danger, #b02a47);
+  background: var(--red-bg);
+  color: var(--red);
 }
 
 .scorecardTitle {
@@ -225,7 +225,7 @@
 
 .scorecardSummary {
   font-size: 12px;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 .scoreRows {
@@ -247,19 +247,19 @@
   display: inline-flex;
   flex: 0 0 auto;
   margin-top: 1px;
-  color: var(--text-faint, #999);
+  color: var(--text-faint);
 }
 
 .rowPass .scoreRowIcon {
-  color: #1f7d5c;
+  color: var(--green);
 }
 
 .rowFail .scoreRowIcon {
-  color: var(--text-danger, #b02a47);
+  color: var(--red);
 }
 
 .rowFixed .scoreRowIcon {
-  color: #a4631a;
+  color: var(--amber);
 }
 
 .scoreRowBody {
@@ -276,16 +276,17 @@
 .scoreRowNote {
   font-size: 12px;
   line-height: 1.45;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 /* ----- rule-proposal: name/assertion/check/rationale + actions ----------- */
 
 .ruleCard {
   padding: 12px 14px;
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-md, 8px);
-  background: var(--bg-default, #fff);
+  background: var(--bg-panel);
+  color: var(--text);
 }
 
 .ruleHead {
@@ -297,7 +298,7 @@
 
 .ruleHeadIcon {
   display: inline-flex;
-  color: #c2476a;
+  color: var(--accent);
 }
 
 .ruleKicker {
@@ -305,7 +306,7 @@
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 }
 
 .ruleSummary {
@@ -318,12 +319,13 @@
   margin: 0;
   font-size: 13.5px;
   font-weight: 600;
+  color: var(--text-strong);
 }
 
 .ruleDescription {
   margin: 0;
   font-size: 12.5px;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
   line-height: 1.45;
 }
 
@@ -343,7 +345,7 @@
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   align-self: baseline;
   padding-top: 1px;
 }
@@ -351,6 +353,7 @@
 .ruleFacts dd {
   margin: 0;
   line-height: 1.45;
+  color: var(--text);
 }
 
 .ruleFields {
@@ -367,7 +370,7 @@
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 }
 
 .ruleFieldLabel input,
@@ -377,13 +380,13 @@
   font-weight: 400;
   letter-spacing: normal;
   text-transform: none;
-  color: var(--text-default, var(--text, #1a1a1a));
+  color: var(--text);
 }
 
 .ruleError {
   margin: 8px 0 0;
   font-size: 12px;
-  color: var(--text-danger, #b02a47);
+  color: var(--red);
 }
 
 .ruleActions {
@@ -403,14 +406,15 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid rgba(47, 163, 122, 0.3);
+  border: 1px solid var(--green-border);
   border-radius: var(--radius-md, 8px);
-  background: rgba(47, 163, 122, 0.08);
+  background: var(--green-bg);
+  color: var(--green);
 }
 
 .ruleSavedIcon {
   display: inline-flex;
-  color: #1f7d5c;
+  color: currentColor;
 }
 
 .ruleSavedLabel {
