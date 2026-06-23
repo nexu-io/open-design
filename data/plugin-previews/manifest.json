@@ -611,11 +611,11 @@
       "hash": "f02fab04d68258f9"
     },
     "example-web-prototype": {
-      "video": "example-web-prototype.939fc4990a4d4d76.mp4",
-      "poster": "example-web-prototype.939fc4990a4d4d76.poster.jpg",
+      "video": "example-web-prototype/446a671767d15dd3/preview.mp4",
+      "poster": "example-web-prototype/446a671767d15dd3/poster.jpg",
       "durationMs": 720,
       "holdMs": 2500,
-      "hash": "939fc4990a4d4d76"
+      "hash": "446a671767d15dd3"
     },
     "example-web-prototype-taste-brutalist": {
       "video": "example-web-prototype-taste-brutalist.7430274db7d5178c.mp4",
