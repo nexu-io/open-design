@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 
-import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
+import { seedVelaLoginConfig, startFakeAmrRecoveryApi, writeFakeVelaBin } from '@/amr';
 import { createFakeAgentRuntimes } from '@/playwright/fake-agents';
 import {
   createProjectViaApi,
@@ -36,8 +36,8 @@ test.beforeAll(async () => {
   codexRuntime = runtimes.codex;
 });
 
-test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
-  const profile = 'local';
+test('[P0] @critical AMR insufficient-balance failures surface AMR Cloud Recovery wallet action', async ({ page }) => {
+  const profile = `balance-${Date.now()}`;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       status: 200,
@@ -51,16 +51,6 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
     });
   });
 
-  await page.addInitScript(() => {
-    const opened: string[] = [];
-    (window as Window & { __openedUrls?: string[] }).__openedUrls = opened;
-    const originalOpen = window.open.bind(window);
-    window.open = ((...args: Parameters<typeof window.open>) => {
-      if (typeof args[0] === 'string') opened.push(args[0]);
-      return originalOpen(...args);
-    }) as typeof window.open;
-  });
-
   const amr = await setupAmrWorkspace(page, {
     failBalanceAtPrompt: true,
     profile,
@@ -68,32 +58,20 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
     selectedAgentId: 'amr',
   });
 
-  await gotoProject(page, amr.projectId);
-  await sendPrompt(page, 'AMR insufficient balance recovery smoke');
+  try {
+    await gotoProject(page, amr.projectId);
+    await sendPrompt(page, 'AMR insufficient balance recovery smoke');
 
-  const topUp = page.getByRole('button', { name: /Top up AMR|前往充值|前往儲值/i }).first();
-  const retry = page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first();
-  await expect(topUp).toBeVisible({ timeout: 15_000 });
-  await expect(retry).toBeVisible();
-
-  await topUp.click();
-
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const opened = (window as Window & { __openedUrls?: string[] }).__openedUrls ?? [];
-        return opened.find((href) => {
-          const url = new URL(href, window.location.href);
-          return (
-            url.pathname.endsWith('/wallet') &&
-            url.searchParams.get('source') === 'open_design' &&
-            url.searchParams.get('od_origin') === 'open_design' &&
-            url.searchParams.get('od_entry_source') === 'chat_error_recharge'
-          );
-        }) ?? null;
-      }),
-    )
-    .toBeTruthy();
+    await expect(page.getByText(/AMR Cloud payment needed/i)).toBeVisible({ timeout: 15_000 });
+    const wallet = page.getByRole('link', { name: /Open AMR wallet/i }).first();
+    await expect(wallet).toBeVisible();
+    await expect(wallet).toHaveAttribute(
+      'href',
+      /^https:\/\/open-design\.ai\/amr\/wallet\?.*source=open_design.*od_origin=open_design.*od_entry_source=chat_error_recharge/,
+    );
+  } finally {
+    await amr.recoveryApi.close();
+  }
 });
 
 test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', async ({ page }) => {
@@ -135,18 +113,21 @@ test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', 
     selectedAgentId: 'amr',
   });
 
-  await gotoProject(page, amr.projectId);
-  await sendPrompt(page, 'AMR auth failure recovery smoke');
+  try {
+    await gotoProject(page, amr.projectId);
+    await sendPrompt(page, 'AMR auth failure recovery smoke');
 
-  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
-  await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
-  await authorizeAndRetry.click();
+    const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
+    await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
+    await authorizeAndRetry.click();
 
-  // New inline flow: clicking Authorize & retry starts vela login in place (it
-  // POSTs /login directly) instead of bouncing the user out to the Settings
-  // dialog. The run then auto-retries once /status reports signed in.
-  await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+    // New inline flow: clicking Authorize & retry starts vela login in place
+    // instead of bouncing the user out to the Settings dialog.
+    await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  } finally {
+    await amr.recoveryApi.close();
+  }
 });
 
 test('[P0] @critical AMR model catalog invalid-key failures route to authorization recovery', async ({ page }) => {
@@ -382,32 +363,36 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
 
   const amr = await setupAmrWorkspace(page, { failAuthAtPrompt: true, selectedAgentId: 'amr' });
 
-  await gotoProject(page, amr.projectId);
-  await sendPrompt(page, 'AMR auth failure before switch smoke');
-  await expect(page.locator('.msg.error')).toContainText(
-    /isn't authorized yet|Authorize it and this run retries automatically/i,
-    { timeout: 15_000 },
-  );
-  await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();
+  try {
+    await gotoProject(page, amr.projectId);
+    await sendPrompt(page, 'AMR auth failure before switch smoke');
+    await expect(page.locator('.msg.error')).toContainText(
+      /isn't authorized yet|Authorize it and this run retries automatically/i,
+      { timeout: 15_000 },
+    );
+    await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();
 
-  const settings = await openSettingsDialog(page);
-  await settings.getByTestId('settings-agent-select-codex').click();
-  await expect
-    .poll(async () => {
-      const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
-      return raw ? JSON.parse(raw).agentId : null;
-    })
-    .toBe('codex');
-  await page.keyboard.press('Escape');
-  await expect(settings).toHaveCount(0);
+    const settings = await openSettingsDialog(page);
+    await settings.getByTestId('settings-agent-select-codex').click();
+    await expect
+      .poll(async () => {
+        const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
+        return raw ? JSON.parse(raw).agentId : null;
+      })
+      .toBe('codex');
+    await page.keyboard.press('Escape');
+    await expect(settings).toHaveCount(0);
 
-  await sendPrompt(page, 'Create a deterministic smoke artifact');
-  await expect(artifactPreview(page)).toBeVisible({ timeout: 20_000 });
-  await expect(
-    artifactPreviewFrame(page).getByRole('heading', {
-      name: 'Real Daemon Smoke',
-    }),
-  ).toBeVisible();
+    await sendPrompt(page, 'Create a deterministic smoke artifact');
+    await expect(artifactPreview(page)).toBeVisible({ timeout: 20_000 });
+    await expect(
+      artifactPreviewFrame(page).getByRole('heading', {
+        name: 'Real Daemon Smoke',
+      }),
+    ).toBeVisible();
+  } finally {
+    await amr.recoveryApi.close();
+  }
 });
 
 test('[P0] upstream outages keep Retry available without promoting AMR', async ({ page }) => {
@@ -582,6 +567,7 @@ async function setupAmrWorkspace(
 ) {
   const root = join(tmpdir(), `open-design-amr-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const homeDir = join(root, 'home');
+  const recoveryApi = await startFakeAmrRecoveryApi();
   const velaBin = await writeFakeVelaBin(join(root, 'bin'), {
     ...(options.assistantText !== undefined ? { assistantText: options.assistantText } : {}),
     ...(options.failAuthAtPrompt !== undefined ? { failAuthAtPrompt: options.failAuthAtPrompt } : {}),
@@ -593,7 +579,11 @@ async function setupAmrWorkspace(
   });
   await mkdir(homeDir, { recursive: true });
   if (options.seedLoginConfig !== false) {
-    await seedVelaLoginConfig(homeDir, { email: 'ui-amr@example.com', profile: options.profile ?? 'local' });
+    await seedVelaLoginConfig(homeDir, {
+      apiUrl: recoveryApi.url,
+      email: 'ui-amr@example.com',
+      profile: options.profile ?? 'local',
+    });
   }
 
   const config = {
@@ -612,6 +602,7 @@ async function setupAmrWorkspace(
     },
     agentCliEnv: {
       amr: {
+        VELA_API_URL: recoveryApi.url,
         VELA_BIN: velaBin,
         HOME: homeDir,
         VELA_LINK_URL: 'http://localhost:18081',
@@ -627,5 +618,5 @@ async function setupAmrWorkspace(
 
   const projectId = `amr-ui-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
   const { conversationId } = await createProjectViaApi(page, projectId, 'AMR UI failure smoke');
-  return { projectId, conversationId, homeDir, root, velaBin };
+  return { projectId, conversationId, homeDir, recoveryApi, root, velaBin };
 }

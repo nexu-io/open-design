@@ -72,6 +72,10 @@ _Avoid_: Open Design supported platforms, release channel, future platform promi
 Whether the user has authenticated the account needed to use AMR Cloud.
 _Avoid_: profile badge, environment, CLI version
 
+**AMR Cloud Recovery**:
+The user-visible continuity path for an AMR Cloud run that pauses because AMR billing requires payment, auto top-up, or retry coordination before the run can continue.
+_Avoid_: billing recovery, account recovery, run retry
+
 **AMR Environment Profile**:
 The target AMR service environment a packaged runtime is configured to use.
 _Avoid_: release channel, account status, app identity
@@ -94,6 +98,19 @@ _Avoid_: continue, finish setup, passive close
 - The **AMR CLI Distribution Contract** is owned separately from Open Design; Open Design release packaging consumes it instead of defining the native CLI release itself.
 - The first **AMR CLI Distribution Slice** is mac arm64 only.
 - **AMR Account Status** describes account readiness for **AMR Cloud**, not the environment profile or CLI installation state.
+- **AMR Cloud Recovery** belongs to **AMR Cloud** continuity and does not make Open Design the owner of AMR billing state.
+- **AMR Cloud Recovery** resumes automatically after automatic top-up and requires user-initiated recovery after manual top-up.
+- Manual **AMR Cloud Recovery** is initiated from Open Design, while payment state and balance readiness remain owned by AMR Cloud.
+- **AMR Cloud Recovery** preserves operation continuity across daemon restarts without becoming a complete replay archive for the original run.
+- When the original local run can no longer be resumed, **AMR Cloud Recovery** presents a restart path rather than treating the AMR payment or operation as failed.
+- **AMR Cloud Recovery** is a normal AMR Cloud continuity state, not a generic run failure category.
+- Multiple **AMR Cloud Recovery** operations may exist at once, but each is presented through its originating run or conversation rather than through a global recovery inbox.
+- Manual **AMR Cloud Recovery** continues the same user request rather than presenting a new unrelated task.
+- Canceling **AMR Cloud Recovery** means the user no longer wants to continue that request; it does not imply a refund or payment reversal.
+- **AMR Cloud Recovery** covers balance-related top-up and resume continuity; risk, refund, and dispute blocks are AMR Cloud blocks rather than recovery states.
+- **AMR Cloud Recovery** is bound to the AMR Cloud user that created the recovery operation, not to a local device or Project.
+- Returning to the correct AMR Cloud user does not change the recovery mode: automatic top-up may auto-resume, while manual top-up still requires user initiation.
+- **AMR Cloud Recovery** is presented through the originating run, conversation, and run surfaces rather than a separate recovery center.
 - An **AMR Environment Profile** is independent from release channel identity; a beta, preview, nightly, or stable package can target different AMR service environments when explicitly configured.
 - **Onboarding Skip** bypasses setup completion requirements that belong to the normal onboarding continue path.
 

@@ -312,6 +312,8 @@ interface Props {
   // assistant message. Omitting them hides the affordance entirely (e.g. in
   // tests that don't wire chat send).
   onArtifactShare?: (fileName: string) => void;
+  onAmrRecoveryResume?: () => void;
+  onAmrRecoveryCancel?: () => void;
   // Featured design-toolbox follow-up rows on the "next step" card. Seeding the
   // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
@@ -416,6 +418,8 @@ function AssistantMessageImpl({
   suppressDirectionForms = false,
   hasDesignSystemContext = false,
   onArtifactShare,
+  onAmrRecoveryResume,
+  onAmrRecoveryCancel,
   onToolboxAction,
   onPickSkill,
   onArtifactDownload,
@@ -629,6 +633,13 @@ function AssistantMessageImpl({
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
+        {message.amrRecovery ? (
+          <AmrCloudRecoveryCard
+            recovery={message.amrRecovery}
+            onResume={onAmrRecoveryResume}
+            onCancel={onAmrRecoveryCancel}
+          />
+        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
@@ -806,6 +817,58 @@ function AssistantMessageImpl({
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
           />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AmrCloudRecoveryCard({
+  recovery,
+  onResume,
+  onCancel,
+}: {
+  recovery: NonNullable<ChatMessage["amrRecovery"]>;
+  onResume?: () => void;
+  onCancel?: () => void;
+}) {
+  const title =
+    recovery.state === "recovering_waiting_payment"
+      ? "AMR Cloud payment needed"
+      : recovery.state === "recovering_waiting_auto_topup"
+        ? "AMR Cloud automatic top-up"
+        : recovery.state === "recovering_retry_available"
+          ? "AMR Cloud request ready to continue"
+          : recovery.state === "recovering_resuming"
+            ? "Continuing AMR Cloud request"
+            : recovery.state === "recovering_restart_available"
+              ? "Restart AMR Cloud request"
+              : recovery.state === "recovering_canceled"
+                ? "AMR Cloud recovery canceled"
+                : recovery.state === "recovering_completed"
+                  ? "AMR Cloud recovery completed"
+                  : "AMR Cloud recovery blocked";
+  const showResume = recovery.canResume && onResume;
+  const showCancel = recovery.canCancel && onCancel;
+  return (
+    <div className="plugin-action-orphan-notice" role="status">
+      <div className="plugin-action-card__notice">
+        <strong>{title}</strong>
+        <div>{recovery.message ?? "This AMR Cloud request has recovery context."}</div>
+        {recovery.recoveryUrl && recovery.userAction === "open_wallet" ? (
+          <a className="chat-error-action" href={recovery.recoveryUrl} target="_blank" rel="noreferrer">
+            Open AMR wallet
+          </a>
+        ) : null}
+        {showResume ? (
+          <button type="button" className="chat-error-action" onClick={onResume}>
+            Continue this AMR request
+          </button>
+        ) : null}
+        {showCancel ? (
+          <button type="button" className="chat-error-action secondary" onClick={onCancel}>
+            Cancel recovery
+          </button>
         ) : null}
       </div>
     </div>

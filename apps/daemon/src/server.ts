@@ -298,6 +298,7 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import { createAmrCloudRecoveryService } from './integrations/amr-cloud-recovery.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
@@ -478,6 +479,7 @@ import {
   updateProject,
   updateRoutine,
   updateRoutineRun,
+  updateMessageAmrRecovery,
   clearAgentSession,
   updateAgentSessionStableHash,
   upsertAgentSession,
@@ -1751,6 +1753,42 @@ function assistantMessageEmittedQuestionForm(db, assistantMessageId) {
   if (!assistantMessageId) return false;
   const row = db.prepare(`SELECT content FROM messages WHERE id = ?`).get(assistantMessageId);
   return emittedRenderableQuestionForm(row?.content);
+}
+
+function replayRequestForAssistantMessage(db, context) {
+  if (!context?.projectId || !context?.conversationId || !context?.assistantMessageId) {
+    return { ok: false, reason: 'missing recovery replay coordinates' };
+  }
+  const messages = listMessages(db, context.conversationId);
+  const assistantIndex = messages.findIndex((message) => message.id === context.assistantMessageId);
+  if (assistantIndex < 0) {
+    return { ok: false, reason: 'assistant message not found' };
+  }
+  const assistant = messages[assistantIndex];
+  const user = messages
+    .slice(0, assistantIndex)
+    .reverse()
+    .find((message) =>
+      message.role === 'user' &&
+      typeof message.content === 'string' &&
+      message.content.trim().length > 0,
+    );
+  if (!user) return { ok: false, reason: 'user request not found' };
+  return {
+    ok: true,
+    projectId: context.projectId,
+    conversationId: context.conversationId,
+    assistantMessageId: context.assistantMessageId,
+    message: user.content,
+    attachments: Array.isArray(user.attachments) ? user.attachments.map((attachment) => attachment.path).filter(Boolean) : [],
+    commentAttachments: Array.isArray(user.commentAttachments) ? user.commentAttachments : [],
+    sessionMode: user.sessionMode ?? assistant.sessionMode,
+    context: assistant.runContext,
+    appliedPluginSnapshotId:
+      typeof assistant.appliedPluginSnapshot?.snapshotId === 'string'
+        ? assistant.appliedPluginSnapshot.snapshotId
+        : null,
+  };
 }
 
 function deferredSkillPluginCandidateForRun(db, run) {
@@ -3605,6 +3643,21 @@ export async function startServer({
     analytics: analyticsService,
     getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
     readAnalyticsContext,
+  };
+  const amrCloudRecovery = createAmrCloudRecoveryService({
+    dataDir: RUNTIME_DATA_DIR,
+  });
+  const persistAmrRecoveryOverlay = (run, overlay) => {
+    if (!overlay) return;
+    run.amrRecovery = overlay;
+    design.runs.emit(run, 'amr_recovery', { recovery: overlay });
+    if (run.assistantMessageId) {
+      updateMessageAmrRecovery(db, run.assistantMessageId, overlay);
+    }
+  };
+  const clearAmrRecoveryOverlay = (run) => {
+    run.amrRecovery = null;
+    if (run.assistantMessageId) updateMessageAmrRecovery(db, run.assistantMessageId, null);
   };
 
   // Interactive Terminal sessions (node-pty). In-memory, process-local, and
@@ -5865,6 +5918,73 @@ export async function startServer({
         spawnRetryAttempt();
       }, wait);
     };
+    const scheduleAmrAutomaticRecovery = () => {
+      if (run.amrAutoRecoveryScheduled) return true;
+      const initial = run.amrRecovery;
+      if (
+        !initial ||
+        initial.mode !== 'automatic_topup' ||
+        (initial.state !== 'recovering_waiting_auto_topup' &&
+          initial.state !== 'recovering_retry_available')
+      ) {
+        return false;
+      }
+      run.amrAutoRecoveryScheduled = true;
+      run.status = 'queued';
+      run.updatedAt = Date.now();
+      const poll = async (attempt) => {
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        try {
+          const refreshed = await amrCloudRecovery.refreshRun({
+            runId: run.id,
+            env: spawnedAgentEnv ?? agentSpawnEnv,
+            configuredEnv: configuredAgentEnv,
+          });
+          if (refreshed) persistAmrRecoveryOverlay(run, refreshed);
+          const current = refreshed ?? run.amrRecovery;
+          if (current?.state === 'recovering_retry_available') {
+            const resuming = await amrCloudRecovery.resumeRun({
+              runId: run.id,
+              env: spawnedAgentEnv ?? agentSpawnEnv,
+              configuredEnv: configuredAgentEnv,
+            });
+            if (resuming) persistAmrRecoveryOverlay(run, resuming);
+            tearDownAttemptForRetry();
+            spawnRetryAttempt();
+            return;
+          }
+          if (
+            current?.state === 'recovering_waiting_auto_topup' &&
+            attempt < 12
+          ) {
+            setTimeout(() => void poll(attempt + 1), 1_000).unref?.();
+            return;
+          }
+          if (current) {
+            persistAmrRecoveryOverlay(run, {
+              ...current,
+              state: 'recovering_restart_available',
+              userAction: 'restart_request',
+              userActionRequired: true,
+              restartAvailable: true,
+              message:
+                'AMR Cloud automatic top-up did not become retryable in time. Restart the request to continue.',
+              updatedAt: Date.now(),
+            });
+          }
+          design.runs.finish(run, 'failed', 1, null);
+        } catch (err) {
+          console.warn('[amr-recovery] automatic recovery poll failed', err);
+          if (attempt < 12) {
+            setTimeout(() => void poll(attempt + 1), 1_000).unref?.();
+            return;
+          }
+          design.runs.finish(run, 'failed', 1, null);
+        }
+      };
+      setTimeout(() => void poll(0), 1_000).unref?.();
+      return true;
+    };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
       const attemptCount = run.retryAttemptCount ?? 0;
       const result = runResultFromStatus(status);
@@ -5948,6 +6068,13 @@ export async function startServer({
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
       });
+      if (
+        def.id === 'amr' &&
+        result === 'failed' &&
+        scheduleAmrAutomaticRecovery()
+      ) {
+        return true;
+      }
       if (decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryAttemptCount = decision.retryAttemptIndex;
         run.retryFinalResult = undefined;
@@ -6018,6 +6145,23 @@ export async function startServer({
         ...(signal ? { signal } : {}),
       });
       pendingRpcCloseReason = null;
+      if (def.id === 'amr') {
+        const terminal =
+          status === 'succeeded'
+            ? 'complete'
+            : status === 'canceled' || run.cancelRequested
+              ? 'cancel'
+              : 'fail';
+        void amrCloudRecovery.markTerminal({
+          runId: run.id,
+          terminal,
+          env: spawnedAgentEnv ?? agentSpawnEnv,
+          configuredEnv: configuredAgentEnv,
+        }).then((overlay) => {
+          if (overlay) persistAmrRecoveryOverlay(run, overlay);
+          else clearAmrRecoveryOverlay(run);
+        });
+      }
       design.runs.finish(run, status, code, signal);
       return false;
     };
@@ -6737,6 +6881,27 @@ export async function startServer({
         });
         return design.runs.finish(run, 'failed', 1, null);
       }
+      if (!amrCloudRecovery.getContextForRun(run.id)) {
+        try {
+          await amrCloudRecovery.prepareRun({
+            run,
+            env: agentSpawnEnv,
+            configuredEnv: configuredAgentEnv,
+            model: safeModel,
+          });
+        } catch (err) {
+          cleanupPromptFile();
+          revokeToolToken('child_exit');
+          unregisterChatAgentEventSink();
+          const message = err instanceof Error ? err.message : String(err);
+          send('error', createSseErrorPayload(
+            'AMR_CLOUD_RECOVERY_UNAVAILABLE',
+            `AMR Cloud Recovery could not start for this run: ${message}`,
+            { retryable: true },
+          ));
+          return design.runs.finish(run, 'failed', 1, null);
+        }
+      }
     }
     const odMediaEnv = {
       OD_BIN,
@@ -6777,6 +6942,25 @@ export async function startServer({
     let spawnedAgentEnv = null;
     let agentStdoutTail = '';
     let agentStderrTail = '';
+    const sendAmrRecoveryOrAccountFailure = async (failure) => {
+      if (failure?.code === 'AMR_INSUFFICIENT_BALANCE') {
+        try {
+          const overlay = await amrCloudRecovery.pauseForInsufficientBalance({
+            runId: run.id,
+            env: spawnedAgentEnv ?? agentSpawnEnv,
+            configuredEnv: configuredAgentEnv,
+          });
+          if (overlay) {
+            persistAmrRecoveryOverlay(run, overlay);
+            return overlay;
+          }
+        } catch (err) {
+          console.warn('[amr-recovery] insufficient-balance pause failed', err);
+        }
+      }
+      sendAmrAccountFailure(failure);
+      return null;
+    };
     const agentStderrFilter = createAgentStderrVisibilityFilter(agentId);
     const emitVisibleAgentStderr = (chunk: unknown) => {
       const visibleChunk = agentStderrFilter.write(chunk);
@@ -7668,7 +7852,7 @@ export async function startServer({
               ].join('\n'),
             );
             if (failure) {
-              sendAmrAccountFailure(failure);
+              void sendAmrRecoveryOrAccountFailure(failure);
               return;
             }
           }
@@ -7794,7 +7978,7 @@ export async function startServer({
             `${agentStderrTail}\n${agentStdoutTail}`,
           );
           if (amrFailure) {
-            sendAmrAccountFailure(amrFailure);
+            await sendAmrRecoveryOrAccountFailure(amrFailure);
             return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
           }
         }
@@ -8350,6 +8534,131 @@ export async function startServer({
       pinAssistantMessageOnRunCreate,
       reconcileAssistantMessageOnRunEnd,
     },
+  });
+
+  app.post('/api/runs/:id/amr-recovery/cancel', async (req, res) => {
+    const run = design.runs.get(req.params.id);
+    const overlay = await amrCloudRecovery.cancelRun({ runId: req.params.id });
+    if (!overlay) return sendApiError(res, 404, 'NOT_FOUND', 'AMR Cloud Recovery not found');
+    if (run) persistAmrRecoveryOverlay(run, overlay);
+    else if (amrCloudRecovery.getContextForRun(req.params.id)?.assistantMessageId) {
+      updateMessageAmrRecovery(
+        db,
+        amrCloudRecovery.getContextForRun(req.params.id).assistantMessageId,
+        overlay,
+      );
+    }
+    res.json({ ok: true, amrRecovery: overlay });
+  });
+
+  app.post('/api/runs/:id/amr-recovery/resume', async (req, res) => {
+    const run = design.runs.get(req.params.id);
+    const overlay = await amrCloudRecovery.resumeRun({ runId: req.params.id });
+    if (!overlay) return sendApiError(res, 404, 'NOT_FOUND', 'AMR Cloud Recovery not found');
+    if (run) persistAmrRecoveryOverlay(run, overlay);
+    const context = amrCloudRecovery.getContextForRun(req.params.id);
+    if (!run && context?.assistantMessageId) {
+      updateMessageAmrRecovery(db, context.assistantMessageId, overlay);
+    }
+    if (overlay.state !== 'recovering_resuming') {
+      res.status(409).json({
+        ok: false,
+        code: 'AMR_RECOVERY_NOT_RESUMABLE',
+        amrRecovery: overlay,
+      });
+      return;
+    }
+    if (run && overlay.state === 'recovering_resuming') {
+      run.status = 'queued';
+      run.updatedAt = Date.now();
+      run.cancelRequested = false;
+      run.exitCode = null;
+      run.signal = null;
+      run.error = null;
+      run.errorCode = null;
+      void startChatRun({
+        agentId: 'amr',
+        message: run.userPrompt ?? '',
+        projectId: run.projectId,
+        conversationId: run.conversationId,
+        assistantMessageId: run.assistantMessageId,
+        model: run.model,
+        reasoning: run.reasoning,
+      }, run).catch((err) => {
+        design.runs.emit(
+          run,
+          'error',
+          createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            err instanceof Error ? err.message : String(err),
+          ),
+        );
+        design.runs.finish(run, 'failed', 1, null);
+      });
+      res.json({ ok: true, amrRecovery: overlay, run: design.runs.statusBody(run), runId: run.id });
+      return;
+    }
+
+    const replay = replayRequestForAssistantMessage(db, context);
+    if (!replay.ok) {
+      const restartOverlay = amrCloudRecovery.markRestartAvailable({
+        runId: req.params.id,
+        message: replay.reason,
+      }) ?? overlay;
+      if (context?.assistantMessageId) {
+        updateMessageAmrRecovery(db, context.assistantMessageId, restartOverlay);
+      }
+      res.status(409).json({
+        ok: false,
+        code: 'AMR_RECOVERY_RESTART_AVAILABLE',
+        amrRecovery: restartOverlay,
+      });
+      return;
+    }
+
+    const recoveredRun = design.runs.create({
+      agentId: 'amr',
+      projectId: replay.projectId,
+      conversationId: replay.conversationId,
+      assistantMessageId: replay.assistantMessageId,
+      clientRequestId: `amr-recovery-${randomUUID()}`,
+      mediaExecution: defaultMediaExecutionPolicy(),
+      ...(replay.sessionMode ? { sessionMode: replay.sessionMode } : {}),
+      ...(replay.context ? { context: replay.context } : {}),
+      ...(replay.appliedPluginSnapshotId ? { appliedPluginSnapshotId: replay.appliedPluginSnapshotId } : {}),
+    });
+    const reboundOverlay = amrCloudRecovery.rebindRun({
+      fromRunId: req.params.id,
+      toRun: recoveredRun,
+    }) ?? overlay;
+    recoveredRun.amrRecovery = reboundOverlay;
+    db.prepare(
+      `UPDATE messages
+          SET run_id = ?, run_status = 'queued',
+              last_run_event_id = NULL,
+              amr_recovery_json = ?,
+              ended_at = NULL
+        WHERE id = ?`,
+    ).run(recoveredRun.id, JSON.stringify(reboundOverlay), replay.assistantMessageId);
+    design.runs.start(recoveredRun, () => startChatRun({
+      agentId: 'amr',
+      message: replay.message,
+      projectId: replay.projectId,
+      conversationId: replay.conversationId,
+      assistantMessageId: replay.assistantMessageId,
+      clientRequestId: recoveredRun.clientRequestId,
+      attachments: replay.attachments,
+      commentAttachments: replay.commentAttachments,
+      ...(replay.sessionMode ? { sessionMode: replay.sessionMode } : {}),
+      ...(replay.context ? { context: replay.context } : {}),
+      ...(replay.appliedPluginSnapshotId ? { appliedPluginSnapshotId: replay.appliedPluginSnapshotId } : {}),
+    }, recoveredRun));
+    res.json({
+      ok: true,
+      amrRecovery: reboundOverlay,
+      run: design.runs.statusBody(recoveredRun),
+      runId: recoveredRun.id,
+    });
   });
 
   // Each routine fire resolves an agent, prepares project/conversation state,

@@ -286,6 +286,9 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'applied_plugin_snapshot_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`);
   }
+  if (!messageCols.some((c: DbRow) => c.name === 'amr_recovery_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN amr_recovery_json TEXT`);
+  }
   if (!messageCols.some((c: DbRow) => c.name === 'telemetry_finalized_at')) {
     db.exec(`ALTER TABLE messages ADD COLUMN telemetry_finalized_at INTEGER`);
   }
@@ -1187,6 +1190,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              amr_recovery_json AS amrRecoveryJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -1211,6 +1215,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               produced_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
               session_mode = ?, run_context_json = ?, applied_plugin_snapshot_json = ?,
+              amr_recovery_json = ?,
               telemetry_finalized_at = CASE
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
@@ -1234,6 +1239,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      m.amrRecovery ? JSON.stringify(m.amrRecovery) : null,
       m.telemetryFinalized === true ? 1 : 0,
       now,
       m.startedAt ?? null,
@@ -1251,8 +1257,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, feedback_json,
     // pre_turn_file_names_json, session_mode, run_context_json,
-    // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
-    // ended_at, position, created_at.
+    // applied_plugin_snapshot_json, amr_recovery_json,
+    // telemetry_finalized_at, started_at, ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
@@ -1260,8 +1266,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           attachments_json, comment_attachments_json, produced_files_json,
           feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, applied_plugin_snapshot_json,
-          telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          amr_recovery_json, telemetry_finalized_at, started_at, ended_at, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -1281,6 +1287,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      m.amrRecovery ? JSON.stringify(m.amrRecovery) : null,
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
@@ -1307,6 +1314,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              amr_recovery_json AS amrRecoveryJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -1357,6 +1365,13 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
   db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`)
     .run(JSON.stringify(next), messageId);
   return next;
+}
+
+export function updateMessageAmrRecovery(db: SqliteDb, messageId: string, amrRecovery: unknown | null) {
+  db.prepare(`UPDATE messages SET amr_recovery_json = ? WHERE id = ?`).run(
+    amrRecovery ? JSON.stringify(amrRecovery) : null,
+    messageId,
+  );
 }
 
 export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: DbRow) {
@@ -1685,6 +1700,7 @@ function normalizeMessage(row: DbRow) {
     sessionMode: normalizeMessageSessionMode(row.sessionMode),
     runContext: parseJsonOrUndef(row.runContextJson),
     appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
+    amrRecovery: parseJsonOrUndef(row.amrRecoveryJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,

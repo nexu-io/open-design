@@ -23,6 +23,7 @@ import type {
   ChatSseStartPayload,
   DaemonAgentPayload,
   AmrModelsResponse,
+  AmrCloudRecoveryOverlay,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -245,6 +246,7 @@ export interface DaemonStreamHandlers extends StreamHandlers {
    * tool name so the UI can gate the live preview to code-writing tools.
    */
   onToolInputDelta?: (id: string, name: string, delta: string) => void;
+  onAmrRecovery?: (recovery: AmrCloudRecoveryOverlay) => void;
 }
 
 export interface DaemonStreamOptions {
@@ -1028,6 +1030,15 @@ async function consumeDaemonRun({
             continue;
           }
 
+          if (event.event === 'amr_recovery') {
+            const recovery = (event.data as { recovery?: AmrCloudRecoveryOverlay }).recovery;
+            if (recovery) {
+              handlers.onAmrRecovery?.(recovery);
+              notifyRunsChanged();
+            }
+            continue;
+          }
+
           if (event.event === 'error') {
             const data = event.data as SseErrorPayload;
             const structuredError = daemonSseError(data);
@@ -1049,6 +1060,10 @@ async function consumeDaemonRun({
             //    `end` frame resolves it (succeeded -> onDone; failed ->
             //    the failure path below, carrying `end`'s resumable bit).
             const status = await fetchChatRunStatus(runId).catch(() => null);
+            if (status?.amrRecovery) {
+              handlers.onAmrRecovery?.(status.amrRecovery);
+              continue;
+            }
             if (status && (status.status === 'failed' || status.status === 'canceled')) {
               onRunStatus?.('failed');
               handlers.onError(

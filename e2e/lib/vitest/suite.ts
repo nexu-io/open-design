@@ -105,6 +105,7 @@ export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
       linkUrl: `http://127.0.0.1:${amrLinkPort}`,
       runtimeEnv(overrides = {}) {
         return normalizeDefinedEnv({
+          VELA_API_URL: `http://127.0.0.1:${amrApiPort}`,
           VELA_LINK_URL: `http://127.0.0.1:${amrLinkPort}`,
           VELA_RUNTIME_KEY: 'fake-runtime-key',
           ...overrides,

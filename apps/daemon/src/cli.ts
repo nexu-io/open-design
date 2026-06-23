@@ -5389,6 +5389,7 @@ async function runRun(args) {
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
+  od run recover <runId>                    Continue an AMR Cloud Recovery run.
   od run cancel <runId>                     Request cancellation.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
@@ -5464,6 +5465,26 @@ Common options:
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       console.log(`[run] cancelled ${id}`);
+      return;
+    }
+    case 'recover': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od run recover <runId>');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/amr-recovery/resume`, { method: 'POST' });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        console.error(`AMR Cloud Recovery failed: ${resp.status} ${JSON.stringify(data)}`);
+        process.exit(1);
+      }
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[run] AMR Cloud Recovery updated ${id}`);
+      if (data?.amrRecovery) {
+        console.log(JSON.stringify(data.amrRecovery, null, 2));
+      }
       return;
     }
     case 'watch': {

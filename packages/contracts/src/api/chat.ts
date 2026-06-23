@@ -249,6 +249,58 @@ export const CHAT_RUN_STATUSES = [
 
 export type ChatRunStatus = (typeof CHAT_RUN_STATUSES)[number];
 
+export type AmrCloudRecoverySourceStatus =
+  | 'active'
+  | 'waiting_payment'
+  | 'waiting_auto_topup'
+  | 'retry_available'
+  | 'resuming'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'blocked';
+
+export type AmrCloudRecoveryMode =
+  | 'automatic_topup'
+  | 'manual_topup'
+  | 'manual_topup_required'
+  | 'unknown';
+
+export type AmrCloudRecoveryState =
+  | 'recovering_waiting_payment'
+  | 'recovering_waiting_auto_topup'
+  | 'recovering_retry_available'
+  | 'recovering_resuming'
+  | 'recovering_restart_available'
+  | 'recovering_blocked'
+  | 'recovering_canceled'
+  | 'recovering_completed';
+
+export type AmrCloudRecoveryUserAction =
+  | 'open_wallet'
+  | 'continue_request'
+  | 'restart_request'
+  | 'switch_amr_user'
+  | 'contact_support'
+  | 'none';
+
+export interface AmrCloudRecoveryOverlay {
+  operationId: string;
+  state: AmrCloudRecoveryState;
+  sourceStatus: AmrCloudRecoverySourceStatus;
+  mode: AmrCloudRecoveryMode;
+  userAction: AmrCloudRecoveryUserAction;
+  userActionRequired: boolean;
+  recoveryUrl?: string | null;
+  message?: string | null;
+  blockReason?: string | null;
+  restartAvailable?: boolean;
+  canResume?: boolean;
+  canCancel?: boolean;
+  updatedAt: number;
+  expiresAt?: number | null;
+}
+
 export type ChatMessageFeedbackRating = 'positive' | 'negative';
 
 export type ChatMessageFeedbackReasonCode =
@@ -341,6 +393,7 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  amrRecovery?: AmrCloudRecoveryOverlay | null;
   /** True when this terminal failure can be recovered by resuming the agent's
    *  existing CLI session (a transient upstream drop / inactivity timeout on a
    *  session-resuming runtime), rather than only restarting from scratch. The
@@ -472,6 +525,7 @@ export interface ChatMessage {
    *  session-resuming runtime). Drives the chat's Continue affordance; mirrors
    *  ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  amrRecovery?: AmrCloudRecoveryOverlay | null;
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;

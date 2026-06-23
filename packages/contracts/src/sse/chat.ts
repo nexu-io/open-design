@@ -1,4 +1,5 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
+import type { AmrCloudRecoveryOverlay } from '../api/chat.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
 
@@ -78,6 +79,10 @@ export interface ChatSseEndPayload {
   resumable?: boolean;
 }
 
+export interface ChatSseAmrRecoveryPayload {
+  recovery: AmrCloudRecoveryOverlay;
+}
+
 export type DaemonAgentPayload =
   | { type: 'status'; label: string; model?: string; ttftMs?: number; detail?: string }
   | { type: 'text_delta'; delta: string }
@@ -121,5 +126,6 @@ export type ChatSseEvent =
   | SseTransportEvent<'agent', DaemonAgentPayload>
   | SseTransportEvent<'stdout', ChatSseChunkPayload>
   | SseTransportEvent<'stderr', ChatSseChunkPayload>
+  | SseTransportEvent<'amr_recovery', ChatSseAmrRecoveryPayload>
   | SseTransportEvent<'error', SseErrorPayload>
   | SseTransportEvent<'end', ChatSseEndPayload>;

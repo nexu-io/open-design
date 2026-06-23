@@ -33,6 +33,7 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 
+import { startFakeAmrRecoveryApi } from '@/amr';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
 import { startRun, waitForRunStatus } from '@/vitest/runs';
@@ -88,8 +89,8 @@ if (argv[2] === 'login') {
       [profile]: {
         runtimeKey: 'fake-runtime-key-0000000000000000000000',
         controlKey: 'fake-control-key-0000000000000000000000',
-        apiUrl: env.FAKE_VELA_API_URL || 'http://localhost:18080',
-        linkUrl: env.FAKE_VELA_LINK_URL || 'http://localhost:18081',
+        apiUrl: env.VELA_API_URL || env.FAKE_VELA_API_URL || 'http://localhost:18080',
+        linkUrl: env.VELA_LINK_URL || env.FAKE_VELA_LINK_URL || 'http://localhost:18081',
         user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
       },
     },
@@ -200,120 +201,125 @@ describe('AMR chat-run end-to-end', () => {
     // tools-dev daemon boot + chat run lifecycle needs the same headroom
     // as the dialog/* smoke specs (~3 minutes for cold spawn + run).
     const suite = await createSmokeSuite('amr-turn');
+    const recoveryApi = await startFakeAmrRecoveryApi(suite.amr);
 
-    await suite.with.toolsDev(async ({ webUrl }) => {
-      const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela'));
+    try {
+      await suite.with.toolsDev(async ({ webUrl }) => {
+        const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela'));
 
-      // Pre-seed `~/.amr/config.json` so `vela agent run` (the fake) does
-      // not need to negotiate device-auth. Production AMR works the same
-      // way: once login has happened once, the runtime reads the file.
-      const velaConfigDir = join(suite.scratchDir, 'home', '.amr');
-      await mkdir(velaConfigDir, { recursive: true });
-      await writeFile(
-        join(velaConfigDir, 'config.json'),
-        JSON.stringify(
-          {
-            profiles: {
-              local: {
-                runtimeKey: 'fake-runtime-key',
-                controlKey: 'fake-control-key',
-                apiUrl: suite.amr.apiUrl,
-                linkUrl: suite.amr.linkUrl,
-                user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
+        // Pre-seed `~/.amr/config.json` so `vela agent run` (the fake) does
+        // not need to negotiate device-auth. Production AMR works the same
+        // way: once login has happened once, the runtime reads the file.
+        const velaConfigDir = join(suite.scratchDir, 'home', '.amr');
+        await mkdir(velaConfigDir, { recursive: true });
+        await writeFile(
+          join(velaConfigDir, 'config.json'),
+          JSON.stringify(
+            {
+              profiles: {
+                local: {
+                  runtimeKey: 'fake-runtime-key',
+                  controlKey: 'fake-control-key',
+                  apiUrl: suite.amr.apiUrl,
+                  linkUrl: suite.amr.linkUrl,
+                  user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
+                },
               },
             },
-          },
-          null,
-          2,
-        ),
-      );
-
-      // Persist agentCliEnv so the daemon's runtime resolver picks up the
-      // fake binary and the pre-run AMR status guard sees configured runtime
-      // credentials without touching the developer's real ~/.amr config.
-      await requestJson<{ config: Record<string, unknown> }>(webUrl, '/api/app-config', {
-        body: {
-          agentCliEnv: {
-            amr: {
-              FAKE_VELA_API_URL: suite.amr.apiUrl,
-              FAKE_VELA_LINK_URL: suite.amr.linkUrl,
-              VELA_BIN: velaBin,
-              ...suite.amr.runtimeEnv(),
-            },
-          },
-          agentId: 'amr',
-          agentModels: { amr: { model: 'default', reasoning: 'default' } },
-          designSystemId: null,
-          onboardingCompleted: true,
-          skillId: null,
-          telemetry: { artifactManifest: true, content: false, metrics: false },
-        },
-        method: 'PUT',
-      });
-
-      const project = await requestJson<ProjectResponse>(webUrl, '/api/projects', {
-        body: {
-          designSystemId: null,
-          id: randomUUID(),
-          metadata: { kind: 'prototype' },
-          name: 'AMR turn e2e',
-          pendingPrompt: null,
-          skillId: null,
-        },
-      });
-      const projectId = project.project.id;
-      const conversationId = project.conversationId;
-
-      const t0 = Date.now();
-      const userMessageId = `user-${t0}`;
-      const assistantMessageId = `assistant-${t0}`;
-
-      const run = await startRun(webUrl, {
-        agentId: 'amr',
-        assistantMessageId,
-        clientRequestId: `req-${t0}`,
-        conversationId,
-        designSystemId: null,
-        message: PROMPT,
-        // 'default' must be resolved through AMR's live `vela models`
-        // preflight; if that helper regressed, the fake vela would reject
-        // session/prompt with the `set_model must be called before
-        // session/prompt` error encoded above.
-        model: 'default',
-        projectId,
-        reasoning: 'default',
-        skillId: null,
-      });
-      expect(run.runId).toMatch(/[a-z0-9-]/i);
-
-      // Override the per-process FAKE_VELA_TEXT so the assertion below is
-      // tied to a stable canned reply. The runtime spawn inherits the
-      // daemon's process.env, so setting it after startRun would race with
-      // spawn; instead we set it on `process.env` for the test process —
-      // but tools-dev orchestrates a separate daemon child, so this only
-      // takes effect when the fake script reads its own env. The fake
-      // ships with a default 'Hello from the e2e fake vela.' literal, so
-      // we assert on a substring instead of pinning the full text here.
-      void ASSISTANT_TEXT;
-
-      const finalStatus = await waitForRunStatus(webUrl, run.runId, 'succeeded', {
-        timeoutMs: 30_000,
-      });
-      expect(finalStatus.status).toBe('succeeded');
-
-      const messages = await listMessages(webUrl, projectId, conversationId);
-      const assistantMessage = messages.find((m) => m.id === assistantMessageId);
-      if (assistantMessage) {
-        expect(assistantMessage.content).toContain('Hello from the e2e fake vela');
-      } else {
-        // Some chat flows save the assistant message under a daemon-assigned
-        // id rather than the client-provided one. Fall back to checking any
-        // assistant message captured the fake's text.
-        const anyAssistant = messages.find(
-          (m) => m.role === 'assistant' && m.content.includes('Hello from the e2e fake vela'),
+            null,
+            2,
+          ),
         );
-        expect(anyAssistant).toBeTruthy();
-      }
-    });
+
+        // Persist agentCliEnv so the daemon's runtime resolver picks up the
+        // fake binary and the pre-run AMR status guard sees configured runtime
+        // credentials without touching the developer's real ~/.amr config.
+        await requestJson<{ config: Record<string, unknown> }>(webUrl, '/api/app-config', {
+          body: {
+            agentCliEnv: {
+              amr: {
+                FAKE_VELA_API_URL: suite.amr.apiUrl,
+                FAKE_VELA_LINK_URL: suite.amr.linkUrl,
+                VELA_BIN: velaBin,
+                ...suite.amr.runtimeEnv(),
+              },
+            },
+            agentId: 'amr',
+            agentModels: { amr: { model: 'default', reasoning: 'default' } },
+            designSystemId: null,
+            onboardingCompleted: true,
+            skillId: null,
+            telemetry: { artifactManifest: true, content: false, metrics: false },
+          },
+          method: 'PUT',
+        });
+
+        const project = await requestJson<ProjectResponse>(webUrl, '/api/projects', {
+          body: {
+            designSystemId: null,
+            id: randomUUID(),
+            metadata: { kind: 'prototype' },
+            name: 'AMR turn e2e',
+            pendingPrompt: null,
+            skillId: null,
+          },
+        });
+        const projectId = project.project.id;
+        const conversationId = project.conversationId;
+
+        const t0 = Date.now();
+        const userMessageId = `user-${t0}`;
+        const assistantMessageId = `assistant-${t0}`;
+
+        const run = await startRun(webUrl, {
+          agentId: 'amr',
+          assistantMessageId,
+          clientRequestId: `req-${t0}`,
+          conversationId,
+          designSystemId: null,
+          message: PROMPT,
+          // 'default' must be resolved through AMR's live `vela models`
+          // preflight; if that helper regressed, the fake vela would reject
+          // session/prompt with the `set_model must be called before
+          // session/prompt` error encoded above.
+          model: 'default',
+          projectId,
+          reasoning: 'default',
+          skillId: null,
+        });
+        expect(run.runId).toMatch(/[a-z0-9-]/i);
+
+        // Override the per-process FAKE_VELA_TEXT so the assertion below is
+        // tied to a stable canned reply. The runtime spawn inherits the
+        // daemon's process.env, so setting it after startRun would race with
+        // spawn; instead we set it on `process.env` for the test process —
+        // but tools-dev orchestrates a separate daemon child, so this only
+        // takes effect when the fake script reads its own env. The fake
+        // ships with a default 'Hello from the e2e fake vela.' literal, so
+        // we assert on a substring instead of pinning the full text here.
+        void ASSISTANT_TEXT;
+
+        const finalStatus = await waitForRunStatus(webUrl, run.runId, 'succeeded', {
+          timeoutMs: 30_000,
+        });
+        expect(finalStatus.status).toBe('succeeded');
+
+        const messages = await listMessages(webUrl, projectId, conversationId);
+        const assistantMessage = messages.find((m) => m.id === assistantMessageId);
+        if (assistantMessage) {
+          expect(assistantMessage.content).toContain('Hello from the e2e fake vela');
+        } else {
+          // Some chat flows save the assistant message under a daemon-assigned
+          // id rather than the client-provided one. Fall back to checking any
+          // assistant message captured the fake's text.
+          const anyAssistant = messages.find(
+            (m) => m.role === 'assistant' && m.content.includes('Hello from the e2e fake vela'),
+          );
+          expect(anyAssistant).toBeTruthy();
+        }
+      });
+    } finally {
+      await recoveryApi.close();
+    }
   }, 180_000);
 });

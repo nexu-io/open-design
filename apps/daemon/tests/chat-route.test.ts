@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { createServer } from 'node:http';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
@@ -68,6 +69,70 @@ async function withFakeAgent<T>(
     process.env.PATH = oldPath;
     killProcessesUsingPath(dir);
     await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function readRequestJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) return {};
+  try {
+    const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+async function withFakeAmrRecoveryApi<T>(run: () => Promise<T>): Promise<T> {
+  const previousApiUrl = process.env.VELA_API_URL;
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const body = req.method === 'POST' ? await readRequestJson(req) : {};
+    res.setHeader('content-type', 'application/json');
+    if (req.method === 'POST' && url.pathname === '/api/v1/billing/recoveries') {
+      res.end(JSON.stringify({
+        operationId: `op-${body.runId ?? randomUUID()}`,
+        retryToken: 'test-retry-token',
+        status: 'active',
+        mode: 'unknown',
+        version: 1,
+        userId: 'env-auth-user',
+      }));
+      return;
+    }
+    const terminalMatch = url.pathname.match(/^\/api\/v1\/billing\/recoveries\/([^/]+)\/(complete|fail|cancel)$/);
+    const terminalOperationId = terminalMatch?.[1];
+    const terminalAction = terminalMatch?.[2];
+    if (req.method === 'POST' && terminalOperationId && terminalAction) {
+      res.end(JSON.stringify({
+        operationId: decodeURIComponent(terminalOperationId),
+        status: terminalAction === 'complete' ? 'completed' : terminalAction === 'cancel' ? 'canceled' : 'failed',
+        mode: 'unknown',
+        version: 2,
+        userId: 'env-auth-user',
+      }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('fake AMR recovery API did not bind a TCP port');
+  }
+  process.env.VELA_API_URL = `http://127.0.0.1:${address.port}`;
+  try {
+    return await run();
+  } finally {
+    if (previousApiUrl == null) delete process.env.VELA_API_URL;
+    else process.env.VELA_API_URL = previousApiUrl;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
 
@@ -299,17 +364,16 @@ process.stdin.on('end', () => {
         };
 
         const externalDirectory = parsed.permission?.external_directory ?? {};
-        const cwdAliases = new Set([effectiveCwd]);
-        if (effectiveCwd.startsWith('/private/var/')) {
-          cwdAliases.add(effectiveCwd.replace(/^\/private\/var\//, '/var/'));
-        }
-        const allowedCwd = [...cwdAliases].find(
-          (cwd) =>
-            externalDirectory[cwd] === 'allow' &&
+        const cwdCandidates = Array.from(new Set([
+          effectiveCwd,
+          realpathSync(effectiveCwd),
+          effectiveCwd.replace(/^\/private\/var\//, '/var/'),
+        ]));
+        expect(cwdCandidates.some((cwd) =>
+          externalDirectory[cwd] === 'allow' &&
             externalDirectory[`${cwd}/*`] === 'allow' &&
             externalDirectory[`${cwd}/**`] === 'allow',
-        );
-        expect(allowedCwd).toBeTruthy();
+        )).toBe(true);
       },
     );
   });
@@ -487,7 +551,7 @@ process.exit(1);
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
 
-      await withFakeAgent(
+      await withFakeAmrRecoveryApi(() => withFakeAgent(
         'vela',
         `
 const { existsSync, readFileSync, writeFileSync } = require('node:fs');
@@ -539,7 +603,7 @@ child.on('exit', (code, signal) => {
           const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
           expect(attempts.attempts).toBeGreaterThanOrEqual(1);
         },
-      );
+      ));
     } finally {
       rmSync(stateFile, { force: true });
       if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
@@ -570,7 +634,7 @@ child.on('exit', (code, signal) => {
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
 
-      await withFakeAgent(
+      await withFakeAmrRecoveryApi(() => withFakeAgent(
         'vela',
         `
 const { spawn } = require('node:child_process');
@@ -617,7 +681,7 @@ child.on('exit', (code, signal) => {
           expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
           expect(body).toContain('"type":"text_delta","delta":"vela."');
         },
-      );
+      ));
     } finally {
       if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
