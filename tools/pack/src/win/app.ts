@@ -65,7 +65,11 @@ async function runNpmInstall(appRoot: string): Promise<void> {
   });
   await execFileAsync(invocation.command, invocation.args, {
     cwd: appRoot,
-    env: process.env,
+    env: {
+      ...process.env,
+      npm_config_enable_thin_lto: "false",
+      npm_config_enable_lto: "false",
+    },
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }

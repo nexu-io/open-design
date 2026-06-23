@@ -17,7 +17,7 @@ import type {
 
 import { Icon, type IconName } from './Icon';
 import { navigate } from '../router';
-import { useT } from '../i18n';
+import { useT, useI18n } from '../i18n';
 import type { SkillSummary } from '../types';
 
 type TranslateFn = ReturnType<typeof useT>;
@@ -55,7 +55,7 @@ interface Props {
   connectorsLoading?: boolean;
 }
 
-function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate> {
+function buildStaticTemplates(t: TranslateFn, locale = 'en'): ReadonlyArray<AutomationTemplate> {
   return [
     {
       id: 'memory-refresh',
@@ -64,9 +64,11 @@ function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate>
       icon: 'sparkles',
       title: t('automations.tpl.memoryRefresh.title'),
       description: t('automations.tpl.memoryRefresh.desc'),
-      defaultName: 'Memory refresh',
+      defaultName: locale === 'tr' ? 'Bellek yenileme' : 'Memory refresh',
       prompt:
-        'Review recent chats, PR comments, design feedback, and project changes. Extract durable preferences, repeated decisions, and workflow lessons. Propose concise memory updates with source links and separate one-off notes from reusable guidance.',
+        locale === 'tr'
+          ? 'Son sohbetleri, PR yorumlarını, tasarım geri bildirimlerini ve proje değişikliklerini gözden geçir. Kalıcı tercihleri, tekrarlanan kararları ve iş akışı derslerini çıkar. Kaynak bağlantılarıyla birlikte kısa bellek güncellemeleri öner ve tek seferlik notları yeniden kullanılabilir kılavuzlardan ayır.'
+          : 'Review recent chats, PR comments, design feedback, and project changes. Extract durable preferences, repeated decisions, and workflow lessons. Propose concise memory updates with source links and separate one-off notes from reusable guidance.',
     },
     {
       id: 'design-system-refresh',
@@ -75,9 +77,11 @@ function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate>
       icon: 'sliders',
       title: t('automations.tpl.designSystemRefresh.title'),
       description: t('automations.tpl.designSystemRefresh.desc'),
-      defaultName: 'Design system maintainer',
+      defaultName: locale === 'tr' ? 'Tasarım sistemi yöneticisi' : 'Design system maintainer',
       prompt:
-        'Inspect recent generated artifacts, review feedback, and accepted revisions. Identify patterns that should become design-system tokens, component rules, examples, or anti-patterns. Draft precise updates to DESIGN.md and call out anything that needs human approval.',
+        locale === 'tr'
+          ? 'Son oluşturulan yapıları, inceleme geri bildirimlerini ve kabul edilen düzeltmeleri incele. Tasarım sistemi token\'ları, bileşen kuralları, örnekler veya anti-pattern\'ler haline gelmesi gereken kalıpları belirle. DESIGN.md dosyasına yönelik kesin güncellemeler taslak haline getir ve insan onayı gerektiren her şeyi belirt.'
+          : 'Inspect recent generated artifacts, review feedback, and accepted revisions. Identify patterns that should become design-system tokens, component rules, examples, or anti-patterns. Draft precise updates to DESIGN.md and call out anything that needs human approval.',
     },
     {
       id: 'live-artifact-registry',
@@ -86,9 +90,11 @@ function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate>
       icon: 'file-code',
       title: t('automations.tpl.liveArtifactRegistry.title'),
       description: t('automations.tpl.liveArtifactRegistry.desc'),
-      defaultName: 'Live artifact maintainer',
+      defaultName: locale === 'tr' ? 'Canlı yapı yöneticisi' : 'Live artifact maintainer',
       prompt:
-        'List live artifacts for this project, find stale or failed refreshes, and update the highest-value artifact in place. Preserve artifact ids, summarize what changed, and flag artifacts that need connector access or human review.',
+        locale === 'tr'
+          ? 'Bu proje için canlı yapıları listele, eski veya başarısız yenilemeleri bul ve en yüksek değerli yapıyı yerinde güncelle. Yapı kimliklerini koru, nelerin değiştiğini özetle ve bağlayıcı erişimi veya insan incelemesi gerektiren yapıları işaretle.'
+          : 'List live artifacts for this project, find stale or failed refreshes, and update the highest-value artifact in place. Preserve artifact ids, summarize what changed, and flag artifacts that need connector access or human review.',
     },
     {
       id: 'orbit-dashboard',
@@ -97,9 +103,11 @@ function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate>
       icon: 'orbit',
       title: t('automations.tpl.orbitDashboard.title'),
       description: t('automations.tpl.orbitDashboard.desc'),
-      defaultName: 'Connector activity dashboard',
+      defaultName: locale === 'tr' ? 'Bağlayıcı etkinlik panosu' : 'Connector activity dashboard',
       prompt:
-        'Use the selected connectors to build or refresh a live dashboard of recent activity. Group by people, projects, decisions, risks, and follow-ups. Prefer connected read-only tools, cite sources, and keep the dashboard refreshable.',
+        locale === 'tr'
+          ? 'Seçilen bağlayıcıları kullanarak son etkinliklerin canlı bir panosunu oluştur veya yenile. Kişilere, projelere, kararlara, risklere ve takiplere göre gruplandır. Bağlı salt okunur araçları tercih et, kaynakları belirt ve panoyu yenilenebilir tut.'
+          : 'Use the selected connectors to build or refresh a live dashboard of recent activity. Group by people, projects, decisions, risks, and follow-ups. Prefer connected read-only tools, cite sources, and keep the dashboard refreshable.',
     },
     {
       id: 'release-notes',
@@ -108,9 +116,11 @@ function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate>
       icon: 'present',
       title: t('automations.tpl.releaseNotes.title'),
       description: t('automations.tpl.releaseNotes.desc'),
-      defaultName: 'Weekly release notes',
+      defaultName: locale === 'tr' ? 'Haftalık sürüm notları' : 'Weekly release notes',
       prompt:
-        "Draft user-facing release notes covering merged PRs, updated artifacts, and design-system changes from the last 7 days. Group by 'New', 'Improved', and 'Fixed'. Include links when available and keep the copy user-readable.",
+        locale === 'tr'
+          ? "Son 7 güne ait birleştirilmiş PR'ları, güncellenmiş yapıları ve tasarım sistemi değişikliklerini kapsayan kullanıcıya yönelik sürüm notları taslağı hazırlayın. 'Yeni', 'İyileştirilmiş' ve 'Düzeltilmiş' olarak gruplandırın. Mümkün olduğunda bağlantıları ekleyin ve metni kullanıcı tarafından okunabilir tutun."
+          : "Draft user-facing release notes covering merged PRs, updated artifacts, and design-system changes from the last 7 days. Group by 'New', 'Improved', and 'Fixed'. Include links when available and keep the copy user-readable.",
     },
     {
       id: 'quality-regression-watch',
@@ -119,14 +129,16 @@ function buildStaticTemplates(t: TranslateFn): ReadonlyArray<AutomationTemplate>
       icon: 'bell',
       title: t('automations.tpl.qualityRegressionWatch.title'),
       description: t('automations.tpl.qualityRegressionWatch.desc'),
-      defaultName: 'Regression watch',
+      defaultName: locale === 'tr' ? 'Gerileme takibi' : 'Regression watch',
       prompt:
-        'Compare recent project changes against accepted artifacts, design-system rules, benchmarks, and traces. Flag regressions in behavior, layout, accessibility, or product intent. Suggest the smallest fix and cite the evidence.',
+        locale === 'tr'
+          ? 'Son proje değişikliklerini kabul edilen yapılarla, tasarım sistemi kurallarıyla, kıyaslamalarla ve izlerle karşılaştır. Davranış, düzen, erişilebilirlik veya product amacındaki gerilemeleri işaretle. En küçük düzeltmeyi öner ve kanıtları belirt.'
+          : 'Compare recent project changes against accepted artifacts, design-system rules, benchmarks, and traces. Flag regressions in behavior, layout, accessibility, or product intent. Suggest the smallest fix and cite the evidence.',
     },
   ];
 }
 
-function fallbackOrbitTemplate(t: TranslateFn): AutomationTemplate {
+function fallbackOrbitTemplate(t: TranslateFn, locale = 'en'): AutomationTemplate {
   return {
     id: 'orbit-daily',
     category: 'orbit',
@@ -134,13 +146,15 @@ function fallbackOrbitTemplate(t: TranslateFn): AutomationTemplate {
     icon: 'orbit',
     title: t('automations.tpl.orbitDaily.title'),
     description: t('automations.tpl.orbitDaily.desc'),
-    defaultName: 'Daily connector digest',
+    defaultName: locale === 'tr' ? 'Günlük bağlayıcı özeti' : 'Daily connector digest',
     prompt:
-      'Survey every connected integration and produce a daily digest of what changed in the last 24 hours. Group the result by people, projects, decisions, and follow-ups. Save the output as a live artifact named `daily_digest.md` and update it in place on each run.',
+      locale === 'tr'
+        ? 'Bağlı her entegrasyonu incele ve son 24 saat içinde nelerin değiştiğine dair günlük bir özet oluştur. Sonucu kişilere, projelere, kararlara ve takiplere göre gruplandır. Çıktıyı `daily_digest.md` adında canlı bir yapı olarak kaydet ve her çalıştırmada yerinde güncelle.'
+        : 'Survey every connected integration and produce a daily digest of what changed in the last 24 hours. Group the result by people, projects, decisions, and follow-ups. Save the output as a live artifact named `daily_digest.md` and update it in place on each run.',
   };
 }
 
-function fallbackLiveTemplate(t: TranslateFn): AutomationTemplate {
+function fallbackLiveTemplate(t: TranslateFn, locale = 'en'): AutomationTemplate {
   return {
     id: 'live-status-board',
     category: 'live-artifact',
@@ -148,9 +162,11 @@ function fallbackLiveTemplate(t: TranslateFn): AutomationTemplate {
     icon: 'file-code',
     title: t('automations.tpl.liveStatusBoard.title'),
     description: t('automations.tpl.liveStatusBoard.desc'),
-    defaultName: 'Live status board',
+    defaultName: locale === 'tr' ? 'Canlı durum panosu' : 'Live status board',
     prompt:
-      "Maintain a single live artifact named `status_board.md`. On each run, update the sections for 'In flight', 'Shipped this week', 'Risks', and 'Decisions made'. Edit in place so the artifact stays stable.",
+      locale === 'tr'
+        ? " `status_board.md` adında tek bir canlı yapı sürdürün. Her çalıştırmada 'Süreçte', 'Bu hafta teslim edilenler', 'Riskler' ve 'Alınan kararlar' bölümlerini güncelleyin. Yapının kararlı kalması için yerinde düzenleyin."
+        : "Maintain a single live artifact named `status_board.md`. On each run, update the sections for 'In flight', 'Shipped this week', 'Risks', and 'Decisions made'. Edit in place so the artifact stays stable.",
   };
 }
 
@@ -169,35 +185,37 @@ function templateFilters(t: TranslateFn): ReadonlyArray<{ id: TemplateFilter; la
   ];
 }
 
-function scheduleStatusLabel(routine: Routine, t: TranslateFn): string {
+function scheduleStatusLabel(routine: Routine, t: TranslateFn, locale = 'en'): string {
   if (!routine.enabled) return t('automations.scheduleStatusPaused');
-  return describeScheduleSummary(routine.schedule);
+  return describeScheduleSummary(routine.schedule, locale);
 }
 
-function nextRunLabel(routine: Routine, t: TranslateFn): string {
+function nextRunLabel(routine: Routine, t: TranslateFn, locale = 'en'): string {
   if (!routine.enabled) return t('automations.nextRunManualOnly');
   if (!routine.nextRunAt) return t('automations.nextRunScheduled');
   const date = new Date(routine.nextRunAt);
   return t('automations.nextRunAt', {
-    time: date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+    time: date.toLocaleString(locale === 'tr' ? 'tr-TR' : undefined, { dateStyle: 'medium', timeStyle: 'short' }),
   });
 }
 
-function formatAutomationTimestamp(ts: number | null | undefined): string {
+function formatAutomationTimestamp(ts: number | null | undefined, locale = 'en'): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleString(undefined, {
+  return new Date(ts).toLocaleString(locale === 'tr' ? 'tr-TR' : undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
 }
 
-function formatRunDuration(run: RoutineRun, t: TranslateFn): string {
+function formatRunDuration(run: RoutineRun, t: TranslateFn, locale = 'en'): string {
   if (!run.completedAt) return t('automations.runInProgress');
   const seconds = Math.max(1, Math.round((run.completedAt - run.startedAt) / 1000));
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return locale === 'tr' ? `${seconds}sn` : `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
-  return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  return remainder > 0
+    ? (locale === 'tr' ? `${minutes}dk ${remainder}sn` : `${minutes}m ${remainder}s`)
+    : (locale === 'tr' ? `${minutes}dk` : `${minutes}m`);
 }
 
 function statusLabel(status: RoutineRun['status'], t: TranslateFn): string {
@@ -212,16 +230,82 @@ function StatusPill({ status, t }: { status: RoutineRun['status']; t: TranslateF
   return <span className={`automation-status is-${status}`}>{statusLabel(status, t)}</span>;
 }
 
-function templateFromSkill(skill: SkillSummary, kind: AutomationTemplateKind): AutomationTemplate {
+function localizeAutomationText(id: string, text: string, locale: string): string {
+  if (locale !== 'tr' || !text) return text;
+  
+  if (id === 'ingest-source-memory-tree') {
+    if (text === 'Ingest source into memory tree') return 'Kaynağı bellek ağacına aktar';
+    if (text.startsWith('Turn uploaded')) return 'Yüklenen, URL, depo, bağlayıcı, yapı veya sohbet içeriğini incelenebilir bellek düğümlerine dönüştürür.';
+  }
+  if (id === 'extract-design-system') {
+    if (text === 'Extract design system') return 'Tasarım sistemini çıkar';
+    if (text.startsWith('Draft a DESIGN.md')) return 'Marka dokümanlarından, ekran görüntülerinden, depolardan, bağlayıcılardan, web sitelerinden veya güçlü yapılardan bir DESIGN.md taslağı oluşturur.';
+  }
+  if (id === 'crystallize-run-into-skill') {
+    if (text === 'Crystallize successful run into skill') return 'Başarılı çalıştırmayı beceriye dönüştür';
+    if (text.startsWith('Convert a completed')) return 'Tamamlanmış bir çalıştırmayı taslak bir SKILL.md dosyasına, örneklere ve takip testi istemlerine dönüştürür.';
+  }
+  if (id === 'connector-digest-design-context') {
+    if (text === 'Connector digest to design context') return 'Bağlayıcı özetini tasarım bağlamına aktar';
+    if (text.startsWith('Pull trusted connector')) return 'Güvenilir bağlayıcı güncellemelerini belleğe ve yapıya hazır tasarım bağlamına çeker.';
+  }
+  if (id === 'compress-project-context') {
+    if (text === 'Compress project context') return 'Proje bağlamını sıkıştır';
+    if (text.startsWith('Rewrite oversized')) return 'Aşırı büyük kaynak paketlerini ve bellek düğmelerini kompakt, izlenebilir bağlama dönüştürür.';
+  }
+  if (id === 'promote-artifact-style') {
+    if (text === 'Promote artifact style') return 'Yapı stilini tasarım sistemine yükselt';
+    if (text.startsWith('Extract reusable visual')) return 'Güçlü bir yapıdan yeniden kullanılabilir görsel kuralları çıkararak tasarım sistemi varyantına dönüştürür.';
+  }
+
+  // Orbit-specific skills
+  if (id === 'orbit-general') {
+    if (text === 'orbit-general') return 'Orbit Genel';
+  }
+  if (id === 'orbit-github') {
+    if (text === 'orbit-github') return 'Orbit GitHub';
+  }
+  if (id === 'orbit-gmail') {
+    if (text === 'orbit-gmail') return 'Orbit Gmail';
+  }
+  if (id === 'orbit-linear') {
+    if (text === 'orbit-linear') return 'Orbit Linear';
+  }
+  if (id === 'orbit-notion') {
+    if (text === 'orbit-notion') return 'Orbit Notion';
+  }
+  if (id.startsWith('live-artifact')) {
+    if (text === 'live-artifact') return 'Canlı Yapı Taşı';
+    if (text === 'Baby Health Live') return 'Bebek Sağlığı (Canlı)';
+    if (text === 'Competitor Radar Live') return 'Rakip Radarı (Canlı)';
+    if (text === 'Crm Table Live') return 'CRM Tablosu (Canlı)';
+    if (text === 'Crypto Dashboard') return 'Kripto Gösterge Paneli';
+    if (text === 'Monday Operator Live') return 'Monday Operatörü (Canlı)';
+    if (text === 'Stock Dashboard') return 'Borsa Gösterge Paneli';
+    if (text.startsWith('Create refreshable')) {
+      return 'Bağlayıcı veya yerel verilerle desteklenen yenilenebilir ve denetlenebilir Open Design yapı taşları oluşturun.';
+    }
+  }
+
+  if (text.startsWith('Open Orbit briefing skill')) {
+    return 'İki veya daha fazla bağlayıcı bağlandığında Orbit tarafından otomatik olarak tetiklenir. Son 24 saatin tüm kimliği doğrulanmış bağlayıcılarından etkinliklerini toplar ve uyarlanabilir bir pano oluşturur.';
+  }
+
+  return text;
+}
+
+function templateFromSkill(skill: SkillSummary, kind: AutomationTemplateKind, locale = 'en'): AutomationTemplate {
   const category = kind === 'orbit' ? 'orbit' : 'live-artifact';
+  const title = localizeAutomationText(skill.id, skill.name, locale);
+  const description = localizeAutomationText(skill.id, skill.description || skill.id, locale);
   return {
     id: `skill-${skill.id}`,
     category,
     kind,
     icon: kind === 'orbit' ? 'orbit' : 'file-code',
-    title: skill.name,
-    description: skill.description || skill.id,
-    defaultName: skill.name,
+    title,
+    description,
+    defaultName: title,
     prompt: skill.examplePrompt || skill.description || `Run ${skill.name}.`,
     skillId: skill.id,
   };
@@ -279,16 +363,19 @@ function automationTemplatePrompt(template: ContractAutomationTemplate): string 
 
 function templateFromAutomationCatalog(
   template: ContractAutomationTemplate,
+  locale = 'en',
 ): AutomationTemplate {
   const category = automationTemplateCategory(template);
+  const title = localizeAutomationText(template.id, template.title, locale);
+  const description = localizeAutomationText(template.id, template.description, locale);
   return {
     id: template.id,
     category,
     kind: 'routine',
     icon: automationTemplateIcon(category),
-    title: template.title,
-    description: template.description,
-    defaultName: template.title,
+    title,
+    description,
+    defaultName: title,
     prompt: automationTemplatePrompt(template),
   };
 }
@@ -306,19 +393,20 @@ function buildAutomationTemplates(
   designTemplates: SkillSummary[],
   automationCatalog: ContractAutomationTemplate[],
   t: TranslateFn,
+  locale = 'en',
 ): AutomationTemplate[] {
   const orbit = designTemplates
     .filter((skill) => skill.scenario === 'orbit')
-    .map((skill) => templateFromSkill(skill, 'orbit'));
+    .map((skill) => templateFromSkill(skill, 'orbit', locale));
   const live = designTemplates
     .filter((skill) => skill.scenario === 'live')
-    .map((skill) => templateFromSkill(skill, 'live-artifact'));
+    .map((skill) => templateFromSkill(skill, 'live-artifact', locale));
 
   return dedupeTemplates([
-    ...automationCatalog.map(templateFromAutomationCatalog),
-    ...(orbit.length > 0 ? orbit : [fallbackOrbitTemplate(t)]),
-    ...(live.length > 0 ? live : [fallbackLiveTemplate(t)]),
-    ...buildStaticTemplates(t),
+    ...automationCatalog.map((tc) => templateFromAutomationCatalog(tc, locale)),
+    ...(orbit.length > 0 ? orbit : [fallbackOrbitTemplate(t, locale)]),
+    ...(live.length > 0 ? live : [fallbackLiveTemplate(t, locale)]),
+    ...buildStaticTemplates(t, locale),
   ]);
 }
 
@@ -378,7 +466,7 @@ function errorMessage(err: unknown): string {
 }
 
 export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   // P2 page_view page_name=automations. Ref-keyed so re-renders don't
   // double-fire while the user is on the page.
@@ -422,8 +510,8 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
   const [historyTick, setHistoryTick] = useState(0);
 
   const templates = useMemo(
-    () => buildAutomationTemplates(designTemplates, automationCatalog, t),
-    [automationCatalog, designTemplates, t],
+    () => buildAutomationTemplates(designTemplates, automationCatalog, t, locale),
+    [automationCatalog, designTemplates, t, locale],
   );
   const filteredTemplates = useMemo(
     () => filterTemplates(templates, templateFilter),
@@ -720,11 +808,11 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <span className="automation-row__content">
                       <span className="automation-row__title">{r.name}</span>
                       <span className="automation-row__meta">
-                        <span>{scheduleStatusLabel(r, t)}</span>
+                        <span>{scheduleStatusLabel(r, t, locale)}</span>
                         <span aria-hidden="true">·</span>
                         <span>{targetLabel}</span>
                         <span aria-hidden="true">·</span>
-                        <span>{nextRunLabel(r, t)}</span>
+                        <span>{nextRunLabel(r, t, locale)}</span>
                       </span>
                       {r.prompt ? (
                         <span className="automation-row__prompt">{r.prompt}</span>
@@ -732,7 +820,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                       {r.lastRun ? (
                         <span className="automation-row__last-run">
                           <StatusPill status={r.lastRun.status} t={t} />
-                          <span>{t('automations.lastRun', { time: formatAutomationTimestamp(r.lastRun.startedAt) })}</span>
+                          <span>{t('automations.lastRun', { time: formatAutomationTimestamp(r.lastRun.startedAt, locale) })}</span>
                           <span aria-hidden="true">·</span>
                           <button
                             type="button"
@@ -825,6 +913,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                       onCrystallizeRun={crystallizeRun}
                       onFireClick={fireClick}
                       t={t}
+                      locale={locale}
                     />
                   ) : null}
                 </li>
@@ -1033,6 +1122,7 @@ function AutomationRunHistory({
   onCrystallizeRun,
   onFireClick,
   t,
+  locale = 'en',
 }: {
   routineId: string;
   refreshKey: number;
@@ -1040,6 +1130,7 @@ function AutomationRunHistory({
   onCrystallizeRun: (routineId: string, runId: string) => void;
   onFireClick: (element: AutomationsClickProps['element']) => void;
   t: TranslateFn;
+  locale?: string;
 }) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
 
@@ -1083,9 +1174,9 @@ function AutomationRunHistory({
               <span>{run.trigger}</span>
             </div>
             <div className="automation-history__meta">
-              <span>{formatAutomationTimestamp(run.startedAt)}</span>
+              <span>{formatAutomationTimestamp(run.startedAt, locale)}</span>
               <span aria-hidden="true">·</span>
-              <span>{formatRunDuration(run, t)}</span>
+              <span>{formatRunDuration(run, t, locale)}</span>
               <span aria-hidden="true">·</span>
               <span>{run.agentRunId}</span>
             </div>

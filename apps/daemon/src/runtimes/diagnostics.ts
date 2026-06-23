@@ -29,7 +29,7 @@ export function buildExecutableDiagnostic(
     return {
       reason: 'configured-bin-invalid',
       severity: 'error',
-      message: `${def.name}'s configured binary (${envKey}) was not found or is not executable.`,
+      message: `${def.name} yapılandırılmış dosyası (${envKey}) bulunamadı veya çalıştırılabilir değil.`,
       detail: overrideRaw,
       fixActions: [
         { kind: 'setEnv', envKey },
@@ -41,7 +41,7 @@ export function buildExecutableDiagnostic(
   return {
     reason: 'not-on-path',
     severity: 'error',
-    message: `${def.name} (\`${def.bin}\`) was not found on your PATH.`,
+    message: `${def.name} (\`${def.bin}\`) PATH ortam değişkeninizde bulunamadı.`,
     searchedDirs: agentSearchDirs().slice(0, MAX_SEARCHED_DIRS),
     fixActions: [
       { kind: 'openInstall' },

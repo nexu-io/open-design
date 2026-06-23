@@ -6164,6 +6164,62 @@ function OrbitSection({
   );
 }
 
+function localizeMediaProviderHint(id: string, hint: string, locale: string): string {
+  if (locale !== 'tr') return hint;
+  switch (id) {
+    case 'openai':
+      return 'gpt-image-2 / dall-e-3';
+    case 'volcengine':
+      return 'Seedance 2.0 / Seedream';
+    case 'grok':
+      return 'grok-imagine — yerleşik ses destekli görsel + video';
+    case 'hyperframes':
+      return 'Yerel HTML -> MP4 oluşturucu';
+    case 'nanobanana':
+      return 'Varsayılan olarak resmi Google; özel ağ geçidi yapılandırılabilir';
+    case 'imagerouter':
+      return 'OpenAI uyumlu görsel + video yönlendirme';
+    case 'openrouter':
+      return 'Görsel + video modelleri için birleşik ağ geçidi';
+    case 'custom-image':
+      return 'OpenAI uyumlu görsel üretimi/düzenlemesi (yerel veya bulut)';
+    case 'comfyui':
+      return 'Yerel JSON iş akışı sunucusu (planlanan adaptör)';
+    case 'bfl':
+      return 'FLUX 1.1 Pro / FLUX Pro / Dev';
+    case 'fal':
+      return 'FLUX / Sora / Veo / Wan / Ideogram / Recraft ve herhangi bir fal-ai/* modeli';
+    case 'leonardo':
+      return 'Phoenix / Kino XL / FLUX';
+    case 'replicate':
+      return 'FLUX / SDXL / Ideogram';
+    case 'google':
+      return 'Imagen 4 / Veo 3 / Lyria';
+    case 'kling':
+      return 'Kling 1.6 / 2.0 video';
+    case 'midjourney':
+      return 'midjourney-v7';
+    case 'minimax':
+      return 'TTS / video-01';
+    case 'suno':
+      return 'Müzik üretimi';
+    case 'udio':
+      return 'Müzik üretimi';
+    case 'elevenlabs':
+      return 'Ses / Ses Efektleri (SFX)';
+    case 'fishaudio':
+      return 'Konuşma / ses klonlama';
+    case 'aihubmix':
+      return 'OpenAI uyumlu toplayıcı · görsel + ses';
+    case 'tavily':
+      return 'Ajan tarafından çağrılabilir web araştırması';
+    case 'stub':
+      return 'Deterministik yerel yer tutucu baytları';
+    default:
+      return hint;
+  }
+}
+
 function MediaProvidersSection({
   cfg,
   setCfg,
@@ -6183,7 +6239,7 @@ function MediaProvidersSection({
   pendingLocalProviderIds: ReadonlySet<string>;
   onChange: (providerId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [reloadRunning, setReloadRunning] = useState(false);
   const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
@@ -6334,7 +6390,7 @@ function MediaProvidersSection({
             ) : reloadNotice?.kind === 'success' ? (
               <>
                 <Icon name="check" size={13} />
-                <span style={{ marginLeft: 4 }}>Reloaded</span>
+                <span style={{ marginLeft: 4 }}>{locale === 'tr' ? 'Yeniden yüklendi' : 'Reloaded'}</span>
               </>
             ) : (
               <>
@@ -6388,7 +6444,7 @@ function MediaProvidersSection({
                       </span>
                     ) : null}
                   </div>
-                  <span className="media-provider-hint">{provider.hint}</span>
+                  <span className="media-provider-hint">{localizeMediaProviderHint(provider.id, provider.hint, locale)}</span>
                 </div>
                 {/*
                   Right-side badges deliberately omitted now: every row
@@ -6539,7 +6595,7 @@ function MediaProvidersSection({
                       {provider.label}
                     </span>
                     <span className="media-provider-hint">
-                      {provider.hint}
+                      {localizeMediaProviderHint(provider.id, provider.hint, locale)}
                     </span>
                   </div>
                   {docsHref ? (

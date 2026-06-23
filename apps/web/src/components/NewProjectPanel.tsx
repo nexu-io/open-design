@@ -18,7 +18,7 @@ import type {
   TrackingDesignSystemStatusValue,
 } from '@open-design/contracts/analytics';
 
-import { useT } from '../i18n';
+import { useT, useI18n } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
@@ -2614,6 +2614,37 @@ export function supportedModels(surface: 'image' | 'video' | 'audio', models: Me
   });
 }
 
+function localizeMediaModelHint(hint: string, locale: string): string {
+  if (locale !== 'tr') return hint;
+  let res = hint;
+  res = res.replace(/4K, native multimodal/g, '4K, yerel çoklu modlu');
+  res = res.replace(/4× faster than/g, 'kat hızlı:');
+  res = res.replace(/ChatGPT native/g, 'ChatGPT yerleşik');
+  res = res.replace(/low-cost variant/g, 'düşük maliyetli varyant');
+  res = res.replace(/classic/g, 'klasik');
+  res = res.replace(/legacy/g, 'eski sürüm');
+  res = res.replace(/Doubao image/g, 'Doubao görsel');
+  res = res.replace(/image edit/g, 'görsel düzenleme');
+  res = res.replace(/multi-aspect, latest/g, 'çoklu en-boy oranı, en yeni');
+  res = res.replace(/standard/g, 'standart');
+  res = res.replace(/hi-res/g, 'yüksek çözünürlük');
+  res = res.replace(/2K text-to-image/g, '2K metinden görsele');
+  res = res.replace(/text-to-image/g, 'metinden görsele');
+  res = res.replace(/routed GPT Image/g, 'yönlendirilmiş GPT Görsel');
+  res = res.replace(/OpenAI-compatible endpoint/g, 'OpenAI uyumlu uç nokta');
+  res = res.replace(/flagship/g, 'amiral gemisi');
+  res = res.replace(/open weights/g, 'açık ağırlıklar');
+  res = res.replace(/fastest \/ cheapest/g, 'en hızlı / en ucuz');
+  res = res.replace(/typography \+ design/g, 'tipografi + tasarım');
+  res = res.replace(/vector \+ illustration/g, 'vektör + illüstrasyon');
+  res = res.replace(/highest quality/g, 'en yüksek kalite');
+  res = res.replace(/in-context edits/g, 'bağlam içi düzenlemeler');
+  res = res.replace(/typography/g, 'tipografi');
+  res = res.replace(/latest/g, 'en yeni');
+  res = res.replace(/Custom/g, 'Özel');
+  return res;
+}
+
 function MediaModelCards({
   label,
   models,
@@ -2627,7 +2658,7 @@ function MediaModelCards({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -2747,10 +2778,11 @@ function MediaModelCards({
   // "OpenAI · 4K, native multimodal"), so emitting providerLabel as a
   // separate prefix would duplicate it. If the hint already opens with the
   // provider label, just use the hint verbatim — otherwise prefix it.
+  const localizedHint = selected ? localizeMediaModelHint(selected.model.hint, locale) : '';
   const triggerSub = selected
-    ? selected.model.hint.toLowerCase().startsWith(selected.group.providerLabel.toLowerCase())
-      ? selected.model.hint
-      : `${selected.group.providerLabel} · ${selected.model.hint}`
+    ? localizedHint.toLowerCase().startsWith(selected.group.providerLabel.toLowerCase())
+      ? localizedHint
+      : `${selected.group.providerLabel} · ${localizedHint}`
     : t('newproj.modelMissingSub');
 
   return (
@@ -2824,7 +2856,7 @@ function MediaModelCards({
                               </span>
                             ) : null}
                           </span>
-                          <span className="ds-picker-item-sub">{model.hint}</span>
+                          <span className="ds-picker-item-sub">{localizeMediaModelHint(model.hint, locale)}</span>
                         </span>
                       </button>
                     );

@@ -58,14 +58,14 @@ export interface ResolvedPet {
 // Resolve the pet definition currently in use. Returns `null` only when
 // the user has not adopted yet — call sites use that to decide whether
 // to render the floating overlay at all.
-export function resolveActivePet(pet: PetConfig | undefined): ResolvedPet | null {
+export function resolveActivePet(pet: PetConfig | undefined, locale = 'en'): ResolvedPet | null {
   if (!pet?.adopted) return null;
   // Bundled "Built-in" pets adopt into the custom slot (the spritesheet
   // and atlas layout are copied there by `adoptCodexPet`), so the
   // custom branch is the rendering path for both user-authored pets
   // and bundled adoptions.
   if (pet.petId === CUSTOM_PET_ID) {
-    return resolveCustomPet(pet.custom);
+    return resolveCustomPet(pet.custom, locale);
   }
   const found = BUILT_IN_PETS.find((p) => p.id === pet.petId);
   if (found) {
@@ -83,16 +83,18 @@ export function resolveActivePet(pet: PetConfig | undefined): ResolvedPet | null
   // spritesheets. Render the user's custom slot instead of crashing or
   // blanking the overlay; the user can re-adopt from Settings to pick
   // a bundled pet.
-  return resolveCustomPet(pet.custom);
+  return resolveCustomPet(pet.custom, locale);
 }
 
-function resolveCustomPet(c: PetCustom): ResolvedPet {
+function resolveCustomPet(c: PetCustom, locale = 'en'): ResolvedPet {
+  const defaultBuddy = locale === 'tr' ? 'Dostum' : 'Buddy';
+  const defaultGreeting = locale === 'tr' ? 'Merhaba! İhtiyacın olduğunda buradayım.' : 'Hi! I am here whenever you need me.';
   return {
     id: CUSTOM_PET_ID,
-    name: c.name?.trim() || 'Buddy',
+    name: c.name?.trim() || defaultBuddy,
     glyph: c.glyph?.trim() || '🦄',
     accent: c.accent?.trim() || '#c96442',
-    greeting: c.greeting?.trim() || 'Hi! I am here whenever you need me.',
+    greeting: c.greeting?.trim() || defaultGreeting,
     // Custom pets get the gentle float animation by default. We could
     // expose this in the editor later; today's UX keeps the picker
     // focused on glyph + name + color.
@@ -243,7 +245,15 @@ export function pickAmbientRow(
 // A short pool of "ambient" prompts that the overlay rotates through on
 // hover so the speech bubble feels alive after the initial greeting.
 // Keep these brand-neutral and product-relevant to Open Design.
-export function ambientLines(name: string): string[] {
+export function ambientLines(name: string, locale = 'en'): string[] {
+  if (locale === 'tr') {
+    return [
+      `${name}: taze bir fikre ihtiyacın olduğunda beni dürt.`,
+      `${name}: İnşa edilirken sana eşlik edeceğim.`,
+      `${name}: bir nefes al — prototip bekleyebilir.`,
+      `${name}: küçük ince ayarlar birikir. Devam et!`,
+    ];
+  }
   return [
     `${name}: nudge me when you want a fresh idea.`,
     `${name}: I will keep you company while it builds.`,
@@ -252,12 +262,12 @@ export function ambientLines(name: string): string[] {
   ];
 }
 
-export function defaultCustomPet(): PetCustom {
+export function defaultCustomPet(locale = 'en'): PetCustom {
   return {
-    name: 'Buddy',
+    name: locale === 'tr' ? 'Dostum' : 'Buddy',
     glyph: '🦄',
     accent: '#c96442',
-    greeting: 'Hi! I am here whenever you need me.',
+    greeting: locale === 'tr' ? 'Merhaba! İhtiyacın olduğunda buradayım.' : 'Hi! I am here whenever you need me.',
   };
 }
 
@@ -323,17 +333,18 @@ export async function migrateCustomPetAtlas(
   }
 }
 
-export async function prepareCodexPetCustom(pet: CodexPetSummary): Promise<PetCustom> {
+export async function prepareCodexPetCustom(pet: CodexPetSummary, locale = 'en'): Promise<PetCustom> {
   const resp = await fetch(codexPetSpritesheetUrl(pet));
   if (!resp.ok) throw new Error('Could not download that pet.');
   const blob = await resp.blob();
   const dataUrl = await blobToDataUrl(blob);
   const prepared = await prepareCodexAtlas(dataUrl);
+  const name = pet.displayName || pet.id;
   return {
-    name: pet.displayName || pet.id,
+    name,
     glyph: '🦄',
     accent: '#c96442',
-    greeting: pet.description || `Hi! I am ${pet.displayName || pet.id}.`,
+    greeting: pet.description || (locale === 'tr' ? `Merhaba! Ben ${name}.` : `Hi! I am ${name}.`),
     imageUrl: prepared.dataUrl,
     frames: 1,
     fps: prepared.layout.rowsDef[0]?.fps ?? 6,

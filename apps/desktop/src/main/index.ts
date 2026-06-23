@@ -399,36 +399,36 @@ function installDesktopMenu(
           ]
         : [
             {
-              label: "File",
+              label: "Dosya",
               submenu: [
-                { role: "quit" as const },
+                { label: "Çıkış", role: "quit" as const },
               ],
             },
           ]),
       {
-        label: "Edit",
+        label: "Düzenle",
         submenu: [
-          { role: "undo" },
-          { role: "redo" },
+          { label: "Geri Al", role: "undo" },
+          { label: "İleri Al", role: "redo" },
           { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
+          { label: "Kes", role: "cut" },
+          { label: "Kopyala", role: "copy" },
+          { label: "Yapıştır", role: "paste" },
+          { label: "Tümünü Seç", role: "selectAll" },
         ],
       },
       {
-        label: "View",
+        label: "Görünüm",
         submenu: [
-          { role: "reload" },
-          { role: "forceReload" },
-          { role: "toggleDevTools" },
+          { label: "Yenile", role: "reload" },
+          { label: "Zorla Yenile", role: "forceReload" },
+          { label: "Geliştirici Araçları", role: "toggleDevTools" },
           { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
+          { label: "Yakınlaştırmayı Sıfırla", role: "resetZoom" },
+          { label: "Yakınlaştır", role: "zoomIn" },
+          { label: "Uzaklaştır", role: "zoomOut" },
           { type: "separator" },
-          { role: "togglefullscreen" },
+          { label: "Tam Ekran", role: "togglefullscreen" },
         ],
       },
       ...(developMenuVisible
@@ -440,34 +440,34 @@ function installDesktopMenu(
           ]
         : []),
       {
-        label: "Window",
+        label: "Pencere",
         submenu: [
-          { role: "minimize" },
-          { role: "zoom" },
+          { label: "Küçült", role: "minimize" },
+          { label: "Yakınlaştır", role: "zoom" },
           ...(process.platform === "darwin"
-            ? [{ type: "separator" as const }, { role: "front" as const }]
-            : [{ role: "close" as const }]),
+            ? [{ type: "separator" as const }, { label: "Öne Getir", role: "front" as const }]
+            : [{ label: "Kapat", role: "close" as const }]),
         ],
       },
       {
-        label: "Help",
+        label: "Yardım",
         role: "help",
         submenu: [
           {
-            label: "Documentation",
+            label: "Belgeler",
             click() {
               void shell.openExternal("https://github.com/nexu-io/open-design#readme");
             },
           },
           { type: "separator" },
           {
-            label: "Contact Us",
+            label: "Bize Ulaşın",
             click() {
               void shell.openExternal("https://x.com/OpenDesignHQ");
             },
           },
           {
-            label: "Report Issue",
+            label: "Sorun Bildir",
             click() {
               void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
             },

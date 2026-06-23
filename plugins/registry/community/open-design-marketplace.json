@@ -32,7 +32,7 @@
         "registry",
         "starter"
       ],
-      "description": "A minimal community plugin that exercises the default registry source and install provenance path."
+      "description": "Varsayılan kayıt kaynağını ve kurulum kaynağı yolunu test eden minimal bir topluluk eklentisi."
     },
     {
       "name": "community/import-smoke-test",

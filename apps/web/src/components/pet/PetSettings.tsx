@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react';
 import { useAnalytics } from '../../analytics/provider';
 import { trackSettingsPetsClick } from '../../analytics/events';
-import { useT } from '../../i18n';
+import { useT, useI18n } from '../../i18n';
 import { Icon } from '../Icon';
 import type { AppConfig, CodexPetSummary, PetConfig, PetCustom } from '../../types';
 import { DEFAULT_PET } from '../../state/config';
@@ -51,10 +51,40 @@ const ACCENT_SWATCHES = [
   '#0d0c0a',
 ];
 
+function localizePetDescription(id: string, description: string, locale: string): string {
+  if (locale !== 'tr' || !description) return description;
+  const needle = id.toLowerCase();
+  if (needle.includes('yorha')) {
+    return 'YoRHa tarzında sakin oturan bir chibi kodlama dostu.';
+  }
+  if (needle.includes('yelling-dario') || needle.includes('yelling_dario') || description.toLowerCase().includes('yelling dario')) {
+    return "Dario Amodei'nin bağıran minik ve kızgın dijital versiyonu.";
+  }
+  if (needle.includes('tux')) {
+    return 'Piksellere yakın minik bir Linux maskotu penguen.';
+  }
+  if (needle.includes('slavik')) {
+    return 'Siyahlar içinde yaramaz, çömelmiş bir goblin.';
+  }
+  if (needle.includes('nyako') || needle.includes('shigure')) {
+    return 'Sıcak ve sakin, mekanik bir kedi kız.';
+  }
+  if (needle.includes('dentist')) {
+    return 'Sevimli ve stilize edilmiş bir chibi diş hekimi maskotu.';
+  }
+  if (needle === 'dario' || (needle.includes('dario') && !needle.includes('yelling'))) {
+    return "Dario Amodei'den esinlenmiş minik, hayal kırıklığına uğramış bir Codex dostu.";
+  }
+  if (needle.includes('clippy')) {
+    return 'Ataş şeklindeki klasik asistanın yeniden canlandırılmış hali.';
+  }
+  return description;
+}
+
 export function PetSettings({ cfg, setCfg }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
-  const pet: PetConfig = cfg.pet ?? { ...DEFAULT_PET, custom: defaultCustomPet() };
+  const pet: PetConfig = cfg.pet ?? { ...DEFAULT_PET, custom: defaultCustomPet(locale) };
   const customGlyphId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const atlasInputRef = useRef<HTMLInputElement | null>(null);
@@ -370,7 +400,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
     setCodexAdopting(pet.id);
     setUploadError(null);
     try {
-      const custom = await prepareCodexPetCustom(pet);
+      const custom = await prepareCodexPetCustom(pet, locale);
       patchCustom(custom, { focusCustom: true });
       setPetActionStatus({
         kind: 'adopted',
@@ -435,7 +465,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
     ...pet,
     adopted: true,
     petId: CUSTOM_PET_ID,
-  })!;
+  }, locale)!;
 
   // Built-in pets are the bundled spritesheets baked into the repo at
   // `assets/community-pets/<id>/`; the daemon flags them with
@@ -449,7 +479,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
     () => codexPets.filter((p) => !p.bundled),
     [codexPets],
   );
-  const selectedPetPreview = pet.adopted ? resolveActivePet(pet) : null;
+  const selectedPetPreview = pet.adopted ? resolveActivePet(pet, locale) : null;
   const canToggleVisibility =
     pet.adopted || bundledPets.length > 0 || codexPetsLoading;
 
@@ -511,7 +541,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
             ) : null}
           </span>
           {p.description ? (
-            <span className="pet-codex-description">{p.description}</span>
+            <span className="pet-codex-description">{localizePetDescription(p.id, p.description, locale)}</span>
           ) : null}
         </div>
         <button

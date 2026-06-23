@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useT } from '../../i18n';
+import { useT, useI18n } from '../../i18n';
 import type { PetConfig } from '../../types';
 import {
   pickAmbientRow,
@@ -120,8 +120,8 @@ export function PetOverlay({
   onOpenProject,
   persistentBubble = false,
 }: Props) {
-  const t = useT();
-  const active = useMemo(() => resolveActivePet(pet), [pet]);
+  const { locale, t } = useI18n();
+  const active = useMemo(() => resolveActivePet(pet, locale), [pet, locale]);
   const [bubbleOpen, setBubbleOpen] = useState(persistentBubble);
   const [acknowledgedRecentKeys, setAcknowledgedRecentKeys] = useState<Set<string>>(() => new Set());
   const [viewingRecentKeys, setViewingRecentKeys] = useState<Set<string>>(() => new Set());

@@ -41,22 +41,26 @@ type SelectedContextItem = {
   icon: IconName;
 };
 
-const SCHEDULE_KINDS: { kind: ScheduleKind; label: string }[] = [
-  { kind: 'hourly', label: 'Hourly' },
-  { kind: 'daily', label: 'Daily' },
-  { kind: 'weekdays', label: 'Weekdays' },
-  { kind: 'weekly', label: 'Weekly' },
-];
+function getScheduleKinds(locale: string): { kind: ScheduleKind; label: string }[] {
+  return [
+    { kind: 'hourly', label: locale === 'tr' ? 'Saatlik' : 'Hourly' },
+    { kind: 'daily', label: locale === 'tr' ? 'Günlük' : 'Daily' },
+    { kind: 'weekdays', label: locale === 'tr' ? 'Hafta içi' : 'Weekdays' },
+    { kind: 'weekly', label: locale === 'tr' ? 'Haftalık' : 'Weekly' },
+  ];
+}
 
-const WEEKDAY_LABELS: { value: Weekday; short: string; long: string }[] = [
-  { value: 0, short: 'Sun', long: 'Sunday' },
-  { value: 1, short: 'Mon', long: 'Monday' },
-  { value: 2, short: 'Tue', long: 'Tuesday' },
-  { value: 3, short: 'Wed', long: 'Wednesday' },
-  { value: 4, short: 'Thu', long: 'Thursday' },
-  { value: 5, short: 'Fri', long: 'Friday' },
-  { value: 6, short: 'Sat', long: 'Saturday' },
-];
+function getWeekdayLabels(locale: string): { value: Weekday; short: string; long: string }[] {
+  return [
+    { value: 0, short: locale === 'tr' ? 'Paz' : 'Sun', long: locale === 'tr' ? 'Pazar' : 'Sunday' },
+    { value: 1, short: locale === 'tr' ? 'Pzt' : 'Mon', long: locale === 'tr' ? 'Pazartesi' : 'Monday' },
+    { value: 2, short: locale === 'tr' ? 'Sal' : 'Tue', long: locale === 'tr' ? 'Salı' : 'Tuesday' },
+    { value: 3, short: locale === 'tr' ? 'Çar' : 'Wed', long: locale === 'tr' ? 'Çarşamba' : 'Wednesday' },
+    { value: 4, short: locale === 'tr' ? 'Per' : 'Thu', long: locale === 'tr' ? 'Perşembe' : 'Thursday' },
+    { value: 5, short: locale === 'tr' ? 'Cum' : 'Fri', long: locale === 'tr' ? 'Cuma' : 'Friday' },
+    { value: 6, short: locale === 'tr' ? 'Cmt' : 'Sat', long: locale === 'tr' ? 'Cumartesi' : 'Saturday' },
+  ];
+}
 
 const FALLBACK_TIMEZONES = [
   'UTC',
@@ -99,12 +103,12 @@ function tzCityLabel(timezone: string): string {
   return last.replace(/_/g, ' ');
 }
 
-function formatTime12h(time: string): string {
+function formatTime12h(time: string, locale = 'en'): string {
   const m = /^(\d{2}):(\d{2})$/.exec(time);
   if (!m) return time;
   const h = Number(m[1]);
   const mm = m[2];
-  const suffix = h >= 12 ? 'PM' : 'AM';
+  const suffix = h >= 12 ? (locale === 'tr' ? 'ÖS' : 'PM') : (locale === 'tr' ? 'ÖÖ' : 'AM');
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   return `${h12}:${mm} ${suffix}`;
 }
@@ -119,34 +123,34 @@ type ScheduleParts =
   | { kind: 'hourly'; minute: string }
   | { kind: 'timed'; freq: string; time: string; tz: string };
 
-function decomposeSchedule(schedule: RoutineSchedule): ScheduleParts {
+function decomposeSchedule(schedule: RoutineSchedule, locale = 'en'): ScheduleParts {
   if (schedule.kind === 'hourly') {
     return { kind: 'hourly', minute: String(schedule.minute).padStart(2, '0') };
   }
   const tz = tzCityLabel(schedule.timezone);
-  const time = formatTime12h(schedule.time);
+  const time = formatTime12h(schedule.time, locale);
   const freq =
     schedule.kind === 'daily'
-      ? 'Daily'
+      ? (locale === 'tr' ? 'Günlük' : 'Daily')
       : schedule.kind === 'weekdays'
-        ? 'Weekdays'
-        : WEEKDAY_LABELS.find((w) => w.value === schedule.weekday)?.long ?? 'Sunday';
+        ? (locale === 'tr' ? 'Hafta içi' : 'Weekdays')
+        : getWeekdayLabels(locale).find((w) => w.value === schedule.weekday)?.long ?? (locale === 'tr' ? 'Pazar' : 'Sunday');
   return { kind: 'timed', freq, time, tz };
 }
 
-export function describeScheduleSummary(schedule: RoutineSchedule): string {
-  const parts = decomposeSchedule(schedule);
-  if (parts.kind === 'hourly') return `Hourly at :${parts.minute}`;
-  return `${parts.freq} at ${parts.time} · ${parts.tz}`;
+export function describeScheduleSummary(schedule: RoutineSchedule, locale = 'en'): string {
+  const parts = decomposeSchedule(schedule, locale);
+  if (parts.kind === 'hourly') return locale === 'tr' ? `Her saat :${parts.minute}` : `Hourly at :${parts.minute}`;
+  return locale === 'tr' ? `${parts.freq} saat ${parts.time} · ${parts.tz}` : `${parts.freq} at ${parts.time} · ${parts.tz}`;
 }
 
 /** Renders the schedule summary as structured pill segments for better visual hierarchy. */
-function buildScheduleSummaryNode(schedule: RoutineSchedule): ReactNode {
-  const parts = decomposeSchedule(schedule);
+function buildScheduleSummaryNode(schedule: RoutineSchedule, locale = 'en'): ReactNode {
+  const parts = decomposeSchedule(schedule, locale);
   if (parts.kind === 'hourly') {
     return (
       <span className="automation-pill__segments">
-        <span className="automation-pill__freq">Hourly</span>
+        <span className="automation-pill__freq">{locale === 'tr' ? 'Saatlik' : 'Hourly'}</span>
         <span className="automation-pill__sep">·</span>
         <span className="automation-pill__time">:{parts.minute}</span>
       </span>
@@ -513,9 +517,9 @@ export function NewAutomationModal({
 
   const projectName = projects.find((p) => p.id === form.projectId)?.name ?? null;
   const projectLabel =
-    form.mode === 'reuse' && projectName ? projectName : 'New project each run';
-  const scheduleLabel = describeScheduleSummary(buildSchedule(form));
-  const scheduleLabelNode = buildScheduleSummaryNode(buildSchedule(form));
+    form.mode === 'reuse' && projectName ? projectName : (locale === 'tr' ? 'Her çalıştırmada yeni proje' : 'New project each run');
+  const scheduleLabel = describeScheduleSummary(buildSchedule(form), locale);
+  const scheduleLabelNode = buildScheduleSummaryNode(buildSchedule(form), locale);
   const mentionQueryNorm = (mention?.query ?? '').trim().toLowerCase();
   const filteredSkills = filterCapabilities(
     skills,
@@ -595,7 +599,7 @@ export function NewAutomationModal({
       className="automation-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label={editingId ? 'Edit automation' : 'New automation'}
+      aria-label={editingId ? (locale === 'tr' ? 'Otomasyonu düzenle' : 'Edit automation') : (locale === 'tr' ? 'Yeni otomasyon' : 'New automation')}
       data-testid="automation-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -612,10 +616,10 @@ export function NewAutomationModal({
             ref={titleRef}
             type="text"
             className="automation-modal__title-input"
-            placeholder="Automation title"
+            placeholder={locale === 'tr' ? 'Otomasyon adı' : 'Automation title'}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            aria-label="Automation title"
+            aria-label={locale === 'tr' ? 'Otomasyon adı' : 'Automation title'}
             data-testid="automation-modal-title"
           />
           <div className="automation-modal__head-actions">
@@ -641,7 +645,7 @@ export function NewAutomationModal({
               type="button"
               className="automation-modal__close"
               onClick={onClose}
-              aria-label="Close (Esc)"
+              aria-label={locale === 'tr' ? 'Kapat (Esc)' : 'Close (Esc)'}
             >
               <Icon name="close" size={14} />
             </button>
@@ -653,7 +657,7 @@ export function NewAutomationModal({
             <textarea
               ref={promptRef}
               className="automation-modal__prompt"
-              placeholder="Ask the agent what to run on this schedule, or @mention context..."
+              placeholder={locale === 'tr' ? 'Agent\'a bu zamanlamada ne çalıştıracağını sorun veya bağlamı @belirtin...' : 'Ask the agent what to run on this schedule, or @mention context...'}
               value={form.prompt}
               onChange={(e) => updatePrompt(e.target.value, e.target.selectionStart ?? e.target.value.length)}
               onClick={refreshMentionFromPrompt}
@@ -672,17 +676,17 @@ export function NewAutomationModal({
               id="automation-context-picker"
               className="automation-mention-popover"
               role="listbox"
-              aria-label="Automation context results"
+              aria-label={locale === 'tr' ? 'Otomasyon bağlam sonuçları' : 'Automation context results'}
               data-testid="automation-mention-popover"
               onMouseDown={(e) => e.preventDefault()}
             >
-              <div className="automation-mention-tabs" role="tablist" aria-label="Context type">
+              <div className="automation-mention-tabs" role="tablist" aria-label={locale === 'tr' ? 'Bağlam türü' : 'Context type'}>
                 {[
-                  ['all', 'All'],
-                  ['skills', 'Skills'],
-                  ['plugins', 'Plugins'],
-                  ['mcp', 'MCP'],
-                  ['connectors', 'Connectors'],
+                  ['all', locale === 'tr' ? 'Tümü' : 'All'],
+                  ['skills', locale === 'tr' ? 'Beceriler' : 'Skills'],
+                  ['plugins', locale === 'tr' ? 'Eklentiler' : 'Plugins'],
+                  ['mcp', locale === 'tr' ? 'MCP' : 'MCP'],
+                  ['connectors', locale === 'tr' ? 'Bağlayıcılar' : 'Connectors'],
                 ].map(([id, label]) => (
                   <button
                     key={id}
@@ -702,11 +706,11 @@ export function NewAutomationModal({
               <div className="automation-mention-results">
                 {!hasMentionResults ? (
                   <div className="automation-mention-empty">
-                    {mention.query ? `No results for "${mention.query}".` : 'Search skills, plugins, MCP servers, and connectors.'}
+                    {mention.query ? (locale === 'tr' ? `"${mention.query}" için sonuç bulunamadı.` : `No results for "${mention.query}".`) : (locale === 'tr' ? 'Becerileri, eklentileri, MCP sunucularını ve bağlayıcıları arayın.' : 'Search skills, plugins, MCP servers, and connectors.')}
                   </div>
                 ) : null}
                 {showSkills && filteredSkills.length > 0 ? (
-                  <MentionSection label="Skills">
+                  <MentionSection label={locale === 'tr' ? 'Beceriler' : 'Skills'}>
                     {filteredSkills.map((skill) => (
                       <MentionItem
                         key={`skill-${skill.id}`}
@@ -720,7 +724,7 @@ export function NewAutomationModal({
                   </MentionSection>
                 ) : null}
                 {showPlugins && filteredPlugins.length > 0 ? (
-                  <MentionSection label="Plugins">
+                  <MentionSection label={locale === 'tr' ? 'Eklentiler' : 'Plugins'}>
                     {filteredPlugins.map((plugin) => (
                       <MentionItem
                         key={`plugin-${plugin.id}`}
@@ -734,7 +738,7 @@ export function NewAutomationModal({
                   </MentionSection>
                 ) : null}
                 {showMcp && filteredMcp.length > 0 ? (
-                  <MentionSection label="MCP">
+                  <MentionSection label={locale === 'tr' ? 'MCP' : 'MCP'}>
                     {filteredMcp.map((server) => (
                       <MentionItem
                         key={`mcp-${server.id}`}
@@ -748,7 +752,7 @@ export function NewAutomationModal({
                   </MentionSection>
                 ) : null}
                 {showConnectors && filteredConnectors.length > 0 ? (
-                  <MentionSection label="Connectors">
+                  <MentionSection label={locale === 'tr' ? 'Bağlayıcılar' : 'Connectors'}>
                     {filteredConnectors.map((connector) => (
                       <MentionItem
                         key={`connector-${connector.id}`}
@@ -766,14 +770,14 @@ export function NewAutomationModal({
           ) : null}
 
           {selectedContextItems.length > 0 ? (
-            <div className="automation-selected-context" aria-label="Selected automation context">
+            <div className="automation-selected-context" aria-label={locale === 'tr' ? 'Seçilen otomasyon bağlamı' : 'Selected automation context'}>
               {selectedContextItems.map((item) => (
                 <button
                   key={`${item.kind}-${item.id}`}
                   type="button"
                   className={`automation-selected-context__chip is-${item.kind}`}
                   onClick={() => removeSelectedContext(item.kind, item.id)}
-                  title={`Remove ${item.label}`}
+                  title={locale === 'tr' ? `${item.label} kaldır` : `Remove ${item.label}`}
                 >
                   <Icon name={item.icon} size={11} />
                   <span>{item.label}</span>
@@ -806,12 +810,12 @@ export function NewAutomationModal({
                       setForm({ ...form, mode: 'create_each_run', projectId: '' });
                       setPopover(null);
                     }}
-                    label="New project each run"
-                    hint="Each run starts a fresh project and conversation."
+                    label={locale === 'tr' ? 'Her çalıştırmada yeni proje' : 'New project each run'}
+                    hint={locale === 'tr' ? 'Her çalıştırma taze bir proje ve konuşma başlatır.' : 'Each run starts a fresh project and conversation.'}
                   />
                   {projects.length > 0 ? (
                     <>
-                      <div className="automation-popover__section-label">Existing projects</div>
+                      <div className="automation-popover__section-label">{locale === 'tr' ? 'Mevcut projeler' : 'Existing projects'}</div>
                       {projects.map((p) => (
                         <PopoverItem
                           key={p.id}
@@ -856,7 +860,7 @@ export function NewAutomationModal({
               className="automation-modal__cancel"
               onClick={onClose}
             >
-              Cancel
+              {locale === 'tr' ? 'İptal' : 'Cancel'}
             </button>
             <button
               type="submit"
@@ -865,11 +869,11 @@ export function NewAutomationModal({
             >
               {editingId
                 ? submitting
-                  ? 'Saving...'
-                  : 'Save'
+                  ? (locale === 'tr' ? 'Kaydediliyor...' : 'Saving...')
+                  : (locale === 'tr' ? 'Kaydet' : 'Save')
                 : submitting
-                  ? 'Creating...'
-                  : 'Create'}
+                  ? (locale === 'tr' ? 'Oluşturuluyor...' : 'Creating...')
+                  : (locale === 'tr' ? 'Oluştur' : 'Create')}
             </button>
           </div>
         </footer>
@@ -908,6 +912,7 @@ function TemplatePopover({
   selectedId: string | null;
   onSelect: (template: AutomationTemplate) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <div className="automation-popover automation-popover--templates">
       {templates.map((template) => (
@@ -922,7 +927,7 @@ function TemplatePopover({
           </span>
           <span className="automation-template-option__body">
             <span className="automation-template-option__title">{template.title ?? template.defaultName}</span>
-            <span className="automation-template-option__meta">{kindLabel(template.kind)}</span>
+            <span className="automation-template-option__meta">{kindLabel(template.kind, locale)}</span>
           </span>
           {selectedId === template.id ? <Icon name="check" size={13} /> : null}
         </button>
@@ -1063,10 +1068,14 @@ function SchedulePopover({
   timezones: string[];
   onDone: () => void;
 }) {
+  const { locale } = useI18n();
+  const scheduleKinds = getScheduleKinds(locale);
+  const weekdayLabels = getWeekdayLabels(locale);
+
   return (
     <div className="automation-popover automation-popover--schedule">
       <div className="automation-popover__kinds" role="tablist">
-        {SCHEDULE_KINDS.map((k) => (
+        {scheduleKinds.map((k) => (
           <button
             type="button"
             key={k.kind}
@@ -1082,7 +1091,7 @@ function SchedulePopover({
 
       {form.kind === 'hourly' ? (
         <label className="automation-popover__field">
-          <span>Minute of every hour</span>
+          <span>{locale === 'tr' ? 'Her saatin dakikası' : 'Minute of every hour'}</span>
           <input
             type="number"
             min={0}
@@ -1101,7 +1110,7 @@ function SchedulePopover({
         <>
           {form.kind === 'weekly' ? (
             <div className="automation-popover__weekdays" aria-label="Weekday">
-              {WEEKDAY_LABELS.map((d) => (
+              {weekdayLabels.map((d) => (
                 <button
                   key={d.value}
                   type="button"
@@ -1116,7 +1125,7 @@ function SchedulePopover({
           ) : null}
           <div className="automation-popover__row">
             <label className="automation-popover__field">
-              <span>Time</span>
+              <span>{locale === 'tr' ? 'Saat' : 'Time'}</span>
               <input
                 type="time"
                 value={form.time}
@@ -1124,7 +1133,7 @@ function SchedulePopover({
               />
             </label>
             <label className="automation-popover__field">
-              <span>Timezone</span>
+              <span>{locale === 'tr' ? 'Saat dilimi' : 'Timezone'}</span>
               <select
                 value={form.timezone}
                 onChange={(e) => setForm({ ...form, timezone: e.target.value })}
@@ -1146,7 +1155,7 @@ function SchedulePopover({
           className="automation-popover__done-btn"
           onClick={onDone}
         >
-          Done
+          {locale === 'tr' ? 'Tamam' : 'Done'}
         </button>
       </div>
     </div>
@@ -1158,8 +1167,8 @@ function clampMinute(value: number): number {
   return Math.max(0, Math.min(59, Math.round(value)));
 }
 
-function kindLabel(kind: AutomationTemplateKind): string {
-  if (kind === 'orbit') return 'Orbit';
-  if (kind === 'live-artifact') return 'Live artifact';
-  return 'Automation';
+function kindLabel(kind: AutomationTemplateKind, locale = 'en'): string {
+  if (kind === 'orbit') return locale === 'tr' ? 'Yörünge' : 'Orbit';
+  if (kind === 'live-artifact') return locale === 'tr' ? 'Canlı yapı' : 'Live artifact';
+  return locale === 'tr' ? 'Otomasyon' : 'Automation';
 }
