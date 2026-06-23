@@ -1134,6 +1134,13 @@ export function ProjectView({
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
   const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
+  // Tracks transient null-status retry attempts per runId; bounded by
+  // MAX_TRANSIENT_RETRIES so we never spin indefinitely on a persistently
+  // missing run.
+  const transientFailedRetriesRef = useRef<Map<string, number>>(new Map());
+  // Timer handles for pending transient-retry callbacks; cleared on cleanup.
+  const transientRetryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const [recoveryTick, setRecoveryTick] = useState(0);
   const recoveredArtifactMessagesRef = useRef<Set<string>>(new Set());
   const messagesRef = useRef<ChatMessage[]>([]);
   const startingQueuedChatSendIdRef = useRef<string | null>(null);
@@ -2609,8 +2616,17 @@ export function ProjectView({
     [project.id, activeConversationId, refreshPreviewComments],
   );
 
+  // Maximum number of times we will retry fetching a null status for a
+  // spuriouslyFailedPending run before treating the absence as authoritative
+  // completion.  Transient null-status retries are bounded; after
+  // MAX_TRANSIENT_RETRIES we add to completedReattachRunsRef to avoid spinning.
+  const MAX_TRANSIENT_RETRIES = 2;
+
   useEffect(() => {
     if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
+    // Reset transient retry state whenever we enter a new conversation or the
+    // daemon reconnects, so stale counts from a previous session don't bleed in.
+    transientFailedRetriesRef.current = new Map();
     let cancelled = false;
     const reattachConversationId = activeConversationId;
 
@@ -2708,14 +2724,29 @@ export function ProjectView({
           // permanently forgotten the run.  For a spuriously-failed pending
           // message we must keep this path retryable: a transient network or
           // daemon hiccup during reload must not permanently suppress the
-          // reattach attempt for the rest of the session.  Leave the message
-          // intact and do NOT add to completedReattachRunsRef — the next
-          // effect tick will retry.
+          // reattach attempt for the rest of the session.
+          //
+          // Transient null-status retries are bounded; after MAX_TRANSIENT_RETRIES
+          // we treat the absence as authoritative completion to avoid spinning.
+          // Timers are tracked in transientRetryTimersRef and cleared on cleanup.
           //
           // For other message states (phantom running rows with no runId),
           // fall through to the original mark-failed behaviour and seal the
           // runId so we don't loop indefinitely.
-          if (!spuriouslyFailedPending) {
+          if (spuriouslyFailedPending) {
+            const attempts = transientFailedRetriesRef.current.get(runId) ?? 0;
+            if (attempts >= MAX_TRANSIENT_RETRIES) {
+              // Cap reached — treat as authoritative completion so we stop retrying.
+              completedReattachRunsRef.current.add(runId);
+            } else {
+              transientFailedRetriesRef.current.set(runId, attempts + 1);
+              const handle = setTimeout(() => {
+                transientRetryTimersRef.current.delete(handle);
+                setRecoveryTick((t) => t + 1);
+              }, 3000);
+              transientRetryTimersRef.current.add(handle);
+            }
+          } else {
             updateMessageById(
               message.id,
               (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
@@ -3223,6 +3254,12 @@ export function ProjectView({
     void attachRecoverableRuns();
     return () => {
       cancelled = true;
+      // Clear any pending transient-retry timers so they don't fire after
+      // unmount or after the effect re-enters for a different conversation.
+      for (const handle of transientRetryTimersRef.current) {
+        clearTimeout(handle);
+      }
+      transientRetryTimersRef.current = new Set();
     };
   }, [
     daemonLive,
@@ -3246,6 +3283,7 @@ export function ProjectView({
     onProjectsRefresh,
     scheduleProjectTimeout,
     scheduleConversationMessageRefresh,
+    recoveryTick,
   ]);
 
   useEffect(() => {
