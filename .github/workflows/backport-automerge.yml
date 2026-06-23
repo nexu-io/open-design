@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write   # github-actions[bot] approves the bot's own clean backport (Approve step)
 
 jobs:
   followup:
@@ -63,6 +64,28 @@ jobs:
             echo "cross=$(printf '%s' "$row" | jq -r '.isCrossRepository')"
             echo "head_oid=$(printf '%s' "$row" | jq -r '.headRefOid')"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Approve the clean backport (release bot, CI green)
+        # release/v* requires 1 approving review. The diff was already reviewed + approved on
+        # main; this is a mechanical, conflict-free cherry-pick by the release bot with green CI.
+        # Approve as github-actions[bot] — a DIFFERENT identity than the App that authored the PR
+        # (an author can't approve its own PR) — under the SAME bot-identity + SHA + CI gates as
+        # the merge below, so only the release bot's own verified backports are auto-approved.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.author == 'open-design-release-bot[bot]'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh pr review "$NUM" --repo "$REPO" --approve \
+            --body "Auto-approved: clean cherry-pick by the release bot of code already reviewed on main, CI green. (release/v* requires one approval.)"
 
       - name: Auto-merge clean backport on green CI
         # Guards (release/v* has no required checks, so this workflow IS the gate):

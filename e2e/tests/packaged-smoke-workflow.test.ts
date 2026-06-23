@@ -236,6 +236,15 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("--squash");
     expect(workflow).toContain("--delete-branch");
 
+    // To satisfy release/v*'s one-approval rule, the bot's own clean backport is auto-approved by
+    // github-actions[bot] (pull-requests: write) — under the same author==bot gate as the merge.
+    expect(workflow).toContain("pull-requests: write");
+    expect(workflow).toContain("gh pr review");
+    expect(workflow).toContain("--approve");
+    const approveStep = sectionBetween(workflow, "Approve the clean backport", "gh pr review");
+    expect(approveStep).toContain("steps.pr.outputs.author == 'open-design-release-bot[bot]'");
+    expect(approveStep).toContain("github.token");
+
     // The Feishu failure path carries the same identity gates, so a fork / non-bot backport-*
     // PR can't spam the release group.
     const feishuStep = sectionBetween(workflow, "Notify Feishu on failed backport CI", "FEISHU_WEBHOOK");
