@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Augment Code buttons</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; font-family: var(--font-body); color: var(--fg); background: var(--bg); }
+      main { max-width: 1040px; margin: 0 auto; padding: var(--space-8) var(--space-5); }
+      h1 { font-size: var(--text-3xl); line-height: var(--leading-tight); }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); }
+      .swatch, .meter, label { display: grid; gap: var(--space-2); padding: var(--space-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+      .swatch div { height: 96px; border-radius: var(--radius-sm); border: 1px solid var(--border-soft); }
+      .meter span { display: block; height: 20px; background: var(--accent); border-radius: var(--radius-sm); }
+      button { border: 1px solid transparent; border-radius: var(--radius-md); padding: .7rem 1rem; font: inherit; }
+      .primary { background: var(--accent); color: var(--accent-on); }
+      .secondary { background: var(--surface-warm); border-color: var(--border); color: var(--fg); }
+      input, textarea { border: 1px solid var(--border); border-radius: var(--radius-md); padding: .75rem; font: inherit; color: var(--fg); background: var(--surface); }
+      .app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+      aside { padding: var(--space-5); background: var(--surface-warm); border-right: 1px solid var(--border); }
+      aside nav { margin-top: var(--space-5); color: var(--muted); line-height: 2; }
+      .app-shell main { margin: 0; padding: var(--space-6); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>Generated preview</p>
+      <h1>Buttons</h1>
+      <section class="grid"><p><button class="primary">Primary action</button> <button class="secondary">Secondary action</button></p></section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "brandId": "augment-code",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "Augment Code components",
+    "styleBlockCount": 1,
+    "selectorCount": 12,
+    "classCount": 5,
+    "elementCount": 15
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--ease-standard",
+      "--elev-raised",
+      "--fg",
+      "--fg-2",
+      "--font-body",
+      "--leading-body",
+      "--leading-tight",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--surface",
+      "--surface-warm",
+      "--text-3xl",
+      "--text-lg"
+    ],
+    "unusedDeclared": [
+      "--accent-active",
+      "--accent-hover",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--elev-flat",
+      "--elev-ring",
+      "--focus-ring",
+      "--font-display",
+      "--font-mono",
+      "--meta",
+      "--motion-base",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--success",
+      "--text-2xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".brand",
+    ".card",
+    ".primary",
+    ".row",
+    ".secondary",
+    "body",
+    "button",
+    "h1",
+    "input",
+    "main",
+    "nav",
+    "p"
+  ],
+  "classes": [
+    "brand",
+    "card",
+    "primary",
+    "row",
+    "secondary"
+  ],
+  "elements": [
+    "body",
+    "button",
+    "div",
+    "h1",
+    "head",
+    "html",
+    "input",
+    "link",
+    "main",
+    "meta",
+    "nav",
+    "p",
+    "section",
+    "style",
+    "title"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        "button"
+      ],
+      "classes": [],
+      "elements": [
+        "button"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        "input"
+      ],
+      "classes": [],
+      "elements": [
+        "input"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--fg",
+        "--radius-md",
+        "--surface"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".card"
+      ],
+      "classes": [
+        "card"
+      ],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        "h1"
+      ],
+      "classes": [],
+      "elements": [
+        "h1",
+        "p"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        "main",
+        "nav"
+      ],
+      "classes": [],
+      "elements": [
+        "main",
+        "nav",
+        "section"
+      ],
+      "tokenReferences": [
+        "--space-5",
+        "--space-8"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 0,
+    "pixelValues": 6,
+    "hardcodedFontFamilies": 1
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "/opt/open-design/.tmp/shadcn-design-system-imports/item-sClaHW",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 418,
+      "kind": "readme"
+    },
+    {
+      "path": "package.json",
+      "bytes": 201,
+      "kind": "package"
+    },
+    {
+      "path": "theme.css",
+      "bytes": 2418,
+      "kind": "style"
+    },
+    {
+      "path": "registry-files/public/augment-logo.svg",
+      "bytes": 5304,
+      "kind": "asset"
+    },
+    {
+      "path": "registry-files/components/icons/CosmosIcon.tsx",
+      "bytes": 6111,
+      "kind": "component"
+    }
+  ]
+}

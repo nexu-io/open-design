@@ -1,0 +1,570 @@
+{
+  "schemaVersion": 1,
+  "format": "od-design-tokens/v1",
+  "contract": "TOKEN_SCHEMA",
+  "generatedAt": "2026-06-23T21:00:01.059Z",
+  "source": {
+    "tokensCss": "tokens.css",
+    "tokenContractReport": "source/token-contract.report.json"
+  },
+  "summary": {
+    "totalTokens": 56,
+    "declaredTokens": 56,
+    "sourceBackedTokens": 14,
+    "sourceBackedA1": 8,
+    "requiredA1": 26,
+    "fallbackTokens": 40,
+    "aliasTokens": 2,
+    "score": 37,
+    "grade": "needs-rebuild",
+    "recommendRebuild": true
+  },
+  "tokens": [
+    {
+      "name": "--bg",
+      "value": "#ffffff",
+      "type": "color",
+      "layer": "A1-identity",
+      "confidence": "medium",
+      "reason": "Mapped source token --background to --bg by role/name heuristic.",
+      "sources": [
+        "theme.css:6"
+      ],
+      "sourceName": "--background"
+    },
+    {
+      "name": "--surface",
+      "value": "#ffffff",
+      "type": "color",
+      "layer": "A1-identity",
+      "confidence": "medium",
+      "reason": "Mapped source token --card to --surface by role/name heuristic.",
+      "sources": [
+        "theme.css:8"
+      ],
+      "sourceName": "--card"
+    },
+    {
+      "name": "--surface-warm",
+      "value": "#f5f5f5",
+      "type": "color",
+      "layer": "B-slot",
+      "confidence": "medium",
+      "reason": "Mapped source token --secondary to --surface-warm by role/name heuristic.",
+      "sources": [
+        "theme.css:14"
+      ],
+      "sourceName": "--secondary"
+    },
+    {
+      "name": "--fg",
+      "value": "#0a0a0a",
+      "type": "color",
+      "layer": "A1-identity",
+      "confidence": "medium",
+      "reason": "Mapped source token --foreground to --fg by role/name heuristic.",
+      "sources": [
+        "theme.css:7"
+      ],
+      "sourceName": "--foreground"
+    },
+    {
+      "name": "--fg-2",
+      "value": "#171717",
+      "type": "color",
+      "layer": "B-slot",
+      "confidence": "medium",
+      "reason": "Mapped source token --secondary-foreground to --fg-2 by role/name heuristic.",
+      "sources": [
+        "theme.css:15"
+      ],
+      "sourceName": "--secondary-foreground"
+    },
+    {
+      "name": "--muted",
+      "value": "#f5f5f5",
+      "type": "color",
+      "layer": "A1-identity",
+      "confidence": "high",
+      "reason": "Exact source token --muted matched TOKEN_SCHEMA.",
+      "sources": [
+        "theme.css:16"
+      ],
+      "sourceName": "--muted"
+    },
+    {
+      "name": "--meta",
+      "value": "var(--muted)",
+      "type": "color",
+      "layer": "B-slot",
+      "confidence": "alias",
+      "reason": "No richer source tier found; using schema alias var(--muted).",
+      "sources": []
+    },
+    {
+      "name": "--border",
+      "value": "#e5e5e5",
+      "type": "color",
+      "layer": "A1-identity",
+      "confidence": "high",
+      "reason": "Exact source token --border matched TOKEN_SCHEMA.",
+      "sources": [
+        "theme.css:22"
+      ],
+      "sourceName": "--border"
+    },
+    {
+      "name": "--border-soft",
+      "value": "var(--border)",
+      "type": "color",
+      "layer": "B-slot",
+      "confidence": "alias",
+      "reason": "No richer source tier found; using schema alias var(--border).",
+      "sources": []
+    },
+    {
+      "name": "--accent",
+      "value": "#1aa049",
+      "type": "color",
+      "layer": "A1-identity",
+      "confidence": "high",
+      "reason": "Exact source token --accent matched TOKEN_SCHEMA.",
+      "sources": [
+        "theme.css:18"
+      ],
+      "sourceName": "--accent"
+    },
+    {
+      "name": "--accent-on",
+      "value": "#fafafa",
+      "type": "color",
+      "layer": "A2",
+      "confidence": "medium",
+      "reason": "Mapped source token --accent-foreground to --accent-on by role/name heuristic.",
+      "sources": [
+        "theme.css:19"
+      ],
+      "sourceName": "--accent-foreground"
+    },
+    {
+      "name": "--accent-hover",
+      "value": "color-mix(in oklab, var(--accent), black 8%)",
+      "type": "color",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--accent-active",
+      "value": "color-mix(in oklab, var(--accent), black 14%)",
+      "type": "color",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--success",
+      "value": "#16a34a",
+      "type": "color",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--warn",
+      "value": "#eab308",
+      "type": "color",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--danger",
+      "value": "#e40014",
+      "type": "color",
+      "layer": "A2",
+      "confidence": "medium",
+      "reason": "Mapped source token --destructive to --danger by role/name heuristic.",
+      "sources": [
+        "theme.css:20"
+      ],
+      "sourceName": "--destructive"
+    },
+    {
+      "name": "--font-display",
+      "value": "-apple-system, BlinkMacSystemFont, \"Inter Display\", sans-serif",
+      "type": "fontFamily",
+      "layer": "A1-identity",
+      "confidence": "medium",
+      "reason": "Mapped source token --font-sans to --font-display by role/name heuristic.",
+      "sources": [
+        "theme.css:2"
+      ],
+      "sourceName": "--font-sans"
+    },
+    {
+      "name": "--font-body",
+      "value": "-apple-system, BlinkMacSystemFont, \"Inter Display\", sans-serif",
+      "type": "fontFamily",
+      "layer": "A1-identity",
+      "confidence": "medium",
+      "reason": "Mapped source token --font-sans to --font-body by role/name heuristic.",
+      "sources": [
+        "theme.css:2"
+      ],
+      "sourceName": "--font-sans"
+    },
+    {
+      "name": "--font-mono",
+      "value": "\"IBM Plex Mono\", monospace",
+      "type": "fontFamily",
+      "layer": "A2",
+      "confidence": "high",
+      "reason": "Exact source token --font-mono matched TOKEN_SCHEMA.",
+      "sources": [
+        "theme.css:3"
+      ],
+      "sourceName": "--font-mono"
+    },
+    {
+      "name": "--text-xs",
+      "value": "0.75rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-sm",
+      "value": "0.875rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-base",
+      "value": "1rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-lg",
+      "value": "1.125rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-xl",
+      "value": "1.375rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-2xl",
+      "value": "1.75rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-3xl",
+      "value": "2.25rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--text-4xl",
+      "value": "3rem",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--leading-body",
+      "value": "1.55",
+      "type": "number",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--leading-tight",
+      "value": "1.15",
+      "type": "number",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--tracking-display",
+      "value": "0",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--space-1",
+      "value": "4px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-2",
+      "value": "8px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-3",
+      "value": "12px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-4",
+      "value": "16px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-5",
+      "value": "20px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-6",
+      "value": "24px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-8",
+      "value": "32px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--space-12",
+      "value": "48px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--section-y-desktop",
+      "value": "96px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--section-y-tablet",
+      "value": "68px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--section-y-phone",
+      "value": "48px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--radius-sm",
+      "value": "8px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--radius-md",
+      "value": "0.625rem",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "medium",
+      "reason": "Mapped source token --radius to --radius-md by role/name heuristic.",
+      "sources": [
+        "theme.css:5"
+      ],
+      "sourceName": "--radius"
+    },
+    {
+      "name": "--radius-lg",
+      "value": "16px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--radius-pill",
+      "value": "9999px",
+      "type": "dimension",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--elev-flat",
+      "value": "none",
+      "type": "shadow",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--elev-ring",
+      "value": "0 0 0 1px var(--border)",
+      "type": "shadow",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--elev-raised",
+      "value": "0 2px 8px color-mix(in oklab, var(--fg), transparent 92%)",
+      "type": "shadow",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--focus-ring",
+      "value": "0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%)",
+      "type": "shadow",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--motion-fast",
+      "value": "150ms",
+      "type": "duration",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--motion-base",
+      "value": "200ms",
+      "type": "duration",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--ease-standard",
+      "value": "cubic-bezier(0.2, 0, 0, 1)",
+      "type": "cubicBezier",
+      "layer": "A2",
+      "confidence": "fallback",
+      "reason": "No source-backed value found; using TOKEN_SCHEMA A2 fallback.",
+      "sources": []
+    },
+    {
+      "name": "--container-max",
+      "value": "1120px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--container-gutter-desktop",
+      "value": "32px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--container-gutter-tablet",
+      "value": "24px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    },
+    {
+      "name": "--container-gutter-phone",
+      "value": "16px",
+      "type": "dimension",
+      "layer": "A1-structure",
+      "confidence": "low",
+      "reason": "No source-backed A1 value found; using conservative importer default.",
+      "sources": []
+    }
+  ]
+}

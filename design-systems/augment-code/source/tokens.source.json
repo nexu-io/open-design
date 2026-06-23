@@ -1,0 +1,457 @@
+{
+  "schemaVersion": 1,
+  "strategy": [
+    "css-vars"
+  ],
+  "tokenCount": 80,
+  "confidence": {
+    "color": "high",
+    "type": "low",
+    "spacing": "low"
+  },
+  "tokens": [
+    {
+      "name": "--font-sans",
+      "value": "-apple-system, BlinkMacSystemFont, \"Inter Display\", sans-serif",
+      "source": "theme.css",
+      "normalizedRole": "font"
+    },
+    {
+      "name": "--font-mono",
+      "value": "\"IBM Plex Mono\", monospace",
+      "source": "theme.css",
+      "normalizedRole": "font"
+    },
+    {
+      "name": "--font-serif",
+      "value": "-apple-system, BlinkMacSystemFont, \"Inter Display\", serif",
+      "source": "theme.css",
+      "normalizedRole": "font"
+    },
+    {
+      "name": "--radius",
+      "value": "0.625rem",
+      "source": "theme.css",
+      "normalizedRole": "radius"
+    },
+    {
+      "name": "--background",
+      "value": "#ffffff",
+      "source": "theme.css",
+      "normalizedRole": "background"
+    },
+    {
+      "name": "--foreground",
+      "value": "#0a0a0a",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--card",
+      "value": "#ffffff",
+      "source": "theme.css",
+      "normalizedRole": "surface"
+    },
+    {
+      "name": "--card-foreground",
+      "value": "#0a0a0a",
+      "source": "theme.css",
+      "normalizedRole": "surface"
+    },
+    {
+      "name": "--popover",
+      "value": "#ffffff",
+      "source": "theme.css"
+    },
+    {
+      "name": "--popover-foreground",
+      "value": "#0a0a0a",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--primary",
+      "value": "#1aa049",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--primary-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--secondary",
+      "value": "#f5f5f5",
+      "source": "theme.css"
+    },
+    {
+      "name": "--secondary-foreground",
+      "value": "#171717",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--muted",
+      "value": "#f5f5f5",
+      "source": "theme.css"
+    },
+    {
+      "name": "--muted-foreground",
+      "value": "#737373",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--accent",
+      "value": "#1aa049",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--accent-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--destructive",
+      "value": "#e40014",
+      "source": "theme.css"
+    },
+    {
+      "name": "--destructive-foreground",
+      "value": "#ffffff",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--border",
+      "value": "#e5e5e5",
+      "source": "theme.css",
+      "normalizedRole": "border"
+    },
+    {
+      "name": "--input",
+      "value": "#e5e5e5",
+      "source": "theme.css"
+    },
+    {
+      "name": "--ring",
+      "value": "#1aa049",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-1",
+      "value": "#1aa049",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-2",
+      "value": "#5ccc76",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-3",
+      "value": "#007524",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-4",
+      "value": "#99f7a9",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-5",
+      "value": "#004b07",
+      "source": "theme.css"
+    },
+    {
+      "name": "--sidebar",
+      "value": "#f7f3ef",
+      "source": "theme.css"
+    },
+    {
+      "name": "--sidebar-foreground",
+      "value": "#0a0a0a",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--sidebar-primary",
+      "value": "#1aa049",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--sidebar-primary-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--sidebar-accent",
+      "value": "#f5f5f5",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--sidebar-accent-foreground",
+      "value": "#171717",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--sidebar-border",
+      "value": "#e5e5e5",
+      "source": "theme.css",
+      "normalizedRole": "border"
+    },
+    {
+      "name": "--sidebar-ring",
+      "value": "#1aa049",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-100",
+      "value": "#caffd3",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-200",
+      "value": "#99f7a9",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-300",
+      "value": "#5ccc76",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-400",
+      "value": "#1aa049",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-500",
+      "value": "#007524",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-600",
+      "value": "#004b07",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-700",
+      "value": "#002400",
+      "source": "theme.css"
+    },
+    {
+      "name": "--brand-400",
+      "value": "#46ee51",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--warm-neutral",
+      "value": "#f7f3ef",
+      "source": "theme.css"
+    },
+    {
+      "name": "--background",
+      "value": "#0a0a0a",
+      "source": "theme.css",
+      "normalizedRole": "background"
+    },
+    {
+      "name": "--foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--card",
+      "value": "#171717",
+      "source": "theme.css",
+      "normalizedRole": "surface"
+    },
+    {
+      "name": "--card-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "surface"
+    },
+    {
+      "name": "--popover",
+      "value": "#262626",
+      "source": "theme.css"
+    },
+    {
+      "name": "--popover-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--primary",
+      "value": "#1aa049",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--primary-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--secondary",
+      "value": "#262626",
+      "source": "theme.css"
+    },
+    {
+      "name": "--secondary-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--muted",
+      "value": "#262626",
+      "source": "theme.css"
+    },
+    {
+      "name": "--muted-foreground",
+      "value": "#a1a1a1",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--accent",
+      "value": "#1aa049",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--accent-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--destructive",
+      "value": "#ff6568",
+      "source": "theme.css"
+    },
+    {
+      "name": "--destructive-foreground",
+      "value": "#0a0a0a",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--border",
+      "value": "#282828",
+      "source": "theme.css",
+      "normalizedRole": "border"
+    },
+    {
+      "name": "--input",
+      "value": "#343434",
+      "source": "theme.css"
+    },
+    {
+      "name": "--ring",
+      "value": "#a1a1a1",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-1",
+      "value": "#46ee51",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-2",
+      "value": "#5ccc76",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-3",
+      "value": "#1aa049",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-4",
+      "value": "#99f7a9",
+      "source": "theme.css"
+    },
+    {
+      "name": "--chart-5",
+      "value": "#caffd3",
+      "source": "theme.css"
+    },
+    {
+      "name": "--sidebar",
+      "value": "#171717",
+      "source": "theme.css"
+    },
+    {
+      "name": "--sidebar-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--sidebar-primary",
+      "value": "#1aa049",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--sidebar-primary-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--sidebar-accent",
+      "value": "#404040",
+      "source": "theme.css",
+      "normalizedRole": "accent"
+    },
+    {
+      "name": "--sidebar-accent-foreground",
+      "value": "#fafafa",
+      "source": "theme.css",
+      "normalizedRole": "foreground"
+    },
+    {
+      "name": "--sidebar-border",
+      "value": "#282828",
+      "source": "theme.css",
+      "normalizedRole": "border"
+    },
+    {
+      "name": "--sidebar-ring",
+      "value": "#a1a1a1",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-100",
+      "value": "#caffd3",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-200",
+      "value": "#99f7a9",
+      "source": "theme.css"
+    },
+    {
+      "name": "--augment-300",
+      "value": "#5ccc76",
+      "source": "theme.css"
+    }
+  ]
+}
