@@ -2703,21 +2703,26 @@ export function ProjectView({
         const status = fallbackRun ?? await fetchChatRunStatus(runId);
         if (cancelled) return;
         if (!status) {
-          // Daemon has no record of this run.  For a spuriously-failed pending
-          // message (entered via `spuriouslyFailedPending`), the absence of a
-          // daemon record means we cannot confirm the run is recoverable — leave
-          // the message intact with its existing failure context and diagnostic
-          // events so the user sees the persisted error.  For other message
-          // states (phantom running rows with no runId), fall through to the
-          // original mark-failed behaviour.
+          // `fetchChatRunStatus` returns null on ANY non-OK response or fetch
+          // exception (providers/daemon.ts:686), not only when the daemon has
+          // permanently forgotten the run.  For a spuriously-failed pending
+          // message we must keep this path retryable: a transient network or
+          // daemon hiccup during reload must not permanently suppress the
+          // reattach attempt for the rest of the session.  Leave the message
+          // intact and do NOT add to completedReattachRunsRef — the next
+          // effect tick will retry.
+          //
+          // For other message states (phantom running rows with no runId),
+          // fall through to the original mark-failed behaviour and seal the
+          // runId so we don't loop indefinitely.
           if (!spuriouslyFailedPending) {
             updateMessageById(
               message.id,
               (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
               true,
             );
+            completedReattachRunsRef.current.add(runId);
           }
-          completedReattachRunsRef.current.add(runId);
           continue;
         }
         // When the daemon authoritative status is 'failed', the run ended in a
