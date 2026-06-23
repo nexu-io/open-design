@@ -7823,10 +7823,18 @@ function HtmlViewer({
   const latestUndo = useRef(undoManualEdit);
   const latestRedo = useRef(redoManualEdit);
   const latestCancel = useRef(cancelManualEditStyleDraft);
-  
+  // Refs so the keydown handler (registered once) always sees the latest values
+  // without needing to be re-registered on every render.
+  const manualEditModeRef = useRef(manualEditMode);
+  const manualEditCanUndoRef = useRef(manualEditHistory.length > 0);
+  const manualEditCanRedoRef = useRef(manualEditUndone.length > 0);
+
   latestUndo.current = undoManualEdit;
   latestRedo.current = redoManualEdit;
   latestCancel.current = cancelManualEditStyleDraft;
+  manualEditModeRef.current = manualEditMode;
+  manualEditCanUndoRef.current = manualEditHistory.length > 0;
+  manualEditCanRedoRef.current = manualEditUndone.length > 0;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -7841,22 +7849,31 @@ function HtmlViewer({
       }
 
       const isModifier = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
 
-      if (isModifier && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      // Ctrl+Z / Cmd+Z — undo
+      if (isModifier && !event.shiftKey && key === 'z') {
+        // Only intercept when manual edit actually owns the shortcut.
+        // A pending style draft counts as something to undo even without history.
+        const canUndo =
+          manualEditModeRef.current &&
+          (manualEditCanUndoRef.current || Boolean(manualEditPendingStyleRef.current));
+        if (!canUndo) return;
         event.preventDefault();
-        
-        // If the user is currently tweaking a color/layout property and
-        // hasn't clicked save yet, Ctrl+Z should undo the draft!
         if (manualEditPendingStyleRef.current) {
+          // If the user is currently tweaking a color/layout property and
+          // hasn't clicked save yet, Ctrl+Z should undo the draft!
           latestCancel.current();
           return;
         }
-
         void latestUndo.current();
         return;
       }
 
-      if (isModifier && ((event.shiftKey && event.key.toLowerCase() === 'z') || (!event.shiftKey && event.key.toLowerCase() === 'y'))) {
+      // Ctrl+Shift+Z / Cmd+Shift+Z / Ctrl+Y — redo
+      if (isModifier && ((event.shiftKey && key === 'z') || (!event.shiftKey && key === 'y'))) {
+        const canRedo = manualEditModeRef.current && manualEditCanRedoRef.current;
+        if (!canRedo) return;
         event.preventDefault();
         void latestRedo.current();
         return;
