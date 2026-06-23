@@ -2,6 +2,12 @@
 
 This is the easiest self-hosting path for beginners.
 
+> **Tip:** For the quickest setup, run the one-click installer instead of following the manual steps below:
+> ```bash
+> cd deploy/scripts && bash install.sh
+> ```
+> It handles Docker detection, `.env` generation (with a random token), pull, start, health check, and optional systemd service installation — all interactively.
+
 ## Before You Start
 
 - Docker Desktop installed and running
@@ -34,14 +40,42 @@ openssl rand -hex 32
 
 Then edit `.env` and configure one of these before first start:
 
-- recommended default: paste the generated token into `OD_API_TOKEN=`
-- trusted authenticated reverse proxy only: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
+- **recommended (authenticated):** paste the generated token into `OD_API_TOKEN=` and set `OD_DISABLE_API_AUTH=0` in `.env`
+- **localhost-only (no token):** leave `OD_API_TOKEN=` empty and keep the compose default (`OD_DISABLE_API_AUTH=1`). Only safe because `docker-compose.yml` binds to `127.0.0.1`
+- **trusted reverse proxy only:** leave `OD_API_TOKEN=` empty and set `OD_DISABLE_API_AUTH=1` only when the proxy already authenticates every request
 
 If you expose Open Design through a reverse proxy, also set:
 
 ```bash
-OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+OD_ALLOWED_ORIGINS=https://yourdomain.com
+# Also set OD_WEB_PORT if the browser-visible port differs from OPEN_DESIGN_PORT
+# (e.g. behind a reverse proxy remapping ports). Omit to auto-derive from OPEN_DESIGN_PORT.
 ```
+
+## Environment variable reference
+
+<!-- AUTO-GENERATED from deploy/.env.example and deploy/docker-compose.yml -->
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `OPEN_DESIGN_IMAGE` | `ghcr.io/nexu-io/od:latest` | No | Container image reference. Pin a digest with `@sha256:<digest>` for immutability |
+| `OPEN_DESIGN_PORT` | `7456` | No | Host port (bound to `127.0.0.1`). Only the Docker host can reach this port |
+| `OD_ALLOWED_ORIGINS` | (empty) | No | Comma-separated browser origins for CORS, e.g. `https://od.example.com,http://203.0.113.10:7456` |
+| `OD_WEB_PORT` | auto-derived from `OPEN_DESIGN_PORT` | No | Browser-visible port when it differs from `OPEN_DESIGN_PORT` (e.g. behind a reverse proxy) |
+| `OD_API_TOKEN` | (empty) | No | 32-byte hex token for API auth. Generate with `openssl rand -hex 32` |
+| `OD_DISABLE_API_AUTH` | `1` (compose default) | No | Set to `0` to enable API token enforcement. Must also set `OD_API_TOKEN` |
+| `OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET` | `1` (compose default) | No | Trusts RFC1918 addresses as loopback. Required when Docker port-publishing rewrites source IP. Set to `0` to harden LAN/remote deployments |
+| `OD_ADDITIONAL_ALLOWED_DIRS` | (empty) | No | Comma-separated directories the agent CLI can read/write inside the container |
+| `OD_CODEX_SANDBOX` | (empty) | No | Codex sandbox mode. Set to `danger-full-access` only when Codex fails with workspace-write sandbox errors |
+| `OD_TRUST_PROXY` | (empty) | No | Trust proxy IPs for `X-Forwarded-*` header processing |
+| `OD_PUBLIC_BASE_URL` | (empty) | No | Externally-reachable base URL for the daemon |
+| `OPEN_DESIGN_MEM_LIMIT` | `384m` | No | Compose-level container memory limit (idle uses ~18-22 MiB). Raise for large exports or concurrent agents |
+| `NODE_OPTIONS` | `--max-old-space-size=192` | No | Node.js heap cap inside the container |
+
+> The compose file uses Docker Compose **list format** (`- KEY=value`) in the `environment` block
+> instead of YAML mapping format (`KEY: value`). List format works reliably across all platforms
+> including Windows and macOS. If environment variables don't seem to reach the daemon, run
+> `docker compose config` to see the resolved values, and check that you used `- KEY=value` syntax
+> if you modified the compose file.
 
 ## Step 3: Start Open Design
 
@@ -93,5 +127,5 @@ You should see the Open Design interface.
 - `failed to connect to the docker API`: Docker Desktop is not running yet
 - `address already in use`: Port `7456` is occupied by another process
 - `curl: (7) Failed to connect`: container is still starting; wait 10-20 seconds and retry
-- reverse proxy + `OD_API_TOKEN`: either inject `Authorization: Bearer <OD_API_TOKEN>` at the proxy, or set `OPEN_DESIGN_DISABLE_API_AUTH=1` only when that proxy already authenticates every request and the daemon is not directly exposed.
+- reverse proxy + `OD_API_TOKEN`: either inject `Authorization: Bearer <OD_API_TOKEN>` at the proxy, or set `OD_DISABLE_API_AUTH=1` (the compose default) only when that proxy already authenticates every request and the daemon is not directly exposed.
 - `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.
