@@ -4911,6 +4911,14 @@ function HtmlViewer({
     projectId: string;
     fileName: string;
   } | null>(null);
+  // Holds the most recently fetched non-null source for routing-predicate
+  // stability.  Content-derived predicates (needsSandboxShim, needsFocusGuard,
+  // looksLikeDeck) fall back to this ref when source is null (i.e. during the
+  // reload window between setSource(null) and the fetch resolving), so
+  // urlLoadDecision stays stable and the srcDoc iframe does not briefly flip
+  // to URL-load (Codex P2, issue #4650).  Cleared on file/project switch so
+  // a new file never inherits the previous file's routing predicates.
+  const lastGoodSourceForRoutingRef = useRef<string | null>(null);
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
@@ -5274,6 +5282,7 @@ function HtmlViewer({
       }
       prevSourceBeforeReloadRef.current = null;
       sourceEverLoadedRef.current = true;
+      lastGoodSourceForRoutingRef.current = text;
       setSource(text);
       sourceRef.current = text;
     });
@@ -5306,8 +5315,9 @@ function HtmlViewer({
   // asked for one in plain prose; without this, prev/next and Present
   // never surface and the deck becomes a static, unnavigable preview.
   const looksLikeDeck = useMemo(() => {
-    if (!source) return false;
-    return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source);
+    const s = source ?? lastGoodSourceForRoutingRef.current;
+    if (!s) return false;
+    return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
@@ -5357,14 +5367,14 @@ function HtmlViewer({
   // `injectSandboxShim` before any user script, so those artifacts render.
   // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
   // edit mode toggles, slide nav) don't re-scan the HTML each time.
-  const needsSandboxShim = useMemo(
-    () => source != null && htmlNeedsSandboxShim(source),
-    [source],
-  );
-  const needsFocusGuard = useMemo(
-    () => source != null && htmlNeedsFocusGuard(source),
-    [source],
-  );
+  const needsSandboxShim = useMemo(() => {
+    const s = source ?? lastGoodSourceForRoutingRef.current;
+    return s != null && htmlNeedsSandboxShim(s);
+  }, [source]);
+  const needsFocusGuard = useMemo(() => {
+    const s = source ?? lastGoodSourceForRoutingRef.current;
+    return s != null && htmlNeedsFocusGuard(s);
+  }, [source]);
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,
@@ -5438,6 +5448,7 @@ function HtmlViewer({
     // iframe when a reload snapshot was non-null at switch time (PR #4652
     // third-pass review, PerishCode finding).
     sourceEverLoadedRef.current = false;
+    lastGoodSourceForRoutingRef.current = null;
   }, [projectId, file.name]);
   const activePreviewSrcUrl = (
     previewSrcUrl === effectiveBasePreviewSrcUrl ||
