@@ -20,8 +20,7 @@ od:
   platform: mobile
   scenario: marketing
   craft:
-    requires:
-      - braze-custom-html
+    requires: [braze-custom-html]
   design_system:
     requires: true
     sections: [color, typography, spacing, components, voice, anti-patterns]
@@ -43,6 +42,8 @@ Braze Custom-HTML IAM을 **브랜드-어그노스틱 워크플로우**로 제작
 
 - **인터뷰 4축**: 목적 · 타겟 · 형식(사이즈/레이아웃) · 톤
 - **트리거 이벤트는 인터뷰하지 않는다**: Braze 캠페인 콘솔에서 직접 설정 (BRAZE-DOMAIN §5.1-5.2 — IAM은 SDK 커스텀 이벤트로만 발화, API로 발화 불가). 기획안에 후보 1~2개를 명시한다.
+- **Variant 수는 2개 고정 (A/B)**: 인터뷰에서 묻지 않는다.
+- **DATA-MODEL §5.1 정합 노트**: 이 스킬의 인터뷰 4축(purpose/target/format/tone)은 DATA-MODEL-BRAZE §5.1 인터뷰 필드와 일치하도록 정합되었다. `trigger_event`는 §5.1에 필드가 존재하지만 인터뷰에서 수집하지 않음(Braze 콘솔 설정이므로); `variant_count`는 2로 고정(A/B). **다에몬 측 인터뷰 폼을 자동 생성할 경우 trigger_event와 variant_count는 skip 또는 default 처리해야 한다.**
 - **산출물 = Braze-ready Custom HTML 파일 2개 (Variant A/B)** → 대시보드 붙여넣기 핸드오프 (BRAZE-DOMAIN §4.4)
 
 > **선행 필수 — 활성 브랜드 컨텍스트 로드**: 타겟·페르소나·브랜드 보이스·금지어·딥링크 카탈로그는 Claude 사전 지식에 없는 브랜드-사내 사실이다. 추측 금지. IAM 제작 시작 시 **활성 브랜드의 `DESIGN.md`를 먼저 Read**해 정본 컨텍스트를 확보한다 (`design-systems/<brand>/DESIGN.md`).
@@ -120,7 +121,7 @@ Read: design-systems/<brand>/DESIGN.md
       <choice value="fullscreen">풀스크린 — 온보딩·몰입·스토리텔링</choice>
       <choice value="custom">직접 입력</choice>
     </choices>
-    <hint>슬라이드업(토스트형)은 HTML IAM으로 제작할 수 없습니다 — HTML IAM은 앱 전체를 차단하는 WebView라 비차단성 슬라이드업과 의도가 충돌합니다 (BRAZE-DOMAIN §1.1). 슬라이드업이 필요하면 Braze 기본 native 슬라이드업을 사용하세요.</hint>
+    <hint>슬라이드업(토스트형)은 HTML IAM으로 제작하지 마세요 — BRAZE-DOMAIN §1.1은 슬라이드업이 비차단(non-blocking)임을 명시하며, HTML IAM은 앱 전체를 점유하는 전체화면 WebView로 동작해 비차단 UI 기대와 충돌합니다(프로덕션 SDK 동작 기준). 슬라이드업이 필요하면 Braze 기본 native 슬라이드업을 사용하세요.</hint>
   </question>
 
   <question id="q-tone" type="single-choice" required="true">
@@ -451,6 +452,8 @@ HTML IAM은 REST API로 전송 불가 (BRAZE-DOMAIN §4.1-4.2). 수동 핸드오
 od braze variant <braze_message_id> --status done
 ```
 
+> ⚠️ `--status done` 플래그 형식은 daemon CLI 구현에 따라 다를 수 있다. 실제 사용 전 `od braze variant --help` 또는 daemon CLI 소스(apps/daemon/src/cli.ts)로 정확한 플래그를 확인할 것.
+
 완료 메시지:
 ```
 ✓ Braze IAM 제작 완료 (Variant 2종)
@@ -468,7 +471,7 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 
 - 모든 인터뷰·컨펌 = `<question-form>` 아티팩트만. AskUserQuestion 도구, 인라인 폼 금지
 - 트리거 이벤트는 인터뷰하지 않음 (BRAZE-DOMAIN §5.1: IAM은 SDK 커스텀 이벤트만 발화)
-- 슬라이드업 = HTML IAM 제작 불가 (BRAZE-DOMAIN §1.1). Native 슬라이드업 권장
+- 슬라이드업 = HTML IAM으로 제작하지 말 것. §1.1은 슬라이드업이 비차단임을 확인; HTML IAM의 전체화면 WebView 동작으로 비차단 기대와 충돌(프로덕션 SDK 동작 기준). Native 슬라이드업 권장
 - `brazeBridge` 만 사용. `appboyBridge` 절대 사용하지 않음 (BRAZE-DOMAIN §2.2)
 - 브랜드 facts (페르소나, 금지어, 딥링크, 어트리뷰트)는 활성 DESIGN.md에서만 로드. 추측 금지
 - 개인화 어트리뷰트는 브랜드 카탈로그에 존재하는 식별자만 사용

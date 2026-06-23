@@ -128,10 +128,11 @@ Recommended ≈ 500 KB, hard maximum **5 MB** (BRAZE-DOMAIN §1.3).
 | Fullscreen | landscape + text | 10:3 | 2000×600 px |
 | Slideup | — | 1:1 | 150×150 px / 50×50 px min |
 
-> Slideup HTML constraint: HTML IAM is a full-blocking WebView — it
-> occupies the entire screen. Slideup (non-blocking by intent) produced
-> as HTML creates a UX mismatch: looks like a toast but blocks all app
-> interaction. Recommend native Braze slideup instead (BRAZE-DOMAIN §1.1).
+> Slideup HTML constraint: BRAZE-DOMAIN §1.1 confirms slideup is
+> non-blocking by design. HTML IAM, by contrast, occupies the entire screen
+> as a full-blocking WebView (production SDK behavior). Producing a slideup
+> as HTML IAM creates a UX mismatch: the WebView blocks all app interaction
+> despite looking like a toast. Recommend native Braze slideup instead.
 
 **Checklist item** (fails lint): any `<img>` or inline image source with
 a `.webp` extension or a data URI whose MIME type is `image/webp`.
