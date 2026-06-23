@@ -239,11 +239,15 @@ test('[P1] artifact persistence survives page reload during an active real daemo
     }, { timeout: 10_000 })
     .toBe('running');
 
+  // Capture the conversation identity BEFORE reload so the post-reload poll
+  // asserts against the *same* conversation.  Picking by updatedAt after reload
+  // would pass even if reattach regressed by switching or recreating the
+  // conversation, masking the real failure.
+  const { projectId, conversationId } = await currentProjectContext(page);
+
   // Reload while the run is still active — this is the reattach trigger.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-
-  const { projectId, conversationId } = await currentProjectContext(page);
 
   // Criterion 1 + 2: run reaches succeeded and the assistant message is still
   // attached to the original conversation (asserting assistantMessages === 1).
@@ -261,15 +265,15 @@ test('[P1] artifact persistence survives page reload during an active real daemo
   // Criterion 3: the generated file is written to project storage.
   await expectProjectFileToContain(page, projectId, SLOW_RELOAD_FILE, SLOW_RELOAD_HEADING);
 
-  // Criterion 4: producedFiles on the assistant message records the artifact.
-  // This is the primary regression assertion — the bug leaves producedFiles empty.
-  await expect
-    .poll(async () => {
-      const messages = await listConversationMessages(page, projectId, conversationId);
-      const assistant = messages.find((m) => m.role === 'assistant');
-      return assistant?.producedFiles?.map((f) => f.name) ?? [];
-    }, { timeout: 15_000 })
-    .toEqual(expect.arrayContaining([SLOW_RELOAD_FILE]));
+  // Criterion 4: producedFiles on the assistant message records the artifact
+  // AND the message retains its runId (proves it was reattached in-place,
+  // not recreated).  This is the primary regression assertion — the bug
+  // leaves producedFiles empty.
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    requireRunId: true,
+    producedFiles: [SLOW_RELOAD_FILE],
+    expectedThinking: false,
+  });
 
   // Criterion 5: the artifact preview restores and renders the artifact heading.
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible({ timeout: 15_000 });

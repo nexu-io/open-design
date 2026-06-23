@@ -2650,13 +2650,21 @@ export function ProjectView({
         // message that has a runId but no content and no produced files — the
         // daemon's authoritative status is fetched below and the message is
         // updated to reflect it.
+        //
+        // NOTE: `spuriouslyFailedPending` is kept separate from the other two
+        // branches because the recovery action is gated on the fetched daemon
+        // status; genuine failures (onError of a live stream) must not enter
+        // the reattach path and must never have their persisted failure context
+        // cleared or their resumable flag overwritten.
+        const spuriouslyFailedPending =
+          message.runStatus === 'failed' &&
+          !!message.runId &&
+          !message.content &&
+          !(message.producedFiles?.length);
         const needsFullReplay =
           isActiveRunStatus(message.runStatus) ||
           shouldReplayTerminalRunMessage(message) ||
-          (message.runStatus === 'failed' &&
-            !!message.runId &&
-            !message.content &&
-            !(message.producedFiles?.length));
+          spuriouslyFailedPending;
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -2695,11 +2703,29 @@ export function ProjectView({
         const status = fallbackRun ?? await fetchChatRunStatus(runId);
         if (cancelled) return;
         if (!status) {
-          updateMessageById(
-            message.id,
-            (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
-            true,
-          );
+          // Daemon has no record of this run.  For a spuriously-failed pending
+          // message (entered via `spuriouslyFailedPending`), the absence of a
+          // daemon record means we cannot confirm the run is recoverable — leave
+          // the message intact with its existing failure context and diagnostic
+          // events so the user sees the persisted error.  For other message
+          // states (phantom running rows with no runId), fall through to the
+          // original mark-failed behaviour.
+          if (!spuriouslyFailedPending) {
+            updateMessageById(
+              message.id,
+              (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+              true,
+            );
+          }
+          completedReattachRunsRef.current.add(runId);
+          continue;
+        }
+        // When the daemon authoritative status is 'failed', the run ended in a
+        // genuine failure.  For spuriously-failed pending messages this means
+        // the client-side heuristic was wrong — the daemon did not succeed.
+        // Leave the message alone so its persisted error context survives; do
+        // not overwrite runStatus or resumable with the re-fetched value.
+        if (spuriouslyFailedPending && status.status === 'failed') {
           completedReattachRunsRef.current.add(runId);
           continue;
         }
@@ -2812,11 +2838,25 @@ export function ProjectView({
           cancelRef.current = cancelController;
           markStreamingConversation(reattachConversationId);
         }
-        if (needsFullReplay) {
+        // Only blank content/events/producedFiles when the daemon confirms the run
+        // is still recoverable (queued/running/succeeded).  A genuinely failed run
+        // already carries diagnostic information in `events`; clearing it before
+        // re-running the reattach path would erase the error context and loop the
+        // message through reattach even when the daemon still reports `failed`.
+        const daemonStatusIsRecoverable =
+          status.status === 'queued' ||
+          status.status === 'running' ||
+          status.status === 'succeeded';
+        if (needsFullReplay && daemonStatusIsRecoverable) {
           updateMessageById(
             message.id,
             (prev) => ({ ...prev, content: '', events: [], producedFiles: undefined }),
           );
+          // When the failed-message recovery moves back to running/succeeded,
+          // clear any stale "daemon stream disconnected" error banner that the
+          // original onError path may have set, so the chat does not show a
+          // stale error after the reattach succeeds.
+          setError(null);
         }
 
         let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2925,6 +2965,10 @@ export function ProjectView({
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
+              // Clear any stale error banner set by the original onError path
+              // (e.g. "daemon stream disconnected") so the chat does not show it
+              // after the spuriously-failed message reattaches and succeeds.
+              if (runMayFinalize && spuriouslyFailedPending) setError(null);
               if (!runMayFinalize) return;
               for (const ev of parser.flush()) {
                 if (ev.type === 'artifact:end') {
@@ -3555,6 +3599,12 @@ export function ProjectView({
         preTurnFileNames,
       };
       let latestAssistantMsg: ChatMessage = assistantMsg;
+      // Tracks the runId once POST /api/runs returns so that the live stream
+      // onError handler can mark the run as completed in completedReattachRunsRef.
+      // This prevents attachRecoverableRuns from attempting to reattach a run
+      // that just failed in the current session (the daemon status fetch is only
+      // needed on reload, not for runs that are already known to have failed).
+      let currentRunId: string | undefined = undefined;
       const updateConversationLatestRun = (
         status: NonNullable<ChatMessage['runStatus']>,
         endedAt?: number,
@@ -4050,6 +4100,14 @@ export function ProjectView({
               void patchAttachedStatuses(runCommentAttachments, 'failed');
             }
           }
+          // Mark the run as completed in the reattach registry so that
+          // attachRecoverableRuns does not race it after streaming ends.
+          // Without this guard, the spuriouslyFailedPending heuristic would
+          // match a freshly-failed live run (no content, no producedFiles) and
+          // attempt a daemon status fetch on a run the client already knows
+          // failed — overwriting the assistant message's resumable flag with
+          // the fetched status before the ChatPane has had a chance to render.
+          if (currentRunId) completedReattachRunsRef.current.add(currentRunId);
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
             runConversationId,
             controller,
@@ -4160,6 +4218,7 @@ export function ProjectView({
               runStatus: 'queued' as const,
             };
             latestAssistantMsg = pinnedAssistant;
+            currentRunId = runId;
             // The view may already be on a different project/conversation;
             // pin the daemon run to the original row so returning can reattach.
             void saveMessage(project.id, runConversationId, pinnedAssistant);
