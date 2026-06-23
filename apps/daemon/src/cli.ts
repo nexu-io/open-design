@@ -12,6 +12,7 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-c
 import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
+import { buildBrazeInterviewBody } from './braze-cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -8019,25 +8020,9 @@ async function runBraze(args) {
   const writeJson = (data) =>
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 
-  // 양수(positional) 인자에서 첫 번째 값(messageId)을 추출
-  const positionalArgs = (values) => {
-    const out = [];
-    for (let i = 0; i < values.length; i++) {
-      const value = values[i];
-      if (!value) continue;
-      if (value.startsWith('--')) {
-        const eq = value.indexOf('=');
-        const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
-        if (eq < 0 && BRAZE_STRING_FLAGS.has(key)) i++;
-        continue;
-      }
-      out.push(value);
-    }
-    return out;
-  };
-
+  // requireMessageId는 모듈 레벨 positionalArgs(argv, stringFlags)를 재사용
   const requireMessageId = (label) => {
-    const id = positionalArgs(rest)[0];
+    const id = positionalArgs(rest, BRAZE_STRING_FLAGS)[0];
     if (!id) {
       console.error(`Usage: od braze ${label} <messageId>`);
       process.exit(2);
@@ -8147,8 +8132,7 @@ async function runBraze(args) {
         console.error('--format, --delivery, and --trigger are required');
         process.exit(2);
       }
-      // buildBrazeInterviewBody은 braze-cli-args.ts에서 가져온 순수 헬퍼 사용
-      const { buildBrazeInterviewBody } = await import('./braze-cli-args.js');
+      // buildBrazeInterviewBody은 정적 import로 가져온 순수 헬퍼 사용
       const interviewBody = buildBrazeInterviewBody(flags);
       let resp;
       try {
@@ -8336,7 +8320,8 @@ async function runBraze(args) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      if (flags.json) return writeJson({ ok: true, id });
+      const data = await resp.json();
+      if (flags.json) return writeJson(data);
       console.log(`[braze] deleted ${id}`);
       return;
     }

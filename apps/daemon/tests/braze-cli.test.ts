@@ -101,3 +101,59 @@ describe('buildBrazeInterviewBody', () => {
     expect(body).not.toHaveProperty('emphasis');
   });
 });
+
+describe('buildBrazeInterviewBody — enum validation', () => {
+  it('throws on invalid --format value', () => {
+    expect(() =>
+      buildBrazeInterviewBody({
+        format: 'banner',
+        delivery: 'action_based',
+        trigger: 'session_start',
+      }),
+    ).toThrow(/invalid --format "banner"/);
+  });
+
+  it('throws on invalid --delivery value', () => {
+    expect(() =>
+      buildBrazeInterviewBody({
+        format: 'modal',
+        delivery: 'immediate',
+        trigger: 'session_start',
+      }),
+    ).toThrow(/invalid --delivery "immediate"/);
+  });
+
+  it('throws on invalid --trigger value', () => {
+    expect(() =>
+      buildBrazeInterviewBody({
+        format: 'modal',
+        delivery: 'action_based',
+        trigger: 'app_open',
+      }),
+    ).toThrow(/invalid --trigger "app_open"/);
+  });
+
+  it('accepts all valid --format values without throwing', () => {
+    for (const fmt of ['slideup', 'modal', 'fullscreen', 'custom_html']) {
+      expect(() =>
+        buildBrazeInterviewBody({ format: fmt, delivery: 'action_based', trigger: 'session_start' }),
+      ).not.toThrow();
+    }
+  });
+
+  it('accepts all valid --delivery values without throwing', () => {
+    for (const d of ['action_based', 'scheduled']) {
+      expect(() =>
+        buildBrazeInterviewBody({ format: 'modal', delivery: d, trigger: 'session_start' }),
+      ).not.toThrow();
+    }
+  });
+
+  it('accepts all valid --trigger values without throwing', () => {
+    for (const t of ['session_start', 'push_click', 'any_purchase', 'specific_purchase', 'custom_event']) {
+      expect(() =>
+        buildBrazeInterviewBody({ format: 'modal', delivery: 'action_based', trigger: t }),
+      ).not.toThrow();
+    }
+  });
+});

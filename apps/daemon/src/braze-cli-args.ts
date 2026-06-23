@@ -19,12 +19,44 @@ export interface BrazeInterviewFlags {
   variants?: string;
 }
 
+// 허용된 enum 값 집합 — 서버로 잘못된 값이 전달되기 전에 명시적 오류를 발생시키기 위해 유지
+const VALID_IAM_FORMATS: ReadonlySet<string> = new Set([
+  'slideup', 'modal', 'fullscreen', 'custom_html',
+]);
+const VALID_DELIVERY_MODELS: ReadonlySet<string> = new Set([
+  'action_based', 'scheduled',
+]);
+const VALID_TRIGGER_EVENTS: ReadonlySet<string> = new Set([
+  'session_start', 'push_click', 'any_purchase', 'specific_purchase', 'custom_event',
+]);
+
 // Builds the BrazeInterviewRequest body from parsed CLI flags.
 // Pure function — no I/O, no process access, safe to unit-test.
+// Throws on invalid enum values so the CLI's try/catch surfaces them as usage errors (exit 2).
 export function buildBrazeInterviewBody(flags: BrazeInterviewFlags): BrazeInterviewRequest {
-  const iamFormat = (flags.format ?? '') as BrazeIamFormat;
-  const deliveryModel = (flags.delivery ?? '') as BrazeDeliveryModel;
-  const triggerEvent = (flags.trigger ?? '') as BrazeTriggerEvent;
+  const rawFormat = flags.format ?? '';
+  if (!VALID_IAM_FORMATS.has(rawFormat)) {
+    throw new Error(
+      `invalid --format "${rawFormat}"; must be one of: ${[...VALID_IAM_FORMATS].join(', ')}`,
+    );
+  }
+  const iamFormat = rawFormat as BrazeIamFormat;
+
+  const rawDelivery = flags.delivery ?? '';
+  if (!VALID_DELIVERY_MODELS.has(rawDelivery)) {
+    throw new Error(
+      `invalid --delivery "${rawDelivery}"; must be one of: ${[...VALID_DELIVERY_MODELS].join(', ')}`,
+    );
+  }
+  const deliveryModel = rawDelivery as BrazeDeliveryModel;
+
+  const rawTrigger = flags.trigger ?? '';
+  if (!VALID_TRIGGER_EVENTS.has(rawTrigger)) {
+    throw new Error(
+      `invalid --trigger "${rawTrigger}"; must be one of: ${[...VALID_TRIGGER_EVENTS].join(', ')}`,
+    );
+  }
+  const triggerEvent = rawTrigger as BrazeTriggerEvent;
 
   // --variants parsed as integer, default 1 when absent or invalid
   const rawVariants = flags.variants !== undefined ? parseInt(flags.variants, 10) : NaN;
