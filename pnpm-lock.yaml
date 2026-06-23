@@ -350,7 +350,7 @@ importers:
         specifier: 4.3.0
         version: 4.3.0
       '@testing-library/jest-dom':
-        specifier: ^6.9.1
+        specifier: 6.9.1
         version: 6.9.1
       '@testing-library/react':
         specifier: 16.3.2
