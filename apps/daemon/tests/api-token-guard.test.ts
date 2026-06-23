@@ -258,4 +258,75 @@ describe('bearer middleware', () => {
     expect(staticResp.statusCode).toBe(404);
     staticResp.resume();
   });
+
+  it('cookie-backed API route works when bootstrap returns 403 (reload scenario)', async () => {
+    // Simulate a page reload on a proxied deployment:
+    //   1. bootstrap-token returns 403 (non-loopback, not proxied)
+    //   2. but a valid od-api-token cookie exists from a prior manual entry
+    // This validates the chain the App.tsx fix relies on: when bootstrap
+    // 403s, the app probes a guarded endpoint with the existing cookie
+    // and only prompts for a new token if that probe also fails.
+    const url = new URL(baseUrl);
+
+    // Step 1: verify bootstrap-token returns 403 from non-loopback
+    const bootstrapResp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/auth/bootstrap-token?clientTag=test-reload',
+        method: 'GET',
+        headers: { Host: `example.com:${url.port}` },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    expect(bootstrapResp.statusCode).toBe(403);
+    bootstrapResp.resume();
+
+    // Step 2: mint the cookie via POST /api/auth/set-token-cookie (simulates
+    // the user's prior manual token entry having succeeded on first load).
+    const cookieResp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/auth/set-token-cookie',
+        method: 'POST',
+        headers: {
+          Host: `example.com:${url.port}`,
+          Authorization: 'Bearer secret-test-token',
+        },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    const rawCookie = (Array.isArray(cookieResp.headers['set-cookie'])
+      ? cookieResp.headers['set-cookie'][0]
+      : cookieResp.headers['set-cookie']) as string | undefined;
+    expect(rawCookie).toBeDefined();
+    const cookieValue = rawCookie!.split(';')[0];
+    cookieResp.resume();
+
+    // Step 3: request a guarded API route with the cookie but NO Bearer
+    // header, from a non-loopback perspective.  This is what the frontend's
+    // probe does after bootstrap 403s — it calls /api/plugins and if the
+    // cookie authenticates, skips the token prompt.
+    const apiResp = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: Number(url.port),
+        path: '/api/plugins',
+        method: 'GET',
+        headers: {
+          Host: `example.com:${url.port}`,
+          Cookie: cookieValue!,
+        },
+      }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    // 401 = cookie not accepted (the fix doesn't work); 200 = cookie works
+    expect(apiResp.statusCode).not.toBe(401);
+    expect(apiResp.statusCode).toBe(200);
+    apiResp.resume();
+  });
 });

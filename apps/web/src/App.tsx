@@ -442,10 +442,12 @@ function AppInner() {
   // mistake for "no key saved" — and to disable Save/Clear so a misclick
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
-  // When bootstrap returns 403, the daemon requires an API token that the
-  // auto-bootstrap cookie exchange cannot provide (e.g. proxied deployment).
-  // We show a prompt; once the user enters a token, we bypass bootstrap and
-  // send it as Authorization: Bearer on every subsequent API request.
+  // When bootstrap returns 403, the daemon cannot auto-bootstrap a session
+  // (e.g. proxied deployment).  The user may already have a valid od-api-token
+  // cookie from a prior manual token entry, so we probe a guarded endpoint
+  // before prompting.  If the cookie still works, we skip the prompt and
+  // continue the fan-out; otherwise we show the ApiTokenPrompt and send the
+  // entered token as Authorization: Bearer on every subsequent API request.
   const [needsToken, setNeedsToken] = useState(false);
   const [apiTokenError, setApiTokenError] = useState<string | null>(null);
   const [verifyingToken, setVerifyingToken] = useState(false);
@@ -809,10 +811,27 @@ function AppInner() {
             signal: bootstrapAbort.signal,
           });
           if (!tokenRes.ok && tokenRes.status === 403) {
-            // Daemon refuses bootstrap (e.g. proxied request).  Prompt user.
-            setNeedsToken(true);
-            clearTimeout(bootstrapTimeout);
-            return; // stop here — fan-out below will run once token is provided
+            // Daemon refuses bootstrap (e.g. proxied request).
+            // The user may have a valid od-api-token cookie from a prior
+            // manual token entry that still authenticates.  Probe a cheap
+            // guarded endpoint to check; only prompt if that also fails.
+            try {
+              const probe = await fetch('/api/plugins');
+              if (probe.ok || probe.status !== 401) {
+                // Cookie is still valid — proceed with fan-out below.
+                // A non-401 error (e.g. 500, 404) means authentication
+                // passed but the endpoint itself has an issue; that is
+                // not a reason to prompt for the token again.
+              } else {
+                setNeedsToken(true);
+                clearTimeout(bootstrapTimeout);
+                return;
+              }
+            } catch {
+              setNeedsToken(true);
+              clearTimeout(bootstrapTimeout);
+              return;
+            }
           }
           if (tokenRes.ok) {
             const { nonce } = await tokenRes.json();
