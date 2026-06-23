@@ -671,7 +671,13 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
         snapshot.byokLinkVisible,
         'fresh packaged Windows onboarding cloud sign-in landing',
       );
-      expect(initial.href).toBe('od://app/');
+      // Onboarding lives on a dedicated route since the #4513 cloud sign-in
+      // redesign, so the href is `od://app/onboarding` (packaged) — not the
+      // bare app root. Match the prefix the same lenient way the mac smoke
+      // does instead of pinning the exact root path. Before the user-data
+      // reset fix the app booted to Home and never reached this line, which
+      // is why the stale exact-match assertion went unnoticed.
+      expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(initial.cloudSignInVisible).toBe(true);
       expect(initial.localLinkVisible).toBe(true);
       expect(initial.byokLinkVisible).toBe(true);
