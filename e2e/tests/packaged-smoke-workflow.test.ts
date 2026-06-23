@@ -19,6 +19,7 @@ const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
+const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
@@ -204,6 +205,42 @@ describe("packaged smoke workflow", () => {
     expect(autofixWorkflow).not.toContain("ci-nix");
     expect(reportWorkflow).toContain("workflows: [ci]");
     expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+  });
+
+  it("[P2] gates the backport auto-merge follow-up as a trusted workflow_run consumer", async () => {
+    const workflow = await readFile(backportAutomergeWorkflowPath, "utf8");
+
+    // Triggered only by ci completing, and only for a pull_request run on a backport-* branch —
+    // never a push / manual dispatch, so a non-PR run can't reach the App-token or merge steps.
+    expect(workflow).toContain("workflows: [ci]");
+    expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(workflow).toContain("startsWith(github.event.workflow_run.head_branch, 'backport-')");
+
+    // It mints the privileged release App token, hence the identity + SHA gates below.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+
+    // Only a non-draft, same-repo PR authored by the release bot, targeting release/v*, is merged.
+    expect(workflow).toContain("steps.pr.outputs.author == 'open-design-release-bot[bot]'");
+    expect(workflow).toContain("steps.pr.outputs.cross == 'false'");
+    expect(workflow).toContain("steps.pr.outputs.draft == 'false'");
+    expect(workflow).toContain('startswith("release/v")');
+
+    // The PR is resolved from the run's authoritative workflow_run.pull_requests association
+    // (filtered to the release/* base at exactly the run's SHA), not a branch-name guess, and the
+    // merge is bound to that same SHA (no post-green commit merged untested).
+    expect(workflow).toContain("github.event.workflow_run.pull_requests");
+    expect(workflow).toContain("select(.head.sha == $sha)");
+    expect(workflow).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(workflow).toContain("--match-head-commit");
+    expect(workflow).toContain("--squash");
+    expect(workflow).toContain("--delete-branch");
+
+    // The Feishu failure path carries the same identity gates, so a fork / non-bot backport-*
+    // PR can't spam the release group.
+    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed backport CI", "FEISHU_WEBHOOK");
+    expect(feishuStep).toContain("steps.pr.outputs.author == 'open-design-release-bot[bot]'");
+    expect(feishuStep).toContain("steps.pr.outputs.cross == 'false'");
   });
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {

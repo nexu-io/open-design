@@ -41,9 +41,7 @@ jobs:
           # Do not give up on conflicts: commit the conflict markers into the backport branch
           # and open a draft PR for a human to resolve.
           experimental: '{ "conflict_resolution": "draft_commit_conflicts" }'
-          # ── Fast lane: auto-merge clean backports (off by default) ──────────
-          # Prerequisite: branch protection on release/* requiring CI to pass, otherwise it
-          # would merge before CI finishes. Once that is set up, uncomment the two lines below
-          # to auto-merge clean backports after CI turns green:
-          # auto_merge_enabled: true
-          # auto_merge_method: squash
+          # Clean backports are auto-merged after CI passes by backport-automerge.yml
+          # (triggered by ci.yml completing on the backport-* branch). release/v* has no merge
+          # queue and no required status check, so GitHub auto-merge / enqueuePullRequest don't
+          # apply here; that workflow gates on ci.yml's own success instead.
