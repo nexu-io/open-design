@@ -60,3 +60,10 @@
 - **A 아티팩트 집 = produced-file**: IAM=정적 Custom HTML → OD 덱/프로토타입식 HTML 파일+iframe 렌더 재사용. live-artifact 회피(format `html_template_v1` 하드코딩 schema.ts:747 + refresh/connector 머신리 불요). `braze_iam_v1` = DB 스키마 아닌 **HTML 파일 계약**(craft lint 검증) (출처: DATA-MODEL-BRAZE §2 코드분석)
 - **B message↔conversation = 대화당 N메시지**. **C brand_id = 프로젝트 design_system_id 상속 + 메시지별 override 허용**. **D 전달 = 경로1만**(대시보드 수동 핸드오프, braze-client REST 보류). **E Variant = 자식 테이블 `braze_variants`** (변종별 상태/수정 독립 추적) (출처: 사용자 "추천 디폴트로 전부 확정")
 - 테이블 = `braze_messages`+`braze_variants`, `migrateBraze` 서브모듈(db.ts:350~352 패턴). 다음 = dual-track: contracts DTO→daemon(persistence+routes)→web UI→`od braze` CLI→design-templates/braze-iam SKILL+craft
+
+## 2026-06-23 — Braze IAM 기능 SDD 실행 + PR #1
+- 실행 방식 = subagent-driven-development + TDD: 독립 task(CLI·skill·web) 병렬 디스패치(no-commit→컨트롤러 커밋, worktree 대신 디스조인트 파일), task별 spec+quality 리뷰 + 최종 전체-브랜치 통합 리뷰(opus) (출처: 사용자 /subagent-driven-development 지시)
+- **통합 리뷰 가치 입증**: 격리된 task 리뷰들이 통과시킨 skill↔CLI 명령 드리프트(skill이 존재 안 하는 `--purpose/--target/--list` 참조, `--conversation` 누락, produce가 라벨 대신 UUID 필요)를 광역 리뷰가 포착→수정. 교훈: dual-track/멀티서피스 기능은 서피스별 격리 리뷰만으론 부족, 통합 리뷰 필수 (출처: 최종 리뷰 c1a456d)
+- 트리거 옵셔널화 = **보류(follow-up)**: daemon /interview가 triggerEvent 필수지만 검증된 워크플로우는 트리거=콘솔 설정. skill이 추론 후보 전달로 우회. 완화는 후속 (출처: DATA-MODEL §5.1)
+- bodoc 카탈로그 PII → `.gitignore` 추가. 설계문서(BRAZE-DOMAIN/DATA-MODEL/DECISIONS/ARCHITECTURE-BRAZE/FORK-DELTA)는 PR 포함 (출처: 사용자 "gitignore 추가하고 설계문서 포함 PR")
+- PR #1 오픈 (Gmin82/open-design, base main ← marketing-ax/braze-iam): dual-track web panel + od braze CLI + skill/craft (출처: 사용자 "A로 진행")
