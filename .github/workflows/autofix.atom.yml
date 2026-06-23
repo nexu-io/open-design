@@ -89,12 +89,12 @@ jobs:
         if: ${{ steps.handoffs.outputs.present == 'true' }}
         id: bot-secrets
         env:
-          BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+          BOT_APP_CLIENT_ID: ${{ secrets.BOT_APP_CLIENT_ID }}
           BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ -n "${BOT_APP_ID}" ] && [ -n "${BOT_APP_PRIVATE_KEY}" ]; then
+          if [ -n "${BOT_APP_CLIENT_ID}" ] && [ -n "${BOT_APP_PRIVATE_KEY}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
@@ -104,9 +104,9 @@ jobs:
         if: ${{ steps.handoffs.outputs.present == 'true' && steps.bot-secrets.outputs.present == 'true' }}
         id: bot-token
         continue-on-error: true
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3.2.0
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
           repositories: open-design

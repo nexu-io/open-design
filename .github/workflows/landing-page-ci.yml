@@ -8,7 +8,6 @@ on:
       - .github/workflows/landing-page-staging.yml
       - .github/workflows/landing-page-production.yml
       - .github/workflows/blog-indexing-on-deploy.yml
-      - .github/workflows/blog-indexing-monitor.yml
       # Landing page sources
       - apps/landing-page/**
       # Design template source of truth for the homepage.
@@ -44,7 +43,6 @@ on:
       - .github/workflows/landing-page-staging.yml
       - .github/workflows/landing-page-production.yml
       - .github/workflows/blog-indexing-on-deploy.yml
-      - .github/workflows/blog-indexing-monitor.yml
       - apps/landing-page/**
       - design-templates/open-design-landing/**
       - skills/**
