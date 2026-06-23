@@ -828,6 +828,24 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(1);
   });
 
+  it('migrates legacy SiliconFlow API configs to the OpenAI protocol preset', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.siliconflow.cn/v1',
+      model: 'Pro/zai-org/GLM-4.7',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('openai');
+    expect(config.apiProviderBaseUrl).toBe('https://api.siliconflow.cn/v1');
+  });
+
   it('backfills the fixed-origin base URL for AIHubMix when persisted empty', () => {
     // AIHubMix hides the Base URL field, so older configs persisted an empty
     // baseUrl. An empty base URL blocks the live model-list fetch, so loadConfig

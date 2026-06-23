@@ -16,6 +16,11 @@ describe('isOpenAICompatible', () => {
     expect(isOpenAICompatible('mimo-v2.5-pro', 'https://token-plan-cn.xiaomimimo.com/v1')).toBe(true);
   });
 
+  it('routes SiliconFlow endpoints through OpenAI-compatible chat completions', () => {
+    expect(isOpenAICompatible('Pro/zai-org/GLM-4.7', 'https://api.siliconflow.cn/v1')).toBe(true);
+    expect(isOpenAICompatible('deepseek-ai/DeepSeek-V3.2', 'https://api.siliconflow.com/v1')).toBe(true);
+  });
+
   it('routes MiniMax Anthropic endpoint paths away from OpenAI-compatible chat completions', () => {
     expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimaxi.com/v1/anthropic')).toBe(false);
     expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimaxi.com/anthropic/v1')).toBe(false);

@@ -42,6 +42,7 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   if (u.includes('xiaomimimo.com/v1')) return true;
   if (u.includes('api.minimaxi.com/v1')) return true;
   if (u.includes('api.deepseek')) return true;
+  if (u.includes('api.siliconflow.')) return true;
   if (u.includes('api.groq')) return true;
   if (u.includes('api.together')) return true;
   if (u.includes('openrouter')) return true;

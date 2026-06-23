@@ -18,6 +18,7 @@ import {
   updateAgentCliEnvValue,
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
+import { KNOWN_PROVIDERS } from '../../src/state/config';
 import type { AppConfig, ConnectionTestResponse } from '../../src/types';
 
 const originalFetch = globalThis.fetch;
@@ -131,6 +132,25 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('includes SiliconFlow as an OpenAI-compatible provider preset', () => {
+    expect(KNOWN_PROVIDERS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'SiliconFlow CN',
+          protocol: 'openai',
+          baseUrl: 'https://api.siliconflow.cn/v1',
+          model: 'deepseek-ai/DeepSeek-V3.2',
+        }),
+        expect.objectContaining({
+          label: 'SiliconFlow Global',
+          protocol: 'openai',
+          baseUrl: 'https://api.siliconflow.com/v1',
+          model: 'deepseek-ai/DeepSeek-V3.2',
+        }),
+      ]),
+    );
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',
@@ -226,6 +246,12 @@ describe('SettingsDialog provider model fetch helpers', () => {
     expect(
       canFetchProviderModels(
         { apiKey: 'sk-openai', baseUrl: 'https://api.openai.com/v1' },
+        'openai',
+      ),
+    ).toBe(true);
+    expect(
+      canFetchProviderModels(
+        { apiKey: 'sk-siliconflow', baseUrl: 'https://api.siliconflow.cn/v1' },
         'openai',
       ),
     ).toBe(true);
