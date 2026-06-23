@@ -66,7 +66,7 @@ OD_ALLOWED_ORIGINS=https://yourdomain.com
 | `OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET` | `1` (compose default) | No | Trusts RFC1918 addresses as loopback. Required when Docker port-publishing rewrites source IP. Set to `0` to harden LAN/remote deployments |
 | `OD_ADDITIONAL_ALLOWED_DIRS` | (empty) | No | Comma-separated directories the agent CLI can read/write inside the container |
 | `OD_CODEX_SANDBOX` | (empty) | No | Codex sandbox mode. Set to `danger-full-access` only when Codex fails with workspace-write sandbox errors |
-| `OD_TRUST_PROXY` | (empty) | No | Trust proxy IPs for `X-Forwarded-*` header processing |
+| `OD_TRUST_PROXY` | (empty) | No | Hop count (`1`), specific IP (`172.18.0.1`), or comma-separated list of IPs/CIDRs to trust for `X-Forwarded-*` headers |
 | `OD_PUBLIC_BASE_URL` | (empty) | No | Externally-reachable base URL for the daemon |
 | `OPEN_DESIGN_MEM_LIMIT` | `384m` | No | Compose-level container memory limit (idle uses ~18-22 MiB). Raise for large exports or concurrent agents |
 | `NODE_OPTIONS` | `--max-old-space-size=192` | No | Node.js heap cap inside the container |

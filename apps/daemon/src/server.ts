@@ -3315,9 +3315,17 @@ export async function startServer({
   // Configurable trust proxy — enable explicitly for reverse-proxy deployments.
   // Without this, req.protocol and req.secure always return 'http'/'false',
   // which breaks the bootstrap cookie Secure flag and OAuth redirect_uri.
-  // Set OD_TRUST_PROXY=1 (or the number of proxy hops) in the environment.
+  // Set OD_TRUST_PROXY=1 (number of proxy hops), a specific IP address
+  // (172.18.0.1), or a comma-separated list of IPs/CIDRs to restrict trust.
   if (process.env.OD_TRUST_PROXY) {
-    app.set('trust proxy', Number(process.env.OD_TRUST_PROXY) || 1);
+    const raw = process.env.OD_TRUST_PROXY.trim();
+    // All-digits with optional leading sign → treat as hop count
+    if (/^-?\d+$/.test(raw)) {
+      app.set('trust proxy', Number(raw));
+    } else {
+      // Comma-separated IP addresses or CIDR ranges
+      app.set('trust proxy', raw.split(',').map((s) => s.trim()).filter(Boolean));
+    }
   }
 
   const projectPreviewScopes = createProjectPreviewScopeRegistry();

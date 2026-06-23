@@ -72,7 +72,7 @@ Full environment variable reference:
 | `OD_DISABLE_API_AUTH` | `1` | Auth enforcement: `0` = on, `1` = off |
 | `OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET` | `1` | Trusts RFC1918 as loopback. Set `0` for LAN hardening |
 | `OD_ADDITIONAL_ALLOWED_DIRS` | (empty) | Extra dirs the agent can read/write inside container |
-| `OD_TRUST_PROXY` | (empty) | Trusted proxy IPs for `X-Forwarded-*` headers |
+| `OD_TRUST_PROXY` | (empty) | Hop count (`1`), specific IP (`172.18.0.1`), or comma-separated list of IPs/CIDRs to trust for `X-Forwarded-*` headers |
 | `OD_PUBLIC_BASE_URL` | (empty) | Externally-reachable base URL |
 | `OD_CODEX_SANDBOX` | (empty) | Codex sandbox. `danger-full-access` to bypass workspace-write |
 | `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory limit (idle ~18-22 MiB) |
