@@ -1,8 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import path from 'node:path';
+import type { ExecutionProfile } from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
+  createToolCallTextSuppressor,
   type ArtifactTextSuppressor,
 } from './artifacts/text-suppression.js';
 
@@ -28,6 +30,7 @@ const ACP_ARTIFACT_ECHO_START_RE = new RegExp(
   String.raw`^\s*(?:${ACP_ARTIFACT_OPEN_PATTERN}|${ACP_GENERATED_FILE_PREFIX_PATTERN}${ACP_ARTIFACT_OPEN_PATTERN})`,
   'i',
 );
+const ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT = 8;
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;
@@ -88,6 +91,7 @@ interface AttachAcpSessionOptions {
   clientName?: string;
   clientVersion?: string;
   stageTimeoutMs?: number;
+  executionProfile?: ExecutionProfile;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
@@ -110,6 +114,90 @@ function resolveAcpTimeoutMs(env: NodeJS.ProcessEnv, fallbackMs: number): number
 
 function asObject(value: unknown): JsonObject | null {
   return value && typeof value === 'object' ? value as JsonObject : null;
+}
+
+function acpValueKind(value: unknown): string {
+  if (Array.isArray(value)) return 'array';
+  if (value === null) return 'null';
+  return typeof value;
+}
+
+function objectKeys(value: unknown): string[] {
+  const obj = asObject(value);
+  return obj ? Object.keys(obj).sort() : [];
+}
+
+function extractAcpTextValue(value: unknown, depth = 0): string | null {
+  if (depth > 4) return null;
+  if (typeof value === 'string') return value.length > 0 ? value : null;
+  if (Array.isArray(value)) {
+    const text = value
+      .map((item) => extractAcpTextValue(item, depth + 1))
+      .filter((part): part is string => typeof part === 'string' && part.length > 0)
+      .join('');
+    return text.length > 0 ? text : null;
+  }
+  const obj = asObject(value);
+  if (!obj) return null;
+  for (const key of [
+    'text',
+    'delta',
+    'content',
+    'message',
+    'output',
+    'answer',
+    'value',
+    'body',
+    'parts',
+    'choices',
+  ]) {
+    const text = extractAcpTextValue(obj[key], depth + 1);
+    if (text) return text;
+  }
+  return null;
+}
+
+function extractAcpUpdateText(update: JsonObject): string | null {
+  for (const key of [
+    'content',
+    'text',
+    'delta',
+    'message',
+    'output',
+    'answer',
+    'value',
+    'body',
+    'parts',
+    'choices',
+  ]) {
+    const text = extractAcpTextValue(update[key]);
+    if (text) return text;
+  }
+  return null;
+}
+
+function acpRawEventShape(update: JsonObject) {
+  const content = update.content;
+  const rawInput = update.rawInput;
+  const locations = update.locations;
+  return {
+    sessionUpdate: typeof update.sessionUpdate === 'string' ? update.sessionUpdate : null,
+    keys: objectKeys(update),
+    contentKind: acpValueKind(content),
+    contentKeys: objectKeys(content),
+    hasText: Boolean(extractAcpUpdateText(update)),
+    hasTopLevelText: typeof update.text === 'string' && update.text.length > 0,
+    hasTopLevelDelta: typeof update.delta === 'string' && update.delta.length > 0,
+    hasTopLevelMessage: update.message !== undefined,
+    hasToolCallId: acpToolCallId(update) !== null,
+    hasRawInput: rawInput !== undefined,
+    rawInputKind: acpValueKind(rawInput),
+    rawInputKeys: objectKeys(rawInput),
+    locationsKind: acpValueKind(locations),
+    locationsCount: Array.isArray(locations) ? locations.length : undefined,
+    status: typeof update.status === 'string' ? update.status : undefined,
+    titlePresent: typeof update.title === 'string' && update.title.length > 0,
+  };
 }
 
 export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 'array' }: AcpSessionOptions = {}) {
@@ -827,6 +915,7 @@ export function attachAcpSession({
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
+  executionProfile = 'filesystem',
   modelUnavailableErrorCode,
   onCliReady,
   onSessionInit,
@@ -850,15 +939,33 @@ export function attachAcpSession({
   let emittedTextChunk = false;
   let emittedVisibleTextChunk = false;
   let emittedToolCall = false;
+  let emittedConcreteToolEvent = false;
   let emittedTextBuffer = '';
+  let rawAcpShapeDiagnosticCount = 0;
+  let artifactSuppressionDiagnosticCount = 0;
   let finished = false;
   let fatal = false;
   let aborted = false;
   let stageTimer: TimerHandle | null = null;
   let dsmlArtifactSuppressor: ArtifactTextSuppressor | null = null;
+  let dsmlArtifactSuppressorLastSuppressedChars = 0;
   let dsmlArtifactSuppressorToolCallId: string | null = null;
   let dsmlArtifactSuppressorArmedAfterText = false;
   let dsmlArtifactSuppressorSawIncrementalProse = false;
+  const toolCallTextSuppressor = createToolCallTextSuppressor();
+  let toolCallTextSuppressorLastSuppressedChars = 0;
+  const artifactTextSuppressionSummary = {
+    suppressedChars: 0,
+    suppressedChunks: 0,
+    openedBlocks: 0,
+    closedBlocks: 0,
+  };
+  const toolCallTextSuppressionSummary = {
+    suppressedChars: 0,
+    suppressedChunks: 0,
+    openedBlocks: 0,
+    closedBlocks: 0,
+  };
   const acpArtifactWriteToolCallIds = new Set<string>();
   // Per artifact-write tool call, accumulate the best concrete file path seen
   // across its frames and whether we have already mirrored it into canonical
@@ -954,6 +1061,120 @@ export function attachAcpSession({
     }
   };
 
+  const emitAcpRawShapeDiagnostic = (update: JsonObject) => {
+    if (!modelUnavailableErrorCode) return;
+    if (rawAcpShapeDiagnosticCount >= ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT) return;
+    rawAcpShapeDiagnosticCount += 1;
+    send('agent', {
+      type: 'diagnostic',
+      name: 'acp_raw_event_shape',
+      source: 'acp-json-rpc',
+      elapsedMs: Date.now() - runStartedAt,
+      shape: acpRawEventShape(update),
+    });
+  };
+
+  const emitVisibleTextDelta = (delta: string) => {
+    if (!delta) return;
+    emittedVisibleTextChunk = true;
+    if (!emittedFirstTokenStatus) {
+      emittedFirstTokenStatus = true;
+      send('agent', {
+        type: 'status',
+        label: 'streaming',
+        ttftMs: Date.now() - runStartedAt,
+      });
+    }
+    send('agent', { type: 'text_delta', delta });
+  };
+
+  const noteArtifactTextSuppression = (reason: string) => {
+    if (!dsmlArtifactSuppressor) return;
+    const stats = dsmlArtifactSuppressor.stats();
+    const suppressedDelta = stats.suppressedChars - dsmlArtifactSuppressorLastSuppressedChars;
+    if (suppressedDelta <= 0) return;
+    dsmlArtifactSuppressorLastSuppressedChars = stats.suppressedChars;
+    artifactTextSuppressionSummary.suppressedChars += suppressedDelta;
+    artifactTextSuppressionSummary.suppressedChunks = stats.suppressedChunks;
+    artifactTextSuppressionSummary.openedBlocks = stats.openedBlocks;
+    artifactTextSuppressionSummary.closedBlocks = stats.closedBlocks;
+    if (artifactSuppressionDiagnosticCount >= ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT) return;
+    artifactSuppressionDiagnosticCount += 1;
+    send('agent', {
+      type: 'diagnostic',
+      name: 'acp_artifact_text_suppression',
+      source: 'acp-json-rpc',
+      elapsedMs: Date.now() - runStartedAt,
+      reason,
+      suppressedChars: artifactTextSuppressionSummary.suppressedChars,
+      suppressedChunks: artifactTextSuppressionSummary.suppressedChunks,
+      openedBlocks: artifactTextSuppressionSummary.openedBlocks,
+      closedBlocks: artifactTextSuppressionSummary.closedBlocks,
+      pendingCandidateChars: stats.pendingCandidateChars,
+      suppressing: stats.suppressing,
+    });
+  };
+
+  const emitArtifactTextSuppressionSummary = () => {
+    if (artifactTextSuppressionSummary.suppressedChars <= 0) return;
+    if (executionProfile === 'filesystem') {
+      send('agent', {
+        type: 'diagnostic',
+        name: 'unexpected_text_artifact_in_filesystem_run',
+        source: 'acp-json-rpc',
+        elapsedMs: Date.now() - runStartedAt,
+        suppressedChars: artifactTextSuppressionSummary.suppressedChars,
+        suppressedChunks: artifactTextSuppressionSummary.suppressedChunks,
+        openedBlocks: artifactTextSuppressionSummary.openedBlocks,
+        closedBlocks: artifactTextSuppressionSummary.closedBlocks,
+      });
+    }
+    send('agent', {
+      type: 'diagnostic',
+      name: 'acp_artifact_text_suppression_summary',
+      source: 'acp-json-rpc',
+      elapsedMs: Date.now() - runStartedAt,
+      ...artifactTextSuppressionSummary,
+    });
+  };
+
+  const noteToolCallTextSuppression = (reason: string) => {
+    const stats = toolCallTextSuppressor.stats();
+    const suppressedDelta = stats.suppressedChars - toolCallTextSuppressorLastSuppressedChars;
+    if (suppressedDelta <= 0) return;
+    toolCallTextSuppressorLastSuppressedChars = stats.suppressedChars;
+    toolCallTextSuppressionSummary.suppressedChars += suppressedDelta;
+    toolCallTextSuppressionSummary.suppressedChunks = stats.suppressedChunks;
+    toolCallTextSuppressionSummary.openedBlocks = stats.openedBlocks;
+    toolCallTextSuppressionSummary.closedBlocks = stats.closedBlocks;
+    if (artifactSuppressionDiagnosticCount >= ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT) return;
+    artifactSuppressionDiagnosticCount += 1;
+    send('agent', {
+      type: 'diagnostic',
+      name: 'acp_tool_call_text_suppression',
+      source: 'acp-json-rpc',
+      elapsedMs: Date.now() - runStartedAt,
+      reason,
+      suppressedChars: toolCallTextSuppressionSummary.suppressedChars,
+      suppressedChunks: toolCallTextSuppressionSummary.suppressedChunks,
+      openedBlocks: toolCallTextSuppressionSummary.openedBlocks,
+      closedBlocks: toolCallTextSuppressionSummary.closedBlocks,
+      pendingCandidateChars: stats.pendingCandidateChars,
+      suppressing: stats.suppressing,
+    });
+  };
+
+  const emitToolCallTextSuppressionSummary = () => {
+    if (toolCallTextSuppressionSummary.suppressedChars <= 0) return;
+    send('agent', {
+      type: 'diagnostic',
+      name: 'acp_tool_call_text_suppression_summary',
+      source: 'acp-json-rpc',
+      elapsedMs: Date.now() - runStartedAt,
+      ...toolCallTextSuppressionSummary,
+    });
+  };
+
   const sendPrompt = () => {
     promptRequestId = nextId;
     expectedId = promptRequestId;
@@ -976,11 +1197,15 @@ export function attachAcpSession({
 
   const finishCleanPrompt = (usageSource?: unknown) => {
     if (finished) return;
-    const flushedText = dsmlArtifactSuppressor?.flush() ?? '';
+    const flushedToolText = toolCallTextSuppressor.flush();
+    noteToolCallTextSuppression('tool_call_xml_flush');
+    const flushedText = flushedToolText ? (dsmlArtifactSuppressor?.strip(flushedToolText) ?? flushedToolText) : '';
     if (flushedText) {
-      emittedVisibleTextChunk = true;
-      send('agent', { type: 'text_delta', delta: flushedText });
+      emitVisibleTextDelta(flushedText);
     }
+    noteArtifactTextSuppression('artifact_flush');
+    emitToolCallTextSuppressionSummary();
+    emitArtifactTextSuppressionSummary();
     const usage = formatUsage(usageSource);
     if (usage) {
       send('agent', {
@@ -1081,10 +1306,12 @@ export function attachAcpSession({
           label: String(update.sessionUpdate || 'session_update'),
           elapsedMs: Date.now() - runStartedAt,
         });
+        emitAcpRawShapeDiagnostic(update);
       }
       if (update.sessionUpdate === 'agent_thought_chunk') {
-        const text = asObject(update.content)?.text;
-        if (typeof text === 'string' && text.length > 0) {
+        emitAcpRawShapeDiagnostic(update);
+        const text = extractAcpUpdateText(update);
+        if (text) {
           if (!emittedThinkingStart) {
             emittedThinkingStart = true;
             send('agent', { type: 'thinking_start' });
@@ -1094,8 +1321,9 @@ export function attachAcpSession({
         return;
       }
       if (update.sessionUpdate === 'agent_message_chunk') {
-        const text = asObject(update.content)?.text;
-        if (typeof text === 'string' && text.length > 0) {
+        emitAcpRawShapeDiagnostic(update);
+        const text = extractAcpUpdateText(update);
+        if (text) {
           const isCumulativeSnapshot = text.startsWith(emittedTextBuffer);
           const delta = isCumulativeSnapshot
             ? text.slice(emittedTextBuffer.length)
@@ -1103,18 +1331,25 @@ export function attachAcpSession({
           if (delta.length > 0) {
             emittedTextChunk = true;
             emittedTextBuffer += delta;
-            if (!emittedFirstTokenStatus) {
-              emittedFirstTokenStatus = true;
-              send('agent', {
-                type: 'status',
-                label: 'streaming',
-                ttftMs: Date.now() - runStartedAt,
-              });
+            const wasSuppressingToolCall = toolCallTextSuppressor.isSuppressing();
+            const toolCallStrippedDelta = toolCallTextSuppressor.strip(delta);
+            noteToolCallTextSuppression(
+              wasSuppressingToolCall || toolCallStrippedDelta !== delta
+                ? 'tool_call_xml'
+                : 'tool_call_candidate',
+            );
+            if (!toolCallStrippedDelta) {
+              return;
             }
             if (dsmlArtifactSuppressor) {
               const wasSuppressingArtifact = dsmlArtifactSuppressor.isSuppressing();
               const hadPendingArtifactCandidate = dsmlArtifactSuppressor.hasPendingCandidate();
-              const strippedDelta = dsmlArtifactSuppressor.strip(delta);
+              const strippedDelta = dsmlArtifactSuppressor.strip(toolCallStrippedDelta);
+              noteArtifactTextSuppression(
+                wasSuppressingArtifact || strippedDelta !== toolCallStrippedDelta
+                  ? 'artifact_echo'
+                  : 'artifact_candidate',
+              );
               const hasOpenArtifactCandidate =
                 dsmlArtifactSuppressor.isSuppressing() || dsmlArtifactSuppressor.hasPendingCandidate();
               const consumedArtifactText = wasSuppressingArtifact || strippedDelta !== delta;
@@ -1124,20 +1359,19 @@ export function attachAcpSession({
                 !hadPendingArtifactCandidate &&
                 !hasOpenArtifactCandidate &&
                 (
-                  strippedDelta === delta ||
+                  strippedDelta === toolCallStrippedDelta ||
                   (
                     !dsmlArtifactSuppressorArmedAfterText &&
                     dsmlArtifactSuppressorSawIncrementalProse &&
-                    !ACP_ARTIFACT_ECHO_START_RE.test(delta)
+                    !ACP_ARTIFACT_ECHO_START_RE.test(toolCallStrippedDelta)
                   )
                 );
-              const outputDelta = shouldPreserveIncrementalProse ? delta : strippedDelta;
+              const outputDelta = shouldPreserveIncrementalProse ? toolCallStrippedDelta : strippedDelta;
               if (outputDelta) {
-                emittedVisibleTextChunk = true;
-                send('agent', { type: 'text_delta', delta: outputDelta });
+                emitVisibleTextDelta(outputDelta);
               }
               if (
-                strippedDelta === delta &&
+                strippedDelta === toolCallStrippedDelta &&
                 !wasSuppressingArtifact &&
                 !hadPendingArtifactCandidate &&
                 !hasOpenArtifactCandidate
@@ -1151,8 +1385,7 @@ export function attachAcpSession({
                 dsmlArtifactSuppressorSawIncrementalProse = false;
               }
             } else {
-              emittedVisibleTextChunk = true;
-              send('agent', { type: 'text_delta', delta });
+              emitVisibleTextDelta(toolCallStrippedDelta);
             }
           }
         }
@@ -1213,11 +1446,13 @@ export function attachAcpSession({
                 input: { file_path: st.path ?? toolCallId },
               });
               send('agent', { type: 'tool_result', toolUseId: toolCallId, isError: failed });
+              emittedConcreteToolEvent = true;
             }
           }
         }
         if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {
           dsmlArtifactSuppressor = createDsmlArtifactTextSuppressor();
+          dsmlArtifactSuppressorLastSuppressedChars = 0;
           dsmlArtifactSuppressorToolCallId = toolCallId;
           dsmlArtifactSuppressorArmedAfterText = emittedTextBuffer.length > 0;
           dsmlArtifactSuppressorSawIncrementalProse = false;
@@ -1288,11 +1523,29 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
-      if (!emittedTextChunk && !emittedToolCall && modelUnavailableErrorCode) {
-        fail(
-          'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
-          { forceModelUnavailable: true },
-        );
+      const usage = formatUsage(result.usage);
+      if (!emittedVisibleTextChunk && !emittedConcreteToolEvent && modelUnavailableErrorCode) {
+        const outputTokens = usage?.output_tokens;
+        const hadCompletionTokens = typeof outputTokens === 'number' && outputTokens > 0;
+        if (hadCompletionTokens || emittedToolCall || emittedTextChunk) {
+          fail(
+            'ACP session completed after reporting model activity, but did not produce visible assistant text, concrete tool results, or artifacts.',
+            {
+              retryable: true,
+              details: {
+                kind: 'acp_no_visible_output',
+                output_tokens: outputTokens,
+                raw_tool_update_seen: emittedToolCall,
+                text_chunk_seen: emittedTextChunk,
+              },
+            },
+          );
+        } else {
+          fail(
+            'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
+            { forceModelUnavailable: true },
+          );
+        }
         return;
       }
       finishCleanPrompt(result.usage);

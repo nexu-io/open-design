@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { daemonAgentPayloadToPersistedAgentEvent } from '../src/server.js';
+import {
+  __forTestFilesystemEmptyAnswerFallbackText,
+  __forTestFilesystemWriteFileNamesFromRunEvents,
+  daemonAgentPayloadToPersistedAgentEvent,
+} from '../src/server.js';
 
 // Regression for PR #3375 review: the `tool_loop` event was handled by the live
 // web translator but dropped by the daemon's persisted-event path, so the
@@ -52,5 +56,91 @@ describe('daemonAgentPayloadToPersistedAgentEvent — tool_loop', () => {
 
   it('drops a malformed tool_loop without a toolName', () => {
     expect(persist({ type: 'tool_loop', action: 'warn', count: 4 })).toBeNull();
+  });
+});
+
+describe('daemonAgentPayloadToPersistedAgentEvent — diagnostic', () => {
+  it('persists safe structured runtime diagnostics', () => {
+    const persisted = daemonAgentPayloadToPersistedAgentEvent({
+      type: 'diagnostic',
+      name: 'acp_artifact_text_suppression',
+      source: 'acp-json-rpc',
+      elapsedMs: 1234,
+      reason: 'artifact_echo',
+      suppressedChars: 4096,
+      suppressedChunks: 3,
+      openedBlocks: 1,
+      closedBlocks: 1,
+      fileCount: 2,
+      files: ['index.html', 'style.css'],
+      shape: {
+        sessionUpdate: 'agent_message_chunk',
+        keys: ['content', 'sessionUpdate'],
+        hasText: true,
+      },
+    }) as Record<string, unknown> | null;
+
+    expect(persisted).toMatchObject({
+      kind: 'diagnostic',
+      name: 'acp_artifact_text_suppression',
+      source: 'acp-json-rpc',
+      elapsedMs: 1234,
+      reason: 'artifact_echo',
+      suppressedChars: 4096,
+      suppressedChunks: 3,
+      openedBlocks: 1,
+      closedBlocks: 1,
+      fileCount: 2,
+      files: ['index.html', 'style.css'],
+      shape: {
+        sessionUpdate: 'agent_message_chunk',
+        keys: ['content', 'sessionUpdate'],
+        hasText: true,
+      },
+    });
+  });
+});
+
+describe('filesystem empty-answer fallback helpers', () => {
+  it('extracts written file names from filesystem tool events', () => {
+    const names = __forTestFilesystemWriteFileNamesFromRunEvents([
+      {
+        event: 'agent',
+        data: {
+          type: 'tool_use',
+          name: 'Write',
+          input: { file_path: '/tmp/project/index.html' },
+        },
+      },
+      {
+        event: 'agent',
+        data: {
+          type: 'tool_use',
+          name: 'Edit',
+          input: { filePath: 'styles/theme.css' },
+        },
+      },
+      {
+        event: 'agent',
+        data: {
+          type: 'tool_use',
+          name: 'Bash',
+          input: { command: 'echo ok' },
+        },
+      },
+    ]);
+
+    expect(names).toEqual(['index.html', 'theme.css']);
+  });
+
+  it('builds a neutral normal assistant answer for file-only runs', () => {
+    expect(__forTestFilesystemEmptyAnswerFallbackText([])).toBe('Wrote project files.');
+    expect(__forTestFilesystemEmptyAnswerFallbackText(['index.html'])).toBe('Wrote index.html.');
+    expect(__forTestFilesystemEmptyAnswerFallbackText(['index.html', 'theme.css'])).toBe(
+      'Wrote index.html and theme.css.'
+    );
+    expect(__forTestFilesystemEmptyAnswerFallbackText(['index.html', 'theme.css', 'app.js', 'data.json'])).toBe(
+      'Wrote index.html, theme.css, app.js, and 4 files total.'
+    );
   });
 });

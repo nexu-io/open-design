@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { DISCOVERY_AND_PHILOSOPHY } from '../../src/prompts/discovery.js';
+import { renderDiscoveryAndPhilosophy } from '../../src/prompts/discovery.js';
+
+const DISCOVERY_AND_PHILOSOPHY = renderDiscoveryAndPhilosophy('filesystem');
 
 // The default-router exception in `discovery.ts` emits a single `<question-form
 // id="task-type">` on turn 1 that combines the routing question (which Open
@@ -63,6 +65,14 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
       'that tailored form replaces the default "Quick brief — 30 seconds" form; never output both.',
     );
+  });
+
+  it('requires the discovery question form before any tool use', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('No native tool calls');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'Do not call TodoWrite, write files, or invoke any native tool before emitting the complete `<question-form>...</question-form>` block',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('the form itself is the next action');
   });
 
   it('teaches RULE 2 to accept the task-type answer marker alongside discovery', () => {
