@@ -5371,6 +5371,12 @@ function HtmlViewer({
     setCommentPanelOpen(false);
     setCommentCreateMode(false);
     setActivePreviewCommentId(null);
+    // Reset the "ever loaded" sentinel so the loading skeleton is shown again
+    // while the new file's source is being fetched. Without this reset the
+    // sentinel stays true from the previous file, the render guard skips the
+    // skeleton, and a slow fetch leaves the user staring at a blank iframe
+    // instead of the loading indicator (codex P2 finding, issue #4650).
+    sourceEverLoadedRef.current = false;
   }, [projectId, file.name]);
   const activePreviewSrcUrl = (
     previewSrcUrl === effectiveBasePreviewSrcUrl ||
