@@ -302,7 +302,7 @@ Open Design (OD) 是开源替代品。同样的循环，同样的工件优先心
 
 ```bash
 # 一行命令安装到你正在使用的 Agent：
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
@@ -361,7 +361,7 @@ Open Design 提供 **stdio MCP 服务器**和逐 Agent 的**安装脚本**。任
 
 ```bash
 # 一行命令安装（支持 16+ CLI）：
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 
 # 然后，Agent 可以：
 od search-files "primary button"      # 跨项目文件搜索

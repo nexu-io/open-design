@@ -220,6 +220,9 @@ async function runServer(config: ResolvedWebuiConfig): Promise<ServeHandle> {
     amrProfile: packagedConfig.amrProfile,
     daemonCliEntry: packagedConfig.daemonCliEntry,
     daemonSidecarEntry: packagedConfig.daemonSidecarEntry,
+    // webui mode: no Electron, so there is no bundled-Electron node command;
+    // the daemon/web children run under the resolved `nodeCommand` instead.
+    electronNodeCommand: null,
     nodeCommand: packagedConfig.nodeCommand,
     telemetryRelayUrl: packagedConfig.telemetryRelayUrl,
     posthogKey: packagedConfig.posthogKey,

@@ -30,15 +30,15 @@ function runNode(args: string[], options: { cwd: string; env: NodeJS.ProcessEnv 
 }
 
 describe("shared release metadata publisher", () => {
-  it("publishes complete beta, preview, nightly, and stable metadata through the release storage fixture", async () => {
+  it("publishes complete beta, prerelease, preview, and stable metadata through the release storage fixture", async () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const root = await mkdtemp(join(tmpdir(), "od-release-metadata-publish-"));
     const server = await startReleaseStorageFixtureServer();
     try {
       for (const [channel, version] of [
         ["beta", "1.2.3-beta.4"],
+        ["prerelease", "1.2.3-prerelease.4"],
         ["preview", "1.2.3-preview.4"],
-        ["nightly", "1.2.3.nightly.4"],
         ["stable", "1.2.3"],
       ] as const) {
         const manifestDir = join(root, channel, "manifests");
@@ -117,7 +117,7 @@ describe("shared release metadata publisher", () => {
           WIN_X64_RESULT: "success",
           ...(channel === "beta" ? { RELEASE_LATEST_CAS_REQUIRED: "true" } : {}),
         };
-        await runNode(["--experimental-strip-types", ".github/workflow/scripts/release/storage/publish-metadata.ts"], {
+        await runNode(["--experimental-strip-types", "tools/release/src/storage/publish-metadata.ts"], {
           cwd: repoRoot,
           env,
         });
@@ -143,10 +143,7 @@ describe("shared release metadata publisher", () => {
         // github attribution must round-trip from the RELEASE_* env the workflow
         // passes; the stable promotion gate checks metadata.github.commit.
         expect(metadata.github?.commit).toBe("abc123");
-        // Nightlies are stable candidates for their own base version. The stable
-        // promotion gate requires metadata.stableVersion on the validated
-        // nightly; the unified-publisher refactor (#3995) dropped it.
-        if (channel === "nightly") {
+        if (channel === "stable") {
           expect(metadata.stableVersion).toBe("1.2.3");
         }
         expect(server.getObject(`${channel}/latest/metadata.json`)).not.toBeNull();

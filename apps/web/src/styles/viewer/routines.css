@@ -831,6 +831,21 @@
     inset 0 0 0 1px color-mix(in srgb, var(--border) 58%, transparent),
     0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
+/* The sticky Home tab must stay opaque on hover/focus: the translucent panel
+   wash above (color-mix(… 78%, transparent)) would otherwise let horizontally
+   scrolled project tabs bleed through the pinned tab when the strip is crowded.
+   Re-lay the opaque tab-bar background under that same wash so the hover/focus
+   affordance is preserved while the tab keeps blocking what scrolls behind it. */
+.workspace-shell .workspace-tab.is-pinned:not(.is-active):hover,
+.workspace-shell .workspace-tab.is-pinned:not(.is-active):focus-within {
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--bg-panel) 78%, transparent),
+      color-mix(in srgb, var(--bg-panel) 78%, transparent)
+    )
+    0 0 / 100% calc(100% - 2px) no-repeat,
+    var(--workspace-tab-bar-bg);
+}
 .workspace-shell .workspace-tab.is-dragging {
   background: var(--bg-panel);
   box-shadow: 0 14px 30px color-mix(in srgb, var(--text) 16%, transparent);

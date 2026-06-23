@@ -491,6 +491,7 @@ export function buildPackagedWebSpawnEnv(options: {
 
 async function spawnSidecarChild(options: {
   app: AppKey;
+  electronNodeCommand: string | null;
   entryPath: string;
   env: NodeJS.ProcessEnv;
   nodeCommand: string | null;
@@ -512,6 +513,10 @@ async function spawnSidecarChild(options: {
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
   await retireExistingSidecarEndpoint(ipcPath, logPath);
+  const usesElectronAsNode = options.nodeCommand == null;
+  const command = options.nodeCommand
+    ?? options.electronNodeCommand
+    ?? await resolvePackagedElectronNodeCommand();
   const childEnv = createSidecarLaunchEnv({
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -525,11 +530,10 @@ async function spawnSidecarChild(options: {
       ...options.env,
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),
-      ...(options.nodeCommand == null ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      ...(usesElectronAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
     },
     stamp,
   });
-  const command = options.nodeCommand ?? (await resolvePackagedElectronNodeCommand());
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
@@ -575,6 +579,7 @@ export async function startPackagedSidecars(
     amrProfile: string | null;
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
+    electronNodeCommand: string | null;
     nodeCommand: string | null;
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
@@ -632,6 +637,7 @@ export async function startPackagedSidecars(
         posthogHost: options.posthogHost,
         network: options.network ?? null,
       }),
+      electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,
@@ -661,6 +667,7 @@ export async function startPackagedSidecars(
         webOutputMode: options.webOutputMode,
         network: options.network ?? null,
       }),
+      electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,

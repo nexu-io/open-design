@@ -38,6 +38,7 @@ import {
 } from '../design-system-auto-prompt';
 import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
+import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
@@ -956,7 +957,14 @@ export function ChatPane({
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
   const rawError = error ?? failedRunErrorEvent?.detail ?? null;
-  const displayError = runFailureUi?.messageKey ? t(runFailureUi.messageKey) : rawError;
+  // Friendly agent name for {agent} interpolation in failure copy (e.g. the
+  // sign-in messages). Falls back to a neutral word when unreadable, never null.
+  const failedAgentLabel =
+    agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
+    t('chat.runError.agentFallback');
+  const displayError = runFailureUi?.messageKey
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    : rawError;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
         message: displayError,
@@ -969,7 +977,22 @@ export function ChatPane({
         agentId: retryAssistant?.agentId,
       })
     : null;
+  // First non-empty line of the diagnostics — shown as the one-line peek when
+  // the error-source area is collapsed.
+  const errorSourcePeek =
+    errorDiagnosticText?.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
+  // Status-dot tone for the unified card. Brand (accent) for AMR sign-in/top-up
+  // — the commercial recovery path; warn (amber) for the self-healing
+  // connection drop; error (red) for everything else. Purely visual.
+  const runErrorTone: 'error' | 'warn' | 'brand' =
+    runFailureUi?.primaryAction === 'authorize' || runFailureUi?.primaryAction === 'recharge'
+      ? 'brand'
+      : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
+        ? 'warn'
+        : 'error';
   const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
+  // Collapsed by default: the error source area shows one line until expanded.
+  const [errorSourceOpen, setErrorSourceOpen] = useState(false);
   const errorDiagnosticCopyTimerRef = useRef<number | null>(null);
   const copyErrorDiagnostic = useCallback(async () => {
     if (!errorDiagnosticText) return;
@@ -2045,10 +2068,63 @@ export function ChatPane({
                 scrollContainerRef={logRef}
               />
               {displayError ? (
-                <div className="msg error">
-                  <span className="chat-error-text">{displayError}</span>
-                  {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
-                    <div className="chat-error-actions">
+                <div className="run-error" data-tone={runErrorTone}>
+                  {/* ① type title + ② detail */}
+                  <div className="run-error__main">
+                    <span className="run-error__icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
+                        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <div className="run-error__copy">
+                      {runFailureUi ? (
+                        <p className="run-error__title">{t(runFailureUi.titleKey)}</p>
+                      ) : null}
+                      <p className="run-error__desc">{displayError}</p>
+                    </div>
+                  </div>
+                  {/* ④ collapsible error source */}
+                  {errorDiagnosticText ? (
+                    <div className={`run-error__source${errorSourceOpen ? ' is-open' : ''}`}>
+                      <div className="run-error__source-head">
+                        <button
+                          type="button"
+                          className="run-error__source-bar"
+                          aria-expanded={errorSourceOpen}
+                          aria-label={
+                            errorSourceOpen
+                              ? t('chat.runError.sourceCollapseAria')
+                              : t('chat.runError.sourceExpandAria')
+                          }
+                          onClick={() => setErrorSourceOpen((open) => !open)}
+                        >
+                          <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
+                            <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <span className="run-error__source-label">{t('chat.runError.sourceLabel')}</span>
+                          {errorSourcePeek ? (
+                            <span className="run-error__source-peek">{errorSourcePeek}</span>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="run-error__source-copy"
+                          onClick={() => void copyErrorDiagnostic()}
+                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                        >
+                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
+                        </button>
+                      </div>
+                      <div className="run-error__source-full">
+                        <pre>{errorDiagnosticText}</pre>
+                      </div>
+                    </div>
+                  ) : null}
+                  {/* ③ fix actions */}
+                  {showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
+                    <div className="run-error__actions">
                       {showByokRecoveryCta ? (
                         <button
                           type="button"
@@ -2056,17 +2132,6 @@ export function ChatPane({
                           onClick={onSwitchToLocalCli}
                         >
                           {t('avatar.useLocal')}
-                        </button>
-                      ) : null}
-                      {errorDiagnosticText ? (
-                        <button
-                          type="button"
-                          className="ghost chat-error-copy"
-                          onClick={() => void copyErrorDiagnostic()}
-                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                        >
-                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
                         </button>
                       ) : null}
                       {retryAssistant && onRetry && runFailureUi ? (

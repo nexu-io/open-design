@@ -19,6 +19,7 @@ import {
   DESKTOP_UPDATE_STATES,
   SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
+import type { ReleaseChannel } from "@open-design/release";
 
 import {
   compareVersions,
@@ -38,16 +39,12 @@ type FixtureServer = {
 };
 
 type FixturePlatform = "mac" | "win";
-type FixtureChannel = "stable" | "beta" | "nightly" | "preview";
+type FixtureChannel = ReleaseChannel;
 
 function prereleaseCounterParts(version: string): { baseVersion: string; number: number } | null {
   const prerelease = /^(\d+\.\d+\.\d+)-.+\.(\d+)$/.exec(version);
   if (prerelease?.[1] != null && prerelease[2] != null) {
     return { baseVersion: prerelease[1], number: Number(prerelease[2]) };
-  }
-  const nightly = /^(\d+\.\d+\.\d+)\.nightly\.(\d+)$/i.exec(version);
-  if (nightly?.[1] != null && nightly[2] != null) {
-    return { baseVersion: nightly[1], number: Number(nightly[2]) };
   }
   return null;
 }
@@ -70,11 +67,11 @@ function channelMetadata(channel: FixtureChannel, version: string): Record<strin
       betaVersion: version,
     };
   }
-  if (channel === "nightly") {
+  if (channel === "prerelease") {
     return {
       baseVersion: countedVersion.baseVersion,
-      nightlyNumber: countedVersion.number,
-      nightlyVersion: version,
+      prereleaseNumber: countedVersion.number,
+      prereleaseVersion: version,
       releaseVersion: version,
       stableVersion: countedVersion.baseVersion,
     };
@@ -1783,16 +1780,16 @@ describe("desktop updater", () => {
     }
   });
 
-  it("treats a larger counted beta nightly prerelease as an update", async () => {
+  it("treats a larger counted beta internal prerelease as an update", async () => {
     const root = makeRoot();
-    const fixture = await createUpdaterFixture({ channel: "beta", version: "1.0.1-beta-nightly.2" });
+    const fixture = await createUpdaterFixture({ channel: "beta", version: "1.0.1-beta-internal.2" });
     try {
       const updater = createDesktopUpdater({
         arch: "arm64",
         downloadRoot: root,
         env: {
           ...updaterEnv(fixture.metadataUrl),
-          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.1-beta-nightly.1",
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.1-beta-internal.1",
         },
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
@@ -1800,31 +1797,31 @@ describe("desktop updater", () => {
       const checked = await updater.checkForUpdates();
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.BETA);
-      expect(checked.availableVersion).toBe("1.0.1-beta-nightly.2");
+      expect(checked.availableVersion).toBe("1.0.1-beta-internal.2");
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
     }
   });
 
-  it("accepts nightly metadata that exposes nightlyVersion", async () => {
+  it("accepts prerelease metadata that exposes prereleaseVersion", async () => {
     const root = makeRoot();
-    const fixture = await createUpdaterFixture({ channel: "nightly", version: "1.0.1.nightly.2" });
+    const fixture = await createUpdaterFixture({ channel: "prerelease", version: "1.0.1-prerelease.2" });
     try {
       const updater = createDesktopUpdater({
         arch: "arm64",
         downloadRoot: root,
         env: {
           ...updaterEnv(fixture.metadataUrl),
-          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.1.nightly.1",
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.1-prerelease.1",
         },
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
       const checked = await updater.checkForUpdates();
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
-      expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.NIGHTLY);
-      expect(checked.availableVersion).toBe("1.0.1.nightly.2");
+      expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.PRERELEASE);
+      expect(checked.availableVersion).toBe("1.0.1-prerelease.2");
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
@@ -2532,11 +2529,11 @@ describe("desktop updater", () => {
     }
   });
 
-  it("defaults counted beta nightly builds to the beta update channel", () => {
+  it("defaults counted beta internal builds to the beta update channel", () => {
     const root = makeRoot();
     try {
       const config = resolveDesktopUpdaterConfig({
-        currentVersion: "1.2.3-beta-nightly.4",
+        currentVersion: "1.2.3-beta-internal.4",
         downloadRoot: root,
         env: {
           [DESKTOP_UPDATE_ENV.ENABLED]: "1",
@@ -2570,11 +2567,11 @@ describe("desktop updater", () => {
     }
   });
 
-  it("defaults dotted nightly builds to the nightly update channel", () => {
+  it("defaults prerelease builds to the prerelease update channel", () => {
     const root = makeRoot();
     try {
       const config = resolveDesktopUpdaterConfig({
-        currentVersion: "1.2.3.nightly.4",
+        currentVersion: "1.2.3-prerelease.4",
         downloadRoot: root,
         env: {
           [DESKTOP_UPDATE_ENV.ENABLED]: "1",
@@ -2582,8 +2579,8 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
-      expect(config.channel).toBe(DESKTOP_UPDATE_CHANNELS.NIGHTLY);
-      expect(config.metadataUrl).toContain("/nightly/latest/metadata.json");
+      expect(config.channel).toBe(DESKTOP_UPDATE_CHANNELS.PRERELEASE);
+      expect(config.metadataUrl).toContain("/prerelease/latest/metadata.json");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -2709,9 +2706,8 @@ describe("desktop updater", () => {
     expect(compareVersions("1.0.1", "1.0.0")).toBe(1);
     expect(compareVersions("1.0.0", "1.0.0")).toBe(0);
     expect(compareVersions("1.0.0-beta.2", "1.0.0-beta.1")).toBe(1);
-    expect(compareVersions("1.0.0-beta-nightly.2", "1.0.0-beta-nightly.1")).toBe(1);
-    expect(compareVersions("1.0.0-nightly.10", "1.0.0-nightly.2")).toBe(1);
-    expect(compareVersions("1.0.0.nightly.2", "1.0.0.nightly.1")).toBe(1);
+    expect(compareVersions("1.0.0-beta-internal.2", "1.0.0-beta-internal.1")).toBe(1);
+    expect(compareVersions("1.0.0-prerelease.10", "1.0.0-prerelease.2")).toBe(1);
     expect(compareVersions("1.0.0", "1.0.0-beta.9")).toBe(1);
     expect(compareVersions("1.0.0-beta.1", "1.0.0")).toBe(-1);
   });

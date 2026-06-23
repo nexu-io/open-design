@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
+import { runErrorCard } from '@/playwright/chat';
 import type { Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
@@ -118,8 +119,8 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 
   await sendPrompt(page, 'Return an intentional daemon smoke failure');
 
-  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure', { timeout: 15_000 });
-  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
+  await expect(runErrorCard(page)).toContainText('intentional fake codex failure', { timeout: 15_000 });
+  await expect(runErrorCard(page)).toContainText('intentional fake codex failure');
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
@@ -133,7 +134,7 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
   // classified as AGENT_CONNECTION_DROPPED and the error card shows the
   // localized chat.connectionDropped copy (en locale here) instead of echoing
   // the raw SDK string verbatim.
-  await expect(page.locator('.msg.error')).toContainText('connection to the model service dropped', {
+  await expect(runErrorCard(page)).toContainText('connection to the model service dropped', {
     timeout: 15_000,
   });
 });
@@ -244,7 +245,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   const expectedError = 'Agent completed without producing any output.';
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('.msg.error')).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText(expectedError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
   await expect.poll(async () => {
@@ -256,7 +257,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
-  await expect(page.locator('.msg.error')).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText(expectedError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 

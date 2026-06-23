@@ -72,11 +72,14 @@ function workspaceDependencyNames(manifest: unknown, includeDevDependencies = fa
 }
 
 function postinstallBuildTargets(): Set<string> {
+  return new Set(postinstallBuildTargetList());
+}
+
+function postinstallBuildTargetList(): string[] {
   const source = readFileSync(join(repoRoot, "scripts/postinstall.mjs"), "utf8");
-  const targets = [...source.matchAll(/"([^"]+)"/g)]
+  return [...source.matchAll(/"([^"]+)"/g)]
     .map((match) => match[1])
     .filter((value): value is string => value != null && /^(?:apps|packages|tools)\//.test(value));
-  return new Set(targets);
 }
 
 function workspacePackageDirectories(): string[] {
@@ -158,6 +161,14 @@ test("postinstall builds workspace packages whose linkable bins delegate to dist
     .filter((directory) => !postinstallBuildTargets().has(directory));
 
   assert.deepEqual(missingBuildTargets, []);
+});
+
+test("postinstall builds release before contracts", () => {
+  const targets = postinstallBuildTargetList();
+
+  assert.ok(targets.indexOf("packages/release") >= 0);
+  assert.ok(targets.indexOf("packages/contracts") >= 0);
+  assert.ok(targets.indexOf("packages/release") < targets.indexOf("packages/contracts"));
 });
 
 test("every postinstall build target has a checked-in tsconfig.json", () => {
