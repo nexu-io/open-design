@@ -54,6 +54,30 @@ jobs:
           fi
           row="$(gh pr view "$num" --repo "$REPO" \
                   --json number,baseRefName,isDraft,title,author,isCrossRepository,headRefOid)"
+          # "Pristine" = every commit on the branch was committed by github-actions[bot] — the
+          # untouched korthout cherry-pick of code already reviewed on main. If a human pushed any
+          # commit (resolving a conflict, fixing a failing test), that commit's committer is NOT
+          # github-actions[bot], so pristine=false and the auto-approve/merge below are skipped:
+          # those commits were never reviewed, so the PR must go through human review instead.
+          # Paginate across ALL commits (--paginate) — a >100-commit PR must not pass on the
+          # strength of its first page; one non-bot committer anywhere fails it. Count the lines
+          # that do NOT equal the literal bot login (-F/-x; the [..] is not a regex class) with
+          # grep -c, whose count semantics are portable (unlike `grep -qv`, whose early-exit status
+          # is unreliable across BSD/GNU).
+          # Fail closed on a partial/failed lookup: --paginate may emit several pages and THEN fail
+          # on a later one; `|| true` would keep that partial output and could read all-bot. Capture
+          # gh's exit status via `if !` and blank the list on any failure, so pristine needs a
+          # complete, successful enumeration of every commit.
+          if ! logins="$(gh api "repos/$REPO/pulls/$num/commits?per_page=100" --paginate \
+                          --jq '.[].committer.login // "none"' 2>/dev/null)"; then
+            logins=""
+          fi
+          nonbot="$(printf '%s\n' "$logins" | grep -Fvxc 'github-actions[bot]' || true)"
+          if [ -n "$logins" ] && [ "${nonbot:-1}" = "0" ]; then
+            pristine=true
+          else
+            pristine=false
+          fi
           {
             echo "found=true"
             echo "number=$(printf '%s' "$row" | jq -r .number)"
@@ -63,6 +87,7 @@ jobs:
             echo "author=$(printf '%s' "$row" | jq -r '.author.login')"
             echo "cross=$(printf '%s' "$row" | jq -r '.isCrossRepository')"
             echo "head_oid=$(printf '%s' "$row" | jq -r '.headRefOid')"
+            echo "pristine=$pristine"
           } >> "$GITHUB_OUTPUT"
 
       - name: Approve the clean backport (release bot, CI green)
@@ -71,9 +96,13 @@ jobs:
         # Approve as github-actions[bot] — a DIFFERENT identity than the App that authored the PR
         # (an author can't approve its own PR) — under the SAME bot-identity + SHA + CI gates as
         # the merge below, so only the release bot's own verified backports are auto-approved.
+        # pristine == 'true' is critical here: it means NO human commit was pushed, so the diff is
+        # exactly what was already reviewed on main. If a human resolved a conflict or fixed CI,
+        # pristine is false and this skips — that unreviewed code must get a real human review.
         if: >-
           ${{ steps.pr.outputs.found == 'true'
               && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
               && steps.pr.outputs.author == 'app/open-design-release-bot'
               && steps.pr.outputs.cross == 'false'
               && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
@@ -94,9 +123,13 @@ jobs:
         #  - PR head == the exact SHA CI passed on (head_oid == workflow_run.head_sha), and
         #    --match-head-commit re-checks at merge time — so a commit pushed after CI went
         #    green is never merged untested.
+        #  - pristine == 'true' — every commit was committed by github-actions[bot], i.e. nobody
+        #    pushed human commits on top of the cherry-pick. Once a human touches the branch the
+        #    diff is no longer the reviewed-on-main code, so we fall back to human review.
         if: >-
           ${{ steps.pr.outputs.found == 'true'
               && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
               && steps.pr.outputs.author == 'app/open-design-release-bot'
               && steps.pr.outputs.cross == 'false'
               && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
