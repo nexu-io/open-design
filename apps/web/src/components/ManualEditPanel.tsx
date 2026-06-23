@@ -46,10 +46,7 @@ export function ManualEditPanel({
   targets: ManualEditTarget[];
   selectedTarget: ManualEditTarget | null;
   draft: ManualEditDraft;
-  history: ManualEditHistoryEntry[];
   error: string | null;
-  canUndo: boolean;
-  canRedo: boolean;
   busy?: boolean;
   resetAvailable?: boolean;
   pageStylesEnabled?: boolean;
@@ -68,8 +65,6 @@ export function ManualEditPanel({
   onCancelDraft: () => void;
   onSaveDraft: () => void;
   onResetDraft: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
 }) {
   const t = useT();
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -150,42 +145,17 @@ export function ManualEditPanel({
           ) : null}
           <span title={panelTitle}>{panelTitle}</span>
           
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {onExit ? (
             <button
               type="button"
               className="manual-edit-titlebar-close"
-              style={{ position: 'static' }}
-              aria-label={t('manualEdit.undo')}
-              title={t('manualEdit.undo')}
-              disabled={!canUndo || busy}
-              onClick={onUndo}
+              aria-label={t('manualEdit.closePanel')}
+              title={t('manualEdit.closePanel')}
+              onClick={onExit}
             >
-              <Icon name="undo" size={16} />
+              <Icon name="close" size={16} />
             </button>
-            <button
-              type="button"
-              className="manual-edit-titlebar-close"
-              style={{ position: 'static' }}
-              aria-label={t('manualEdit.redo')}
-              title={t('manualEdit.redo')}
-              disabled={!canRedo || busy}
-              onClick={onRedo}
-            >
-              <Icon name="redo" size={16} />
-            </button>
-            {onExit ? (
-              <button
-                type="button"
-                className="manual-edit-titlebar-close"
-                style={{ position: 'static' }}
-                aria-label={t('manualEdit.closePanel')}
-                title={t('manualEdit.closePanel')}
-                onClick={onExit}
-              >
-                <Icon name="close" size={16} />
-              </button>
-            ) : null}
-          </div>
+          ) : null}
         </div>
         <div className="manual-edit-scroll">
           {targetForInspector ? (
@@ -265,33 +235,45 @@ export function ManualEditPanel({
           <div className="manual-edit-footer-actions">
             <div className="manual-edit-footer-left">
               {targetForInspector ? (
-                <button
-                  type="button"
-                  className="manual-edit-delete-btn"
-                  aria-label={t('manualEdit.deleteElement')}
-                  title={t('manualEdit.deleteElement')}
-                  disabled={busy}
-                  onClick={() => {
-                    onApplyPatch(
-                      { id: targetForInspector.id, kind: 'remove-element' },
-                      t('manualEdit.deleteElement'),
-                    );
-                  }}
-                >
-                  <Icon name="trash" size={15} />
-                </button>
-              ) : null}
-            </div>
-            <div className="manual-edit-footer-right">
-              {resetAvailable ? (
-                <button
-                  type="button"
-                  className="manual-edit-footer-btn subtle"
-                  disabled={busy}
-                  onClick={onResetDraft}
-                >
-                  {t('ds.reset')}
-                </button>
+                confirmDelete ? (
+                  <div className="manual-edit-delete-confirm">
+                    <button
+                      type="button"
+                      className="manual-edit-delete-btn manual-edit-delete-confirm-action"
+                      aria-label={t('manualEdit.deleteElement')}
+                      title={t('manualEdit.deleteElement')}
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirmDelete(false);
+                        onApplyPatch(
+                          { id: targetForInspector.id, kind: 'remove-element' },
+                          t('manualEdit.deleteElement'),
+                        );
+                      }}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="manual-edit-footer-btn subtle"
+                      disabled={busy}
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="manual-edit-delete-btn"
+                    aria-label={t('manualEdit.deleteElement')}
+                    title={t('manualEdit.deleteElement')}
+                    disabled={busy}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                )
               ) : null}
             </div>
             {targetForInspector ? (

@@ -200,7 +200,7 @@ describe('FileViewer manual edit history regressions', () => {
     expect(savedSources[0]).toContain('rgb(239, 68, 68)');
 
     act(() => {
-      panelState.props?.onUndo();
+      fireEvent.click(screen.getByTestId('manual-edit-undo'));
     });
     await waitFor(() => expect(savedSources).toHaveLength(2));
     expect(savedSources[1]).toBe(initialSource);

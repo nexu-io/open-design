@@ -446,7 +446,7 @@ describe('FileViewer manual edit regressions', () => {
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
     expect((baseSizeInput as HTMLInputElement).value).toBe('18');
 
-    // Click titlebar Undo button
+    // Click toolbar Undo button
     const undoBtn = screen.getByRole('button', { name: 'Undo' });
     expect((undoBtn as HTMLButtonElement).disabled).toBe(false);
 
