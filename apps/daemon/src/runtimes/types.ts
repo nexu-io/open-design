@@ -147,6 +147,9 @@ export type RuntimeAgentDef = {
   //                            schema and hand it through
   //                            `OPENCODE_CONFIG_CONTENT` in the spawn
   //                            env.
+  //   'mimo-env-content'      — same schema as opencode-env-content
+  //                            but emitted as `MIMOCODE_CONFIG_CONTENT`
+  //                            under MiMo's env namespace.
   //
   // Leave undefined for adapters that have no native MCP transport
   // wired yet (codex, gemini, cursor-agent, copilot, qoder, pi). The
@@ -157,7 +160,8 @@ export type RuntimeAgentDef = {
   externalMcpInjection?:
     | 'claude-mcp-json'
     | 'acp-merge'
-    | 'opencode-env-content';
+    | 'opencode-env-content'
+    | 'mimo-env-content';
   installUrl?: string;
   docsUrl?: string;
   // When `false`, the Settings model picker hides the "Custom (fill below)"

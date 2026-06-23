@@ -71,6 +71,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://kilo.ai',
     docsUrl: 'https://kilo.ai/docs/cli',
   },
+  mimo: {
+    installUrl: 'https://mimo.ai',
+    docsUrl: 'https://mimo.ai/docs',
+  },
   vibe: {
     installUrl: 'https://docs.mistral.ai',
     docsUrl: 'https://github.com/mistralai/vibe-acp',

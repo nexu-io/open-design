@@ -1378,3 +1378,56 @@ test('spawnEnvForAgent does not mutate the input env', () => {
   assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
   assert.notEqual(env, original);
 });
+
+test('spawnEnvForAgent strips inherited MIMOCODE_* env for mimo', () => {
+  const env = spawnEnvForAgent('mimo', {
+    MIMOCODE: '/leak/mimo',
+    MIMOCODE_PID: 'pid-leak',
+    MIMOCODE_RUN_ID: 'run-id-leak',
+    MIMOCODE_SERVER_PASSWORD: 'password-leak',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal('MIMOCODE' in env, false);
+  assert.equal('MIMOCODE_PID' in env, false);
+  assert.equal('MIMOCODE_RUN_ID' in env, false);
+  assert.equal('MIMOCODE_SERVER_PASSWORD' in env, false);
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent forces MIMOCODE_DISABLE_PROJECT_CONFIG=true for mimo when unset', () => {
+  const env = spawnEnvForAgent('mimo', {
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, 'true');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent forces MIMOCODE_DISABLE_PROJECT_CONFIG=true for mimo when empty', () => {
+  const env = spawnEnvForAgent('mimo', {
+    MIMOCODE_DISABLE_PROJECT_CONFIG: '',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, 'true');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves a configured MIMOCODE_DISABLE_PROJECT_CONFIG override for mimo', () => {
+  const env = spawnEnvForAgent(
+    'mimo',
+    {
+      MIMOCODE_DISABLE_PROJECT_CONFIG: '',
+      PATH: '/usr/bin',
+    },
+    {
+      MIMOCODE_DISABLE_PROJECT_CONFIG: '0',
+    },
+  );
+
+  assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, '0');
+  assert.equal(env.PATH, '/usr/bin');
+});
