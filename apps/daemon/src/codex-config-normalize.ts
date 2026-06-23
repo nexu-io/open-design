@@ -24,8 +24,14 @@
 // intentionally scoped: only standalone `service_tier` key lines are touched;
 // everything else in config.toml is preserved verbatim.
 //
-// The normalization is idempotent: if the file is absent or every service_tier
-// value is already valid, it is left unchanged.
+// The normalizer also removes nested `[features.*]` tables. Current Codex CLI
+// configs model `[features]` as a map of boolean flags; a nested table makes a
+// flag value a TOML map and the CLI exits with:
+//
+//   invalid type: map, expected a boolean in `features`
+//
+// The normalization is idempotent: if the file is absent, or if no invalid
+// service_tier value or nested features table is present, it is left unchanged.
 
 import { randomBytes } from 'node:crypto';
 import { rename, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -61,12 +67,60 @@ export function resolveCodexConfigPath(
  */
 const VALID_SERVICE_TIERS = new Set(['fast', 'flex']);
 
+function splitLinesPreservingEndings(content: string): string[] {
+  const lines = content.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? [];
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+function tableHeaderName(line: string): string | null {
+  const withoutLineEnding = line.replace(/\r\n$|\n$|\r$/, '');
+  const trimmed = withoutLineEnding.trim();
+  const arrayHeader = trimmed.match(/^\[\[([^\]\r\n]+)\]\][^\S\r\n]*(?:#.*)?$/);
+  const arrayHeaderName = arrayHeader?.[1];
+  if (arrayHeaderName) return arrayHeaderName.trim();
+  const tableHeader = trimmed.match(/^\[([^\]\r\n]+)\][^\S\r\n]*(?:#.*)?$/);
+  const tableName = tableHeader?.[1];
+  if (tableName) return tableName.trim();
+  return null;
+}
+
+function removeNestedFeaturesTables(content: string): string | null {
+  const lines = splitLinesPreservingEndings(content);
+  let changed = false;
+  let droppingNestedFeaturesTable = false;
+  const kept: string[] = [];
+
+  for (const line of lines) {
+    const headerName = tableHeaderName(line);
+    if (headerName) {
+      droppingNestedFeaturesTable = headerName.startsWith('features.');
+      if (droppingNestedFeaturesTable) {
+        changed = true;
+        continue;
+      }
+    }
+
+    if (droppingNestedFeaturesTable) {
+      changed = true;
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  return changed ? kept.join('') : null;
+}
+
 /**
  * Normalize the `service_tier` field in a config.toml string.
  *
  * Any standalone `service_tier` key line whose value is not in
  * {@link VALID_SERVICE_TIERS} has its entire line removed (so the Codex CLI
  * uses its built-in default tier). Valid values are left verbatim.
+ *
+ * Any nested `[features.*]` table is also removed because current Codex CLI
+ * configs expect `[features]` entries to be booleans, not maps.
  *
  * Returns `null` when nothing needed to change, otherwise the patched content.
  */
@@ -94,7 +148,7 @@ export function normalizeCodexConfigContent(content: string): string | null {
     /^([^\S\r\n]*)service_tier([^\S\r\n]*=[^\S\r\n]*)(["'])([^"'\r\n]*)\3([^\S\r\n]*(?:#[^\r\n]*)?)(\r?\n|$)/gm;
 
   let changed = false;
-  const patched = content.replace(
+  const serviceTierPatched = content.replace(
     pattern,
     (match: string, _indent, _eq, _quote, value: string) => {
       if (VALID_SERVICE_TIERS.has(value)) {
@@ -107,7 +161,12 @@ export function normalizeCodexConfigContent(content: string): string | null {
     },
   );
 
-  return changed ? patched : null;
+  const featuresPatched = removeNestedFeaturesTables(serviceTierPatched);
+  if (featuresPatched !== null) {
+    changed = true;
+  }
+
+  return changed ? (featuresPatched ?? serviceTierPatched) : null;
 }
 
 /**
