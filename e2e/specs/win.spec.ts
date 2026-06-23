@@ -658,9 +658,15 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
 
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
-      expect(inspect.status?.url).toBe('od://app/');
+      // A fresh install boots at `od://app/` and the SPA immediately redirects to the dedicated
+      // onboarding route (`od://app/onboarding`, since the #4513 cloud sign-in redesign). Whether
+      // the desktop is reported healthy just before or just after that redirect is a race, so the
+      // healthy URL/href may be either — match the prefix leniently exactly as the mac smoke and
+      // the onboarding-landing assertion below do, instead of pinning the bare root (which flaked
+      // ~3 of 4 nightly Windows builds when the redirect won the race).
+      expect(inspect.status?.url).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       const health = assertHealthEvalValue(inspect.eval?.value);
-      expect(health.href).toBe('od://app/');
+      expect(health.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(health.status).toBe(200);
       expect(health.health.ok).toBe(true);
 
