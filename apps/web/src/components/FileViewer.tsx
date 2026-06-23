@@ -4689,6 +4689,10 @@ function HtmlViewer({
   }, [closeDeployModal, deployModalOpen]);
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Set to true permanently once `source` has been populated for the first
+  // time. After the first load, we never show the "loading" skeleton again —
+  // even if a reload temporarily clears `source` to null (issue #4650).
+  const sourceEverLoadedRef = useRef(false);
   const [boardMode, setBoardMode] = useState(false);
   const [commentPanelOpen, setCommentPanelOpen] = useState(false);
   const [commentCreateMode, setCommentCreateMode] = useState(false);
@@ -5187,6 +5191,7 @@ function HtmlViewer({
     const sourceFileKey = `${projectId}\0${file.name}\0${liveHtml === undefined ? 'raw' : 'live'}`;
     if (liveHtml !== undefined) {
       sourceFileKeyRef.current = sourceFileKey;
+      sourceEverLoadedRef.current = true;
       setSource(liveHtml);
       sourceRef.current = liveHtml;
       return;
@@ -5213,6 +5218,7 @@ function HtmlViewer({
       // transient null mid-burst would blank source → srcDoc empty →
       // shell stays on prior frame. Keep the last good text instead.
       if (text == null) return;
+      sourceEverLoadedRef.current = true;
       setSource(text);
       sourceRef.current = text;
     });
@@ -5428,8 +5434,11 @@ function HtmlViewer({
       editBridge: true,
       paletteBridge: false,
       previewFocusGuard: true,
+      // Embed the reload counter so the srcdoc string differs across reloads
+      // even when the fetched HTML bytes are identical (issue #4650).
+      reloadKey,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, reloadKey],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -7265,6 +7274,11 @@ function HtmlViewer({
     setInlinedSource(null);
     setReloadKey((key) => key + 1);
     if (!useUrlLoadPreview) {
+      // Clear source synchronously so previewSource becomes null and the
+      // srcDoc memo recomputes to '' before the async re-fetch resolves.
+      // Without this, the remounted iframe carries stale srcdoc content
+      // until the fetch completes (issue #4650).
+      setSource(null);
       activatedSrcDocTransportHtmlRef.current = null;
       setSrcDocShellReady(false);
       setSrcDocTransportResetKey((key) => key + 1);
@@ -8976,7 +8990,7 @@ function HtmlViewer({
           ) : null}
         </>)}
       <div className="viewer-body" ref={previewBodyRef}>
-        {source === null ? (
+        {source === null && !sourceEverLoadedRef.current ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div
