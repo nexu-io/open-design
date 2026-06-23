@@ -1,0 +1,273 @@
+<!doctype html>
+<!--
+  Role: Braze Custom-HTML IAM — example.html (modal format, brand-agnostic)
+  Key Features: craft/braze-custom-html.md 전 항목 충족 참조 구현
+               brazeBridge only (ab.BridgeReady), logClick('0'/'1'), ≤2 CTA,
+               id="iam-..." 전 body 요소, no WebP, no brand logo, Liquid vars
+  Dependencies: craft/braze-custom-html.md (lint checklist §1–§10)
+  Notes: 갤러리 EntryView 프리뷰용 정적 예시. 브랜드 토큰 미정 시 CSS 변수 폴백 사용.
+         Liquid 변수는 Braze 엔진이 치환 전 placeholder comment로 표시.
+-->
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── 브랜드 토큰 폴백 (실제 DESIGN.md 토큰으로 교체) ── */
+    :root {
+      --color-primary:      #4F46E5; /* 브랜드 primary — DESIGN.md 교체 */
+      --color-primary-tint: #EEF2FF; /* primary 연한 배경 */
+      --color-surface:      #FFFFFF;
+      --color-on-surface:   #111827;
+      --color-secondary:    #6B7280;
+      --color-cta-text:     #FFFFFF;
+      --color-overlay:      rgba(0, 0, 0, 0.45);
+      --color-divider:      #E5E7EB;
+      --radius-modal:       20px;
+      --radius-btn:         12px;
+      --font-sans:          -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                            sans-serif;
+    }
+
+    /* ── 전체 오버레이 ── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--color-overlay);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      /* 진입 애니메이션 */
+      animation: overlay-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    }
+
+    /* ── 모달 컨테이너 ── */
+    .modal {
+      width: 100%;
+      max-width: 400px;
+      background: var(--color-surface);
+      border-radius: var(--radius-modal);
+      padding: 28px 20px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      position: relative;
+      text-align: center;
+      /* 진입 애니메이션 */
+      animation: modal-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    }
+
+    /* ── 닫기 버튼 ── */
+    .close-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: var(--color-primary-tint);
+      color: var(--color-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+      transition: background 120ms ease-out, transform 120ms ease-out;
+    }
+    .close-btn:active { transform: scale(0.92); background: var(--color-divider); }
+
+    /* ── 아이콘 영역 ── */
+    .icon-wrap {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--color-primary-tint);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 8px;
+      margin-bottom: 20px;
+    }
+
+    /* ── 텍스트 ── */
+    .heading {
+      font-family: var(--font-sans);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--color-on-surface);
+      margin-bottom: 10px;
+    }
+    .body-text {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.6;
+      color: var(--color-secondary);
+      max-width: 300px;
+      margin-bottom: 20px;
+    }
+
+    /* ── 구분선 ── */
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: var(--color-divider);
+      margin-bottom: 20px;
+    }
+
+    /* ── CTA 버튼 ── */
+    .btn-primary {
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--color-primary);
+      color: var(--color-cta-text);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius-btn);
+      cursor: pointer;
+      margin-bottom: 12px;
+      transition: opacity 120ms ease-out, transform 120ms ease-out;
+    }
+    .btn-primary:active { transform: scale(0.98); opacity: 0.92; }
+
+    .btn-secondary {
+      background: none;
+      border: none;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-secondary);
+      cursor: pointer;
+      padding: 8px 0;
+      transition: color 120ms ease-out;
+    }
+    .btn-secondary:active { color: var(--color-on-surface); }
+
+    /* ── 진입 애니메이션 ── */
+    @keyframes overlay-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes modal-in {
+      from { opacity: 0; transform: scale(0.92) translateY(12px); }
+      to   { opacity: 1; transform: scale(1)    translateY(0);    }
+    }
+
+    /* ── reduced-motion ── */
+    @media (prefers-reduced-motion: reduce) {
+      .overlay, .modal { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!--
+    Liquid preview placeholders:
+      {{${first_name}}}   → 사용자 이름 (Standard attribute)
+      {{${email}}}        → 이메일 (Standard attribute)
+    실제 발송본에서 Braze 엔진이 치환; 미치환 시 기본값 적용.
+  -->
+
+  <div id="iam-overlay" class="overlay" role="dialog" aria-modal="true" aria-label="IAM 팝업">
+
+    <div id="iam-modal" class="modal">
+
+      <!-- 닫기 버튼 -->
+      <button id="iam-close" class="close-btn" aria-label="닫기">
+        <svg id="iam-close-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <!-- 메인 아이콘 -->
+      <div id="iam-icon" class="icon-wrap" aria-hidden="true">
+        <svg id="iam-star-svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <path
+            d="M18 4l3.6 10.8H32l-9 6.6 3.4 10.8L18 26l-8.4 6.2 3.4-10.8-9-6.6h10.4L18 4z"
+            fill="var(--color-primary)"
+          />
+        </svg>
+      </div>
+
+      <!-- 헤딩 — Liquid: {{${first_name}}} 치환 예시 -->
+      <h1 id="iam-header" class="heading">
+        지금 시작하면 한 달 무료예요
+        <!-- preview: {{${first_name}}}님, 지금 시작하면 한 달 무료예요 -->
+      </h1>
+
+      <!-- 본문 -->
+      <p id="iam-body" class="body-text">
+        첫 달 무료 혜택을 놓치지 마세요.<br>
+        지금 가입하면 30일 동안 모든 기능을 제한 없이 이용할 수 있습니다.
+      </p>
+
+      <!-- 구분선 -->
+      <div id="iam-divider" class="divider" aria-hidden="true"></div>
+
+      <!-- 주 CTA -->
+      <button id="iam-cta-primary" class="btn-primary">
+        지금 무료로 시작하기
+      </button>
+
+      <!-- 보조 CTA -->
+      <button id="iam-cta-secondary" class="btn-secondary">
+        다음에 할게요
+      </button>
+
+    </div>
+  </div>
+
+  <script>
+    // brazeBridge 폴백 (EntryView 정적 프리뷰에서도 오류 없이 동작)
+    window.brazeBridge = window.brazeBridge || {
+      logClick:     function() {},
+      closeMessage: function() {},
+      BridgeReady:  function(cb) {
+        if (document.readyState !== 'loading') { cb(); }
+        else { document.addEventListener('ab.BridgeReady', cb); }
+      }
+    };
+
+    // 모든 brazeBridge 호출은 반드시 BridgeReady 콜백 안에 위치 (craft §1)
+    brazeBridge.BridgeReady(function () {
+
+      // 주 CTA — 딥링크 예시: logClick('0') + location.href (closeMessage 호출 금지 — craft §3)
+      document.getElementById('iam-cta-primary').addEventListener('click', function () {
+        brazeBridge.logClick('0');           // Button 1 → '0' (craft §2, BRAZE-DOMAIN §2.4)
+        location.href = 'yourapp://trial/start'; // 딥링크 — closeMessage 없음 (craft §3)
+      });
+
+      // 보조 CTA — 딥링크 없는 명시적 닫기 → closeMessage 허용 (craft §3)
+      document.getElementById('iam-cta-secondary').addEventListener('click', function () {
+        brazeBridge.logClick('1');           // Button 2 → '1' (craft §2, BRAZE-DOMAIN §2.4)
+        brazeBridge.closeMessage();          // 비딥링크 dismiss — OK (craft §3)
+      });
+
+      // 닫기(✕) 버튼 — 명시적 dismiss
+      document.getElementById('iam-close').addEventListener('click', function () {
+        brazeBridge.closeMessage();
+      });
+
+      // 본문 탭 추적 (선택) — logClick() 인수 없음 (craft §2)
+      document.getElementById('iam-modal').addEventListener('click', function (e) {
+        // CTA·닫기 버튼 클릭은 각자 처리 — 여기선 배경 영역 탭만
+        var target = e.target;
+        var isCta = target.closest('#iam-cta-primary, #iam-cta-secondary, #iam-close');
+        if (!isCta) { brazeBridge.logClick(); }
+      });
+
+    });
+  </script>
+
+</body>
+</html>

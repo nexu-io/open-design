@@ -33,7 +33,8 @@ import type { IconName } from '../Icon';
 // independently of the default-binding mapping.
 export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
-  | 'example-hyperframes';
+  | 'example-hyperframes'
+  | 'example-braze-iam';
 
 export type ChipAction =
   | {
@@ -139,6 +140,21 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         fidelity: 'high-fidelity',
       },
     },
+  },
+  {
+    id: 'braze-iam',
+    label: 'Braze IAM',
+    icon: 'bell',
+    group: 'create',
+    hint: 'Author a Braze Custom-HTML in-app message: interview → plan → confirm → A/B HTML variants.',
+    // Braze IAM binds to the bundled `example-braze-iam` scenario plugin
+    // (ships SKILL.md, example.html, and the format/interaction/liquid/size
+    // references), so the chip activates the full IAM interview → confirm →
+    // produce workflow instead of dropping the request into the generic
+    // od-new-generation router. The SKILL.md owns its own <question-form>
+    // interview, so the manifest exposes only the editable `{{audience}}`
+    // slot; Home renders that placeholder inline.
+    action: { kind: 'apply-scenario', pluginId: 'example-braze-iam', projectKind: 'prototype' },
   },
   {
     id: 'image',

@@ -1,0 +1,138 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-braze-iam",
+  "title": "Braze IAM",
+  "title_i18n": {
+    "zh-CN": "Braze IAM",
+    "zh-TW": "Braze IAM",
+    "ja": "Braze IAM",
+    "ko": "Braze IAM",
+    "de": "Braze IAM",
+    "fr": "Braze IAM",
+    "ru": "Braze IAM",
+    "es": "Braze IAM",
+    "pt-BR": "Braze IAM",
+    "it": "Braze IAM",
+    "vi": "Braze IAM",
+    "pl": "Braze IAM",
+    "id": "Braze IAM",
+    "nl": "Braze IAM",
+    "ar": "Braze IAM",
+    "tr": "Braze IAM",
+    "uk": "Braze IAM",
+    "en": "Braze IAM"
+  },
+  "version": "0.1.0",
+  "description": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+  "description_i18n": {
+    "zh-CN": "Braze Custom-HTML 应用内消息（IAM）生成器。品牌无关的 7 步工作流：先采访用户，起草活动方案，进入确认门控，生成两个 A/B 设计变体 HTML 产物，并交接到 Braze 仪表盘。适用于任何 'Braze IAM'、'应用内消息'、'인앱메시지'、'Braze 弹窗' 或 'IAM HTML' 请求。",
+    "zh-TW": "Braze Custom-HTML 應用程式內訊息（IAM）產生器。品牌無關的 7 步工作流：先訪談使用者，草擬活動方案，進入確認關卡，產生兩個 A/B 設計變體 HTML 產物，並交接到 Braze 儀表板。適用於任何 'Braze IAM'、'應用程式內訊息'、'인앱메시지'、'Braze 彈窗' 或 'IAM HTML' 請求。",
+    "ja": "Braze Custom-HTML アプリ内メッセージ（IAM）プロデューサー。ブランド非依存の 7 ステップワークフロー：ユーザーにインタビューし、キャンペーン計画を起草し、確認ゲートを通し、A/B デザインバリアントの HTML 成果物を 2 つ生成し、Braze ダッシュボードへ引き継ぎます。'Braze IAM'、'アプリ内メッセージ'、'인앱메시지'、'Braze ポップアップ'、'IAM HTML' のいずれのリクエストにも使用します。",
+    "ko": "Braze Custom-HTML 인앱메시지(IAM) 제작기. 브랜드 무관 7단계 워크플로우: 사용자를 인터뷰하고, 캠페인 기획안을 작성하고, 컨펌 게이트를 거친 뒤 A/B 디자인 변종 HTML 산출물 2개를 생성하고, Braze 대시보드로 핸드오프한다. 'Braze IAM', '인앱메시지', 'in-app message', 'Braze 팝업', 'IAM HTML' 요청 어디에나 사용한다.",
+    "de": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "fr": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "ru": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "es": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "pt-BR": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "it": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "vi": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "pl": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "id": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "nl": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "ar": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "tr": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "uk": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request.",
+    "en": "Braze Custom-HTML In-App Message (IAM) producer. Brand-agnostic 7-step workflow: interviews the user, drafts a campaign plan, gates confirmation, produces two A/B design-variant HTML artifacts, and hands off to the Braze dashboard. Use for any 'Braze IAM', 'in-app message', '인앱메시지', 'Braze 팝업', or 'IAM HTML' request."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/braze-iam",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "braze",
+    "in-app-message",
+    "iam",
+    "mobile",
+    "html"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "mobile",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Produce a Braze Custom-HTML in-app message for {{audience}}. Run the braze-iam interview to capture format, trigger, segment and tone; draft a campaign plan; gate it for confirmation; then produce two A/B HTML variants ready for the Braze dashboard.",
+        "ko": "{{audience}} 대상 Braze Custom-HTML 인앱메시지를 제작한다. braze-iam 인터뷰로 형태·트리거·세그먼트·톤을 받고, 기획안을 작성해 컨펌 게이트를 거친 뒤 Braze 대시보드용 A/B HTML 변종 2개를 생성한다."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Braze IAM"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "app users who haven't signed up",
+        "default": "target users"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./references/format-design-guide.md",
+        "./references/interaction-standard.md",
+        "./references/liquid-guide.md",
+        "./references/size-patterns.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
