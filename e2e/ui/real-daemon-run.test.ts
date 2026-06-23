@@ -274,6 +274,16 @@ test('[P1] artifact persistence survives page reload during an active real daemo
     producedFiles: [SLOW_RELOAD_FILE],
     expectedThinking: false,
   });
+  // Criterion 4b: the runId must equal the *original* runId captured before
+  // reload — requireRunId:true above only proves *some* runId is present, not
+  // that the message was reattached in-place rather than recreated with a new id.
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistant = messages.find((m) => m.role === 'assistant');
+      return assistant?.runId ?? null;
+    }, { timeout: 5_000 })
+    .toBe(runId);
 
   // Criterion 5: the artifact preview restores and renders the artifact heading.
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible({ timeout: 15_000 });

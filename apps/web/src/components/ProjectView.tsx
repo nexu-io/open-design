@@ -2723,9 +2723,17 @@ export function ProjectView({
         // When the daemon authoritative status is 'failed', the run ended in a
         // genuine failure.  For spuriously-failed pending messages this means
         // the client-side heuristic was wrong — the daemon did not succeed.
-        // Leave the message alone so its persisted error context survives; do
-        // not overwrite runStatus or resumable with the re-fetched value.
+        // Leave the message alone so its persisted error content/events/producedFiles
+        // survive, but still apply the daemon's authoritative `resumable` flag so
+        // ChatPane's Continue affordance reflects the daemon's view after a reload.
         if (spuriouslyFailedPending && status.status === 'failed') {
+          if (typeof status.resumable !== 'undefined') {
+            updateMessageById(
+              message.id,
+              (prev) => ({ ...prev, resumable: status.resumable }),
+              true,
+            );
+          }
           completedReattachRunsRef.current.add(runId);
           continue;
         }
