@@ -2907,7 +2907,10 @@ export function ProjectView({
         if (needsFullReplay && daemonStatusIsRecoverable) {
           updateMessageById(
             message.id,
-            (prev) => ({ ...prev, content: '', events: [], producedFiles: undefined }),
+            // Clear endedAt so the replay finalizers stamp Date.now() on real
+            // completion instead of preserving the SSE-disconnect timestamp that
+            // onError set when the browser-side reconnect loop gave up.
+            (prev) => ({ ...prev, content: '', events: [], producedFiles: undefined, endedAt: undefined }),
           );
           // When the failed-message recovery moves back to running/succeeded,
           // clear any stale "daemon stream disconnected" error banner that the
