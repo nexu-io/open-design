@@ -1361,8 +1361,31 @@ async function resetPackagedRuntimeNamespaceRoot(namespaceRoot: string): Promise
   await rm(namespaceRoot, { force: true, recursive: true });
 }
 
+// Reset every per-namespace runtime state directory before a fresh-onboarding
+// start, EXCEPT the installed app payload (`install/`). On Windows the install
+// lives UNDER the runtime namespace root, so — unlike the macOS smoke, which
+// installs to /Applications and can `rm` the whole namespace root
+// (resetPackagedMacRuntimeData) — we must preserve `install/` while wiping
+// everything else.
+//
+// Wiping only `data/` is not enough. The packaged web frontend persists its
+// config — including `onboardingCompleted` — to `localStorage`, which Electron
+// stores under the SEPARATE `user-data/` partition, not the daemon's `data/`
+// dir (see the `daemonDataRoot` vs `electronUserDataRoot` split logged on
+// boot). When `<data>/app-config.json` is absent the daemon OMITS
+// `onboardingCompleted`, so `mergeDaemonConfig` keeps the localStorage value;
+// a leftover `onboardingCompleted: true` from an earlier run (e.g. the [P2]
+// smoke that ran first in this file) then boots the app straight to Home
+// instead of onboarding, and this test times out waiting for the cloud
+// sign-in landing. Clearing `user-data/` alongside `data/` gives the same
+// true-first-run guarantee the mac smoke gets from removing the entire root.
 async function resetPackagedRuntimeDataRoot(): Promise<void> {
-  await rm(join(runtimeNamespaceRoot, 'data'), { force: true, recursive: true });
+  const entries = await readdir(runtimeNamespaceRoot).catch(() => [] as string[]);
+  await Promise.all(
+    entries
+      .filter((entry) => entry !== 'install')
+      .map((entry) => rm(join(runtimeNamespaceRoot, entry), { force: true, recursive: true })),
+  );
 }
 
 function resolveFromWorkspace(filePath: string): string {
