@@ -40,12 +40,6 @@ on:
 permissions:
   contents: write
   actions: write
-  # release-stable's publish_docker_image job (added in #4327) needs these to call
-  # docker-image.yml. A called workflow can only downgrade the caller's token, so without
-  # them this reusable-workflow chain fails at startup (permission escalation) — even though
-  # the docker job is skipped for the nightly channel. See run 27996588773.
-  packages: write
-  id-token: write
 
 concurrency:
   group: feishu-release-${{ github.ref }}
@@ -60,6 +54,16 @@ jobs:
   build:
     name: Build nightly from release branch
     if: github.repository == 'nexu-io/open-design'
+    # Scope packages/id-token to the only job that calls release-stable. Its
+    # publish_docker_image job (added in #4327) needs them to call docker-image.yml;
+    # a called workflow can only downgrade the caller's token, so without them the chain
+    # fails at startup (permission escalation) even though the docker job is skipped for
+    # the nightly channel. The notify job below doesn't need them. See run 27996588773.
+    permissions:
+      contents: write
+      actions: write
+      packages: write
+      id-token: write
     uses: ./.github/workflows/release-stable.yml
     secrets: inherit
     with:
