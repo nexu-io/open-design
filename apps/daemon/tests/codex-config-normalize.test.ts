@@ -195,6 +195,49 @@ describe('normalizeCodexConfigContent', () => {
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
+  it('removes nested features tables that make Codex parse features as maps (#4648)', () => {
+    const input = [
+      '[features]',
+      'hide_spawn_agent_metadata = false',
+      '[features.multi_agent_v2]',
+      'hide_spawn_agent_metadata = false',
+      'max_concurrent_threads_per_session = 10000',
+      'enabled = false',
+      '',
+      '[model]',
+      'model = "gpt-5.5"',
+    ].join('\n');
+
+    const result = normalizeCodexConfigContent(input);
+
+    expect(result).toBe([
+      '[features]',
+      'hide_spawn_agent_metadata = false',
+      '[model]',
+      'model = "gpt-5.5"',
+    ].join('\n'));
+  });
+
+  it('preserves unrelated dotted tables while removing nested features tables', () => {
+    const input = [
+      '[profiles.default]',
+      'model = "gpt-5.5"',
+      '[features.multi_agent_v2]',
+      'enabled = false',
+      '[projects."/tmp/open-design"]',
+      'trust_level = "trusted"',
+    ].join('\n');
+
+    const result = normalizeCodexConfigContent(input);
+
+    expect(result).toBe([
+      '[profiles.default]',
+      'model = "gpt-5.5"',
+      '[projects."/tmp/open-design"]',
+      'trust_level = "trusted"',
+    ].join('\n'));
+  });
+
   // -------------------------------------------------------------------------
   // CRLF regression: config.toml files written by the Codex app on Windows use
   // CRLF endings. Removing the stale line must preserve ALL surrounding \r\n
@@ -214,6 +257,17 @@ describe('normalizeCodexConfigContent', () => {
     // No stray bare \r without \n.
     expect(result).not.toMatch(/\r(?!\n)/);
     // No naked LF introduced.
+    expect(result).not.toMatch(/(?<!\r)\n/);
+  });
+
+  it('CRLF regression: removes nested features tables while preserving surrounding \\r\\n endings', () => {
+    const crlfContent = '[features]\r\nhide_spawn_agent_metadata = false\r\n[features.multi_agent_v2]\r\nenabled = false\r\n[model]\r\nmodel = "gpt-5.5"\r\n';
+    const result = normalizeCodexConfigContent(crlfContent);
+
+    expect(result).not.toBeNull();
+    expect(result).not.toContain('[features.multi_agent_v2]');
+    expect(result).toBe('[features]\r\nhide_spawn_agent_metadata = false\r\n[model]\r\nmodel = "gpt-5.5"\r\n');
+    expect(result).not.toMatch(/\r(?!\n)/);
     expect(result).not.toMatch(/(?<!\r)\n/);
   });
 });
@@ -281,6 +335,34 @@ describe('normalizeCodexConfigFile', () => {
     const after = readFileSync(configPath, 'utf8');
     expect(after).not.toContain('service_tier');
     expect(after).not.toContain('"turbo"');
+    expect(after).toContain('model = "gpt-5.5"');
+  });
+
+  it('removes nested features tables from config.toml (#4648 regression)', async () => {
+    const configPath = join(tmpDir, 'config.toml');
+    writeFileSync(
+      configPath,
+      [
+        '[features]',
+        'hide_spawn_agent_metadata = false',
+        '[features.multi_agent_v2]',
+        'hide_spawn_agent_metadata = false',
+        'max_concurrent_threads_per_session = 10000',
+        'enabled = false',
+        '[model]',
+        'model = "gpt-5.5"',
+      ].join('\n'),
+      'utf8',
+    );
+
+    await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
+
+    const after = readFileSync(configPath, 'utf8');
+    expect(after).toContain('[features]');
+    expect(after).toContain('hide_spawn_agent_metadata = false');
+    expect(after).not.toContain('[features.multi_agent_v2]');
+    expect(after).not.toContain('max_concurrent_threads_per_session');
+    expect(after).toContain('[model]');
     expect(after).toContain('model = "gpt-5.5"');
   });
 

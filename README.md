@@ -307,6 +307,10 @@ od mcp install <agent>
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
 
+> **WSL2 users:** If your coding-agent CLIs run inside WSL2, follow the
+> [`WSL2 setup guide`](docs/wsl-setup.md) first. Linux's `/usr/bin/od` can
+> shadow Open Design's `od` command.
+
 Then, inside the agent:
 
 ```
@@ -343,7 +347,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Node `~24`, pnpm `10.33.x`. Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, Nix flake, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup.md); native Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, Nix flake, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
 
 ### A full workflow — from brief to artifact
 
