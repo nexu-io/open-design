@@ -501,6 +501,7 @@ import { registerChatRoutes } from './chat-routes.js';
 import { registerTerminalRoutes } from './terminal-routes.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './social-share-routes.js';
+import { registerBrazeRoutes } from './braze-routes.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
@@ -5799,6 +5800,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
   });
   registerSocialShareRoutes(app, { http: httpDeps });
+  registerBrazeRoutes(app, { db, http: httpDeps });
   registerProjectRoutes(app, {
     db,
     design,
