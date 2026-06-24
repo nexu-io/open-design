@@ -128,6 +128,27 @@ function seedLogin(profile: string, payload: Record<string, unknown> = {}): void
   writeFileSync(configPath(), JSON.stringify(full, null, 2), 'utf8');
 }
 
+async function startWalletApi(
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void | Promise<void>,
+): Promise<{ close: () => Promise<void>; requests: string[]; url: string }> {
+  const requests: string[] = [];
+  const walletServer = createServer((req, res) => {
+    requests.push(req.headers.authorization ?? '');
+    void Promise.resolve(handler(req, res)).catch((err) => {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+    });
+  });
+  await new Promise<void>((resolve) => walletServer.listen(0, '127.0.0.1', resolve));
+  const address = walletServer.address() as AddressInfo;
+  return {
+    requests,
+    url: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((resolve) => walletServer.close(() => resolve())),
+  };
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -188,7 +209,173 @@ afterEach(() => {
   delete process.env.VELA_LINK_URL;
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
+  delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
   rmSync(tmpHome, { recursive: true, force: true });
+});
+
+describe('GET /api/integrations/vela/wallet', () => {
+  it('returns signed_out without reading an upstream wallet API', async () => {
+    const walletApi = await startWalletApi((_req, res) => {
+      res.statusCode = 500;
+      res.end('must not be called');
+    });
+    try {
+      const { status, body } = await getJson<{
+        status: string;
+        balanceUsd: string | null;
+        error?: { code: string };
+      }>(`${baseUrl}/api/integrations/vela/wallet`);
+
+      expect(status).toBe(200);
+      expect(body.status).toBe('signed_out');
+      expect(body.balanceUsd).toBeNull();
+      expect(body.error?.code).toBe('signed_out');
+      expect(walletApi.requests).toEqual([]);
+    } finally {
+      await walletApi.close();
+    }
+  });
+
+  it('fetches the AMR wallet balance with the local control key and caches it briefly', async () => {
+    const walletApi = await startWalletApi((req, res) => {
+      expect(req.url).toBe('/api/v1/wallet/balance');
+      expect(req.headers.authorization).toBe('Bearer ck-wallet-balance');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        balanceUsd: '0.1000',
+        updatedAt: '2026-06-23T06:05:18.782Z',
+      }));
+    });
+    seedLogin('local', {
+      apiUrl: walletApi.url,
+      controlKey: 'ck-wallet-balance',
+      runtimeKey: 'rt-wallet-balance',
+      user: { id: 'wallet-user', email: 'wallet@example.com', plan: 'free' },
+    });
+    try {
+      const first = await getJson<{
+        balanceUsd: string | null;
+        source: string;
+        status: string;
+        user: { email?: string } | null;
+      }>(`${baseUrl}/api/integrations/vela/wallet`);
+      const second = await getJson<{ balanceUsd: string | null; source: string }>(
+        `${baseUrl}/api/integrations/vela/wallet`,
+      );
+
+      expect(first.status).toBe(200);
+      expect(first.body.status).toBe('available');
+      expect(first.body.balanceUsd).toBe('0.1000');
+      expect(first.body.source).toBe('vela_api');
+      expect(first.body.user?.email).toBe('wallet@example.com');
+      expect(second.body.balanceUsd).toBe('0.1000');
+      expect(second.body.source).toBe('daemon_cache');
+      expect(walletApi.requests).toEqual(['Bearer ck-wallet-balance']);
+      expect(JSON.stringify(first.body)).not.toContain('ck-wallet-balance');
+      expect(JSON.stringify(first.body)).not.toContain('rt-wallet-balance');
+    } finally {
+      await walletApi.close();
+    }
+  });
+
+  it('does not serve a cached wallet balance after the control key is rejected', async () => {
+    let requestCount = 0;
+    const walletApi = await startWalletApi((_req, res) => {
+      requestCount += 1;
+      res.setHeader('content-type', 'application/json');
+      if (requestCount === 1) {
+        res.end(JSON.stringify({
+          balanceUsd: '0.1000',
+          updatedAt: '2026-06-23T06:05:18.782Z',
+        }));
+        return;
+      }
+      res.statusCode = 401;
+      res.end(JSON.stringify({ error: 'unauthenticated' }));
+    });
+    seedLogin('local', {
+      apiUrl: walletApi.url,
+      controlKey: 'ck-revoked-wallet',
+      runtimeKey: 'rt-wallet-balance',
+      user: { id: 'wallet-user', email: 'wallet@example.com', plan: 'free' },
+    });
+    try {
+      const first = await getJson<{
+        balanceUsd: string | null;
+        source: string;
+        status: string;
+      }>(`${baseUrl}/api/integrations/vela/wallet`);
+      const second = await getJson<{
+        balanceUsd: string | null;
+        error?: { code: string; message: string };
+        source: string;
+        status: string;
+      }>(`${baseUrl}/api/integrations/vela/wallet?refresh=1`);
+
+      expect(first.body.status).toBe('available');
+      expect(first.body.balanceUsd).toBe('0.1000');
+      expect(first.body.source).toBe('vela_api');
+      expect(second.body.status).toBe('unavailable');
+      expect(second.body.balanceUsd).toBeNull();
+      expect(second.body.source).toBe('unavailable');
+      expect(second.body.error?.code).toBe('unauthorized');
+      expect(second.body.error?.message).toMatch(/sign in again/i);
+    } finally {
+      await walletApi.close();
+    }
+  });
+
+  it('reports missing_control_key instead of showing zero when only a runtime key is present', async () => {
+    seedLogin('local', {
+      controlKey: '',
+      runtimeKey: 'rt-without-control',
+      user: { id: 'wallet-user', email: 'wallet@example.com' },
+    });
+
+    const { status, body } = await getJson<{
+      status: string;
+      balanceUsd: string | null;
+      error?: { code: string };
+    }>(`${baseUrl}/api/integrations/vela/wallet?refresh=1`);
+
+    expect(status).toBe(200);
+    expect(body.status).toBe('unavailable');
+    expect(body.balanceUsd).toBeNull();
+    expect(body.error?.code).toBe('missing_control_key');
+  });
+
+  it('bounds a stalled upstream wallet request and returns a recoverable network snapshot', async () => {
+    process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS = '25';
+    const walletApi = await startWalletApi((_req, _res) => {
+      // Intentionally leave the request open so the daemon timeout owns the boundary.
+    });
+    seedLogin('local', {
+      apiUrl: walletApi.url,
+      controlKey: 'ck-stalled-wallet',
+      runtimeKey: 'rt-wallet-balance',
+      user: { id: 'wallet-user', email: 'wallet@example.com', plan: 'free' },
+    });
+    try {
+      const startedAt = Date.now();
+      const { status, body } = await getJson<{
+        balanceUsd: string | null;
+        error?: { code: string; message: string };
+        source: string;
+        status: string;
+      }>(`${baseUrl}/api/integrations/vela/wallet?refresh=1`);
+
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      expect(status).toBe(200);
+      expect(body.status).toBe('unavailable');
+      expect(body.balanceUsd).toBeNull();
+      expect(body.source).toBe('unavailable');
+      expect(body.error?.code).toBe('network');
+      expect(body.error?.message).toMatch(/temporarily unavailable/i);
+      expect(walletApi.requests).toEqual(['Bearer ck-stalled-wallet']);
+    } finally {
+      await walletApi.close();
+    }
+  });
 });
 
 describe('GET /api/integrations/vela/status', () => {
