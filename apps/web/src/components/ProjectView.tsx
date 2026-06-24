@@ -5185,18 +5185,23 @@ export function ProjectView({
                 : artifactFromStandaloneHtml(finalText);
               if (artifactToPersist?.html) {
                 const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-                const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                  artifactHtml: resolvePersistedArtifactHtml({
-                    artifactHtml: artifactToPersist.html,
-                    identifier: artifactToPersist.identifier,
-                    sourceText: finalText,
-                  }),
-                  producedFiles: producedBeforeFallback,
-                  readProjectHtml,
-                });
-                if (sameTurnHtmlWrite) {
-                  savedArtifactRef.current = sameTurnHtmlWrite.name;
-                  requestOpenFile(sameTurnHtmlWrite.name);
+                const sameTurnArtifactWrite =
+                  findExistingArtifactProjectFile(artifactToPersist, producedBeforeFallback);
+                const sameTurnHtmlWrite = sameTurnArtifactWrite
+                  ? null
+                  : await findSameTurnHtmlWriteForRecoveredArtifact({
+                      artifactHtml: resolvePersistedArtifactHtml({
+                        artifactHtml: artifactToPersist.html,
+                        identifier: artifactToPersist.identifier,
+                        sourceText: finalText,
+                      }),
+                      producedFiles: producedBeforeFallback,
+                      readProjectHtml,
+                    });
+                const sameTurnWrite = sameTurnArtifactWrite ?? sameTurnHtmlWrite;
+                if (sameTurnWrite) {
+                  savedArtifactRef.current = sameTurnWrite.name;
+                  requestOpenFile(sameTurnWrite.name);
                 } else {
                   await persistArtifact(artifactToPersist, nextFiles, finalText);
                   nextFiles = await refreshProjectFiles();
@@ -8431,12 +8436,17 @@ export function ProjectView({
   );
 }
 
-function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
+function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' | '.css' | '.svg' | '.md' {
   const type = (art.artifactType || '').toLowerCase();
   const identifier = (art.identifier || '').toLowerCase();
   if (type.includes('tsx') || identifier.endsWith('.tsx')) return '.tsx';
   if (type.includes('jsx') || type.includes('react') || identifier.endsWith('.jsx')) {
     return '.jsx';
+  }
+  if (type.includes('css') || identifier.endsWith('.css')) return '.css';
+  if (type.includes('svg') || identifier.endsWith('.svg')) return '.svg';
+  if (type.includes('markdown') || type === 'md' || identifier.endsWith('.md')) {
+    return '.md';
   }
   return '.html';
 }

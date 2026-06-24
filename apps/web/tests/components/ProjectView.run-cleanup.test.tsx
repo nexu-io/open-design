@@ -248,6 +248,18 @@ describe('terminal replay artifact recovery', () => {
     ).toBe(currentTarget);
   });
 
+  it('reuses same-turn non-html artifact files with their declared extension', () => {
+    const cssArtifact: Artifact = {
+      identifier: 'theme',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme.css', 'code', 1_000);
+
+    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+  });
+
   it('treats standalone HTML terminal assistant messages as recoverable', () => {
     expect(
       hasRecoverableArtifactMessage({

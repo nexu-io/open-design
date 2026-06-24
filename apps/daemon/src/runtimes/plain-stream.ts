@@ -1,0 +1,321 @@
+import type { ProjectFile } from '@open-design/contracts';
+import { createProjectArtifactFile } from '../artifacts/create.js';
+import {
+  listFiles as defaultListFiles,
+  writeProjectFile as defaultWriteProjectFile,
+} from '../projects.js';
+
+type JsonRecord = Record<string, unknown>;
+
+export interface PlainStreamArtifact {
+  identifier: string;
+  artifactType: string;
+  title: string;
+  content: string;
+  extension: SupportedArtifactExtension;
+  fileName: string;
+}
+
+export interface PersistedPlainStreamArtifact {
+  identifier: string;
+  artifactType: string;
+  title: string;
+  name: string;
+  file: unknown;
+}
+
+interface RunEventLike {
+  event?: string;
+  data?: unknown;
+}
+
+type SupportedArtifactExtension = '.html' | '.css' | '.svg' | '.md';
+
+type WriteProjectFile = Parameters<typeof createProjectArtifactFile>[0]['writeProjectFile'];
+
+type ListFiles = (
+  projectsRoot: string,
+  projectId: string,
+  opts?: { metadata?: unknown },
+) => Promise<ProjectFile[]>;
+
+const OPEN_TAG = '<artifact';
+const CLOSE_TAG = '</artifact>';
+const MAX_ARTIFACTS_PER_RUN = 50;
+
+const TYPE_TO_EXTENSION = new Map<string, SupportedArtifactExtension>([
+  ['html', '.html'],
+  ['text/html', '.html'],
+  ['css', '.css'],
+  ['text/css', '.css'],
+  ['svg', '.svg'],
+  ['image/svg+xml', '.svg'],
+  ['markdown', '.md'],
+  ['md', '.md'],
+  ['text/markdown', '.md'],
+  ['text/x-markdown', '.md'],
+]);
+
+export function plainStdoutFromRunEvents(events: readonly RunEventLike[]): string {
+  let stdout = '';
+  for (const rec of events) {
+    if (rec?.event !== 'stdout') continue;
+    const data = rec.data as { chunk?: unknown } | null | undefined;
+    if (typeof data?.chunk === 'string') stdout += data.chunk;
+  }
+  return stdout;
+}
+
+export function extractPlainStreamArtifacts(stdout: string): PlainStreamArtifact[] {
+  if (!stdout.includes(OPEN_TAG)) return [];
+  const skipRanges = computeMarkdownFenceRanges(stdout);
+  const artifacts: PlainStreamArtifact[] = [];
+  let from = 0;
+
+  while (from < stdout.length && artifacts.length < MAX_ARTIFACTS_PER_RUN) {
+    const openStart = findNextArtifactOpen(stdout, from, skipRanges);
+    if (openStart === -1) break;
+    const openEnd = findOpenTagEnd(stdout, openStart + OPEN_TAG.length);
+    if (openEnd === -1) break;
+    const closeStart = stdout.indexOf(CLOSE_TAG, openEnd);
+    if (closeStart === -1) break;
+
+    const attrText = stdout.slice(openStart + OPEN_TAG.length, openEnd - 1);
+    const attrs = parseAttrs(attrText);
+    const content = stdout.slice(openEnd, closeStart);
+    const artifactType = normalizeArtifactType(attrs.type, content);
+    const extension = artifactType ? TYPE_TO_EXTENSION.get(artifactType) : undefined;
+    if (artifactType && extension) {
+      const title = attrs.title ?? '';
+      const identifier = attrs.identifier ?? '';
+      artifacts.push({
+        identifier,
+        artifactType,
+        title,
+        content,
+        extension,
+        fileName: `${artifactBaseNameFor({ identifier, title })}${extension}`,
+      });
+    }
+    from = closeStart + CLOSE_TAG.length;
+  }
+
+  return artifacts;
+}
+
+export async function persistPlainStreamArtifacts(options: {
+  projectsRoot: string;
+  projectId: string;
+  stdout: string;
+  metadata?: unknown;
+  writeProjectFile?: WriteProjectFile;
+  listFiles?: ListFiles;
+}): Promise<PersistedPlainStreamArtifact[]> {
+  const artifacts = extractPlainStreamArtifacts(options.stdout);
+  if (artifacts.length === 0) return [];
+
+  const listFiles = options.listFiles ?? (defaultListFiles as ListFiles);
+  const writeProjectFile = options.writeProjectFile ?? (defaultWriteProjectFile as WriteProjectFile);
+  const existingFiles = await listFiles(options.projectsRoot, options.projectId, {
+    metadata: options.metadata,
+  });
+  const reservedNames = new Set(existingFiles.map((file) => file.name));
+  const persisted: PersistedPlainStreamArtifact[] = [];
+
+  for (const artifact of artifacts) {
+    const name = reserveUniqueArtifactFileName(artifact.fileName, reservedNames);
+    const manifest = artifactManifestFor(artifact, name);
+    const file = await createProjectArtifactFile({
+      projectsRoot: options.projectsRoot,
+      projectId: options.projectId,
+      input: {
+        name,
+        content: artifact.content,
+        artifactManifest: manifest,
+      },
+      metadata: options.metadata,
+      writeProjectFile,
+    });
+    persisted.push({
+      identifier: artifact.identifier,
+      artifactType: artifact.artifactType,
+      title: artifact.title,
+      name,
+      file,
+    });
+  }
+
+  return persisted;
+}
+
+function normalizeArtifactType(rawType: string | undefined, content: string): string | null {
+  const normalized = rawType?.trim().toLowerCase();
+  if (normalized && TYPE_TO_EXTENSION.has(normalized)) return normalized;
+  if (!normalized && looksLikeHtmlDocument(content)) return 'text/html';
+  return null;
+}
+
+function looksLikeHtmlDocument(content: string): boolean {
+  return /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(content);
+}
+
+function parseAttrs(raw: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const re = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  let match: RegExpExecArray | null = re.exec(raw);
+  while (match) {
+    attrs[match[1] as string] = (match[2] ?? match[3] ?? '') as string;
+    match = re.exec(raw);
+  }
+  return attrs;
+}
+
+function findNextArtifactOpen(
+  text: string,
+  from: number,
+  skipRanges: ReadonlyArray<[number, number]>,
+): number {
+  let current = from;
+  while (current < text.length) {
+    const idx = text.indexOf(OPEN_TAG, current);
+    if (idx === -1) return -1;
+    if (!isRealArtifactOpenAt(text, idx) || rangeContains(skipRanges, idx)) {
+      current = idx + OPEN_TAG.length;
+      continue;
+    }
+    return idx;
+  }
+  return -1;
+}
+
+function isRealArtifactOpenAt(text: string, idx: number): boolean {
+  const next = text.charAt(idx + OPEN_TAG.length);
+  return next === '>' || /\s/.test(next);
+}
+
+function findOpenTagEnd(text: string, from: number): number {
+  let quote: '"' | "'" | null = null;
+  for (let i = from; i < text.length; i += 1) {
+    const ch = text.charAt(i);
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '>') return i + 1;
+  }
+  return -1;
+}
+
+function computeMarkdownFenceRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const fenceRe = /^(?:```|~~~).*$/gm;
+  let open: { marker: string; start: number } | null = null;
+  let match: RegExpExecArray | null = fenceRe.exec(text);
+  while (match) {
+    const line = match[0] ?? '';
+    const marker = line.startsWith('~~~') ? '~~~' : '```';
+    if (!open) {
+      open = { marker, start: match.index };
+    } else if (marker === open.marker) {
+      ranges.push([open.start, fenceRe.lastIndex]);
+      open = null;
+    }
+    match = fenceRe.exec(text);
+  }
+  if (open) ranges.push([open.start, text.length]);
+  return ranges;
+}
+
+function rangeContains(ranges: ReadonlyArray<[number, number]>, idx: number): boolean {
+  return ranges.some(([start, end]) => idx >= start && idx < end);
+}
+
+function artifactBaseNameFor(input: { identifier: string; title: string }): string {
+  return (
+    (input.identifier || input.title || 'artifact')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'artifact'
+  );
+}
+
+function reserveUniqueArtifactFileName(
+  desiredName: string,
+  reservedNames: Set<string>,
+): string {
+  if (!reservedNames.has(desiredName)) {
+    reservedNames.add(desiredName);
+    return desiredName;
+  }
+  const dot = desiredName.lastIndexOf('.');
+  const stem = dot >= 0 ? desiredName.slice(0, dot) : desiredName;
+  const ext = dot >= 0 ? desiredName.slice(dot) : '';
+  let suffix = 2;
+  while (suffix < 10_000) {
+    const candidate = `${stem}-${suffix}${ext}`;
+    if (!reservedNames.has(candidate)) {
+      reservedNames.add(candidate);
+      return candidate;
+    }
+    suffix += 1;
+  }
+  throw new Error(`could not allocate artifact filename for ${desiredName}`);
+}
+
+function artifactManifestFor(artifact: PlainStreamArtifact, entry: string): JsonRecord {
+  const title = artifact.title || artifact.identifier || entry;
+  const metadata = {
+    identifier: artifact.identifier,
+    artifactType: artifact.artifactType,
+    inferred: false,
+  };
+
+  if (artifact.extension === '.html') {
+    return {
+      kind: 'html',
+      title,
+      entry,
+      renderer: 'html',
+      status: 'complete',
+      exports: ['html', 'pdf', 'zip'],
+      primary: true,
+      metadata,
+    };
+  }
+  if (artifact.extension === '.css') {
+    return {
+      kind: 'code-snippet',
+      title,
+      entry,
+      renderer: 'code',
+      status: 'complete',
+      exports: ['txt', 'zip'],
+      metadata,
+    };
+  }
+  if (artifact.extension === '.svg') {
+    return {
+      kind: 'svg',
+      title,
+      entry,
+      renderer: 'svg',
+      status: 'complete',
+      exports: ['svg', 'zip'],
+      metadata,
+    };
+  }
+  return {
+    kind: 'markdown-document',
+    title,
+    entry,
+    renderer: 'markdown',
+    status: 'complete',
+    exports: ['md', 'html', 'pdf', 'zip'],
+    metadata,
+  };
+}

@@ -156,6 +156,10 @@ import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
+  persistPlainStreamArtifacts,
+  plainStdoutFromRunEvents,
+} from './runtimes/plain-stream.js';
+import {
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
@@ -8704,6 +8708,52 @@ export async function startServer({
       }
       const flushedTitleMarkerText = titleMarkerStripper.flush();
       if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
+      if (
+        status === 'succeeded' &&
+        (def.streamFormat ?? 'plain') === 'plain' &&
+        run.projectId
+      ) {
+        const plainStdout = plainStdoutFromRunEvents(run.events);
+        if (plainStdout.includes('<artifact')) {
+          try {
+            const project = getProject(db, run.projectId);
+            const persistedPlainArtifacts = await persistPlainStreamArtifacts({
+              projectsRoot: PROJECTS_DIR,
+              projectId: run.projectId,
+              stdout: plainStdout,
+              metadata: project?.metadata,
+              writeProjectFile,
+            });
+            if (persistedPlainArtifacts.length > 0) {
+              send('agent', {
+                type: 'artifact',
+                source: 'plain-stream',
+                files: persistedPlainArtifacts.map((artifact) => ({
+                  name: artifact.name,
+                  identifier: artifact.identifier,
+                  artifactType: artifact.artifactType,
+                })),
+              });
+              send('agent', {
+                type: 'diagnostic',
+                name: 'plain_stream_artifacts_persisted',
+                source: 'daemon-run-finalize',
+                fileCount: persistedPlainArtifacts.length,
+                files: persistedPlainArtifacts.map((artifact) => artifact.name),
+              });
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
+            send('agent', {
+              type: 'diagnostic',
+              name: 'plain_stream_artifacts_persist_failed',
+              source: 'daemon-run-finalize',
+              message,
+            });
+          }
+        }
+      }
       // Capture the pi session file path for conversational continuity.
       // The session path is discovered by attachPiRpcSession when it
       // processes agent_end; persist it under (conversationId, agentId) so
