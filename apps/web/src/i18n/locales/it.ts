@@ -3087,4 +3087,5 @@ export const it: Dict = {
   'braze.status.editing': 'Editing',
   'braze.status.done': 'Done',
   'braze.status.pending': 'Pending',
+  'braze.brief.view': 'Visualizza brief',
 };

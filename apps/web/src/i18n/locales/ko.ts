@@ -3087,4 +3087,5 @@ export const ko: Dict = {
   'braze.status.editing': 'Editing',
   'braze.status.done': 'Done',
   'braze.status.pending': 'Pending',
+  'braze.brief.view': '기획 문서 보기',
 };

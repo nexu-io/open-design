@@ -3220,4 +3220,6 @@ export interface Dict {
   'braze.status.done': string;
   // BrazeVariantStatus 전용 — 메시지 상태에는 없는 pending
   'braze.status.pending': string;
+  // 기획 문서 링크 — briefPath 있을 때 상세 패널에서 열기
+  'braze.brief.view': string;
 }

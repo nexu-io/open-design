@@ -212,9 +212,13 @@ function VariantList({
 function MessageDetail({
   fallback,
   onClose,
+  projectId,
+  conversationId,
 }: {
   fallback: BrazeMessage;
   onClose: () => void;
+  projectId: string;
+  conversationId: string;
 }) {
   const t = useT();
   const [message, setMessage] = useState<BrazeMessage>(fallback);
@@ -260,6 +264,23 @@ function MessageDetail({
 
       {detailLoading ? (
         <div className={styles.detailLoading}>{t('braze.loading')}</div>
+      ) : null}
+
+      {/* briefPath 있을 때 기획 문서 열기 버튼 — navigate 로 FileViewer 에서 직접 열람 */}
+      {message.briefPath ? (
+        <Button
+          variant="ghost"
+          onClick={() =>
+            navigate({
+              kind: 'project',
+              projectId,
+              conversationId,
+              fileName: message.briefPath!,
+            })
+          }
+        >
+          {t('braze.brief.view')}
+        </Button>
       ) : null}
 
       {message.plan ? <PlanCard plan={message.plan} /> : null}
@@ -443,6 +464,8 @@ export function BrazeSection({ projects = [], initialProjectId }: BrazeSectionPr
                   <MessageDetail
                     fallback={fallbackMessage}
                     onClose={() => setSelectedId(null)}
+                    projectId={fallbackMessage.projectId}
+                    conversationId={fallbackMessage.conversationId}
                   />
                 ) : null}
               </li>

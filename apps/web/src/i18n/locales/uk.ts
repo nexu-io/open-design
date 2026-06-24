@@ -3087,4 +3087,5 @@ export const uk: Dict = {
   'braze.status.editing': 'Editing',
   'braze.status.done': 'Done',
   'braze.status.pending': 'Pending',
+  'braze.brief.view': 'Переглянути бриф',
 };

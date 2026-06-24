@@ -3088,4 +3088,5 @@ export const zhTW: Dict = {
   'braze.status.editing': 'Editing',
   'braze.status.done': 'Done',
   'braze.status.pending': 'Pending',
+  'braze.brief.view': '查看創作簡報',
 };
