@@ -115,6 +115,8 @@ export interface BrazeMessage {
   emphasis: string | null;
   variantCount: number;
   plan: BrazePlan | null;
+  // Project-relative path to the persisted 기획 문서 (brief.md). null until saved.
+  briefPath: string | null;
   status: BrazeMessageStatus;
   createdAt: string;
   updatedAt: string;
@@ -177,4 +179,14 @@ export interface BrazeVariantProduceRequest {
 export interface BrazeVariantUpdateRequest {
   status?: BrazeVariantStatus;
   artifactPath?: string;
+}
+
+// SKILL이 저작한 기획 문서 마크다운을 저장. status가 plan_confirmed 이후일 때만 허용.
+export interface BrazeBriefSaveRequest {
+  markdown: string;
+}
+
+export interface BrazeBriefSaveResponse {
+  message: BrazeMessage;
+  path: string; // project-relative path the brief was written to
 }
