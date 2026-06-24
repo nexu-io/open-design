@@ -348,6 +348,14 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain("ok: false, error: 'Target not found'");
   });
 
+  it('keeps edit-mode hover outlines visible over artifact CSS resets', () => {
+    const style = buildManualEditBridgeStyle();
+
+    expect(style).toContain('outline: 1px dashed rgba(37, 99, 235, 0.35) !important');
+    expect(style).toContain('outline: 2px solid #2563eb !important');
+    expect(style).toContain('outline-offset: 3px !important');
+  });
+
   it('moves the runtime selected marker between selected targets', () => {
     const dom = new JSDOM(
       `<main>

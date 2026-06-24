@@ -38,6 +38,7 @@ import {
 } from '../providers/registry';
 import type { Dict } from '../i18n/types';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
+import { finalizeBrandProject } from '../runtime/brands';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { parseDesignMd } from '../runtime/design-md-parse';
 import {
@@ -168,6 +169,7 @@ interface Props {
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
+  designSystemBrandId?: string | null;
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
@@ -425,6 +427,7 @@ export function FileWorkspace({
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
+  designSystemBrandId = null,
   defaultDesignSystemId = null,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
@@ -2148,6 +2151,7 @@ export function FileWorkspace({
           <DesignSystemProjectPanel
             projectId={projectId}
             system={designSystemProject}
+            brandId={designSystemBrandId}
             files={visibleFiles}
             streaming={Boolean(streaming)}
             activityEvents={designSystemActivityEvents}
@@ -2454,6 +2458,7 @@ function DesignSystemProjectPanel({
 }: {
   projectId: string;
   system: DesignSystemSummary;
+  brandId?: string | null;
   files: ProjectFile[];
   streaming: boolean;
   activityEvents: AgentEvent[];

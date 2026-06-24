@@ -197,6 +197,20 @@ describe('manual edit source patches', () => {
     expect(result.source).toContain('<h1 data-od-id="hero-title">Edited title</h1>');
   });
 
+  it('rejects removing the only rendered body element even when scripts remain', () => {
+    const source = [
+      '<!doctype html><html><body>',
+      '<main data-od-id="app-root">App</main>',
+      '<script>window.bootApp && window.bootApp();</script>',
+      '</body></html>',
+    ].join('');
+    const result = applyManualEditPatch(source, { kind: 'remove-element', id: 'app-root' });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Cannot remove the last rendered element in the document.');
+    expect(result.source).toContain('data-od-id="app-root"');
+  });
+
   it('addresses unannotated elements with generated DOM path ids', () => {
     const result = applyManualEditPatch(baseSource, { kind: 'set-text', id: 'path-0-7', value: 'Path target' });
 

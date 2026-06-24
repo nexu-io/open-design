@@ -62,8 +62,8 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
     if (!el.parentElement) {
       return { ok: false, source, error: 'Cannot remove the root element.' };
     }
-    if (el.parentElement === doc.body && doc.body.children.length === 1) {
-      return { ok: false, source, error: 'Cannot remove the last element in the document.' };
+    if (el.parentElement === doc.body && isLastRenderableBodyChild(doc, el)) {
+      return { ok: false, source, error: 'Cannot remove the last rendered element in the document.' };
     }
     el.remove();
   }
@@ -387,6 +387,19 @@ function replaceOuterHtml(doc: Document, el: Element, html: string): { ok: true 
   }
   el.replaceWith(next);
   return { ok: true };
+}
+
+function isLastRenderableBodyChild(doc: Document, el: Element): boolean {
+  const renderableBodyChildren = Array.from(doc.body.children).filter((child) => {
+    if (child === el) return true;
+    return !isNonRenderableBodyChild(child);
+  });
+  return renderableBodyChildren.length === 1 && renderableBodyChildren[0] === el;
+}
+
+function isNonRenderableBodyChild(el: Element): boolean {
+  const tag = el.tagName.toLowerCase();
+  return tag === 'script' || tag === 'style' || tag === 'template' || tag === 'noscript';
 }
 
 function setCssToken(doc: Document, token: string, value: string): boolean {
