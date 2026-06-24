@@ -2096,7 +2096,6 @@ export interface Dict {
   'ds.colorSaveFailed': string;
   'ds.colorResetFailed': string;
   'ds.designMdSectionLabel': string;
-  'ds.fullSystemLabel': string;
   'ds.noOriginalColor': string;
   'ds.manifestReadFailed': string;
   'ds.reviewCollapseSection': string;
@@ -2274,6 +2273,7 @@ export interface Dict {
   'project.brandReadyRefineHint': string;
   'project.brandReadyAiOptimize': string;
   'project.brandReadyEditManually': string;
+  'project.brandReadyPreviewOpened': string;
   'project.metaFreeform': string;
   'project.customInstructions': string;
   'project.customInstructionsPlaceholder': string;
@@ -3579,7 +3579,6 @@ export interface Dict {
   'brandDetail.designSystem': string;
   'brandDetail.brandAssets': string;
   'brandDetail.openProject': string;
-  'brandDetail.openFullSystem': string;
   'brandDetail.themeLight': string;
   'brandDetail.themeDark': string;
   'brandDetail.subjects': string;

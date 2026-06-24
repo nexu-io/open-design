@@ -893,7 +893,21 @@ export function EntryShell({
             </div>
             <div data-testid="entry-view-design-systems" data-active={view === 'design-systems' ? 'true' : 'false'} {...inactiveViewProps(view === 'design-systems')}>
               {designSystemsLoading ? (
-                <CenteredLoader label={t('common.loading')} />
+                <div className="entry-section">
+                  <header className="entry-section__head">
+                    <h1 className="entry-section__title">{t('entry.navDesignSystems')}</h1>
+                  </header>
+                  <DesignSystemsTab
+                    loading
+                    systems={[]}
+                    templates={templates}
+                    selectedId={defaultDesignSystemId}
+                    onSelect={onChangeDefaultDesignSystem}
+                    onCreate={onCreateDesignSystem}
+                    onOpenSystem={onOpenDesignSystem}
+                    onSystemsRefresh={onDesignSystemsRefresh}
+                  />
+                </div>
               ) : (
                 <div className="entry-section">
                   <header className="entry-section__head">

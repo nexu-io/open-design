@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@open-design/components';
+import { Button, VisuallyHidden } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemsTemplateCardClick,
@@ -38,6 +38,7 @@ interface Props {
   systems: DesignSystemSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  loading?: boolean;
   onCreate?: () => void;
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
@@ -224,6 +225,7 @@ export function DesignSystemsTab({
   systems,
   selectedId,
   onSelect,
+  loading = false,
   onCreate,
   onOpenSystem,
   onSystemsRefresh,
@@ -232,6 +234,7 @@ export function DesignSystemsTab({
   const analytics = useAnalytics();
   const designSystemsPageViewFiredRef = useRef(false);
   useEffect(() => {
+    if (loading) return;
     if (designSystemsPageViewFiredRef.current) return;
     designSystemsPageViewFiredRef.current = true;
     // v2 doc: the DS list page also carries `area` / `view_type` /
@@ -246,7 +249,7 @@ export function DesignSystemsTab({
       entry_from: 'unknown',
       available_design_system_count: systems.length,
     });
-  }, [analytics.track, systems.length]);
+  }, [analytics.track, systems.length, loading]);
   const searchTrackedRef = useRef(false);
   const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
@@ -540,6 +543,71 @@ export function DesignSystemsTab({
 
   const showPresetFilters = designSystemCollection === 'official';
 
+  if (loading) {
+    return (
+      <div
+        className={styles.root}
+        data-testid="design-systems-tab"
+        data-loading="true"
+        aria-busy="true"
+      >
+        <VisuallyHidden role="status">{t('designSystemPicker.loading')}</VisuallyHidden>
+        <aside className={styles.sidebar} data-testid="design-systems-sidebar-skeleton">
+          {onCreate ? (
+            <Button
+              variant="primary"
+              className={styles.newBtn}
+              onClick={onCreate}
+              data-testid="design-systems-create"
+            >
+              <Icon name="plus" />
+              {t('dsManager.createAction')}
+            </Button>
+          ) : (
+            <SkeletonBlock className={styles.skeletonCreateButton} />
+          )}
+
+          <div className={styles.searchWrap} aria-hidden>
+            <SearchGlyph className={styles.searchIcon} />
+            <SkeletonBlock className={`${styles.search} ${styles.skeletonSearchField}`} />
+          </div>
+
+          <div className={styles.scopes} aria-hidden>
+            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChipWide}`} />
+            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChip}`} />
+            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChipWide}`} />
+          </div>
+
+          <div className={styles.list} data-testid="design-systems-list" aria-hidden>
+            {Array.from({ length: 7 }, (_, index) => (
+              <div
+                key={index}
+                className={`${styles.item} ${index === 0 ? styles.skeletonRowActive : styles.skeletonRow}`}
+                data-testid={`design-systems-loading-row-${index}`}
+              >
+                <span className={styles.itemThumb}>
+                  <SkeletonBlock className={styles.skeletonThumb} />
+                </span>
+                <span className={styles.itemMeta}>
+                  <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLineTitle}`} />
+                  <SkeletonBlock className={`${styles.skeletonLine} ${index % 3 === 0 ? styles.skeletonLineShort : styles.skeletonLineMedium}`} />
+                </span>
+                <SkeletonBlock className={styles.skeletonStatusDot} />
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className={styles.preview} data-testid="design-systems-preview">
+          <DesignSystemDetailSkeleton
+            label={t('designSystemPicker.loadingPreview')}
+            dataTestId="design-systems-preview-skeleton"
+          />
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.root} data-testid="design-systems-tab">
       <aside className={styles.sidebar}>
@@ -726,6 +794,7 @@ export function DesignSystemsTab({
     if (selectedSystem) {
       return (
         <DesignSystemDetail
+          key={selectedSystem.id}
           system={selectedSystem}
           isDefault={selectedSystem.id === selectedId}
           busy={busyId === selectedSystem.id}
@@ -756,6 +825,14 @@ export function DesignSystemsTab({
       </div>
     );
   }
+}
+
+function SkeletonBlock({
+  className,
+}: {
+  className?: string;
+}) {
+  return <span className={`${styles.skeletonBlock}${className ? ` ${className}` : ''}`} aria-hidden />;
 }
 
 interface SystemRowProps {
@@ -932,6 +1009,7 @@ function DesignSystemDetail({
   // the full detail. The kit view derives every module from brand.json (when a
   // backing project carries one) or the parsed DESIGN.md (presets).
   const [detail, setDetail] = useState<DesignSystemDetail | null>(null);
+  const [detailResolved, setDetailResolved] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
@@ -950,12 +1028,17 @@ function DesignSystemDetail({
     lastSystemIdRef.current = system.id;
     if (isNewSelection) {
       setDetail(null);
+      setDetailResolved(false);
       setDownloadFailed(false);
     } else {
       setReloadKey((k) => k + 1);
     }
     void fetchDesignSystem(system.id).then((d) => {
-      if (!cancelled && d) setDetail(d);
+      if (cancelled) return;
+      if (d) setDetail(d);
+      setDetailResolved(true);
+    }).catch(() => {
+      if (!cancelled) setDetailResolved(true);
     });
     return () => {
       cancelled = true;
@@ -1070,7 +1153,7 @@ function DesignSystemDetail({
 
   return (
     <div className={styles.detail} data-testid={`design-system-detail-${system.id}`}>
-      {kit ? (
+      {kit && detailResolved ? (
         <DesignKitView
           kit={kit}
           badgeSlot={badgeSlot}
@@ -1084,18 +1167,71 @@ function DesignSystemDetail({
           dataTestId={`design-kit-view-${system.id}`}
         />
       ) : (
-        // Kit still resolving (brand.json / DESIGN.md fetch). Show a calm
-        // centered spinner inside the same framed box so the panel never flashes
-        // a blank white/grey rectangle before the content fades in.
-        <div
-          className={styles.detailLoading}
-          role="status"
-          aria-label={t('common.loading')}
-          data-testid={`design-system-detail-loading-${system.id}`}
-        >
-          <span className={styles.detailSpinner} aria-hidden />
-        </div>
+        <DesignSystemDetailSkeleton
+          label={detailResolved ? t('common.loading') : t('designSystemPicker.loadingPreview')}
+          dataTestId={`design-system-detail-loading-${system.id}`}
+        />
       )}
+    </div>
+  );
+}
+
+function DesignSystemDetailSkeleton({
+  label,
+  dataTestId,
+}: {
+  label: string;
+  dataTestId: string;
+}) {
+  return (
+    <div
+      className={`${styles.detail} ${styles.detailSkeleton}`}
+      role="status"
+      aria-label={label}
+      aria-busy="true"
+      data-testid={dataTestId}
+    >
+      <header className={styles.skeletonHeader}>
+        <div className={styles.skeletonHeaderCopy}>
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonHeroTitle}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonHeroSub}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonHeroMeta}`} />
+        </div>
+        <div className={styles.skeletonActions} aria-hidden>
+          <SkeletonBlock className={styles.skeletonActionPrimary} />
+          <SkeletonBlock className={styles.skeletonActionToggle} />
+          <SkeletonBlock className={styles.skeletonActionIcon} />
+        </div>
+      </header>
+
+      <section className={styles.skeletonModule}>
+        <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonModuleKicker}`} />
+        <div className={styles.skeletonParagraph}>
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLine}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLine}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLineShort}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLine}`} />
+        </div>
+      </section>
+
+      <section className={styles.skeletonLogoModule}>
+        <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonModuleKicker}`} />
+        <div className={styles.skeletonLogoStage}>
+          <SkeletonBlock className={styles.skeletonLogoMark} />
+          <div className={styles.skeletonLogoText}>
+            <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLogoWord}`} />
+            <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLogoCaption}`} />
+          </div>
+        </div>
+        <div className={styles.skeletonThumbRow} aria-hidden>
+          {Array.from({ length: 6 }, (_, index) => (
+            <SkeletonBlock
+              key={index}
+              className={`${styles.skeletonLogoThumb} ${index === 0 ? styles.skeletonLogoThumbActive : ''}`}
+            />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

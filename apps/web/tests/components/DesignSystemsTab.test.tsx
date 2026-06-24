@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
+import { fetchDesignSystem } from '../../src/providers/registry';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -64,6 +65,55 @@ function openOfficialPresets() {
 }
 
 describe('DesignSystemsTab', () => {
+  it('renders structured list and preview skeletons while design systems load', () => {
+    const { container } = render(
+      <DesignSystemsTab
+        loading
+        systems={[]}
+        selectedId={null}
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId('design-systems-sidebar-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('design-systems-preview-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('design-systems-loading-row-0')).toBeTruthy();
+    expect(screen.getByText('Loading design systems…')).toBeTruthy();
+    expect(container.querySelector('.loading-spinner')).toBeNull();
+  });
+
+  it('renders a structured detail skeleton while the selected system resolves', async () => {
+    let resolveDetail!: (value: Awaited<ReturnType<typeof fetchDesignSystem>>) => void;
+    vi.mocked(fetchDesignSystem).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDetail = resolve;
+      }),
+    );
+    const { container } = render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId('design-system-detail-loading-user:acme')).toBeTruthy();
+    expect(container.querySelector('.loading-spinner')).toBeNull();
+
+    resolveDetail({
+      id: 'user:acme',
+      title: 'Acme Design System',
+      summary: 'Internal product system.',
+      category: 'Custom',
+      body: '# Acme\n\n## Colors\n- Primary #111111',
+    });
+    await screen.findByTestId('design-kit-view-user:acme');
+  });
+
   it('uses design-system scopes directly instead of a design-system/template switcher', () => {
     render(
       <DesignSystemsTab
@@ -121,7 +171,7 @@ describe('DesignSystemsTab', () => {
     expect(row.queryByText('Design system')).toBeNull();
   });
 
-  it('routes create and edit actions to the dedicated design-system flow', () => {
+  it('routes create and edit actions to the dedicated design-system flow', async () => {
     const onCreate = vi.fn();
     const onOpenSystem = vi.fn();
     render(
@@ -139,7 +189,7 @@ describe('DesignSystemsTab', () => {
 
     // Acme is the only user system, so it auto-selects into the detail pane,
     // exposing the agent edit action that routes back into the authoring flow.
-    fireEvent.click(screen.getByRole('button', { name: /Edit with agent/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Edit with agent/i }));
     expect(onOpenSystem).toHaveBeenCalledWith('user:acme');
   });
 
@@ -165,7 +215,7 @@ describe('DesignSystemsTab', () => {
     expect(onOpenSystem).not.toHaveBeenCalled();
   });
 
-  it('sets a system as the global default through the detail pane', () => {
+  it('sets a system as the global default through the detail pane', async () => {
     const onSelect = vi.fn();
     render(
       <DesignSystemsTab
@@ -179,7 +229,7 @@ describe('DesignSystemsTab', () => {
 
     openOfficialPresets();
     // "Make default" now lives in the detail's ⋯ overflow menu.
-    fireEvent.click(screen.getByTestId('design-kit-more-actions'));
+    fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Default for new chats' }));
     expect(onSelect).toHaveBeenCalledWith('linear');
   });

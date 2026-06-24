@@ -10,6 +10,7 @@ import {
   listMessages,
   listTabs,
   openDatabase,
+  upsertMessage,
 } from '../src/db.js';
 import {
   finalizeBrand,
@@ -27,7 +28,7 @@ import {
   imageSize,
   type ImagerySlot,
 } from '../src/brands/imagery-fallback.js';
-import { isChallengePage } from '../src/brands/prefetch.js';
+import { isChallengePage, type PrefetchResult } from '../src/brands/prefetch.js';
 
 // Real repo skills root so the bundled brand-kit template resolves.
 const SKILLS_ROOT = path.resolve(
@@ -134,6 +135,35 @@ Architectural Minimalism meets Journalistic Gravitas.
 ## Colors
 - **Tertiary (#B8422E):** Boston Clay for interaction.
 `;
+
+function programmaticPrefetchResult(url: string): PrefetchResult {
+  return {
+    url,
+    finalUrl: url,
+    siteName: 'Acme',
+    title: 'Acme',
+    description: 'Acme makes excellent things for everyone.',
+    colors: [
+      { hex: '#f5f4ed', count: 12 },
+      { hex: '#141413', count: 9 },
+      { hex: '#b8422e', count: 8 },
+      { hex: '#3d7a4f', count: 3 },
+    ],
+    fonts: [{ family: 'Inter', count: 10 }],
+    fontFaceFamilies: [],
+    googleFontsUrls: [],
+    fontFiles: [],
+    logos: [],
+    headings: ['Excellent things'],
+    paragraphs: ['Acme makes useful products for careful teams.'],
+    navLabels: ['Product', 'Pricing'],
+    extraPages: [],
+    screenshot: null,
+    thin: false,
+    blocked: false,
+    materialMd: '# Acme\n\nExcellent things',
+  };
+}
 
 describe('agent-driven brand extraction engine', () => {
   let tempDir: string;
@@ -258,6 +288,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(messages[1]?.agentId).toBe('claude');
     expect(messages[1]?.agentName).toBe('Claude');
     expect(messages[1]?.runStatus).toBe('succeeded');
+    expect(messages[0]?.createdAt).toBe(messages[1]?.startedAt);
     expect(messages[1]?.startedAt).toBeGreaterThanOrEqual(startedBeforeRequest);
     expect(messages[1]?.endedAt).toBeLessThanOrEqual(endedAfterRequest);
     expect(messages[1]?.endedAt).toBeGreaterThanOrEqual(messages[1]?.startedAt ?? 0);
@@ -270,6 +301,57 @@ describe('agent-driven brand extraction engine', () => {
     expect(producedNames).toContain('brand.html');
     expect(producedNames.some((name: string) => name.startsWith('system/'))).toBe(true);
     expect(producedNames.length).toBeGreaterThan(1);
+  });
+
+  it('keeps the programmatic transcript when other messages arrive before background completion', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      programmaticSyncBudgetMs: 0,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(result.status).toBe('extracting');
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    upsertMessage(db, result.conversationId, {
+      id: 'manual-user-message',
+      role: 'user',
+      content: 'hello while extraction is still running',
+    });
+
+    releasePrefetch();
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.some((message) => message.content === 'hello while extraction is still running')).toBe(true);
+    const assistant = messages.find((message) => message.content.includes('Programmatic extraction finished'));
+    expect(assistant?.role).toBe('assistant');
+    expect(assistant?.agentId).toBe('claude');
+    expect(assistant?.producedFiles?.length).toBeGreaterThan(1);
   });
 
   it('rejects a non-http(s) URL', async () => {

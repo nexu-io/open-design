@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 
 import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind, ProjectFolder } from '../../src/types';
+import { VISUAL_STABILITY_STORAGE_KEY } from '../../src/utils/visualStability';
 
 function folder(path: string): ProjectFolder {
   return { name: path.split('/').pop() ?? path, path, type: 'dir', size: 0, mtime: 1700000000 };
@@ -19,6 +20,10 @@ vi.stubGlobal('localStorage', {
   setItem: (key: string, value: string) => { lsStore.set(key, value); },
   removeItem: (key: string) => { lsStore.delete(key); },
   clear: () => { lsStore.clear(); },
+});
+
+beforeEach(() => {
+  lsStore.clear();
 });
 
 function extForKind(kind: ProjectFileKind): string {
@@ -185,6 +190,7 @@ describe('DesignFilesPanel sections', () => {
   });
 
   it('types out the first useful-info tip in the footer while the agent runs', async () => {
+    localStorage.setItem(VISUAL_STABILITY_STORAGE_KEY, '1');
     renderPanel([file({ name: 'page.html', kind: 'html' })], { running: true });
 
     expect(document.querySelector('.df-drop-hint')).toBeNull();

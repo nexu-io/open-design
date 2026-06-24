@@ -209,15 +209,31 @@ function findTrackedEvent<T extends Record<string, unknown>>(
   return payload as T;
 }
 
-function chooseDropdownOption(label: string, option: string | RegExp) {
-  const field = screen
+function chooseOnboardingOption(label: string, option: string | RegExp) {
+  const chipField = screen
+    .getAllByText(label)
+    .map((node) => node.closest('.onboarding-chip-field'))
+    .find((node): node is HTMLElement => node instanceof HTMLElement);
+  if (chipField) {
+    const matcher = option instanceof RegExp ? option : new RegExp(option, 'i');
+    const chip = Array.from(chipField.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      matcher.test(button.textContent ?? ''),
+    );
+    if (!(chip instanceof HTMLButtonElement)) {
+      throw new Error(`profile chip not found: ${label} / ${String(option)}`);
+    }
+    fireEvent.click(chip);
+    return;
+  }
+
+  const dropdownField = screen
     .getAllByText(label)
     .map((node) => node.closest('.onboarding-view__select-field'))
     .find((node): node is HTMLElement => node instanceof HTMLElement);
-  if (!field) throw new Error(`dropdown field not found: ${label}`);
-  const trigger = field.querySelector('button');
+  if (!dropdownField) throw new Error(`profile field not found: ${label}`);
+  const trigger = dropdownField.querySelector('button');
   if (!(trigger instanceof HTMLButtonElement)) {
-    throw new Error(`dropdown trigger not found: ${label}`);
+    throw new Error(`profile field trigger not found: ${label}`);
   }
   fireEvent.click(trigger);
   fireEvent.click(
@@ -670,10 +686,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     await clickSignedInCloudContinue();
 
-    chooseDropdownOption('Your role', 'Engineer');
-    chooseDropdownOption('Organization size', /Growth company/i);
-    chooseDropdownOption('Use case', /Product design/i);
-    chooseDropdownOption('Where did you hear about us?', /Search/i);
+    chooseOnboardingOption('Your role', 'Engineer');
+    chooseOnboardingOption('Organization size', /Growth company/i);
+    chooseOnboardingOption('Use case', /Product design/i);
+    chooseOnboardingOption('Where did you hear about us?', /Search/i);
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
@@ -867,10 +883,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     renderOnboarding();
 
     await clickSignedInCloudContinue();
-    chooseDropdownOption('Your role', 'Engineer');
-    chooseDropdownOption('Organization size', 'Growth company');
-    chooseDropdownOption('Use case', 'Product design');
-    chooseDropdownOption('Where did you hear about us?', 'Search');
+    chooseOnboardingOption('Your role', 'Engineer');
+    chooseOnboardingOption('Organization size', 'Growth company');
+    chooseOnboardingOption('Use case', 'Product design');
+    chooseOnboardingOption('Where did you hear about us?', 'Search');
 
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
 
@@ -906,7 +922,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     renderOnboarding();
 
     await clickSignedInCloudContinue();
-    chooseDropdownOption('Your role', 'Engineer');
+    chooseOnboardingOption('Your role', 'Engineer');
 
     // Advance to the newsletter step via Continue (the stepper no longer
     // allows forward jumps past the current step). The survey snapshot must
@@ -940,7 +956,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     renderOnboarding();
 
     await clickSignedInCloudContinue();
-    chooseDropdownOption('Your role', 'Engineer');
+    chooseOnboardingOption('Your role', 'Engineer');
 
     // About you -> Newsletter
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
@@ -1008,7 +1024,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
     });
-    chooseDropdownOption('Model', /claude-opus-4-8/i);
+    chooseOnboardingOption('Model', /claude-opus-4-8/i);
     fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
     await waitFor(() => {
       expect(screen.getByText(/Connected\. Replied in 12 ms/i)).toBeTruthy();

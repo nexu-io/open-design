@@ -244,6 +244,93 @@
   scrollbar-width: thin;
 }
 
+.skeletonBlock {
+  display: block;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(
+      110deg,
+      transparent 28%,
+      color-mix(in srgb, #fff 34%, transparent) 50%,
+      transparent 72%
+    ) 0 0 / 200% 100%,
+    color-mix(in srgb, var(--bg-muted) 84%, var(--bg-panel));
+  animation: designSystemsSkeletonSheen 1.55s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+[data-theme="dark"] .skeletonBlock {
+  background:
+    linear-gradient(
+      110deg,
+      transparent 28%,
+      color-mix(in srgb, #fff 13%, transparent) 50%,
+      transparent 72%
+    ) 0 0 / 200% 100%,
+    color-mix(in srgb, var(--bg-elevated) 68%, var(--bg-muted));
+}
+
+.skeletonCreateButton {
+  width: 100%;
+  height: 36px;
+  border-radius: var(--radius-sm);
+}
+
+.skeletonSearchField {
+  pointer-events: none;
+  border-color: var(--border);
+}
+
+.skeletonScopeChip {
+  width: 96px;
+  height: 32px;
+}
+
+.skeletonScopeChipWide {
+  width: 122px;
+  height: 32px;
+}
+
+.skeletonRow,
+.skeletonRowActive {
+  pointer-events: none;
+  cursor: default;
+}
+
+.skeletonRowActive {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.skeletonThumb {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--radius-sm) - 2px);
+}
+
+.skeletonLine {
+  height: 12px;
+}
+
+.skeletonLineTitle {
+  width: 68%;
+  height: 14px;
+}
+
+.skeletonLineMedium {
+  width: 86%;
+}
+
+.skeletonLineShort {
+  width: 58%;
+}
+
+.skeletonStatusDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
 .item {
   display: flex;
   align-items: center;
@@ -422,34 +509,165 @@
   }
 }
 
-/* Detail preview loading state — a framed box with a centered spinner, sized to
-   match the resting cover so the layout never jumps, and softly faded in so the
-   panel never flashes a blank white/grey rectangle before the kit resolves. */
-.detailLoading {
+.detailSkeleton {
+  gap: 24px;
+  min-height: 620px;
+}
+
+.skeletonHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.skeletonHeaderCopy {
+  display: grid;
+  gap: 11px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.skeletonHeroTitle {
+  width: min(260px, 44%);
+  height: 26px;
+  border-radius: var(--radius);
+}
+
+.skeletonHeroSub {
+  width: min(520px, 58%);
+  height: 16px;
+}
+
+.skeletonHeroMeta {
+  width: min(160px, 30%);
+  height: 13px;
+}
+
+.skeletonActions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 320px;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.skeletonActionPrimary {
+  width: 150px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  animation-delay: 80ms;
+}
+
+.skeletonActionToggle {
+  width: 138px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  animation-delay: 160ms;
+}
+
+.skeletonActionIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  animation-delay: 240ms;
+}
+
+.skeletonModule,
+.skeletonLogoModule {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(120% 140% at 50% -10%, var(--bg-subtle) 0%, var(--bg) 70%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-subtle) 60%, var(--bg-panel)),
+      var(--bg-panel)
+    );
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-strong) 4%, transparent);
 }
 
-.detailSpinner {
-  width: 30px;
-  height: 30px;
-  border: 2.5px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: designSystemDetailSpin 0.7s linear infinite;
+.skeletonModuleKicker {
+  width: 88px;
+  height: 13px;
+  border-radius: var(--radius-xs);
 }
 
-@keyframes designSystemDetailSpin {
-  to {
-    transform: rotate(360deg);
-  }
+.skeletonParagraph {
+  display: grid;
+  gap: 12px;
+}
+
+.skeletonParagraphLine {
+  width: 100%;
+  height: 17px;
+}
+
+.skeletonParagraphLineShort {
+  width: 74%;
+  height: 17px;
+}
+
+.skeletonLogoModule {
+  padding-bottom: 18px;
+}
+
+.skeletonLogoStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 190px;
+  gap: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.skeletonLogoMark {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+}
+
+.skeletonLogoText {
+  display: grid;
+  gap: 14px;
+  width: min(360px, 46%);
+}
+
+.skeletonLogoWord {
+  width: 100%;
+  height: 42px;
+  border-radius: var(--radius);
+  animation-delay: 140ms;
+}
+
+.skeletonLogoCaption {
+  width: 62%;
+  height: 14px;
+  animation-delay: 220ms;
+}
+
+.skeletonThumbRow {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.skeletonLogoThumb {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  animation-delay: 100ms;
+}
+
+.skeletonLogoThumbActive {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 /* Live showcase cover */
@@ -773,6 +991,19 @@
   text-transform: uppercase;
 }
 
+@keyframes designSystemsSkeletonSheen {
+  to {
+    background-position: -200% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail,
+  .skeletonBlock {
+    animation: none;
+  }
+}
+
 /* ── Responsive: stack panes on narrow viewports ──────────────────── */
 @media (max-width: 900px) {
   .root {
@@ -787,5 +1018,33 @@
   }
   .cover {
     height: 240px;
+  }
+  .skeletonHeader {
+    flex-direction: column;
+  }
+  .skeletonActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .skeletonHeroTitle,
+  .skeletonHeroSub,
+  .skeletonHeroMeta {
+    width: 100%;
+    max-width: none;
+  }
+  .skeletonLogoStage {
+    min-height: 160px;
+    gap: 16px;
+  }
+  .skeletonLogoMark {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+  }
+  .skeletonLogoText {
+    width: 50%;
+  }
+  .skeletonLogoWord {
+    height: 30px;
   }
 }
