@@ -1609,7 +1609,7 @@ function OnboardingView({
       return;
     }
     if (isLastStep) {
-      await runOnboardingCompletion();
+      await runOnboardingCompletion('completed_without_design_system');
       onFinish();
       return;
     }
@@ -1627,7 +1627,13 @@ function OnboardingView({
   // final picks even on a fast click before React commits the latest state.
   // Callers pick the destination: home (`onFinish`) or the design-system
   // create flow (`onGoBuild`).
-  async function runOnboardingCompletion(): Promise<void> {
+  // `completionType` distinguishes the final-step fork (C2, tracking spec §3.1):
+  // 'completed_with_design_system' when the user chose "Build a design system",
+  // 'completed_without_design_system' when they went straight Home. Lets the
+  // funnel measure how many users skip DS creation at onboarding.
+  async function runOnboardingCompletion(
+    completionType: TrackingOnboardingCompletionType,
+  ): Promise<void> {
     emitAboutYouSubmit();
     void persistOnboardingProfileToMemory();
     const newsletterEmail = profileRef.current.email;
@@ -1638,19 +1644,19 @@ function OnboardingView({
       await submitNewsletterEmail(newsletterEmail);
     }
     emitOnboardingClick('continue', 'continue');
-    emitOnboardingComplete('completed', 'completed_without_design_system');
+    emitOnboardingComplete('completed', completionType);
     clearOnboardingSessionId();
   }
 
   async function handleFinishToHome(): Promise<void> {
     if (newsletterSubmitting) return;
-    await runOnboardingCompletion();
+    await runOnboardingCompletion('completed_without_design_system');
     onFinish();
   }
 
   async function handleFinishToBuild(): Promise<void> {
     if (newsletterSubmitting) return;
-    await runOnboardingCompletion();
+    await runOnboardingCompletion('completed_with_design_system');
     onGoBuild();
   }
 
