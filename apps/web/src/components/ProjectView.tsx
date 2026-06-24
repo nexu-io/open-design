@@ -2803,13 +2803,6 @@ export function ProjectView({
           completedReattachRunsRef.current.add(runId);
           continue;
         }
-        // A successful status fetch for a still-active run is a recovery signal:
-        // the daemon is reachable and the run is alive.  Reset the transient retry
-        // budgets so a *future* disconnect starts from zero — the cap is meant for
-        // consecutive failures without intervening recovery, not for the lifetime
-        // of the run.  Addresses nettee BLOCKING + codex P2 on PR #4651 round 8.
-        transientFailedRetriesRef.current.delete(runId);
-        genericDisconnectRetriesRef.current.delete(runId);
         updateMessageById(
           message.id,
           (prev) => ({
@@ -3034,10 +3027,19 @@ export function ProjectView({
           initialLastEventId: needsFullReplay ? null : message.lastRunEventId ?? null,
           handlers: {
             onDelta: (delta) => {
+              // First payload from the resumed stream is real recovery — the daemon is
+              // sending data, not just answering REST status probes.  Reset the
+              // transient retry budgets so a future disconnect starts from zero, but
+              // only on genuine stream progress (not on a status fetch or queued→running
+              // transition).  PR #4651 round 9 (nettee BLOCKING + codex P2).
+              transientFailedRetriesRef.current.delete(runId);
+              genericDisconnectRetriesRef.current.delete(runId);
               replayedContent += delta;
               textBuffer.appendContent(delta);
             },
             onAgentEvent: (ev) => {
+              transientFailedRetriesRef.current.delete(runId);
+              genericDisconnectRetriesRef.current.delete(runId);
               replayedEvents = [...replayedEvents, ev];
               textBuffer.appendEvent(ev);
             },
@@ -3265,15 +3267,6 @@ export function ProjectView({
             },
           },
           onRunStatus: (runStatus) => {
-            // A live stream status of 'running' or 'succeeded' is a recovery
-            // signal — the daemon is reachable and the run is active.  Reset
-            // both retry budgets so a *future* disconnect starts from zero.
-            // The cap is for *consecutive* failures; an intervening recovery
-            // must clear the count.  PR #4651 round 8 (nettee BLOCKING + codex P2).
-            if (runStatus === 'running' || runStatus === 'succeeded') {
-              transientFailedRetriesRef.current.delete(runId);
-              genericDisconnectRetriesRef.current.delete(runId);
-            }
             textBuffer.flush();
             updateMessageById(
               message.id,
@@ -4047,10 +4040,19 @@ export function ProjectView({
       cancelRef.current = cancelController;
       const handlers = {
         onDelta: (delta: string) => {
+          // See reattach-path comment above for rationale.  PR #4651 round 9.
+          if (currentRunId) {
+            transientFailedRetriesRef.current.delete(currentRunId);
+            genericDisconnectRetriesRef.current.delete(currentRunId);
+          }
           streamedText += delta;
           textBuffer.appendContent(delta);
         },
         onAgentEvent: (ev: AgentEvent) => {
+          if (currentRunId) {
+            transientFailedRetriesRef.current.delete(currentRunId);
+            genericDisconnectRetriesRef.current.delete(currentRunId);
+          }
           if (ev.kind === 'conversation_title') {
             applyAgentGeneratedTitle(ev.title);
             return;
@@ -4385,14 +4387,6 @@ export function ProjectView({
             updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
           },
           onRunStatus: (runStatus) => {
-            // A live stream status of 'running' or 'succeeded' is a recovery
-            // signal — the daemon is reachable and the run is active.  Reset
-            // both retry budgets so a *future* disconnect starts from zero.
-            // PR #4651 round 8 (nettee BLOCKING + codex P2).
-            if ((runStatus === 'running' || runStatus === 'succeeded') && currentRunId) {
-              transientFailedRetriesRef.current.delete(currentRunId);
-              genericDisconnectRetriesRef.current.delete(currentRunId);
-            }
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
