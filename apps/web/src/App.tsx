@@ -836,12 +836,32 @@ function AppInner() {
           if (tokenRes.ok) {
             const { nonce } = await tokenRes.json();
             if (nonce) {
-              await fetch('/api/auth/bootstrap', {
+              const bootstrapRes = await fetch('/api/auth/bootstrap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ nonce, clientTag }),
                 signal: bootstrapAbort.signal,
               });
+              if (!bootstrapRes.ok) {
+                // Bootstrap exchange was rejected — expired nonce,
+                // clientTag mismatch, or transient daemon error.
+                // Probe for a still-valid cookie before falling back
+                // to the token prompt.
+                try {
+                  const probe = await fetch('/api/plugins');
+                  if (probe.ok || probe.status !== 401) {
+                    // Cookie is still valid — proceed with fan-out.
+                  } else {
+                    setNeedsToken(true);
+                    clearTimeout(bootstrapTimeout);
+                    return;
+                  }
+                } catch {
+                  setNeedsToken(true);
+                  clearTimeout(bootstrapTimeout);
+                  return;
+                }
+              }
             }
           }
         } catch (err) {
