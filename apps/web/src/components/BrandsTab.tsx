@@ -136,13 +136,6 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
     (_brandId: string, projectId: string, conversationId: string) => {
       setModalOpen(false);
       void refresh();
-      try {
-        // Auto-send the seeded extraction prompt so the agent starts the moment
-        // the project opens (same pattern as plugin-share / design-system handoff).
-        window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
-      } catch {
-        // Private-mode storage failures should not block navigation.
-      }
       navigate({ kind: 'project', projectId, fileName: null, conversationId });
     },
     [refresh],

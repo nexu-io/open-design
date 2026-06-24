@@ -710,6 +710,84 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  it('reloads an empty brand-extraction transcript without auto-sending the fallback prompt', async () => {
+    const programmaticMessages: ChatMessage[] = [
+      {
+        id: 'brand-user-1',
+        role: 'user',
+        content: 'Extract a design system from https://refly.ai/.',
+        createdAt: 1,
+      },
+      {
+        id: 'brand-assistant-1',
+        role: 'assistant',
+        content: 'Programmatic design-system extraction started from https://refly.ai/.',
+        createdAt: 1,
+        startedAt: 1,
+        runStatus: 'running',
+      },
+    ];
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(programmaticMessages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: ['brand.html'], activeTabId: 'brand.html' });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    window.sessionStorage.setItem('od:auto-send-first:brand-project', '1');
+
+    render(
+      <ProjectView
+        project={{
+          id: 'brand-project',
+          name: 'refly.ai Design System',
+          skillId: null,
+          designSystemId: null,
+          pendingPrompt: 'Extract refly.ai into a design system.',
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'refly-ai',
+            brandSourceUrl: 'https://refly.ai/',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.messages).toEqual(programmaticMessages);
+    });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
+  });
+
   it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);

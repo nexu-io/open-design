@@ -326,6 +326,68 @@ describe('EntryShell settings menu', () => {
   });
 });
 
+describe('EntryShell new project rail', () => {
+  it('creates a blank project from the rail plus without opening the modal', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'false');
+    const fetchMock = vi.fn(
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/projects') && init?.method === 'POST') {
+        return jsonResponse({
+          project: {
+            id: 'project-1',
+            name: 'Untitled',
+            skillId: null,
+            designSystemId: null,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          conversationId: 'conversation-1',
+        });
+      }
+      if (url.endsWith('/api/community/discord')) {
+        return jsonResponse({
+          inviteCode: 'mHAjSMV6gz',
+          inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+          onlineCount: 0,
+          memberCount: 0,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      if (url.endsWith('/api/github/open-design')) {
+        return jsonResponse({
+          repo: 'nexu-io/open-design',
+          stargazers_count: 0,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      return jsonResponse({});
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderHome();
+
+    fireEvent.click(screen.getByTestId('entry-rail-toggle'));
+    fireEvent.click(screen.getByTestId('entry-nav-new-project'));
+
+    await waitFor(() => {
+      expect(props.onOpenProject).toHaveBeenCalledWith('project-1');
+    });
+    expect(screen.queryByRole('heading', { name: 'New project' })).toBeNull();
+
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
+    );
+    expect(createCall).toBeTruthy();
+    const body = JSON.parse(String(createCall?.[1]?.body));
+    expect(body.name).toBe('Untitled');
+    expect(body.skillId).toBeNull();
+    expect(body.designSystemId).toBeNull();
+    expect(body.metadata).toBeUndefined();
+  });
+});
+
 describe('EntryShell onboarding Open Design AMR runtime', () => {
   it('does not auto-select Open Design AMR when the AMR runtime is unavailable', async () => {
     globalThis.fetch = vi.fn(async () =>

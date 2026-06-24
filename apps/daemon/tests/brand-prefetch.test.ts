@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { prefetchFromHtml, previewablePrefetchHtml } from '../src/brands/prefetch.js';
+import { extractFonts, prefetchFromHtml, previewablePrefetchHtml } from '../src/brands/prefetch.js';
 
 function tmpBrandDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'od-brand-html-'));
@@ -37,6 +37,22 @@ describe('brand prefetch artifacts', () => {
 });
 
 describe('prefetchFromHtml (extract from already-rendered DOM)', () => {
+  it('does not let icon fonts outrank the real body/display face', () => {
+    const css = [
+      '.ri{font-family:"Remix Icon"}',
+      '.icon{font-family:"Remix Icon"}',
+      '.button .glyph{font-family:"Remix Icon"}',
+      'body{font-family:"Albert Sans",system-ui,sans-serif}',
+      'h1{font-family:"Albert Sans",system-ui,sans-serif}',
+    ].join('');
+
+    const { fonts, fontFaceFamilies } = extractFonts(css);
+
+    expect(fonts[0]?.family).toBe('Albert Sans');
+    expect(fonts.some((font) => font.family === 'Remix Icon')).toBe(false);
+    expect(fontFaceFamilies.some((font) => font === 'Remix Icon')).toBe(false);
+  });
+
   it('harvests colors, fonts, and copy from provided HTML + CSS without fetching the page', async () => {
     const html = [
       '<!doctype html><html><head>',

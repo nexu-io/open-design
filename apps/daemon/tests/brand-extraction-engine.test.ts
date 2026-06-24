@@ -22,6 +22,7 @@ import {
 import { findChrome } from '../src/brands/chrome.js';
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
+import { brandFromMaterial } from '../src/brands/provisional.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
 import {
   adoptExistingImagery,
@@ -200,6 +201,78 @@ describe('agent-driven brand extraction engine', () => {
       if (previousChrome === undefined) delete process.env.BRANDING_AGENT_CHROME;
       else process.env.BRANDING_AGENT_CHROME = previousChrome;
     }
+  });
+
+  it('prefers source-backed human brand tokens over script/debug color noise', () => {
+    const brand = brandFromMaterial({
+      url: 'https://open-design.ai/',
+      finalUrl: 'https://open-design.ai/',
+      siteName: 'Open Design',
+      title: 'Open Design',
+      description: 'Open Design design system.',
+      colors: [
+        { hex: '#262626', count: 19, sources: ['css-var:--ink'] },
+        { hex: '#15140f', count: 15, sources: ['css-var:--shadow-ink'] },
+        { hex: '#d8ffb5', count: 7, sources: ['selector:.hero-discord-pill:hover prop:background'] },
+        { hex: '#ffa500', count: 6, sources: ['prop:fillStyle selector:matter-debug-canvas'] },
+        { hex: '#83ff3b', count: 3, sources: ['css-var:--coral-soft'] },
+        { hex: '#63fe13', count: 2, sources: ['css-var:--coral', 'css-var:--mustard'] },
+        { hex: '#ffffff', count: 46, extreme: true, sources: ['css-var:--bone'] },
+        { hex: '#000000', count: 15, extreme: true, sources: ['prop:box-shadow'] },
+      ],
+      fonts: [{ family: 'Albert Sans', count: 2 }],
+      fontFaceFamilies: ['Albert Sans'],
+      googleFontsUrls: [],
+      fontFiles: [],
+      logos: [],
+      headings: ['Open Design The Open-source Claude Design alternative'],
+      paragraphs: ['Open Design is a local-first design platform.'],
+      navLabels: [],
+      extraPages: [],
+      screenshot: null,
+      thin: false,
+      blocked: false,
+      materialMd: '',
+    }, 'https://open-design.ai/');
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#63fe13');
+    expect(brand.typography.body.family).toBe('Albert Sans');
+  });
+
+  it('allows a dominant near-black system to beat generic generated blue effects', () => {
+    const brand = brandFromMaterial({
+      url: 'https://refly.ai/',
+      finalUrl: 'https://refly.ai/',
+      siteName: 'Refly.ai-Vibe Workflow for Non-Technical Users',
+      title: 'Refly.ai-Vibe Workflow for Non-Technical Users',
+      description: 'Refly.ai empowers non-technical creators through natural language and a visual canvas.',
+      colors: [
+        { hex: '#d5dbe6', count: 191, sources: ['css-var:--token-f195ea74-7512-4096-8d91-0e7c7e10d0ab'] },
+        { hex: '#cfe7ff', count: 123, sources: ['prop:box-shadow selector:.framer-card'] },
+        { hex: '#0099ff', count: 117, sources: ['prop:background-color selector:.framer-generated-effect'] },
+        { hex: '#10131c', count: 66, sources: ['css-var:--token-f213e283-24d0-40a3-a2dc-bca1da07b971'] },
+        { hex: '#0e9f77', count: 18, sources: ['logo-svg:header-img-3.svg'] },
+        { hex: '#04070d', count: 174, extreme: true, sources: ['css-var:--token-eb09dbbf-ef85-4b7f-81a5-44e9b062efb7'] },
+        { hex: '#ffffff', count: 157, extreme: true, sources: ['css-var:--token-a85af9cb-7834-4006-a277-2dd1295ae376'] },
+        { hex: '#000000', count: 156, extreme: true, sources: ['prop:background selector:footer'] },
+      ],
+      fonts: [{ family: 'Inter', count: 157 }],
+      fontFaceFamilies: ['Inter'],
+      googleFontsUrls: [],
+      fontFiles: [],
+      logos: [],
+      headings: ['The World’s First Vibe Workflow Platform'],
+      paragraphs: ['Refly.ai empowers non-technical creators through natural language and a visual canvas.'],
+      navLabels: [],
+      extraPages: [],
+      screenshot: null,
+      thin: false,
+      blocked: false,
+      materialMd: '',
+    }, 'https://refly.ai/');
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#04070d');
+    expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#0e9f77');
   });
 
   it('startBrandExtraction reserves the brand and seeds a live brand.html tab', async () => {
