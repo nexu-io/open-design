@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,6 +79,14 @@ async function discoverBrandSources(): Promise<BrandSources[]> {
     const brandRoot = path.join(designSystemsRoot, entry.name);
     const tokensPath = path.join(brandRoot, 'tokens.css');
     const fixturePath = path.join(brandRoot, 'components.html');
+
+    // prose-only 브랜드(tokens.css/components.html 없는 DESIGN.md 전용 폴더)는 건너뜀
+    const [hasTokens, hasFixture] = await Promise.all([
+      access(tokensPath).then(() => true, () => false),
+      access(fixturePath).then(() => true, () => false),
+    ]);
+    if (!hasTokens || !hasFixture) continue;
+
     const [tokensCss, fixtureHtml] = await Promise.all([
       readFile(tokensPath, 'utf8'),
       readFile(fixturePath, 'utf8'),
