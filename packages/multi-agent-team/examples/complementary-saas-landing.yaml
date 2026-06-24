@@ -1,0 +1,52 @@
+# 互补模式示例：多领域专家协作设计 SaaS 落地页
+# 使用方式：在 waiteam 中加载此配置，指定 mode=complementary
+
+team:
+  name: "saas-landing-experts"
+  mode: complementary
+
+  agents:
+    - id: designer
+      name: "UI 设计师"
+      role: "视觉设计"
+      type: "claude-code"
+      skills: [hero-section, pricing-table, feature-grid]
+      designs: [linear-app]
+    - id: copywriter
+      name: "品牌文案"
+      role: "内容创作"
+      type: "hermes"
+      skills: [brand-copywriting, seo-optimization]
+    - id: developer
+      name: "前端开发"
+      role: "技术实现"
+      type: "codex"
+      skills: [tailwind-css, responsive-layout]
+    - id: reviewer
+      name: "质量审查"
+      role: "代码审查"
+      type: "opencode"
+      skills: [code-review, accessibility-check]
+
+  # 互补模式核心：定义专家链的执行顺序
+  experts:
+    - agent_id: designer
+      role: "UI 设计师"
+      specialty: "视觉设计与品牌一致性"
+      skills: [hero-section, pricing-table]
+      order: 1
+    - agent_id: copywriter
+      role: "品牌文案"
+      specialty: "品牌语调与转化文案"
+      skills: [brand-copywriting]
+      order: 2
+    - agent_id: developer
+      role: "前端开发"
+      specialty: "响应式实现与性能优化"
+      skills: [tailwind-css]
+      order: 3
+    - agent_id: reviewer
+      role: "质量审查"
+      specialty: "代码质量与无障碍合规"
+      skills: [code-review, accessibility-check]
+      order: 4

@@ -1,0 +1,28 @@
+# 循环模式示例：Generator ← Reviewer 迭代打磨品牌 slogan
+# 使用方式：在 waiteam 中加载此配置，指定 mode=cycle
+#
+# 流程：Generator 产出首版 → Reviewer 评审打分 → 不达标则 Generator 修改 → 循环
+#       直到 Score >= 8.0 或 5 轮用尽
+
+team:
+  name: "slogan-refinement"
+  mode: cycle
+
+  agents:
+    - id: generator
+      name: "文案生成器"
+      role: "创意文案"
+      type: "hermes"
+      skills: [brand-copywriting, creative-writing]
+    - id: reviewer
+      name: "文案评审"
+      role: "品牌审查"
+      type: "claude-code"
+      skills: [brand-guidelines, critique]
+
+  # 循环模式核心参数
+  cycle:
+    generator_id: generator      # 产出者
+    reviewer_id: reviewer        # 评审者
+    max_iterations: 5            # 最多 5 轮循环
+    score_threshold: 8.0         # 评分 ≥ 8.0 即停止

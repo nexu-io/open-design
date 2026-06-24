@@ -1,0 +1,37 @@
+# Inheritance mode — parent agent output inherited by child agents
+# Use case: refinement chain (initial design → polish → codegen)
+version: "1.0"
+team:
+  name: "inheritance-refinement"
+  mode: inheritance
+
+  agents:
+    - id: initial_designer
+      name: "Initial Designer"
+      role: "Create rough design draft"
+      type: claude-code
+      skills: [layout-design, component-library]
+      designs: [minimal-light]
+
+    - id: polisher
+      name: "Design Polisher"
+      role: "Refine and enhance the initial design"
+      type: claude-code
+      skills: [visual-polish, micro-interactions]
+      designs: [minimal-light]
+
+    - id: codegen
+      name: "Code Generator"
+      role: "Convert polished design to production code"
+      type: codex
+      skills: [html-css, js-interactions]
+      designs: [minimal-light]
+
+inheritance:
+  enabled: true
+  tree:
+    agent_id: initial_designer
+    children:
+      - agent_id: polisher
+        children:
+          - agent_id: codegen
