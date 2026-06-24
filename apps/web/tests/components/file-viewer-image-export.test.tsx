@@ -9,14 +9,14 @@ const {
   downloadImageDataUrlMock,
   imageDataUrlToBlobMock,
   prepareImageExportTargetMock,
-  requestPreviewSnapshotMock,
+  requestPreviewSnapshotResultMock,
   saveImageBlobMock,
 } = vi.hoisted(() => ({
   captureHostIframeSnapshotMock: vi.fn(),
   downloadImageDataUrlMock: vi.fn(),
   imageDataUrlToBlobMock: vi.fn(),
   prepareImageExportTargetMock: vi.fn(),
-  requestPreviewSnapshotMock: vi.fn(),
+  requestPreviewSnapshotResultMock: vi.fn(),
   saveImageBlobMock: vi.fn(),
 }));
 
@@ -30,7 +30,7 @@ vi.mock('../../src/runtime/exports', async () => {
     downloadImageDataUrl: downloadImageDataUrlMock,
     imageDataUrlToBlob: imageDataUrlToBlobMock,
     prepareImageExportTarget: prepareImageExportTargetMock,
-    requestPreviewSnapshot: requestPreviewSnapshotMock,
+    requestPreviewSnapshotResult: requestPreviewSnapshotResultMock,
   };
 });
 
@@ -95,10 +95,9 @@ describe('FileViewer image export', () => {
   });
 
   it('portals the image export dialog above fixed chat composer layers', async () => {
-    requestPreviewSnapshotMock.mockResolvedValueOnce({
-      dataUrl: 'data:image/png;base64,ok',
-      w: 800,
-      h: 600,
+    requestPreviewSnapshotResultMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: { dataUrl: 'data:image/png;base64,ok', w: 800, h: 600 },
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
@@ -145,10 +144,9 @@ describe('FileViewer image export', () => {
   it('lets users choose an image format before saving URL-loaded HTML previews', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
     const imageBlob = new Blob(['jpeg'], { type: 'image/jpeg' });
-    requestPreviewSnapshotMock.mockResolvedValueOnce({
-      dataUrl: 'data:image/png;base64,ok',
-      w: 800,
-      h: 600,
+    requestPreviewSnapshotResultMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: { dataUrl: 'data:image/png;base64,ok', w: 800, h: 600 },
     });
     imageDataUrlToBlobMock.mockImplementation(async (_dataUrl: string, format: 'png' | 'jpeg' | 'webp') => {
       if (format === 'jpeg') return imageBlob;
@@ -165,7 +163,7 @@ describe('FileViewer image export', () => {
     expect(screen.getByRole('radio', { name: 'PNG' })).toBeTruthy();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500);
+      expect(requestPreviewSnapshotResultMock).toHaveBeenCalledWith(activeFrame, 1500);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'png');
     });
     await waitForSaveButton();
@@ -181,7 +179,7 @@ describe('FileViewer image export', () => {
     await waitFor(() => {
       expect(prepareImageExportTargetMock).toHaveBeenCalledWith('workspace', 'jpeg', { useNativePicker: false });
     });
-    expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(requestPreviewSnapshotResultMock).toHaveBeenCalledTimes(1);
     expect(saveImageBlobMock).toHaveBeenCalledWith(imageBlob);
     expect(screen.getByText('workspace.jpg')).toBeTruthy();
   });
@@ -189,10 +187,9 @@ describe('FileViewer image export', () => {
   it('keeps the Save label stable while a format change prepares the next image', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
     let resolveJpegBlob: ((blob: Blob) => void) | undefined;
-    requestPreviewSnapshotMock.mockResolvedValueOnce({
-      dataUrl: 'data:image/png;base64,ok',
-      w: 800,
-      h: 600,
+    requestPreviewSnapshotResultMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: { dataUrl: 'data:image/png;base64,ok', w: 800, h: 600 },
     });
     imageDataUrlToBlobMock
       .mockResolvedValueOnce(pngBlob)
@@ -221,14 +218,13 @@ describe('FileViewer image export', () => {
   it('retries the srcDoc snapshot bridge before giving up on URL-loaded previews', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
     let srcDocAttempts = 0;
-    requestPreviewSnapshotMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
-      if (iframe.getAttribute('data-od-render-mode') === 'url-load') return null;
+    requestPreviewSnapshotResultMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
+      if (iframe.getAttribute('data-od-render-mode') === 'url-load') return { ok: false, reason: 'render-error' };
       srcDocAttempts += 1;
-      if (srcDocAttempts === 1) return null;
+      if (srcDocAttempts === 1) return { ok: false, reason: 'render-error' };
       return {
-        dataUrl: 'data:image/png;base64,recovered',
-        w: 800,
-        h: 600,
+        ok: true,
+        snapshot: { dataUrl: 'data:image/png;base64,recovered', w: 800, h: 600 },
       };
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
@@ -237,23 +233,22 @@ describe('FileViewer image export', () => {
     await openImageExportDialog();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 1500);
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 3000);
+      expect(requestPreviewSnapshotResultMock).toHaveBeenCalledWith(srcDocFrame, 1500);
+      expect(requestPreviewSnapshotResultMock).toHaveBeenCalledWith(srcDocFrame, 3000);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,recovered', 'png');
     }, { timeout: 4000 });
   });
 
   it('captures the visible URL-loaded preview before falling back to the hidden srcDoc transport', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
-    requestPreviewSnapshotMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
+    requestPreviewSnapshotResultMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
       if (iframe.getAttribute('data-od-render-mode') === 'url-load') {
         return {
-          dataUrl: 'data:image/png;base64,visible',
-          w: 800,
-          h: 600,
+          ok: true,
+          snapshot: { dataUrl: 'data:image/png;base64,visible', w: 800, h: 600 },
         };
       }
-      return null;
+      return { ok: false, reason: 'render-error' };
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
 
@@ -261,19 +256,18 @@ describe('FileViewer image export', () => {
     await openImageExportDialog();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500);
+      expect(requestPreviewSnapshotResultMock).toHaveBeenCalledWith(activeFrame, 1500);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,visible', 'png');
     });
-    expect(requestPreviewSnapshotMock).not.toHaveBeenCalledWith(srcDocFrame, 1500);
+    expect(requestPreviewSnapshotResultMock).not.toHaveBeenCalledWith(srcDocFrame, 1500);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('uses the prepared PNG data URL for fallback downloads', async () => {
     const imageBlob = new Blob(['png'], { type: 'image/png' });
-    requestPreviewSnapshotMock.mockResolvedValueOnce({
-      dataUrl: 'data:image/png;base64,ok',
-      w: 800,
-      h: 600,
+    requestPreviewSnapshotResultMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: { dataUrl: 'data:image/png;base64,ok', w: 800, h: 600 },
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(imageBlob);
     prepareImageExportTargetMock.mockResolvedValueOnce({
@@ -294,8 +288,48 @@ describe('FileViewer image export', () => {
     expect(screen.getByText(/workspace\.png/)).toBeTruthy();
   });
 
-  it('does not create a save target when snapshot capture fails', async () => {
-    requestPreviewSnapshotMock.mockResolvedValueOnce(null);
+  it('shows a "preview still loading" hint when the iframe is not ready yet', async () => {
+    // Red spec for #3605: when the snapshot bridge hasn't booted yet
+    // (e.g. user clicks "Export as image" before the preview iframe
+    // finishes loading), surface an actionable retry message instead
+    // of the generic capture-failed copy. Pre-fix, every failure
+    // collapsed to the same alert and users couldn't tell wait-and-retry
+    // apart from a fatal render error.
+    requestPreviewSnapshotResultMock.mockResolvedValue({
+      ok: false,
+      reason: 'loading',
+    });
+    prepareImageExportTargetMock.mockResolvedValueOnce({
+      filename: 'workspace.png',
+      method: 'picker',
+      save: saveImageBlobMock,
+    });
+
+    renderHtmlPreview();
+    await openImageExportDialog();
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toBe(
+        'Preview is still loading. Please wait a moment and try again.',
+      );
+    }, { timeout: 4000 });
+    expect((screen.getByRole('button', { name: /^save$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(prepareImageExportTargetMock).not.toHaveBeenCalled();
+    expect(imageDataUrlToBlobMock).not.toHaveBeenCalled();
+    expect(saveImageBlobMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the generic capture-failed copy for fatal snapshot failures', async () => {
+    // Three reasons share the generic copy (timeout / render-error /
+    // post-message-error) because the user's recovery path is the same
+    // for all of them. We assert just one here and let the pure helper
+    // unit tests in `runtime/exports.test.ts` lock the per-reason
+    // routing to keep this integration test focused on UI wiring.
+    requestPreviewSnapshotResultMock.mockResolvedValue({
+      ok: false,
+      reason: 'render-error',
+      error: 'canvas tainted by cross-origin image',
+    });
     prepareImageExportTargetMock.mockResolvedValueOnce({
       filename: 'workspace.png',
       method: 'picker',
@@ -317,10 +351,9 @@ describe('FileViewer image export', () => {
   });
 
   it('does not write the save target when the captured image is empty', async () => {
-    requestPreviewSnapshotMock.mockResolvedValueOnce({
-      dataUrl: 'data:image/png;base64,ok',
-      w: 800,
-      h: 600,
+    requestPreviewSnapshotResultMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: { dataUrl: 'data:image/png;base64,ok', w: 800, h: 600 },
     });
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob([]));
     prepareImageExportTargetMock.mockResolvedValueOnce({

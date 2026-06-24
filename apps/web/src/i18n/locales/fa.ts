@@ -2170,6 +2170,7 @@ export const fa: Dict = {
   'fileViewer.exportMd': 'صادرکردن به صورت Markdown',
   'fileViewer.exportImage': 'صادرکردن به صورت تصویر',
   'fileViewer.exportImageFailed': 'گرفتن تصویر ناموفق بود. لطفاً دوباره تلاش کنید یا از ابزار اسکرین‌شات مرورگرتان استفاده کنید.',
+  'fileViewer.exportImageNotReady': 'پیش‌نمایش هنوز در حال بارگذاری است. لطفاً کمی صبر کنید و دوباره تلاش کنید.',
   'fileViewer.exportImageModalSubtitle': 'یک قالب انتخاب کنید، سپس پیش‌نمایش فعلی را به‌صورت تصویر دانلود کنید.',
   'fileViewer.exportImageFormatLabel': 'قالب',
   'fileViewer.exportImageSaving': 'در حال ذخیره تصویر…',

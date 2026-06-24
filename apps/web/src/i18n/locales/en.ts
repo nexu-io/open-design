@@ -2170,6 +2170,7 @@ export const en: Dict = {
   'fileViewer.exportMd': 'Export as Markdown',
   'fileViewer.exportImage': 'Export as image',
   'fileViewer.exportImageFailed': 'Image capture failed. Please try again or use your browser\'s screenshot tool.',
+  'fileViewer.exportImageNotReady': 'Preview is still loading. Please wait a moment and try again.',
   'fileViewer.exportImageModalSubtitle': 'Choose a format, then download the current preview as an image.',
   'fileViewer.exportImageFormatLabel': 'Format',
   'fileViewer.exportImageSaving': 'Saving image…',

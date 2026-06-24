@@ -2170,6 +2170,7 @@ export const id: Dict = {
   'fileViewer.exportMd': 'Ekspor Markdown',
   'fileViewer.exportImage': 'Ekspor gambar',
   'fileViewer.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
+  'fileViewer.exportImageNotReady': 'Pratinjau masih dimuat. Tunggu sebentar lalu coba lagi.',
   'fileViewer.exportImageModalSubtitle': 'Pilih format, lalu unduh pratinjau saat ini sebagai gambar.',
   'fileViewer.exportImageFormatLabel': 'Format',
   'fileViewer.exportImageSaving': 'Menyimpan gambar…',

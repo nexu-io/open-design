@@ -2170,6 +2170,7 @@ export const zhCN: Dict = {
   'fileViewer.exportMd': '导出为 Markdown',
   'fileViewer.exportImage': '导出为图片',
   'fileViewer.exportImageFailed': '图片捕获失败，请重试或使用浏览器的截图工具。',
+  'fileViewer.exportImageNotReady': '预览仍在加载中，请稍候再试。',
   'fileViewer.exportImageModalSubtitle': '选择图片格式后，将当前预览下载为图片。',
   'fileViewer.exportImageFormatLabel': '格式',
   'fileViewer.exportImageSaving': '正在保存图片…',

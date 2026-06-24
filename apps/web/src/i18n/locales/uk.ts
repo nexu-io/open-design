@@ -2170,6 +2170,7 @@ export const uk: Dict = {
   'fileViewer.exportMd': 'Експортувати як Markdown',
   'fileViewer.exportImage': 'Експортувати як зображення',
   'fileViewer.exportImageFailed': 'Не вдалося захопити зображення. Спробуйте ще раз або скористайтеся інструментом знімків екрана вашого браузера.',
+  'fileViewer.exportImageNotReady': 'Попередній перегляд ще завантажується. Зачекайте хвилинку та спробуйте ще раз.',
   'fileViewer.exportImageModalSubtitle': 'Виберіть формат, а потім завантажте поточний попередній перегляд як зображення.',
   'fileViewer.exportImageFormatLabel': 'Формат',
   'fileViewer.exportImageSaving': 'Збереження зображення…',

@@ -418,6 +418,7 @@ export async function requestPreviewSnapshot(
 }
 
 /**
+/**
  * Capture a rectangle of the on-screen window via the desktop host's
  * compositor (Electron `webContents.capturePage`). Unlike the in-iframe
  * SVG-foreignObject bridge, this returns the REAL rendered pixels — fonts,
@@ -469,6 +470,48 @@ export async function captureHostIframeSnapshot(
     width: rect.width,
     height: rect.height,
   });
+}
+
+/**
+ * Translation key returned by {@link resolveExportImageFailureKey} for the
+ * "preview iframe is not ready yet" case. The caller uses this key to surface
+ * an actionable retry hint instead of the catch-all `exportImageFailed` copy.
+ *
+ * Kept as a string literal (not a `keyof Dict` import) to keep this module
+ * free of i18n machinery — the helper stays pure and unit-testable, and the
+ * call site enforces typing via the `t()` lookup.
+ */
+export type ExportImageFailureKey =
+  | 'fileViewer.exportImageNotReady'
+  | 'fileViewer.exportImageFailed';
+
+/**
+ * Map a {@link PreviewSnapshotResult} failure reason to the i18n key the UI
+ * should show.
+ *
+ * The Export-as-image button in the share menu used to collapse every snapshot
+ * failure (iframe not loaded yet, postMessage error, render error, timeout)
+ * down to a single generic "Image capture failed" alert. That made it
+ * impossible for users to tell whether they should wait and retry or whether
+ * the preview itself was broken — so a transient "iframe still loading" race
+ * looked indistinguishable from a fatal render error. See issue #3605.
+ *
+ * The split here is deliberately conservative:
+ *   - `loading` is the only branch surfaced as a distinct, actionable
+ *     message ("preview is still loading, try again in a moment"). It is the
+ *     one failure mode the user can resolve themselves without leaving the
+ *     dialog.
+ *   - `timeout` / `render-error` / `post-message-error` all stay on the
+ *     existing generic message because the user's recovery path is the same
+ *     (retry or fall back to a browser screenshot). The precise reason is
+ *     emitted to the console for bug reports instead of fragmenting the UI.
+ */
+export function resolveExportImageFailureKey(
+  result: PreviewSnapshotResult,
+): ExportImageFailureKey | null {
+  if (result.ok) return null;
+  if (result.reason === 'loading') return 'fileViewer.exportImageNotReady';
+  return 'fileViewer.exportImageFailed';
 }
 
 /** Convert a data-URL to a Blob without re-encoding through canvas. */

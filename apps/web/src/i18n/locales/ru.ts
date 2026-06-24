@@ -2170,6 +2170,7 @@ export const ru: Dict = {
   'fileViewer.exportMd': 'Экспорт в Markdown',
   'fileViewer.exportImage': 'Экспорт как изображение',
   'fileViewer.exportImageFailed': 'Не удалось сделать снимок. Попробуйте ещё раз или воспользуйтесь инструментом скриншотов вашего браузера.',
+  'fileViewer.exportImageNotReady': 'Предпросмотр ещё загружается. Подождите немного и попробуйте снова.',
   'fileViewer.exportImageModalSubtitle': 'Выберите формат, затем скачайте текущий предпросмотр как изображение.',
   'fileViewer.exportImageFormatLabel': 'Формат',
   'fileViewer.exportImageSaving': 'Сохранение изображения…',

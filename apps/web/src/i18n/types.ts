@@ -2786,6 +2786,7 @@ export interface Dict {
   'fileViewer.exportMd': string;
   'fileViewer.exportImage': string;
   'fileViewer.exportImageFailed': string;
+  'fileViewer.exportImageNotReady': string;
   'fileViewer.exportImageModalSubtitle': string;
   'fileViewer.exportImageFormatLabel': string;
   'fileViewer.exportImageSaving': string;

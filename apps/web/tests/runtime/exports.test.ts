@@ -17,6 +17,8 @@ import {
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
   requestPreviewSnapshot,
+  resolveExportImageFailureKey,
+  type PreviewSnapshotResult,
 } from '../../src/runtime/exports';
 
 function mockResponse(headers: Record<string, string>): Response {
@@ -984,6 +986,66 @@ describe('requestPreviewSnapshot', () => {
     const result = await promise;
     expect(result).toBeNull();
     vi.useRealTimers();
+  });
+});
+
+describe('resolveExportImageFailureKey', () => {
+  // Locks the contract that backs the image-export modal's user-facing
+  // copy. Before #3605 the consumer collapsed every snapshot failure
+  // (iframe not mounted, postMessage error, render error, timeout) into
+  // a single null and a single generic alert, so a transient
+  // "iframe still loading" race looked identical to a fatal capture
+  // error. The helper now hands back a translation key per reason: a
+  // distinct "preview is still loading, try again" hint for the
+  // transient case, and the existing generic copy for everything else.
+  // This describe block is the load-bearing red spec for that split —
+  // it must go red on `main` (where there is no helper) and stay green
+  // on the fix branch.
+
+  it('returns null for a successful capture so callers know there is nothing to surface', () => {
+    const result: PreviewSnapshotResult = {
+      ok: true,
+      snapshot: { dataUrl: 'data:image/png;base64,ok', w: 800, h: 600 },
+    };
+    expect(resolveExportImageFailureKey(result)).toBeNull();
+  });
+
+  it('routes the iframe-not-ready race to the actionable retry copy', () => {
+    // `loading` is the only reason a user can resolve themselves
+    // without leaving the dialog (just wait for the preview to finish
+    // loading and click again). It must NOT collapse into the generic
+    // fatal copy, otherwise the user has no way to tell the two apart.
+    expect(resolveExportImageFailureKey({ ok: false, reason: 'loading' })).toBe(
+      'fileViewer.exportImageNotReady',
+    );
+  });
+
+  it.each([
+    ['timeout' as const],
+    ['render-error' as const],
+    ['post-message-error' as const],
+  ])('keeps fatal failures (%s) on the generic exportImageFailed copy', (reason) => {
+    // Three distinct fatal modes; the user's recovery path is the same
+    // for all of them (retry or fall back to a browser screenshot), so
+    // we deliberately keep them on one i18n key. Splitting these into
+    // separate per-reason messages would balloon translation surface
+    // for no UX gain. The precise reason is logged at the call site
+    // for bug reports.
+    expect(resolveExportImageFailureKey({ ok: false, reason })).toBe(
+      'fileViewer.exportImageFailed',
+    );
+  });
+
+  it('surfaces an error string alongside fatal reasons without losing the key', () => {
+    // `error` is an opaque debug string from the snapshot bridge. It
+    // must not influence which i18n key we pick — the reason field is
+    // the routing input, and the message appears only in console logs.
+    const result: PreviewSnapshotResult = {
+      ok: false,
+      reason: 'render-error',
+      error: 'canvas tainted by cross-origin image',
+    };
+    expect(resolveExportImageFailureKey(result)).toBe('fileViewer.exportImageFailed');
   });
 });
 
