@@ -235,6 +235,7 @@ export interface McpRunCreateRequest {
   pluginId?: string;
   model?: string;
   pluginInputs?: Record<string, unknown>;
+  deferredDefaultInputNames?: string[];
   mediaExecution?: MediaExecutionPolicy;
   toolBundle?: RunScopedToolBundle;
 }

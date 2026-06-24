@@ -533,6 +533,7 @@ export const ar: Dict = {
   'homeHero.footer.ratio': 'النسبة',
   'homeHero.footer.duration': 'المدة',
   'homeHero.footer.resolution': 'الدقة',
+  'homeHero.footer.pageQuantity': 'عدد الصفحات',
   'homeHero.footer.speakerNotes': 'الملاحظات',
   'homeHero.footer.noSpeakerNotes': 'بلا ملاحظات',
   'homeHero.footer.availableCount': '{n} متاح',

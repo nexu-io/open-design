@@ -533,6 +533,7 @@ export const en: Dict = {
   'homeHero.footer.ratio': 'Ratio',
   'homeHero.footer.duration': 'Duration',
   'homeHero.footer.resolution': 'Resolution',
+  'homeHero.footer.pageQuantity': 'Page quantity',
   'homeHero.footer.speakerNotes': 'Notes',
   'homeHero.footer.noSpeakerNotes': 'No notes',
   'homeHero.footer.availableCount': '{n} available',

@@ -1342,6 +1342,7 @@ function AppInner() {
         pluginType?: string;
         appliedPluginSnapshotId?: string;
         pluginInputs?: Record<string, unknown>;
+        deferredDefaultInputNames?: string[];
         conversationMode?: ChatSessionMode;
         autoSendFirstMessage?: boolean;
         requestId?: string;
@@ -1375,6 +1376,9 @@ function AppInner() {
             ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
             : {}),
           ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+          ...(input.deferredDefaultInputNames && input.deferredDefaultInputNames.length > 0
+            ? { deferredDefaultInputNames: input.deferredDefaultInputNames }
+            : {}),
         });
       } catch (err) {
         const errorCode =

@@ -533,6 +533,7 @@ export const ru: Dict = {
   'homeHero.footer.ratio': 'Формат',
   'homeHero.footer.duration': 'Длительность',
   'homeHero.footer.resolution': 'Разрешение',
+  'homeHero.footer.pageQuantity': 'Количество страниц',
   'homeHero.footer.speakerNotes': 'Заметки',
   'homeHero.footer.noSpeakerNotes': 'Без заметок',
   'homeHero.footer.availableCount': 'Доступно: {n}',

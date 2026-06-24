@@ -41,7 +41,7 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
-import { useI18n, useT } from '../i18n';
+import { useI18n, useT, type Locale } from '../i18n';
 import {
   localizeSkillName,
   localizeSkillPrompt,
@@ -94,7 +94,7 @@ import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
-import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
+import { examplePresetSeedPrompt, firstPromptParagraph } from './plugins-home/presetSeedPrompt';
 import { localizePluginDescription } from './plugins-home/localization';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 import { AnimatePresence } from 'motion/react';
@@ -110,6 +110,7 @@ export interface ActivePlugin {
   inputs: Record<string, unknown>;
   inputFields: InputFieldSpec[];
   inputsValid: boolean;
+  confirmedInputNames: string[];
   queryTemplate: string | null;
   // True when `queryTemplate` covers only a suffix of the prompt (the plugin
   // query appended after a user-owned draft), so input extraction must allow
@@ -673,6 +674,7 @@ export function HomeView({
       // or Community card / detail modal) rather than a type chip's default
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
       explicitPick?: boolean;
+      confirmedInputNames?: string[];
     },
     // Resolves true when the bound plugin left the composer submittable
     // (inputs valid, apply not failed/superseded) — callers use this to
@@ -683,9 +685,15 @@ export function HomeView({
     setActiveSkill(null);
     const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
-    const optimisticInputs = hydratePluginInputs(
-      inputFields,
-      withHomeDesignSystemDefault(options?.inputs, inputFields, defaultDesignSystemTitle),
+    const projectKind = options?.projectKind ?? null;
+    const confirmedInputNames = options?.confirmedInputNames ?? [];
+    const optimisticInputs = normalizeHomeArtifactInputs(
+      projectKind,
+      hydratePluginInputs(
+        inputFields,
+        withHomeDesignSystemDefault(options?.inputs, inputFields, defaultDesignSystemTitle),
+      ),
+      confirmedInputNames,
     );
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
@@ -717,17 +725,18 @@ export function HomeView({
       inputs: optimisticInputs,
       inputFields,
       inputsValid,
+      confirmedInputNames,
       queryTemplate,
       queryTemplateAllowsPrefix: options?.queryTemplateAllowsPrefix === true,
       // When prompt updates are suppressed we leave lastRenderedPrompt
       // null so the inline pattern-extraction in handlePromptChange
       // doesn't claim ownership of the user's typed text.
       lastRenderedPrompt: suppressPromptUpdate ? null : optimisticPrompt,
-      projectKind: options?.projectKind ?? null,
+      projectKind,
       chipId: options?.chipId ?? null,
       mediaSurface: options?.mediaSurface ?? null,
       projectMetadata: homeCreateProjectMetadata(
-        options?.projectKind ?? null,
+        projectKind,
         optimisticInputs,
         options?.projectMetadata ?? null,
       ),
@@ -825,9 +834,14 @@ export function HomeView({
     record: InstalledPluginRecord,
     inputs: Record<string, unknown>,
     applyRequestId?: number,
+    options?: { deferredDefaultInputNames?: string[] },
   ): Promise<ApplyResult | null> {
     setPendingApplyId(record.id);
-    const result = await applyPlugin(record.id, { locale, inputs });
+    const result = await applyPlugin(record.id, {
+      locale,
+      inputs,
+      deferredDefaultInputNames: options?.deferredDefaultInputNames,
+    });
     if (applyRequestId === undefined || activePluginApplyRequestRef.current === applyRequestId) {
       setPendingApplyId(null);
       setPendingChipId(null);
@@ -1041,12 +1055,29 @@ export function HomeView({
     // submit (submit() already re-resolves), so a preset click stays instant
     // and doesn't fire an /apply roundtrip per card. The chip is already
     // active when preset cards are visible, so reuse its project kind/metadata.
-    void usePlugin(record, promptText, {
+    const carried = chipId === active?.chipId
+      ? inputsToCarryIntoPreset(active, record)
+      : {};
+    const nextPrompt = promptTextWithCarriedPresetInputs(
+      record,
+      locale,
+      promptText,
+      carried.inputs,
+      active?.projectKind ?? null,
+      carried.confirmedInputNames ?? [],
+    );
+    const seed = examplePresetSeedPrompt(record, locale, () => promptText);
+    const queryTemplate = seed.fromRenderedQuery
+      ? resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale)
+      : null;
+    void usePlugin(record, nextPrompt, {
+      ...carried,
       chipId,
       projectKind: active?.projectKind ?? undefined,
       projectMetadata: active?.projectMetadata ?? null,
       deferApply: true,
       explicitPick: true,
+      queryTemplate,
     }).then((submittable) => {
       if (submittable) inputRef.current?.pulseSend();
     });
@@ -1079,9 +1110,11 @@ export function HomeView({
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
+    const confirmedInputNames = confirmedInputNamesForUpdate(active, normalizedInputs);
     setActive({
       ...active,
       inputs: normalizedInputs,
+      confirmedInputNames,
       inputsValid,
       projectMetadata: active.mediaSurface
         ? metadataForHomeMediaComposer(active.mediaSurface, normalizedInputs, promptTemplates)
@@ -1159,6 +1192,7 @@ export function HomeView({
       ? metadataForHomeMediaComposer(active.mediaSurface, normalized, promptTemplates)
       : homeCreateProjectMetadata(active.projectKind, normalized, active.projectMetadata);
     const inputsValid = pluginInputsAreValid(inputFields, normalized);
+    const confirmedInputNames = confirmedInputNamesForUpdate(active, normalized);
     const nextRendered =
       queryTemplate !== null
         ? renderPluginBriefTemplate(queryTemplate, normalized)
@@ -1176,6 +1210,7 @@ export function HomeView({
       ...active,
       inputs: normalized,
       inputFields,
+      confirmedInputNames,
       queryTemplate,
       projectMetadata,
       editableInputNames: mediaComposer?.editableFieldNames ?? active.editableInputNames,
@@ -1513,28 +1548,30 @@ export function HomeView({
         designSystemPickerSystems,
         t('designSystemPicker.noneTitle'),
       );
-      // Composer inputs are forwarded as-is; the deferred footer/media fields are
-      // stripped from this set just below to form the run-facing inputs.
+      // Composer inputs are forwarded as-is; footer/media fields are stripped
+      // from this set just below to form the run-facing inputs.
       const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
-      // Inputs forwarded to the run AND used to build the run-facing snapshot:
-      // drop every now-hidden footer/media setting so the first-turn
-      // question-form flow collects them instead of inheriting a baked-in
-      // default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …). The
-      // snapshot is resolved from these stripped inputs too — the daemon renders
-      // `## Plugin inputs` from `snapshot.inputs` and tells the agent not to
-      // re-ask about anything listed there, so leaving the deferred defaults in
-      // the snapshot would suppress the discovery flow even though
-      // `onSubmit.pluginInputs` was stripped. Stripping only removes non-required
-      // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
-      // od-media-generation apply still validates.
+      // Inputs forwarded to the run and used to build the run-facing snapshot.
+      // This PR only marks neutral deck page quantity as a deferred manifest
+      // default. Other hidden footer/media defaults need a separate scoped pass.
       const submittedPluginInputs = submittedActive
-        ? stripArtifactFooterInputs(submittedApplyInputs)
+        ? stripArtifactFooterInputs(submittedApplyInputs, {
+            keepDeckSlideCount:
+              submittedActive.projectKind === 'deck' &&
+              submittedActive.confirmedInputNames.includes('slideCount'),
+            keepDeckSpeakerNotes: submittedActive.projectKind === 'deck',
+          })
         : defaultInputs;
       const activeInputsChangedForSubmit = submittedActive
         ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
         : false;
       if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
-        const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
+        const result = await resolveActivePlugin(
+          submittedActive.record,
+          submittedPluginInputs,
+          undefined,
+          { deferredDefaultInputNames: deferredDefaultInputNamesForSubmit(submittedActive) },
+        );
         if (!result) {
           setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
           return;
@@ -1593,12 +1630,14 @@ export function HomeView({
         sessionMode === 'design'
           ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
           : submittedActive?.record.id ?? null;
+      const appliedPluginSnapshotId = submittedActive?.result?.appliedPlugin?.snapshotId;
       // The example-prompt override is a one-shot marker. Decide whether to
       // send it now, but defer spending the marker until the create is
       // accepted — a rejected attempt stays retryable and must resend it.
       const examplePromptKey = 'od:example-prompt-used';
+      const examplePromptStorage = getOptionalLocalStorage();
       const examplePromptToSend =
-        examplePromptInfoRef.current != null && localStorage.getItem(examplePromptKey) == null
+        examplePromptInfoRef.current != null && examplePromptStorage?.getItem(examplePromptKey) == null
           ? examplePromptInfoRef.current
           : null;
       const accepted = await onSubmit({
@@ -1606,10 +1645,14 @@ export function HomeView({
         pluginId: routedPluginId,
         pluginType: submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
         skillId: resolvedSkillId,
-        appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
+        appliedPluginSnapshotId:
+          appliedPluginSnapshotId && appliedPluginSnapshotId.length > 0
+            ? appliedPluginSnapshotId
+            : null,
         pluginTitle: submittedActive?.record.title ?? null,
         taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
         pluginInputs: submittedPluginInputs,
+        deferredDefaultInputNames: submittedActive ? deferredDefaultInputNamesForSubmit(submittedActive) : [],
         projectKind: submittedProjectKind,
         projectMetadata: submittedProjectMetadata,
         designSystemId: submittedDesignSystemId,
@@ -1627,7 +1670,7 @@ export function HomeView({
         return;
       }
       // Create accepted — now it is safe to spend the one-shot marker.
-      if (examplePromptToSend) localStorage.setItem(examplePromptKey, '1');
+      if (examplePromptToSend) examplePromptStorage?.setItem(examplePromptKey, '1');
       // Only drop the staged contexts once the run actually started — a
       // rejected creation keeps them so the retry sends the same payload.
       setSelectedPluginContexts([]);
@@ -1678,7 +1721,9 @@ export function HomeView({
         onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
         pluginInputFields={(active?.inputFields ?? []).filter(
-          (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
+          (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name) || (
+            active?.chipId === 'deck' && (field.name === 'slideCount' || field.name === 'speakerNotes')
+          ),
         )}
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
@@ -1957,25 +2002,15 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
   }
 }
 
-// Prototype/deck-specific settings (fidelity, slide count, speaker notes) are
-// no longer promoted into the home composer footer — the agent asks for those
-// via the first-turn discovery flow, so the prototype/deck footer keeps only
-// the design-system picker. Media surfaces (image/video/audio/hyperframes)
-// now defer the same way: image/video keep only the design-system picker and
-// audio/hyperframes keep nothing, with model / ratio / resolution / duration /
-// audio type collected by the agent via question-form during the run instead
-// of inline pre-flight controls.
+// Inputs in this set are stripped from run-facing plugin inputs unless Home
+// has visible user-confirmed evidence for keeping them. Deferred default
+// tracking is intentionally limited to deck page quantity in this PR.
 const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'fidelity',
   'slideCount',
   'speakerNotes',
-  // Media surfaces (image/video/audio/hyperframes) defer the same way. These
-  // were dropped from the footer but `buildHomeMediaComposer` still seeds them
-  // (`model: gpt-image-2`, `ratio: 16:9`, `duration: 5`, `audioType: speech`,
-  // …) so they must be stripped before submission — otherwise the run arrives
-  // with baked-in defaults and the first-turn question-form flow has nothing
-  // left to ask. `subject` / `style` / `aspect` / `mediaKind` are intentionally
-  // NOT listed: the od-media-generation apply still validates against them.
+  // `subject` / `style` / `aspect` / `mediaKind` are intentionally not listed:
+  // the od-media-generation apply path still validates against them.
   'model',
   'ratio',
   'resolution',
@@ -1984,18 +2019,26 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'voice',
 ]);
 
-// The prototype/deck footer no longer exposes these settings, so any plugin
-// default for them must NOT be seeded into the Home composer's inputs — that
-// would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
-// instead of leaving it "unknown" for the first-turn discovery flow to ask.
+// Hidden/deferred defaults must not be forwarded to the run just because the
+// plugin manifest ships them. Deck page quantity is the exception only after a
+// concrete value is visible/selected in Home; blank keeps Quick Brief in charge.
 function stripArtifactFooterInputs(
   inputs: Record<string, unknown>,
+  options: { keepDeckSlideCount?: boolean; keepDeckSpeakerNotes?: boolean } = {},
 ): Record<string, unknown> {
   if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
     return inputs;
   }
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(inputs)) {
+    if (options.keepDeckSlideCount && key === 'slideCount' && hasDeckSlideCount(value)) {
+      next[key] = value;
+      continue;
+    }
+    if (options.keepDeckSpeakerNotes && key === 'speakerNotes' && hasDeckSpeakerNotes(value)) {
+      next[key] = value;
+      continue;
+    }
     if (ARTIFACT_FOOTER_FIELD_NAMES.has(key)) continue;
     next[key] = value;
   }
@@ -2003,11 +2046,138 @@ function stripArtifactFooterInputs(
 }
 
 function footerInputNamesForChip(chipId: string | null): string[] {
-  if (chipId === 'prototype' || chipId === 'deck') return ['designSystem'];
+  if (chipId === 'deck') return ['slideCount', 'speakerNotes', 'designSystem'];
+  if (chipId === 'prototype') return ['designSystem'];
   if (chipId === 'image' || chipId === 'video') return ['designSystem'];
   // hyperframes / audio surface no pre-flight settings — the agent asks for
   // ratio / duration / model / audio kind via question-form during the run.
   return [];
+}
+
+function hasDeckSlideCount(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0 && !isUnresolvedTemplatePlaceholder(value);
+}
+
+function hasDeckSpeakerNotes(value: unknown): boolean {
+  return value === 'include speaker notes' || value === 'no speaker notes';
+}
+
+function isUnresolvedTemplatePlaceholder(value: string): boolean {
+  return /^\{\{\s*[a-zA-Z_][\w-]*\s*\}\}$/.test(value.trim());
+}
+
+function confirmedInputNamesForUpdate(active: ActivePlugin, normalized: Record<string, unknown>): string[] {
+  if (active.projectKind !== 'deck') return active.confirmedInputNames;
+  const confirmed = new Set(active.confirmedInputNames);
+  if (!Object.is(active.inputs.slideCount, normalized.slideCount)) {
+    if (hasDeckSlideCount(normalized.slideCount)) {
+      confirmed.add('slideCount');
+    } else {
+      confirmed.delete('slideCount');
+    }
+  }
+  return Array.from(confirmed);
+}
+
+function deferredDefaultInputNamesForSubmit(active: ActivePlugin): string[] {
+  if (!active.chipId || active.projectKind !== 'deck') return [];
+  const keep = keptArtifactFooterInputNamesForSubmit(active);
+  const deferred = new Set<string>();
+  for (const field of active.inputFields) {
+    const name = field.name;
+    if (!name || keep.has(name) || !ARTIFACT_FOOTER_FIELD_NAMES.has(name)) continue;
+    if (field.default === undefined || field.default === null || field.default === '') continue;
+    deferred.add(name);
+  }
+  return Array.from(deferred);
+}
+
+function keptArtifactFooterInputNamesForSubmit(active: ActivePlugin): Set<string> {
+  const keep = new Set<string>();
+  if (active.projectKind === 'deck') {
+    if (active.confirmedInputNames.includes('slideCount') && hasDeckSlideCount(active.inputs.slideCount)) {
+      keep.add('slideCount');
+    }
+    if (hasDeckSpeakerNotes(active.inputs.speakerNotes)) {
+      keep.add('speakerNotes');
+    }
+  }
+  return keep;
+}
+
+function getOptionalLocalStorage(): Storage | null {
+  try {
+    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function inputsToCarryIntoPreset(
+  active: ActivePlugin,
+  record: InstalledPluginRecord,
+): { inputs?: Record<string, unknown>; confirmedInputNames?: string[] } {
+  const targetFieldNames = new Set((record.manifest?.od?.inputs ?? []).map((field) => field.name));
+  const inputs: Record<string, unknown> = {};
+  const confirmedInputNames: string[] = [];
+  if (targetFieldNames.has('designSystem') && active.inputs.designSystem !== undefined) {
+    inputs.designSystem = active.inputs.designSystem;
+  }
+  if (active.projectKind === 'deck') {
+    if (
+      targetFieldNames.has('slideCount') &&
+      active.confirmedInputNames.includes('slideCount') &&
+      hasDeckSlideCount(active.inputs.slideCount)
+    ) {
+      inputs.slideCount = active.inputs.slideCount;
+      confirmedInputNames.push('slideCount');
+    }
+    if (targetFieldNames.has('speakerNotes') && hasDeckSpeakerNotes(active.inputs.speakerNotes)) {
+      inputs.speakerNotes = active.inputs.speakerNotes;
+    }
+  }
+  return {
+    ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
+    ...(confirmedInputNames.length > 0 ? { confirmedInputNames } : {}),
+  };
+}
+
+function promptTextWithCarriedPresetInputs(
+  record: InstalledPluginRecord,
+  locale: Locale,
+  promptText: string,
+  inputs: Record<string, unknown> | undefined,
+  projectKind: ProjectKind | null,
+  confirmedInputNames: string[],
+): string {
+  if (!inputs || Object.keys(inputs).length === 0) return promptText;
+  const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+  if (!query) return promptText;
+  const fields = record.manifest?.od?.inputs ?? [];
+  const defaultPrompt = firstPromptParagraph(
+    renderPluginBriefTemplate(query, hydratePluginInputs(fields, undefined)),
+  );
+  if (promptText.trim() !== defaultPrompt.trim()) return promptText;
+  const renderedInputs = hydratePluginInputs(fields, inputs);
+  if (projectKind === 'deck' && !confirmedInputNames.includes('slideCount')) {
+    delete renderedInputs.slideCount;
+  }
+  const carriedPrompt = firstPromptParagraph(
+    renderPluginBriefTemplate(query, renderedInputs),
+  );
+  return carriedPrompt.trim() ? carriedPrompt : promptText;
+}
+
+function normalizeHomeArtifactInputs(
+  projectKind: ProjectKind | null,
+  inputs: Record<string, unknown>,
+  confirmedInputNames: string[] = [],
+): Record<string, unknown> {
+  // Home exposes deck page quantity as a visible footer choice. Do not let the
+  // plugin manifest's default count stand in for user confirmation; choosing a
+  // real count later writes it back and prevents Quick Brief from re-asking.
+  if (projectKind !== 'deck' || !('slideCount' in inputs) || confirmedInputNames.includes('slideCount')) return inputs;
+  return { ...inputs, slideCount: '' };
 }
 
 function homeCreateProjectMetadata(
@@ -2018,10 +2188,9 @@ function homeCreateProjectMetadata(
   const kind = projectKind ?? existing?.kind ?? null;
   if (!kind) return existing;
 
-  // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
-  // longer collected in the home composer; the agent asks for them via
-  // question-form, so we only seed `kind` here and let those fields stay
-  // unset (the system prompt then marks them "unknown — ask").
+  // Artifact-specific settings are not stamped into project metadata here. If a
+  // user selects deck page quantity in Home, it travels through pluginInputs;
+  // otherwise the system prompt marks it unknown and Quick Brief asks.
   const next: ProjectMetadata = {
     ...(existing ?? {}),
     kind,

@@ -533,6 +533,7 @@ export const ko: Dict = {
   'homeHero.footer.ratio': '비율',
   'homeHero.footer.duration': '길이',
   'homeHero.footer.resolution': '해상도',
+  'homeHero.footer.pageQuantity': '페이지 수',
   'homeHero.footer.speakerNotes': '메모',
   'homeHero.footer.noSpeakerNotes': '노트 없음',
   'homeHero.footer.availableCount': '{n}개 사용 가능',

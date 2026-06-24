@@ -929,6 +929,7 @@ export interface Dict {
   'homeHero.footer.ratio': string;
   'homeHero.footer.duration': string;
   'homeHero.footer.resolution': string;
+  'homeHero.footer.pageQuantity': string;
   'homeHero.footer.speakerNotes': string;
   'homeHero.footer.noSpeakerNotes': string;
   'homeHero.footer.availableCount': string;

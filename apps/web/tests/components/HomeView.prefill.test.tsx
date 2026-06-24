@@ -216,6 +216,28 @@ const SIMPLE_DECK_PLUGIN = {
   },
 };
 
+const ALT_DECK_PLUGIN = {
+  ...SIMPLE_DECK_PLUGIN,
+  id: 'example-alt-deck',
+  title: 'Alt Deck',
+  source: '/tmp/alt-deck',
+  fsPath: '/tmp/alt-deck',
+  manifest: {
+    ...SIMPLE_DECK_PLUGIN.manifest,
+    name: 'example-alt-deck',
+    title: 'Alt Deck',
+    od: {
+      ...SIMPLE_DECK_PLUGIN.manifest.od,
+      inputs: SIMPLE_DECK_PLUGIN.manifest.od.inputs.map((field) => {
+        if (field.name === 'deckType') return { ...field, default: 'product overview' };
+        if (field.name === 'topic') return { ...field, default: 'the alt preset brief' };
+        if (field.name === 'audience') return { ...field, default: 'review board' };
+        return field;
+      }),
+    },
+  },
+};
+
 const LIVE_ARTIFACT_PLUGIN = {
   ...DEFAULT_PLUGIN,
   id: 'example-live-artifact',
@@ -383,7 +405,7 @@ const SIMPLE_DECK_APPLY_RESULT = {
   inputs: SIMPLE_DECK_PLUGIN.manifest.od.inputs,
   appliedPlugin: {
     ...AUTHORING_APPLY_RESULT.appliedPlugin,
-    snapshotId: 'snap-simple-deck',
+    snapshotId: '',
     pluginId: 'example-simple-deck',
     inputs: {
       deckType: 'pitch deck',
@@ -395,6 +417,24 @@ const SIMPLE_DECK_APPLY_RESULT = {
     },
   },
 };
+
+const ALT_DECK_APPLY_RESULT = {
+  ...SIMPLE_DECK_APPLY_RESULT,
+  inputs: ALT_DECK_PLUGIN.manifest.od.inputs,
+  appliedPlugin: {
+    ...SIMPLE_DECK_APPLY_RESULT.appliedPlugin,
+    pluginId: 'example-alt-deck',
+    inputs: {
+      deckType: 'product overview',
+      topic: 'the alt preset brief',
+      audience: 'review board',
+      slideCount: '10-15 pages',
+      speakerNotes: 'include speaker notes',
+      designSystem: 'the active project design system',
+    },
+  },
+};
+
 
 const LIVE_ARTIFACT_APPLY_RESULT = {
   ...AUTHORING_APPLY_RESULT,
@@ -747,8 +787,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
     // The inline plugin inputs form was removed from the Home composer, so the
-    // non-footer inputs (artifactKind / audience / template) no longer render;
-    // fidelity / designSystem still surface as footer options above.
+    // non-footer inputs (artifactKind / audience / template) no longer render.
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     await setPromptAndSettle('Build a pricing-page prototype.');
@@ -761,13 +800,15 @@ describe('HomeView prompt handoff', () => {
     const applyCall = fetchMock.mock.calls.find(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ));
-    const protoApplyInputs = JSON.parse(String((applyCall?.[1] as RequestInit).body)).inputs;
+    const protoApplyBody = JSON.parse(String((applyCall?.[1] as RequestInit).body));
+    const protoApplyInputs = protoApplyBody.inputs;
     expect(protoApplyInputs).toMatchObject({
       artifactKind: 'web prototype',
       audience: 'product evaluators',
       designSystem: 'Refly Design System',
       template: 'the bundled web prototype seed',
     });
+    expect(protoApplyBody.deferredDefaultInputNames).toEqual([]);
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
@@ -777,12 +818,10 @@ describe('HomeView prompt handoff', () => {
         kind: 'prototype',
       }),
     })));
-    // Fidelity is deferred to first-turn discovery: the plugin is still applied
-    // with its full inputs, but its default must NOT be forwarded to the run, so
-    // the question-form flow collects it instead of inheriting a baked-in value.
-    const [{ pluginInputs: protoSubmittedInputs }] = onSubmit.mock.calls[0] as [
-      { pluginInputs?: Record<string, unknown> },
+    const [{ deferredDefaultInputNames, pluginInputs: protoSubmittedInputs }] = onSubmit.mock.calls[0] as [
+      { deferredDefaultInputNames?: string[]; pluginInputs?: Record<string, unknown> },
     ];
+    expect(deferredDefaultInputNames).toEqual([]);
     expect(protoSubmittedInputs).not.toHaveProperty('fidelity');
     expect(screen.queryByRole('alert')).toBeNull();
   });
@@ -951,7 +990,7 @@ describe('HomeView prompt handoff', () => {
     screen.getByTestId('home-hero-input');
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe(
-        'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+        'Build a high-fidelity web prototype for product evaluators using Refly Design System from the bundled web prototype seed.',
       );
     });
     expect(fetchMock.mock.calls.some(([url]) => (
@@ -1000,7 +1039,7 @@ describe('HomeView prompt handoff', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
-      prompt: 'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+      prompt: 'Build a high-fidelity web prototype for product evaluators using Refly Design System from the bundled web prototype seed.',
       designSystemId: 'ds-refly',
       projectMetadata: expect.objectContaining({
         kind: 'prototype',
@@ -1153,10 +1192,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('binds the deck chip and keeps only the design-system picker in the footer', async () => {
-    // Slide count + speaker-notes footer controls were removed from the deck
-    // composer; the agent asks for them in the first-turn discovery flow. The
-    // deck footer now mirrors the prototype footer — design system only.
+  it('binds the deck chip with neutral page quantity and strips unchosen slide count', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
@@ -1193,18 +1229,348 @@ describe('HomeView prompt handoff', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Slide deck');
     });
-    expect(screen.queryByTestId('home-hero-footer-option-speakerNotes')).toBeNull();
-    expect(screen.queryByTestId('home-hero-footer-option-slideCount')).toBeNull();
+    expect(screen.getByTestId('home-hero-footer-option-speakerNotes').textContent).toContain('Notes');
+    expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('Page quantity');
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
 
+    fireEvent.click(screen.getAllByTestId('home-hero-plugin-preset')[0]!);
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('Page quantity');
+    });
     await setPromptAndSettle('Create an investor deck for a local-first design tool.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-simple-deck/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
+    ));
+    const applyBody = JSON.parse(String((applyCall?.[1] as RequestInit).body));
+    expect(applyBody).toMatchObject({
+      inputs: {
+        speakerNotes: 'include speaker notes',
+        designSystem: 'Refly Design System',
+      },
+      deferredDefaultInputNames: ['slideCount'],
+    });
+    expect(applyBody.inputs).not.toHaveProperty('slideCount');
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-simple-deck',
       projectKind: 'deck',
       projectMetadata: expect.objectContaining({
         kind: 'deck',
+      }),
+    })));
+    const [{ appliedPluginSnapshotId, deferredDefaultInputNames, pluginInputs }] = onSubmit.mock.calls[0] as [{
+      appliedPluginSnapshotId?: string | null;
+      deferredDefaultInputNames?: string[] | null;
+      pluginInputs?: Record<string, unknown>;
+    }];
+    expect(appliedPluginSnapshotId).toBeNull();
+    expect(deferredDefaultInputNames).toEqual(['slideCount']);
+    expect(pluginInputs).not.toHaveProperty('slideCount');
+    expect(pluginInputs).toHaveProperty('speakerNotes', 'include speaker notes');
+  });
+
+  it('does not let deck preset cards inherit default-chip brief inputs', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN, ALT_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-alt-deck/apply')) {
+        return new Response(JSON.stringify(ALT_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        return new Response(JSON.stringify(SIMPLE_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-plugin-presets').textContent).toContain('Alt Deck');
+    });
+    const altPreset = document.querySelector('[data-plugin-id="example-alt-deck"]');
+    expect(altPreset).toBeInstanceOf(HTMLButtonElement);
+    fireEvent.click(altPreset as HTMLButtonElement);
+    await waitFor(() => {
+      expect(homeHeroPromptValue()).toContain('{{slideCount}}');
+      expect(homeHeroPromptValue()).not.toContain('10-15 pages');
+    });
+    await setPromptAndSettle('Create a deck from the alternate preset.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-alt-deck/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-alt-deck/apply')
+    ));
+    const applyBody = JSON.parse(String((applyCall?.[1] as RequestInit).body));
+    expect(applyBody).toMatchObject({
+      inputs: {
+        deckType: 'product overview',
+        topic: 'the alt preset brief',
+        audience: 'review board',
+        speakerNotes: 'include speaker notes',
+      },
+      deferredDefaultInputNames: ['slideCount'],
+    });
+    expect(applyBody.inputs).not.toMatchObject({
+      deckType: 'pitch deck',
+      topic: 'the user brief',
+      audience: 'decision makers',
+    });
+  });
+
+  it('carries only an explicitly selected deck page quantity into plugin inputs on submit', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        return new Response(JSON.stringify(SIMPLE_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    });
+    const slideCountButton = screen.getByTestId('home-hero-footer-option-slideCount');
+    expect(slideCountButton.textContent).toContain('Page quantity');
+    fireEvent.click(slideCountButton);
+    const slideCountMenu = await screen.findByTestId('home-hero-footer-option-slideCount-menu');
+    fireEvent.click(within(slideCountMenu).getByRole('option', { name: /20-25 pages/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('20-25 pages');
+    });
+    const speakerNotesButton = screen.getByTestId('home-hero-footer-option-speakerNotes');
+    expect(speakerNotesButton.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(speakerNotesButton);
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-speakerNotes').getAttribute('aria-pressed')).toBe('false');
+    });
+    fireEvent.click(screen.getAllByTestId('home-hero-plugin-preset')[0]!);
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('20-25 pages');
+      expect(screen.getByTestId('home-hero-footer-option-speakerNotes').getAttribute('aria-pressed')).toBe('false');
+    });
+    await waitFor(() => {
+      expect(homeHeroPromptValue()).toContain('20-25 pages');
+      expect(homeHeroPromptValue()).toContain('no speaker notes');
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-simple-deck/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
+    ));
+    const applyBody = JSON.parse(String((applyCall?.[1] as RequestInit).body));
+    expect(applyBody).toMatchObject({
+      inputs: {
+        slideCount: '20-25 pages',
+        speakerNotes: 'no speaker notes',
+      },
+      deferredDefaultInputNames: [],
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-simple-deck',
+      projectKind: 'deck',
+      prompt: expect.stringContaining('20-25 pages'),
+      deferredDefaultInputNames: [],
+      pluginInputs: expect.objectContaining({
+        slideCount: '20-25 pages',
+        speakerNotes: 'no speaker notes',
+      }),
+    })));
+  });
+
+  it('carries a deck page quantity typed into the prompt as a confirmed input', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        return new Response(JSON.stringify(SIMPLE_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    });
+    fireEvent.click(screen.getAllByTestId('home-hero-plugin-preset')[0]!);
+    await waitFor(() => {
+      expect(homeHeroPromptValue()).toContain('{{slideCount}}');
+    });
+    await setPromptAndSettle(homeHeroPromptValue().replace('{{slideCount}}', '15-20 pages'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('15-20 pages');
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-simple-deck/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
+    ));
+    const applyBody = JSON.parse(String((applyCall?.[1] as RequestInit).body));
+    expect(applyBody).toMatchObject({
+      inputs: {
+        slideCount: '15-20 pages',
+        speakerNotes: 'include speaker notes',
+      },
+      deferredDefaultInputNames: [],
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-simple-deck',
+      projectKind: 'deck',
+      deferredDefaultInputNames: [],
+      pluginInputs: expect.objectContaining({
+        slideCount: '15-20 pages',
+        speakerNotes: 'include speaker notes',
+      }),
+    })));
+  });
+
+  it('keeps an unresolved deck page quantity placeholder deferred when other prompt inputs change', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        return new Response(JSON.stringify(SIMPLE_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    });
+    fireEvent.click(screen.getAllByTestId('home-hero-plugin-preset')[0]!);
+    await waitFor(() => {
+      expect(homeHeroPromptValue()).toContain('{{slideCount}}');
+    });
+    await setPromptAndSettle(homeHeroPromptValue().replace('the user brief', 'growth roadmap'));
+    await waitFor(() => {
+      expect(homeHeroPromptValue()).toContain('growth roadmap');
+      expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('Page quantity');
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-simple-deck/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
+    ));
+    const applyBody = JSON.parse(String((applyCall?.[1] as RequestInit).body));
+    expect(applyBody).toMatchObject({
+      inputs: {
+        topic: 'growth roadmap',
+        speakerNotes: 'include speaker notes',
+      },
+      deferredDefaultInputNames: ['slideCount'],
+    });
+    expect(applyBody.inputs).not.toHaveProperty('slideCount');
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-simple-deck',
+      projectKind: 'deck',
+      deferredDefaultInputNames: ['slideCount'],
+      pluginInputs: expect.not.objectContaining({
+        slideCount: '{{slideCount}}',
       }),
     })));
   });
@@ -1301,7 +1667,7 @@ describe('HomeView prompt handoff', () => {
     ))).toBe(false);
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe(
-        'Create a pitch deck for decision makers about the user brief with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
+        'Create a pitch deck for decision makers about the user brief with {{slideCount}}. Speaker notes: include speaker notes. Use Refly Design System.',
       );
     });
 
@@ -1316,7 +1682,7 @@ describe('HomeView prompt handoff', () => {
     ))).toBe(false);
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe(
-        'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+        'Build a high-fidelity web prototype for product evaluators using Refly Design System from the bundled web prototype seed.',
       );
     });
   });

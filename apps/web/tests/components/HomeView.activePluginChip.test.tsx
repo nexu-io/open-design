@@ -28,6 +28,7 @@ function activeFor(
     inputs: {},
     inputFields: [],
     inputsValid: true,
+    confirmedInputNames: [],
     queryTemplate: null,
     lastRenderedPrompt: null,
     projectKind: null,

@@ -533,6 +533,7 @@ export const ja: Dict = {
   'homeHero.footer.ratio': '比率',
   'homeHero.footer.duration': '長さ',
   'homeHero.footer.resolution': '解像度',
+  'homeHero.footer.pageQuantity': 'ページ数',
   'homeHero.footer.speakerNotes': 'ノート',
   'homeHero.footer.noSpeakerNotes': 'ノートなし',
   'homeHero.footer.availableCount': '{n} 件利用可能',
