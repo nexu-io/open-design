@@ -52,6 +52,7 @@ import { extractJsonBlock, validateBrand } from './validate.js';
 import { brandFromMaterial } from './provisional.js';
 import { prefetchBrand, prefetchFromHtml, type PrefetchResult } from './prefetch.js';
 import { BRAND_KIT_FILE, writeBrandKitPreview } from './kit-render.js';
+import { normalizeBrandKitLocale } from './kit-i18n.js';
 import { selfHostGoogleFonts } from './fonts.js';
 import { adoptExistingLogos, ensureLogoFallback, type LogoFallbackFn, type LogoSlot } from './logo-fallback.js';
 import { ensureImageryFallback, type ImageryFallbackFn, type ImagerySlot } from './imagery-fallback.js';
@@ -132,6 +133,8 @@ export interface StartBrandExtractionOptions {
    *  promise whenever the start response returns before that work settles, so
    *  callers (tests) can await completion deterministically. */
   onBackgroundExtraction?: (settled: Promise<unknown>) => void;
+  /** UI locale used to render static brand.html copy. */
+  locale?: string;
 }
 
 export interface StartBrandExtractionResult {
@@ -213,6 +216,7 @@ export async function startBrandExtraction(
   const projectId = brandProjectId(id);
   const host = hostnameOf(url);
   const now = Date.now();
+  const locale = normalizeBrandKitLocale(opts.locale);
 
   const meta: BrandMeta = {
     id,
@@ -221,6 +225,7 @@ export async function startBrandExtraction(
     updatedAt: now,
     status: 'extracting',
     projectId,
+    locale,
   };
   createBrandDir(brandsRoot, id, meta);
   if (designMd) writeDesignMdInput(brandsRoot, id, designMd);
@@ -301,6 +306,7 @@ export async function startBrandExtraction(
     status: 'extracting',
     host,
     metadata,
+    locale,
   });
   if (designMd) {
     await writeProjectFile(projectsRoot, projectId, 'context/input-DESIGN.md', designMd, { overwrite: true }, metadata);
@@ -336,6 +342,7 @@ export async function startBrandExtraction(
       logoFallback,
       imageryFallback,
       hasWebsiteSource,
+      locale,
     };
     if (opts.dataDir) programmaticOptions.dataDir = opts.dataDir;
     if (opts.prefetch) programmaticOptions.prefetch = opts.prefetch;
@@ -436,6 +443,8 @@ export interface FinalizeBrandOptions {
    *  to avoid real network calls). Defaults to the live cover/hero-image
    *  fallback that runs when the agent captured too few `imagery.samples`. */
   imageryFallback?: ImageryFallbackFn;
+  /** Optional override; defaults to the locale stored in brand meta. */
+  locale?: string;
 }
 
 /**
@@ -615,6 +624,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     brand: brand as unknown as Record<string, unknown>,
     status: 'ready',
     metadata: finalizeMetadata,
+    locale: opts.locale ?? meta.locale,
   });
 
   await linkUserDesignSystemProject(userDesignSystemsRoot, designSystemId, projectId);
@@ -682,6 +692,7 @@ export interface RunProgrammaticExtractionOptions {
   prefetch?: PrefetchFn;
   logoFallback?: LogoFallbackFn;
   imageryFallback?: ImageryFallbackFn;
+  locale?: string;
 }
 
 /**
@@ -814,6 +825,8 @@ export interface RenderBrandPreviewOptions {
   projectsRoot: string;
   /** Overrides the brand's recorded backing project. */
   projectId?: string;
+  /** Optional override; defaults to the locale stored in brand meta. */
+  locale?: string;
 }
 
 export interface RenderBrandPreviewResult {
@@ -885,6 +898,7 @@ export async function renderBrandPreviewIntoProject(
     brand,
     status,
     metadata: { kind: 'brand', brandId: id, brandSourceUrl: meta.sourceUrl },
+    locale: opts.locale ?? meta.locale,
   });
   return { id, projectId, file: BRAND_KIT_FILE, rendered };
 }

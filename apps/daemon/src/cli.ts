@@ -258,7 +258,7 @@ const FIGMA_BOOLEAN_FLAGS = new Set([
 // reachable through the top-of-file SUBCOMMAND_MAP dispatch, which runs during
 // module evaluation — a const declared further down would still be in TDZ.
 const BRAND_STRING_FLAGS = new Set([
-  'daemon-url', 'prompt-file', 'project',
+  'daemon-url', 'prompt-file', 'project', 'locale',
   'html-file', 'css-file', 'base-url',
 ]);
 const BRAND_BOOLEAN_FLAGS = new Set([
@@ -5164,7 +5164,12 @@ async function runBrandCreate(rest) {
     resp = await fetch(`${base}/api/brands`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        ...(typeof flags.locale === 'string' && flags.locale.trim()
+          ? { locale: flags.locale.trim() }
+          : {}),
+      }),
     });
   } catch (err) {
     surfaceFetchError(err, base);
@@ -5206,6 +5211,7 @@ async function runBrandFinalize(rest) {
   const base = await cliDaemonBaseUrl(flags);
   const body = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
+  if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
   try {
     resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/finalize`, {
@@ -5340,6 +5346,7 @@ async function runBrandPreview(rest) {
   const base = await cliDaemonBaseUrl(flags);
   const body = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
+  if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
   try {
     resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/preview`, {

@@ -211,6 +211,26 @@ describe('agent-driven brand extraction engine', () => {
     expect(tabs.browserTabs?.[0]?.url).toBe('https://acme.com/');
   });
 
+  it('localizes the seeded brand.html copy from the creation locale', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      locale: 'zh-CN',
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
+    expect(html).toContain('<html lang="zh-CN">');
+    expect(html).toContain('<title>品牌设计体系</title>');
+    expect(html).toContain('"logo":"标志"');
+    expect(html).toContain('"brandReady":"设计体系已就绪"');
+  });
+
   it('rejects a non-http(s) URL', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     await expect(

@@ -93,6 +93,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
     const url = typeof req.body?.url === 'string' ? req.body.url : '';
     const description = typeof req.body?.description === 'string' ? req.body.description : '';
     const designMd = typeof req.body?.designMd === 'string' ? req.body.designMd : '';
+    const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
     if (!url.trim() && !designMd.trim()) {
       res.status(400).json({ error: 'url or designMd is required' });
       return;
@@ -113,6 +114,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       if (url.trim()) startOptions.url = url;
       if (description.trim()) startOptions.description = description;
       if (designMd.trim()) startOptions.designMd = designMd;
+      if (locale.trim()) startOptions.locale = locale;
       if (randomId) startOptions.randomId = randomId;
       const result = await startBrandExtraction(startOptions);
       res.json(result);
@@ -133,6 +135,10 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       typeof req.body?.projectId === 'string' && req.body.projectId.trim()
         ? String(req.body.projectId)
         : undefined;
+    const locale =
+      typeof req.body?.locale === 'string' && req.body.locale.trim()
+        ? String(req.body.locale)
+        : undefined;
     try {
       const renderOptions: Parameters<typeof renderBrandPreviewIntoProject>[0] = {
         id,
@@ -141,6 +147,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         projectsRoot,
       };
       if (projectId) renderOptions.projectId = projectId;
+      if (locale) renderOptions.locale = locale;
       const result = await renderBrandPreviewIntoProject(renderOptions);
       res.json(result);
     } catch (err) {
@@ -159,6 +166,10 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       typeof req.body?.projectId === 'string' && req.body.projectId.trim()
         ? String(req.body.projectId)
         : undefined;
+    const locale =
+      typeof req.body?.locale === 'string' && req.body.locale.trim()
+        ? String(req.body.locale)
+        : undefined;
     try {
       const finalizeOptions: Parameters<typeof finalizeBrand>[0] = {
         id,
@@ -170,6 +181,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         db,
       };
       if (projectId) finalizeOptions.projectId = projectId;
+      if (locale) finalizeOptions.locale = locale;
       if (randomId) finalizeOptions.randomId = randomId;
       const result = await finalizeBrand(finalizeOptions);
       res.json(result);

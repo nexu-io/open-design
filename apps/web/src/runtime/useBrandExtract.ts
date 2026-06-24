@@ -11,6 +11,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { BrandExtractStartResponse, BrandStatus } from '@open-design/contracts';
+import { useI18n } from '../i18n';
 
 /** Coarse kickoff phase. */
 export type BrandExtractPhase = 'idle' | 'starting' | 'done' | 'error';
@@ -58,6 +59,7 @@ export interface UseBrandExtract {
 }
 
 export function useBrandExtract(): UseBrandExtract {
+  const { locale } = useI18n();
   const [state, setState] = useState<BrandExtractState>(INITIAL_STATE);
   const inFlightRef = useRef(false);
 
@@ -84,6 +86,7 @@ export function useBrandExtract(): UseBrandExtract {
           ...(url.trim() ? { url } : {}),
           ...(options.description?.trim() ? { description: options.description.trim() } : {}),
           ...(options.designMd?.trim() ? { designMd: options.designMd.trim() } : {}),
+          locale,
         }),
       });
     } catch (err) {
@@ -134,7 +137,7 @@ export function useBrandExtract(): UseBrandExtract {
       error: null,
     });
     return result;
-  }, []);
+  }, [locale]);
 
   return { state, run, reset };
 }

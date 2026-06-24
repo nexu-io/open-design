@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="__OD_BRAND_LANG__">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Brand Kit</title>
+<title>__OD_BRAND_TITLE__</title>
 <!--
   Self-contained brand-kit page. The daemon's brand-kit renderer replaces the
   payload token in the script tag below with a JSON blob { status, brand,
@@ -275,6 +275,10 @@
   }
 
   var data = payload();
+  var copy = data.copy || {};
+  function txt(key, fallback) {
+    return typeof copy[key] === 'string' && copy[key] ? copy[key] : fallback;
+  }
   var brand = data.brand || {};
   var status = data.status || 'extracting';
   var assets = arr(data.assets);
@@ -312,15 +316,15 @@
       .filter(function (c, i, a) { return a.indexOf(c) === i; });
     if (!cands.length) {
       return '<div class="logo-empty">' + (extracting
-        ? '<div class="skel" style="width:60%;height:48px"></div><span class="muted">Looking for a logo…</span>'
-        : 'No logo found') + '</div>';
+        ? '<div class="skel" style="width:60%;height:48px"></div><span class="muted">' + esc(txt('lookingForLogo', 'Looking for a logo...')) + '</span>'
+        : esc(txt('noLogoFound', 'No logo found'))) + '</div>';
     }
     var thumbs = cands.length > 1 ? '<div class="logo-thumbs">' + cands.map(function (c, i) {
       return '<button class="logo-thumb' + (i===0?' active':'') + '" data-src="' + esc(c) + '" style="background:' + esc(bg) + '"><img src="' + esc(c) + '" alt=""></button>';
     }).join('') + '</div>' : '';
     var notes = brand.logo && brand.logo.notes ? '<p class="logo-notes">' + esc(brand.logo.notes) + '</p>' : '';
-    return '<div class="logo-stage" id="logo-stage" style="background:' + esc(bg) + '" data-light-src="' + esc(cands[0]) + '" data-light-caption="' + esc(brand.name || 'Logo') + '" tabindex="0" role="button" aria-label="Preview logo">' +
-      '<img id="logo-img" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || 'logo') + '"></div>' + thumbs + notes;
+    return '<div class="logo-stage" id="logo-stage" style="background:' + esc(bg) + '" data-light-src="' + esc(cands[0]) + '" data-light-caption="' + esc(brand.name || txt('logo', 'Logo')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewLogoAria', 'Preview logo')) + '">' +
+      '<img id="logo-img" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || txt('logoAlt', 'logo')) + '"></div>' + thumbs + notes;
   }
 
   // Big "Ag" specimen tile per real family (display / body / mono), each set in
@@ -328,10 +332,10 @@
   // Lovart 字体 tiles. Empty until at least one family is known.
   function fontTilesHtml() {
     var tiles = [
-      { role: 'Display', spec: typo.display },
-      { role: 'Body', spec: typo.body },
+      { role: txt('display', 'Display'), spec: typo.display },
+      { role: txt('body', 'Body'), spec: typo.body },
     ];
-    if (typo.mono) tiles.push({ role: 'Mono', spec: typo.mono });
+    if (typo.mono) tiles.push({ role: txt('mono', 'Mono'), spec: typo.mono });
     tiles = tiles.filter(function (t) { return t.spec && t.spec.family; });
     if (!tiles.length) return '';
     return '<div class="fonts">' + tiles.map(function (t) {
@@ -355,16 +359,16 @@
     var samples = imagerySamples();
     if (!samples.length) return '';
     var viewAll = samples.length > 6
-      ? '<button class="view-all" id="gallery-view-all" type="button">View all (' + samples.length + ') →</button>'
+      ? '<button class="view-all" id="gallery-view-all" type="button">' + esc(txt('viewAll', 'View all')) + ' (' + samples.length + ') →</button>'
       : '';
     return '<section class="sec">' +
-      '<div class="gallery-head"><h2 class="sec-title" style="margin:0">Images</h2>' + viewAll + '</div>' +
+      '<div class="gallery-head"><h2 class="sec-title" style="margin:0">' + esc(txt('images', 'Images')) + '</h2>' + viewAll + '</div>' +
       '<div class="gallery">' + samples.map(function (s, i) {
         var cap = s.caption || s.kind || '';
         var sub = (s.caption && s.kind) ? s.kind : '';
         var meta = cap ? '<div class="shot-meta"><div class="shot-cap">' + esc(cap) + '</div>' +
           (sub ? '<div class="shot-kind">' + esc(sub) + '</div>' : '') + '</div>' : '';
-        return '<div class="shot" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || 'Image') + '"><div class="shot-frame">' +
+        return '<div class="shot" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || txt('images', 'Image')) + '"><div class="shot-frame">' +
           '<img src="' + esc(s.file) + '" alt="' + esc(cap || brand.name || '') + '" loading="lazy"></div>' + meta + '</div>';
       }).join('') + '</div></section>';
   }
@@ -373,22 +377,22 @@
   function heroHtml() {
     var samples = imagerySamples();
     if (!samples.length) return '';
-    return '<div class="kit-hero" data-light-src="' + esc(samples[0].file) + '" data-light-caption="' + esc(samples[0].caption || samples[0].kind || brand.name || 'Image') + '" tabindex="0" role="button" aria-label="Preview hero image"><img src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
+    return '<div class="kit-hero" data-light-src="' + esc(samples[0].file) + '" data-light-caption="' + esc(samples[0].caption || samples[0].kind || brand.name || txt('images', 'Image')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewHeroImageAria', 'Preview hero image')) + '"><img src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
   }
 
   function typeHtml() {
     var rows = [
-      { label: 'Display', spec: typo.display, sample: brand.name || 'Aa', size: '40px', weight: 600, color: fg },
-      { label: 'Body', spec: typo.body, sample: brand.tagline || brand.description || 'The quick brown fox jumps over the lazy dog.', size: '17px', weight: 400, color: muted },
+      { label: txt('display', 'Display'), spec: typo.display, sample: brand.name || 'Aa', size: '40px', weight: 600, color: fg },
+      { label: txt('body', 'Body'), spec: typo.body, sample: brand.tagline || brand.description || 'The quick brown fox jumps over the lazy dog.', size: '17px', weight: 400, color: muted },
     ];
-    if (typo.mono) rows.push({ label: 'Mono', spec: typo.mono, sample: 'const brand = await extract(url);', size: '14px', weight: 400, color: fg });
+    if (typo.mono) rows.push({ label: txt('mono', 'Mono'), spec: typo.mono, sample: 'const brand = await extract(url);', size: '14px', weight: 400, color: fg });
     if (!typo.display && !typo.body) {
-      if (!extracting) return emptyCard('No typography captured.');
+      if (!extracting) return emptyCard(txt('noTypographyCaptured', 'No typography captured.'));
       return '<div class="type-row"><div class="skel skel-line" style="width:50%"></div><div class="skel" style="height:34px;margin-top:10px;width:70%"></div></div>';
     }
     return rows.map(function (r) {
       var spec = r.spec || {};
-      var note = spec.googleFontsUrl ? '' : ' <span class="dim">· proprietary, shown via fallback</span>';
+      var note = spec.googleFontsUrl ? '' : ' <span class="dim">· ' + esc(txt('typographyFallbackNote', 'proprietary, shown via fallback')) + '</span>';
       var weights = arr(spec.weights).length ? ' · ' + arr(spec.weights).join('/') : '';
       return '<div class="type-row"><div class="type-meta">' +
         '<span class="type-label">' + esc(r.label) + '</span>' +
@@ -399,7 +403,7 @@
 
   function paletteHtml() {
     if (!colors.length) {
-      if (!extracting) return emptyCard('No palette captured.');
+      if (!extracting) return emptyCard(txt('noPaletteCaptured', 'No palette captured.'));
       var sk = '';
       for (var i = 0; i < 7; i++) sk += '<div class="swatch"><div class="skel" style="height:92px"></div><div class="swatch-body"><div class="skel skel-line" style="width:70%"></div></div></div>';
       return '<div class="palette">' + sk + '</div>';
@@ -417,7 +421,7 @@
   function voiceHtml() {
     var v = brand.voice || {};
     if (!arr(v.adjectives).length && !v.tone) {
-      if (!extracting) return emptyCard('No voice notes captured.');
+      if (!extracting) return emptyCard(txt('noVoiceNotesCaptured', 'No voice notes captured.'));
       return '<div class="card"><div class="skel skel-line" style="width:40%"></div><div class="skel skel-line" style="width:85%"></div><div class="skel skel-line" style="width:75%"></div></div>';
     }
     var chips = arr(v.adjectives).map(function (a) {
@@ -427,8 +431,8 @@
       return '<li><span style="color:' + esc(accent) + '">—</span><span>' + esc(p) + '</span></li>';
     }).join('') + '</ul>' : '';
     var vocab = (v.vocabulary && (arr(v.vocabulary.use).length || arr(v.vocabulary.avoid).length))
-      ? '<div class="vocab"><div class="use"><div class="k">Use</div><div class="v">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
-        '<div class="avoid"><div class="k">Avoid</div><div class="v">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
+      ? '<div class="vocab"><div class="use"><div class="k">' + esc(txt('use', 'Use')) + '</div><div class="v">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
+        '<div class="avoid"><div class="k">' + esc(txt('avoid', 'Avoid')) + '</div><div class="v">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
     return '<div class="card"><div class="chips">' + chips + '</div>' +
       (v.tone ? '<p class="voice-tone">' + esc(v.tone) + '</p>' : '') + pillars + vocab + '</div>';
   }
@@ -437,16 +441,16 @@
     var im = brand.imagery || {};
     var lay = brand.layout || {};
     if (!im.style && !arr(lay.postureRules).length) {
-      if (!extracting) return emptyCard('No imagery or layout notes captured.');
+      if (!extracting) return emptyCard(txt('noImageryOrLayoutCaptured', 'No imagery or layout notes captured.'));
       return '<div class="card"><div class="skel skel-line" style="width:90%"></div><div class="skel skel-line" style="width:70%"></div></div>';
     }
-    var posture = arr(lay.postureRules).length ? '<div class="posture"><div class="type-label">Layout posture</div><ul>' +
+    var posture = arr(lay.postureRules).length ? '<div class="posture"><div class="type-label">' + esc(txt('layoutPosture', 'Layout posture')) + '</div><ul>' +
       arr(lay.postureRules).map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul></div>' : '';
     return '<div class="card imagery">' +
       (im.style ? '<p>' + esc(im.style) + '</p>' : '') +
-      (arr(im.subjects).length ? '<p><span class="k">Subjects:</span> ' + esc(arr(im.subjects).join(', ')) + '</p>' : '') +
-      (im.treatment ? '<p><span class="k">Treatment:</span> ' + esc(im.treatment) + '</p>' : '') +
-      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">Avoid:</span> ' + esc(arr(im.avoid).join(', ')) + '</p>' : '') +
+      (arr(im.subjects).length ? '<p><span class="k">' + esc(txt('subjects', 'Subjects')) + ':</span> ' + esc(arr(im.subjects).join(', ')) + '</p>' : '') +
+      (im.treatment ? '<p><span class="k">' + esc(txt('treatment', 'Treatment')) + ':</span> ' + esc(im.treatment) + '</p>' : '') +
+      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">' + esc(txt('avoid', 'Avoid')) + ':</span> ' + esc(arr(im.avoid).join(', ')) + '</p>' : '') +
       posture + '</div>';
   }
 
@@ -474,28 +478,28 @@
         '</div>';
     }
     var themes = arr(sys.themes).length ? arr(sys.themes).join(' · ') : 'default · dark · compact';
-    var openLink = sys.indexHref ? '<a class="btn" href="' + esc(sys.indexHref) + '" target="_blank" rel="noreferrer noopener">Open full system ↗</a>' : '';
+    var openLink = sys.indexHref ? '<a class="btn" href="' + esc(sys.indexHref) + '" target="_blank" rel="noreferrer noopener">' + esc(txt('openFullSystem', 'Open full system')) + ' ↗</a>' : '';
     return '<section class="sec"><div class="ds-head"><div>' +
-        '<h2 class="sec-title">Design system</h2>' +
-        '<p class="ds-sub">Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.</p>' +
+        '<h2 class="sec-title">' + esc(txt('designSystem', 'Design system')) + '</h2>' +
+        '<p class="ds-sub">' + esc(txt('designSystemDescription', 'Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.')) + '</p>' +
       '</div>' + openLink + '</div>' +
       '<div class="ds-frame-wrap"><div class="ds-bar">' +
         '<div class="ds-tabs" id="ds-tabs">' +
-          '<button class="ds-tab active" data-kit="' + esc(sys.kitHref) + '">Light</button>' +
-          (sys.kitDarkHref ? '<button class="ds-tab" data-kit="' + esc(sys.kitDarkHref) + '">Dark</button>' : '') +
+          '<button class="ds-tab active" data-kit="' + esc(sys.kitHref) + '">' + esc(txt('light', 'Light')) + '</button>' +
+          (sys.kitDarkHref ? '<button class="ds-tab" data-kit="' + esc(sys.kitDarkHref) + '">' + esc(txt('dark', 'Dark')) + '</button>' : '') +
         '</div>' +
         '<span class="ds-cap">system/kit.html · themes: ' + esc(themes) + '</span>' +
       '</div>' +
-      '<iframe id="ds-frame" class="ds-frame" src="' + esc(sys.kitHref) + '" loading="lazy" sandbox="" title="Component kit"></iframe></div>' +
+      '<iframe id="ds-frame" class="ds-frame" src="' + esc(sys.kitHref) + '" loading="lazy" sandbox="" title="' + esc(txt('componentKitTitle', 'Component kit')) + '"></iframe></div>' +
       tokens + '</section>';
   }
 
   function assetsHtml() {
     if (!assets.length) return '';
-    return '<section class="sec">' + sectionTitle('Brand assets') +
+    return '<section class="sec">' + sectionTitle(txt('brandAssets', 'Brand assets')) +
       '<p class="muted" style="margin:-6px 0 14px">' + (extracting
-        ? 'Generated once extraction finishes — click any tile to preview the full page.'
-        : 'Click any tile to preview the full page; everything is colored from this one brand.') + '</p>' +
+        ? esc(txt('assetsExtracting', 'Generated once extraction finishes - click any tile to preview the full page.'))
+        : esc(txt('assetsReady', 'Click any tile to preview the full page; everything is colored from this one brand.'))) + '</p>' +
       '<div class="assets">' + assets.map(function (a) {
         var pending = !a.available;
         var inner = pending
@@ -509,7 +513,7 @@
           : ' data-asset-href="' + esc(a.href) + '" data-asset-label="' + esc(a.label) +
             '" data-asset-desc="' + esc(a.desc || '') + '" tabindex="0" role="button"';
         return '<div class="asset' + (pending ? ' pending' : '') + '"' + attrs + '>' + inner +
-          '<div class="asset-meta"><div class="asset-name">' + esc(a.label) + (pending ? '' : '<span class="open">Preview →</span>') + '</div>' +
+          '<div class="asset-meta"><div class="asset-name">' + esc(a.label) + (pending ? '' : '<span class="open">' + esc(txt('preview', 'Preview')) + ' →</span>') + '</div>' +
           (a.desc ? '<div class="asset-desc">' + esc(a.desc) + '</div>' : '') + '</div></div>';
       }).join('') + '</div></section>';
   }
@@ -520,14 +524,14 @@
       (brand.tagline ? '<p class="kit-tagline">' + esc(brand.tagline) + '</p>' : '') +
       (brand.sourceUrl ? '<a class="kit-source" href="' + esc(brand.sourceUrl) + '" target="_blank" rel="noreferrer noopener">' + esc(brand.sourceUrl) + ' ↗</a>' : '') +
     '</div><div class="head-actions">' +
-      '<span class="status-pill ' + (extracting ? 'extracting' : 'ready') + '"><span class="dot"></span>' + (extracting ? 'Extracting…' : 'Brand ready') + '</span>' +
+      '<span class="status-pill ' + (extracting ? 'extracting' : 'ready') + '"><span class="dot"></span>' + esc(extracting ? txt('extracting', 'Extracting...') : txt('brandReady', 'Brand ready')) + '</span>' +
     '</div></header>' +
     heroHtml() +
-    '<div class="sec grid-top"><section><h2 class="sec-title">Logo</h2>' + logoHtml() + '</section>' +
-      '<section><h2 class="sec-title">Typography</h2>' + fontTilesHtml() + typeHtml() + '</section></div>' +
-    '<section class="sec">' + sectionTitle('Palette') + paletteHtml() + '</section>' +
-    '<div class="sec grid-2"><section><h2 class="sec-title">Voice &amp; tone</h2>' + voiceHtml() + '</section>' +
-      '<section><h2 class="sec-title">Imagery &amp; layout</h2>' + imageryHtml() + '</section></div>' +
+    '<div class="sec grid-top"><section><h2 class="sec-title">' + esc(txt('logo', 'Logo')) + '</h2>' + logoHtml() + '</section>' +
+      '<section><h2 class="sec-title">' + esc(txt('typography', 'Typography')) + '</h2>' + fontTilesHtml() + typeHtml() + '</section></div>' +
+    '<section class="sec">' + sectionTitle(txt('palette', 'Palette')) + paletteHtml() + '</section>' +
+    '<div class="sec grid-2"><section><h2 class="sec-title">' + esc(txt('voiceTone', 'Voice & tone')) + '</h2>' + voiceHtml() + '</section>' +
+      '<section><h2 class="sec-title">' + esc(txt('imageryLayout', 'Imagery & layout')) + '</h2>' + imageryHtml() + '</section></div>' +
     galleryHtml() +
     designSystemHtml() +
     assetsHtml();
@@ -710,7 +714,7 @@
   function showStandaloneLight(src, caption) {
     if (!src) return;
     buildLight();
-    setLightContent(src, caption || brand.name || 'Image', caption || '', false);
+    setLightContent(src, caption || brand.name || txt('images', 'Image'), caption || '', false);
     openOverlay(lightOv);
   }
 
@@ -790,7 +794,7 @@
   function openAsset(href, label, desc) {
     if (!href) return;
     buildAsset();
-    assetTitle.textContent = label || 'Preview';
+    assetTitle.textContent = label || txt('preview', 'Preview');
     assetSub.textContent = desc || '';
     assetFrame.src = href;
     openOverlay(assetOv);
