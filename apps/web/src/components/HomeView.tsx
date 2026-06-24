@@ -283,9 +283,7 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
-  // Home composer always starts design work; the project chat keeps the visible
-  // mode switcher. Do not pass `onSessionModeChange` to HomeHero.
-  const sessionMode: ChatSessionMode = 'design';
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
@@ -1847,6 +1845,8 @@ export function HomeView({
         }}
         onExamplePromptStatusChange={handleExamplePromptStatusChange}
         onStartBlankProject={startBlankProject}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         executionSwitcher={executionSwitcher}
       />
 
