@@ -196,11 +196,7 @@ import {
   selectAutoOpenProducedHtml,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
-import {
-  designSystemExtractionSource,
-  isDesignSystemProject,
-  resolveProjectDesignSystemId,
-} from './design-system-project';
+import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
 import {
@@ -6180,24 +6176,6 @@ export function ProjectView({
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!projectDesignSystemId}
               activeDesignSystem={chatDesignSystemSummary}
-              onCreateDesignFromActiveSystem={
-                designSystemProject && onCreateProjectFromDesignSystem
-                  ? () =>
-                      void onCreateProjectFromDesignSystem(
-                        designSystemProject.id,
-                        designSystemProject.title,
-                      )
-                  : undefined
-              }
-              designSystemIntro={
-                designSystemProject
-                  ? {
-                      sourceLabel: designSystemExtractionSource(project, designSystemProject.title),
-                      systemTitle: designSystemProject.title,
-                      extracting: currentConversationStreaming,
-                    }
-                  : null
-              }
               projectFileNames={projectFileNames}
               skills={skills}
               onEnsureProject={handleEnsureProject}

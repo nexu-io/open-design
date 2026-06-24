@@ -2102,6 +2102,7 @@ export function FileWorkspace({
           >
             <DesignBrowserPanel
               projectId={projectId}
+              browserTabId={browserTab.id}
               resolvedDir={resolvedDir}
               initialIconUrl={browserTab.iconUrl}
               initialTitle={browserTab.title}
@@ -4207,69 +4208,79 @@ function designSystemBasename(path: string): string {
 }
 
 function designSystemSectionPhaseLabel(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,
 ): string {
   if (activity.phase === 'planned') {
     switch (section.category) {
       case 'Type':
-        return 'Queued typography';
+        return t('ds.phaseQueuedTypography');
       case 'Colors':
-        return 'Queued tokens';
+        return t('ds.phaseQueuedTokens');
       case 'Spacing':
-        return 'Queued spacing';
+        return t('ds.phaseQueuedSpacing');
       case 'Components':
-        return 'Queued UI kit';
+        return t('ds.phaseQueuedUiKit');
       case 'Brand':
-        return 'Queued assets';
+        return t('ds.phaseQueuedAssets');
     }
   }
   if (activity.phase === 'reading') {
     switch (section.category) {
       case 'Type':
-        return 'Reading typography';
+        return t('ds.phaseReadingTypography');
       case 'Colors':
-        return 'Reading tokens';
+        return t('ds.phaseReadingTokens');
       case 'Spacing':
-        return 'Reading spacing';
+        return t('ds.phaseReadingSpacing');
       case 'Components':
-        return 'Reading UI kit';
+        return t('ds.phaseReadingUiKit');
       case 'Brand':
-        return 'Reading assets';
+        return t('ds.phaseReadingAssets');
     }
   }
   if (activity.phase === 'writing') {
     switch (section.category) {
       case 'Type':
-        return 'Writing typography';
+        return t('ds.phaseWritingTypography');
       case 'Colors':
-        return 'Writing tokens';
+        return t('ds.phaseWritingTokens');
       case 'Spacing':
-        return 'Writing spacing';
+        return t('ds.phaseWritingSpacing');
       case 'Components':
-        return 'Building UI kit';
+        return t('ds.phaseBuildingUiKit');
       case 'Brand':
-        return 'Updating assets';
+        return t('ds.phaseUpdatingAssets');
     }
   }
-  if (activity.phase === 'error') return 'Needs attention';
-  if (activity.phase === 'updated') return 'Updated';
-  return 'Needs review';
+  if (activity.phase === 'error') return t('ds.phaseNeedsAttention');
+  if (activity.phase === 'updated') return t('ds.phaseUpdated');
+  return t('ds.reviewNeedsReview');
 }
 
 function designSystemSectionActivityLabel(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,
 ): string {
   if (activity.touchedFiles.length === 0) {
+    const phaseLabel = designSystemSectionPhaseLabel(t, section, activity);
     return activity.todoText
-      ? `${designSystemSectionPhaseLabel(section, activity)} from todo: ${truncateDesignSystemActivityText(activity.todoText)}`
-      : designSystemSectionPhaseLabel(section, activity);
+      ? t('ds.sectionActivityFromTodo', {
+          phase: phaseLabel,
+          todo: truncateDesignSystemActivityText(activity.todoText),
+        })
+      : phaseLabel;
   }
   const label = activity.touchedFiles.slice(0, 3).join(', ');
   const suffix = activity.touchedFiles.length > 3 ? ` +${activity.touchedFiles.length - 3}` : '';
-  if (activity.phase === 'idle') return `Read ${label}${suffix}`;
-  return `${designSystemSectionPhaseLabel(section, activity)} ${label}${suffix}`;
+  const files = `${label}${suffix}`;
+  if (activity.phase === 'idle') return t('ds.sectionActivityReadFiles', { files });
+  return t('ds.sectionActivityPhaseFiles', {
+    phase: designSystemSectionPhaseLabel(t, section, activity),
+    files,
+  });
 }
 
 function truncateDesignSystemActivityText(value: string): string {
@@ -4278,40 +4289,51 @@ function truncateDesignSystemActivityText(value: string): string {
 }
 
 function designSystemSectionRunningNotice(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,
 ): string {
   if (activity.phase === 'reading') {
-    return `Open Design is reading ${section.title} context for this section.`;
+    return t('ds.sectionRunningReadingContext', { title: section.title });
   }
-  return `${designSystemSectionPhaseLabel(section, activity)} now.`;
+  return t('ds.sectionRunningNow', { phase: designSystemSectionPhaseLabel(t, section, activity) });
 }
 
-function designSystemReviewTimeLabel(value: string): string | null {
+function designSystemReviewTimeLabel(t: TranslateFn, value: string): string | null {
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return null;
-  return `Last reviewed ${new Intl.DateTimeFormat('en', {
+  const formatted = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date(time))}`;
+  }).format(new Date(time));
+  return t('ds.reviewLastReviewed', { time: formatted });
 }
 
-function designSystemReviewAgentTaskLabel(task: DesignSystemReviewAgentTask): string {
+function designSystemReviewAgentTaskLabel(t: TranslateFn, task: DesignSystemReviewAgentTask): string {
   switch (task.status) {
     case 'queued':
-      return 'Feedback saved. The agent will pick it up when the current run finishes.';
+      return t('ds.agentFeedbackQueued');
     case 'sent':
-      if (!task.sentAt) return 'Sent to agent.';
+      if (!task.sentAt) return t('ds.agentFeedbackSent');
       {
-        const label = designSystemReviewTimeLabel(task.sentAt)?.replace('Last reviewed', '').trim();
-        return label ? `Sent to agent ${label}.` : 'Sent to agent.';
+        const time = Date.parse(task.sentAt);
+        if (!Number.isFinite(time)) return t('ds.agentFeedbackSent');
+        const formatted = new Intl.DateTimeFormat(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        }).format(new Date(time));
+        return t('ds.agentFeedbackSentAt', { time: formatted });
       }
     case 'failed':
-      return task.error ? `Agent task failed: ${task.error}` : 'Agent task failed.';
+      return task.error
+        ? t('ds.agentFeedbackFailedWithError', { error: task.error })
+        : t('ds.agentFeedbackFailed');
   }
-  return 'Agent task status unknown.';
+  return t('ds.agentFeedbackUnknown');
 }
 
 function designSystemSectionChangedAfterReview(

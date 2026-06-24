@@ -23,7 +23,6 @@ import type {
   RefObject,
 } from 'react';
 import type {
-  ChatSessionMode,
   ConnectorDetail,
   DesignSystemSummary,
   InputFieldSpec,
@@ -34,11 +33,7 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import {
-  trackComposerSessionModeClick,
-  trackHomeChatComposerClick,
-} from '../analytics/events';
-import { sessionModeToTracking } from '@open-design/contracts/analytics';
+import { trackHomeChatComposerClick } from '../analytics/events';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -85,7 +80,6 @@ import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
 import type { LibraryAsset } from '@open-design/contracts';
 import { WorkingDirPicker } from './WorkingDirPicker';
-import { SessionModeToggle } from './SessionModeToggle';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -135,8 +129,6 @@ interface Props {
   // showing: the host seeds the prompt with `scenario.text`, binds the
   // scenario's template, and creates the project — one-click "just start".
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
-  sessionMode?: ChatSessionMode;
-  onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
   // True when the active plugin chip shows a user-picked plugin (Community card
   // or example-prompt preset) rather than a task-type chip's default plugin —
@@ -268,8 +260,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPromptChange,
     onSubmit,
     onSubmitScenario = () => undefined,
-    sessionMode = 'design',
-    onSessionModeChange,
     firstRunGuide,
     activePluginTitle,
     activePluginIsExplicit = false,
@@ -1628,22 +1618,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
           </div>
           <div className="home-hero__foot-right">
-            <SessionModeToggle
-              mode={sessionMode}
-              onChange={(next) => {
-                if (next !== sessionMode) {
-                  trackComposerSessionModeClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'chat_composer',
-                    element: 'session_mode_toggle',
-                    mode_before: sessionModeToTracking(sessionMode),
-                    mode_after: sessionModeToTracking(next),
-                  });
-                }
-                onSessionModeChange?.(next);
-              }}
-              disabled={Boolean(submitDisabled)}
-            />
             {executionSwitcher ? (
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}

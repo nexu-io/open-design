@@ -91,6 +91,48 @@ export const BROWSER_SERIALIZE_HTML_SCRIPT = `
 })()
 `;
 
+// Collect a CSS digest from a rendered page for the brand harvest: readable
+// stylesheet rules PLUS a computed-style sweep. The computed sweep matters
+// because cross-origin stylesheets (CDN-hosted, Google Fonts) throw on
+// `cssRules`, so their colors/fonts would otherwise be invisible — but
+// getComputedStyle resolves them on every element regardless of origin. The
+// daemon's regex harvest (extractColors / extractFonts) reads the resulting
+// `color:` / `background-color:` / `font-family:` declarations, and the
+// frequency of repeated computed colors usefully ranks the real palette.
+export const BROWSER_SERIALIZE_STYLES_SCRIPT = `
+(() => {
+  const out = [];
+  for (const sheet of Array.from(document.styleSheets || [])) {
+    try {
+      const rules = sheet.cssRules;
+      if (!rules) continue;
+      for (const rule of Array.from(rules)) {
+        if (rule && rule.cssText) out.push(rule.cssText);
+      }
+    } catch (_) {
+      // Cross-origin stylesheet — rules are not readable; computed styles cover it.
+    }
+  }
+  try {
+    const TRANSPARENT = new Set(['rgba(0, 0, 0, 0)', 'transparent', '']);
+    const els = Array.from(document.querySelectorAll('body *')).slice(0, 2500);
+    for (const el of els) {
+      const cs = window.getComputedStyle(el);
+      if (!cs) continue;
+      const decl = [];
+      if (cs.color) decl.push('color:' + cs.color);
+      if (!TRANSPARENT.has(cs.backgroundColor)) decl.push('background-color:' + cs.backgroundColor);
+      if (!TRANSPARENT.has(cs.borderTopColor)) decl.push('border-color:' + cs.borderTopColor);
+      if (cs.fontFamily) decl.push('font-family:' + cs.fontFamily);
+      if (decl.length) out.push('x{' + decl.join(';') + '}');
+    }
+  } catch (_) {
+    // getComputedStyle unavailable — fall back to whatever sheet rules we got.
+  }
+  return out.join('\\n');
+})()
+`;
+
 export function browserElementPickerScript(filePath: string): string {
   return `
 (() => new Promise((resolve) => {

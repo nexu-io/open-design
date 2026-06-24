@@ -2607,12 +2607,9 @@ describe('DesignSystemDetailView', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
-
     await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
     await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(project.id));
     expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id);
-    await waitFor(() => expect(screen.getByTestId('design-system-files')).toBeTruthy());
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
     expect(onOpenProject).toHaveBeenCalledWith(project.id);
     expect(screen.queryByText('Could not open the design system workspace.')).toBeNull();
@@ -2659,8 +2656,6 @@ describe('DesignSystemDetailView', () => {
         onOpenProject={onOpenProject}
       />,
     );
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
 
     await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
     await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(system.projectId));
