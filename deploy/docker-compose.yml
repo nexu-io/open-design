@@ -39,7 +39,7 @@ services:
       - OD_PUBLIC_BASE_URL=${OD_PUBLIC_BASE_URL:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}
     ports:
-      - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"
+      - "${OPEN_DESIGN_PORT:-7456}:7456"
     volumes:
       - open_design_data:/app/.od
     tmpfs:
