@@ -120,7 +120,6 @@ import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import {
-  createProject,
   type PluginShareAction,
   type PluginShareProjectOutcome,
 } from '../state/projects';
@@ -514,7 +513,6 @@ export function EntryShell({
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
-  const blankProjectCreatingRef = useRef(false);
   const analytics = useAnalytics();
   const discordOnlineLabel = discordPresence
     ? t('entry.discordOnlineLabel', {
@@ -575,24 +573,6 @@ export function EntryShell({
   function openNewProject(tab: CreateTab = 'prototype') {
     setNewProjectInitialTab(tab);
     setNewProjectOpen(true);
-  }
-
-  async function startBlankProject() {
-    if (blankProjectCreatingRef.current) return;
-    blankProjectCreatingRef.current = true;
-    setNewProjectOpen(false);
-    try {
-      const { project } = await createProject({
-        name: t('common.untitled'),
-        skillId: null,
-        designSystemId: null,
-      });
-      await onOpenProject(project.id);
-    } catch (err) {
-      console.warn('Could not create a blank project from the entry rail', err);
-    } finally {
-      blankProjectCreatingRef.current = false;
-    }
   }
 
   function handleCreate(input: CreateInput) {
@@ -775,7 +755,7 @@ export function EntryShell({
         <EntryNavRail
           view={view}
           onViewChange={changeView}
-          onNewProject={startBlankProject}
+          onNewProject={() => openNewProject()}
           open={railOpen}
           onClose={() => setRailOpen(false)}
         />
