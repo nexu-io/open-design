@@ -17,6 +17,8 @@ import {
   deriveConfigureGlobals,
   modelIdForTracking,
   sessionModeToTracking,
+  type TrackingDesignSystemSource,
+  type TrackingDesignSystemKind,
 } from '@open-design/contracts/analytics';
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
@@ -793,6 +795,33 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ),
         ),
       ];
+      // Map the internal DS selection source -> the wire `design_system_source`
+      // enum (previously hard-wired to unknown/not_applicable). And derive
+      // official-vs-custom from the id shape (`user:<id>` => custom). See the
+      // design-system tracking spec §3.5 (U3/U4).
+      const dsSelectedId = analyticsDesignSystemSelection.id;
+      const designSystemSourceForRun: TrackingDesignSystemSource = (() => {
+        switch (analyticsDesignSystemSelection.source) {
+          case 'request':
+            return 'user_selected';
+          case 'plugin':
+            return 'template_inherited';
+          case 'project':
+            return 'project_saved';
+          case 'app-default':
+            return 'default';
+          case 'none':
+          default:
+            return dsSelectedId ? 'unknown' : 'not_applicable';
+        }
+      })();
+      const designSystemKindForRun: TrackingDesignSystemKind | undefined = dsSelectedId
+        ? dsSelectedId.startsWith('user:')
+          ? 'custom'
+          : 'official'
+        : undefined;
+      const designSystemSlugForRun =
+        dsSelectedId && !dsSelectedId.startsWith('user:') ? dsSelectedId : undefined;
       const baseProps: Record<string, unknown> = {
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
@@ -809,12 +838,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         ...sessionDimensionProps,
-        design_system_id: analyticsDesignSystemSelection.id ?? undefined,
+        design_system_id: dsSelectedId ?? undefined,
         design_system_selection_source: analyticsDesignSystemSelection.source,
-        design_system_source:
-          analyticsDesignSystemSelection.id
-            ? 'unknown'
-            : 'not_applicable',
+        design_system_source: designSystemSourceForRun,
+        ...(designSystemKindForRun ? { design_system_kind: designSystemKindForRun } : {}),
+        ...(designSystemSlugForRun ? { design_system_slug: designSystemSlugForRun } : {}),
         ...(isDesignSystemRun ? {
           ds_source_origin: typeof dsRunContext.origin === 'string'
             ? dsRunContext.origin

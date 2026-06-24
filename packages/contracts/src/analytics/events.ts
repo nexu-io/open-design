@@ -703,6 +703,9 @@ export type TrackingDesignSystemsArea =
   | 'design_system_generation'
   | 'design_system_preview'
   | 'design_system_picker'
+  // Preset-brand picker opened from the create form ("Start from a brand").
+  // A brand here is one *source* for a design system, not a separate object.
+  | 'preset_brand_picker'
   | 'composer';
 
 export type TrackingDesignSystemsViewType =
@@ -718,6 +721,10 @@ export type TrackingDesignSystemsEntryFrom =
   | 'home_card'
   | 'composer_picker'
   | 'project_settings'
+  // Created from inside a project's canvas / file workspace.
+  | 'project_canvas'
+  // Created from the Library surface.
+  | 'library'
   | 'unknown';
 
 // Origin of the design system itself. NOT the same field as
@@ -747,6 +754,22 @@ export type TrackingDesignSystemStatus =
   | 'failed'
   | 'archived'
   | 'unknown';
+
+// Whether a design system is an official/preset one or user-built. Derived
+// from the design_system_id shape: `user:<id>` => custom, everything else
+// (registry-backed presets) => official. `unknown` when no DS is in play.
+export type TrackingDesignSystemKind = 'official' | 'custom' | 'unknown';
+
+// Which surface initiated an edit of an existing design system. All of the
+// non-`direct_module` surfaces ultimately route through the agent (a run);
+// `direct_module` is an in-panel module button (some direct, some agent-routed).
+export type TrackingDesignSystemEditSurface =
+  | 'chat'
+  | 'edit'
+  | 'draw'
+  | 'comment'
+  | 'mark'
+  | 'direct_module';
 
 export interface DesignSystemsPageViewProps {
   page_name: 'design_systems' | 'design_system_project' | 'home' | 'studio';
@@ -837,7 +860,12 @@ export type TrackingDesignSystemCreateEntryFrom =
   | 'onboarding'
   | 'design_systems_page'
   | 'home_card'
+  | 'composer_picker'
   | 'project_settings'
+  // Created from inside a project's canvas / file workspace.
+  | 'project_canvas'
+  // Created from the Library surface.
+  | 'library'
   | 'unknown';
 
 export type TrackingDesignSystemSourceIngestEntryFrom =
@@ -1563,10 +1591,32 @@ export interface DesignSystemsCreateClickProps {
     | 'browse_folder'
     | 'upload_fig'
     | 'add_assets'
+    // Opens the preset-brand picker ("Start from a brand").
+    | 'start_from_brand'
     | 'continue_to_generation'
     | 'back';
   // State *after* the toggle; only sent with element=show_access_methods.
   methods_expanded?: boolean;
+}
+
+// Preset-brand picker ("Start from a brand") on the /design-systems/create
+// form. Picking a brand adds its site as a *source* for the design system —
+// brand is an input here, not a separate object. Privacy: never send the raw
+// brand domain/URL; only the curated category + quick-pick flag.
+export interface DesignSystemsPresetBrandPickerClickProps {
+  page_name: 'design_systems';
+  area: 'preset_brand_picker';
+  element: 'brand_pick' | 'quick_pick' | 'close';
+  // Curated category bucket of the picked brand (e.g. `software`, `finance`).
+  // Only on brand_pick / quick_pick. Never the domain.
+  preset_brand_category?: string;
+  // True when picked from the quick "popular brands" row rather than search.
+  is_quick_pick?: boolean;
+}
+
+export interface DesignSystemsPresetBrandPickerSurfaceViewProps {
+  page_name: 'design_systems';
+  area: 'preset_brand_picker';
 }
 
 // INTEGRATIONS
@@ -2357,6 +2407,7 @@ export type UiClickProps =
   | DesignSystemsTemplatesModalClickProps
   | DesignSystemsTemplatesModalSharePopoverClickProps
   | DesignSystemsCreateClickProps
+  | DesignSystemsPresetBrandPickerClickProps
   | IntegrationsTabClickProps
   | IntegrationsMcpTabClickProps
   | IntegrationsConnectorsTabClickProps
@@ -2525,6 +2576,7 @@ export type SurfaceViewProps =
   | PluginDetailModalSurfaceViewProps
   | PluginImportModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
+  | DesignSystemsPresetBrandPickerSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
   | QuestionsFormSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
@@ -2630,7 +2682,14 @@ export interface RunCreatedProps {
   project_kind: TrackingProjectKind | null;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
+  // Official preset vs user-built; `design_system_slug` carries the concrete
+  // preset id when official (never set for custom — only the id is sent there).
+  design_system_kind?: TrackingDesignSystemKind;
+  design_system_slug?: string;
   design_system_version?: string;
+  // Which surface drove this run when it's editing an existing DS
+  // (chat / edit / draw / comment / mark). Only on design_system_project runs.
+  edit_surface?: TrackingDesignSystemEditSurface;
   // DS-variant context. `ds_source_origin` mirrors the
   // `TrackingDesignSystemOrigin` set used on DS page_views (where
   // the DS came from), separate from the runtime-selection

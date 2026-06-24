@@ -69,6 +69,7 @@ import type {
 import { agentIdToTracking } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
+import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import type {
   AgentInfo,
   ApiProtocol,
@@ -719,6 +720,7 @@ export function EntryShell({
             onFinish={finishOnboarding}
             onGoBuild={() => {
               onCompleteOnboarding();
+              setPendingDesignSystemCreateEntry('onboarding');
               navigate({ kind: 'design-system-create' });
             }}
           />

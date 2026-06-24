@@ -51,6 +51,8 @@ import type {
   DesignSystemsTemplatesModalClickProps,
   DesignSystemsTemplatesModalSharePopoverClickProps,
   DesignSystemsCreateClickProps,
+  DesignSystemsPresetBrandPickerClickProps,
+  DesignSystemsPresetBrandPickerSurfaceViewProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -492,6 +494,20 @@ export function trackDesignSystemsCreateClick(
   props: DesignSystemsCreateClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsPresetBrandPickerClick(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsPresetBrandPickerSurfaceView(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
 }
 
 export function trackIntegrationsTabClick(
