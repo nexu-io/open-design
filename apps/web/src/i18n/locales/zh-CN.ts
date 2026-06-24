@@ -504,7 +504,7 @@ export const zhCN: Dict = {
   "settings.privacyConsentDecline": "不分享",
   "settings.privacyConsentAccept": "我知道了",
   "settings.privacyConsentBannerFooter":
-    "默认开启数据分享。你可以随时在 设置 → 隐私 中关闭。",
+    "可选使用遥测默认开启。你可以随时在 设置 → 隐私 中关闭。安全和崩溃诊断仍可能发送。",
   "settings.privacyConsentPolicyLink": "阅读隐私政策",
   "settings.privacyMetrics": "匿名指标",
   "settings.privacyMetricsHint":
@@ -512,11 +512,14 @@ export const zhCN: Dict = {
   "settings.privacyContent": "对话和工具内容",
   "settings.privacyContentHint":
     "prompt、助手回复、工具输入/输出，以及质量回看所需的完整上下文文件。发送前会剥离密钥等敏感信息。",
+  "settings.privacySafety": "安全和崩溃诊断",
+  "settings.privacySafetyHint":
+    "即使关闭使用遥测，经过清理的异常和可靠性诊断仍可能发送。不包含 prompt 或产物内容。",
   "settings.privacyInstallationId": "匿名 ID",
   "settings.privacyOptedOut": "已退出",
   "settings.privacyDataDeletion": "删除我的数据",
   "settings.privacyDataDeletionHint":
-    "轮换你的匿名 ID 并停止发送。已有数据按我们的留存策略自然过期。",
+    "轮换你的匿名 ID 并关闭可选使用遥测。已有数据按我们的留存策略自然过期。",
   "settings.about": "关于",
   "settings.aboutHint": "版本和运行时详情",
   "settings.appVersion": "版本",

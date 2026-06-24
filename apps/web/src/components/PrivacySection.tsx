@@ -3,6 +3,10 @@ import { useAnalytics } from '../analytics/provider';
 import { trackSettingsPrivacyClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
+import {
+  PrivacySafetyDisclosure,
+  PrivacyTelemetryDisclosure,
+} from './PrivacyTelemetryDisclosure';
 import type { AppConfig, TelemetryConfig } from '../types';
 
 interface Props {
@@ -108,6 +112,8 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
             />
           </div>
 
+          <PrivacySafetyDisclosure />
+
           <div className="settings-subsection">
             <div className="section-head">
               <div>
@@ -189,16 +195,7 @@ function ConsentCard({ onShare, onDecline }: ConsentProps): JSX.Element {
         </div>
       </div>
 
-      <dl className="settings-privacy-disclosure">
-        <div>
-          <dt>{t('settings.privacyMetrics')}</dt>
-          <dd>{t('settings.privacyMetricsHint')}</dd>
-        </div>
-        <div>
-          <dt>{t('settings.privacyContent')}</dt>
-          <dd>{t('settings.privacyContentHint')}</dd>
-        </div>
-      </dl>
+      <PrivacyTelemetryDisclosure />
 
       <p className="hint">{t('settings.privacyConsentFooter')}</p>
 

@@ -5,17 +5,19 @@ when it collects it, and how you stay in control. It documents the behavior
 shipped in the app — the same controls live under **Settings → Privacy**.
 
 Open Design is **local-first**. Your projects, generated files, and BYOK API
-keys stay on your machine, and the app works fully offline. Usage telemetry,
-described below, is the one category of data the app may send — it is **on by
-default**, and you can turn it off at any time under **Settings → Privacy**.
+keys stay on your machine, and the app works fully offline. Optional usage
+telemetry, described below, is **on by default**, and you can turn it off at any
+time under **Settings → Privacy**. Safety and crash diagnostics are a separate
+reliability path described below.
 
 ## Telemetry is opt-out
 
-Usage telemetry is **on by default**. On first run the app shows a privacy
-disclosure banner so you can see what is collected before doing anything else.
-It is an informed-disclosure notice with a single **I get it** acknowledgement,
-not an opt-in gate — and because telemetry is already enabled, the app may begin
-sending events (such as onboarding and UI-interaction events) from first launch.
+Optional usage telemetry is **on by default**. On first run the app shows a
+privacy disclosure banner so you can see what is collected before doing anything
+else. It is an informed-disclosure notice with a single **I get it**
+acknowledgement, not an opt-in gate — and because usage telemetry is already
+enabled, the app may begin sending events (such as onboarding and
+UI-interaction events) from first launch.
 
 You stay in control: the banner footer tells you sharing is on and points you to
 **Settings → Privacy**, where you can turn telemetry off and toggle each category
@@ -23,8 +25,9 @@ below — and you can change your decision at any time.
 
 ## What is collected
 
-When telemetry is enabled, the app may send the following to the Open Design
-team. Each category is independently controllable in Settings.
+Open Design may send the following to the Open Design team. Optional usage
+categories are independently controllable in Settings; safety and crash
+diagnostics are always-on reliability data.
 
 - **Anonymous metrics** — run counts, token usage, error rate, and duration.
   No prompts and no project data.
@@ -34,13 +37,18 @@ team. Each category is independently controllable in Settings.
   before anything leaves your machine.
 - **Project artifacts manifest** — filenames, types, and sizes of generated
   files. The **contents** of those files are never sent.
+- **Safety and crash diagnostics** — scrubbed exception, crash, white-screen,
+  dropped-chunk, stuck-run, and reliability diagnostics. This path is always on
+  so the team can keep the app stable; it may still send after optional usage
+  telemetry is turned off. It does not include prompts or generated artifact
+  contents.
 
 ## What is never collected
 
 - The contents of your generated artifact files.
 - Your BYOK API keys, tokens, or other secrets — these are redacted before
   send and are never part of telemetry.
-- Anything at all while telemetry is turned off.
+- Optional usage telemetry while telemetry is turned off.
 
 ## How telemetry is sent
 
@@ -53,15 +61,15 @@ never blocks your workflow.
 
 ## Your anonymous ID
 
-When telemetry is enabled the app generates a random, opaque installation ID
-so related events can be grouped. It is not tied to your name, email, or
-account, and it carries no personal information.
+When telemetry or safety diagnostics are sent, the app uses a random, opaque
+installation ID so related events can be grouped. It is not tied to your name,
+email, or account, and it carries no personal information.
 
 ## Deleting your data
 
-**Settings → Privacy → Delete my data** rotates your anonymous ID and stops
-sending. Telemetry already received ages out under the team's retention
-policy.
+**Settings → Privacy → Delete my data** rotates your anonymous ID and turns off
+optional usage telemetry. Telemetry already received ages out under the team's
+retention policy.
 
 ## Bring your own key
 

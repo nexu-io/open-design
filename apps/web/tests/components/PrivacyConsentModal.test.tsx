@@ -31,16 +31,25 @@ describe('PrivacyConsentModal', () => {
     expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
   });
 
-  it('tells the user data sharing is on by default and toggleable in Settings', () => {
+  it('tells the user optional usage telemetry is on by default and toggleable in Settings', () => {
     renderModal();
     // The single-button banner replaces the binary consent picker, so the
     // disclosure must say plainly that telemetry defaults on and point the
     // user at the off switch in Settings. Without this hint the surface
     // would feel like a dark pattern.
-    const footer = screen.getByText(/Data sharing is on by default/i);
+    const footer = screen.getByText(/Optional usage telemetry is on by default/i);
     expect(footer.textContent ?? '').toMatch(/Settings/);
     expect(footer.textContent ?? '').toMatch(/Privacy/);
     expect(footer.textContent ?? '').toMatch(/turn it off any time/i);
+    expect(footer.textContent ?? '').toMatch(/Safety and crash diagnostics may still be sent/i);
+  });
+
+  it('discloses always-on safety and crash diagnostics separately from usage telemetry', () => {
+    renderModal();
+    expect(screen.getByText('Safety and crash diagnostics')).toBeTruthy();
+    expect(
+      screen.getByText(/sent even when usage telemetry is off/i),
+    ).toBeTruthy();
   });
 
   it('exposes the privacy policy via an obvious external link', () => {

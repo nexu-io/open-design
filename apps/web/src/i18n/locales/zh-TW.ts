@@ -506,7 +506,7 @@ export const zhTW: Dict = {
   "settings.privacyConsentDecline": "不分享",
   "settings.privacyConsentAccept": "我知道了",
   "settings.privacyConsentBannerFooter":
-    "預設開啟資料分享。你可以隨時在 設定 → 隱私 中關閉。",
+    "可選使用遙測預設開啟。你可以隨時在 設定 → 隱私 中關閉。安全與崩潰診斷仍可能傳送。",
   "settings.privacyConsentPolicyLink": "閱讀隱私政策",
   "settings.privacyMetrics": "匿名指標",
   "settings.privacyMetricsHint":
@@ -514,11 +514,14 @@ export const zhTW: Dict = {
   "settings.privacyContent": "對話內容",
   "settings.privacyContentHint":
     "prompt、助手回覆、工具輸入/輸出，以及品質回看所需的完整上下文檔案。傳送前會移除金鑰等敏感資訊。",
+  "settings.privacySafety": "安全與崩潰診斷",
+  "settings.privacySafetyHint":
+    "即使關閉使用遙測，經過清理的例外與可靠性診斷仍可能傳送。不包含 prompt 或產物內容。",
   "settings.privacyInstallationId": "匿名 ID",
   "settings.privacyOptedOut": "已退出",
   "settings.privacyDataDeletion": "刪除我的資料",
   "settings.privacyDataDeletionHint":
-    "輪換你的匿名 ID 並停止傳送。既有資料依保留政策自然過期。",
+    "輪換你的匿名 ID 並關閉可選使用遙測。既有資料依保留政策自然過期。",
   "settings.about": "關於",
   "settings.aboutHint": "版本與執行環境詳情",
   "settings.appVersion": "版本",

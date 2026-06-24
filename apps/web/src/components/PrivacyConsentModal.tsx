@@ -2,6 +2,7 @@ import { useAnalytics } from '../analytics/provider';
 import { trackPrivacyModalClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
+import { PrivacyTelemetryDisclosure } from './PrivacyTelemetryDisclosure';
 
 /**
  * Canonical location of the full privacy policy. Kept as a single named
@@ -57,16 +58,7 @@ export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
 
       <p className="privacy-consent-banner-lead">{t('settings.privacyConsentLead')}</p>
 
-      <dl className="settings-privacy-disclosure">
-        <div>
-          <dt>{t('settings.privacyMetrics')}</dt>
-          <dd>{t('settings.privacyMetricsHint')}</dd>
-        </div>
-        <div>
-          <dt>{t('settings.privacyContent')}</dt>
-          <dd>{t('settings.privacyContentHint')}</dd>
-        </div>
-      </dl>
+      <PrivacyTelemetryDisclosure />
 
       <p className="hint privacy-consent-banner-footer">{t('settings.privacyConsentBannerFooter')}</p>
 

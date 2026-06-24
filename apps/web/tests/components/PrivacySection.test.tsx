@@ -61,4 +61,20 @@ describe('PrivacySection', () => {
 
     expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
   });
+
+  it('discloses that safety and crash diagnostics continue after usage opt-out', () => {
+    render(
+      <Harness
+        initial={{
+          ...baseConfig,
+          installationId: null,
+          privacyDecisionAt: 1778244000000,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Safety and crash diagnostics')).toBeTruthy();
+    expect(screen.getByText(/sent even when usage telemetry is off/i)).toBeTruthy();
+  });
 });

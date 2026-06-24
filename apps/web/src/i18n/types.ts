@@ -499,6 +499,8 @@ export interface Dict {
   'settings.privacyMetricsHint': string;
   'settings.privacyContent': string;
   'settings.privacyContentHint': string;
+  'settings.privacySafety': string;
+  'settings.privacySafetyHint': string;
   'settings.privacyInstallationId': string;
   'settings.privacyOptedOut': string;
   'settings.privacyDataDeletion': string;
