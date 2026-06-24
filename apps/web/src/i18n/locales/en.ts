@@ -3419,6 +3419,7 @@ export const en: Dict = {
   'ds.reset': 'Reset',
   'ds.editingDesignMdHint': 'Editing this Markdown updates the rendered kit modules.',
   'ds.editingModuleHint': 'Editing only the {module} module.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'Save module',
   'ds.uploadLogo': 'Upload logo',
   'ds.uploadImage': 'Upload image',

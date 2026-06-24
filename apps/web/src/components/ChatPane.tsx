@@ -68,7 +68,6 @@ import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
-import { BrandEnrichmentBanner } from './BrandEnrichmentBanner';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
@@ -567,13 +566,14 @@ interface Props {
   // with the import instruction).
   onConnectRepo?: () => void;
   // True for a programmatically-extracted brand project whose AI enrichment
-  // never ran — surfaces the "Continue with AI optimization" banner in the
-  // empty chat state. Gated to the empty state, so it disappears once a turn
-  // is sent.
+  // never ran. The next-step card uses this to offer AI Optimize after the
+  // extraction completion message.
   brandEnrichmentEligible?: boolean;
   // Runs the optional brand-enrichment turn. The parent sends the project's
   // seeded enrichment prompt with the default per-turn skill bundle.
   onContinueBrandEnrichment?: () => void;
+  // Creates a fresh design project using the current extracted design system.
+  onCreateDesignFromActiveDesignSystem?: () => void;
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
@@ -742,6 +742,7 @@ export function ChatPane({
   onConnectRepo,
   brandEnrichmentEligible,
   onContinueBrandEnrichment,
+  onCreateDesignFromActiveDesignSystem,
   composerDraftSignal,
   petConfig,
   onAdoptPet,
@@ -778,6 +779,18 @@ export function ChatPane({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const displayMessages = useMemo(
+    () =>
+      messages.length > 0
+        ? messages
+        : buildBrandExtractionFallbackMessages({
+            enabled: Boolean(brandEnrichmentEligible),
+            metadata: projectMetadata,
+            activeDesignSystem,
+            projectFiles,
+          }),
+    [activeDesignSystem, brandEnrichmentEligible, messages, projectFiles, projectMetadata],
+  );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
@@ -875,7 +888,9 @@ export function ChatPane({
     composerRef.current?.applyDesignToolboxSkill(skillId);
   }, []);
   const nextStepVariant: NextStepActionsVariant = isDesignSystemNextStepProject(projectMetadata)
-    ? 'design-system'
+    ? isBrandExtractionNextStepProject(projectMetadata)
+      ? 'brand-extraction'
+      : 'design-system'
     : 'default';
   // The `@skill` shown in each featured row's hover detail — matched the same
   // way the composer matches it, using the raw skill name (what gets inlined
@@ -918,15 +933,15 @@ export function ChatPane({
   }, [nextStepVariant, t]);
   const composerPlaceholderScenarios = useMemo<PlaceholderScenario[]>(() => {
     if (loading || initialDraft?.trim()) return [];
-    if (messages.length === 0 && queuedItems.length === 0) return blankProjectComposerScenarios;
-    if (messages.length > 0) return followUpComposerScenarios;
+    if (displayMessages.length === 0 && queuedItems.length === 0) return blankProjectComposerScenarios;
+    if (displayMessages.length > 0) return followUpComposerScenarios;
     return [];
   }, [
     blankProjectComposerScenarios,
+    displayMessages.length,
     followUpComposerScenarios,
     initialDraft,
     loading,
-    messages.length,
     queuedItems.length,
   ]);
   const [tab, setTab] = useState<Tab>('chat');
@@ -947,15 +962,15 @@ export function ChatPane({
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]!.role === 'assistant') return messages[i]!.id;
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      if (displayMessages[i]!.role === 'assistant') return displayMessages[i]!.id;
     }
     return undefined;
-  }, [messages]);
-  const hasActiveRunMessage = messages.some(
+  }, [displayMessages]);
+  const hasActiveRunMessage = displayMessages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
-  const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
+  const retryAssistant = retryableAssistantMessage(displayMessages, lastAssistantId, streaming);
   // The failed run's error event lives on the (persisted) assistant message, so
   // the error card + AMR card survive a reload — unlike the ephemeral global
   // `error` state. Drive both off this event.
@@ -1166,29 +1181,29 @@ export function ChatPane({
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
   const firstUserMessageId = useMemo(
-    () => messages.find((m) => m.role === 'user')?.id,
-    [messages],
+    () => displayMessages.find((m) => m.role === 'user')?.id,
+    [displayMessages],
   );
   const shouldBalanceFinishedTranscript =
     !loading &&
     !streaming &&
     !displayError &&
     !hasActiveRunMessage &&
-    messages.length > 0;
+    displayMessages.length > 0;
   // Map each assistant message id to the user message that follows it (if any)
   // so the chat-side Questions banner can reopen that exact answered form in
   // the right-hand panel later.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
-    for (let i = 0; i < messages.length - 1; i++) {
-      const m = messages[i]!;
-      const next = messages[i + 1]!;
+    for (let i = 0; i < displayMessages.length - 1; i++) {
+      const m = displayMessages[i]!;
+      const next = displayMessages[i + 1]!;
       if (m.role === 'assistant' && next.role === 'user') {
         map.set(m.id, next.content);
       }
     }
     return map;
-  }, [messages]);
+  }, [displayMessages]);
 
   useEffect(() => {
     didInitialScrollRef.current = false;
@@ -1269,12 +1284,12 @@ export function ChatPane({
 
   useEffect(() => {
     const el = logRef.current;
-    if (!el || didInitialScrollRef.current || messages.length === 0) return;
+    if (!el || didInitialScrollRef.current || displayMessages.length === 0) return;
     didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user sees the form first.
-      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistantMsg = [...displayMessages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistantMsg?.content.includes('<question-form')) {
         const assistantEls = el.querySelectorAll('.msg.assistant');
         const lastAssistantEl = assistantEls[assistantEls.length - 1];
@@ -1301,7 +1316,7 @@ export function ChatPane({
     // didInitialScrollRef while the chat-log is unmounted; this effect
     // then re-runs when the user returns to Chat and the element is
     // available, scrolling the new conversation to its initial bottom.
-  }, [activeConversationId, messages.length, tab]);
+  }, [activeConversationId, displayMessages, tab]);
 
   // When a turn finishes streaming, release the anchor-to-top reserve. The
   // tail spacer only exists to give a streaming reply room to grow while the
@@ -1340,7 +1355,7 @@ export function ChatPane({
 
     // A brand-new user turn from a local send: switch to "anchor to top"
     // mode and smooth-scroll their message to the top of the viewport.
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const lastUser = [...displayMessages].reverse().find((m) => m.role === 'user');
     const prevUserId = prevLastUserIdRef.current;
     prevLastUserIdRef.current = lastUser?.id;
     if (anchorPendingRef.current && lastUser && lastUser.id !== prevUserId) {
@@ -1366,7 +1381,7 @@ export function ChatPane({
     if (pinnedToBottomRef.current) {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user lands on the form.
-      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistantMsg = [...displayMessages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistantMsg?.content.includes('<question-form')) {
         const assistantEls = el.querySelectorAll('.msg.assistant');
         const lastAssistantEl = assistantEls[assistantEls.length - 1];
@@ -1388,7 +1403,7 @@ export function ChatPane({
       // breaking auto-follow for subsequent chunks.
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, error, streaming]);
+  }, [displayMessages, error, streaming]);
 
   // Saved chat-log scroll state, preserved across tab switches. The
   // chat-log <div> is conditionally rendered so it unmounts when the
@@ -2039,7 +2054,7 @@ export function ChatPane({
               }}
             >
               {loading ? <ChatConversationLoading t={t} /> : null}
-              {messages.length === 0 && !loading ? (
+              {displayMessages.length === 0 && !loading ? (
                 <div className="chat-empty-wrap">
                   {showImportedFolderArtifacts ? (
                     <ImportedFolderArtifacts
@@ -2055,12 +2070,6 @@ export function ChatPane({
                           {t('chat.startTitle')}
                         </span>
                       </div>
-                      {brandEnrichmentEligible ? (
-                        <BrandEnrichmentBanner
-                          busy={Boolean(streaming || sendDisabled || loading || !activeConversationId)}
-                          onContinue={() => onContinueBrandEnrichment?.()}
-                        />
-                      ) : null}
                       <div className="chat-examples" role="list">
                         {pickStarters(projectMetadata, t).map((ex, i) => (
                           <button
@@ -2124,7 +2133,7 @@ export function ChatPane({
                 </div>
               ) : null}
               <ChatRows
-                messages={messages}
+                messages={displayMessages}
                 streaming={streaming}
                 liveToolInput={liveToolInput}
                 projectId={projectId}
@@ -2155,6 +2164,8 @@ export function ChatPane({
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
                 onNextStepPromptAction={handleNextStepPromptAction}
+                onNextStepAiOptimize={onContinueBrandEnrichment}
+                onNextStepCreateDesign={onCreateDesignFromActiveDesignSystem}
                 onPickSkill={handlePickSkill}
                 onArtifactDownload={onArtifactDownload}
                 nextStepSkills={skills}
@@ -2545,6 +2556,8 @@ function ChatRows({
   onArtifactShare,
   onToolboxAction,
   onNextStepPromptAction,
+  onNextStepAiOptimize,
+  onNextStepCreateDesign,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
@@ -2588,6 +2601,8 @@ function ChatRows({
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepAiOptimize?: () => void;
+  onNextStepCreateDesign?: () => void;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -2716,6 +2731,8 @@ function ChatRows({
         }
         onToolboxAction={onToolboxAction}
         onNextStepPromptAction={onNextStepPromptAction}
+        onNextStepAiOptimize={onNextStepAiOptimize}
+        onNextStepCreateDesign={onNextStepCreateDesign}
         onPickSkill={onPickSkill}
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
@@ -3927,12 +3944,112 @@ function sortChatAttachmentsForDisplay(attachments: ChatAttachment[]): ChatAttac
     .map((entry) => entry.attachment);
 }
 
+function buildBrandExtractionFallbackMessages({
+  enabled,
+  metadata,
+  activeDesignSystem,
+  projectFiles,
+}: {
+  enabled: boolean;
+  metadata: ProjectMetadata | undefined;
+  activeDesignSystem?: DesignSystemSummary | null;
+  projectFiles: ProjectFile[];
+}): ChatMessage[] {
+  if (!enabled || !activeDesignSystem || !isBrandExtractionNextStepProject(metadata)) return [];
+  const stableId = metadata?.brandId || metadata?.brandDesignSystemId || activeDesignSystem.id;
+  const sourceLabel = brandExtractionSourceLabel(metadata, activeDesignSystem);
+  const produced = brandExtractionProducedFile(metadata, projectFiles);
+  const timestamp = brandExtractionTimestamp(activeDesignSystem, produced);
+  const assistantContent = [
+    `Programmatic extraction finished for ${activeDesignSystem.title}.`,
+    '',
+    `I created and registered the ${activeDesignSystem.id} design system from ${sourceLabel}. It is ready to preview and can be used in new designs now.`,
+    '',
+    'Next, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.',
+  ].join('\n');
+  return [
+    {
+      id: `brand-extraction-user-${stableId}`,
+      role: 'user',
+      content: `Extract a design system from ${sourceLabel}.`,
+      createdAt: timestamp - 1,
+    },
+    {
+      id: `brand-extraction-assistant-${stableId}`,
+      role: 'assistant',
+      content: assistantContent,
+      agentId: 'open-design',
+      agentName: 'Open Design',
+      events: [{ kind: 'text', text: assistantContent }],
+      producedFiles: [produced],
+      runStatus: 'succeeded',
+      createdAt: timestamp,
+      startedAt: timestamp - 1,
+      endedAt: timestamp,
+    },
+  ] as ChatMessage[];
+}
+
+function brandExtractionSourceLabel(
+  metadata: ProjectMetadata | undefined,
+  activeDesignSystem: DesignSystemSummary,
+): string {
+  const sourceUrl = metadata?.brandSourceUrl?.trim();
+  if (sourceUrl) {
+    if (sourceUrl.startsWith('designmd://')) return 'pasted DESIGN.md';
+    return sourceUrl;
+  }
+  return metadata?.sourceFileName?.trim() || activeDesignSystem.title;
+}
+
+function brandExtractionProducedFile(
+  metadata: ProjectMetadata | undefined,
+  projectFiles: ProjectFile[],
+): ProjectFile {
+  const preferred = metadata?.entryFile?.trim() || 'brand.html';
+  const file =
+    projectFiles.find((candidate) => candidate.name === preferred) ||
+    projectFiles.find((candidate) => candidate.name === 'brand.html') ||
+    projectFiles.find((candidate) => /\.html?$/i.test(candidate.name));
+  if (file) return file;
+  return {
+    name: preferred,
+    path: preferred,
+    size: 0,
+    mtime: 1,
+    kind: 'html',
+    mime: 'text/html',
+  };
+}
+
+function brandExtractionTimestamp(
+  activeDesignSystem: DesignSystemSummary,
+  produced: ProjectFile,
+): number {
+  const updatedAt = Date.parse(activeDesignSystem.updatedAt ?? '');
+  const createdAt = Date.parse(activeDesignSystem.createdAt ?? '');
+  for (const value of [produced.mtime, updatedAt, createdAt]) {
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 1;
+}
+
 function isDesignSystemNextStepProject(metadata: ProjectMetadata | undefined): boolean {
   if (!metadata) return false;
   return (
     metadata.kind === 'brand' ||
     metadata.importedFrom === 'design-system' ||
     metadata.importedFrom === 'brand-extraction' ||
+    Boolean(metadata.brandDesignSystemId)
+  );
+}
+
+function isBrandExtractionNextStepProject(metadata: ProjectMetadata | undefined): boolean {
+  if (!metadata) return false;
+  return (
+    metadata.kind === 'brand' ||
+    metadata.importedFrom === 'brand-extraction' ||
+    Boolean(metadata.brandId) ||
     Boolean(metadata.brandDesignSystemId)
   );
 }

@@ -3420,6 +3420,7 @@ export const zhTW: Dict = {
   'ds.reset': '重設',
   'ds.editingDesignMdHint': '編輯這份 Markdown 會更新已渲染的套件模組。',
   'ds.editingModuleHint': '僅編輯{module}模組。',
+  'ds.manualEditModuleHint': '在這裡編輯{module}。懸停此模組可顯示修改控制項。',
   'ds.saveModule': '儲存模組',
   'ds.uploadLogo': '上傳 Logo',
   'ds.uploadImage': '上傳圖片',

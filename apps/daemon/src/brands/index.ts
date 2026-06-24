@@ -41,6 +41,7 @@ import {
   insertConversation,
   insertProject,
   setTabs,
+  upsertMessage,
   updateProject,
 } from '../db.js';
 import { readProjectFile, resolveProjectDir, writeProjectFile } from '../projects.js';
@@ -375,6 +376,24 @@ export async function startBrandExtraction(
   }
 
   const latest = readBrandDetail(brandsRoot, id);
+  if ((latest?.meta.status ?? meta.status) === 'ready' && latest?.meta.designSystemId) {
+    seedProgrammaticExtractionTranscript({
+      db,
+      conversationId,
+      randomId,
+      sourceUrl: url,
+      sourceLabel: host,
+      brandName: latest?.brand?.name ?? host,
+      designSystemId: latest.meta.designSystemId,
+      projectsRoot,
+      projectId,
+      metadata: {
+        ...metadata,
+        entryFile: BRAND_KIT_FILE,
+        brandDesignSystemId: latest.meta.designSystemId,
+      },
+    });
+  }
   return {
     id,
     projectId,
@@ -383,6 +402,82 @@ export async function startBrandExtraction(
     status: latest?.meta.status ?? meta.status,
     ...(latest?.meta.designSystemId ? { designSystemId: latest.meta.designSystemId } : {}),
     ...(latest?.brand?.name ? { brandName: latest.brand.name } : {}),
+  };
+}
+
+function seedProgrammaticExtractionTranscript(input: {
+  db: Parameters<typeof insertProject>[0];
+  conversationId: string;
+  randomId: () => string;
+  sourceUrl: string;
+  sourceLabel: string;
+  brandName: string;
+  designSystemId: string;
+  projectsRoot: string;
+  projectId: string;
+  metadata: ProjectMetadata;
+}): void {
+  const now = Date.now();
+  const brandName = input.brandName.trim() || input.sourceLabel;
+  const sourceLine = input.sourceUrl.startsWith('designmd://')
+    ? 'pasted DESIGN.md'
+    : input.sourceUrl;
+  upsertMessage(input.db, input.conversationId, {
+    id: input.randomId(),
+    role: 'user',
+    content: `Extract a design system from ${sourceLine}.`,
+    createdAt: now - 1,
+  });
+  upsertMessage(input.db, input.conversationId, {
+    id: input.randomId(),
+    role: 'assistant',
+    content: [
+      `Programmatic extraction finished for ${brandName}.`,
+      '',
+      `I created and registered the ${input.designSystemId} design system from ${input.sourceLabel}. It is ready to preview and can be used in new designs now.`,
+      '',
+      'Next, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.',
+    ].join('\n'),
+    agentId: 'open-design',
+    agentName: 'Open Design',
+    events: [
+      { kind: 'text', text: `Programmatic extraction finished for ${brandName}.\n\n` },
+      {
+        kind: 'text',
+        text: `I created and registered the ${input.designSystemId} design system from ${input.sourceLabel}. It is ready to preview and can be used in new designs now.\n\nNext, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.`,
+      },
+    ],
+    producedFiles: [brandKitProducedFile(input.projectsRoot, input.projectId, input.metadata)],
+    runStatus: 'succeeded',
+    createdAt: now,
+    startedAt: now - 1,
+    endedAt: now,
+  });
+}
+
+function brandKitProducedFile(
+  projectsRoot: string,
+  projectId: string,
+  metadata: ProjectMetadata,
+) {
+  const filePath = path.join(resolveProjectDir(projectsRoot, projectId, metadata), BRAND_KIT_FILE);
+  let size = 0;
+  let mtime = Date.now();
+  try {
+    const stat = fs.statSync(filePath);
+    size = stat.size;
+    mtime = stat.mtimeMs;
+  } catch {
+    // The file is created just above; if a test stubs that path, keep the
+    // transcript usable and let the live project file listing provide details.
+  }
+  return {
+    name: BRAND_KIT_FILE,
+    path: BRAND_KIT_FILE,
+    size,
+    mtime,
+    kind: 'html',
+    mime: 'text/html',
   };
 }
 

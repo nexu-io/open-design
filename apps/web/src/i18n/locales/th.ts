@@ -3419,6 +3419,7 @@ export const th: Dict = {
   'ds.reset': 'รีเซ็ต',
   'ds.editingDesignMdHint': 'การแก้ไข Markdown นี้จะอัปเดตโมดูล kit ที่แสดงผลแล้ว',
   'ds.editingModuleHint': 'กำลังแก้ไขเฉพาะโมดูล {module}',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'บันทึกโมดูล',
   'ds.uploadLogo': 'อัปโหลดโลโก้',
   'ds.uploadImage': 'อัปโหลดรูปภาพ',

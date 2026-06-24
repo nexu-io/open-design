@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { act } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +9,7 @@ import { BrandReadyPrompt } from '../../src/components/BrandReadyPrompt';
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe('BrandReadyPrompt', () => {
@@ -31,5 +33,27 @@ describe('BrandReadyPrompt', () => {
 
     fireEvent.click(dismiss);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays mounted by default until the user dismisses it', () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+
+    render(
+      <I18nProvider initial="en">
+        <BrandReadyPrompt
+          brandName="Open Design"
+          onPreview={vi.fn()}
+          onDismiss={onDismiss}
+        />
+      </I18nProvider>,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toBeTruthy();
   });
 });

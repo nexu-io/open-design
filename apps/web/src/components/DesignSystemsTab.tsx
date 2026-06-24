@@ -22,7 +22,6 @@ import { takeDesignSystemFocus } from '../runtime/brands';
 import {
   deleteDesignSystemDraft,
   fetchDesignSystem,
-  fetchDesignSystemShowcase,
   fetchProjectFileText,
   projectRawUrl,
   updateDesignSystemDraft,
@@ -39,7 +38,6 @@ interface Props {
   systems: DesignSystemSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onPreview: (id: string) => void;
   onCreate?: () => void;
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
@@ -226,7 +224,6 @@ export function DesignSystemsTab({
   systems,
   selectedId,
   onSelect,
-  onPreview,
   onCreate,
   onOpenSystem,
   onSystemsRefresh,
@@ -265,10 +262,6 @@ export function DesignSystemsTab({
   // sessionStorage exactly once; applied by the effect below once the system
   // actually shows up in the loaded list (which may arrive after a refresh).
   const [pendingFocus, setPendingFocus] = useState<string | null>(() => takeDesignSystemFocus());
-  // Cache fetched showcase HTML so the preview never re-flickers when the user
-  // re-selects a row. null = "in flight"; undefined = "not yet requested".
-  const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
-
   const q = filter.trim().toLowerCase();
 
   const librarySystems = useMemo(
@@ -388,20 +381,6 @@ export function DesignSystemsTab({
     if (!previewId) return null;
     return activeSystems.find((s) => s.id === previewId) ?? null;
   }, [previewId, activeSystems]);
-
-  // Lazily fetch the showcase HTML for the previewed design system. Only one
-  // iframe is ever mounted (the selected detail), so unlike the old card grid
-  // there is no need for an IntersectionObserver gate.
-  useEffect(() => {
-    if (!previewId) return;
-    setThumbs((prev) => {
-      if (prev[previewId] !== undefined) return prev;
-      void fetchDesignSystemShowcase(previewId).then((html) => {
-        setThumbs((p) => ({ ...p, [previewId]: html }));
-      });
-      return { ...prev, [previewId]: null };
-    });
-  }, [previewId]);
 
   // Category metadata is authored in English; keep raw values in state for
   // filtering while localizing the visible labels for the current UI locale.
@@ -551,11 +530,6 @@ export function DesignSystemsTab({
   function handleSelectSystem(system: DesignSystemSummary): void {
     setPreviewId(system.id);
     trackCardClick(system);
-  }
-
-  function handlePreviewSystem(system: DesignSystemSummary): void {
-    trackCardClick(system);
-    onPreview(system.id);
   }
 
   const scopeTabs = [
@@ -754,14 +728,12 @@ export function DesignSystemsTab({
         <DesignSystemDetail
           system={selectedSystem}
           isDefault={selectedSystem.id === selectedId}
-          showcaseHtml={thumbs[selectedSystem.id]}
           busy={busyId === selectedSystem.id}
           t={t}
           onEdit={onOpenSystem}
           onMakeDefault={handleMakeDefaultClick}
           onTogglePublished={togglePublished}
           onDelete={deleteSystem}
-          onPreviewFull={handlePreviewSystem}
           onSystemsRefresh={onSystemsRefresh}
         />
       );
@@ -929,28 +901,24 @@ function SystemRow({ system, active, isDefault, subtitle, statusLabel, onSelect 
 interface DetailProps {
   system: DesignSystemSummary;
   isDefault: boolean;
-  showcaseHtml: string | null | undefined;
   busy: boolean;
   t: ReturnType<typeof useI18n>['t'];
   onEdit?: (id: string) => void;
   onMakeDefault: (system: DesignSystemSummary) => void;
   onTogglePublished: (system: DesignSystemSummary) => void | Promise<void>;
   onDelete: (system: DesignSystemSummary) => void | Promise<void>;
-  onPreviewFull: (system: DesignSystemSummary) => void;
   onSystemsRefresh?: () => Promise<void> | void;
 }
 
 function DesignSystemDetail({
   system,
   isDefault,
-  showcaseHtml,
   busy,
   t,
   onEdit,
   onMakeDefault,
   onTogglePublished,
   onDelete,
-  onPreviewFull,
   onSystemsRefresh,
 }: DetailProps) {
   const isUser = isUserSystem(system);
@@ -1004,7 +972,7 @@ function DesignSystemDetail({
     body: detail?.body,
     packageInfo: detail?.packageInfo,
     swatches: system.swatches,
-    showcaseHtml: showcaseHtml ?? null,
+    showcaseHtml: null,
     // Read-only is enforced by withholding the edit handlers below — not by
     // this flag. Keep user systems "editable" so their kit renders live from
     // the project (the SSOT / latest) rather than a stale published snapshot.
@@ -1107,7 +1075,7 @@ function DesignSystemDetail({
           kit={kit}
           badgeSlot={badgeSlot}
           actionsSlot={actionsSlot}
-          showCover
+          showCover={false}
           noticeSlot={
             downloadFailed ? (
               <div className={styles.missingProjectNotice}>{t('dsManager.downloadFailed')}</div>

@@ -3419,6 +3419,7 @@ export const ptBR: Dict = {
   'ds.reset': 'Redefinir',
   'ds.editingDesignMdHint': 'Editar este Markdown atualiza os módulos renderizados do kit.',
   'ds.editingModuleHint': 'Apenas o módulo {module} está sendo editado.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'Salvar módulo',
   'ds.uploadLogo': 'Enviar logo',
   'ds.uploadImage': 'Enviar imagem',

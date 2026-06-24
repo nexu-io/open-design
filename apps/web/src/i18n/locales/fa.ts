@@ -3414,6 +3414,7 @@ export const fa: Dict = {
   'ds.reset': 'بازنشانی',
   'ds.editingDesignMdHint': 'ویرایش این Markdown ماژول‌های رندرشده کیت را به‌روزرسانی می‌کند.',
   'ds.editingModuleHint': 'فقط ماژول {module} ویرایش می‌شود.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'ذخیره ماژول',
   'ds.uploadLogo': 'بارگذاری لوگو',
   'ds.uploadImage': 'بارگذاری تصویر',

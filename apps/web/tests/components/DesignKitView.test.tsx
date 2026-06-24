@@ -170,4 +170,24 @@ describe('DesignKitView iframe sandboxing', () => {
     expect(screen.queryByRole('menuitem', { name: 'Upload MD' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Open full system' })).toBeNull();
   });
+
+  it('renders the embedded component kit without an Open full system action', () => {
+    const baseKit = previewKit();
+    const kit = {
+      ...baseKit,
+      system: {
+        kitUrl: baseKit.system!.kitUrl,
+        indexUrl: '/raw/projects/preview/system/index.html',
+      },
+    };
+
+    const { container } = render(
+      <I18nProvider initial="en">
+        <DesignKitView kit={kit} />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Open full system' })).toBeNull();
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+  });
 });

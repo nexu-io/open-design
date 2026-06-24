@@ -92,16 +92,19 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-top: -1px;
-  margin-left: 4px;
-  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, var(--border, #d0d7de));
+  width: 34px;
+  height: 34px;
+  margin-top: -4px;
+  margin-right: -4px;
+  margin-left: 6px;
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 50%, var(--border, #d0d7de));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg, #fff) 88%, var(--success, #2da44e) 12%);
-  color: color-mix(in srgb, var(--text, #1f2328) 82%, var(--success, #2da44e));
+  background: var(--bg, #fff);
+  color: var(--text-strong, #111827);
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(31, 35, 40, 0.08);
+  box-shadow:
+    0 2px 7px rgba(31, 35, 40, 0.14),
+    0 0 0 3px color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
   transition:
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -113,10 +116,12 @@
   pointer-events: none;
 }
 .dismiss:hover {
-  background: var(--bg, #fff);
-  border-color: color-mix(in srgb, var(--success, #2da44e) 54%, var(--border, #d0d7de));
+  background: color-mix(in srgb, var(--success, #2da44e) 10%, var(--bg, #fff));
+  border-color: color-mix(in srgb, var(--success, #2da44e) 70%, var(--border, #d0d7de));
   color: var(--text, #1f2328);
-  box-shadow: 0 2px 6px rgba(31, 35, 40, 0.14);
+  box-shadow:
+    0 3px 10px rgba(31, 35, 40, 0.18),
+    0 0 0 3px color-mix(in srgb, var(--success, #2da44e) 14%, transparent);
 }
 .dismiss:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--success, #2da44e) 70%, var(--accent, #0969da));

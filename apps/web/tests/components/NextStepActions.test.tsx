@@ -101,6 +101,23 @@ describe('NextStepActions', () => {
     expect(onPromptAction).toHaveBeenCalledWith(expect.stringContaining('refine this design system in place'));
   });
 
+  it('uses brand-extraction primary rows for programmatic brand projects', () => {
+    const onAiOptimize = vi.fn();
+    const onCreateDesign = vi.fn();
+    renderActions({ variant: 'brand-extraction', onAiOptimize, onCreateDesign });
+
+    expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
+    expect(screen.queryByText(VISUAL_POLISH_TITLE)).toBeNull();
+    expect(screen.getByText('AI Optimize')).toBeTruthy();
+    expect(screen.getByText('Create new design')).toBeTruthy();
+    expect(screen.getByTestId('next-step-toolbox-more')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('next-step-brand-action-brand-ai-optimize'));
+    expect(onAiOptimize).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('next-step-brand-action-brand-create-design'));
+    expect(onCreateDesign).toHaveBeenCalledTimes(1);
+  });
+
   it('reveals the matched @skill in the featured-row hover detail', () => {
     renderActions();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-action-auto-match'));

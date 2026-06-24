@@ -3419,6 +3419,7 @@ export const ru: Dict = {
   'ds.reset': 'Сбросить',
   'ds.editingDesignMdHint': 'Редактирование этого Markdown обновляет отображаемые модули комплекта.',
   'ds.editingModuleHint': 'Редактируется только модуль {module}.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'Сохранить модуль',
   'ds.uploadLogo': 'Загрузить логотип',
   'ds.uploadImage': 'Загрузить изображение',

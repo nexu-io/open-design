@@ -2072,6 +2072,7 @@ export interface Dict {
   'ds.reset': string;
   'ds.editingDesignMdHint': string;
   'ds.editingModuleHint': string;
+  'ds.manualEditModuleHint': string;
   'ds.saveModule': string;
   'ds.uploadLogo': string;
   'ds.uploadImage': string;

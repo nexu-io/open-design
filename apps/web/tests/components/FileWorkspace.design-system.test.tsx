@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FileWorkspace } from '../../src/components/FileWorkspace';
+import { DESIGN_SYSTEM_TAB, FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
 
 const registryMocks = vi.hoisted(() => ({
@@ -153,6 +153,68 @@ describe('FileWorkspace design-system project surface', () => {
       await Promise.resolve();
     });
     expect(container.textContent).toContain('Edit DESIGN.md');
+  });
+
+  it('opens the design-system tab and highlights Logo for manual edit requests', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve('# Acme\n\n## Logo\nUse the captured mark.');
+      return Promise.resolve(null);
+    });
+    const onTabsStateChange = vi.fn();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    try {
+      const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+        projectId: 'ds-acme',
+        projectKind: 'prototype',
+        files: [workspaceFile('DESIGN.md'), workspaceFile('brand.html')],
+        liveArtifacts: [],
+        onRefreshFiles: vi.fn(),
+        isDeck: false,
+        tabsState: { tabs: ['brand.html'], active: 'brand.html' },
+        onTabsStateChange,
+        designSystemProject: designSystem(),
+      };
+
+      const container = renderWorkspace(<FileWorkspace {...baseProps} />);
+
+      expect(container.querySelector('[data-testid="design-system-project-kit"]')).toBeNull();
+
+      act(() => {
+        root?.render(
+          <FileWorkspace
+            {...baseProps}
+            designSystemEditRequest={{ module: 'logo', nonce: 1 }}
+          />,
+        );
+      });
+
+      await flushKit();
+
+      expect(onTabsStateChange).toHaveBeenCalledWith(
+        expect.objectContaining({ active: DESIGN_SYSTEM_TAB }),
+      );
+      const logoSection = container.querySelector<HTMLElement>('[data-testid="design-kit-logo-section"]');
+      expect(logoSection).toBeTruthy();
+      expect(logoSection?.textContent).toContain(
+        'Edit Logo here. Hover this section to reveal controls.',
+      );
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: originalScrollIntoView,
+        });
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
   });
 
   it('edits and resets palette colors through the color editor dialog', async () => {

@@ -3419,6 +3419,7 @@ export const id: Dict = {
   'ds.reset': 'Atur ulang',
   'ds.editingDesignMdHint': 'Mengedit Markdown ini akan memperbarui modul kit yang dirender.',
   'ds.editingModuleHint': 'Hanya modul {module} yang sedang diedit.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'Simpan modul',
   'ds.uploadLogo': 'Unggah logo',
   'ds.uploadImage': 'Unggah gambar',

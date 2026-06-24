@@ -370,7 +370,7 @@ describe('DesignFilesPanel directory navigation', () => {
     renderPanel([file({ name: 'top.html', kind: 'html' })]);
 
     expect(document.querySelector('.df-breadcrumbs')).toBeTruthy();
-    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('Project');
   });
 
   it('shows rootDirName as the root breadcrumb when one is provided', () => {

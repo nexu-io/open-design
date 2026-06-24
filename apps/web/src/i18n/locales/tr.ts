@@ -3419,6 +3419,7 @@ export const tr: Dict = {
   'ds.reset': 'Sıfırla',
   'ds.editingDesignMdHint': 'Bu Markdown düzenlendiğinde işlenen kit modülleri güncellenir.',
   'ds.editingModuleHint': 'Yalnızca {module} modülü düzenleniyor.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'Modülü kaydet',
   'ds.uploadLogo': 'Logo yükle',
   'ds.uploadImage': 'Görüntü yükle',

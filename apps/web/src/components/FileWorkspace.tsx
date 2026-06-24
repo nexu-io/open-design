@@ -52,7 +52,11 @@ import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../r
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
-import { DesignKitView, type HeaderMenuAction } from './DesignKitView';
+import {
+  DesignKitView,
+  type DesignKitEditFocusRequest,
+  type HeaderMenuAction,
+} from './DesignKitView';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -182,6 +186,7 @@ interface Props {
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => Promise<void> | void;
+  designSystemEditRequest?: DesignKitEditFocusRequest | null;
   onConnectRepo?: () => void;
   githubConnected?: boolean;
   commentPortalId?: string;
@@ -428,6 +433,7 @@ export function FileWorkspace({
   designSystemReview,
   onDesignSystemReviewDecision,
   onUseDesignSystem,
+  designSystemEditRequest,
   onConnectRepo,
   githubConnected,
   commentPortalId,
@@ -757,6 +763,13 @@ export function FileWorkspace({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedTabs, activeTab]);
+
+  useEffect(() => {
+    if (!designSystemEditRequest) return;
+    setUploadError(null);
+    setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [designSystemEditRequest?.nonce]);
 
   // External open requests from chat (tool cards, produced-file chips,
   // deep-linked URL, or the parent's auto-open after an agent Write) —
@@ -2148,6 +2161,7 @@ export function FileWorkspace({
             designSystemReview={designSystemReview}
             onReviewDecision={onDesignSystemReviewDecision}
             onUseDesignSystem={onUseDesignSystem}
+            editFocusRequest={designSystemEditRequest}
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
@@ -2432,6 +2446,7 @@ function DesignSystemProjectPanel({
   designSystemReview,
   onReviewDecision,
   onUseDesignSystem,
+  editFocusRequest,
   onConnectRepo,
   githubConnected,
 }: {
@@ -2458,6 +2473,7 @@ function DesignSystemProjectPanel({
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => Promise<void> | void;
+  editFocusRequest?: DesignKitEditFocusRequest | null;
   onConnectRepo?: () => void;
   githubConnected?: boolean;
 }) {
@@ -3265,6 +3281,7 @@ function DesignSystemProjectPanel({
           onDownload={() => void downloadKit()}
           onReset={() => void resetKitEdits()}
           uploading={kitUploading}
+          editFocusRequest={editFocusRequest}
           dataTestId="design-system-project-kit"
         />
       ) : (

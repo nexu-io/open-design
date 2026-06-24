@@ -57,6 +57,11 @@ interface DesignMdModuleSpec {
 type DesignMdEditTarget =
   | { kind: 'all' }
   | { kind: 'module'; module: DesignMdModuleSpec };
+export type DesignKitEditFocusModule = 'logo';
+export interface DesignKitEditFocusRequest {
+  module: DesignKitEditFocusModule;
+  nonce: number;
+}
 
 // ── Logo with fallback chain ────────────────────────────────────────
 // Brand stage (`/api/brands/:id/logo`) when a brandId is known, else an explicit
@@ -271,6 +276,7 @@ export interface DesignKitViewProps {
   onImport?: () => void;
   onReset?: () => void;
   uploading?: KitUploadModule | null;
+  editFocusRequest?: DesignKitEditFocusRequest | null;
   dataTestId?: string;
 }
 
@@ -296,6 +302,7 @@ function DesignKitViewInner({
   onImport,
   onReset,
   uploading,
+  editFocusRequest,
   dataTestId = 'design-kit-view',
 }: DesignKitViewProps) {
   const t = useT();
@@ -329,11 +336,13 @@ function DesignKitViewInner({
   const [colorError, setColorError] = useState<string | null>(null);
   const [colorSaving, setColorSaving] = useState(false);
   const [colorOverrides, setColorOverrides] = useState<Record<number, string>>({});
+  const [editFocusModule, setEditFocusModule] = useState<DesignKitEditFocusModule | null>(null);
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fontInputRef = useRef<HTMLInputElement | null>(null);
   const designMdInputRef = useRef<HTMLInputElement | null>(null);
   const stickyHeaderRef = useRef<HTMLElement | null>(null);
+  const logoSectionRef = useRef<HTMLElement | null>(null);
 
   useBrandFonts(kit.projectId, kit.fonts);
 
@@ -412,6 +421,23 @@ function DesignKitViewInner({
     };
   }, [stickyHeader]);
 
+  useEffect(() => {
+    if (!editFocusRequest || compact) return undefined;
+    if (editFocusRequest.module !== 'logo') return undefined;
+    const target = logoSectionRef.current;
+    setEditFocusModule('logo');
+    if (target) {
+      if (typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      if (typeof target.focus === 'function') {
+        target.focus({ preventScroll: true });
+      }
+    }
+    const timer = window.setTimeout(() => setEditFocusModule(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [compact, editFocusRequest?.module, editFocusRequest?.nonce]);
+
   // Engine token chips, when the system dir exists.
   useEffect(() => {
     const url = kit.system?.tokensUrl;
@@ -463,7 +489,6 @@ function DesignKitViewInner({
   const layout = kit.layout;
   const samples = imagery?.samples ?? [];
   const dsKitUrl = dsTheme === 'dark' ? kit.system?.kitDarkUrl ?? kit.system?.kitUrl : kit.system?.kitUrl;
-  const fullSystemUrl = kit.system?.indexUrl ?? null;
   const canUpload = Boolean(kit.canUpload && onUploadModule);
   const canEditDesignMd = Boolean(designMd?.canEdit !== false && designMd?.onSave);
   const designMdModules = useMemo<Record<DesignMdModuleId, DesignMdModuleSpec>>(
@@ -518,11 +543,6 @@ function DesignKitViewInner({
   function openInBrowser(event: MouseEvent<HTMLAnchorElement>, url: string) {
     event.preventDefault();
     void openExternalUrl(url);
-  }
-
-  function openFullSystemPreview() {
-    if (!fullSystemUrl) return;
-    setAssetPreview({ url: fullSystemUrl, label: t('ds.fullSystemLabel', { name: kit.name }) });
   }
 
   function openUrlInNewTab(url: string) {
@@ -1018,13 +1038,24 @@ function DesignKitViewInner({
 
           {!compact ? (
             <section
-              className={styles.section}
+              ref={logoSectionRef}
+              className={[
+                styles.section,
+                editFocusModule === 'logo' ? styles.sectionEditFocus : '',
+              ].filter(Boolean).join(' ')}
+              data-testid="design-kit-logo-section"
+              tabIndex={editFocusModule === 'logo' ? -1 : undefined}
               aria-label={t('brandDetail.logo')}
               onDragOver={handleModuleDragOver}
               onDrop={(event) => handleModuleDrop('logo', event)}
             >
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.logo')}</h3>
+                {editFocusModule === 'logo' ? (
+                  <span className={styles.editFocusHint}>
+                    {t('ds.manualEditModuleHint', { module: t('brandDetail.logo') })}
+                  </span>
+                ) : null}
                 {moduleActions(
                   <>
                     {uploadAction('logo')}
@@ -1342,16 +1373,6 @@ function DesignKitViewInner({
                     {!stickyHeader && onDownload ? moduleActionButton(t('ds.download'), 'download', onDownload) : null}
                     {!stickyHeader && onImport ? moduleActionButton(t('ds.importFolder'), 'import', onImport) : null}
                     {!stickyHeader && onReset ? moduleActionButton(t('ds.reset'), 'reload', onReset) : null}
-                    {!stickyHeader && fullSystemUrl ? (
-                      <button
-                        type="button"
-                        className={`${styles.dsOpen} ${styles.dsOpenButton}`}
-                        onClick={openFullSystemPreview}
-                      >
-                        {t('brandDetail.openFullSystem')}
-                        <ExternalGlyph />
-                      </button>
-                    ) : null}
                   </>,
                 )}
               </div>

@@ -3419,6 +3419,7 @@ export const ar: Dict = {
   'ds.reset': 'إعادة تعيين',
   'ds.editingDesignMdHint': 'سيؤدي تحرير Markdown هذا إلى تحديث وحدات الحزمة المعروضة.',
   'ds.editingModuleHint': 'يتم تحرير وحدة {module} فقط.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'حفظ الوحدة',
   'ds.uploadLogo': 'رفع الشعار',
   'ds.uploadImage': 'رفع صورة',

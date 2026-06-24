@@ -1143,6 +1143,8 @@ export function ProjectView({
   const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
   // Parallel to shareRequest, but opens the workspace's Download/Export menu.
   const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [designSystemEditRequest, setDesignSystemEditRequest] =
+    useState<{ module: 'logo'; nonce: number } | null>(null);
   // When a queued chat send starts processing, ask the workspace to flip the
   // deck preview to the slide its marked element lives on, so the user watches
   // the edit land in context instead of staying parked on slide 1. Mirrors the
@@ -5936,6 +5938,14 @@ export function ProjectView({
   const brandEnrichmentPromptSeed =
     project.pendingPrompt?.trim() ||
     (initialDraft?.projectId === project.id ? initialDraft.value.trim() : '');
+  const [brandEnrichmentPromptSeedCache, setBrandEnrichmentPromptSeedCache] = useState(
+    () => brandEnrichmentPromptSeed,
+  );
+  useEffect(() => {
+    if (brandEnrichmentPromptSeed) {
+      setBrandEnrichmentPromptSeedCache(brandEnrichmentPromptSeed);
+    }
+  }, [brandEnrichmentPromptSeed]);
 
   // Run the deeper "AI Optimize" enrichment pass on a programmatically-extracted
   // brand: send the hidden seeded enrichment prompt + the default design-system
@@ -5944,12 +5954,18 @@ export function ProjectView({
   const handleBrandEnrichment = useCallback(() => {
     const skillIds = installedBrandEnrichmentSkillIds(skills);
     void handleSend(
-      buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed),
+      buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache),
       [],
       [],
       skillIds.length > 0 ? { skillIds } : undefined,
     );
-  }, [skills, brandEnrichmentPromptSeed, handleSend]);
+  }, [skills, brandEnrichmentPromptSeed, brandEnrichmentPromptSeedCache, handleSend]);
+
+  const handleCreateDesignFromActiveDesignSystem = useCallback(() => {
+    const system = designSystemProject ?? activeDesignSystemSummary;
+    if (!system || !onCreateProjectFromDesignSystem) return;
+    void onCreateProjectFromDesignSystem(system.id, system.title);
+  }, [activeDesignSystemSummary, designSystemProject, onCreateProjectFromDesignSystem]);
 
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
@@ -6337,6 +6353,7 @@ export function ProjectView({
               onConnectRepo={handleConnectRepo}
               brandEnrichmentEligible={brandEnrichmentEligibleForProject}
               onContinueBrandEnrichment={handleBrandEnrichment}
+              onCreateDesignFromActiveDesignSystem={handleCreateDesignFromActiveDesignSystem}
               onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
@@ -6483,6 +6500,7 @@ export function ProjectView({
           designSystemReview={project.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
           onUseDesignSystem={onCreateProjectFromDesignSystem}
+          designSystemEditRequest={designSystemEditRequest}
           onConnectRepo={handleConnectRepo}
           githubConnected={githubConnected}
           commentPortalId={commentInspectorPortalId}
@@ -6597,7 +6615,7 @@ export function ProjectView({
               dismissBrandReady();
             }}
             onEditManually={() => {
-              requestOpenFile(BRAND_KIT_FILE);
+              setDesignSystemEditRequest({ module: 'logo', nonce: Date.now() });
               dismissBrandReady();
             }}
             onDismiss={dismissBrandReady}

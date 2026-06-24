@@ -440,6 +440,24 @@
   background: var(--bg-subtle);
 }
 
+.sectionEditFocus {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background:
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      color-mix(in srgb, var(--accent) 7%, transparent)
+    ),
+    var(--bg-subtle);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent),
+    0 12px 30px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sectionEditFocus:focus {
+  outline: none;
+}
+
 .sectionTitle {
   margin: 0;
   font-size: 12px;
@@ -469,10 +487,21 @@
     transition: opacity var(--dur-quick, 140ms) var(--ease-out, ease);
   }
   .section:hover .moduleActions,
-  .section:focus-within .moduleActions {
+  .section:focus-within .moduleActions,
+  .sectionEditFocus .moduleActions {
     opacity: 1;
     pointer-events: auto;
   }
+}
+
+.editFocusHint {
+  flex: 1 1 auto;
+  min-width: 160px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .moduleAction {
@@ -1010,29 +1039,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.dsOpen {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: color var(--dur-quick) var(--ease-out);
-}
-
-.dsOpenButton {
-  appearance: none;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-}
-
-.dsOpen:hover {
-  color: var(--accent);
 }
 
 .dsFrameWrap {

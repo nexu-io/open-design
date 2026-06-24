@@ -3419,6 +3419,7 @@ export const ko: Dict = {
   'ds.reset': '초기화',
   'ds.editingDesignMdHint': '이 Markdown을 편집하면 렌더링된 키트 모듈이 업데이트됩니다.',
   'ds.editingModuleHint': '{module} 모듈만 편집 중입니다.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': '모듈 저장',
   'ds.uploadLogo': '로고 업로드',
   'ds.uploadImage': '이미지 업로드',

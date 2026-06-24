@@ -15,7 +15,7 @@ export interface BrandReadyPromptProps {
   brandName: string | null;
   /** Left offset for the workspace panel; keeps the prompt away from composer. */
   workspaceOffsetPx?: number;
-  /** Auto-dismiss after a short confirmation window. */
+  /** Optional auto-dismiss window. Omitted by default so the prompt stays until user action. */
   ttlMs?: number;
   /** Focus the in-project brand-kit (design system) tab. */
   onPreview: () => void;
@@ -29,12 +29,10 @@ export interface BrandReadyPromptProps {
   onEditManually?: () => void;
 }
 
-const DEFAULT_TTL_MS = 6000;
-
 export function BrandReadyPrompt({
   brandName,
   workspaceOffsetPx = 0,
-  ttlMs = DEFAULT_TTL_MS,
+  ttlMs,
   onPreview,
   onDismiss,
   showRefinement = false,
@@ -104,7 +102,7 @@ export function BrandReadyPrompt({
         aria-label={dismissLabel}
         title={dismissLabel}
       >
-        <Icon name="close" size={14} strokeWidth={2.1} />
+        <Icon name="close" size={18} strokeWidth={2.6} />
       </button>
     </motion.div>
   );

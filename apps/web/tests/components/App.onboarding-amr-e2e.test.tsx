@@ -241,11 +241,11 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     render(<App />);
 
     // Bootstrap routes a first-run user into onboarding. AMR detection lags
-    // the first agent probe, so wait for the runtime step's primary Continue
-    // action to become usable before advancing past the Connect step.
+    // the first agent probe, so wait for the cloud sign-in CTA to resolve to
+    // the signed-in state before advancing past the Connect step.
     const runtimeContinue = await screen.findByRole(
       'button',
-      { name: /^Continue$/i },
+      { name: /Continue \(signed in\)/i },
       { timeout: 10000 },
     );
     await waitFor(() => {

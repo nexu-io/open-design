@@ -3419,6 +3419,7 @@ export const hu: Dict = {
   'ds.reset': 'Visszaállítás',
   'ds.editingDesignMdHint': 'A Markdown szerkesztése frissíti a megjelenített kitmodulokat.',
   'ds.editingModuleHint': 'Csak a(z) {module} modul szerkesztése történik.',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'Modul mentése',
   'ds.uploadLogo': 'Logó feltöltése',
   'ds.uploadImage': 'Kép feltöltése',

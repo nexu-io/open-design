@@ -12,7 +12,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -88,7 +87,6 @@ import type {
 } from '../types';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
-import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
@@ -148,7 +146,6 @@ import {
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
-import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
@@ -488,7 +485,6 @@ export function EntryShell({
   // view from the route rather than keeping it in component state.
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
-  const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
@@ -578,11 +574,6 @@ export function EntryShell({
     setNewProjectInitialTab(tab);
     setNewProjectOpen(true);
   }
-
-  const previewSystem = useMemo(
-    () => (previewSystemId ? designSystems.find((d) => d.id === previewSystemId) ?? null : null),
-    [designSystems, previewSystemId],
-  );
 
   function handleCreate(input: CreateInput) {
     // The NewProjectModal no longer asks the user to pick a plugin.
@@ -916,7 +907,6 @@ export function EntryShell({
                     onCreate={onCreateDesignSystem}
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
-                    onPreview={(id) => setPreviewSystemId(id)}
                   />
                 </div>
               )}
@@ -948,14 +938,6 @@ export function EntryShell({
           </div>
         </main>
       </div>
-      <AnimatePresence>
-        {previewSystem ? (
-          <DesignSystemPreviewModal
-            system={previewSystem}
-            onClose={() => setPreviewSystemId(null)}
-          />
-        ) : null}
-      </AnimatePresence>
       <NewProjectModal
         open={newProjectOpen}
         initialTab={newProjectInitialTab}

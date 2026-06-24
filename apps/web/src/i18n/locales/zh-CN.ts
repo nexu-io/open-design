@@ -3420,6 +3420,7 @@ export const zhCN: Dict = {
   'ds.reset': '重置',
   'ds.editingDesignMdHint': '编辑这份 Markdown 会更新已渲染的套件模块。',
   'ds.editingModuleHint': '仅编辑{module}模块。',
+  'ds.manualEditModuleHint': '在这里编辑{module}。悬停此模块可显示修改控件。',
   'ds.saveModule': '保存模块',
   'ds.uploadLogo': '上传 Logo',
   'ds.uploadImage': '上传图片',

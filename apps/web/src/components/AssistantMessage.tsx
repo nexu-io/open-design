@@ -321,6 +321,8 @@ interface Props {
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepAiOptimize?: () => void;
+  onNextStepCreateDesign?: () => void;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -426,6 +428,8 @@ function AssistantMessageImpl({
   onArtifactShare,
   onToolboxAction,
   onNextStepPromptAction,
+  onNextStepAiOptimize,
+  onNextStepCreateDesign,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
@@ -813,6 +817,8 @@ function AssistantMessageImpl({
             onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
             onToolboxAction={isLast ? onToolboxAction : undefined}
             onPromptAction={isLast ? onNextStepPromptAction : undefined}
+            onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
+            onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
             onPickSkill={isLast ? onPickSkill : undefined}
             onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}

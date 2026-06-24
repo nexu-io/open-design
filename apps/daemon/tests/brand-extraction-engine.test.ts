@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   closeDatabase,
   getProject,
+  listMessages,
   listTabs,
   openDatabase,
 } from '../src/db.js';
@@ -229,6 +230,30 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('<title>品牌设计体系</title>');
     expect(html).toContain('"logo":"标志"');
     expect(html).toContain('"brandReady":"设计体系已就绪"');
+  });
+
+  it('seeds a completed chat transcript when the programmatic pass returns ready', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      designMd: DESIGN_MD_INPUT,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      programmaticSyncBudgetMs: 10_000,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    expect(result.status).toBe('ready');
+    expect(result.designSystemId).toBeTruthy();
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(messages[0]?.content).toContain('pasted DESIGN.md');
+    expect(messages[1]?.content).toContain('Programmatic extraction finished');
+    expect(messages[1]?.runStatus).toBe('succeeded');
+    expect(messages[1]?.producedFiles?.[0]?.name).toBe('brand.html');
   });
 
   it('rejects a non-http(s) URL', async () => {

@@ -23,7 +23,7 @@ import type { SkillSummary } from '../types';
 import styles from './NextStepActions.module.css';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
-export type NextStepActionsVariant = 'default' | 'design-system';
+export type NextStepActionsVariant = 'default' | 'design-system' | 'brand-extraction';
 
 export const DESIGN_SYSTEM_NEXT_STEP_ACTIONS = [
   {
@@ -39,6 +39,19 @@ export const DESIGN_SYSTEM_NEXT_STEP_ACTIONS = [
     title: 'Audit tokens & kit',
     prompt:
       'Audit this design system for readiness. Check DESIGN.md, brand.json, variables.css, theme.json, kit.html, kit.dark.html, generated artifacts, palette contrast, typography specimens, spacing/radius rules, and component coverage. Fix the highest-impact issues directly, keep the same registered design system id, and report remaining gaps before publishing or using it in other projects.',
+  },
+] as const;
+
+export const BRAND_EXTRACTION_NEXT_STEP_ACTIONS = [
+  {
+    id: 'brand-ai-optimize',
+    icon: 'sparkles' as IconName,
+    title: 'AI Optimize',
+  },
+  {
+    id: 'brand-create-design',
+    icon: 'plus' as IconName,
+    title: 'Create new design',
   },
 ] as const;
 
@@ -64,6 +77,11 @@ interface Props {
   // where the primary next steps are system optimization rather than generic
   // artifact polishing.
   onPromptAction?: (prompt: string) => void;
+  // Run the deeper AI extraction pass for a programmatically-created brand
+  // design system.
+  onAiOptimize?: () => void;
+  // Create a new design using the active brand/design system.
+  onCreateDesign?: () => void;
   // Seed the composer with a specific global skill resource picked from the toolbox.
   onPickSkill?: (skillId: string) => void;
   // Available global skill resources. The full composer toolbox also includes
@@ -122,6 +140,8 @@ export function NextStepActions({
   onDownload,
   onToolboxAction,
   onPromptAction,
+  onAiOptimize,
+  onCreateDesign,
   onPickSkill,
   skills = [],
   toolboxSkillNames,
@@ -260,6 +280,18 @@ export function NextStepActions({
     [closeAll, onPromptAction, track],
   );
 
+  const handleAiOptimize = useCallback(() => {
+    track('toolbox_action', 'brand-ai-optimize');
+    onAiOptimize?.();
+    closeAll();
+  }, [closeAll, onAiOptimize, track]);
+
+  const handleCreateDesign = useCallback(() => {
+    track('toolbox_action', 'brand-create-design');
+    onCreateDesign?.();
+    closeAll();
+  }, [closeAll, onCreateDesign, track]);
+
   const handlePickSkill = useCallback(
     (skillId: string) => {
       track('toolbox_more', skillId);
@@ -304,6 +336,7 @@ export function NextStepActions({
   const hasMore = !!onToolboxAction || hasShareGroup;
   const showToolbox = !!onToolboxAction;
   const showDesignSystemRows = variant === 'design-system' && !!onPromptAction;
+  const showBrandRows = variant === 'brand-extraction' && (!!onAiOptimize || !!onCreateDesign);
 
   // Hover handlers shared by every flyout surface: stay open while hovered.
   const keepOpen = { onMouseEnter: cancelClose, onMouseLeave: scheduleClose };
@@ -311,8 +344,29 @@ export function NextStepActions({
   return (
     <div className={styles.root} data-testid="next-step-actions">
       <div className={styles.label}>{t('nextStep.title')}</div>
-      {showDesignSystemRows || showToolbox || hasMore ? (
+      {showBrandRows || showDesignSystemRows || showToolbox || hasMore ? (
         <div className={styles.toolboxList} data-testid="next-step-toolbox">
+          {showBrandRows
+            ? BRAND_EXTRACTION_NEXT_STEP_ACTIONS.map((action) => {
+                const disabled =
+                  (action.id === 'brand-ai-optimize' && !onAiOptimize) ||
+                  (action.id === 'brand-create-design' && !onCreateDesign);
+                if (disabled) return null;
+                return (
+                  <button
+                    key={action.id}
+                    type="button"
+                    className={styles.toolboxRow}
+                    data-testid={`next-step-brand-action-${action.id}`}
+                    onClick={action.id === 'brand-ai-optimize' ? handleAiOptimize : handleCreateDesign}
+                  >
+                    <Icon name={action.icon} size={14} className={styles.toolboxRowIcon} />
+                    <span className={styles.toolboxRowTitle}>{action.title}</span>
+                    <Icon name="chevron-right" size={13} className={styles.toolboxRowArrow} />
+                  </button>
+                );
+              })
+            : null}
           {showDesignSystemRows
             ? DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => (
                 <button
@@ -329,6 +383,7 @@ export function NextStepActions({
               ))
             : null}
           {showToolbox && !showDesignSystemRows
+            && !showBrandRows
             ? FEATURED_DESIGN_TOOLBOX_ACTION_IDS.map((id) => {
                 const action = getDesignToolboxAction(id);
                 if (!action) return null;

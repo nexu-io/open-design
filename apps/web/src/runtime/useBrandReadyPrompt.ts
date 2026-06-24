@@ -11,9 +11,9 @@
 // guide the user there.
 //
 // We poll `/api/brands` while the backing project is a brand-extraction project
-// and stop the moment it reaches a terminal state. The prompt is shown at most
-// once per brand (a sessionStorage flag) so re-opening a finished project never
-// nags.
+// and stop the moment it reaches a terminal state. The prompt stays visible
+// until the user dismisses or acts on it; that manual action sets a
+// sessionStorage flag so a later visit does not nag again.
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ProjectMetadata } from '@open-design/contracts';
@@ -112,7 +112,7 @@ export function useBrandReadyPrompt(
     setPrompt(null);
     setBrowserAssist(null);
     if (!brandId) return undefined;
-    // Already nudged this brand to its ready state — don't nag on revisit.
+    // The user already dismissed or acted on this ready state.
     if (alreadyShown(brandId)) return undefined;
 
     let cancelled = false;
@@ -128,7 +128,6 @@ export function useBrandReadyPrompt(
       const status = summary?.meta.status;
       const designSystemId = summary?.meta.designSystemId;
       if (status === 'ready' && designSystemId) {
-        markShown(brandId);
         setPrompt({ designSystemId, brandName: summary?.brand?.name ?? null });
         return; // terminal — stop polling
       }
@@ -160,7 +159,10 @@ export function useBrandReadyPrompt(
     };
   }, [brandId]);
 
-  const dismiss = useCallback(() => setPrompt(null), []);
+  const dismiss = useCallback(() => {
+    if (brandId) markShown(brandId);
+    setPrompt(null);
+  }, [brandId]);
   const dismissBrowserAssist = useCallback(() => setBrowserAssist(null), []);
 
   return {

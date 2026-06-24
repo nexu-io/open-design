@@ -19,7 +19,6 @@ vi.mock('../../src/providers/registry', async () => {
       category: id === 'linear' ? 'Productivity & SaaS' : 'Custom',
       body: `# ${id}\n\n## Colors\n- Primary #111111`,
     })),
-    fetchDesignSystemShowcase: vi.fn(async () => '<main>Showcase</main>'),
     updateDesignSystemDraft: vi.fn(async () => null),
     deleteDesignSystemDraft: vi.fn(async () => true),
   };
@@ -71,7 +70,6 @@ describe('DesignSystemsTab', () => {
         systems={systems}
         selectedId="user:acme"
         onSelect={() => {}}
-        onPreview={() => {}}
         onCreate={() => {}}
         onOpenSystem={() => {}}
       />,
@@ -90,7 +88,6 @@ describe('DesignSystemsTab', () => {
         systems={systems}
         selectedId="user:acme"
         onSelect={() => {}}
-        onPreview={() => {}}
         onCreate={() => {}}
         onOpenSystem={() => {}}
       />,
@@ -112,7 +109,6 @@ describe('DesignSystemsTab', () => {
         systems={systems}
         selectedId="user:acme"
         onSelect={() => {}}
-        onPreview={() => {}}
         onCreate={() => {}}
         onOpenSystem={() => {}}
       />,
@@ -133,7 +129,6 @@ describe('DesignSystemsTab', () => {
         systems={systems}
         selectedId={null}
         onSelect={() => {}}
-        onPreview={() => {}}
         onCreate={onCreate}
         onOpenSystem={onOpenSystem}
       />,
@@ -154,7 +149,6 @@ describe('DesignSystemsTab', () => {
       <DesignSystemsTab
         systems={systems}
         selectedId={null}
-        onPreview={() => {}}
         onSelect={() => {}}
         onCreate={() => {}}
         onOpenSystem={onOpenSystem}
@@ -178,7 +172,6 @@ describe('DesignSystemsTab', () => {
         systems={systems}
         selectedId={null}
         onSelect={onSelect}
-        onPreview={() => {}}
         onCreate={() => {}}
         onOpenSystem={() => {}}
       />,
@@ -224,7 +217,6 @@ function renderTab(items: DesignSystemSummary[] = librarySystems) {
       systems={items}
       selectedId={null}
       onSelect={vi.fn()}
-      onPreview={vi.fn()}
     />,
   );
 }

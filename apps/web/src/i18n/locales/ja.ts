@@ -3419,6 +3419,7 @@ export const ja: Dict = {
   'ds.reset': 'リセット',
   'ds.editingDesignMdHint': 'この Markdown を編集すると、レンダリング済みのキットモジュールが更新されます。',
   'ds.editingModuleHint': '{module} モジュールのみ編集中です。',
+  'ds.manualEditModuleHint': 'Edit {module} here. Hover this section to reveal controls.',
   'ds.saveModule': 'モジュールを保存',
   'ds.uploadLogo': 'ロゴをアップロード',
   'ds.uploadImage': '画像をアップロード',

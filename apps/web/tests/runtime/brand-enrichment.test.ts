@@ -23,6 +23,8 @@ describe('brand enrichment runtime helpers', () => {
     expect(prompt).toContain('Do not create a duplicate system.');
     expect(prompt).toContain('10-20');
     expect(prompt).toContain('anti-bot verification page');
+    expect(prompt).toContain('frequency-rank colors and fonts');
+    expect(prompt).toContain('design best practices');
   });
 
   it('appends the quality bar to an existing extraction prompt without replacing context', () => {
@@ -31,6 +33,7 @@ describe('brand enrichment runtime helpers', () => {
     expect(prompt).toContain('Existing source URL: https://example.com');
     expect(prompt).toContain('AI Optimize quality bar:');
     expect(prompt).toContain('DESIGN.md, README.md, SKILL.md');
+    expect(prompt).toContain('content hierarchy, grid and density');
   });
 
   it('recognizes reopened programmatic brand extraction projects from persisted metadata', () => {
