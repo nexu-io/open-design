@@ -212,12 +212,12 @@ function findOpenTagEnd(text: string, from: number): number {
 
 function computeMarkdownFenceRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
-  const fenceRe = /^(?:```|~~~).*$/gm;
+  const fenceRe = /^ {0,3}(?:```|~~~).*$/gm;
   let open: { marker: string; start: number } | null = null;
   let match: RegExpExecArray | null = fenceRe.exec(text);
   while (match) {
     const line = match[0] ?? '';
-    const marker = line.startsWith('~~~') ? '~~~' : '```';
+    const marker = line.trimStart().startsWith('~~~') ? '~~~' : '```';
     if (!open) {
       open = { marker, start: match.index };
     } else if (marker === open.marker) {

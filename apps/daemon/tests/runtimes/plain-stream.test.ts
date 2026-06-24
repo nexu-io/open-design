@@ -136,4 +136,18 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]?.content).toBe('<!doctype html><html></html>');
   });
+
+  it('ignores artifact tags inside indented markdown code fences', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      '- Literal example:\n',
+      '   ```html\n',
+      '   <artifact type="text/html"><!doctype html><html><body>Example</body></html></artifact>\n',
+      '   ```\n',
+      '<artifact identifier="real" type="text/html"><!doctype html><html><body>Real</body></html></artifact>',
+    ].join(''));
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.fileName).toBe('real.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
 });
