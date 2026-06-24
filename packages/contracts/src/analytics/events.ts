@@ -2719,6 +2719,18 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   uncached_input_tokens?: number;
   estimated_context_tokens?: number;
   cache_hit_ratio?: number;
+  // Cache-hit of the turn's FIRST model call (vs `cache_hit_ratio`, which is the
+  // last/aggregate call). The first call is the session-reuse signal: within a
+  // turn, later calls re-read the growing cached prefix and inflate the
+  // aggregate regardless of reuse. Per-call-usage agents (claude/opencode/
+  // codebuddy/pi) source this from the stream; codex from its rollout.
+  first_call_input_tokens?: number;
+  first_call_cache_read_input_tokens?: number;
+  first_call_cache_hit_ratio?: number;
+  // Whether this run is a non-first turn (a prior completed assistant turn
+  // exists). Slice first_call_cache_hit_ratio by this to isolate the turns
+  // where session reuse applies.
+  is_followup_turn?: boolean;
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
