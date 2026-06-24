@@ -2405,9 +2405,8 @@ function OnboardingView({
                 body={t('settings.onboardingProfileBody')}
               />
               <div className="onboarding-view__form-grid">
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingRoleLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.role}
                   options={roleOptions}
                   onChange={(value) => {
@@ -2419,9 +2418,8 @@ function OnboardingView({
                     setProfile((current) => ({ ...current, role: value }));
                   }}
                 />
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingOrgSizeLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.orgSize}
                   options={orgSizeOptions}
                   onChange={(value) => {
@@ -2433,9 +2431,8 @@ function OnboardingView({
                     setProfile((current) => ({ ...current, orgSize: value }));
                   }}
                 />
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingUseCaseLabel')}
-                  placeholder={t('settings.onboardingSelectMultiplePlaceholder')}
                   value={profile.useCase}
                   options={useCaseOptions}
                   multiple
@@ -2459,9 +2456,8 @@ function OnboardingView({
                     setProfile((current) => ({ ...current, useCase: value }));
                   }}
                 />
-                <OnboardingDropdown
+                <OnboardingChipField
                   label={t('settings.onboardingSourceLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.source}
                   options={sourceOptions}
                   onChange={(value) => {
@@ -3127,6 +3123,65 @@ function OnboardingPanelHeader({ title, body }: { title: string; body: string })
     <div className="onboarding-view__panel-head">
       <h2>{title}</h2>
       <p>{body}</p>
+    </div>
+  );
+}
+
+type OnboardingChipFieldProps =
+  | {
+      label: string;
+      options: Array<{ value: string; label: string }>;
+      value: string;
+      onChange: (value: string) => void;
+      multiple?: false;
+    }
+  | {
+      label: string;
+      options: Array<{ value: string; label: string }>;
+      value: string[];
+      onChange: (value: string[]) => void;
+      multiple: true;
+    };
+
+// Profile fields render their options as flat toggleable chips so every choice
+// is visible and a selection takes one tap instead of opening a dropdown first.
+function OnboardingChipField(props: OnboardingChipFieldProps) {
+  const { label, options } = props;
+  const selected = props.multiple
+    ? props.value
+    : props.value
+      ? [props.value]
+      : [];
+
+  return (
+    <div className="onboarding-chip-field">
+      <span className="onboarding-chip-field__label">{label}</span>
+      <div className="onboarding-chip-field__chips">
+        {options.map((option) => {
+          const active = selected.includes(option.value);
+          return (
+            <button
+              type="button"
+              key={option.value}
+              className={`onboarding-chip${active ? ' is-selected' : ''}`}
+              aria-pressed={active}
+              onClick={() => {
+                if (props.multiple) {
+                  props.onChange(
+                    active
+                      ? props.value.filter((value) => value !== option.value)
+                      : [...props.value, option.value],
+                  );
+                } else {
+                  props.onChange(active ? '' : option.value);
+                }
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
