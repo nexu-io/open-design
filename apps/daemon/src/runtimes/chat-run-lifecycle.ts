@@ -114,10 +114,16 @@ export function resolveChatRunShutdownGraceMs() {
   return Math.max(0, Math.floor(raw));
 }
 
-export function resolveAcpStageTimeoutMs(): number | undefined {
+export function resolveAcpStageTimeoutMs(agentDefault?: number): number | undefined {
+  assertValidRuntimeDefInactivityTimeoutMs(agentDefault);
   const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
-  if (!Number.isFinite(raw)) return undefined;
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+  if (Number.isFinite(raw)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+  }
+  if (agentDefault !== undefined) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
+  }
+  return undefined;
 }
 
 type GeminiJsonEventStreamEvent = Record<string, unknown>;

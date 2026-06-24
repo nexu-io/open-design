@@ -281,4 +281,8 @@ export const amrAgentDef = {
   // selection comes from the live `vela models` catalog and is preflighted
   // before spawn.
   defaultModelEnvVar: 'VELA_DEFAULT_MODEL',
+  // Vela/OpenCode can spend extended stretches silent while the upstream
+  // provider is still working. Keep the outer chat watchdog aligned with the
+  // 30-minute ACP stage timeout so the daemon does not fail the run first.
+  inactivityTimeoutMs: 30 * 60 * 1000,
 } satisfies RuntimeAgentDef;

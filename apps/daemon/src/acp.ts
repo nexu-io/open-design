@@ -22,7 +22,7 @@ const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // mirroring the outer chat watchdog's escape-hatch semantics — without this,
 // `OD_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
 // ACP session on the next tick instead of disabling the watchdog.
-const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
+const DEFAULT_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
 const ACP_ARTIFACT_OPEN_PATTERN = String.raw`<\s*(?:\|?\s*DSML[\s,]+artifact\b|artifact\b)`;
 const ACP_GENERATED_FILE_PREFIX_PATTERN =
   String.raw`(?:here\s+is|here'?s)\s+the\s+generated\s+file\s*:?\s*(?:\r?\n|\s)*`;
