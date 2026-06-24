@@ -908,6 +908,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
+          # Resolving the queued PR via commits/<sha>/pulls is unreliable: the merge queue squashes,
+          # so the queued commits are NEW synthetic SHAs GitHub does not associate back to the PR —
+          # that found nothing and waved a needs-validation PR through (#4736). Enumerate the group's
+          # PRs from three sources and take the union (see below).
+          MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
@@ -915,24 +920,40 @@ jobs:
           if [ "$EVENT_NAME" != "merge_group" ]; then
             echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
           else
-            # Fail closed: capture each gh result into a plain assignment so a failed lookup
-            # trips set -e / pipefail and blocks the merge. Do NOT put the gh call in an `if`
-            # condition — a nonzero exit there is swallowed (read as "no label") and waves the
-            # merge through.
-            shas="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" --jq '.commits[].sha')"
-            prs=""
-            for s in $shas; do
-              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"
-              prs="$(printf '%s\n%s\n' "$prs" "$pulls")"
+            # Enumerate EVERY PR in the group from the union of three independent sources, so a
+            # batched group (more than one PR) cannot hide an unchecked PR behind the ref tip:
+            #   1. ref `.../pr-<N>-<sha>` — names the (tip) entry; squash-safe.
+            #   2. each commit subject's trailing `(#N)` — the queue's per-entry squash commit
+            #      carries its own PR number, so this recovers the NON-tip PRs of a batched group.
+            #   3. commits/<sha>/pulls — covers a non-squash queue where commits map back directly.
+            # Sources 2/3 depend on the compare API. Capture it in a REQUIRED assignment (no
+            # `|| true`) so an API failure trips set -e and blocks — otherwise an empty result would
+            # silently fall back to the ref tip and merge a batched needs-validation PR unchecked.
+            # Only grep no-match (an empty set within a SUCCESSFUL response) is tolerated.
+            compare_json="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA")"
+            ref_prs="$(printf '%s\n' "$MERGE_GROUP_REF" | grep -oE 'pr-[0-9]+' | grep -oE '[0-9]+' || true)"
+            msg_prs="$(printf '%s' "$compare_json" | jq -r '.commits[].commit.message | split("\n")[0]' | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' || true)"
+            assoc_prs=""
+            for s in $(printf '%s' "$compare_json" | jq -r '.commits[].sha'); do
+              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"   # required; failure blocks
+              assoc_prs="$(printf '%s\n%s\n' "$assoc_prs" "$pulls")"
             done
-            for pr in $(printf '%s\n' "$prs" | sort -u | grep -E '^[0-9]+$'); do
+            prs="$(printf '%s\n%s\n%s\n' "$ref_prs" "$msg_prs" "$assoc_prs" | grep -E '^[0-9]+$' | sort -u || true)"
+            if [ -z "$prs" ]; then
+              echo "::error::could not resolve any PR from merge_group ref '$MERGE_GROUP_REF' / commits — blocking merge (fail closed)."
+              exit 1
+            fi
+            for pr in $prs; do
+              # Plain assignment (not in an `if`) so a failed lookup trips set -e / pipefail and
+              # blocks rather than being read as "no label" and waving the merge through.
               labels="$(gh pr view "$pr" --repo "$REPO" --json labels --jq '.labels[].name')"
               if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
                 echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
                 exit 1
               fi
+              echo "PR #$pr: no needs-validation label."
             done
-            echo "No 'needs-validation' label in the queued group — clear to merge."
+            echo "No 'needs-validation' label in the queued group ($prs) — clear to merge."
           fi
 
   runtime_summary:
