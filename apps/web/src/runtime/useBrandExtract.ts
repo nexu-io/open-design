@@ -1,12 +1,11 @@
-// `useBrandExtract` — kick off an agent-driven brand extraction.
+// `useBrandExtract` — kick off a programmatic-first brand extraction.
 //
 // Extraction is no longer an in-place SSE pipeline. `POST /api/brands { url }`
-// reserves a brand record and stands up a backing `brand` project with the
-// target site open in an in-app browser tab plus a seeded prompt. The caller
-// navigates into that project and auto-sends the first prompt, so the agent
-// runs the extraction live — measuring the page, synthesizing the kit, and
-// registering the design system, pausing for the user when an anti-bot wall
-// needs a human. This hook just drives the kickoff request and exposes a
+// reserves a brand record, stands up a backing `brand` project with the target
+// site open in an in-app browser tab, and persists a real programmatic
+// transcript before returning. The deterministic pass then registers the design
+// system in the background, pausing for the user/agent fallback when an anti-bot
+// wall needs a human. This hook just drives the kickoff request and exposes a
 // coarse status the New Brand modal / onboarding step render.
 
 import { useCallback, useRef, useState } from 'react';

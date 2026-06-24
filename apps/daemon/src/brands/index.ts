@@ -1,15 +1,14 @@
 // Brand engine — public API consumed by brand-routes.ts.
 //
 // A "brand" = brand metadata (brand.json + meta.json under
-// `<brandsRoot>/<id>/`) PLUS a generated user design system. Extraction is now
-// AGENT-DRIVEN, not an in-place deterministic pipeline:
+// `<brandsRoot>/<id>/`) PLUS a generated user design system. Extraction is
+// programmatic-first, with the agent/browser path as fallback and enrichment:
 //
 //   1. startBrandExtraction — reserve the brand record, create a backing
-//      `brand` project with the target site open in an in-app browser tab, and
-//      seed a pending prompt that walks an agent through the full extraction
-//      chain (measure → synthesize → build the design system). The web/CLI
-//      caller navigates in and auto-sends, so the agent runs the extraction
-//      live in front of the user (who can clear anti-bot walls by hand).
+//      `brand` project with the target site open in an in-app browser tab, seed
+//      a real programmatic transcript, then run the deterministic harvest +
+//      design-system registration in the background. The caller navigates
+//      immediately, so the user sees the conversation while the kit extracts.
 //   2. finalizeBrand — once the agent has written `brand.json` (+ BRAND.md,
 //      logos, fonts) into the project, validate the kit, derive tokens +
 //      brand-system artifacts, and register the `user:<id>` design system so
@@ -114,8 +113,9 @@ export interface StartBrandExtractionOptions {
   imageryFallback?: ImageryFallbackFn;
   /** `<dataDir>/design-systems` — registry root. Required to run the
    *  programmatic-first extraction (which registers a `user:<id>` design system
-   *  synchronously). When omitted, no programmatic finalize runs and the brand
-   *  stays `extracting` for the agent to drive (the legacy behavior tests use). */
+   *  in the background). When omitted, no programmatic finalize runs and the
+   *  brand stays `extracting` for the agent to drive (the legacy behavior tests
+   *  use). */
   userDesignSystemsRoot?: string;
   /** Runtime data dir so the programmatically-built design system is sedimented
    *  into memory. Optional. */
@@ -124,16 +124,12 @@ export interface StartBrandExtractionOptions {
    *  extraction (tests inject a stub to stay offline). Defaults to the live
    *  network prefetch. */
   prefetch?: PrefetchFn;
-  /** Upper bound on how long the start response will WAIT for the synchronous
-   *  programmatic finalize before returning and letting it finish in the
-   *  background. Fast origins still finalize within the budget (the instant
-   *  "aha"); slow / blocked origins return immediately on a skeleton and the
-   *  finalize continues in the background. Defaults to
-   *  `BRAND_PROGRAMMATIC_SYNC_BUDGET_MS`. */
+  /** Deprecated no-op retained for older tests/callers. Brand starts now always
+   *  return immediately after the project, transcript, and skeleton page are
+   *  persisted; programmatic finalize settles in the background. */
   programmaticSyncBudgetMs?: number;
   /** Test/observability hook invoked with the background programmatic-extraction
-   *  promise whenever the start response returns before that work settles, so
-   *  callers (tests) can await completion deterministically. */
+   *  promise, so callers (tests) can await completion deterministically. */
   onBackgroundExtraction?: (settled: Promise<unknown>) => void;
   /** UI locale used to render static brand.html copy. */
   locale?: string;
@@ -331,12 +327,12 @@ export async function startBrandExtraction(
       : {}),
   });
 
-  // Programmatic-first: synchronously harvest + synthesize + finalize a usable
-  // design system before returning, so the caller navigates into a project whose
-  // design system is ALREADY registered and applyable (the instant "aha"). The
-  // agent's auto-sent prompt then runs as the async AI enrichment pass. Bounded
-  // and best-effort: a slow / blocked site (or any failure) leaves the brand
-  // `extracting` and the agent drives the extraction from the scaffold instead.
+  // Programmatic-first runs immediately, but never blocks the start response.
+  // The caller should land in the project with a real user/assistant transcript
+  // and the extracting skeleton already persisted while the deterministic
+  // harvester finalizes the design system in the background. Best-effort: a
+  // blocked, thin, or failing origin leaves the brand `extracting` for the
+  // agent/browser fallback to drive from the scaffold instead.
   const programmaticStartedAt = Date.now();
   const programmaticTranscript = runProgrammatic && opts.userDesignSystemsRoot
     ? seedProgrammaticExtractionStartTranscript({
@@ -370,89 +366,57 @@ export async function startBrandExtraction(
     if (opts.description) programmaticOptions.description = opts.description;
     if (designMd) programmaticOptions.designMd = designMd;
 
-    // The full programmatic finalize (harvest + synthesize + register) keeps
-    // running to completion — but the start response only WAITS for it up to a
-    // short budget. A fast origin finalizes within the budget so the caller
-    // still lands on a ready, applyable design system (the instant "aha"); a
-    // slow / blocked origin returns immediately on the "Extracting…" skeleton
-    // and the finalize sediments the design system in the background, after
-    // which the next `GET /api/brands/:id` (or a `preview`/`finalize` call)
-    // reflects it. Best-effort: a failure leaves the brand `extracting` for the
-    // agent to drive. PROGRAMMATIC_EXTRACT_TIMEOUT_MS still caps the background
-    // work so a hanging origin can never leak a forever-pending promise.
+    // Run the full programmatic finalize (harvest + synthesize + register) out
+    // of band. The timer defers even synchronous work inside
+    // runProgrammaticExtraction (notably DESIGN.md parsing) until after the HTTP
+    // route has a chance to return the ids that make the transcript visible in
+    // the left pane. PROGRAMMATIC_EXTRACT_TIMEOUT_MS still caps the work so a
+    // hanging origin can never leak a forever-pending promise.
     const settled = withTimeout(
-      runProgrammaticExtraction(programmaticOptions),
+      new Promise<BrandFinalizeResponse | null>((resolve, reject) => {
+        setTimeout(() => {
+          void runProgrammaticExtraction(programmaticOptions).then(resolve, reject);
+        }, 0);
+      }),
       PROGRAMMATIC_EXTRACT_TIMEOUT_MS,
     ).catch((err) => {
       console.warn(`[brand] programmatic extraction failed for ${id} — falling back to agent`, err);
       return null;
     });
-    const budget = opts.programmaticSyncBudgetMs ?? BRAND_PROGRAMMATIC_SYNC_BUDGET_MS;
-    const finishedInBudget = await Promise.race([
-      settled.then(() => true),
-      sleep(budget).then(() => false),
-    ]);
-    if (!finishedInBudget) opts.onBackgroundExtraction?.(settled);
-    if (!finishedInBudget) {
-      void settled
-        .then(() =>
-          seedReadyProgrammaticExtractionTranscript({
-            db,
-            conversationId,
-            randomId,
-            sourceUrl: url,
-            sourceLabel: host,
-            brandsRoot,
-            projectsRoot,
-            projectId,
-            locale,
-            startedAt: programmaticStartedAt,
-            transcript: programmaticTranscript,
-            transcriptAgent: opts.transcriptAgent,
-            metadata: {
-              ...metadata,
-              entryFile: BRAND_KIT_FILE,
-            },
-          }),
-        )
-        .catch((err) => {
-          if (isClosedDatabaseError(err)) return;
-          console.warn(`[brand] failed to seed programmatic extraction transcript for ${id}`, err);
-        });
-    }
+    opts.onBackgroundExtraction?.(settled);
+    void settled
+      .then(() =>
+        seedReadyProgrammaticExtractionTranscript({
+          db,
+          conversationId,
+          randomId,
+          sourceUrl: url,
+          sourceLabel: host,
+          brandsRoot,
+          projectsRoot,
+          projectId,
+          locale,
+          startedAt: programmaticStartedAt,
+          transcript: programmaticTranscript,
+          transcriptAgent: opts.transcriptAgent,
+          metadata: {
+            ...metadata,
+            entryFile: BRAND_KIT_FILE,
+          },
+        }),
+      )
+      .catch((err) => {
+        if (isClosedDatabaseError(err)) return;
+        console.warn(`[brand] failed to seed programmatic extraction transcript for ${id}`, err);
+      });
   }
 
-  const latest = readBrandDetail(brandsRoot, id);
-  if ((latest?.meta.status ?? meta.status) === 'ready' && latest?.meta.designSystemId) {
-    await seedProgrammaticExtractionTranscript({
-      db,
-      conversationId,
-      randomId,
-      sourceUrl: url,
-      sourceLabel: host,
-      brandName: latest?.brand?.name ?? host,
-      designSystemId: latest.meta.designSystemId,
-      projectsRoot,
-      projectId,
-      locale,
-      startedAt: programmaticStartedAt,
-      transcript: programmaticTranscript,
-      transcriptAgent: opts.transcriptAgent,
-      metadata: {
-        ...metadata,
-        entryFile: BRAND_KIT_FILE,
-        brandDesignSystemId: latest.meta.designSystemId,
-      },
-    });
-  }
   return {
     id,
     projectId,
     conversationId,
     sourceUrl: url,
-    status: latest?.meta.status ?? meta.status,
-    ...(latest?.meta.designSystemId ? { designSystemId: latest.meta.designSystemId } : {}),
-    ...(latest?.brand?.name ? { brandName: latest.brand.name } : {}),
+    status: meta.status,
   };
 }
 
@@ -725,24 +689,12 @@ async function brandExtractionProducedFiles(
   }];
 }
 
-/** How long `startBrandExtraction` waits for the synchronous programmatic
- *  finalize before returning and letting it complete in the background. Tuned
- *  to keep navigation snappy: fast sites still finalize in time for the instant
- *  "aha", slow ones never block the user from entering the project. */
-const BRAND_PROGRAMMATIC_SYNC_BUDGET_MS = 1_200;
-
-/** Resolve after `ms`. */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Upper bound on the synchronous programmatic-first extraction so a slow or
- *  hanging origin can never block the start response indefinitely; on timeout
- *  the brand simply stays `extracting` for the agent to finish. */
+/** Upper bound on the background programmatic-first extraction so a slow or
+ *  hanging origin can never leave a permanently pending transcript update. */
 const PROGRAMMATIC_EXTRACT_TIMEOUT_MS = 45_000;
 
-/** Resolve `p`, or reject once `ms` elapses. The underlying work keeps running
- *  (and may still mark the brand ready) — we only stop awaiting it. */
+/** Resolve `p`, or reject once `ms` elapses. The underlying work may still
+ *  finish, but the background transcript updater stops awaiting it. */
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);

@@ -172,16 +172,14 @@ export interface BrandCreateRequest {
 
 /**
  * POST /api/brands response. Extraction is two-phase:
- *   1. PROGRAMMATIC-FIRST (synchronous): the daemon harvests the site
- *      deterministically (logo, palette, typography, one-line description,
- *      cover imagery, source URL), synthesizes a valid design system with NO
- *      LLM, and finalizes + registers it before responding — so the caller
- *      lands on a usable, applyable design system within seconds (the "aha").
- *   2. ASYNC AI ENRICHMENT: the backing `brand` project carries a seeded prompt
- *      the caller auto-sends; the agent re-measures precisely and re-finalizes
- *      in place (same `user:<id>` design system), updating every artifact.
- * A fully blocked / unreachable origin skips phase 1 and stays `extracting`
- * for the agent to drive — with a human in the loop for anti-bot walls.
+ *   1. START: the daemon reserves the brand/project/conversation, persists the
+ *      extracting `brand.html` skeleton, seeds real programmatic user/assistant
+ *      messages, and returns immediately so the caller can navigate in.
+ *   2. BACKGROUND PROGRAMMATIC EXTRACTION: the daemon harvests the site or
+ *      pasted DESIGN.md without an LLM, registers `user:<id>` when successful,
+ *      and updates the same assistant message with completion + produced files.
+ * A fully blocked / unreachable origin stays `extracting` for the agent/browser
+ * fallback — with a human in the loop for anti-bot walls.
  */
 export interface BrandExtractStartResponse {
   /** The reserved brand id (status starts as `extracting`). */
@@ -192,11 +190,11 @@ export interface BrandExtractStartResponse {
   conversationId: string;
   /** The normalized source URL the browser tab was opened to. */
   sourceUrl: string;
-  /** Current lifecycle after the bounded programmatic-first pass. */
+  /** Current lifecycle at project creation time; normally `extracting`. */
   status: BrandStatus;
-  /** Present when the fast pass already registered an applyable `user:<id>` design system. */
+  /** Present only for legacy callers/edge paths that already have a registered system. */
   designSystemId?: string;
-  /** Display name from the fast pass, when available. */
+  /** Display name when already available. */
   brandName?: string;
 }
 

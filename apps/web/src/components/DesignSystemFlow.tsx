@@ -361,8 +361,9 @@ export function DesignSystemCreationFlow({
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Two-phase brand/design-system extraction kickoff (POST /api/brands):
-  // a fast programmatic pass registers a usable user:<id> design system
-  // synchronously, then the brand-extract skill enriches it in the project.
+  // the daemon creates the project + real transcript immediately, then the
+  // programmatic pass registers a usable user:<id> design system in the
+  // background.
   const brandExtract = useBrandExtract();
   const composioConfigured = isComposioConfigured(config?.composio);
   const [githubConnector, setGithubConnector] = useState<ConnectorDetail | null>(null);
@@ -868,9 +869,9 @@ export function DesignSystemCreationFlow({
     }
     try {
       // Two-phase extraction. The website link (a real site, not a GitHub repo)
-      // drives the kickoff. POST /api/brands runs a fast programmatic pass that
-      // registers a usable user:<id> design system synchronously, then stands up
-      // a backing project where the brand-extract skill enriches it live.
+      // drives the kickoff. POST /api/brands creates the backing project and
+      // real transcript immediately, then the programmatic pass registers a
+      // usable user:<id> design system in the background.
       const extractUrl =
         nonGithubSourceUrlsFromState(state)[0] ?? sourceUrlsFromState(state)[0] ?? '';
       const fallbackDesignMd = !extractUrl && !hasDesignMd

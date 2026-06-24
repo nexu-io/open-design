@@ -336,9 +336,10 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('"brandReady":"设计体系已就绪"');
   });
 
-  it('seeds a completed chat transcript when the programmatic pass returns ready', async () => {
+  it('seeds a running chat transcript immediately and completes it when the programmatic pass returns ready', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const startedBeforeRequest = Date.now();
+    let backgroundExtraction: Promise<unknown> | null = null;
 
     const result = await startOfflineBrandExtraction({
       designMd: DESIGN_MD_INPUT,
@@ -347,27 +348,49 @@ describe('agent-driven brand extraction engine', () => {
       userDesignSystemsRoot,
       skillsRoot: SKILLS_ROOT,
       db,
-      programmaticSyncBudgetMs: 10_000,
       logoFallback: NO_LOGO_FALLBACK,
       transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
-    const endedAfterRequest = Date.now();
+    const returnedAfterRequest = Date.now();
 
-    expect(result.status).toBe('ready');
-    expect(result.designSystemId).toBeTruthy();
-    const messages = listMessages(db, result.conversationId);
-    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
-    expect(messages[0]?.content).toContain('pasted DESIGN.md');
-    expect(messages[1]?.content).toContain('Programmatic extraction finished');
-    expect(messages[1]?.agentId).toBe('claude');
-    expect(messages[1]?.agentName).toBe('Claude');
-    expect(messages[1]?.runStatus).toBe('succeeded');
-    expect(messages[0]?.createdAt).toBe(messages[1]?.startedAt);
-    expect(messages[1]?.startedAt).toBeGreaterThanOrEqual(startedBeforeRequest);
-    expect(messages[1]?.endedAt).toBeLessThanOrEqual(endedAfterRequest);
-    expect(messages[1]?.endedAt).toBeGreaterThanOrEqual(messages[1]?.startedAt ?? 0);
-    const producedFiles = (Array.isArray(messages[1]?.producedFiles)
-      ? messages[1].producedFiles
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toBeUndefined();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('pasted DESIGN.md');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.agentId).toBe('claude');
+    expect(initialMessages[1]?.agentName).toBe('Claude');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+    expect(initialMessages[0]?.createdAt).toBe(initialMessages[1]?.startedAt);
+    expect(initialMessages[1]?.startedAt).toBeGreaterThanOrEqual(startedBeforeRequest);
+    expect(initialMessages[1]?.endedAt).toBeUndefined();
+
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const endedAfterCompletion = Date.now();
+
+    const completedMessages = listMessages(db, result.conversationId);
+    expect(completedMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(completedMessages[1]?.content).toContain('Programmatic extraction finished');
+    expect(completedMessages[1]?.agentId).toBe('claude');
+    expect(completedMessages[1]?.agentName).toBe('Claude');
+    expect(completedMessages[1]?.runStatus).toBe('succeeded');
+    expect(completedMessages[0]?.createdAt).toBe(completedMessages[1]?.startedAt);
+    expect(completedMessages[1]?.startedAt).toBe(initialMessages[1]?.startedAt);
+    expect(completedMessages[1]?.endedAt).toBeGreaterThanOrEqual(returnedAfterRequest);
+    expect(completedMessages[1]?.endedAt).toBeLessThanOrEqual(endedAfterCompletion);
+    expect(completedMessages[1]?.endedAt).toBeGreaterThanOrEqual(completedMessages[1]?.startedAt ?? 0);
+    const producedFiles = (Array.isArray(completedMessages[1]?.producedFiles)
+      ? completedMessages[1].producedFiles
       : []) as Array<{ name?: unknown }>;
     const producedNames = producedFiles
       .map((file) => file.name)
@@ -375,6 +398,9 @@ describe('agent-driven brand extraction engine', () => {
     expect(producedNames).toContain('brand.html');
     expect(producedNames.some((name: string) => name.startsWith('system/'))).toBe(true);
     expect(producedNames.length).toBeGreaterThan(1);
+    const detail = readBrandDetail(brandsRoot, result.id);
+    expect(detail?.meta.status).toBe('ready');
+    expect(detail?.meta.designSystemId?.startsWith('user:')).toBe(true);
   });
 
   it('keeps the programmatic transcript when other messages arrive before background completion', async () => {
@@ -392,7 +418,6 @@ describe('agent-driven brand extraction engine', () => {
       userDesignSystemsRoot,
       skillsRoot: SKILLS_ROOT,
       db,
-      programmaticSyncBudgetMs: 0,
       logoFallback: NO_LOGO_FALLBACK,
       prefetch: async (url) => {
         await prefetchGate;
@@ -1138,8 +1163,9 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('imagery/cover-0.jpg');
   });
 
-  it('startBrandExtraction finalizes a usable design system programmatically before returning', async () => {
+  it('startBrandExtraction starts programmatic design-system extraction in the background', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
 
     // Stub the network harvest: write a real logo into the brand dir and return
     // measured material, exactly as the live prefetch would, but offline.
@@ -1192,22 +1218,45 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: stubPrefetch,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
 
-    // The design system is registered + ready the moment startBrandExtraction
-    // returns — no agent run required (the instant "aha").
+    // The project and transcript are available immediately while the
+    // deterministic harvest continues in the background.
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toBeUndefined();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('https://acme.com/');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // The background pass registers and syncs the usable design system — no
+    // agent run required.
     const detail = readBrandDetail(brandsRoot, result.id);
     expect(detail?.meta.status).toBe('ready');
     expect(detail?.meta.designSystemId?.startsWith('user:')).toBe(true);
     expect(detail?.brand?.name).toBe('Acme');
     expect(detail?.brand?.tagline).toBe('We make things');
     expect(detail?.brand?.logo.primary).toBe('logos/header.svg');
-    expect(result.status).toBe('ready');
-    expect(result.designSystemId).toBe(detail?.meta.designSystemId);
-    expect(result.brandName).toBe('Acme');
+    const completedMessages = listMessages(db, result.conversationId);
+    const completedAssistant = completedMessages.find((message) =>
+      message.content.includes('Programmatic extraction finished'),
+    );
+    expect(completedAssistant?.runStatus).toBe('succeeded');
 
     // The backing project's design system page renders ready, with the six
-    // artifacts built, so it is immediately applyable.
+    // artifacts built, so it is applyable once the background pass settles.
     const projectDir = path.join(projectsRoot, result.projectId);
     const html = readFileSync(path.join(projectDir, 'brand.html'), 'utf8');
     expect(html).toContain('"status":"ready"');
@@ -1230,6 +1279,7 @@ describe('agent-driven brand extraction engine', () => {
 
   it('startBrandExtraction registers directly from a pasted DESIGN.md without a website', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
 
     const result = await startOfflineBrandExtraction({
       designMd: DESIGN_MD_INPUT,
@@ -1244,7 +1294,26 @@ describe('agent-driven brand extraction engine', () => {
       },
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
+
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toBeUndefined();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('pasted DESIGN.md');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
 
     const detail = readBrandDetail(brandsRoot, result.id);
     expect(detail?.meta.status).toBe('ready');
@@ -1254,8 +1323,11 @@ describe('agent-driven brand extraction engine', () => {
     expect(detail?.brand?.description).toContain('custom newsroom');
     expect(detail?.brand?.colors.find((color) => color.role === 'accent')?.hex).toBe('#b8422e');
     expect(detail?.brand?.typography.display.family).toBe('Public Sans');
-    expect(result.status).toBe('ready');
-    expect(result.designSystemId).toBe(detail?.meta.designSystemId);
+    const completedMessages = listMessages(db, result.conversationId);
+    const completedAssistant = completedMessages.find((message) =>
+      message.content.includes('Programmatic extraction finished'),
+    );
+    expect(completedAssistant?.runStatus).toBe('succeeded');
 
     const projectDir = path.join(projectsRoot, result.projectId);
     expect(readFileSync(path.join(projectDir, 'context', 'input-DESIGN.md'), 'utf8')).toContain('name: Heritage');
@@ -1427,8 +1499,6 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: stubPrefetch,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
-      // Keep the test snappy: a short sync budget, well under the slow harvest.
-      programmaticSyncBudgetMs: 200,
       onBackgroundExtraction: (settled) => {
         background = settled;
       },
