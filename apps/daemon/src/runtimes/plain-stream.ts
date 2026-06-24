@@ -42,6 +42,9 @@ type ListFiles = (
 const OPEN_TAG = '<artifact';
 const CLOSE_TAG = '</artifact>';
 const MAX_ARTIFACTS_PER_RUN = 50;
+const HEADING_RE = /^#{1,4}\s+/;
+const UL_ITEM_RE = /^\s*[-*+]\s+/;
+const OL_ITEM_RE = /^\s*\d+\.\s+/;
 
 const TYPE_TO_EXTENSION = new Map<string, SupportedArtifactExtension>([
   ['html', '.html'],
@@ -240,21 +243,62 @@ function computeMarkdownInlineCodeRanges(
   fenceRanges: ReadonlyArray<[number, number]>,
 ): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
-  let i = 0;
-  while (i < text.length) {
-    if (text.charAt(i) !== '`' || rangeContains(fenceRanges, i)) {
-      i += 1;
-      continue;
+  for (const [start, end] of computeMarkdownInlineBlockRanges(text, fenceRanges)) {
+    let i = start;
+    while (i < end) {
+      const idx = text.indexOf('`', i);
+      if (idx === -1 || idx >= end) break;
+      const tickCount = countBacktickRun(text, idx);
+      const close = findMatchingBacktickRun(text, idx + tickCount, tickCount, fenceRanges, end);
+      if (close === -1) {
+        i = idx + tickCount;
+        continue;
+      }
+      ranges.push([idx, close + tickCount]);
+      i = close + tickCount;
     }
-    const tickCount = countBacktickRun(text, i);
-    const close = findMatchingBacktickRun(text, i + tickCount, tickCount, fenceRanges);
-    if (close === -1) {
-      i += tickCount;
-      continue;
-    }
-    ranges.push([i, close + tickCount]);
-    i = close + tickCount;
   }
+  return ranges;
+}
+
+function computeMarkdownInlineBlockRanges(
+  text: string,
+  fenceRanges: ReadonlyArray<[number, number]>,
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let pos = 0;
+  let blockStart = -1;
+
+  const closeBlockBefore = (idx: number) => {
+    if (blockStart !== -1 && idx > blockStart) ranges.push([blockStart, idx]);
+    blockStart = -1;
+  };
+
+  while (pos < text.length) {
+    const fenceRange = rangeContaining(fenceRanges, pos);
+    if (fenceRange) {
+      closeBlockBefore(pos);
+      pos = fenceRange[1];
+      continue;
+    }
+
+    const eol = text.indexOf('\n', pos);
+    const lineEnd = eol === -1 ? text.length : eol;
+    const line = text.slice(pos, lineEnd);
+
+    if (line.trim() === '') {
+      closeBlockBefore(pos);
+    } else if (HEADING_RE.test(line) || UL_ITEM_RE.test(line) || OL_ITEM_RE.test(line)) {
+      closeBlockBefore(pos);
+      ranges.push([pos, lineEnd]);
+    } else if (blockStart === -1) {
+      blockStart = pos;
+    }
+
+    pos = eol === -1 ? text.length : eol + 1;
+  }
+
+  closeBlockBefore(text.length);
   return ranges;
 }
 
@@ -269,11 +313,12 @@ function findMatchingBacktickRun(
   from: number,
   tickCount: number,
   fenceRanges: ReadonlyArray<[number, number]>,
+  until: number,
 ): number {
   let i = from;
-  while (i < text.length) {
+  while (i < until) {
     const idx = text.indexOf('`', i);
-    if (idx === -1) return -1;
+    if (idx === -1 || idx >= until) return -1;
     if (rangeContains(fenceRanges, idx)) {
       i = idx + 1;
       continue;
@@ -283,6 +328,13 @@ function findMatchingBacktickRun(
     i = idx + candidateCount;
   }
   return -1;
+}
+
+function rangeContaining(
+  ranges: ReadonlyArray<[number, number]>,
+  idx: number,
+): [number, number] | null {
+  return ranges.find(([start, end]) => idx >= start && idx < end) ?? null;
 }
 
 function rangeContains(ranges: ReadonlyArray<[number, number]>, idx: number): boolean {

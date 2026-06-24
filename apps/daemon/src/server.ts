@@ -8745,6 +8745,7 @@ export async function startServer({
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            const failureMessage = `Failed to persist plain-stream artifact(s): ${message}`;
             console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
             send('agent', {
               type: 'diagnostic',
@@ -8752,6 +8753,11 @@ export async function startServer({
               source: 'daemon-run-finalize',
               message,
             });
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              failureMessage,
+            ));
+            return finishWithRetryDecision('failed', 1, null);
           }
         }
       }

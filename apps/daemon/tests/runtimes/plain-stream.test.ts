@@ -161,4 +161,18 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts[0]?.fileName).toBe('real.html');
     expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
   });
+
+  it('does not let unmatched backticks hide artifact tags in later paragraphs', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      'Intro with a stray ` backtick.',
+      '',
+      '<artifact identifier="real" type="text/html"><!doctype html><html><body>Real</body></html></artifact>',
+      '',
+      'Another stray ` backtick later.',
+    ].join('\n'));
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.fileName).toBe('real.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
 });

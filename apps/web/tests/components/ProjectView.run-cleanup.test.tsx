@@ -262,6 +262,19 @@ describe('terminal replay artifact recovery', () => {
     expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
   });
 
+  it('reuses same-turn non-html artifact files with collision suffixes', () => {
+    const cssArtifact: Artifact = {
+      identifier: '',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme-2.css', 'code', 1_000);
+
+    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+  });
+
   it('does not reuse same-turn html files before checking recovered content', () => {
     const htmlArtifact: Artifact = {
       identifier: 'landing',

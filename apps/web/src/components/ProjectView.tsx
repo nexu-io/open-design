@@ -8474,6 +8474,12 @@ function artifactBaseNameFor(art: Artifact): string {
   );
 }
 
+function artifactFileNamePattern(baseName: string, ext: string): RegExp {
+  const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escapedBaseName}(?:-\\d+)?${escapedExt}$`);
+}
+
 export function findExistingArtifactProjectFile(
   art: Artifact,
   projectFiles: ProjectFile[],
@@ -8504,7 +8510,16 @@ export function findExistingArtifactProjectFile(
     if (manifestMatches[0]) return manifestMatches[0];
   }
 
-  return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
+  const exactNameMatch = currentRunFiles.find((file) => file.name === candidateFileName);
+  if (exactNameMatch) return exactNameMatch;
+  if (ext !== '.html') {
+    const namePattern = artifactFileNamePattern(baseName, ext);
+    const suffixedMatches = currentRunFiles
+      .filter((file) => namePattern.test(file.name))
+      .sort((a, b) => b.mtime - a.mtime);
+    if (suffixedMatches[0]) return suffixedMatches[0];
+  }
+  return null;
 }
 
 export function findExistingNonHtmlArtifactProjectFile(
