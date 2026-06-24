@@ -14,7 +14,7 @@ services:
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=192}
-      - OD_BIND_HOST=0.0.0.0
+      - OD_BIND_HOST=${OD_BIND_HOST:-127.0.0.1}
       - OD_PORT=7456
       # Derive from OPEN_DESIGN_PORT so origin validation always trusts the
       # published host port. Set OD_WEB_PORT in .env to override.
