@@ -13,6 +13,7 @@ import type {
   TrackingConfigureType,
   TrackingRuntimeType,
 } from './public-params.js';
+import type { ReleaseChannel } from '@open-design/release';
 
 // ---- Event names ---------------------------------------------------------
 
@@ -34,6 +35,11 @@ export type AnalyticsEventName =
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_apply_observed'
+  // Packaged startup failure — emitted by the packaged MAIN process (not the
+  // daemon) when daemon/web sidecars die before reporting status, i.e. the
+  // pre-daemon crash class that produces zero telemetry today (issue #4638).
+  // A `captureSafety`-class stability event; see apps/packaged/src/startup-telemetry.ts.
+  | 'packaged_runtime_failed'
   // File manager
   | 'file_upload_result'
   // Artifact
@@ -111,6 +117,7 @@ export type TrackingProjectKind =
   // `hyperframes-html` as a secondary anchor.
   | 'hyperframes'
   | 'audio'
+  | 'brand'
   // `design_system` covers DS-as-project runs (creation + regeneration).
   // The dashboard reads it on run_created / run_finished to split the
   // DS generation funnel from regular artifact runs.
@@ -268,6 +275,7 @@ export type TrackingRunFailureDetail =
   | 'model_not_found'
   | 'model_not_supported'
   | 'model_disabled'
+  | 'local_model_not_loaded'
   | 'cli_version_incompatible'
   | 'prompt_too_large'
   | 'upstream_5xx'
@@ -290,6 +298,7 @@ export type TrackingRunFailureDetail =
   | 'spawn_eperm'
   | 'stdin_write_eof'
   | 'agent_protocol_error'
+  | 'session_resume_expired'
   | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
@@ -298,6 +307,9 @@ export type TrackingRunFailureDetail =
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
+  | 'stream_error'
+  | 'exit_nonzero'
+  | 'fatal_rpc_error'
   | 'execution_failed'
   | 'user_cancelled'
   | 'unknown';
@@ -460,25 +472,28 @@ export type TrackingChatPanelPageViewSource =
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
 // welcome flow. The current first-run flow is Connect → About you →
-// Newsletter; the design-system and generation literals remain in the
-// contract for historical rows and a future reintroduction. Each step's `step_index` / `step_name`
-// must match the enum pairs below. `onboarding_session_id` is generated once
-// per session so dashboards can stitch the funnel.
+// Newsletter → Brand extraction; the design-system and generation literals
+// remain in the contract for historical rows and a future reintroduction.
+// Each step's `step_index` / `step_name` must match the enum pairs below.
+// `onboarding_session_id` is generated once per session so dashboards can
+// stitch the funnel.
 export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
   | 'newsletter'
+  | 'brand'
   | 'design_system'
   | 'generation_progress';
 
-// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3'`
+// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3' | '4'`
 // and the generation phase as `'progress'`. Mirrors the v2 doc literally.
-export type TrackingOnboardingStepIndex = '1' | '2' | '3' | 'progress';
+export type TrackingOnboardingStepIndex = '1' | '2' | '3' | '4' | 'progress';
 
 export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
   | 'newsletter'
+  | 'brand_extract'
   | 'design_system'
   | 'generation';
 
@@ -2710,12 +2725,32 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   uncached_input_tokens?: number;
   estimated_context_tokens?: number;
   cache_hit_ratio?: number;
+  // Cache-hit of the turn's FIRST model call (vs `cache_hit_ratio`, which is the
+  // last/aggregate call). The first call is the session-reuse signal: within a
+  // turn, later calls re-read the growing cached prefix and inflate the
+  // aggregate regardless of reuse. Per-call-usage agents (claude/opencode/
+  // codebuddy/pi) source this from the stream; codex from its rollout.
+  first_call_input_tokens?: number;
+  first_call_cache_read_input_tokens?: number;
+  first_call_cache_hit_ratio?: number;
+  // Whether this run is a non-first turn (a prior completed assistant turn
+  // exists). Slice first_call_cache_hit_ratio by this to isolate the turns
+  // where session reuse applies.
+  is_followup_turn?: boolean;
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
   process_spawn_duration_ms?: number;
   time_to_first_token_ms?: number;
   spawn_to_first_token_ms?: number;
+  // `spawn_to_first_token_ms` split into auditable subsegments so dashboards
+  // can separate local CLI startup from session handshake from provider
+  // first-token latency. The four parts sum back to `spawn_to_first_token_ms`
+  // (absent subsegments count as 0 and roll into the remainder).
+  cli_ready_ms?: number;
+  session_init_ms?: number;
+  model_first_token_ms?: number;
+  spawn_to_first_token_remainder_ms?: number;
   generation_duration_ms?: number;
   tool_call_count?: number;
   tool_duration_ms?: number;
@@ -2773,6 +2808,8 @@ export interface RunRetryBaseProps {
 
 export interface RunRetryAttemptedProps extends RunRetryBaseProps {
   retry_reason: 'transient_failure';
+  // Backoff delay (ms) waited before this retry attempt was restarted.
+  retry_delay_ms?: number;
 }
 
 export interface RunRetryFinishedProps extends RunRetryBaseProps {
@@ -2799,7 +2836,7 @@ export type TrackingUpdateApplyElapsedBucket =
 
 export interface UpdateApplyObservedProps {
   flow_id: string;
-  channel: 'stable' | 'beta' | 'nightly' | 'preview';
+  channel: ReleaseChannel;
   namespace: string;
   platform: string;
   arch: string;
@@ -3036,9 +3073,44 @@ export interface SettingsConnectorAuthResultProps {
   error_code?: string;
 }
 
+// ---- Packaged startup failure --------------------------------------------
+
+export type PackagedStartupFailureKind =
+  | 'daemon-start'
+  | 'web-start'
+  | 'path-access'
+  | 'unknown';
+
+// Event-specific props for `packaged_runtime_failed`. Emitted by the packaged
+// MAIN process (apps/packaged/src/startup-telemetry.ts) over a direct PostHog
+// capture when daemon/web sidecars die before reporting status — the pre-daemon
+// crash class that otherwise produces no telemetry (issue #4638). The shared
+// safety-event envelope (event_schema_version / env / device_id / client_type /
+// capture_source / $insert_id / $os) is stamped at emit time, mirroring
+// `captureSafety` in apps/daemon/src/analytics.ts; these are the event-specific
+// fields on top of it.
+export interface PackagedRuntimeFailedProps {
+  failure_kind: PackagedStartupFailureKind;
+  exit_code: number | null;
+  signal: string | null;
+  error_name: string;
+  // Pulled from the dead sidecar's log tail (e.g. `ERR_MODULE_NOT_FOUND`).
+  error_code: string | null;
+  // The unresolved module when error_code is a module-resolution failure
+  // (e.g. `better-sqlite3` for #4638).
+  missing_module: string | null;
+  // Scrubbed of the user's home dir before send.
+  log_path: string | null;
+  app_version: string | null;
+  namespace: string;
+  source: string;
+  platform: string;
+}
+
 // ---- Discriminated union of all event payloads ---------------------------
 
 export type AnalyticsEventPayload =
+  | { event: 'packaged_runtime_failed'; props: PackagedRuntimeFailedProps }
   | { event: 'page_view'; props: PageViewProps }
   | { event: 'ui_click'; props: UiClickProps }
   | { event: 'surface_view'; props: SurfaceViewProps }
@@ -3102,7 +3174,7 @@ export function sessionModeToTracking(
 }
 
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
-//   'prototype' | 'deck' | 'template' | 'other' | 'image' | 'video' | 'audio'
+//   'prototype' | 'deck' | 'template' | 'other' | 'brand' | 'image' | 'video' | 'audio'
 // Discriminates HyperFrames from generic AI video. A HyperFrames project is
 // stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
 // (the local HTML→MP4 renderer); callers pass that videoModel through so the
@@ -3131,6 +3203,8 @@ export function projectKindToTracking(
       return videoModel === HYPERFRAMES_VIDEO_MODEL ? 'hyperframes' : 'video';
     case 'audio':
       return 'audio';
+    case 'brand':
+      return 'brand';
     case 'live-artifact':
     case 'live_artifact':
       return 'live_artifact';

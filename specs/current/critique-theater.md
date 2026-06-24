@@ -413,7 +413,7 @@ Reopening an artifact loads the badge from SQLite columns. Clicking expand trigg
 | User Interrupt | `POST /api/projects/:id/critique/:runId/interrupt` | cascade `SIGTERM`, persist partial state, ship best-so-far if any round closed, otherwise mark `interrupted` with no final. |
 | CLI process crash | spawn handle exits non-zero before `<SHIP>` | persist partial transcript, mark `failed` with `rounds_json.cause`, emit `critique.failed`, never silently retry. |
 | Daemon restart mid-run | next boot scans SQLite for rows in state `running` older than `totalTimeoutMs` | mark `interrupted` with `rounds_json.recoveryReason = "daemon_restart"`. Never auto-resume. |
-| Adapter unsupported | adapter fails conformance test in nightly CI | adapter marked `critique:degraded` in adapter registry with 24h TTL. UI shows the degraded banner once per session per adapter. |
+| Adapter unsupported | adapter fails conformance test in prerelease CI | adapter marked `critique:degraded` in adapter registry with 24h TTL. UI shows the degraded banner once per session per adapter. |
 
 ### Failure-mode rate targets and recovery
 
@@ -506,7 +506,7 @@ A separate security review pass runs through the `code-reviewer` agent before me
 | Golden-file fixtures | vitest with `__fixtures__/critique/v1/*.txt` | Each adapter has at least one happy and two malformed transcripts on disk. |
 | Component | RTL + jsdom | Every reducer phase rendered at least once. |
 | Integration | vitest + sqlite memory + http mock | End-to-end happy path plus five failure modes. |
-| Adapter conformance | nightly e2e against live adapters | Each of 12 CLIs plus BYOK proxy must pass canonical brief. |
+| Adapter conformance | prerelease e2e against live adapters | Each of 12 CLIs plus BYOK proxy must pass canonical brief. |
 | Playwright e2e | `e2e/critique-theater.spec.ts` | Theater renders within 200 ms, Esc triggers Interrupt, replay scrub at 60 fps. |
 | Visual regression | Playwright `toHaveScreenshot()` | Each Theater state captured at 375 / 768 / 1280 viewports. |
 | A11y self-test | axe-playwright | Theater UI passes WCAG AA. |

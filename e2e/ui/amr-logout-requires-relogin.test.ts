@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { expect, test } from '@/playwright/suite';
 
 import { writeFakeVelaBin } from '@/amr';
+import { runErrorCard } from '@/playwright/chat';
+import { T } from '@/timeouts';
 import {
   createProjectViaApi,
   gotoProject,
@@ -13,6 +15,8 @@ import {
   seedBrowserConfig,
   sendPrompt,
 } from '@/playwright/amr';
+
+test.describe.configure({ timeout: T.long });
 
 test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AMR selected', async ({ page }) => {
   const root = join(tmpdir(), `open-design-amr-logout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -98,7 +102,7 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await putAppConfig(page, reloginConfig);
   await sendPrompt(page, 'AMR logout should require relogin');
 
-  await expect(page.locator('.msg.error')).toContainText(/authorize|sign in again|login missing|expired|ACP session exited before completion/i, {
+  await expect(runErrorCard(page)).toContainText(/authorize|sign in again|login missing|expired|ACP session exited before completion/i, {
     timeout: 15_000,
   });
   await expect(

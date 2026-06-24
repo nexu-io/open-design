@@ -26,7 +26,7 @@
  *     `setCritiqueTheaterEnabled` on the web side is localStorage-
  *     only this phase, with daemon persistence deferred to the
  *     Settings UI PR.
- *   - The conformance harness, so a nightly cycle can run against an
+ *   - The conformance harness, so a prerelease cycle can run against an
  *     adapter even when the human-facing flag is off.
  *
  * Operators who want to enable the feature today should set

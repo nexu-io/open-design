@@ -125,9 +125,11 @@ async function runFixture(options: {
     const electronFrameworkRoot = join(frameworksRoot, "Electron Framework.framework");
     await mkdir(join(electronFrameworkRoot, "Resources"), { recursive: true });
     await mkdir(join(electronFrameworkRoot, "Versions", "A", "Resources"), { recursive: true });
+    await mkdir(join(electronFrameworkRoot, "Versions", "A", "Helpers"), { recursive: true });
     await mkdir(join(electronFrameworkRoot, "Versions", "Current", "Resources"), { recursive: true });
     await writeFile(join(electronFrameworkRoot, "Electron Framework"), "binary\n", "utf8");
     await writeFile(join(electronFrameworkRoot, "Versions", "A", "Electron Framework"), "binary\n", "utf8");
+    await writeFile(join(electronFrameworkRoot, "Versions", "A", "Helpers", "chrome_crashpad_handler"), "binary\n", "utf8");
     await writeFile(join(electronFrameworkRoot, "Versions", "Current", "Electron Framework"), "binary\n", "utf8");
     await mkdir(join(frameworksRoot, "ReactiveObjC.framework"), { recursive: true });
     await mkdir(join(frameworksRoot, "Open Design Helper.app"), { recursive: true });
@@ -362,6 +364,10 @@ describe("web standalone afterPack hook", () => {
       expect(codesignInvocations.split(path.sep).join("/")).toContain(
         "Electron Framework.framework/Versions/Current",
       );
+      expect(codesignInvocations.split(/\r?\n/).some((line) => {
+        const normalized = line.split(path.sep).join("/");
+        return normalized.includes("--deep") && normalized.includes("Electron Framework.framework/Versions/Current");
+      })).toBe(true);
     } finally {
       if (fixture != null) {
         await rm(fixture.root, { force: true, recursive: true });

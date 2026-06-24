@@ -875,6 +875,93 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  // Windows: npm installs global binaries directly into the prefix root, not
+  // a <prefix>/bin subdirectory. The helper must surface BOTH the canonical
+  // Unix <prefix>/bin (cross-platform parity, no regression) AND the Windows
+  // prefix root so `npm i -g`'d CLIs like `pi` resolve under GUI launchers.
+  it("adds the npm prefix root alongside <prefix>/bin on Windows", () => {
+    const originalPlatform = process.platform;
+    const home = mkdtempSync(join(tmpdir(), "wkutb-win-prefix-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-win-custom-"));
+    try {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "win32",
+      });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      // <prefix>/bin is preserved (contract unchanged) AND the root is added.
+      expect(dirs).toContain(join(customPrefix, "bin"));
+      expect(dirs).toContain(customPrefix);
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
+  // Regression for #3691. NPM_CONFIG_PREFIX / npm_config_prefix are npm-internal
+  // env vars usually absent in Electron child processes, so the env-driven block
+  // no-ops for most Windows users. %APPDATA%\npm (npm's default global prefix)
+  // must still be surfaced so globally-installed agent CLIs are detected.
+  it("always adds %APPDATA%\\npm as a fallback on Windows even without a prefix env var", () => {
+    const originalPlatform = process.platform;
+    const home = mkdtempSync(join(tmpdir(), "wkutb-win-appdata-"));
+    try {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "win32",
+      });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: {},
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(home, "AppData", "Roaming", "npm"));
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Guards the no-regression promise: the Windows-only additions must never
+  // leak onto POSIX hosts, where <prefix>/bin is the only correct entry.
+  it("does not add the npm prefix root or %APPDATA%\\npm on POSIX", () => {
+    const originalPlatform = process.platform;
+    const home = mkdtempSync(join(tmpdir(), "wkutb-posix-prefix-"));
+    const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-posix-custom-"));
+    try {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: "linux",
+      });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: customPrefix },
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(customPrefix, "bin"));
+      expect(dirs).not.toContain(customPrefix);
+      expect(dirs).not.toContain(join(home, "AppData", "Roaming", "npm"));
+    } finally {
+      Object.defineProperty(process, "platform", {
+        configurable: true,
+        value: originalPlatform,
+      });
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customPrefix, { recursive: true, force: true });
+    }
+  });
+
   it("prepends $VP_HOME/bin and expands ~/ so custom Vite+ homes outrank the default", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-vp-home-"));
     try {

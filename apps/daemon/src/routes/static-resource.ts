@@ -879,13 +879,13 @@ function normalizeDesignSystemCraftApplies(value: unknown): string[] | undefined
   return out;
 }
 
-function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
+export function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
   return templateHtml
     .replace('<!-- SLIDES_HERE -->', slidesHtml)
     .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
 }
 
-function rewriteSkillAssetUrls(html: string, skillId: string) {
+export function rewriteSkillAssetUrls(html: string, skillId: string) {
   if (typeof html !== 'string' || html.length === 0) return html;
   return html.replace(
     /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,

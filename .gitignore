@@ -81,3 +81,6 @@ apps/landing-page/public/previews/
 e2e/scripts/test-fal-webui.ts
 e2e/scripts/fal-webui-*.png
 growth/**
+
+# Agent long-running task memory
+.task/

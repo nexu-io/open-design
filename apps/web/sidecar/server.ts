@@ -8,11 +8,11 @@ import {
 } from "node:http";
 import { request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createConnection, createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
-import { dirname, isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, isAbsolute, join, relative } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   SIDECAR_ENV,
@@ -627,6 +627,78 @@ async function waitForStandaloneBackendReady(
   throw new Error(`timed out after ${timeoutMs}ms waiting for standalone Next.js server at ${origin}; override with ${STANDALONE_STARTUP_TIMEOUT_ENV}`);
 }
 
+async function waitForInProcessStandaloneBackendReady(
+  origin: string,
+  timeoutMs = resolveStandaloneStartupTimeoutMs(),
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await probeStandaloneBackend(origin)) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, STANDALONE_READINESS_POLL_MS));
+  }
+
+  throw new Error(`timed out after ${timeoutMs}ms waiting for in-process standalone Next.js server at ${origin}; override with ${STANDALONE_STARTUP_TIMEOUT_ENV}`);
+}
+
+function shouldStartStandaloneBackendInProcess(): boolean {
+  return process.env.ELECTRON_RUN_AS_NODE === "1" && process.versions.electron != null;
+}
+
+async function startStandaloneBackendInProcess(entryPath: string, port: number, origin: string): Promise<StandaloneBackend> {
+  Object.assign(process.env, createStandaloneBackendEnv({ port }));
+  console.log(`[open-design web] starting in-process standalone Next.js server from ${entryPath}`);
+  const restoreChdir = await installInProcessStandaloneChdirAlias(dirname(entryPath));
+  try {
+    await import(pathToFileURL(entryPath).href);
+  } finally {
+    restoreChdir();
+  }
+  await waitForInProcessStandaloneBackendReady(origin);
+
+  return {
+    exitReason() {
+      return null;
+    },
+    isRunning() {
+      return true;
+    },
+    origin,
+    async stop() {
+      // The standalone server shares this web sidecar process in packaged
+      // Electron-as-Node mode. Process shutdown is the close boundary.
+    },
+  };
+}
+
+async function installInProcessStandaloneChdirAlias(aliasRoot: string): Promise<() => void> {
+  if (process.platform !== "win32") return () => {};
+
+  const realRoot = await realpath(aliasRoot).catch(() => null);
+  if (realRoot == null || normalizeWindowsPath(realRoot) === normalizeWindowsPath(aliasRoot)) return () => {};
+
+  const originalChdir = process.chdir.bind(process);
+  process.chdir = ((directory: string): void => {
+    const mapped = mapWindowsPathIntoAlias(directory, realRoot, aliasRoot);
+    originalChdir(mapped ?? directory);
+  }) as typeof process.chdir;
+
+  return () => {
+    process.chdir = originalChdir as typeof process.chdir;
+  };
+}
+
+function mapWindowsPathIntoAlias(candidate: string, realRoot: string, aliasRoot: string): string | null {
+  const normalizedCandidate = normalizeWindowsPath(candidate);
+  const normalizedRealRoot = normalizeWindowsPath(realRoot);
+  if (normalizedCandidate !== normalizedRealRoot && !normalizedCandidate.startsWith(`${normalizedRealRoot}\\`)) return null;
+  return join(aliasRoot, relative(realRoot, candidate));
+}
+
+function normalizeWindowsPath(path: string): string {
+  return path.replaceAll("/", "\\").replace(/[\\]+$/, "").toLowerCase();
+}
+
 async function startStandaloneBackend(webRoot: string | null): Promise<StandaloneBackend> {
   const entryPath = resolveStandaloneServerEntry(webRoot);
   if (entryPath == null) {
@@ -639,6 +711,10 @@ async function startStandaloneBackend(webRoot: string | null): Promise<Standalon
 
   const port = await reserveTcpPort(STANDALONE_BACKEND_HOST);
   const origin = resolveStandaloneBackendOrigin(port);
+  if (shouldStartStandaloneBackendInProcess()) {
+    return await startStandaloneBackendInProcess(entryPath, port, origin);
+  }
+
   console.log(`[open-design web] starting standalone Next.js server from ${entryPath}`);
   const child = spawn(process.execPath, createStandaloneServerArgs(entryPath), {
     cwd: dirname(entryPath),

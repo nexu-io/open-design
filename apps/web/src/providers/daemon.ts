@@ -23,6 +23,7 @@ import type {
   ChatSseStartPayload,
   DaemonAgentPayload,
   AmrModelsResponse,
+  AmrWalletSnapshot,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -771,6 +772,17 @@ export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
   }
 }
 
+export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}): Promise<AmrWalletSnapshot | null> {
+  try {
+    const query = options.refresh ? '?refresh=1' : '';
+    const resp = await fetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AmrWalletSnapshot;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
   try {
     const resp = await fetch('/api/amr/models', { cache: 'no-store' });
@@ -1268,6 +1280,15 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       label: 'warning',
       detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated to prevent unauthorized instruction injection.`,
     };
+  }
+  if (t === 'tool_loop' && typeof data.toolName === 'string') {
+    const toolName = data.toolName;
+    const count = typeof data.count === 'number' ? data.count : 0;
+    const detail =
+      data.action === 'halt'
+        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
+        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
+    return { kind: 'status', label: 'warning', detail };
   }
   if (t === 'raw' && typeof data.line === 'string') {
     return { kind: 'raw', line: data.line };

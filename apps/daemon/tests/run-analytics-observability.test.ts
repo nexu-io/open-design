@@ -423,6 +423,141 @@ describe('scanRunEventsForUsageAnalytics', () => {
       agent_reported_model: 'claude-opus-4-1',
     });
     expect(result.cache_hit_ratio).toBeCloseTo(60 / 240);
+    // The reverse scan above takes the LAST usage event (240 / cache_read 60).
+    // The forward first-call scan must instead surface the turn's OPENING call
+    // (120 / cache_read 20) — the session-reuse signal that the within-turn
+    // aggregate masks.
+    expect(result.first_call_input_tokens).toBe(120);
+    expect(result.first_call_cache_read_input_tokens).toBe(20);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(20 / 120);
+  });
+
+  it('reports the anthropic first-call cache hit independently of later within-turn calls', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        // Opening call of a resumed turn: tiny uncached delta over a fully
+        // cached prefix — the cache-hit signal session reuse produces.
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 100,
+              output_tokens: 10,
+              cache_read_input_tokens: 8_000,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        },
+        // A later within-turn call grows the prefix; the reverse scan lands here.
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 300,
+              output_tokens: 30,
+              cache_read_input_tokens: 8_400,
+              cache_creation_input_tokens: 200,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    // Anthropic input_tokens is the UNCACHED portion, so effective = input + cache_read.
+    expect(result.first_call_input_tokens).toBe(100);
+    expect(result.first_call_cache_read_input_tokens).toBe(8_000);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(8_000 / 8_100);
+    // Last-call aggregate stays distinct from the first-call signal.
+    expect(result.cache_read_input_tokens).toBe(8_400);
+  });
+
+  it('includes anthropic cache_creation in the first-call denominator (matches last-call)', () => {
+    // A cold opening call writes a large cache (cache_creation) while reading
+    // little. The first-call denominator must be input + cache_read +
+    // cache_creation — identical to the last-call definition — so the two
+    // ratios are comparable. A single usage event makes first == last.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 1_000,
+              output_tokens: 20,
+              cache_read_input_tokens: 500,
+              cache_creation_input_tokens: 8_500,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    // denominator = 1000 + 500 + 8500 = 10000, not 1500.
+    expect(result.first_call_input_tokens).toBe(1_000);
+    expect(result.first_call_cache_read_input_tokens).toBe(500);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(500 / 10_000);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(result.cache_hit_ratio ?? 0);
+  });
+
+  it('honors the full cache-creation alias matrix on the first call (nested cache_creation)', () => {
+    // A provider that emits cache creation only via the nested
+    // `cache_creation.input_tokens` alias (not the flat key) must still land in
+    // the first-call denominator — otherwise it overstates the cache hit. This
+    // locks the first-call extraction to the same alias matrix the last-call
+    // path already supports.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 1_000,
+              output_tokens: 20,
+              cache_read_input_tokens: 500,
+              cache_creation: { input_tokens: 8_500 },
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(500 / 10_000);
+    // Locked to the last-call definition, which also reads the nested alias.
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(result.cache_hit_ratio ?? 0);
+  });
+
+  it('mirrors first-call onto last-call for a single-call turn', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 500,
+              output_tokens: 50,
+              cache_read_input_tokens: 100,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result.first_call_input_tokens).toBe(500);
+    expect(result.first_call_cache_read_input_tokens).toBe(100);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(result.cache_hit_ratio ?? 0);
   });
 
   it('falls back to modelUsage and totalTokens aliases when usage is nested under modelUsage', () => {
@@ -647,12 +782,76 @@ describe('summarizeRunTimingAnalytics', () => {
       process_spawn_duration_ms: 60,
       time_to_first_token_ms: 1300,
       spawn_to_first_token_ms: 740,
+      // No subsegment markers were observed, so the whole spawn->first-token
+      // span is unattributed and falls into the remainder.
+      spawn_to_first_token_remainder_ms: 740,
       generation_duration_ms: 5500,
       tool_call_count: 2,
       tool_duration_ms: 650,
       finalize_duration_ms: 20,
       total_duration_ms: 7020,
     });
+  });
+
+  it('splits spawn->first-token into subsegments that sum back exactly', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 8_000,
+      analyticsCapturedAt: 8_020,
+      telemetry: {
+        startChatRunStartedAt: 1_200,
+        processSpawnStartedAt: 1_700,
+        processSpawnedAt: 1_760,
+        // 1760 -> 1900 cli-ready, 1900 -> 2100 session-init, 2100 -> 2500 model.
+        cliReadyAt: 1_900,
+        sessionInitDoneAt: 2_100,
+        firstTokenAt: 2_500,
+      },
+      events: [],
+    });
+
+    expect(result.spawn_to_first_token_ms).toBe(740);
+    expect(result.cli_ready_ms).toBe(140);
+    expect(result.session_init_ms).toBe(200);
+    expect(result.model_first_token_ms).toBe(400);
+    expect(result.spawn_to_first_token_remainder_ms).toBe(0);
+    // The auditable invariant: the four parts reconstruct the parent span.
+    expect(
+      (result.cli_ready_ms ?? 0) +
+        (result.session_init_ms ?? 0) +
+        (result.model_first_token_ms ?? 0) +
+        (result.spawn_to_first_token_remainder_ms ?? 0),
+    ).toBe(result.spawn_to_first_token_ms);
+  });
+
+  it('folds an unobservable session-init boundary into the remainder', () => {
+    // Stream/plain families stamp cliReadyAt but never sessionInitDoneAt, so
+    // session_init/model_first_token stay undefined and their time rolls into
+    // the remainder while the sum invariant still holds.
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 8_000,
+      analyticsCapturedAt: 8_020,
+      telemetry: {
+        startChatRunStartedAt: 1_200,
+        processSpawnedAt: 1_760,
+        cliReadyAt: 1_900,
+        firstTokenAt: 2_500,
+      },
+      events: [],
+    });
+
+    expect(result.spawn_to_first_token_ms).toBe(740);
+    expect(result.cli_ready_ms).toBe(140);
+    expect(result.session_init_ms).toBeUndefined();
+    expect(result.model_first_token_ms).toBeUndefined();
+    expect(result.spawn_to_first_token_remainder_ms).toBe(600);
+    expect(
+      (result.cli_ready_ms ?? 0) +
+        (result.session_init_ms ?? 0) +
+        (result.model_first_token_ms ?? 0) +
+        (result.spawn_to_first_token_remainder_ms ?? 0),
+    ).toBe(result.spawn_to_first_token_ms);
   });
 
   it('drops negative timing segments and ignores orphan tool results', () => {

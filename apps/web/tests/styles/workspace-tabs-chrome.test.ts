@@ -141,6 +141,32 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(hoverTab, 'box-shadow')).toContain('inset 0 0 0 1px');
   });
 
+  it('keeps the pinned Home tab opaque on hover/focus so crowded tabs cannot bleed through (#4446)', () => {
+    // The generic inactive-hover rule paints a translucent panel wash
+    // (color-mix(… 78%, transparent)) sized to calc(100% - 2px). Its specificity
+    // (0,4,0) outranks the pinned base rule (0,3,0) and sits later in the
+    // cascade, so without a pinned-specific override the sticky Home tab loses
+    // its opaque background on hover/focus and horizontally-scrolled project
+    // tabs bleed through it. The pinned tab needs its own hover/focus rule that
+    // re-lays the opaque tab-bar background under that wash.
+    const pinnedHover = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tab.is-pinned:not(.is-active):hover',
+    );
+    const pinnedFocus = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tab.is-pinned:not(.is-active):focus-within',
+    );
+
+    for (const block of [pinnedHover, pinnedFocus]) {
+      const background = ruleValue(block, 'background');
+      // Opaque base layer keeps scrolled tabs from bleeding through…
+      expect(background).toContain('var(--workspace-tab-bar-bg)');
+      // …while the translucent hover wash still rides on top for the affordance.
+      expect(background).toContain('calc(100% - 2px)');
+    }
+  });
+
   it('gives dragged tabs physical collision feedback', () => {
     const tab = cssDeclarations(shellCss, '.workspace-tab');
     const dragging = cssDeclarations(shellCss, '.workspace-tab.is-dragging');

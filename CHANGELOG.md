@@ -196,7 +196,7 @@ The rebuilt-core release: **everything is a plugin**, **headless by default**, *
 - **Updater hardening** through the preview cycle — release validation, deferred installer on Windows, applied-state clearing, download / install handoff hardening, smoke-recovery. ([#2565], [#2575], [#2592], [#2595], [#2677], [#2687], [#2700])
 - **Desktop updater UI flow** — new in-app updater popup.
 - **Packaged update apply observations** captured for telemetry / debugging. ([#2429])
-- **Nightly + preview package identity** so beta installs don't collide with stable. ([#2437])
+- **Prerelease + preview package identity** so beta installs don't collide with stable. ([#2437])
 - **macOS Dock icon stays put** when desktop-pet window opens. ([#2413])
 - **Refresh Open Design app visuals** — new app icons, logo, brand glyphs. ([#2436])
 - **Linux packaged client parity smoke coverage.**
@@ -257,7 +257,7 @@ The rebuilt-core release: **everything is a plugin**, **headless by default**, *
 #### Desktop & packaging
 - macOS Dock icon stays put when desktop-pet window opens. ([#2413])
 - Align Windows smoke update root with portable installs. ([#2376])
-- Nightly release smoke identity. ([#2446])
+- Prerelease release smoke identity. ([#2446])
 - Improve desktop updater ready UI. ([#2403])
 - Forward proxy env vars to packaged sidecars.
 - Detect mise-installed npm package bins.
@@ -442,7 +442,7 @@ A memory-plus-UI release: **auto-memory store** carries agent context across run
 ### Internal
 
 - Stabilize extended Playwright coverage. ([#1341])
-- Expand nightly UI and desktop regression coverage. ([#1256])
+- Expand prerelease UI and desktop regression coverage. ([#1256])
 - Harden e2e smoke and release reports. ([#1140])
 - Expand entry and settings automation coverage. ([#954])
 - Refreshed generated GitHub metrics SVG and contributors wall. ([#1115], [#1117], [#1183], [#1188], [#1328], [#1330])
@@ -591,7 +591,7 @@ A connectivity-and-iteration release: Open Design becomes a fully bidirectional 
 - Expose Gemini 3 preview models and Gemini 2.5 Flash Lite in the picker. ([#986])
 - Add GPT-5.1 entries to the Codex picker. ([#946])
 - Expand Codex picker coverage. ([#757])
-- Stable nightly promotion gate for `[codex]`. ([#962])
+- Stable prerelease promotion gate for `[codex]`. ([#962])
 - `VP_HOME` environment variable support in agent resolution. ([#859])
 - Auto-rebuild `better-sqlite3` on Node.js ABI mismatch postinstall. ([#813])
 - Increase agent inactivity timeout. ([#1071])

@@ -231,7 +231,7 @@ describe("runElectronBuilder", () => {
     await writeFile(cliPath, "process.exit(0);\n", "utf8");
 
     const config = makeConfig(root, {
-      appVersion: "1.2.3.nightly.4",
+      appVersion: "1.2.3-prerelease.4",
       electronBuilderCliPath: cliPath,
       signed: true,
       webOutputMode: "server",

@@ -5,17 +5,23 @@ when it collects it, and how you stay in control. It documents the behavior
 shipped in the app — the same controls live under **Settings → Privacy**.
 
 Open Design is **local-first**. Your projects, generated files, and BYOK API
-keys stay on your machine. The app works fully offline; nothing in this page
-applies unless you explicitly turn telemetry on.
+keys stay on your machine, and the app works fully offline. Usage telemetry,
+described below, is the one category of data the app may send — it is **on by
+default**, and you can turn it off at any time under **Settings → Privacy**.
 
-## Telemetry is opt-in
+## Telemetry is opt-out
 
-Usage telemetry is **off by default**. On first run the app shows a privacy
-consent banner asking you to make a choice — it never starts sending anything
-before you do. You can change your decision at any time under
-**Settings → Privacy**, where each category below has its own toggle.
+Usage telemetry is **on by default**. On first run the app shows a privacy
+disclosure banner so you can see what is collected before doing anything else.
+It is an informed-disclosure notice with a single **I get it** acknowledgement,
+not an opt-in gate — and because telemetry is already enabled, the app may begin
+sending events (such as onboarding and UI-interaction events) from first launch.
 
-## What is collected when you opt in
+You stay in control: the banner footer tells you sharing is on and points you to
+**Settings → Privacy**, where you can turn telemetry off and toggle each category
+below — and you can change your decision at any time.
+
+## What is collected
 
 When telemetry is enabled, the app may send the following to the Open Design
 team. Each category is independently controllable in Settings.

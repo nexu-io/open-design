@@ -424,13 +424,22 @@ async function bakeOne(browser, id, hash, motion) {
   const listPath = path.join(frameDir, 'list.txt');
   writeFileSync(listPath, lines.join('\n'));
 
-  // Content-hashed filenames so a re-bake publishes a NEW URL the daemon points
-  // at via the manifest, instead of overwriting the same key — which the CDN
-  // edge would keep serving stale until its TTL expired. New name => new cache
-  // entry => safe to cache immutably forever.
-  const slug = hash ? `${id}.${hash}` : id;
-  const video = path.join(OUT, `${slug}.mp4`);
-  const poster = path.join(OUT, `${slug}.poster.jpg`);
+  // Directory-layered, content-addressed keys: `<id>/<fingerprint>/preview.mp4`
+  // (+ `poster.jpg`). Immutable — a content change yields a NEW `<fingerprint>`
+  // directory (hence a new URL the CDN can cache forever), while a re-bake of the
+  // same source resolves to the same keys. The manifest stores these
+  // PREFIX-RELATIVE keys; it must NOT repeat the `plugin-previews/` segment that
+  // the base URL already carries, or `${base}/${key}` would double it and 404
+  // (see specs/change/20260618-plugin-preview-bake-pipeline/spec.md §0). The
+  // daemon resolves both `${base}/${key}` and `path.join(dir, key)`, which handle
+  // the nested path transparently — no consumer change needed. Existing flat
+  // `<id>.<hash>.mp4` entries are left untouched on reuse (additive migration).
+  const dirKey = hash ? `${id}/${hash}` : id;
+  const videoKey = `${dirKey}/preview.mp4`;
+  const posterKey = `${dirKey}/poster.jpg`;
+  const video = path.join(OUT, videoKey);
+  const poster = path.join(OUT, posterKey);
+  mkdirSync(path.dirname(video), { recursive: true });
   const ff = (a) => execFileSync('ffmpeg', ['-y', ...a], { stdio: 'ignore' });
   // H.264 MP4, constant frame rate (the fps filter resamples the concat's
   // real-time timeline to a constant FPS). H.264 decodes reliably in both
@@ -444,7 +453,7 @@ async function bakeOne(browser, id, hash, motion) {
     '-q:v', '5', '-frames:v', '1', poster]);
   rmSync(frameDir, { recursive: true, force: true });
 
-  return { id, durationMs: durMs, holdMs: HOLD_MS, video: `${slug}.mp4`, poster: `${slug}.poster.jpg`,
+  return { id, durationMs: durMs, holdMs: HOLD_MS, video: videoKey, poster: posterKey,
     bytes: statSync(video).size, posterBytes: statSync(poster).size };
 }
 

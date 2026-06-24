@@ -6,10 +6,9 @@ import { describe, expect, it } from "vitest";
 function runReservationCheck(options: { releaseRunId?: string }): Promise<string> {
   const repoRoot = resolve(import.meta.dirname, "../../..");
   const script = `
-    const { validateVersionReservation } = await import("./.github/workflow/scripts/release/storage/beta-version-reservation.ts");
+    const { validateVersionReservation } = await import("./tools/release/src/storage/beta-version-reservation.ts");
     const reservation = {
       baseVersion: "1.2.3",
-      betaNumber: 4,
       channel: "beta",
       createdAt: "2026-06-09T07:00:00.000Z",
       kind: "version-reservation",
@@ -22,6 +21,7 @@ function runReservationCheck(options: { releaseRunId?: string }): Promise<string
         runId: 42,
         workflow: "release-beta-s"
       },
+      releaseNumber: 4,
       releaseVersion: "1.2.3-beta.4",
       state: "reserved",
       version: 1
