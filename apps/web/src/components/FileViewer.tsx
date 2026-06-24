@@ -68,8 +68,6 @@ import {
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
-  exportArtifactAsPptx,
-  exportArtifactAsPptxEditable,
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsZip,
@@ -4466,7 +4464,6 @@ function HtmlViewer({
   const fireShareExport = (
     format:
       | 'pdf'
-      | 'pptx'
       | 'zip'
       | 'html'
       | 'image'
@@ -4512,7 +4509,7 @@ function HtmlViewer({
         { requestId },
       );
     };
-    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
+    const toastFormats = new Set(['pdf', 'zip', 'html', 'image', 'markdown']);
     // Programmatic exports compute in-browser and can take a while (one render
     // per deck slide), so the loading toast ticks every second with elapsed time
     // and — once at least one slide is captured — a live ETA derived from the
@@ -4590,7 +4587,7 @@ function HtmlViewer({
     }
   };
   // Feeds per-slide capture progress into the ref the loading-toast ticker reads
-  // (apps/web/src/runtime/exports.ts drives this for the PDF / PPTX exporters).
+  // (apps/web/src/runtime/exports.ts drives this for the PDF exporter).
   const onExportProgress: ExportProgress = (done, total) => {
     exportProgressRef.current = { done, total };
   };
@@ -7627,9 +7624,6 @@ function HtmlViewer({
     rendererId === 'html';
   const canShare = source !== null && isShareableArtifact;
   const canDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
-  // PPTX export is offered for any shareable artifact: decks export one slide
-  // per slide; a single page exports as a one-slide PPTX sized to its aspect.
-  const showPptxExport = canShare;
   const showMarkdownExport = source !== null && isMarkdownArtifact;
   const showImageExport = canShare;
 
@@ -8920,40 +8914,6 @@ function HtmlViewer({
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
                     <span>{t('fileViewer.exportPdf')}</span>
                   </button>
-                  {showPptxExport ? (
-                    <>
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setDownloadMenuOpen(false);
-                          fireShareExport('pptx', () => exportArtifactAsPptx(source ?? '', exportTitle, {
-                            deck: effectiveDeck,
-                            onProgress: onExportProgress,
-                          }));
-                        }}
-                      >
-                        <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                        <span>{t('fileViewer.exportPptxImages')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setDownloadMenuOpen(false);
-                          fireShareExport('pptx', () => exportArtifactAsPptxEditable(source ?? '', exportTitle, {
-                            deck: effectiveDeck,
-                            onProgress: onExportProgress,
-                          }));
-                        }}
-                      >
-                        <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                        <span>{t('fileViewer.exportPptxEditable')}</span>
-                      </button>
-                    </>
-                  ) : null}
                   {showImageExport ? (
                     <button
                       type="button"

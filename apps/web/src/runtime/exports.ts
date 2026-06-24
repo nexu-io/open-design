@@ -1252,35 +1252,19 @@ function injectDeckPrintStylesheet(doc: string): string {
 }
 
 // ===========================================================================
-// Programmatic client-side capture + PDF/PPTX assembly.
+// Programmatic client-side capture + PDF assembly.
 //
 // The in-iframe capture half lives in ./srcdoc.ts (injectExportCaptureBridge).
 // Here we drive it: spin up a hidden, full-resolution export iframe, collect
-// one image (or structured shape list) per slide, then assemble the output with
-// jsPDF / pptxgenjs — entirely in the browser, with no print dialog and no
-// agent/model call. Both libs are dynamically imported so they stay out of the
+// one image per slide, then assemble the output with jsPDF — entirely in the
+// browser, with no print dialog and no agent/model call. The library is
+// dynamically imported so it stays out of the
 // main bundle until an export actually runs.
 // ===========================================================================
-
-export type ExportShape =
-  | { type: 'rect'; x: number; y: number; w: number; h: number; fill: string }
-  | {
-      type: 'image';
-      x: number; y: number; w: number; h: number;
-      dataUrl?: string | null; src?: string;
-    }
-  | {
-      type: 'text';
-      x: number; y: number; w: number; h: number;
-      text: string; fontSize: number; fontFamily: string;
-      bold: boolean; italic: boolean; color: string;
-      align: 'left' | 'center' | 'right' | 'justify';
-    };
 
 export type CapturedSlide = {
   index: number;
   dataUrl?: string;
-  shapes?: ExportShape[];
   w: number;
   h: number;
   notes?: string;
@@ -1311,7 +1295,7 @@ function waitForIframeWindow(iframe: HTMLIFrameElement, timeout = 15_000): Promi
 
 type CaptureRequest = {
   id: string;
-  mode: 'image' | 'editable';
+  mode: 'image';
   deck: boolean;
   single?: boolean;
   delay: number;
@@ -1339,7 +1323,7 @@ function runExportCapture(
       if (ev.source !== win) return;
       const d = ev.data as {
         type?: string; id?: string; index?: number; total?: number;
-        dataUrl?: string; shapes?: ExportShape[]; w?: number; h?: number;
+        dataUrl?: string; w?: number; h?: number;
         notes?: string; error?: string;
       } | null;
       if (!d || d.id !== req.id) return;
@@ -1349,7 +1333,6 @@ function runExportCapture(
           {
             index: d.index ?? 0,
             dataUrl: d.dataUrl,
-            shapes: d.shapes,
             w: d.w ?? 0,
             h: d.h ?? 0,
             notes: typeof d.notes === 'string' ? d.notes : '',
@@ -1396,7 +1379,7 @@ async function captureArtifactSlides(
   html: string,
   opts: {
     deck: boolean;
-    mode: 'image' | 'editable';
+    mode: 'image';
     width?: number;
     height?: number;
     onProgress?: ExportProgress;
@@ -1484,95 +1467,4 @@ export async function exportArtifactAsPdf(
     pdf.addImage(img.dataUrl!, 'PNG', 0, -p * pageH, img.w, img.h);
   }
   triggerDownload(pdf.output('blob'), filename);
-}
-
-const PPTX_LAYOUT_WIDTH_IN = 13.333; // 16:9 width; height derived from slide aspect
-
-/** Programmatic PPTX with one full-bleed slide image per deck slide. */
-export async function exportArtifactAsPptx(
-  html: string,
-  title: string,
-  opts: { deck: boolean; onProgress?: ExportProgress },
-): Promise<void> {
-  const slides = await captureArtifactSlides(html, {
-    deck: opts.deck,
-    mode: 'image',
-    onProgress: opts.onProgress,
-  });
-  const images = slides.filter((s) => s.dataUrl && s.w > 0 && s.h > 0);
-  if (!images.length) throw new Error('Nothing was captured for PPTX export');
-
-  const { default: PptxGenJS } = await import('pptxgenjs');
-  const pptx = new PptxGenJS();
-  const first = images[0]!;
-  const layoutH = Number((PPTX_LAYOUT_WIDTH_IN * (first.h / first.w)).toFixed(3));
-  pptx.defineLayout({ name: 'OD', width: PPTX_LAYOUT_WIDTH_IN, height: layoutH });
-  pptx.layout = 'OD';
-  for (const s of images) {
-    const slide = pptx.addSlide();
-    slide.addImage({ data: s.dataUrl!, x: 0, y: 0, w: PPTX_LAYOUT_WIDTH_IN, h: layoutH });
-    if (s.notes) slide.addNotes(s.notes);
-  }
-  const blob = (await pptx.write({ outputType: 'blob' })) as Blob;
-  triggerDownload(blob, `${safeFilename(title, 'artifact')}.pptx`);
-}
-
-/** Programmatic editable PPTX: best-effort native text boxes / images / shapes. */
-export async function exportArtifactAsPptxEditable(
-  html: string,
-  title: string,
-  opts: { deck: boolean; onProgress?: ExportProgress },
-): Promise<void> {
-  const slides = await captureArtifactSlides(html, {
-    deck: opts.deck,
-    mode: 'editable',
-    onProgress: opts.onProgress,
-  });
-  if (!slides.length) throw new Error('Nothing was captured for PPTX export');
-
-  const { default: PptxGenJS } = await import('pptxgenjs');
-  const pptx = new PptxGenJS();
-  const first = slides[0]!;
-  const baseW = first.w || 1920;
-  const layoutH = Number((PPTX_LAYOUT_WIDTH_IN * ((first.h || 1080) / baseW)).toFixed(3));
-  pptx.defineLayout({ name: 'OD', width: PPTX_LAYOUT_WIDTH_IN, height: layoutH });
-  pptx.layout = 'OD';
-
-  for (const s of slides) {
-    const slide = pptx.addSlide();
-    const pxToIn = PPTX_LAYOUT_WIDTH_IN / (s.w || baseW);
-    const inch = (v: number) => Number((v * pxToIn).toFixed(3));
-    for (const shape of s.shapes ?? []) {
-      const x = inch(shape.x);
-      const y = inch(shape.y);
-      const w = Math.max(0.05, inch(shape.w));
-      const h = Math.max(0.05, inch(shape.h));
-      try {
-        if (shape.type === 'rect') {
-          slide.addShape(pptx.ShapeType.rect, { x, y, w, h, fill: { color: shape.fill } });
-        } else if (shape.type === 'image') {
-          if (shape.dataUrl) slide.addImage({ data: shape.dataUrl, x, y, w, h });
-          else if (shape.src) slide.addImage({ path: shape.src, x, y, w, h });
-        } else {
-          slide.addText(shape.text, {
-            x, y, w, h,
-            fontSize: Math.max(1, Number((shape.fontSize * pxToIn * 72).toFixed(1))),
-            color: shape.color,
-            bold: shape.bold,
-            italic: shape.italic,
-            align: shape.align,
-            valign: 'top',
-            margin: 0,
-            ...(shape.fontFamily ? { fontFace: shape.fontFamily } : {}),
-            fit: 'shrink',
-          });
-        }
-      } catch {
-        /* skip a shape pptxgenjs rejects rather than failing the whole export */
-      }
-    }
-    if (s.notes) slide.addNotes(s.notes);
-  }
-  const blob = (await pptx.write({ outputType: 'blob' })) as Blob;
-  triggerDownload(blob, `${safeFilename(title, 'artifact')}.pptx`);
 }

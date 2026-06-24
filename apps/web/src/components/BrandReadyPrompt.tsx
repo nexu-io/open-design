@@ -14,17 +14,31 @@ import styles from './BrandReadyPrompt.module.css';
 export interface BrandReadyPromptProps {
   /** Brand display name; null falls back to a generic title. */
   brandName: string | null;
-  /** Open the Design systems tab with the new system preselected. */
+  /** Focus the in-project brand-kit (design system) tab. */
   onPreview: () => void;
   /** Dismiss without navigating. */
   onDismiss: () => void;
+  /** Show the "automatic extraction may miss details" refinement nudge. */
+  showRefinement?: boolean;
+  /** Run the deeper AI Optimize enrichment pass on the extracted system. */
+  onAiOptimize?: () => void;
+  /** Open the brand kit to refine it by hand. */
+  onEditManually?: () => void;
 }
 
-export function BrandReadyPrompt({ brandName, onPreview, onDismiss }: BrandReadyPromptProps) {
+export function BrandReadyPrompt({
+  brandName,
+  onPreview,
+  onDismiss,
+  showRefinement = false,
+  onAiOptimize,
+  onEditManually,
+}: BrandReadyPromptProps) {
   const t = useT();
   const title = brandName
     ? t('project.brandReadyTitle', { name: brandName })
     : t('project.brandReadyTitleGeneric');
+  const refine = showRefinement && (onAiOptimize || onEditManually);
 
   return (
     <motion.div
@@ -45,6 +59,25 @@ export function BrandReadyPrompt({ brandName, onPreview, onDismiss }: BrandReady
           {t('project.brandReadyCta')}
           <Icon name="chevron-right" size={14} />
         </button>
+        {refine ? (
+          <div className={styles.refine}>
+            <span className={styles.refineHint}>{t('project.brandReadyRefineHint')}</span>
+            <div className={styles.refineActions}>
+              {onAiOptimize ? (
+                <button type="button" className={styles.refineAction} onClick={onAiOptimize}>
+                  <Icon name="sparkles" size={13} />
+                  {t('project.brandReadyAiOptimize')}
+                </button>
+              ) : null}
+              {onEditManually ? (
+                <button type="button" className={styles.refineAction} onClick={onEditManually}>
+                  <Icon name="edit" size={13} />
+                  {t('project.brandReadyEditManually')}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
       <button
         type="button"

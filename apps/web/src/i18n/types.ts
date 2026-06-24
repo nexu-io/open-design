@@ -2270,6 +2270,9 @@ export interface Dict {
   'project.brandReadyTitleGeneric': string;
   'project.brandReadyCta': string;
   'project.brandReadyDismiss': string;
+  'project.brandReadyRefineHint': string;
+  'project.brandReadyAiOptimize': string;
+  'project.brandReadyEditManually': string;
   'project.metaFreeform': string;
   'project.customInstructions': string;
   'project.customInstructionsPlaceholder': string;
@@ -2374,6 +2377,9 @@ export interface Dict {
   'chat.forkConversationFailed': string;
   'chat.startTitle': string;
   'chat.startHint': string;
+  'chat.brandBrowserAssistDesktopOnly': string;
+  'chat.brandBrowserAssistReadFailed': string;
+  'chat.brandBrowserAssistMessage': string;
   'brandEnrichment.title': string;
   'brandEnrichment.body': string;
   'brandEnrichment.cta': string;
