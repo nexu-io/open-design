@@ -547,9 +547,9 @@
   border-color: rgba(28, 138, 115, 0.28);
 }
 .design-card-tag.tag-brand {
-  color: #5f3db8;
-  background: rgba(95, 61, 184, 0.11);
-  border-color: rgba(95, 61, 184, 0.26);
+  color: var(--purple);
+  background: var(--purple-bg);
+  border-color: var(--purple-border);
 }
 .design-card-tag.tag-design-system {
   color: var(--red);

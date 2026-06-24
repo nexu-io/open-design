@@ -98,59 +98,24 @@ describe('AmrAccountControl', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('surfaces the activation URL + code while signing in so the user can finish manually', () => {
+  it('surfaces the activation URL while signing in so the user can reopen the sign-in page', () => {
     renderAccountControl({
       status: 'signing-in',
       compact: true,
       activationUrl: 'https://app.vela.example/device?user_code=AB12-CD34',
-      userCode: 'AB12-CD34',
       onSignIn: vi.fn(),
     });
 
     const link = screen.getByRole('link', { name: 'Open sign-in page' });
+    // The activation URL already carries the device code, so the link alone
+    // completes sign-in — no separate code is rendered.
     expect(link.getAttribute('href')).toBe(
       'https://app.vela.example/device?user_code=AB12-CD34',
     );
-    // The user code is offered with a copy affordance.
-    expect(screen.getByText('AB12-CD34')).toBeTruthy();
+    expect(screen.queryByText('AB12-CD34')).toBeNull();
     expect(
-      screen.getByRole('button', { name: 'Copy verification code' }),
-    ).toBeTruthy();
-  });
-
-  it('resets the copied label when a fresh activation code arrives', async () => {
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-    const view = renderAccountControl({
-      status: 'signing-in',
-      compact: true,
-      activationUrl: 'https://app.vela.example/device?user_code=OLD-CODE',
-      userCode: 'OLD-CODE',
-      onSignIn: vi.fn(),
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Copy verification code' }));
-    await waitFor(() => {
-      expect(screen.getByText('Copied')).toBeTruthy();
-    });
-
-    view.rerender(
-      <I18nProvider initial="en">
-        <AmrAccountControl
-          status="signing-in"
-          compact
-          activationUrl="https://app.vela.example/device?user_code=NEW-CODE"
-          userCode="NEW-CODE"
-          onSignIn={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-
-    expect(screen.getByText('NEW-CODE')).toBeTruthy();
-    expect(screen.getByText('Copy')).toBeTruthy();
-    expect(screen.queryByText('Copied')).toBeNull();
+      screen.queryByRole('button', { name: 'Copy verification code' }),
+    ).toBeNull();
   });
 
   it('shows the browser-failed hint when vela could not open the browser', () => {
@@ -158,7 +123,6 @@ describe('AmrAccountControl', () => {
       status: 'signing-in',
       compact: true,
       activationUrl: 'https://app.vela.example/device?user_code=AB12-CD34',
-      userCode: 'AB12-CD34',
       browserOpenFailed: true,
       onSignIn: vi.fn(),
     });
@@ -644,7 +608,9 @@ describe('AmrLoginPill', () => {
       showActivationDetails: true,
     });
     expect(await screen.findByRole('link', { name: 'Open sign-in page' })).toBeTruthy();
-    expect(screen.getByText('VISIBLE')).toBeTruthy();
+    // The activation URL carries the device code, so the link alone is shown —
+    // the standalone code is never rendered even when present in the status.
+    expect(screen.queryByText('VISIBLE')).toBeNull();
   });
 
   it('recovers from transient /status failures and still flips to signed-in when polling succeeds later', async () => {

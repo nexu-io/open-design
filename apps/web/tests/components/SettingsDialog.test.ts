@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
+  amrWalletValueLabel,
   canFetchProviderModels,
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
@@ -290,6 +291,81 @@ describe('SettingsDialog custom model picker state', () => {
       shouldShowCustomModelInput('gpt-5.5', ['gpt-5', 'o3'], false),
     ).toBe(true);
     expect(shouldShowCustomModelInput('', ['gpt-5', 'o3'], false)).toBe(true);
+  });
+});
+
+describe('SettingsDialog AMR wallet display state', () => {
+  it('shows re-auth guidance when the daemon reports missing or rejected wallet credentials', () => {
+    expect(
+      amrWalletValueLabel({
+        balance: null,
+        loadingLabel: 'Loading',
+        ready: true,
+        snapshot: {
+          status: 'unavailable',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'unavailable',
+          error: {
+            code: 'unauthorized',
+            message: 'AMR wallet authorization expired. Sign in again to refresh wallet access.',
+          },
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('AMR wallet authorization expired. Sign in again to refresh wallet access.');
+
+    expect(
+      amrWalletValueLabel({
+        balance: null,
+        loadingLabel: 'Loading',
+        ready: true,
+        snapshot: {
+          status: 'unavailable',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'unavailable',
+          error: {
+            code: 'missing_control_key',
+            message: 'Sign in again to refresh AMR wallet credentials.',
+          },
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('Sign in again to refresh AMR wallet credentials.');
+  });
+
+  it('keeps transient wallet failures on the temporary-unavailable copy', () => {
+    expect(
+      amrWalletValueLabel({
+        balance: null,
+        loadingLabel: 'Loading',
+        ready: true,
+        snapshot: {
+          status: 'unavailable',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'unavailable',
+          error: {
+            code: 'network',
+            message: 'AMR wallet balance is temporarily unavailable.',
+          },
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('Balance temporarily unavailable');
   });
 });
 

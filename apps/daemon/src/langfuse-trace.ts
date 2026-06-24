@@ -243,7 +243,7 @@ export interface RuntimeInfo {
   arch?: string;
   /** Open Design app version reported by the daemon. */
   appVersion?: string;
-  /** Build channel (development / nightly / beta / stable). */
+  /** Build channel (development / prerelease / beta / stable). */
   appChannel?: string;
   /** Whether the daemon is running inside a packaged build. */
   packaged?: boolean;

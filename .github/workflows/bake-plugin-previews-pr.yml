@@ -1,0 +1,104 @@
+name: bake-plugin-previews-pr
+
+# Pre-merge bake for SAME-REPO pull requests (spec slice 2 — the coupling fix).
+# When an internal PR changes a plugin's preview source (or the bake recipe),
+# re-render the affected previews, publish the immutable clips to R2, and commit
+# the manifest update INTO THE AUTHOR'S BRANCH, so the manifest change rides with
+# the code change in the same PR and reverts atomically — instead of arriving
+# later as a detached bot PR.
+#
+# Forks are intentionally excluded: a `pull_request` from a fork has no secrets,
+# so fork manifests are refreshed post-merge by bake-plugin-previews.yml.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'plugins/_official/**'
+      - 'scripts/bake-plugin-previews.mjs'
+
+permissions:
+  contents: write # push the manifest commit back to the PR head branch
+
+concurrency:
+  group: bake-plugin-previews-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bake:
+    name: Bake plugin previews (pre-merge)
+    # Same-repo only — a fork PR cannot safely receive the R2/push secrets.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          # Token that can push back to the PR branch. PREVIEW_BAKE_TOKEN (PAT/
+          # app) also lets the pushed commit re-trigger CI; GITHUB_TOKEN can push
+          # but its commits do not start new runs.
+          token: ${{ secrets.PREVIEW_BAKE_TOKEN || github.token }}
+
+      - name: Loop guard — skip the bake bot's own manifest commit
+        id: guard
+        # A `pull_request` path filter evaluates the PR's CUMULATIVE diff, so the
+        # original plugin change keeps this workflow path-eligible even after our
+        # commit only touches data/plugin-previews/**. Without a guard the manifest
+        # commit re-triggers another bake (and loops). Note: head.user.login is the
+        # head-repo OWNER, not the commit author, so check the actual head commit
+        # author email instead. The head SHA goes through env (never interpolated
+        # into the script body) to avoid script injection.
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          AUTHOR="$(git log -1 --format='%ae' "$HEAD_SHA")"
+          echo "head commit author: $AUTHOR"
+          if [ "$AUTHOR" = "bot@open-design.ai" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "head commit is the bake bot's manifest commit — skipping to break the loop"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup workspace
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        uses: ./.github/actions/setup-workspace
+
+      - name: Render previews + publish clips to R2
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        uses: ./.github/actions/bake-previews
+        with:
+          upload: 'true'
+          r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
+          r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
+          r2-bucket: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
+          r2-endpoint: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
+
+      - name: Commit refreshed manifest into the PR branch
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        # No-op `previews`-diff guard: an identical re-bake commits nothing, so a
+        # synchronize that only re-renders the same content does not loop. The PR
+        # head ref goes through env (not interpolated into the script) to avoid
+        # script injection.
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          OLD=data/plugin-previews/manifest.json
+          NEW=.tmp/plugin-previews/manifest.json
+          # Capture on its own line so `set -e` surfaces a helper error (exit 2)
+          # rather than command substitution swallowing it into the test.
+          diff_result="$(node scripts/plugin-previews-diff.mjs "$OLD" "$NEW")"
+          case "$diff_result" in
+            changed) ;;
+            unchanged) echo "previews unchanged — nothing to commit"; exit 0 ;;
+            *) echo "unexpected diff result: '$diff_result'" >&2; exit 1 ;;
+          esac
+          cp "$NEW" "$OLD"
+          git config user.name "open-design-bot"
+          git config user.email "bot@open-design.ai"
+          git add "$OLD"
+          git commit -m "chore(plugin-previews): refresh baked preview manifest"
+          git push origin "HEAD:$HEAD_REF"

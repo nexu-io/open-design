@@ -675,7 +675,16 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   }
 
   if (obj.type === 'thread.started') {
-    onEvent({ type: 'status', label: 'initializing' });
+    // Surface codex's thread/session uuid on the same `sessionId` status
+    // channel claude uses (claude-stream.ts). It identifies this run's rollout
+    // file (`$CODEX_HOME/sessions/**/rollout-*-<thread_id>.jsonl`), which is the
+    // only place codex records per-call usage — run_finished reads it to recover
+    // the turn's first-call cache hit (codex's stream usage is cumulative only).
+    onEvent({
+      type: 'status',
+      label: 'initializing',
+      ...(typeof obj.thread_id === 'string' ? { sessionId: obj.thread_id } : {}),
+    });
     return true;
   }
 

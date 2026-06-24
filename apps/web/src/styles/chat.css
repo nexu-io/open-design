@@ -718,39 +718,169 @@
   color: white;
   border-radius: var(--radius-xs);
 }
-/* Run-failure error card. Neutral gray (not red): the actionable next step
-   lives in the AMR card below it; this card just states what happened. */
-.msg.error {
-  border: none;
-  background: var(--bg-fill-tertiary);
-  color: var(--text-muted);
-  padding: 10px 12px;
-  border-radius: var(--radius);
+/* =====================================================================
+   Unified run-failure card  ·  .run-error
+   One shell for every task failure. Neutral surface; the failure is
+   signalled by a semantic status dot + a strong title, NOT a flooded red
+   background (keeps a column of failed turns calm). Four-part structure:
+   ① type title  ② detail message  ③ 1–2 fix CTAs  ④ collapsible source.
+   data-tone re-tints only the status dot (error / warn / brand).
+   ===================================================================== */
+.run-error {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  gap: 12px;
+  animation: run-error-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-error-text { min-width: 0; }
-.chat-error-actions {
+@keyframes run-error-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ① + ② — status dot, title, detail */
+.run-error__main { display: flex; gap: 11px; align-items: flex-start; }
+.run-error__icon {
   flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+}
+.run-error__icon svg { width: 13px; height: 13px; }
+.run-error[data-tone='warn'] .run-error__icon {
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--amber);
+}
+.run-error[data-tone='brand'] .run-error__icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.run-error__copy { min-width: 0; flex: 1 1 auto; }
+.run-error__title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-strong);
+}
+.run-error__desc {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 64ch;
+  overflow-wrap: anywhere;
+}
+
+/* ④ — collapsible error source (code-line styled, one line when collapsed) */
+.run-error__source {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+/* Head row: the expand toggle (flex-grows) + a trailing copy button. They are
+   siblings, not nested — a button cannot contain another button. */
+.run-error__source-head {
+  display: flex;
+  align-items: stretch;
+}
+.run-error__source-bar {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  padding: 7px 10px;
+  color: var(--text-soft);
 }
-.chat-error-copy {
-  width: 28px;
-  height: 28px;
-  padding: 0;
+/* Copy diagnostics — sits at the right edge of the source head row. */
+.run-error__source-copy {
+  flex: 0 0 auto;
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 34px;
+  color: var(--text-soft);
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-error-retry {
+.run-error__source-copy:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
+}
+.run-error__source-chevron {
   flex: 0 0 auto;
-  padding: 4px 10px;
+  width: 12px;
+  height: 12px;
+  color: var(--text-faint);
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Contextual primary action in the gray error card (Authorize & retry / Top up). */
+.run-error__source.is-open .run-error__source-chevron { transform: rotate(90deg); }
+.run-error__source-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.run-error__source-peek {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.run-error__source.is-open .run-error__source-peek { opacity: 0; }
+/* max-height accordion (robust where grid-rows:0fr leaks the first child line) */
+.run-error__source-full {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.run-error__source.is-open .run-error__source-full { max-height: 240px; }
+.run-error__source-full > pre {
+  margin: 0;
+  overflow: auto;
+  max-height: 220px;
+  padding: 4px 10px 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ③ — fix actions, anchored to the bottom-right of the card */
+.run-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* Primary contextual CTA (Authorize & retry / Top up / terminal launch). */
 .chat-error-action {
   flex: 0 0 auto;
   appearance: none;
@@ -759,35 +889,22 @@
   background: var(--accent);
   color: white;
   font: inherit;
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 4px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-sm);
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-error-action:hover {
-  background: var(--accent-hover, var(--accent));
+.chat-error-action:hover { background: var(--accent-hover, var(--accent)); }
+/* Secondary recovery (Retry / Continue) — ghost. */
+.chat-error-retry {
+  flex: 0 0 auto;
+  padding: 6px 14px;
 }
 
-/* Inline AMR sign-in inside the gray error card. The pill's base layout is
-   scoped to the Settings/onboarding surfaces, so it arrives unstyled here —
-   stack the card onto its own rows (otherwise the long device-auth error
-   crushes the CJK message into a vertical sliver), wrap the error text, and
-   give the sign-in CTA the same accent button as .chat-error-action. */
-.msg.error:has(.chat-error-amr-login) {
-  flex-wrap: wrap;
-  align-items: center;
-  row-gap: 8px;
-}
-/* Dissolve the actions wrapper so the copy button and the sign-in pill flow as
-   direct flex items of the card: message + copy share the top row, the sign-in
-   CTA / activation block gets its own row below. */
-.msg.error:has(.chat-error-amr-login) .chat-error-actions {
-  display: contents;
-}
-.msg.error:has(.chat-error-amr-login) .chat-error-text {
-  flex: 1 1 auto;
-}
-/* Always its own row, below the message + copy button. */
+/* Inline AMR sign-in inside the unified card. The pill's base layout is scoped
+   to Settings/onboarding, so it arrives unstyled here — give it its own full
+   row, wrap the long device-auth error, and match the accent CTA. */
 .chat-error-amr-login {
   flex: 1 1 100%;
   min-width: 0;
@@ -821,7 +938,7 @@
   color: white;
   font: inherit;
   font-weight: 600;
-  padding: 4px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-sm);
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -843,14 +960,21 @@
   border-radius: var(--radius-sm);
 }
 
-/* AMR guidance card under the gray error card. Theme-color tinted; two
-   content variants (switch / recharge) share the shell. */
+@media (prefers-reduced-motion: reduce) {
+  .run-error { animation: none; }
+  .run-error__source-full,
+  .run-error__source-chevron { transition: none; }
+}
+
+/* AMR guidance card under the unified run-error card. Shares the same shell
+   (1px border + elevated surface + radius-md) so the two stack as one visual
+   system; the accent dot/chips carry the brand tint. */
 .amr-card {
   margin-top: 8px;
-  padding: 12px 14px;
-  border: none;
-  background: var(--bg-fill-tertiary);
-  border-radius: var(--radius);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: 8px;

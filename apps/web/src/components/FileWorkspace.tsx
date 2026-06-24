@@ -4157,6 +4157,7 @@ function Tab({
         'od-tooltip',
         meta ? 'has-meta' : '',
         kind === 'live-artifact' ? 'live-artifact-tab' : '',
+        kind === 'browser' ? 'browser-tab' : '',
         active ? 'active' : '',
         draggable ? 'draggable' : '',
         dragging ? 'dragging' : '',

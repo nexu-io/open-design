@@ -29,15 +29,21 @@
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
  */
-import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.js';
+import { renderOfficialDesignerPrompt } from './official-system.js';
+import { renderDiscoveryAndPhilosophy, renderSharedFramesBlock } from './discovery.js';
 import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
-import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import {
+  executionProfileFromStreamFormat,
+  type ChatSessionMode,
+  type ExecutionProfile,
+  type MediaExecutionPolicy,
+  type MediaSurface,
+} from '@open-design/contracts';
 
 // Prepended first in every composed prompt so it wins precedence over all
 // later sections, including skill bodies and user/project instructions.
@@ -246,7 +252,7 @@ export function resolveExclusiveSurface(args: {
     ?? (composedSurfaceModes.length === 1 ? composedSurfaceModes[0] ?? null : null);
 }
 
-export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
+export const BASE_SYSTEM_PROMPT = renderOfficialDesignerPrompt('filesystem');
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
@@ -308,17 +314,30 @@ printf '%s\\n' "\$last"
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 
-const CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE = `
+const FILESYSTEM_HANDOFF_OVERRIDE = `
 
 ---
 
-## Claude Code filesystem handoff
+## Filesystem handoff
 
-You are running as Claude Code with filesystem tools. When you write or edit an HTML file in the project folder with Write/Edit, that file is already visible in the user's file panel and preview.
+This run uses Open Design's filesystem execution profile. Project files are the source of truth for generated artifacts.
 
-- Do not output the full same HTML again in a \`<artifact type="text/html">...</artifact>\` block after writing it to disk.
+Normal rhythm for artifact work:
+1. Start with a short ordinary assistant message or compact \`<od-card>\` that states the locked direction.
+2. Use progress tools for planning/status.
+3. Create or edit project files through the runtime's native tool-call interface.
+4. End with a short ordinary assistant message naming the written file(s) and summarizing the result.
+
+Never type a tool invocation into assistant text as XML, markdown, JSON, or prose; if the runtime cannot call the tool, briefly explain that instead of simulating it.
+
+This tool-call rule does not apply to Open Design UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
+
+When you write or edit an HTML file in the project folder through the native file tool, that file is already visible in the user's file panel and preview.
+
+- Do not output generated source code in a \`<artifact type="text/html">...</artifact>\` block.
+- Do not duplicate file contents in assistant text after writing them to disk.
 - After the final self-check, briefly name the written file and summarize the result instead.
-- Only emit a full HTML \`<artifact>\` block if you could not write the project file through the filesystem tools.`;
+- A filesystem run that emits a source-code \`<artifact>\` is treated as an unexpected fallback by the host.`;
 
 export function buildExamplePromptOverride(
   title?: string | null,
@@ -515,6 +534,10 @@ export interface ComposeInput {
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
+  // Explicit handoff profile. Filesystem runs write project files through
+  // native tools; text_artifact runs (BYOK/plain) deliver source through
+  // assistant-text <artifact> blocks.
+  executionProfile?: ExecutionProfile | undefined;
 }
 
 export function composeSystemPrompt({
@@ -552,6 +575,7 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
   mediaExecution,
+  executionProfile,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -566,6 +590,8 @@ export function composeSystemPrompt({
         : [],
   );
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
+  const resolvedExecutionProfile =
+    executionProfile ?? executionProfileFromStreamFormat(streamFormat);
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -615,7 +641,7 @@ export function composeSystemPrompt({
   }
 
   if (!isMediaSurfaceEarly) {
-    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
     // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
@@ -644,7 +670,7 @@ export function composeSystemPrompt({
 
   parts.push(
     '# Identity and workflow charter (background)\n\n',
-    BASE_SYSTEM_PROMPT,
+    renderOfficialDesignerPrompt(resolvedExecutionProfile),
   );
 
   if (memoryBody && memoryBody.trim().length > 0) {
@@ -872,8 +898,8 @@ export function composeSystemPrompt({
     );
   }
 
-  if (agentId === 'claude') {
-    parts.push(CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE);
+  if (resolvedExecutionProfile === 'filesystem') {
+    parts.push(FILESYSTEM_HANDOFF_OVERRIDE);
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
@@ -882,7 +908,7 @@ export function composeSystemPrompt({
   // right-hand Questions tab, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
   parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.",
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
   );
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
@@ -1546,5 +1572,5 @@ function derivePreflight(skillBody: string): string {
     refs.push('`references/html-in-canvas.md`');
   }
   if (refs.length === 0) return '';
-  return ` **Pre-flight (do this before any other tool):** Read ${refs.join(', ')} via the path written in the skill-root preamble. The seed template defines the class system you'll paste into; the layouts file is the only acceptable source of section/screen/slide skeletons; the checklist is your P0/P1/P2 gate before emitting \`<artifact>\`. Skipping this step is the #1 reason output regresses to generic AI-slop.`;
+  return ` **Pre-flight (do this before any other tool):** Read ${refs.join(', ')} via the path written in the skill-root preamble. The seed template defines the class system you'll paste into; the layouts file is the only acceptable source of section/screen/slide skeletons; the checklist is your P0/P1/P2 gate before final handoff. Skipping this step is the #1 reason output regresses to generic AI-slop.`;
 }

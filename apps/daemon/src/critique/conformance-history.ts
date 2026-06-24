@@ -1,7 +1,7 @@
 /**
  * Conformance history persistence (Phase 16).
  *
- * The nightly cron writes one `ConformanceDay` row per adapter per day
+ * The prerelease cron writes one `ConformanceDay` row per adapter per day
  * via `appendConformanceDay`. The `/api/critique/conformance` route
  * reads the rolling N-day window via `readConformanceHistory` and
  * feeds it into the `evaluateRollout` ratchet.

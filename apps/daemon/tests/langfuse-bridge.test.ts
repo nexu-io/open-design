@@ -387,6 +387,82 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(trace.metadata.success).toBe(true);
   });
 
+  it('collects runtime diagnostic agent events into Langfuse observations', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: '',
+              producedFiles: [],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun({
+          agentId: 'amr',
+          events: [
+            {
+              id: 1,
+              event: 'agent',
+              timestamp: Date.now() - 100,
+              data: {
+                type: 'diagnostic',
+                name: 'acp_artifact_text_suppression',
+                source: 'acp-json-rpc',
+                reason: 'artifact_echo',
+                suppressedChars: 4096,
+                openedBlocks: 1,
+                closedBlocks: 1,
+                fileCount: 1,
+                files: ['index.html'],
+              },
+            },
+          ] as any,
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    expect(
+      bodyOf(batch, 'event-create', 'agent-diagnostic:acp_artifact_text_suppression'),
+    ).toMatchObject({
+      input: {
+        source: 'amr',
+        event_type: 'diagnostic',
+      },
+      output: {
+        name: 'acp_artifact_text_suppression',
+        source: 'acp-json-rpc',
+        reason: 'artifact_echo',
+        suppressed_chars: 4096,
+        opened_blocks: 1,
+        closed_blocks: 1,
+        file_count: 1,
+        files: ['index.html'],
+      },
+      metadata: {
+        diagnostic_name: 'acp_artifact_text_suppression',
+      },
+    });
+  });
+
   it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
