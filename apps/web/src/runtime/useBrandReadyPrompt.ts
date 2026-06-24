@@ -22,26 +22,50 @@ import { fetchBrands } from './brands';
 const POLL_INTERVAL_MS = 5000;
 // Ceiling so a stuck / abandoned extraction stops polling after ~25 minutes.
 const MAX_POLLS = 300;
+// When programmatic extraction is still running this long with no result, offer
+// the browser-assisted fallback (alongside the immediate offer when an anti-bot
+// wall is detected). ~60s per the product decision.
+const ASSIST_TIMEOUT_MS = 60_000;
 
 function shownStorageKey(brandId: string): string {
   return `od:brand-ready-prompt:${brandId}`;
 }
 
-function alreadyShown(brandId: string): boolean {
+function assistStorageKey(brandId: string): string {
+  return `od:brand-browser-assist:${brandId}`;
+}
+
+function readFlag(key: string): boolean {
   try {
-    return window.sessionStorage.getItem(shownStorageKey(brandId)) === '1';
+    return window.sessionStorage.getItem(key) === '1';
   } catch {
     return false;
   }
 }
 
-function markShown(brandId: string): void {
+function writeFlag(key: string): void {
   try {
-    window.sessionStorage.setItem(shownStorageKey(brandId), '1');
+    window.sessionStorage.setItem(key, '1');
   } catch {
     // sessionStorage unavailable — the prompt may re-show on a later visit,
     // which is a far smaller problem than never showing it at all.
   }
+}
+
+function alreadyShown(brandId: string): boolean {
+  return readFlag(shownStorageKey(brandId));
+}
+
+function markShown(brandId: string): void {
+  writeFlag(shownStorageKey(brandId));
+}
+
+function assistAlreadyShown(brandId: string): boolean {
+  return readFlag(assistStorageKey(brandId));
+}
+
+function markAssistShown(brandId: string): void {
+  writeFlag(assistStorageKey(brandId));
 }
 
 export interface BrandReadyPromptState {
@@ -51,14 +75,30 @@ export interface BrandReadyPromptState {
   brandName: string | null;
 }
 
+/** A one-shot signal that ProjectView should post the "solve the wall in the
+ *  browser, then Confirm" assist card into the conversation. */
+export interface BrandBrowserAssistState {
+  brandId: string;
+  /** The page the browser tab is open to, used as the extraction base URL. */
+  sourceUrl: string;
+  /** Wall label ("Cloudflare") when blocked; "timeout" when it just stalled. */
+  reason: string;
+}
+
 export interface UseBrandReadyPrompt {
   prompt: BrandReadyPromptState | null;
   dismiss: () => void;
+  /** Set once when extraction is blocked by an anti-bot wall OR has stalled past
+   *  the timeout; null otherwise. ProjectView injects the assist card on it. */
+  browserAssist: BrandBrowserAssistState | null;
+  dismissBrowserAssist: () => void;
 }
 
 /**
  * Watch a project's metadata; when it is a brand-extraction project whose brand
- * has reached `ready`, expose a one-shot prompt. No-op for every other project.
+ * has reached `ready`, expose a one-shot ready prompt. While it is still
+ * extracting, also expose a one-shot browser-assist signal when an anti-bot wall
+ * is detected or extraction stalls past ~60s. No-op for every other project.
  */
 export function useBrandReadyPrompt(
   metadata: ProjectMetadata | null | undefined,
@@ -66,16 +106,19 @@ export function useBrandReadyPrompt(
   const brandId =
     metadata?.importedFrom === 'brand-extraction' ? metadata?.brandId ?? null : null;
   const [prompt, setPrompt] = useState<BrandReadyPromptState | null>(null);
+  const [browserAssist, setBrowserAssist] = useState<BrandBrowserAssistState | null>(null);
 
   useEffect(() => {
     setPrompt(null);
+    setBrowserAssist(null);
     if (!brandId) return undefined;
-    // Already nudged this brand in this session — don't nag on revisit.
+    // Already nudged this brand to its ready state — don't nag on revisit.
     if (alreadyShown(brandId)) return undefined;
 
     let cancelled = false;
     let timer: number | undefined;
     let polls = 0;
+    const startedAt = Date.now();
 
     const check = async (): Promise<void> => {
       polls += 1;
@@ -90,6 +133,21 @@ export function useBrandReadyPrompt(
         return; // terminal — stop polling
       }
       if (status === 'failed') return; // terminal — no prompt
+
+      // Offer the browser-assisted fallback once, when an anti-bot wall is hit
+      // or extraction stalls past the timeout. Keep polling afterwards so a
+      // later `ready` (the user solved it) still fires the success prompt.
+      const blocked = summary?.meta.blocked === true;
+      const stalled = status === 'extracting' && Date.now() - startedAt >= ASSIST_TIMEOUT_MS;
+      if ((blocked || stalled) && !assistAlreadyShown(brandId)) {
+        markAssistShown(brandId);
+        setBrowserAssist({
+          brandId,
+          sourceUrl: summary?.meta.sourceUrl ?? '',
+          reason: summary?.meta.blockedReason ?? (blocked ? 'Cloudflare' : 'timeout'),
+        });
+      }
+
       if (polls >= MAX_POLLS) return;
       timer = window.setTimeout(() => void check(), POLL_INTERVAL_MS);
     };
@@ -105,5 +163,7 @@ export function useBrandReadyPrompt(
   return {
     prompt,
     dismiss: () => setPrompt(null),
+    browserAssist,
+    dismissBrowserAssist: () => setBrowserAssist(null),
   };
 }

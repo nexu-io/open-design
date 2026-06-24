@@ -2661,6 +2661,7 @@ describe('DesignSystemDetailView', () => {
     await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(system.projectId));
     expect(mocks.fetchProjectFiles).not.toHaveBeenCalled();
     expect(onOpenProject).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
     await waitFor(() => expect(screen.getByText('Could not open the design system workspace.')).toBeTruthy());
     expect(screen.queryByText('Opening the design system workspace...')).toBeNull();
     expect(screen.queryByTestId('design-system-files')).toBeNull();

@@ -3307,6 +3307,12 @@ export interface Dict {
   'artifact.odCardRuleSaving': string;
   'artifact.odCardRuleSaved': string;
   'artifact.odCardRuleError': string;
+  'artifact.odCardBrandAssistDone': string;
+  'artifact.odCardBrandAssistKicker': string;
+  'artifact.odCardBrandAssistBody': string;
+  'artifact.odCardBrandAssistError': string;
+  'artifact.odCardBrandAssistWorking': string;
+  'artifact.odCardBrandAssistConfirm': string;
 
   // Pet (Codex-style floating companion)
   'pet.title': string;

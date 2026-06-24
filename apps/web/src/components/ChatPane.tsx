@@ -42,6 +42,7 @@ import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Cha
 import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
+import type { BrandBrowserAssistConfirm } from './OdCard';
 import {
   DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
   type NextStepActionsVariant,
@@ -506,6 +507,9 @@ interface Props {
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
+  // Client-side confirm for a brand-browser-assist od-card: read the unblocked
+  // browser DOM and re-extract the brand. Routed through the stable callbacks ref.
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   // "Next step" affordance handlers forwarded to the last assistant message.
   // The featured design-toolbox rows are driven directly off the composer ref
   // owned here, so they need no handler from ProjectView (unlike onArtifactShare).
@@ -712,6 +716,7 @@ export function ChatPane({
   onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
+  onBrandBrowserAssistConfirm,
   onArtifactShare,
   onArtifactDownload,
   onForkFromMessage,
@@ -840,9 +845,10 @@ export function ChatPane({
   // excluded from its memo comparison (so streaming doesn't re-render every
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
-  const assistantCallbacksRef = useRef({
+  const assistantCallbacksRef = useRef<AssistantCallbacks>({
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onBrandBrowserAssistConfirm,
     onArtifactShare,
     onForkFromMessage,
     onShareToOpenDesign,
@@ -850,6 +856,7 @@ export function ChatPane({
   assistantCallbacksRef.current = {
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onBrandBrowserAssistConfirm,
     onArtifactShare,
     onForkFromMessage,
     onShareToOpenDesign,
@@ -2144,6 +2151,7 @@ export function ChatPane({
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
                 onNextStepPromptAction={handleNextStepPromptAction}
@@ -2475,6 +2483,7 @@ interface AssistantCallbacks {
   onAssistantFeedback:
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
+  onBrandBrowserAssistConfirm: BrandBrowserAssistConfirm | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
   onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
@@ -2532,6 +2541,7 @@ function ChatRows({
   nextUserContentByAssistantId,
   assistantCallbacksRef,
   onContinueRemainingTasks,
+  onBrandBrowserAssistConfirm,
   onArtifactShare,
   onToolboxAction,
   onNextStepPromptAction,
@@ -2574,6 +2584,7 @@ function ChatRows({
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onNextStepPromptAction?: (prompt: string) => void;
@@ -2677,6 +2688,11 @@ function ChatRows({
         suppressDirectionForms={hasActiveDesignSystem}
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
         onOpenQuestions={onOpenQuestions}
+        onBrandBrowserAssistConfirm={
+          onBrandBrowserAssistConfirm
+            ? (card) => assistantCallbacksRef.current.onBrandBrowserAssistConfirm?.(card)
+            : undefined
+        }
         onContinueRemainingTasks={
           m.id === lastAssistantId && onContinueRemainingTasks
             ? (todos) => assistantCallbacksRef.current.onContinueRemainingTasks?.(m, todos)

@@ -37,7 +37,7 @@ import {
   stripTrailingOpenOdCard,
   type OdCard,
 } from "@open-design/contracts";
-import { OdCardView } from "./OdCard";
+import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
@@ -277,6 +277,10 @@ interface Props {
   projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  // Client-side confirm for a <od-card type="brand-browser-assist"> button: read
+  // the unblocked browser DOM and re-extract the brand. Excluded from the memo
+  // comparison (routed through ChatPane's stable callbacks ref).
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -403,6 +407,7 @@ function AssistantMessageImpl({
   projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
@@ -653,6 +658,7 @@ function AssistantMessageImpl({
                 runId={message.runId ?? null}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               />
             );
           if (b.kind === "thinking")
@@ -1913,6 +1919,7 @@ function ProseBlock({
   runId,
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
 }: {
   text: string;
   hideRecoveredHtmlFallback?: boolean;
@@ -1928,6 +1935,7 @@ function ProseBlock({
   projectFileNames?: Set<string>;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onRequestOpenFile?: (name: string) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
@@ -2019,6 +2027,7 @@ function ProseBlock({
             <OdCardView
               key={seg.key}
               card={seg.card}
+              onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               instanceScope={[
                 projectId ?? "no-project",
                 conversationId ?? "no-conversation",

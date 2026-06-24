@@ -9,7 +9,11 @@
 // picker tests).
 
 import { useEffect, useState } from 'react';
-import type { BrandSummary } from '@open-design/contracts';
+import type {
+  BrandExtractFromHtmlRequest,
+  BrandFinalizeResponse,
+  BrandSummary,
+} from '@open-design/contracts';
 
 // One-shot cross-route handoff: the design-system id a navigation wants the
 // Design systems tab to preselect when it mounts. ProjectView's "design system
@@ -39,6 +43,44 @@ export function takeDesignSystemFocus(): string | null {
     return id || null;
   } catch {
     return null;
+  }
+}
+
+export type ExtractBrandFromHtmlOutcome =
+  | { ok: true; result: BrandFinalizeResponse }
+  | { ok: false; error: string };
+
+/** POST the DOM the web read out of the unblocked in-app browser tab so the
+ *  daemon re-runs extraction against it (no fresh fetch). Resolves with the
+ *  finalized brand on success, or a failure reason the assist card can show. */
+export async function extractBrandFromHtml(
+  brandId: string,
+  body: BrandExtractFromHtmlRequest,
+): Promise<ExtractBrandFromHtmlOutcome> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/extract-from-html`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      let error = `Extraction failed (${resp.status})`;
+      try {
+        const data = (await resp.json()) as { error?: string };
+        if (data?.error) error = data.error;
+      } catch {
+        // Non-JSON error body — keep the status-based message.
+      }
+      return { ok: false, error };
+    }
+    const result = (await resp.json()) as BrandFinalizeResponse;
+    return { ok: true, result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not reach the daemon',
+    };
   }
 }
 

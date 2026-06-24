@@ -107,7 +107,13 @@ import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
-import { setDesignSystemFocus } from '../runtime/brands';
+import { extractBrandFromHtml } from '../runtime/brands';
+import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
+import {
+  BROWSER_SERIALIZE_HTML_SCRIPT,
+  BROWSER_SERIALIZE_STYLES_SCRIPT,
+} from './design-browser-tools';
+import type { BrandBrowserAssistConfirm, BrandBrowserAssistResult } from './OdCard';
 import {
   buildBrandEnrichmentPrompt,
   installedBrandEnrichmentSkillIds,
@@ -370,6 +376,10 @@ interface QueuedChatSendUpdate {
 }
 
 let liveArtifactEventSequence = 0;
+// The brand-extraction project's design-system (brand kit) preview tab. Mirrors
+// the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
+// local literal to respect the web↔daemon boundary.
+const BRAND_KIT_FILE = 'brand.html';
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
 const MIN_CHAT_PANEL_WIDTH = 345;
@@ -1062,8 +1072,12 @@ export function ProjectView({
   // backing extraction finalizes a `user:<id>` design system, surfaces a
   // one-shot "ready — preview it" prompt so the user knows to open the Design
   // systems tab. A no-op for every non-brand-extraction project.
-  const { prompt: brandReadyPrompt, dismiss: dismissBrandReady } =
-    useBrandReadyPrompt(project.metadata);
+  const {
+    prompt: brandReadyPrompt,
+    dismiss: dismissBrandReady,
+    browserAssist: brandBrowserAssist,
+    dismissBrowserAssist: dismissBrandBrowserAssist,
+  } = useBrandReadyPrompt(project.metadata);
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
@@ -2355,6 +2369,73 @@ export function ProjectView({
     },
     [activeConversationId, project.id],
   );
+
+  // Client-side handler for the brand-browser-assist od-card's Confirm button:
+  // read the now-unblocked page DOM out of the in-app browser webview and re-run
+  // extraction against it. Desktop-only — the web-only <iframe> fallback can't
+  // read cross-origin guest DOM, so it returns a graceful refusal instead.
+  const handleBrandBrowserAssistConfirm = useCallback<BrandBrowserAssistConfirm>(
+    async (card): Promise<BrandBrowserAssistResult> => {
+      const tabId = card.browserTabId || BRAND_BROWSER_TAB_ID;
+      const handle = getBrandBrowser(project.id, tabId);
+      if (!handle || !handle.isDesktopWebview) {
+        return { ok: false, message: t('chat.brandBrowserAssistDesktopOnly') };
+      }
+      let html = '';
+      let css = '';
+      try {
+        const htmlPromise = handle.executeJavaScript<string>(BROWSER_SERIALIZE_HTML_SCRIPT, true);
+        html = htmlPromise ? await htmlPromise : '';
+        const cssPromise = handle.executeJavaScript<string>(BROWSER_SERIALIZE_STYLES_SCRIPT, true);
+        css = cssPromise ? await cssPromise : '';
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : t('chat.brandBrowserAssistReadFailed'),
+        };
+      }
+      if (!html.trim()) {
+        return { ok: false, message: t('chat.brandBrowserAssistReadFailed') };
+      }
+      const baseUrl = handle.getURL() || card.url || '';
+      const outcome = await extractBrandFromHtml(card.brandId, { html, css, baseUrl });
+      if (!outcome.ok) return { ok: false, message: outcome.error };
+      return { ok: true };
+    },
+    [project.id, t],
+  );
+
+  // One-shot: when extraction is blocked by an anti-bot wall (or has stalled past
+  // the timeout), drop the assist card into the conversation so the user can
+  // clear the wall in the Browser tab and Confirm. Keyed per conversation+brand
+  // so it can't double-post.
+  const injectedAssistRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!brandBrowserAssist || !activeConversationId) return;
+    const { brandId, sourceUrl, reason } = brandBrowserAssist;
+    const dedupeKey = `${activeConversationId}:${brandId}`;
+    if (injectedAssistRef.current === dedupeKey) return;
+    injectedAssistRef.current = dedupeKey;
+    const payload = JSON.stringify({
+      brandId,
+      browserTabId: BRAND_BROWSER_TAB_ID,
+      ...(sourceUrl ? { url: sourceUrl } : {}),
+      reason,
+    });
+    appendConversationMessage(activeConversationId, {
+      id: randomUUID(),
+      role: 'assistant',
+      content: `${t('chat.brandBrowserAssistMessage')}\n\n<od-card type="brand-browser-assist">${payload}</od-card>`,
+      createdAt: Date.now(),
+    });
+    dismissBrandBrowserAssist();
+  }, [
+    brandBrowserAssist,
+    activeConversationId,
+    appendConversationMessage,
+    dismissBrandBrowserAssist,
+    t,
+  ]);
 
   const replaceConversationMessage = useCallback(
     (
@@ -5856,6 +5937,20 @@ export function ProjectView({
     project.pendingPrompt?.trim() ||
     (initialDraft?.projectId === project.id ? initialDraft.value.trim() : '');
 
+  // Run the deeper "AI Optimize" enrichment pass on a programmatically-extracted
+  // brand: send the hidden seeded enrichment prompt + the default design-system
+  // skill bundle, refining the SAME registered design system in place. Shared by
+  // the chat "Continue" affordance and the ready-toast "AI Optimize" nudge.
+  const handleBrandEnrichment = useCallback(() => {
+    const skillIds = installedBrandEnrichmentSkillIds(skills);
+    void handleSend(
+      buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed),
+      [],
+      [],
+      skillIds.length > 0 ? { skillIds } : undefined,
+    );
+  }, [skills, brandEnrichmentPromptSeed, handleSend]);
+
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
@@ -6241,19 +6336,8 @@ export function ProjectView({
               githubConnected={githubConnected}
               onConnectRepo={handleConnectRepo}
               brandEnrichmentEligible={brandEnrichmentEligibleForProject}
-              onContinueBrandEnrichment={() => {
-                // Programmatically-extracted brand projects open with a finished
-                // design system but no agent run. This sends the hidden seeded
-                // enrichment prompt plus the default design-system skill bundle,
-                // refining the SAME registered design system in place.
-                const skillIds = installedBrandEnrichmentSkillIds(skills);
-                void handleSend(
-                  buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed),
-                  [],
-                  [],
-                  skillIds.length > 0 ? { skillIds } : undefined,
-                );
-              }}
+              onContinueBrandEnrichment={handleBrandEnrichment}
+              onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
@@ -6499,11 +6583,21 @@ export function ProjectView({
             key="brand-ready-prompt"
             brandName={brandReadyPrompt.brandName}
             onPreview={() => {
-              // Hand the new design system to the tab, then switch to it. The
-              // tab consumes the focus on mount and preselects the row.
-              setDesignSystemFocus(brandReadyPrompt.designSystemId);
+              // Stay in the project: focus the in-project brand-kit tab (the
+              // design-system preview) rather than jumping out to the global
+              // Design systems view.
+              requestOpenFile(BRAND_KIT_FILE);
               dismissBrandReady();
-              navigate({ kind: 'home', view: 'design-systems' });
+            }}
+            // Programmatic extraction can miss details — nudge toward refining it.
+            showRefinement={isProgrammaticBrandExtractionProject(project.metadata)}
+            onAiOptimize={() => {
+              handleBrandEnrichment();
+              dismissBrandReady();
+            }}
+            onEditManually={() => {
+              requestOpenFile(BRAND_KIT_FILE);
+              dismissBrandReady();
             }}
             onDismiss={dismissBrandReady}
           />
