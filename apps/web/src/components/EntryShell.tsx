@@ -182,6 +182,7 @@ import {
   type OptimisticProjectOwnershipWitnesses,
 } from '../collab/optimistic-project-ownership';
 import type { ModelCapabilityTag } from './modelCapabilityTags';
+import { UnavailableAgentGrid } from './UnavailableAgentGrid';
 import { LanguageMenu } from './LanguageMenu';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
@@ -208,7 +209,7 @@ import { defaultKnownProviderModel, KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
-import { invalidateProjectFilesCache } from '../providers/registry';
+import { invalidateProjectFilesCache, openExternalUrl } from '../providers/registry';
 import {
   cancelVelaLogin,
   fetchVelaLoginStatus,
@@ -2178,6 +2179,19 @@ function OnboardingView({
   const candidateCliAgents = agents.filter(
     (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
   );
+  // The complement of the candidates, not simply `!agent.available`.
+  // `deepSeekHarnessNeedsSetup` requires `!agent.available`, so such an agent
+  // satisfies both predicates: it is a candidate (surfaced so the user can
+  // finish setup) and would also read as "not installed" here. Today that
+  // cannot produce two visible cards — the panel's empty state is gated on
+  // `visibleAgents.length === 0`, and a setup-pending agent is visible, so the
+  // unavailable grid does not render at all. It would still be the wrong list
+  // to be on: an install card for an agent that is already installed. Deriving
+  // this from candidateCliAgents keeps the two in step if either the predicate
+  // or that gate changes.
+  const unavailableCliAgents = agents.filter(
+    (agent) => agent.id !== 'amr' && !candidateCliAgents.includes(agent),
+  );
   const visibleAgents = candidateCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrSignedIn = isAmrSessionAuthenticated(amrStatus);
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
@@ -3538,6 +3552,7 @@ function OnboardingView({
               {runtime === 'local' ? (
                 <OnboardingCliSetupPanel
                   agents={visibleAgents}
+                  unavailableAgents={unavailableCliAgents}
                   daemonLive={daemonLive}
                   selectedAgentId={config.agentId}
                   selectedAgent={selectedAgent}
@@ -3649,6 +3664,7 @@ function OnboardingView({
 
 function OnboardingCliSetupPanel({
   agents,
+  unavailableAgents,
   daemonLive,
   selectedAgentId,
   selectedAgent,
@@ -3663,6 +3679,7 @@ function OnboardingCliSetupPanel({
   onTest,
 }: {
   agents: AgentInfo[];
+  unavailableAgents: AgentInfo[];
   daemonLive: boolean;
   selectedAgentId: string | null;
   selectedAgent: AgentInfo | null;
@@ -3747,6 +3764,14 @@ function OnboardingCliSetupPanel({
       {showEmpty ? (
         <div className="onboarding-view__empty-slice">
           {t('settings.noAgentsDetected')}
+          {unavailableAgents.length > 0 ? (
+            <UnavailableAgentGrid
+              agents={unavailableAgents}
+              onInstallIntent={() => {}}
+              onRescan={onRefresh}
+              onOpenFixUrl={(url) => void openExternalUrl(url)}
+            />
+          ) : null}
         </div>
       ) : null}
       {selectedAgent && modelOptions.length > 0 ? (

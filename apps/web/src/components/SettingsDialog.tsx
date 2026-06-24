@@ -44,6 +44,7 @@ import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
+import { UnavailableAgentGrid } from './UnavailableAgentGrid';
 import { AmrLoginPill } from './AmrLoginPill';
 import { PlanBadge } from './PlanBadge';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
@@ -5126,98 +5127,18 @@ export function SettingsDialog({
                           })}
                         </span>
                       </summary>
-                      <div className="agent-grid agent-grid-unavailable">
-                        {unavailableAgents.map((a) => {
-                          const installUrl = sanitizeHttpsUrl(a.installUrl);
-                          const docsUrl = sanitizeHttpsUrl(a.docsUrl);
-                          const description = AGENT_SHORT_DESCRIPTIONS[a.id];
-                          const agentName = displayAgentName(a);
-                          const diagnosticHandlers = diagnosticHandlersForAgent(a);
-                          const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
-                          return (
-                            <div
-                              key={a.id}
-                              className="agent-card disabled agent-card-unavailable"
-                              role="group"
-                              aria-label={cardLabel}
-                            >
-                              <div className="agent-card-unavailable-row">
-                                <AgentIcon id={a.id} size={30} />
-                                <div className="agent-card-body">
-                                  <div className="agent-card-name">
-                                    {agentName}
-                                  </div>
-                                  {description ? (
-                                    <div className="agent-card-description">
-                                      {description}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                              {/* Why is it unavailable? not-on-path vs a broken
-                                  shim vs a bad *_BIN override each get a
-                                  distinct, actionable line, full-width below the
-                                  logo/name. Rendered message-only: the fix
-                                  actions are hoisted into the shared footer bar
-                                  so every control lives on one row. */}
-                              {(a.diagnostics ?? []).map((diagnostic, i) => (
-                                <AgentDiagnosticRow
-                                  key={`${diagnostic.reason}-${i}`}
-                                  diagnostic={diagnostic}
-                                />
-                              ))}
-                              {/* Every action for the card collapses into one
-                                  horizontal bar at the foot, fenced from the
-                                  content above by a hair divider: Docs + Rescan
-                                  as quiet icon buttons, Install as the primary
-                                  labelled CTA holding the right edge. */}
-                              <div className="agent-card-footer">
-                                {docsUrl ? (
-                                  <a
-                                    href={docsUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="agent-card-link agent-card-link--muted agent-card-link--icon"
-                                    onClick={markAgentInstallIntent}
-                                    title={t('settings.agentInstall.docs')}
-                                    aria-label={t('settings.agentInstall.docs')}
-                                  >
-                                    <Icon name="file" size={15} />
-                                  </a>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="agent-card-link agent-card-link--muted agent-card-link--icon"
-                                  onClick={() => diagnosticHandlers.onRescan?.()}
-                                  title={t('settings.rescan')}
-                                  aria-label={t('settings.rescan')}
-                                >
-                                  <Icon name="reload" size={15} />
-                                </button>
-                                {installUrl ? (
-                                  <a
-                                    href={installUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="agent-card-link agent-card-link--ghost"
-                                    onClick={(event) => {
-                                      markAgentInstallIntent();
-                                      if (a.id === 'amr') {
-                                        event.currentTarget.href = attributedAmrSettingsUrl(
-                                          installUrl,
-                                          'settings_amr_install',
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    {t('settings.agentInstall.install')}
-                                  </a>
-                                ) : null}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {/* No onOpenFixUrl: Settings keeps the plain
+                          target="_blank" anchors this section has always used.
+                          Only onboarding overrides them, because the packaged
+                          app needs links to leave its own window. */}
+                      <UnavailableAgentGrid
+                        agents={unavailableAgents}
+                        onInstallIntent={markAgentInstallIntent}
+                        onRescan={() => void handleRefreshAgents()}
+                        attributeAmrInstallUrl={(url) =>
+                          attributedAmrSettingsUrl(url, 'settings_amr_install')
+                        }
+                      />
                     </details>
                   ) : null}
                   {/*
