@@ -373,6 +373,18 @@ const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
 const TAB_PERSIST_DEBOUNCE_MS = 400;
+// The generic browser-side SSE reconnect-budget exhaustion message emitted by
+// consumeDaemonRun when the daemon status fetch still shows the run as
+// queued/running (providers/daemon.ts).  Both the live-stream onError and the
+// reattach-stream onError share this message; neither constitutes an
+// authoritative terminal failure.  Use isGenericDaemonDisconnect() at both
+// sites so generic disconnects stay eligible for attachRecoverableRuns to
+// re-query daemon authoritative status on the next tick.
+const GENERIC_DAEMON_DISCONNECT_MESSAGE =
+  'daemon stream disconnected before run completed';
+function isGenericDaemonDisconnect(err: unknown): boolean {
+  return err instanceof Error && err.message === GENERIC_DAEMON_DISCONNECT_MESSAGE;
+}
 const MIN_NORMAL_SPLIT_WIDTH =
   MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
@@ -1138,6 +1150,10 @@ export function ProjectView({
   // MAX_TRANSIENT_RETRIES so we never spin indefinitely on a persistently
   // missing run.
   const transientFailedRetriesRef = useRef<Map<string, number>>(new Map());
+  // Tracks generic-disconnect retry attempts per runId independently of the
+  // null-status path so the two transient error classes don't share one budget
+  // and cause premature sealing when both fire on the same run.
+  const genericDisconnectRetriesRef = useRef<Map<string, number>>(new Map());
   // Timer handles for pending transient-retry callbacks; cleared on cleanup.
   const transientRetryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [recoveryTick, setRecoveryTick] = useState(0);
@@ -2630,6 +2646,7 @@ export function ProjectView({
   // bumped, preventing attempts >= MAX_TRANSIENT_RETRIES from ever holding.
   useEffect(() => {
     transientFailedRetriesRef.current = new Map();
+    genericDisconnectRetriesRef.current = new Map();
   }, [activeConversationId, daemonLive]);
 
   useEffect(() => {
@@ -2746,6 +2763,7 @@ export function ProjectView({
               // Cap reached — treat as authoritative completion so we stop retrying.
               // Clear the Map entry so it doesn't accumulate stale entries.
               transientFailedRetriesRef.current.delete(runId);
+              genericDisconnectRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
             } else {
               transientFailedRetriesRef.current.set(runId, attempts + 1);
@@ -2781,6 +2799,7 @@ export function ProjectView({
           }
           // Clear stale retry count — this run is authoritatively done.
           transientFailedRetriesRef.current.delete(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
           completedReattachRunsRef.current.add(runId);
           continue;
         }
@@ -2880,6 +2899,7 @@ export function ProjectView({
             await auditDesignSystemWorkspaceAfterRun(message.id);
             // Clear stale retry count for successfully recovered run.
             transientFailedRetriesRef.current.delete(runId);
+            genericDisconnectRetriesRef.current.delete(runId);
             completedReattachRunsRef.current.add(runId);
             onProjectsRefresh();
             continue;
@@ -3028,6 +3048,7 @@ export function ProjectView({
               unregisterTextBuffer();
               // Clear stale retry count for successfully recovered run.
               transientFailedRetriesRef.current.delete(runId);
+              genericDisconnectRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -3206,9 +3227,29 @@ export function ProjectView({
                   })();
                 }
               }
-              // Clear stale retry count for successfully recovered run.
-              transientFailedRetriesRef.current.delete(runId);
-              completedReattachRunsRef.current.add(runId);
+              // Clear stale retry count for the run.  Generic disconnects
+              // (browser SSE reconnect-budget exhaustion) are NOT authoritative
+              // terminal failures — the daemon may still report the run as
+              // queued/running/succeeded on the next attachRecoverableRuns tick.
+              // Only seal completedReattachRunsRef for real terminal errors so
+              // generic disconnects stay eligible for re-query.
+              // Generic disconnects share the transient-retry budget with the
+              // null-status path: after MAX_TRANSIENT_RETRIES consecutive generic
+              // disconnects we promote to an authoritative seal so a flapping
+              // daemon can't trigger an unbounded reattach loop.
+              if (isGenericDaemonDisconnect(err)) {
+                const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
+                if (attempts >= MAX_TRANSIENT_RETRIES) {
+                  completedReattachRunsRef.current.add(runId);
+                  genericDisconnectRetriesRef.current.delete(runId);
+                } else {
+                  genericDisconnectRetriesRef.current.set(runId, attempts);
+                }
+              } else {
+                transientFailedRetriesRef.current.delete(runId);
+                genericDisconnectRetriesRef.current.delete(runId);
+                completedReattachRunsRef.current.add(runId);
+              }
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
@@ -3232,6 +3273,7 @@ export function ProjectView({
               unregisterTextBuffer();
               // Clear stale retry count for canceled run.
               transientFailedRetriesRef.current.delete(runId);
+              genericDisconnectRetriesRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -4193,10 +4235,22 @@ export function ProjectView({
           // runId eligible for attachRecoverableRuns to re-query.  Only seal
           // the registry entry on authoritative terminal failures (any error
           // that is NOT the generic disconnect message).
-          const isGenericDisconnect =
-            err.message === 'daemon stream disconnected before run completed';
-          if (currentRunId && !isGenericDisconnect) {
-            completedReattachRunsRef.current.add(currentRunId);
+          // Generic disconnects share the transient-retry budget with the
+          // reattach null-status path: after MAX_TRANSIENT_RETRIES we seal so
+          // a flapping daemon can't trigger an unbounded live-stream reconnect loop.
+          if (currentRunId) {
+            if (isGenericDaemonDisconnect(err)) {
+              const attempts = (genericDisconnectRetriesRef.current.get(currentRunId) ?? 0) + 1;
+              if (attempts >= MAX_TRANSIENT_RETRIES) {
+                completedReattachRunsRef.current.add(currentRunId);
+                genericDisconnectRetriesRef.current.delete(currentRunId);
+              } else {
+                genericDisconnectRetriesRef.current.set(currentRunId, attempts);
+              }
+            } else {
+              genericDisconnectRetriesRef.current.delete(currentRunId);
+              completedReattachRunsRef.current.add(currentRunId);
+            }
           }
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
             runConversationId,
