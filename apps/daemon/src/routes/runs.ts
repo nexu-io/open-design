@@ -26,7 +26,7 @@ import { newInsertId, readAnalyticsContext } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
 import type { ConnectorService } from '../connectors/service.js';
-import { getProject, listConversations, upsertMessage } from '../db.js';
+import { getProject, listConversations, updateProject, upsertMessage } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,
@@ -738,6 +738,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
         ? analyticsHints.isFirstRun
         : undefined;
+      // Marks the AI-optimize (deep enrichment) run so completion can emit
+      // design_system_enrich_result + flag the DS ai_refined (C14/C15).
+      const hintDsEnrichment = analyticsHints.dsEnrichment === true;
       const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
         ? analyticsHints.hasExistingArtifact
         : undefined;
@@ -925,6 +928,43 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
         const result = runResultFromStatus(status.status);
         const errorCode = deriveRunErrorCode(status);
+        // C14/C15: AI-optimize (enrichment) run settled. Emit the dedicated
+        // result event and, on success, flag the DS ai_refined so the
+        // programmatic-vs-refined cohorts are comparable (tracking spec §6).
+        if (hintDsEnrichment) {
+          design.analytics.capture({
+            eventName: 'design_system_enrich_result',
+            context: analyticsContext,
+            appVersion: design.getAppVersion(),
+            properties: {
+              page_name: 'design_system_project',
+              area: 'design_system_enrich',
+              result,
+              design_system_id: dsSelectedId ?? undefined,
+              project_id: requestProjectId,
+              run_id: run.id,
+              ...(errorCode ? { error_code: errorCode } : {}),
+              duration_ms: Math.max(0, Date.now() - run.createdAt),
+            },
+            insertId: newInsertId(),
+          });
+          if (result === 'success' && requestProjectId) {
+            try {
+              const enrichedProject = getProject(db, requestProjectId);
+              if (enrichedProject) {
+                updateProject(db, requestProjectId, {
+                  metadata: {
+                    ...(enrichedProject.metadata ?? {}),
+                    enrichmentStatus: 'ai_refined',
+                    enrichmentCompletedAt: Date.now(),
+                  },
+                });
+              }
+            } catch {
+              // Best-effort flag; the enrich_result event already recorded the outcome.
+            }
+          }
+        }
         const failure = classifyRunFailure({
           result,
           status,

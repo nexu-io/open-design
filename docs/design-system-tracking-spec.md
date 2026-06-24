@@ -32,7 +32,7 @@
 | C2 Onboarding 创建 vs Go Home（用 completion_type with/without_design_system 区分） | ✅ 已实现 |
 | E1 DS 编辑 run 带 `edit_surface`(chat/comment/mark，daemon 从 entry_from 派生） | ✅ 已实现 |
 | E3 §3.6 编辑按钮：edit_with_agent/refresh/download/reset/color/logo·image delete/上传×3(含 paste)/design_md_edit + Brand 卡三键 | ✅ 已实现 |
-| C14 `design_system_enrich_result`、C15 `ProjectMetadata.enrichmentStatus` | ⏳ follow-up（需关联 enrichment run 完成） |
+| C14 `design_system_enrich_result` + C15 `ProjectMetadata.enrichmentStatus`/`enrichmentCompletedAt`（daemon 在 enrichment run 完成时发事件 + 成功则标 ai_refined） | ✅ 已实现 |
 | C10 多网站计数；少量按钮 `kit_import`(无实现)/`kit_open`(无状态外链)/`design_md_copy·upload`(无独立 handler) | ⏳ 未实现/枚举预留 |
 
 ## 0. 业务目标（埋点要回答的问题）
