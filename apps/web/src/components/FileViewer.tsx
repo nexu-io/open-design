@@ -4925,6 +4925,7 @@ function HtmlViewer({
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
+  const [manualEditDraftDirty, setManualEditDraftDirty] = useState(false);
   const selectedManualEditTargetIdRef = useRef<string | null>(null);
   const manualEditSelectionDraftRef = useRef<{ id: string; draft: ManualEditDraft } | null>(null);
   // Tracks the iframe's in-flight inline text edit. `finishManualEditTextSession`
@@ -5890,6 +5891,7 @@ function HtmlViewer({
     setManualEditPanelPosition(null);
     selectedManualEditTargetIdRef.current = null;
     setManualEditDraft(emptyManualEditDraft());
+    setManualEditDraftDirty(false);
     setManualEditHistory([]);
     setManualEditUndone([]);
     setManualEditError(null);
@@ -6140,6 +6142,7 @@ function HtmlViewer({
       setManualEditHoverTarget(null);
       setManualEditPageStylesOpen(false);
       setManualEditPanelPosition(null);
+      setManualEditDraftDirty(false);
       selectedManualEditTargetIdRef.current = null;
       manualEditSelectionDraftRef.current = null;
       manualEditTextSessionIdRef.current = null;
@@ -6449,6 +6452,7 @@ function HtmlViewer({
     manualEditSelectionDraftRef.current = { id: target.id, draft: nextDraft };
     setSelectedManualEditTarget(target);
     setManualEditDraft(nextDraft);
+    setManualEditDraftDirty(false);
     setManualEditError(null);
   }
 
@@ -6480,6 +6484,7 @@ function HtmlViewer({
     setSelectedManualEditTarget(null);
     setManualEditPanelPosition(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
+    setManualEditDraftDirty(false);
     setManualEditError(null);
   }
 
@@ -6535,21 +6540,6 @@ function HtmlViewer({
     return null;
   }
 
-  function manualEditDraftChangedFromSelection(): boolean {
-    if (!selectedManualEditTarget) return false;
-    const snapshot = manualEditSelectionDraftRef.current;
-    if (!snapshot || snapshot.id !== selectedManualEditTarget.id) return false;
-    const before = snapshot.draft;
-    if (
-      manualEditDraft.text !== before.text ||
-      manualEditDraft.href !== before.href ||
-      manualEditDraft.src !== before.src ||
-      manualEditDraft.alt !== before.alt ||
-      manualEditDraft.outerHtml !== before.outerHtml
-    ) return true;
-    return MANUAL_EDIT_STYLE_PROPS.some((key) => manualEditDraft.styles[key] !== before.styles[key]);
-  }
-
   async function saveManualEditPanelDraft() {
     const hadTextSession = Boolean(manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current);
     if (!(await settlePendingManualEditCommit())) return;
@@ -6590,6 +6580,7 @@ function HtmlViewer({
       fullSource: refreshedBase,
       styles: inspectorManualEditStyles(selectedManualEditTarget, refreshedBase),
     });
+    setManualEditDraftDirty(false);
     setManualEditError(null);
     postSelectedManualEditTargetToIframe(selectedManualEditTarget.id);
   }
@@ -6675,9 +6666,18 @@ function HtmlViewer({
         setSelectedManualEditTarget(null);
         setManualEditTargets((current) => current.filter((target) => target.id !== patch.id));
         setManualEditDraft(emptyManualEditDraft(result.source));
+        setManualEditDraftDirty(false);
         postSelectedManualEditTargetToIframe(null);
       } else {
         setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      }
+      if (
+        patch.kind !== 'remove-element' &&
+        patch.kind !== 'set-token' &&
+        patch.kind !== 'set-full-source' &&
+        selectedManualEditTargetIdRef.current === patch.id
+      ) {
+        setManualEditDraftDirty(true);
       }
       if (patch.kind === 'set-style') {
         reconcileManualEditStyleSave(patch.id, patch.styles, result.source);
@@ -8339,7 +8339,7 @@ function HtmlViewer({
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
   const manualEditPanelActive =
     manualEditMode && (!!selectedManualEditTarget || manualEditPageCardActive);
-  const manualEditResetAvailable = manualEditDraftChangedFromSelection();
+  const manualEditResetAvailable = selectedManualEditTarget ? manualEditDraftDirty : false;
   const manualEditPanel = manualEditPanelActive ? (
     <ManualEditPanel
       targets={manualEditTargets}
@@ -8355,7 +8355,10 @@ function HtmlViewer({
       onSelectTarget={(target) => {
         void selectManualEditTarget(target);
       }}
-      onDraftChange={setManualEditDraft}
+      onDraftChange={(draft) => {
+        setManualEditDraft(draft);
+        setManualEditDraftDirty(Boolean(selectedManualEditTarget));
+      }}
       onStyleChange={(id, styles, label) => {
         void handleManualEditStyleChange(id, styles, label);
       }}

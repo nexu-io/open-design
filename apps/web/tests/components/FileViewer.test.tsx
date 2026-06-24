@@ -1207,7 +1207,7 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Exit while editing; the iframe commits new text, but the save fails.
     fireEvent.click(toggle);
@@ -1289,7 +1289,7 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Iframe-driven finish (Enter): commit + session-inactive with NO host finish.
     window.dispatchEvent(new MessageEvent('message', {
