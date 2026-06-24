@@ -145,6 +145,19 @@ function isGreenish(hex: string): boolean {
   return h >= 75 && h <= 165 && saturation(hex) > 0.25;
 }
 
+function lightThemeBackground(...rawColors: Array<string | undefined>): string {
+  for (const raw of rawColors) {
+    const hex = normalizeHex(raw ?? "");
+    if (hex && luminance(hex) >= 0.72) return hex;
+  }
+  return defaultSeed.colorBgBase;
+}
+
+function lightThemeForeground(raw: string | undefined): string {
+  const hex = normalizeHex(raw ?? "");
+  return hex && luminance(hex) <= 0.45 ? hex : defaultSeed.colorTextBase;
+}
+
 // ─────────────────────────── Brand → Seed ───────────────────────────────────
 
 function findRole(colors: BrandColor[], role: BrandColor["role"]): BrandColor | undefined {
@@ -177,8 +190,8 @@ function fontStack(primaryFamily: string | undefined, fallbacks: string[]): stri
  *  - colorInfo     ← same as primary
  *  - colorLink     ← role "accent-secondary" (else "")
  *  - colorSuccess  ← accent-secondary if it reads green, else default
- *  - colorTextBase ← role "foreground"
- *  - colorBgBase   ← role "background"
+ *  - colorTextBase ← dark role "foreground"; light foregrounds fall back to black
+ *  - colorBgBase   ← light role "background" / "surface"; dark canvases fall back to white
  *  - fontFamily    ← body face + fallbacks + system tail
  *  - borderRadius  ← parseInt(layout.radius) || 6
  *  - everything else ← defaultSeed
@@ -197,6 +210,7 @@ export function seedFromBrand(brand: Brand): SeedToken {
   const accentSecondary = findRole(colors, "accent-secondary");
   const foreground = findRole(colors, "foreground");
   const background = findRole(colors, "background");
+  const surface = findRole(colors, "surface");
 
   const primaryHex =
     normalizeHex(accent?.hex ?? "") ??
@@ -215,8 +229,8 @@ export function seedFromBrand(brand: Brand): SeedToken {
     colorInfo: primaryHex,
     colorLink: linkHex ?? "",
     colorSuccess: successHex,
-    colorTextBase: normalizeHex(foreground?.hex ?? "") ?? defaultSeed.colorTextBase,
-    colorBgBase: normalizeHex(background?.hex ?? "") ?? defaultSeed.colorBgBase,
+    colorTextBase: lightThemeForeground(foreground?.hex),
+    colorBgBase: lightThemeBackground(background?.hex, surface?.hex),
     fontFamily: fontStack(brand.typography?.body?.family, brand.typography?.body?.fallbacks ?? []),
     borderRadius: Number.isFinite(radius) && radius > 0 ? radius : defaultSeed.borderRadius,
   };
@@ -247,8 +261,9 @@ function primaryScore(hex: string, count: number): number {
  *  - colorPrimary  ← highest-scoring chromatic color (skip extremes + greys),
  *                    weighted by frequency. Falls back to defaultSeed.
  *  - colorInfo     ← same as primary.
- *  - colorTextBase / colorBgBase ← decided by the site's overall light/dark cast
- *                    (mean luminance of its measured colors).
+ *  - colorTextBase / colorBgBase ← the light-theme neutral baseline. A dark
+ *                    source site still gets a light default kit; the dark
+ *                    algorithm owns the black canvas.
  *  - colorSuccess/Warning/Error/Link ← stable defaults (semantic colors aren't
  *                    reliably inferable from frequency alone).
  *  - fontFamily    ← fonts[0] / first @font-face family + system tail.
@@ -270,21 +285,6 @@ export function seedFromMaterial(material: PrefetchResult): SeedToken {
     }
   }
 
-  // ── light vs dark cast: count-weighted mean luminance over the measured
-  // colors. Extremes are kept here on purpose — they reveal whether the canvas
-  // itself is light or dark, which is exactly the background/text decision.
-  // Weighting by declaration count matters: an unweighted mean lets a long
-  // tail of one-off dark greys outvote the near-white the page actually sits
-  // on. The threshold is biased light (0.45) — a wrong dark canvas is far
-  // more jarring than a wrong light one.
-  let dark = false;
-  const totalCount = candidates.reduce((sum, c) => sum + c.count, 0);
-  if (totalCount > 0) {
-    const meanLuma =
-      candidates.reduce((sum, c) => sum + luminance(c.hex) * c.count, 0) / totalCount;
-    dark = meanLuma < 0.45;
-  }
-
   // ── font: first measured family, else first @font-face family ──
   const primaryFamily = material.fonts?.[0]?.family ?? material.fontFaceFamilies?.[0];
 
@@ -292,8 +292,8 @@ export function seedFromMaterial(material: PrefetchResult): SeedToken {
     ...defaultSeed,
     colorPrimary: primaryHex,
     colorInfo: primaryHex,
-    colorTextBase: dark ? "#ffffff" : "#000000",
-    colorBgBase: dark ? "#000000" : "#ffffff",
+    colorTextBase: defaultSeed.colorTextBase,
+    colorBgBase: defaultSeed.colorBgBase,
     fontFamily: fontStack(primaryFamily, []),
   };
 }

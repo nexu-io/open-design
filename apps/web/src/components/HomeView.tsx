@@ -283,7 +283,9 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
-  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
+  // Home composer always starts design work; the project chat keeps the visible
+  // mode switcher. Do not pass `onSessionModeChange` to HomeHero.
+  const sessionMode: ChatSessionMode = 'design';
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
@@ -1769,8 +1771,6 @@ export function HomeView({
         onSubmit={submit}
         onSubmitScenario={submitScenario}
         submitting={sending}
-        sessionMode={sessionMode}
-        onSessionModeChange={setSessionMode}
         activePluginTitle={activeBadgeTitle}
         activePluginIsExplicit={activePluginIsExplicit}
         activePluginRecord={active?.record ?? null}

@@ -2153,6 +2153,7 @@ export function FileWorkspace({
             activityEvents={designSystemActivityEvents}
             onOpenFile={openFile}
             onUploadAssets={() => fileInputRef.current?.click()}
+            onRefreshFiles={onRefreshFiles}
             defaultDesignSystemId={defaultDesignSystemId}
             onSetDefaultDesignSystem={onSetDefaultDesignSystem}
             onDesignSystemsRefresh={onDesignSystemsRefresh}
@@ -2438,6 +2439,7 @@ function DesignSystemProjectPanel({
   activityEvents,
   onOpenFile,
   onUploadAssets,
+  onRefreshFiles,
   defaultDesignSystemId,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
@@ -2457,6 +2459,7 @@ function DesignSystemProjectPanel({
   activityEvents: AgentEvent[];
   onOpenFile: (name: string) => void;
   onUploadAssets: () => void;
+  onRefreshFiles: () => Promise<void> | void;
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
@@ -2514,6 +2517,15 @@ function DesignSystemProjectPanel({
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
+
+  const refreshKitDependencies = useCallback(async () => {
+    setKitReloadKey((k) => k + 1);
+    await Promise.all([
+      Promise.resolve(onRefreshFiles()),
+      Promise.resolve(onDesignSystemsRefresh?.()),
+    ]);
+  }, [onDesignSystemsRefresh, onRefreshFiles]);
+
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
@@ -2539,9 +2551,9 @@ function DesignSystemProjectPanel({
     projectId,
     title: system.title,
     onUploaded: () => {
-      setKitReloadKey((k) => k + 1);
-      void onDesignSystemsRefresh?.();
-      notifyKit('success', t('ds.uploadDone'));
+      void refreshKitDependencies()
+        .then(() => notifyKit('success', t('ds.uploadDone')))
+        .catch(() => notifyKit('error', t('ds.actionFailed')));
     },
     onError: () => notifyKit('error', t('ds.uploadFailed')),
   });
@@ -2561,8 +2573,7 @@ function DesignSystemProjectPanel({
       await updateDesignSystemDraft(system.id, { body: nextBody });
       await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
       setDesignMdBody(nextBody);
-      setKitReloadKey((k) => k + 1);
-      await onDesignSystemsRefresh?.();
+      await refreshKitDependencies();
     } finally {
       setSavingDesignMd(false);
     }
@@ -2573,8 +2584,7 @@ function DesignSystemProjectPanel({
     setKitActionBusy('refresh');
     try {
       await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
-      setKitReloadKey((k) => k + 1);
-      await onDesignSystemsRefresh?.();
+      await refreshKitDependencies();
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2587,9 +2597,10 @@ function DesignSystemProjectPanel({
     if (kitActionBusy) return;
     setKitActionBusy('download');
     try {
+      await refreshKitDependencies();
       const ok =
-        await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title }) ||
-        await downloadProjectArchive({ projectId, fallbackTitle: system.title });
+        await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
+        await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title });
       if (!ok) notifyKit('error', t('ds.actionFailed'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2612,8 +2623,7 @@ function DesignSystemProjectPanel({
         await deleteProjectFile(projectId, 'brand.json');
       }
       setDesignMdBody(originalMd);
-      setKitReloadKey((k) => k + 1);
-      await onDesignSystemsRefresh?.();
+      await refreshKitDependencies();
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2665,8 +2675,7 @@ function DesignSystemProjectPanel({
       await saveDesignMd(nextBody);
       return;
     }
-    setKitReloadKey((k) => k + 1);
-    await onDesignSystemsRefresh?.();
+    await refreshKitDependencies();
   }
 
   async function resetKitColor(index: number) {
@@ -2686,8 +2695,7 @@ function DesignSystemProjectPanel({
       notifyKit('error', t('ds.actionFailed'));
       return;
     }
-    setKitReloadKey((k) => k + 1);
-    await onDesignSystemsRefresh?.();
+    await refreshKitDependencies();
     notifyKit('success', t('ds.actionDone'));
   }
 
@@ -2697,8 +2705,7 @@ function DesignSystemProjectPanel({
       notifyKit('error', t('ds.actionFailed'));
       return;
     }
-    setKitReloadKey((k) => k + 1);
-    await onDesignSystemsRefresh?.();
+    await refreshKitDependencies();
     notifyKit('success', t('ds.actionDone'));
   }
 

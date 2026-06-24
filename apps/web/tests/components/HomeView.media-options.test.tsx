@@ -58,6 +58,15 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
+  it('does not show the project chat session-mode switcher on the Home composer', async () => {
+    stubFetch();
+    renderHome();
+
+    await screen.findByTestId('home-hero-input');
+
+    expect(document.querySelector('.session-mode-toggle')).toBeNull();
+  });
+
   it('renders the design-system popover outside the prompt editor (not clipped by it)', async () => {
     stubFetch();
     renderHome();

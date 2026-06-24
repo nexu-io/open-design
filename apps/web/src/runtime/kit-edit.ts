@@ -1,5 +1,6 @@
 import type { Brand } from '@open-design/contracts';
 import {
+  deleteProjectFile,
   fetchProjectFileText,
   writeProjectTextFile,
 } from '../providers/registry';
@@ -58,24 +59,33 @@ export function replaceDesignMdColorAtIndex(body: string, index: number, hex: st
 }
 
 export async function deleteBrandLogo(projectId: string, index: number): Promise<boolean> {
-  return patchBrand(projectId, (brand) => {
+  let fileToDelete: string | null = null;
+  const ok = await patchBrand(projectId, (brand) => {
     const logo = brand.logo;
     if (!logo) return;
     const alternates = logo.alternates ?? [];
     if (index <= 0) {
+      fileToDelete = relativeProjectAssetPath(logo.primary);
       logo.primary = alternates.shift() ?? null;
       logo.alternates = alternates;
       return;
     }
+    fileToDelete = relativeProjectAssetPath(alternates[index - 1]);
     logo.alternates = alternates.filter((_, i) => i !== index - 1);
   });
+  if (ok && fileToDelete) await deleteProjectFile(projectId, fileToDelete);
+  return ok;
 }
 
 export async function deleteBrandImage(projectId: string, index: number): Promise<boolean> {
-  return patchBrand(projectId, (brand) => {
+  let fileToDelete: string | null = null;
+  const ok = await patchBrand(projectId, (brand) => {
     if (!brand.imagery?.samples) return;
+    fileToDelete = relativeProjectAssetPath(brand.imagery.samples[index]?.file);
     brand.imagery.samples = brand.imagery.samples.filter((_, i) => i !== index);
   });
+  if (ok && fileToDelete) await deleteProjectFile(projectId, fileToDelete);
+  return ok;
 }
 
 export async function readDesignMd(projectId: string): Promise<string> {
@@ -89,4 +99,11 @@ export async function writeDesignMd(projectId: string, body: string): Promise<bo
 
 export async function readTextFile(file: File): Promise<string> {
   return await file.text();
+}
+
+function relativeProjectAssetPath(raw: string | null | undefined): string | null {
+  if (!raw || /^(?:[a-z]+:)?\/\//i.test(raw) || raw.startsWith('/')) return null;
+  const clean = raw.replace(/^\.\/+/, '').replace(/\\/g, '/');
+  if (!clean || clean.includes('\0') || clean.split('/').some((part) => part === '..')) return null;
+  return clean;
 }

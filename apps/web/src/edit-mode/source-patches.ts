@@ -20,7 +20,12 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
   }
 
   const el = findEditableElement(doc, patch.id);
-  if (!el) return { ok: false, source, error: `Target not found: ${patch.id}` };
+  if (!el) {
+    const dynamic = applyDynamicBrandKitPatch(doc, patch);
+    return dynamic.ok
+      ? { ok: true, source: serializeSource(doc, source) }
+      : { ok: false, source, error: `Target not found: ${patch.id}` };
+  }
 
   if (patch.kind === 'set-text') {
     if (hasElementChildren(el)) {
@@ -167,6 +172,171 @@ function findEditableElement(doc: Document, id: string): Element | null {
   );
 }
 
+function applyDynamicBrandKitPatch(doc: Document, patch: ManualEditPatch): { ok: boolean } {
+  if (!doc.getElementById('od-brand-payload')) return { ok: false };
+  if (patch.kind === 'set-style') {
+    setRuntimeStyleOverride(doc, patch.id, patch.styles);
+    return { ok: true };
+  }
+  if (patch.kind === 'remove-element') {
+    setRuntimeStyleOverride(doc, patch.id, { display: 'none' } as Partial<ManualEditStyles>);
+    return { ok: true };
+  }
+  return updateBrandKitPayload(doc, patch);
+}
+
+function updateBrandKitPayload(doc: Document, patch: ManualEditPatch): { ok: boolean } {
+  const script = doc.getElementById('od-brand-payload');
+  if (!script) return { ok: false };
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(script.textContent || '{}') as Record<string, unknown>;
+  } catch {
+    return { ok: false };
+  }
+  const brand = ensureRecord(payload, 'brand');
+  let changed = false;
+  if (patch.kind === 'set-text') {
+    changed = setBrandKitTextValue(brand, patch.id, patch.value);
+  } else if (patch.kind === 'set-link' && patch.id === 'brand-source') {
+    brand.sourceUrl = patch.href;
+    changed = true;
+  } else if (patch.kind === 'set-image') {
+    changed = setBrandKitImageValue(brand, patch.id, patch.src, patch.alt);
+  }
+  if (!changed) return { ok: false };
+  script.textContent = safeJsonForScript(payload);
+  return { ok: true };
+}
+
+function setBrandKitTextValue(brand: Record<string, unknown>, id: string, value: string): boolean {
+  if (id === 'brand-name') {
+    brand.name = value;
+    return true;
+  }
+  if (id === 'brand-tagline') {
+    brand.tagline = value;
+    return true;
+  }
+  if (id === 'brand-description') {
+    brand.description = value;
+    return true;
+  }
+  if (id === 'brand-source') {
+    brand.sourceUrl = value;
+    return true;
+  }
+  if (id === 'brand-logo-notes') {
+    ensureRecord(brand, 'logo').notes = value;
+    return true;
+  }
+  if (id === 'brand-voice-tone') {
+    ensureRecord(brand, 'voice').tone = value;
+    return true;
+  }
+  if (id === 'brand-imagery-style') {
+    ensureRecord(brand, 'imagery').style = value;
+    return true;
+  }
+  if (id === 'brand-imagery-treatment') {
+    ensureRecord(brand, 'imagery').treatment = value;
+    return true;
+  }
+  const colorMatch = id.match(/^brand-color-(hex|name|role|usage)-(\d+)$/);
+  if (colorMatch) {
+    const colors = ensureArray(brand, 'colors');
+    const entry = ensureArrayRecord(colors, Number(colorMatch[2]));
+    entry[colorMatch[1]!] = value;
+    return true;
+  }
+  const imageMatch = id.match(/^brand-image-(caption|kind)-(\d+)$/);
+  if (imageMatch) {
+    const imagery = ensureRecord(brand, 'imagery');
+    const samples = ensureArray(imagery, 'samples');
+    const entry = ensureArrayRecord(samples, Number(imageMatch[2]));
+    entry[imageMatch[1]!] = value;
+    return true;
+  }
+  return false;
+}
+
+function setBrandKitImageValue(brand: Record<string, unknown>, id: string, src: string, alt: string): boolean {
+  if (id === 'brand-logo-img') {
+    const logo = ensureRecord(brand, 'logo');
+    logo.primary = src;
+    if (alt) logo.notes = alt;
+    return true;
+  }
+  const imageMatch = id.match(/^brand-image-img-(\d+)$/);
+  if (!imageMatch) return false;
+  const imagery = ensureRecord(brand, 'imagery');
+  const samples = ensureArray(imagery, 'samples');
+  const entry = ensureArrayRecord(samples, Number(imageMatch[1]));
+  entry.file = src;
+  if (alt) entry.caption = alt;
+  return true;
+}
+
+function ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+  const current = parent[key];
+  if (current && typeof current === 'object' && !Array.isArray(current)) return current as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  parent[key] = next;
+  return next;
+}
+
+function ensureArray(parent: Record<string, unknown>, key: string): unknown[] {
+  const current = parent[key];
+  if (Array.isArray(current)) return current;
+  const next: unknown[] = [];
+  parent[key] = next;
+  return next;
+}
+
+function ensureArrayRecord(array: unknown[], index: number): Record<string, unknown> {
+  while (array.length <= index) array.push({});
+  const current = array[index];
+  if (current && typeof current === 'object' && !Array.isArray(current)) return current as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  array[index] = next;
+  return next;
+}
+
+function safeJsonForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/<\//g, '<\\/')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+function setRuntimeStyleOverride(doc: Document, id: string, styles: Partial<ManualEditStyles>): void {
+  const style = runtimeStyleElement(doc);
+  const selector = `[data-od-id="${cssStringEscape(id)}"]`;
+  const cleaned = removeRuntimeStyleRule(style.textContent ?? '', selector);
+  const body = Object.entries(styles)
+    .map(([name, value]) => {
+      if (typeof value !== 'string' || value.trim() === '') return '';
+      return `  ${camelToKebab(name)}: ${value.trim()} !important;`;
+    })
+    .filter(Boolean)
+    .join('\n');
+  style.textContent = body ? `${cleaned}\n${selector} {\n${body}\n}\n`.trimStart() : cleaned.trim();
+}
+
+function runtimeStyleElement(doc: Document): HTMLStyleElement {
+  const existing = doc.querySelector<HTMLStyleElement>('style[data-od-manual-edit-runtime-overrides]');
+  if (existing) return existing;
+  const style = doc.createElement('style');
+  style.setAttribute('data-od-manual-edit-runtime-overrides', '');
+  (doc.head || doc.documentElement).appendChild(style);
+  return style;
+}
+
+function removeRuntimeStyleRule(css: string, selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return css.replace(new RegExp(`\\n?${escaped}\\s*\\{[^}]*\\}\\s*`, 'g'), '\n').trim();
+}
+
 function findElementByPath(doc: Document, id: string): Element | null {
   if (!id.startsWith('path-')) return null;
   const indexes = id
@@ -234,6 +404,10 @@ function setCssToken(doc: Document, token: string, value: string): boolean {
 function cssEscape(value: string): string {
   if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value);
   return value.replace(/"/g, '\\"');
+}
+
+function cssStringEscape(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function escapeRegExp(value: string): string {

@@ -24,6 +24,7 @@ import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
+import { buildBrandSystem, deriveTokens, seedFromMaterial } from '../src/brands/engine/index.js';
 import {
   adoptExistingImagery,
   findImageRefs,
@@ -172,6 +173,42 @@ describe('agent-driven brand extraction engine', () => {
   let brandsRoot: string;
   let projectsRoot: string;
   let userDesignSystemsRoot: string;
+
+  it('keeps the generated default theme light even when the source canvas is dark', () => {
+    const darkCanvasBrand = {
+      ...VALID_BRAND,
+      name: 'Open Design',
+      colors: [
+        { role: 'background', hex: '#050505', name: 'Black', usage: 'source hero background' },
+        { role: 'surface', hex: '#0a0a0a', name: 'Panel', usage: 'source cards' },
+        { role: 'foreground', hex: '#f4f4f4', name: 'White', usage: 'source text' },
+        { role: 'accent', hex: '#56fe13', name: 'Signal Green', usage: 'primary actions' },
+      ],
+    };
+
+    const system = buildBrandSystem(darkCanvasBrand);
+
+    expect(system.themes.default.colorBgContainer).toBe('#ffffff');
+    expect(system.themes.default.colorText).toBe('#1f1f1f');
+    expect(system.themes.dark.colorBgContainer).toBe('#141414');
+    expect(system.themes.dark.colorText).toBe('#dedede');
+  });
+
+  it('keeps programmatic dark-site material on a light default seed', () => {
+    const seed = seedFromMaterial({
+      colors: [
+        { hex: '#050505', count: 120 },
+        { hex: '#56fe13', count: 28 },
+      ],
+      fonts: [{ family: 'Albert Sans', count: 12 }],
+      fontFaceFamilies: [],
+    } as PrefetchResult);
+
+    expect(seed.colorBgBase).toBe('#ffffff');
+    expect(seed.colorTextBase).toBe('#000000');
+    expect(deriveTokens(seed, 'default').colorBgContainer).toBe('#ffffff');
+    expect(deriveTokens(seed, 'dark').colorBgContainer).toBe('#141414');
+  });
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-brand-engine-'));
