@@ -19,6 +19,7 @@ import {
   sessionModeToTracking,
   type TrackingDesignSystemSource,
   type TrackingDesignSystemKind,
+  type TrackingDesignSystemEditSurface,
 } from '@open-design/contracts/analytics';
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
@@ -822,6 +823,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : undefined;
       const designSystemSlugForRun =
         dsSelectedId && !dsSelectedId.startsWith('user:') ? dsSelectedId : undefined;
+      // E1 (tracking spec §3.4): a DS-project run that edits an EXISTING design
+      // system carries which surface drove it. comment/mark ride their own
+      // entry_from; everything else editing an existing DS is the chat surface.
+      // First-generation runs (no existing artifact) get no edit_surface.
+      const editSurfaceForRun: TrackingDesignSystemEditSurface | undefined =
+        runProjectKind === 'design_system' && hintHasExistingArtifact === true
+          ? hintEntryFrom === 'comment'
+            ? 'comment'
+            : hintEntryFrom === 'mark'
+              ? 'mark'
+              : 'chat'
+          : undefined;
       const baseProps: Record<string, unknown> = {
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
@@ -843,6 +856,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         design_system_source: designSystemSourceForRun,
         ...(designSystemKindForRun ? { design_system_kind: designSystemKindForRun } : {}),
         ...(designSystemSlugForRun ? { design_system_slug: designSystemSlugForRun } : {}),
+        ...(editSurfaceForRun ? { edit_surface: editSurfaceForRun } : {}),
         ...(isDesignSystemRun ? {
           ds_source_origin: typeof dsRunContext.origin === 'string'
             ? dsRunContext.origin

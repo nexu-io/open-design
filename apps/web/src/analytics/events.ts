@@ -55,6 +55,7 @@ import type {
   DesignSystemsPresetBrandPickerSurfaceViewProps,
   DesignSystemEnrichClickProps,
   DesignSystemEnrichResultProps,
+  DesignSystemEditClickProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -524,6 +525,13 @@ export function trackDesignSystemEnrichResult(
   props: DesignSystemEnrichResultProps,
 ): void {
   send(track, 'design_system_enrich_result', props);
+}
+
+export function trackDesignSystemEditClick(
+  track: Track,
+  props: DesignSystemEditClickProps,
+): void {
+  send(track, 'ui_click', props);
 }
 
 export function trackIntegrationsTabClick(

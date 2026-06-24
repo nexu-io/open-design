@@ -5,8 +5,10 @@ import {
   trackDesignSystemsTemplateCardClick,
   trackDesignSystemsTopClick,
   trackDesignSystemStatusResult,
+  trackDesignSystemEditClick,
   trackPageView,
 } from '../analytics/events';
+import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
 import type {
   TrackingDesignSystemStatusAction,
   TrackingDesignSystemStatusValue,
@@ -903,6 +905,7 @@ function DesignSystemDetail({
   onPreviewFull,
   onSystemsRefresh,
 }: DetailProps) {
+  const analytics = useAnalytics();
   const isUser = isUserSystem(system);
   const status = system.status ?? 'draft';
   const published = status === 'published';
@@ -945,6 +948,24 @@ function DesignSystemDetail({
   const host = designSystemLogoHost(system) || undefined;
   const projectId = detail?.projectId ?? system.projectId;
 
+  // Direct in-panel DS edits (E3 / §3.6). All carry edit_surface=direct_module
+  // + artifact_kind=design_system + the DS id so "edit depth" drills down.
+  function emitEditClick(
+    element: DesignSystemEditClickProps['element'],
+    module: DesignSystemEditClickProps['module'],
+  ) {
+    trackDesignSystemEditClick(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_edit',
+      element,
+      module,
+      edit_surface: 'direct_module',
+      artifact_kind: 'design_system',
+      design_system_id: system.id,
+      project_id: projectId ?? undefined,
+    });
+  }
+
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
@@ -983,6 +1004,7 @@ function DesignSystemDetail({
 
   async function handleDownload() {
     if (downloading) return;
+    emitEditClick('download', 'general');
     setDownloading(true);
     setDownloadFailed(false);
     try {
@@ -1001,6 +1023,7 @@ function DesignSystemDetail({
 
   async function saveDesignMd(nextBody: string) {
     if (!isUser) return;
+    emitEditClick('design_md_edit', 'design_md');
     setSavingDesignMd(true);
     try {
       const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
@@ -1015,6 +1038,7 @@ function DesignSystemDetail({
   }
 
   async function refreshKit() {
+    emitEditClick('refresh', 'general');
     await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
     setReloadKey((k) => k + 1);
     await onSystemsRefresh?.();
@@ -1022,6 +1046,7 @@ function DesignSystemDetail({
 
   async function resetKitEdits() {
     if (!isUser) return;
+    emitEditClick('kit_reset', 'kit');
     const originalMd = initialDesignMdRef.current ?? designMdBody;
     await updateDesignSystemDraft(system.id, { body: originalMd });
     if (projectId) {
@@ -1039,6 +1064,7 @@ function DesignSystemDetail({
 
   async function changeKitColor(index: number, hex: string) {
     if (!projectId) return;
+    emitEditClick('color_edit', 'palette');
     const ok = await updateBrandColor(projectId, index, hex);
     if (!ok) {
       const nextBody = replaceDesignMdColorAtIndex(designMdBody || detail?.body || '', index, hex);
@@ -1052,6 +1078,7 @@ function DesignSystemDetail({
 
   async function removeKitLogo(index: number) {
     if (!projectId) return;
+    emitEditClick('logo_delete', 'logo');
     const ok = await deleteBrandLogo(projectId, index);
     if (!ok) return;
     setReloadKey((k) => k + 1);
@@ -1060,6 +1087,7 @@ function DesignSystemDetail({
 
   async function removeKitImage(index: number) {
     if (!projectId) return;
+    emitEditClick('image_delete', 'images');
     const ok = await deleteBrandImage(projectId, index);
     if (!ok) return;
     setReloadKey((k) => k + 1);
@@ -1076,7 +1104,10 @@ function DesignSystemDetail({
         <Button
           variant="ghost"
           className={styles.actionButton}
-          onClick={() => onEdit(system.id)}
+          onClick={() => {
+            emitEditClick('edit_with_agent', 'general');
+            onEdit(system.id);
+          }}
           disabled={busy}
           title={t('dsManager.openSystemAria', { title: system.title })}
         >
@@ -1188,7 +1219,17 @@ function DesignSystemDetail({
                 ? { body: detail.body, canEdit: false }
                 : undefined
           }
-          onUploadModule={uploadModule}
+          onUploadModule={(module, file) => {
+            emitEditClick(
+              module === 'logo'
+                ? 'logo_upload'
+                : module === 'font'
+                  ? 'font_upload'
+                  : 'image_upload',
+              module === 'logo' ? 'logo' : module === 'font' ? 'typography' : 'images',
+            );
+            void uploadModule(module, file);
+          }}
           onColorChange={projectId ? (index, hex) => void changeKitColor(index, hex) : undefined}
           onDeleteLogo={projectId ? (index) => void removeKitLogo(index) : undefined}
           onDeleteImage={projectId ? (index) => void removeKitImage(index) : undefined}

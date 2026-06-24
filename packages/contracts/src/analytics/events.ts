@@ -1652,6 +1652,51 @@ export interface DesignSystemsPresetBrandPickerSurfaceViewProps {
   area: 'preset_brand_picker';
 }
 
+// Direct in-panel edits of an existing design system (tracking spec §3.6,
+// E3). Covers the DS list general ops (edit-with-agent / refresh / download),
+// the DesignKitView module buttons (logo / typography / palette / images /
+// kit), and the brand preview card. `edit_surface` is always `direct_module`
+// here; agent-routed edits (chat / draw / edit / comment / mark) ride on
+// run_created.edit_surface instead. Never carries artifact content/URLs.
+export interface DesignSystemEditClickProps {
+  page_name: 'design_systems' | 'design_system_project';
+  area: 'design_system_edit';
+  element:
+    | 'edit_with_agent'
+    | 'refresh'
+    | 'download'
+    | 'logo_upload'
+    | 'logo_delete'
+    | 'design_md_copy'
+    | 'design_md_edit'
+    | 'design_md_upload'
+    | 'font_upload'
+    | 'color_edit'
+    | 'image_upload'
+    | 'image_delete'
+    | 'kit_refresh'
+    | 'kit_download'
+    | 'kit_import'
+    | 'kit_reset'
+    | 'kit_open'
+    | 'brand_card_use_in_chat'
+    | 'brand_card_open_project'
+    | 'brand_card_delete';
+  module?:
+    | 'logo'
+    | 'design_md'
+    | 'typography'
+    | 'palette'
+    | 'images'
+    | 'kit'
+    | 'brand_card'
+    | 'general';
+  edit_surface?: TrackingDesignSystemEditSurface;
+  artifact_kind?: 'design_system';
+  design_system_id?: string;
+  project_id?: string;
+}
+
 // INTEGRATIONS
 export interface IntegrationsTabClickProps {
   page_name: 'integrations';
@@ -2442,6 +2487,7 @@ export type UiClickProps =
   | DesignSystemsCreateClickProps
   | DesignSystemsPresetBrandPickerClickProps
   | DesignSystemEnrichClickProps
+  | DesignSystemEditClickProps
   | IntegrationsTabClickProps
   | IntegrationsMcpTabClickProps
   | IntegrationsConnectorsTabClickProps
