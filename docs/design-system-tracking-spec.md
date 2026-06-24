@@ -28,8 +28,9 @@
 | §3.1 创建入口来源透传（6 入口 + `project_canvas`/`library`/`composer_picker`） | ✅ 已实现 |
 | C7-C9 预设品牌选择器（`start_from_brand` / surface_view / `brand_pick`） | ✅ 已实现（`is_quick_pick` 待办） |
 | C13 AI 优化点击 `design_system_enrich`/`ai_optimize` | ✅ 已实现 |
+| `ds_source_origins` 多值（评论②，create_result 列全部来源不再塌缩成 mixed） | ✅ 已实现 |
 | C14 `design_system_enrich_result`、C15 `ProjectMetadata.enrichmentStatus` | ⏳ follow-up（需关联 enrichment run 完成） |
-| `ds_source_origins` 多值（评论②）、C2 Onboarding 分叉、C10、E1-E3 + §3.6 全部按钮 | ⏳ 未实现 |
+| C2 Onboarding 分叉、C10 多网站计数、E1-E3 + §3.6 全部编辑按钮 | ⏳ 未实现 |
 
 ## 0. 业务目标（埋点要回答的问题）
 

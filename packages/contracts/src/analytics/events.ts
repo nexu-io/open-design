@@ -990,6 +990,11 @@ export interface DesignSystemCreateResultProps {
   project_id?: string;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemOrigin;
+  // Every source actually used, comma-joined (e.g. `source_url,local_code`),
+  // so multi-source creates aren't flattened to the single `mixed` value of
+  // `design_system_source`. Mirrors the multi-value convention of
+  // target_platforms/connectors. See tracking spec dimension dict + comment ②.
+  ds_source_origins?: string;
   source_count: number;
   created_as_project: boolean;
   has_brand_description: boolean;
