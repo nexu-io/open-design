@@ -66,7 +66,13 @@
   margin-bottom: 6px;
   font-weight: 500;
 }
-.produced-files-list { display: flex; flex-direction: column; gap: 2px; }
+.produced-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
+}
 .produced-file {
   display: flex;
   align-items: center;
@@ -332,6 +338,8 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
   border-top: 1px solid var(--border-soft, var(--border));
 }
 .file-ops-row {

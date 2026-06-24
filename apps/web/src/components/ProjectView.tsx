@@ -5941,6 +5941,8 @@ export function ProjectView({
   const [brandEnrichmentPromptSeedCache, setBrandEnrichmentPromptSeedCache] = useState(
     () => brandEnrichmentPromptSeed,
   );
+  const [brandEnrichmentStarting, setBrandEnrichmentStarting] = useState(false);
+  const [brandCreateDesignStarting, setBrandCreateDesignStarting] = useState(false);
   useEffect(() => {
     if (brandEnrichmentPromptSeed) {
       setBrandEnrichmentPromptSeedCache(brandEnrichmentPromptSeed);
@@ -5952,20 +5954,47 @@ export function ProjectView({
   // skill bundle, refining the SAME registered design system in place. Shared by
   // the chat "Continue" affordance and the ready-toast "AI Optimize" nudge.
   const handleBrandEnrichment = useCallback(() => {
+    if (brandEnrichmentStarting) return;
+    const system = designSystemProject ?? activeDesignSystemSummary;
     const skillIds = installedBrandEnrichmentSkillIds(skills);
+    setBrandEnrichmentStarting(true);
     void handleSend(
-      buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache),
+      buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache, {
+        metadata: project.metadata,
+        designSystemId: system?.id,
+        designSystemTitle: system?.title,
+        projectFiles,
+      }),
       [],
       [],
       skillIds.length > 0 ? { skillIds } : undefined,
-    );
-  }, [skills, brandEnrichmentPromptSeed, brandEnrichmentPromptSeedCache, handleSend]);
+    ).finally(() => setBrandEnrichmentStarting(false));
+  }, [
+    activeDesignSystemSummary,
+    brandEnrichmentPromptSeed,
+    brandEnrichmentPromptSeedCache,
+    brandEnrichmentStarting,
+    designSystemProject,
+    handleSend,
+    project.metadata,
+    projectFiles,
+    skills,
+  ]);
 
   const handleCreateDesignFromActiveDesignSystem = useCallback(() => {
+    if (brandCreateDesignStarting) return;
     const system = designSystemProject ?? activeDesignSystemSummary;
     if (!system || !onCreateProjectFromDesignSystem) return;
-    void onCreateProjectFromDesignSystem(system.id, system.title);
-  }, [activeDesignSystemSummary, designSystemProject, onCreateProjectFromDesignSystem]);
+    setBrandCreateDesignStarting(true);
+    void Promise.resolve(onCreateProjectFromDesignSystem(system.id, system.title)).finally(() => {
+      setBrandCreateDesignStarting(false);
+    });
+  }, [
+    activeDesignSystemSummary,
+    brandCreateDesignStarting,
+    designSystemProject,
+    onCreateProjectFromDesignSystem,
+  ]);
 
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
@@ -6353,7 +6382,9 @@ export function ProjectView({
               onConnectRepo={handleConnectRepo}
               brandEnrichmentEligible={brandEnrichmentEligibleForProject}
               onContinueBrandEnrichment={handleBrandEnrichment}
+              brandEnrichmentBusy={brandEnrichmentStarting}
               onCreateDesignFromActiveDesignSystem={handleCreateDesignFromActiveDesignSystem}
+              createDesignFromActiveDesignSystemBusy={brandCreateDesignStarting}
               onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}

@@ -40,11 +40,12 @@ import {
   getProject,
   insertConversation,
   insertProject,
+  listMessages,
   setTabs,
   upsertMessage,
   updateProject,
 } from '../db.js';
-import { readProjectFile, resolveProjectDir, writeProjectFile } from '../projects.js';
+import { listFiles, readProjectFile, resolveProjectDir, writeProjectFile } from '../projects.js';
 import { brandFromDesignMd, sourceUrlForDesignMd } from './design-md-input.js';
 import { brandGuideMd, brandToDesignMd } from './design-md.js';
 import { reflowBrandToMemory } from './memory.js';
@@ -136,6 +137,12 @@ export interface StartBrandExtractionOptions {
   onBackgroundExtraction?: (settled: Promise<unknown>) => void;
   /** UI locale used to render static brand.html copy. */
   locale?: string;
+  /** Agent identity to show on the programmatic transcript. No tokens are spent,
+   *  but the synthetic turn should align with the user's selected code agent. */
+  transcriptAgent?: {
+    agentId?: string | null;
+    agentName?: string | null;
+  };
 }
 
 export interface StartBrandExtractionResult {
@@ -330,6 +337,7 @@ export async function startBrandExtraction(
   // agent's auto-sent prompt then runs as the async AI enrichment pass. Bounded
   // and best-effort: a slow / blocked site (or any failure) leaves the brand
   // `extracting` and the agent drives the extraction from the scaffold instead.
+  const programmaticStartedAt = Date.now();
   if (runProgrammatic && opts.userDesignSystemsRoot) {
     const programmaticOptions: RunProgrammaticExtractionOptions = {
       id,
@@ -373,11 +381,32 @@ export async function startBrandExtraction(
       sleep(budget).then(() => false),
     ]);
     if (!finishedInBudget) opts.onBackgroundExtraction?.(settled);
+    if (!finishedInBudget) {
+      void settled.then(() =>
+        seedReadyProgrammaticExtractionTranscript({
+          db,
+          conversationId,
+          randomId,
+          sourceUrl: url,
+          sourceLabel: host,
+          brandsRoot,
+          projectsRoot,
+          projectId,
+          locale,
+          startedAt: programmaticStartedAt,
+          transcriptAgent: opts.transcriptAgent,
+          metadata: {
+            ...metadata,
+            entryFile: BRAND_KIT_FILE,
+          },
+        }),
+      );
+    }
   }
 
   const latest = readBrandDetail(brandsRoot, id);
   if ((latest?.meta.status ?? meta.status) === 'ready' && latest?.meta.designSystemId) {
-    seedProgrammaticExtractionTranscript({
+    await seedProgrammaticExtractionTranscript({
       db,
       conversationId,
       randomId,
@@ -387,6 +416,9 @@ export async function startBrandExtraction(
       designSystemId: latest.meta.designSystemId,
       projectsRoot,
       projectId,
+      locale,
+      startedAt: programmaticStartedAt,
+      transcriptAgent: opts.transcriptAgent,
       metadata: {
         ...metadata,
         entryFile: BRAND_KIT_FILE,
@@ -405,7 +437,34 @@ export async function startBrandExtraction(
   };
 }
 
-function seedProgrammaticExtractionTranscript(input: {
+async function seedReadyProgrammaticExtractionTranscript(input: {
+  db: Parameters<typeof insertProject>[0];
+  conversationId: string;
+  randomId: () => string;
+  sourceUrl: string;
+  sourceLabel: string;
+  brandsRoot: string;
+  projectsRoot: string;
+  projectId: string;
+  locale: string;
+  startedAt: number;
+  transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
+  metadata: ProjectMetadata;
+}): Promise<void> {
+  const latest = readBrandDetail(input.brandsRoot, input.metadata.brandId ?? '');
+  if ((latest?.meta.status ?? null) !== 'ready' || !latest?.meta.designSystemId) return;
+  await seedProgrammaticExtractionTranscript({
+    ...input,
+    brandName: latest.brand?.name ?? input.sourceLabel,
+    designSystemId: latest.meta.designSystemId,
+    metadata: {
+      ...input.metadata,
+      brandDesignSystemId: latest.meta.designSystemId,
+    },
+  });
+}
+
+async function seedProgrammaticExtractionTranscript(input: {
   db: Parameters<typeof insertProject>[0];
   conversationId: string;
   randomId: () => string;
@@ -415,51 +474,102 @@ function seedProgrammaticExtractionTranscript(input: {
   designSystemId: string;
   projectsRoot: string;
   projectId: string;
+  locale: string;
+  startedAt: number;
+  transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
   metadata: ProjectMetadata;
-}): void {
+}): Promise<void> {
+  if (listMessages(input.db, input.conversationId).length > 0) return;
   const now = Date.now();
   const brandName = input.brandName.trim() || input.sourceLabel;
+  const copy = brandExtractionTranscriptCopy(input.locale);
   const sourceLine = input.sourceUrl.startsWith('designmd://')
-    ? 'pasted DESIGN.md'
+    ? copy.sourceDesignMd
     : input.sourceUrl;
+  const title = copy.doneTitle(brandName);
+  const body = copy.doneBody(input.designSystemId, sourceLine);
+  const next = copy.next;
+  const assistantContent = [title, '', body, '', next].join('\n');
   upsertMessage(input.db, input.conversationId, {
     id: input.randomId(),
     role: 'user',
-    content: `Extract a design system from ${sourceLine}.`,
+    content: copy.user(sourceLine),
     createdAt: now - 1,
   });
   upsertMessage(input.db, input.conversationId, {
     id: input.randomId(),
     role: 'assistant',
-    content: [
-      `Programmatic extraction finished for ${brandName}.`,
-      '',
-      `I created and registered the ${input.designSystemId} design system from ${input.sourceLabel}. It is ready to preview and can be used in new designs now.`,
-      '',
-      'Next, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.',
-    ].join('\n'),
-    agentId: 'open-design',
-    agentName: 'Open Design',
+    content: assistantContent,
+    ...(input.transcriptAgent?.agentId ? { agentId: input.transcriptAgent.agentId } : {}),
+    ...(input.transcriptAgent?.agentName ? { agentName: input.transcriptAgent.agentName } : {}),
     events: [
-      { kind: 'text', text: `Programmatic extraction finished for ${brandName}.\n\n` },
+      { kind: 'text', text: `${title}\n\n` },
       {
         kind: 'text',
-        text: `I created and registered the ${input.designSystemId} design system from ${input.sourceLabel}. It is ready to preview and can be used in new designs now.\n\nNext, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.`,
+        text: `${body}\n\n${next}`,
       },
     ],
-    producedFiles: [brandKitProducedFile(input.projectsRoot, input.projectId, input.metadata)],
+    producedFiles: await brandExtractionProducedFiles(input.projectsRoot, input.projectId, input.metadata),
     runStatus: 'succeeded',
     createdAt: now,
-    startedAt: now - 1,
+    startedAt: input.startedAt,
     endedAt: now,
   });
 }
 
-function brandKitProducedFile(
+interface BrandExtractionTranscriptCopy {
+  sourceDesignMd: string;
+  next: string;
+  user: (source: string) => string;
+  doneTitle: (name: string) => string;
+  doneBody: (designSystemId: string, source: string) => string;
+}
+
+function brandExtractionTranscriptCopy(locale?: string | null): BrandExtractionTranscriptCopy {
+  switch (normalizeBrandKitLocale(locale)) {
+    case 'zh-CN':
+      return {
+        sourceDesignMd: '粘贴的 DESIGN.md',
+        user: (source) => `从 ${source} 抽取一个设计系统。`,
+        doneTitle: (name) => `${name} 的程序化抽取已完成。`,
+        doneBody: (designSystemId, source) =>
+          `我已经从 ${source} 创建并注册了 ${designSystemId} 设计系统。现在可以预览，也可以直接用于新设计。`,
+        next: '接下来，你可以运行 AI 优化做更深一轮抽取，或者用这个系统新建设计。',
+      };
+    case 'zh-TW':
+      return {
+        sourceDesignMd: '貼上的 DESIGN.md',
+        user: (source) => `從 ${source} 抽取一個設計系統。`,
+        doneTitle: (name) => `${name} 的程式化抽取已完成。`,
+        doneBody: (designSystemId, source) =>
+          `我已經從 ${source} 建立並註冊了 ${designSystemId} 設計系統。現在可以預覽，也可以直接用於新設計。`,
+        next: '接下來，你可以執行 AI 優化做更深一輪抽取，或者用這個系統建立新設計。',
+      };
+    default:
+      return {
+        sourceDesignMd: 'pasted DESIGN.md',
+        user: (source) => `Extract a design system from ${source}.`,
+        doneTitle: (name) => `Programmatic extraction finished for ${name}.`,
+        doneBody: (designSystemId, source) =>
+          `I created and registered the ${designSystemId} design system from ${source}. It is ready to preview and can be used in new designs now.`,
+        next: 'Next, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.',
+      };
+  }
+}
+
+async function brandExtractionProducedFiles(
   projectsRoot: string,
   projectId: string,
   metadata: ProjectMetadata,
-) {
+): Promise<unknown[]> {
+  const files = await listFiles(projectsRoot, projectId, { metadata }).catch(() => []);
+  const visible = files.filter((file) => {
+    if (!file || file.type === 'dir') return false;
+    const name = String(file.name ?? file.path ?? '');
+    if (!name || name.startsWith('.') || name.includes('/.')) return false;
+    return !name.toLowerCase().endsWith('.sketch.json');
+  });
+  if (visible.length > 0) return visible;
   const filePath = path.join(resolveProjectDir(projectsRoot, projectId, metadata), BRAND_KIT_FILE);
   let size = 0;
   let mtime = Date.now();

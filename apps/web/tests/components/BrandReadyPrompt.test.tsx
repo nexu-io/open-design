@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 
-import { act } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../src/i18n';
 import { BrandReadyPrompt } from '../../src/components/BrandReadyPrompt';
+
+vi.mock('motion/react', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    motion: {
+      div: ({ variants: _variants, initial: _initial, animate: _animate, exit: _exit, ...props }: Record<string, unknown>) =>
+        React.createElement('div', props),
+    },
+  };
+});
 
 afterEach(() => {
   cleanup();
@@ -36,7 +45,7 @@ describe('BrandReadyPrompt', () => {
   });
 
   it('stays mounted by default until the user dismisses it', () => {
-    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
     const onDismiss = vi.fn();
 
     render(
@@ -49,11 +58,8 @@ describe('BrandReadyPrompt', () => {
       </I18nProvider>,
     );
 
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
-
     expect(onDismiss).not.toHaveBeenCalled();
+    expect(setTimeoutSpy.mock.calls.some(([callback]) => callback === onDismiss)).toBe(false);
     expect(screen.getByRole('status')).toBeTruthy();
   });
 });

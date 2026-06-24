@@ -322,7 +322,9 @@ interface Props {
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onNextStepPromptAction?: (prompt: string) => void;
   onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
   onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -429,7 +431,9 @@ function AssistantMessageImpl({
   onToolboxAction,
   onNextStepPromptAction,
   onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
   onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
@@ -635,14 +639,6 @@ function AssistantMessageImpl({
         <span className="role-name">{roleName}</span>
       </div>
       <div className="assistant-flow">
-        {fileOps.length > 0 ? (
-          <FileOpsSummary
-            entries={fileOps}
-            streaming={streaming}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
@@ -715,6 +711,14 @@ function AssistantMessageImpl({
           }
           return null;
         })}
+        {fileOps.length > 0 ? (
+          <FileOpsSummary
+            entries={fileOps}
+            streaming={streaming}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
         {!streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
@@ -818,7 +822,9 @@ function AssistantMessageImpl({
             onToolboxAction={isLast ? onToolboxAction : undefined}
             onPromptAction={isLast ? onNextStepPromptAction : undefined}
             onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
+            aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
             onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
+            createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
             onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}

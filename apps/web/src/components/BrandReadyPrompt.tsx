@@ -50,7 +50,7 @@ export function BrandReadyPrompt({
   } as CSSProperties;
 
   useEffect(() => {
-    if (!Number.isFinite(ttlMs) || ttlMs <= 0) return undefined;
+    if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs) || ttlMs <= 0) return undefined;
     const timer = window.setTimeout(onDismiss, ttlMs);
     return () => window.clearTimeout(timer);
   }, [onDismiss, ttlMs]);

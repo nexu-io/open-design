@@ -5,7 +5,7 @@ import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
-import type { Conversation, ProjectMetadata } from '../../src/types';
+import type { Conversation, DesignSystemSummary, ProjectFile, ProjectMetadata } from '../../src/types';
 
 const composerMocks = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -125,3 +125,59 @@ describe('ChatPane connect-repo CTA', () => {
     expect(container.querySelector('.chat-connect-repo')).toBeNull();
   });
 });
+
+describe('ChatPane brand extraction fallback transcript', () => {
+  it('lists every generated project file from the programmatic extraction turn', () => {
+    renderPane({
+      brandEnrichmentEligible: true,
+      projectMetadata: {
+        kind: 'brand',
+        importedFrom: 'brand-extraction',
+        brandId: 'open-design',
+        brandDesignSystemId: 'user:open-design',
+        brandSourceUrl: 'https://open-design.ai/',
+      },
+      activeDesignSystem: designSystem({
+        id: 'user:open-design',
+        title: 'Open Design',
+        updatedAt: new Date(1700000100).toISOString(),
+      }),
+      projectFiles: [
+        projectFile('DESIGN.md', 'text/markdown', 'text'),
+        projectFile('system/kit.html', 'text/html', 'html'),
+        projectFile('prefetch/styles.css', 'text/css', 'code'),
+        projectFile('board.sketch.json', 'application/json', 'sketch'),
+      ],
+    });
+
+    expect(screen.getByText('DESIGN.md')).toBeTruthy();
+    expect(screen.getByText('system/kit.html')).toBeTruthy();
+    expect(screen.getByText('prefetch/styles.css')).toBeTruthy();
+    expect(screen.queryByText('board.sketch.json')).toBeNull();
+  });
+});
+
+function designSystem(overrides: Partial<DesignSystemSummary> & { id: string; title: string }): DesignSystemSummary {
+  return {
+    category: 'Custom',
+    summary: 'Programmatic extraction.',
+    source: 'user',
+    status: 'draft',
+    ...overrides,
+  };
+}
+
+function projectFile(
+  name: string,
+  mime: string,
+  kind: ProjectFile['kind'],
+): ProjectFile {
+  return {
+    name,
+    path: name,
+    size: 100,
+    mtime: 1700000100,
+    kind,
+    mime,
+  };
+}

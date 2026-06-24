@@ -4,6 +4,7 @@ import type { SkillSummary } from '../types';
 export const DEFAULT_BRAND_ENRICHMENT_SKILL_IDS = [
   'design-md',
   'design-review',
+  'plan-design-review',
   'color-expert',
   'brand-guidelines',
 ] as const;
@@ -12,7 +13,7 @@ const AI_OPTIMIZE_QUALITY_BAR = [
   'AI Optimize quality bar:',
   '- Treat this as a longer background-quality pass that may take 10-20 minutes; prioritize completeness and recoverable incremental progress over a quick superficial answer.',
   '- Keep this run scoped to the current design-system project and update the existing registered design system in place. Do not create a duplicate system.',
-  '- Use the attached design-system skills as internal lenses: DESIGN.md structure, design review, color expertise, and brand-guideline completeness. Do not ask the user to choose skills.',
+  '- Use the attached design-system skills as internal lenses: DESIGN.md structure, senior design review, color expertise, and brand-guideline completeness. Do not ask the user to choose skills.',
   '- Read the current project evidence before editing: context/source notes, DESIGN.md, BRAND.md, brand.json, system/variables.css, system/theme.json, system/index.html, kit.html, kit.dark.html, preview cards, generated artifacts, assets/, logos/, imagery/, fonts/, and source_examples/ when present.',
   '- Treat the programmatic output as a module graph, not a single markdown file. Inspect every listed module and reconcile duplicated facts across tokens, previews, source captures, copied assets, and generated examples.',
   '- Re-measure reachable website, HTML, CSS, Figma, GitHub, or local-code evidence instead of guessing. Extract exact color literals and semantic roles, @font-face/font-family data, spacing, radius, shadows, layout posture, motion/interaction states, copy voice, logo candidates, and representative hero/product imagery.',

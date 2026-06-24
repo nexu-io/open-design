@@ -113,6 +113,18 @@
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
+.toolboxRow:disabled,
+.moreRow:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.toolboxRow:disabled:hover,
+.moreRow:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
 .toolboxRow:focus-visible,
 .moreRow:focus-visible {
   outline: 2px solid var(--accent);

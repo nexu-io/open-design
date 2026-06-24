@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignKitView } from '../../src/components/DesignKitView';
 import { I18nProvider } from '../../src/i18n';
@@ -32,6 +32,11 @@ function previewKit(): DesignKit {
     showcaseHtml: '<main><a target="_blank" href="/">Open</a></main>',
   };
 }
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('DesignKitView iframe sandboxing', () => {
   it('does not let generated kit previews escape the iframe sandbox', () => {
@@ -189,5 +194,44 @@ describe('DesignKitView iframe sandboxing', () => {
 
     expect(screen.queryByRole('button', { name: 'Open full system' })).toBeNull();
     expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+  });
+
+  it('scrolls to Logo and reveals edit controls for edit focus requests', () => {
+    vi.useFakeTimers();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const { container, unmount } = render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          editFocusRequest={{ module: 'logo', nonce: 1 }}
+        />
+      </I18nProvider>,
+    );
+
+    try {
+      const logoSection = container.querySelector<HTMLElement>('[data-testid="design-kit-logo-section"]');
+      if (!logoSection) throw new Error('Expected Logo section to render');
+      expect(logoSection.textContent).toContain(
+        'Edit Logo here. Hover this section to reveal controls.',
+      );
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+    } finally {
+      unmount();
+      vi.useRealTimers();
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: originalScrollIntoView,
+        });
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
   });
 });

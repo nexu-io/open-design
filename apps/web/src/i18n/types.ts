@@ -2385,6 +2385,11 @@ export interface Dict {
   'brandEnrichment.body': string;
   'brandEnrichment.cta': string;
   'brandEnrichment.busy': string;
+  'brandExtractionTranscript.sourceDesignMd': string;
+  'brandExtractionTranscript.user': string;
+  'brandExtractionTranscript.doneTitle': string;
+  'brandExtractionTranscript.doneBody': string;
+  'brandExtractionTranscript.next': string;
   'chat.fillInputTitle': string;
   'chat.jumpToLatest': string;
   'chat.scrollToLatest': string;
@@ -3252,6 +3257,7 @@ export interface Dict {
   'nextStep.share': string;
   'nextStep.download': string;
   'nextStep.contribute': string;
+  'nextStep.createDesignBusy': string;
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;

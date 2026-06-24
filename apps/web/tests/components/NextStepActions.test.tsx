@@ -108,14 +108,31 @@ describe('NextStepActions', () => {
 
     expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
     expect(screen.queryByText(VISUAL_POLISH_TITLE)).toBeNull();
-    expect(screen.getByText('AI Optimize')).toBeTruthy();
-    expect(screen.getByText('Create new design')).toBeTruthy();
+    expect(screen.getByText(en['brandEnrichment.cta'])).toBeTruthy();
+    expect(screen.getByText(en['ds.createNewDesign'])).toBeTruthy();
     expect(screen.getByTestId('next-step-toolbox-more')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('next-step-brand-action-brand-ai-optimize'));
     expect(onAiOptimize).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByTestId('next-step-brand-action-brand-create-design'));
     expect(onCreateDesign).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps brand-extraction rows visible and disabled while their actions are starting', () => {
+    renderActions({
+      variant: 'brand-extraction',
+      onAiOptimize: vi.fn(),
+      onCreateDesign: vi.fn(),
+      aiOptimizeBusy: true,
+      createDesignBusy: true,
+    });
+
+    const optimize = screen.getByTestId('next-step-brand-action-brand-ai-optimize') as HTMLButtonElement;
+    const create = screen.getByTestId('next-step-brand-action-brand-create-design') as HTMLButtonElement;
+    expect(screen.getByText(en['brandEnrichment.busy'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.createDesignBusy'])).toBeTruthy();
+    expect(optimize.disabled).toBe(true);
+    expect(create.disabled).toBe(true);
   });
 
   it('reveals the matched @skill in the featured-row hover detail', () => {

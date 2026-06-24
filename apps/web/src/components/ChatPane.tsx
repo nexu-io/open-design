@@ -71,6 +71,7 @@ import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
+import { filterImplicitProducedFiles } from '../produced-files';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -572,8 +573,10 @@ interface Props {
   // Runs the optional brand-enrichment turn. The parent sends the project's
   // seeded enrichment prompt with the default per-turn skill bundle.
   onContinueBrandEnrichment?: () => void;
+  brandEnrichmentBusy?: boolean;
   // Creates a fresh design project using the current extracted design system.
   onCreateDesignFromActiveDesignSystem?: () => void;
+  createDesignFromActiveDesignSystemBusy?: boolean;
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
@@ -742,7 +745,9 @@ export function ChatPane({
   onConnectRepo,
   brandEnrichmentEligible,
   onContinueBrandEnrichment,
+  brandEnrichmentBusy,
   onCreateDesignFromActiveDesignSystem,
+  createDesignFromActiveDesignSystemBusy,
   composerDraftSignal,
   petConfig,
   onAdoptPet,
@@ -788,8 +793,9 @@ export function ChatPane({
             metadata: projectMetadata,
             activeDesignSystem,
             projectFiles,
+            t,
           }),
-    [activeDesignSystem, brandEnrichmentEligible, messages, projectFiles, projectMetadata],
+    [activeDesignSystem, brandEnrichmentEligible, messages, projectFiles, projectMetadata, t],
   );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
@@ -2165,7 +2171,9 @@ export function ChatPane({
                 onToolboxAction={handleToolboxAction}
                 onNextStepPromptAction={handleNextStepPromptAction}
                 onNextStepAiOptimize={onContinueBrandEnrichment}
+                nextStepAiOptimizeBusy={brandEnrichmentBusy}
                 onNextStepCreateDesign={onCreateDesignFromActiveDesignSystem}
+                nextStepCreateDesignBusy={createDesignFromActiveDesignSystemBusy}
                 onPickSkill={handlePickSkill}
                 onArtifactDownload={onArtifactDownload}
                 nextStepSkills={skills}
@@ -2557,7 +2565,9 @@ function ChatRows({
   onToolboxAction,
   onNextStepPromptAction,
   onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
   onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
@@ -2602,7 +2612,9 @@ function ChatRows({
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onNextStepPromptAction?: (prompt: string) => void;
   onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
   onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -2732,7 +2744,9 @@ function ChatRows({
         onToolboxAction={onToolboxAction}
         onNextStepPromptAction={onNextStepPromptAction}
         onNextStepAiOptimize={onNextStepAiOptimize}
+        nextStepAiOptimizeBusy={nextStepAiOptimizeBusy}
         onNextStepCreateDesign={onNextStepCreateDesign}
+        nextStepCreateDesignBusy={nextStepCreateDesignBusy}
         onPickSkill={onPickSkill}
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
@@ -3949,29 +3963,34 @@ function buildBrandExtractionFallbackMessages({
   metadata,
   activeDesignSystem,
   projectFiles,
+  t,
 }: {
   enabled: boolean;
   metadata: ProjectMetadata | undefined;
   activeDesignSystem?: DesignSystemSummary | null;
   projectFiles: ProjectFile[];
+  t: TranslateFn;
 }): ChatMessage[] {
   if (!enabled || !activeDesignSystem || !isBrandExtractionNextStepProject(metadata)) return [];
   const stableId = metadata?.brandId || metadata?.brandDesignSystemId || activeDesignSystem.id;
-  const sourceLabel = brandExtractionSourceLabel(metadata, activeDesignSystem);
-  const produced = brandExtractionProducedFile(metadata, projectFiles);
-  const timestamp = brandExtractionTimestamp(activeDesignSystem, produced);
+  const sourceLabel = brandExtractionSourceLabel(metadata, activeDesignSystem, t);
+  const producedFiles = brandExtractionProducedFiles(metadata, projectFiles);
+  const timestamp = brandExtractionTimestamp(activeDesignSystem, producedFiles);
   const assistantContent = [
-    `Programmatic extraction finished for ${activeDesignSystem.title}.`,
+    t('brandExtractionTranscript.doneTitle', { name: activeDesignSystem.title }),
     '',
-    `I created and registered the ${activeDesignSystem.id} design system from ${sourceLabel}. It is ready to preview and can be used in new designs now.`,
+    t('brandExtractionTranscript.doneBody', {
+      designSystemId: activeDesignSystem.id,
+      source: sourceLabel,
+    }),
     '',
-    'Next, you can run AI Optimize for a deeper extraction pass, or create a new design with this system.',
+    t('brandExtractionTranscript.next'),
   ].join('\n');
   return [
     {
       id: `brand-extraction-user-${stableId}`,
       role: 'user',
-      content: `Extract a design system from ${sourceLabel}.`,
+      content: t('brandExtractionTranscript.user', { source: sourceLabel }),
       createdAt: timestamp - 1,
     },
     {
@@ -3981,7 +4000,7 @@ function buildBrandExtractionFallbackMessages({
       agentId: 'open-design',
       agentName: 'Open Design',
       events: [{ kind: 'text', text: assistantContent }],
-      producedFiles: [produced],
+      producedFiles,
       runStatus: 'succeeded',
       createdAt: timestamp,
       startedAt: timestamp - 1,
@@ -3993,16 +4012,33 @@ function buildBrandExtractionFallbackMessages({
 function brandExtractionSourceLabel(
   metadata: ProjectMetadata | undefined,
   activeDesignSystem: DesignSystemSummary,
+  t: TranslateFn,
 ): string {
   const sourceUrl = metadata?.brandSourceUrl?.trim();
   if (sourceUrl) {
-    if (sourceUrl.startsWith('designmd://')) return 'pasted DESIGN.md';
+    if (sourceUrl.startsWith('designmd://')) return t('brandExtractionTranscript.sourceDesignMd');
     return sourceUrl;
   }
   return metadata?.sourceFileName?.trim() || activeDesignSystem.title;
 }
 
-function brandExtractionProducedFile(
+function brandExtractionProducedFiles(
+  metadata: ProjectMetadata | undefined,
+  projectFiles: ProjectFile[],
+): ProjectFile[] {
+  const visibleProjectFiles = filterImplicitProducedFiles(
+    projectFiles.filter((candidate) => {
+      if (candidate.type === 'dir') return false;
+      const name = candidate.name || candidate.path || '';
+      if (!name || name.startsWith('.') || name.includes('/.')) return false;
+      return true;
+    }),
+  );
+  if (visibleProjectFiles.length > 0) return visibleProjectFiles;
+  return [brandExtractionFallbackProducedFile(metadata, projectFiles)];
+}
+
+function brandExtractionFallbackProducedFile(
   metadata: ProjectMetadata | undefined,
   projectFiles: ProjectFile[],
 ): ProjectFile {
@@ -4024,11 +4060,12 @@ function brandExtractionProducedFile(
 
 function brandExtractionTimestamp(
   activeDesignSystem: DesignSystemSummary,
-  produced: ProjectFile,
+  producedFiles: ProjectFile[],
 ): number {
   const updatedAt = Date.parse(activeDesignSystem.updatedAt ?? '');
   const createdAt = Date.parse(activeDesignSystem.createdAt ?? '');
-  for (const value of [produced.mtime, updatedAt, createdAt]) {
+  const latestProduced = Math.max(0, ...producedFiles.map((file) => file.mtime || 0));
+  for (const value of [latestProduced, updatedAt, createdAt]) {
     if (Number.isFinite(value) && value > 0) return value;
   }
   return 1;

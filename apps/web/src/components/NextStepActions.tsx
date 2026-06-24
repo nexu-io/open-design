@@ -46,12 +46,14 @@ export const BRAND_EXTRACTION_NEXT_STEP_ACTIONS = [
   {
     id: 'brand-ai-optimize',
     icon: 'sparkles' as IconName,
-    title: 'AI Optimize',
+    titleKey: 'brandEnrichment.cta' as keyof Dict,
+    busyKey: 'brandEnrichment.busy' as keyof Dict,
   },
   {
     id: 'brand-create-design',
     icon: 'plus' as IconName,
-    title: 'Create new design',
+    titleKey: 'ds.createNewDesign' as keyof Dict,
+    busyKey: 'nextStep.createDesignBusy' as keyof Dict,
   },
 ] as const;
 
@@ -80,8 +82,10 @@ interface Props {
   // Run the deeper AI extraction pass for a programmatically-created brand
   // design system.
   onAiOptimize?: () => void;
+  aiOptimizeBusy?: boolean;
   // Create a new design using the active brand/design system.
   onCreateDesign?: () => void;
+  createDesignBusy?: boolean;
   // Seed the composer with a specific global skill resource picked from the toolbox.
   onPickSkill?: (skillId: string) => void;
   // Available global skill resources. The full composer toolbox also includes
@@ -141,7 +145,9 @@ export function NextStepActions({
   onToolboxAction,
   onPromptAction,
   onAiOptimize,
+  aiOptimizeBusy = false,
   onCreateDesign,
+  createDesignBusy = false,
   onPickSkill,
   skills = [],
   toolboxSkillNames,
@@ -281,16 +287,18 @@ export function NextStepActions({
   );
 
   const handleAiOptimize = useCallback(() => {
+    if (aiOptimizeBusy) return;
     track('toolbox_action', 'brand-ai-optimize');
     onAiOptimize?.();
     closeAll();
-  }, [closeAll, onAiOptimize, track]);
+  }, [aiOptimizeBusy, closeAll, onAiOptimize, track]);
 
   const handleCreateDesign = useCallback(() => {
+    if (createDesignBusy) return;
     track('toolbox_action', 'brand-create-design');
     onCreateDesign?.();
     closeAll();
-  }, [closeAll, onCreateDesign, track]);
+  }, [closeAll, createDesignBusy, onCreateDesign, track]);
 
   const handlePickSkill = useCallback(
     (skillId: string) => {
@@ -348,20 +356,31 @@ export function NextStepActions({
         <div className={styles.toolboxList} data-testid="next-step-toolbox">
           {showBrandRows
             ? BRAND_EXTRACTION_NEXT_STEP_ACTIONS.map((action) => {
-                const disabled =
+                const busy =
+                  (action.id === 'brand-ai-optimize' && aiOptimizeBusy) ||
+                  (action.id === 'brand-create-design' && createDesignBusy);
+                const unavailable =
                   (action.id === 'brand-ai-optimize' && !onAiOptimize) ||
                   (action.id === 'brand-create-design' && !onCreateDesign);
-                if (disabled) return null;
+                if (unavailable) return null;
                 return (
                   <button
                     key={action.id}
                     type="button"
                     className={styles.toolboxRow}
                     data-testid={`next-step-brand-action-${action.id}`}
+                    aria-busy={busy || undefined}
+                    disabled={busy}
                     onClick={action.id === 'brand-ai-optimize' ? handleAiOptimize : handleCreateDesign}
                   >
-                    <Icon name={action.icon} size={14} className={styles.toolboxRowIcon} />
-                    <span className={styles.toolboxRowTitle}>{action.title}</span>
+                    <Icon
+                      name={busy ? 'spinner' : action.icon}
+                      size={14}
+                      className={busy ? 'icon-spin' : styles.toolboxRowIcon}
+                    />
+                    <span className={styles.toolboxRowTitle}>
+                      {t(busy ? action.busyKey : action.titleKey)}
+                    </span>
                     <Icon name="chevron-right" size={13} className={styles.toolboxRowArrow} />
                   </button>
                 );
