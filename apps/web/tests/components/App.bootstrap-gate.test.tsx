@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -24,7 +24,14 @@ vi.mock('../../src/router', () => ({
 }));
 
 vi.mock('../../src/components/ApiTokenPrompt', () => ({
-  ApiTokenPrompt: () => <div data-testid="api-token-prompt">ApiTokenPrompt</div>,
+  ApiTokenPrompt: ({ onSubmit, submitting, error }: any) => (
+    <div data-testid="api-token-prompt">
+      <button data-testid="token-submit" onClick={() => onSubmit('test-token')} disabled={submitting}>
+        Submit
+      </button>
+      {error && <div data-testid="token-error">{error}</div>}
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
@@ -440,5 +447,147 @@ describe('bootstrap nonce exchange failure gate', () => {
     });
 
     expect(screen.queryByTestId('api-token-prompt')).toBeNull();
+  });
+});
+
+describe('handleApiTokenSubmit probe verification', () => {
+  beforeEach(() => {
+    mockedDaemonIsLive.mockResolvedValue(true);
+    mockedFetchAgentsStream.mockResolvedValue([]);
+    mockedFetchSkills.mockResolvedValue([]);
+    mockedFetchDesignSystems.mockResolvedValue([]);
+    mockedFetchDesignTemplates.mockResolvedValue([]);
+    mockedFetchPromptTemplates.mockResolvedValue([]);
+    mockedFetchAppVersionInfo.mockResolvedValue(null);
+    mockedFetchAmrModels.mockResolvedValue(null);
+    mockedFetchVelaLoginStatus.mockResolvedValue(null);
+    mockedListProjects.mockResolvedValue([]);
+    mockedListTemplates.mockResolvedValue([]);
+    mockedLoadConfig.mockReturnValue({ ...baseConfig });
+    mockedMergeDaemonConfig.mockImplementation((local) => local);
+    mockedFetchDaemonConfig.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('rejects token and shows error when probe returns 403', async () => {
+    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : '';
+      // Bootstrap flow — trigger the token prompt
+      if (url.includes('/api/auth/bootstrap-token')) {
+        return Promise.resolve({ ok: false, status: 403 } as Response);
+      }
+      if (url.includes('/api/plugins')) {
+        return Promise.resolve({ ok: false, status: 401 } as Response);
+      }
+      // Token verification probe — 403 Forbidden
+      if (url.includes('/api/agents')) {
+        return Promise.resolve({ ok: false, status: 403 } as Response);
+      }
+      return Promise.resolve({
+        ok: true, status: 200, json: () => Promise.resolve({}),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    // ApiTokenPrompt must appear (bootstrap flow triggered it)
+    await waitFor(() => {
+      expect(screen.getByTestId('api-token-prompt')).toBeTruthy();
+    });
+
+    // Simulate token submission
+    fireEvent.click(screen.getByTestId('token-submit'));
+
+    // Error must appear and prompt must stay visible
+    await waitFor(() => {
+      expect(screen.getByTestId('token-error')).toBeTruthy();
+      expect(screen.getByTestId('api-token-prompt')).toBeTruthy();
+    });
+
+    // Entry view must never appear
+    expect(screen.queryByTestId('entry-view')).toBeNull();
+  });
+
+  it('rejects token and shows error when probe returns 500', async () => {
+    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : '';
+      // Bootstrap flow — trigger the token prompt
+      if (url.includes('/api/auth/bootstrap-token')) {
+        return Promise.resolve({ ok: false, status: 403 } as Response);
+      }
+      if (url.includes('/api/plugins')) {
+        return Promise.resolve({ ok: false, status: 401 } as Response);
+      }
+      // Token verification probe — 500 Server Error
+      if (url.includes('/api/agents')) {
+        return Promise.resolve({ ok: false, status: 500 } as Response);
+      }
+      return Promise.resolve({
+        ok: true, status: 200, json: () => Promise.resolve({}),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('api-token-prompt')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('token-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('token-error')).toBeTruthy();
+      expect(screen.getByTestId('api-token-prompt')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('entry-view')).toBeNull();
+  });
+
+  it('accepts token and proceeds to fan-out when probe returns 200', async () => {
+    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : '';
+      // Bootstrap flow — trigger the token prompt
+      if (url.includes('/api/auth/bootstrap-token')) {
+        return Promise.resolve({ ok: false, status: 403 } as Response);
+      }
+      if (url.includes('/api/plugins')) {
+        return Promise.resolve({ ok: false, status: 401 } as Response);
+      }
+      // Token verification probe — 200 OK (token accepted)
+      if (url.includes('/api/agents')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) } as Response);
+      }
+      // set-token-cookie endpoint
+      if (url.includes('/api/auth/set-token-cookie')) {
+        return Promise.resolve({ ok: true, status: 200 } as Response);
+      }
+      return Promise.resolve({
+        ok: true, status: 200, json: () => Promise.resolve({}),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('api-token-prompt')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('token-submit'));
+
+    // Entry view must appear (token accepted, fan-out runs)
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-view')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('api-token-prompt')).toBeNull();
+    expect(screen.queryByTestId('token-error')).toBeNull();
   });
 });

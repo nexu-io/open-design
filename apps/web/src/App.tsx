@@ -2101,8 +2101,12 @@ function AppInner() {
       const probe = await fetch('/api/agents', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!probe.ok && probe.status === 401) {
-        setApiTokenError(t('apiTokenPrompt.invalidToken'));
+      if (!probe.ok) {
+        setApiTokenError(
+          probe.status >= 500 || probe.status === 429
+            ? t('apiTokenPrompt.serverError')
+            : t('apiTokenPrompt.invalidToken'),
+        );
         setVerifyingToken(false);
         return;
       }
