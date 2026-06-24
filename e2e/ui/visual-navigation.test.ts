@@ -64,7 +64,7 @@ test('[P2] captures the design system detail preview surface', async ({ page }) 
   await expect(page.getByTestId('design-system-detail-agentic')).toBeVisible();
   await page.getByTestId('design-system-detail-agentic').getByTestId('design-kit-cover-preview').click();
   await expect(page.getByRole('dialog', { name: /Agentic/i })).toBeVisible();
-  await expect(page.locator('.ds-modal-stage-iframe-scaler iframe')).toBeVisible();
+  await expect(page.getByTestId('design-kit-cover-preview-frame')).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-design-system-detail');

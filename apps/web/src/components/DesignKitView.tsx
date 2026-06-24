@@ -1539,6 +1539,7 @@ function DesignKitViewInner({
                     </div>
                     <iframe
                       className={styles.assetModalFrame}
+                      data-testid="design-kit-cover-preview-frame"
                       title={`${kit.name} preview`}
                       sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
                       srcDoc={buildSrcdoc(kit.showcaseHtml)}
