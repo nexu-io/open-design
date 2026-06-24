@@ -3226,7 +3226,7 @@ export const en: Dict = {
   'settings.resetOnboardingButton': 'Reset',
   'onboarding.brandTitle': 'Extract your design system',
   'onboarding.brandSubtitle': 'Paste a website and we\'ll turn its brand signals into a reusable design system for future work.',
-  'onboarding.brandSkip': 'Skip for now',
+  'onboarding.brandSkip': 'Skip',
   'onboarding.brandDone': 'Design system extracted',
   'brandPicker.heading': 'Start from a brand you love',
   'brandPicker.subtext': 'Click any brand to extract its design system straight from its website.',
