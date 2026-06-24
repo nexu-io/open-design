@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Brand } from '@open-design/contracts';
 
 import {
   closeDatabase,
@@ -93,6 +94,8 @@ const VALID_BRAND = {
   name: 'Acme',
   tagline: 'We make things',
   description: 'Acme makes excellent things for everyone.',
+  sourceUrl: 'https://acme.com/',
+  logo: { primary: null, alternates: [], notes: '' },
   colors: [
     { role: 'background', hex: '#f5f4ed', oklch: 'oklch(96% 0.01 90)', name: 'Parchment', usage: 'page background' },
     { role: 'surface', hex: '#ffffff', oklch: 'oklch(100% 0 0)', name: 'Card', usage: 'cards' },
@@ -106,7 +109,26 @@ const VALID_BRAND = {
     display: { family: 'Tiempos', fallbacks: ['Georgia', 'serif'], weights: [400, 600] },
     body: { family: 'Inter', fallbacks: ['system-ui'], weights: [400, 700] },
   },
-};
+  voice: {
+    adjectives: [],
+    tone: '',
+    messagingPillars: [],
+    vocabulary: { use: [], avoid: [] },
+  },
+  imagery: {
+    style: '',
+    subjects: [],
+    treatment: '',
+    avoid: [],
+    samples: [],
+  },
+  layout: {
+    radius: '',
+    borderWeight: '',
+    spacing: '',
+    postureRules: [],
+  },
+} satisfies Brand;
 
 const DESIGN_MD_INPUT = `---
 name: Heritage
@@ -175,14 +197,14 @@ describe('agent-driven brand extraction engine', () => {
   let userDesignSystemsRoot: string;
 
   it('keeps the generated default theme light even when the source canvas is dark', () => {
-    const darkCanvasBrand = {
+    const darkCanvasBrand: Brand = {
       ...VALID_BRAND,
       name: 'Open Design',
       colors: [
-        { role: 'background', hex: '#050505', name: 'Black', usage: 'source hero background' },
-        { role: 'surface', hex: '#0a0a0a', name: 'Panel', usage: 'source cards' },
-        { role: 'foreground', hex: '#f4f4f4', name: 'White', usage: 'source text' },
-        { role: 'accent', hex: '#56fe13', name: 'Signal Green', usage: 'primary actions' },
+        { role: 'background', hex: '#050505', oklch: 'oklch(14% 0 0)', name: 'Black', usage: 'source hero background' },
+        { role: 'surface', hex: '#0a0a0a', oklch: 'oklch(17% 0 0)', name: 'Panel', usage: 'source cards' },
+        { role: 'foreground', hex: '#f4f4f4', oklch: 'oklch(96% 0 0)', name: 'White', usage: 'source text' },
+        { role: 'accent', hex: '#56fe13', oklch: 'oklch(86% 0.29 142)', name: 'Signal Green', usage: 'primary actions' },
       ],
     };
 
@@ -191,7 +213,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(system.themes.default.colorBgContainer).toBe('#ffffff');
     expect(system.themes.default.colorText).toBe('#1f1f1f');
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
-    expect(system.themes.dark.colorText).toBe('#dedede');
+    expect(system.themes.dark.colorText).toBe('#dcdcdc');
   });
 
   it('keeps programmatic dark-site material on a light default seed', () => {
@@ -202,7 +224,7 @@ describe('agent-driven brand extraction engine', () => {
       ],
       fonts: [{ family: 'Albert Sans', count: 12 }],
       fontFaceFamilies: [],
-    } as PrefetchResult);
+    } as unknown as PrefetchResult);
 
     expect(seed.colorBgBase).toBe('#ffffff');
     expect(seed.colorTextBase).toBe('#000000');
@@ -646,6 +668,9 @@ describe('agent-driven brand extraction engine', () => {
     // The partial palette flowed into the embedded payload, still "extracting".
     expect(html).toContain('"status":"extracting"');
     expect(html).toContain('#d97757');
+    expect(html).toContain('data-od-id="brand-name"');
+    expect(html).toContain('data-od-id="brand-color-hex-\' + i + \'"');
+    expect(html).toContain('data-od-id="brand-palette"');
   });
 
   it('finalizeBrand registers the kit, marks it ready, and lights up the assets', async () => {
@@ -830,7 +855,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('imagery/product.webp');
     // The kit template ships the gallery + font-specimen-tile renderers.
     expect(html).toContain('<div class="gallery">');
-    expect(html).toContain('<div class="fonts">');
+    expect(html).toContain('<div class="fonts" data-od-id="brand-fonts"');
   });
 
   it('preview falls back to a logo alternate when logo.primary is empty', async () => {

@@ -1,5 +1,105 @@
 import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
 
+const MANUAL_EDIT_RUNTIME_OVERRIDES_ID = 'od-manual-edit-runtime-overrides';
+const MANUAL_EDIT_RUNTIME_APPLY_ID = 'od-manual-edit-runtime-apply';
+const RUNTIME_OVERRIDE_APPLIER_SOURCE = `
+(function () {
+  function readOverrides() {
+    var node = document.getElementById('od-manual-edit-runtime-overrides');
+    if (!node) return {};
+    try {
+      var parsed = JSON.parse(node.textContent || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function cssEscape(value) {
+    if (window.CSS && CSS.escape) return CSS.escape(value);
+    return String(value).replace(/"/g, '\\\\"');
+  }
+  function byId(id) {
+    return document.querySelector('[data-od-id="' + cssEscape(id) + '"]');
+  }
+  function textValue(value) {
+    return value == null ? '' : String(value);
+  }
+  function applyAll() {
+    var data = readOverrides();
+    Object.keys(data.text || {}).forEach(function (id) {
+      var el = byId(id);
+      var value = textValue(data.text[id]);
+      if (el && el.textContent !== value) el.textContent = value;
+    });
+    Object.keys(data.links || {}).forEach(function (id) {
+      var el = byId(id);
+      var value = data.links[id] || {};
+      if (!el) return;
+      var text = textValue(value.text);
+      var href = textValue(value.href);
+      if (el.textContent !== text) el.textContent = text;
+      if (href && el.getAttribute('href') !== href) el.setAttribute('href', href);
+    });
+    Object.keys(data.images || {}).forEach(function (id) {
+      var el = byId(id);
+      var value = data.images[id] || {};
+      if (!el) return;
+      var src = textValue(value.src);
+      var alt = textValue(value.alt);
+      if (src && el.getAttribute('src') !== src) el.setAttribute('src', src);
+      if (el.getAttribute('alt') !== alt) el.setAttribute('alt', alt);
+    });
+    Object.keys(data.attrs || {}).forEach(function (id) {
+      var el = byId(id);
+      var attrs = data.attrs[id] || {};
+      if (!el) return;
+      Object.keys(attrs).forEach(function (name) {
+        if (!/^[a-zA-Z_:][a-zA-Z0-9_:.-]*$/.test(name)) return;
+        if (/^data-od-/.test(name)) return;
+        var value = textValue(attrs[name]);
+        if (value.trim() === '') {
+          if (el.hasAttribute(name)) el.removeAttribute(name);
+        } else if (el.getAttribute(name) !== value) {
+          el.setAttribute(name, value);
+        }
+      });
+    });
+    Object.keys(data.html || {}).forEach(function (id) {
+      var el = byId(id);
+      if (!el) return;
+      var template = document.createElement('template');
+      template.innerHTML = textValue(data.html[id]);
+      if (template.content.children.length !== 1) return;
+      var next = template.content.children[0];
+      if (!next.getAttribute('data-od-id')) next.setAttribute('data-od-id', id);
+      if (el.outerHTML === next.outerHTML) return;
+      el.replaceWith(next);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyAll, { once: true });
+  else applyAll();
+  var root = document.getElementById('root') || document.body;
+  if (window.MutationObserver && root) {
+    var pending = 0;
+    new MutationObserver(function () {
+      if (pending) return;
+      pending = window.setTimeout(function () {
+        pending = 0;
+        applyAll();
+      }, 0);
+    }).observe(root, { childList: true, subtree: true });
+  }
+})();`;
+interface RuntimeContentOverrides {
+  text?: Record<string, string>;
+  links?: Record<string, { text: string; href: string }>;
+  images?: Record<string, { src: string; alt: string }>;
+  attrs?: Record<string, Record<string, string>>;
+  html?: Record<string, string>;
+}
+
+type ManualEditElementPatch = Extract<ManualEditPatch, { id: string }>;
+
 export interface ManualEditPatchResult {
   ok: boolean;
   source: string;
@@ -182,10 +282,11 @@ function applyDynamicBrandKitPatch(doc: Document, patch: ManualEditPatch): { ok:
     setRuntimeStyleOverride(doc, patch.id, { display: 'none' } as Partial<ManualEditStyles>);
     return { ok: true };
   }
+  if (!manualEditPatchHasId(patch)) return { ok: false };
   return updateBrandKitPayload(doc, patch);
 }
 
-function updateBrandKitPayload(doc: Document, patch: ManualEditPatch): { ok: boolean } {
+function updateBrandKitPayload(doc: Document, patch: ManualEditElementPatch): { ok: boolean } {
   const script = doc.getElementById('od-brand-payload');
   if (!script) return { ok: false };
   let payload: Record<string, unknown>;
@@ -204,9 +305,14 @@ function updateBrandKitPayload(doc: Document, patch: ManualEditPatch): { ok: boo
   } else if (patch.kind === 'set-image') {
     changed = setBrandKitImageValue(brand, patch.id, patch.src, patch.alt);
   }
-  if (!changed) return { ok: false };
+  if (!changed) return setRuntimeContentOverride(doc, patch);
+  clearRuntimeContentOverride(doc, patch.id);
   script.textContent = safeJsonForScript(payload);
   return { ok: true };
+}
+
+function manualEditPatchHasId(patch: ManualEditPatch): patch is ManualEditElementPatch {
+  return 'id' in patch;
 }
 
 function setBrandKitTextValue(brand: Record<string, unknown>, id: string, value: string): boolean {
@@ -242,6 +348,33 @@ function setBrandKitTextValue(brand: Record<string, unknown>, id: string, value:
     ensureRecord(brand, 'imagery').treatment = value;
     return true;
   }
+  if (id === 'brand-imagery-subjects') {
+    ensureRecord(brand, 'imagery').subjects = splitBrandListValue(value);
+    return true;
+  }
+  if (id === 'brand-imagery-avoid') {
+    ensureRecord(brand, 'imagery').avoid = splitBrandListValue(value);
+    return true;
+  }
+  const adjectiveMatch = id.match(/^brand-voice-adjective-(\d+)$/);
+  if (adjectiveMatch) {
+    const voice = ensureRecord(brand, 'voice');
+    const adjectives = ensureArray(voice, 'adjectives');
+    adjectives[Number(adjectiveMatch[1])] = value;
+    return true;
+  }
+  const pillarMatch = id.match(/^brand-voice-pillar-(\d+)$/);
+  if (pillarMatch) {
+    const voice = ensureRecord(brand, 'voice');
+    const pillars = ensureArray(voice, 'messagingPillars');
+    pillars[Number(pillarMatch[1])] = value;
+    return true;
+  }
+  if (id === 'brand-voice-vocab-use' || id === 'brand-voice-vocab-avoid') {
+    const vocabulary = ensureRecord(ensureRecord(brand, 'voice'), 'vocabulary');
+    vocabulary[id === 'brand-voice-vocab-use' ? 'use' : 'avoid'] = splitBrandListValue(value);
+    return true;
+  }
   const colorMatch = id.match(/^brand-color-(hex|name|role|usage)-(\d+)$/);
   if (colorMatch) {
     const colors = ensureArray(brand, 'colors');
@@ -267,6 +400,27 @@ function setBrandKitImageValue(brand: Record<string, unknown>, id: string, src: 
     if (alt) logo.notes = alt;
     return true;
   }
+  if (id === 'brand-hero-img') {
+    const imagery = ensureRecord(brand, 'imagery');
+    const samples = ensureArray(imagery, 'samples');
+    const entry = ensureArrayRecord(samples, 0);
+    entry.file = src;
+    if (alt) entry.caption = alt;
+    return true;
+  }
+  const logoThumbMatch = id.match(/^brand-logo-thumb-(\d+)$/);
+  if (logoThumbMatch) {
+    const logo = ensureRecord(brand, 'logo');
+    const index = Number(logoThumbMatch[1]);
+    if (index === 0) {
+      logo.primary = src;
+      if (alt) logo.notes = alt;
+      return true;
+    }
+    const alternates = ensureArray(logo, 'alternates');
+    alternates[index - 1] = src;
+    return true;
+  }
   const imageMatch = id.match(/^brand-image-img-(\d+)$/);
   if (!imageMatch) return false;
   const imagery = ensureRecord(brand, 'imagery');
@@ -275,6 +429,91 @@ function setBrandKitImageValue(brand: Record<string, unknown>, id: string, src: 
   entry.file = src;
   if (alt) entry.caption = alt;
   return true;
+}
+
+function splitBrandListValue(value: string): string[] {
+  return value
+    .split(/\s*(?:·|,|，)\s*/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function setRuntimeContentOverride(doc: Document, patch: ManualEditPatch): { ok: boolean } {
+  const overrides = readRuntimeContentOverrides(doc);
+  if (patch.kind === 'set-text') {
+    overrides.text = { ...(overrides.text ?? {}), [patch.id]: patch.value };
+  } else if (patch.kind === 'set-link') {
+    overrides.links = { ...(overrides.links ?? {}), [patch.id]: { text: patch.text, href: patch.href } };
+  } else if (patch.kind === 'set-image') {
+    overrides.images = { ...(overrides.images ?? {}), [patch.id]: { src: patch.src, alt: patch.alt } };
+  } else if (patch.kind === 'set-attributes') {
+    overrides.attrs = { ...(overrides.attrs ?? {}), [patch.id]: patch.attributes };
+  } else if (patch.kind === 'set-outer-html') {
+    overrides.html = { ...(overrides.html ?? {}), [patch.id]: patch.html };
+  } else {
+    return { ok: false };
+  }
+  writeRuntimeContentOverrides(doc, overrides);
+  return { ok: true };
+}
+
+function clearRuntimeContentOverride(doc: Document, id: string): void {
+  const existing = doc.getElementById(MANUAL_EDIT_RUNTIME_OVERRIDES_ID);
+  if (!existing) return;
+  const overrides = readRuntimeContentOverrides(doc);
+  delete overrides.text?.[id];
+  delete overrides.links?.[id];
+  delete overrides.images?.[id];
+  delete overrides.attrs?.[id];
+  delete overrides.html?.[id];
+  writeRuntimeContentOverrides(doc, overrides);
+}
+
+function readRuntimeContentOverrides(doc: Document): RuntimeContentOverrides {
+  const script = doc.getElementById(MANUAL_EDIT_RUNTIME_OVERRIDES_ID);
+  if (!script) return {};
+  try {
+    const parsed = JSON.parse(script.textContent || '{}') as RuntimeContentOverrides;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRuntimeContentOverrides(doc: Document, overrides: RuntimeContentOverrides): void {
+  const script = runtimeOverridesElement(doc);
+  script.textContent = safeJsonForScript(pruneRuntimeContentOverrides(overrides));
+  ensureRuntimeOverrideApplier(doc);
+}
+
+function pruneRuntimeContentOverrides(overrides: RuntimeContentOverrides): RuntimeContentOverrides {
+  const next: RuntimeContentOverrides = {};
+  if (overrides.text && Object.keys(overrides.text).length > 0) next.text = overrides.text;
+  if (overrides.links && Object.keys(overrides.links).length > 0) next.links = overrides.links;
+  if (overrides.images && Object.keys(overrides.images).length > 0) next.images = overrides.images;
+  if (overrides.attrs && Object.keys(overrides.attrs).length > 0) next.attrs = overrides.attrs;
+  if (overrides.html && Object.keys(overrides.html).length > 0) next.html = overrides.html;
+  return next;
+}
+
+function runtimeOverridesElement(doc: Document): HTMLScriptElement {
+  const existing = doc.getElementById(MANUAL_EDIT_RUNTIME_OVERRIDES_ID);
+  if (existing?.tagName.toLowerCase() === 'script') return existing as HTMLScriptElement;
+  const script = doc.createElement('script');
+  script.id = MANUAL_EDIT_RUNTIME_OVERRIDES_ID;
+  script.type = 'application/json';
+  const payload = doc.getElementById('od-brand-payload');
+  if (payload?.parentNode) payload.parentNode.insertBefore(script, payload.nextSibling);
+  else (doc.head || doc.documentElement).appendChild(script);
+  return script;
+}
+
+function ensureRuntimeOverrideApplier(doc: Document): void {
+  if (doc.getElementById(MANUAL_EDIT_RUNTIME_APPLY_ID)) return;
+  const script = doc.createElement('script');
+  script.id = MANUAL_EDIT_RUNTIME_APPLY_ID;
+  script.textContent = RUNTIME_OVERRIDE_APPLIER_SOURCE;
+  (doc.body || doc.documentElement).appendChild(script);
 }
 
 function ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {

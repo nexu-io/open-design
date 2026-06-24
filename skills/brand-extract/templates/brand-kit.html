@@ -315,16 +315,16 @@
       .filter(Boolean)
       .filter(function (c, i, a) { return a.indexOf(c) === i; });
     if (!cands.length) {
-      return '<div class="logo-empty">' + (extracting
+      return '<div class="logo-empty" data-od-id="brand-logo-empty" data-od-edit="container" data-od-label="Logo empty state">' + (extracting
         ? '<div class="skel" style="width:60%;height:48px"></div><span class="muted">' + esc(txt('lookingForLogo', 'Looking for a logo...')) + '</span>'
         : esc(txt('noLogoFound', 'No logo found'))) + '</div>';
     }
     var thumbs = cands.length > 1 ? '<div class="logo-thumbs">' + cands.map(function (c, i) {
-      return '<button class="logo-thumb' + (i===0?' active':'') + '" data-src="' + esc(c) + '" style="background:' + esc(bg) + '"><img src="' + esc(c) + '" alt=""></button>';
+      return '<button class="logo-thumb' + (i===0?' active':'') + '" data-od-id="brand-logo-thumb-' + i + '" data-od-edit="image" data-src="' + esc(c) + '" style="background:' + esc(bg) + '"><img src="' + esc(c) + '" alt=""></button>';
     }).join('') + '</div>' : '';
-    var notes = brand.logo && brand.logo.notes ? '<p class="logo-notes">' + esc(brand.logo.notes) + '</p>' : '';
-    return '<div class="logo-stage" id="logo-stage" style="background:' + esc(bg) + '" data-light-src="' + esc(cands[0]) + '" data-light-caption="' + esc(brand.name || txt('logo', 'Logo')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewLogoAria', 'Preview logo')) + '">' +
-      '<img id="logo-img" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || txt('logoAlt', 'logo')) + '"></div>' + thumbs + notes;
+    var notes = brand.logo && brand.logo.notes ? '<p class="logo-notes" data-od-id="brand-logo-notes" data-od-edit="text">' + esc(brand.logo.notes) + '</p>' : '';
+    return '<div class="logo-stage" id="logo-stage" data-od-id="brand-logo-stage" data-od-edit="container" data-od-label="Logo stage" style="background:' + esc(bg) + '" data-light-src="' + esc(cands[0]) + '" data-light-caption="' + esc(brand.name || txt('logo', 'Logo')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewLogoAria', 'Preview logo')) + '">' +
+      '<img id="logo-img" data-od-id="brand-logo-img" data-od-edit="image" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || txt('logoAlt', 'logo')) + '"></div>' + thumbs + notes;
   }
 
   // Big "Ag" specimen tile per real family (display / body / mono), each set in
@@ -338,11 +338,11 @@
     if (typo.mono) tiles.push({ role: txt('mono', 'Mono'), spec: typo.mono });
     tiles = tiles.filter(function (t) { return t.spec && t.spec.family; });
     if (!tiles.length) return '';
-    return '<div class="fonts">' + tiles.map(function (t) {
-      return '<div class="font-tile">' +
-        '<div class="ag" style="font-family:' + fontStack(t.spec) + '">Ag</div>' +
-        '<div class="ft-meta"><div class="ft-name">' + esc(t.spec.family) + '</div>' +
-        '<div class="ft-role">' + esc(t.role) + '</div></div></div>';
+    return '<div class="fonts" data-od-id="brand-fonts" data-od-edit="container">' + tiles.map(function (t, i) {
+      return '<div class="font-tile" data-od-id="brand-font-tile-' + i + '" data-od-edit="container">' +
+        '<div class="ag" data-od-id="brand-font-sample-' + i + '" data-od-edit="text" style="font-family:' + fontStack(t.spec) + '">Ag</div>' +
+        '<div class="ft-meta"><div class="ft-name" data-od-id="brand-font-name-' + i + '" data-od-edit="text">' + esc(t.spec.family) + '</div>' +
+        '<div class="ft-role" data-od-id="brand-font-role-' + i + '" data-od-edit="text">' + esc(t.role) + '</div></div></div>';
     }).join('') + '</div>';
   }
 
@@ -361,15 +361,15 @@
     var viewAll = samples.length > 6
       ? '<button class="view-all" id="gallery-view-all" type="button">' + esc(txt('viewAll', 'View all')) + ' (' + samples.length + ') →</button>'
       : '';
-    return '<section class="sec">' +
-      '<div class="gallery-head"><h2 class="sec-title" style="margin:0">' + esc(txt('images', 'Images')) + '</h2>' + viewAll + '</div>' +
+    return '<section class="sec" data-od-id="brand-images-section" data-od-edit="container">' +
+      '<div class="gallery-head"><h2 class="sec-title" data-od-id="brand-images-title" data-od-edit="text" style="margin:0">' + esc(txt('images', 'Images')) + '</h2>' + viewAll + '</div>' +
       '<div class="gallery">' + samples.map(function (s, i) {
         var cap = s.caption || s.kind || '';
         var sub = (s.caption && s.kind) ? s.kind : '';
-        var meta = cap ? '<div class="shot-meta"><div class="shot-cap">' + esc(cap) + '</div>' +
-          (sub ? '<div class="shot-kind">' + esc(sub) + '</div>' : '') + '</div>' : '';
-        return '<div class="shot" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || txt('images', 'Image')) + '"><div class="shot-frame">' +
-          '<img src="' + esc(s.file) + '" alt="' + esc(cap || brand.name || '') + '" loading="lazy"></div>' + meta + '</div>';
+        var meta = cap ? '<div class="shot-meta"><div class="shot-cap" data-od-id="brand-image-caption-' + i + '" data-od-edit="text">' + esc(cap) + '</div>' +
+          (sub ? '<div class="shot-kind" data-od-id="brand-image-kind-' + i + '" data-od-edit="text">' + esc(sub) + '</div>' : '') + '</div>' : '';
+        return '<div class="shot" data-od-id="brand-image-' + i + '" data-od-edit="container" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || txt('images', 'Image')) + '"><div class="shot-frame">' +
+          '<img data-od-id="brand-image-img-' + i + '" data-od-edit="image" src="' + esc(s.file) + '" alt="' + esc(cap || brand.name || '') + '" loading="lazy"></div>' + meta + '</div>';
       }).join('') + '</div></section>';
   }
 
@@ -377,7 +377,7 @@
   function heroHtml() {
     var samples = imagerySamples();
     if (!samples.length) return '';
-    return '<div class="kit-hero" data-light-src="' + esc(samples[0].file) + '" data-light-caption="' + esc(samples[0].caption || samples[0].kind || brand.name || txt('images', 'Image')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewHeroImageAria', 'Preview hero image')) + '"><img src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
+    return '<div class="kit-hero" data-od-id="brand-hero-image" data-od-edit="container" data-light-src="' + esc(samples[0].file) + '" data-light-caption="' + esc(samples[0].caption || samples[0].kind || brand.name || txt('images', 'Image')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewHeroImageAria', 'Preview hero image')) + '"><img data-od-id="brand-hero-img" data-od-edit="image" src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
   }
 
   function typeHtml() {
@@ -390,14 +390,14 @@
       if (!extracting) return emptyCard(txt('noTypographyCaptured', 'No typography captured.'));
       return '<div class="type-row"><div class="skel skel-line" style="width:50%"></div><div class="skel" style="height:34px;margin-top:10px;width:70%"></div></div>';
     }
-    return rows.map(function (r) {
+    return rows.map(function (r, i) {
       var spec = r.spec || {};
       var note = spec.googleFontsUrl ? '' : ' <span class="dim">· ' + esc(txt('typographyFallbackNote', 'proprietary, shown via fallback')) + '</span>';
       var weights = arr(spec.weights).length ? ' · ' + arr(spec.weights).join('/') : '';
-      return '<div class="type-row"><div class="type-meta">' +
-        '<span class="type-label">' + esc(r.label) + '</span>' +
-        '<span class="type-font">' + esc(spec.family || '—') + esc(weights) + note + '</span></div>' +
-        '<p class="type-sample" style="font-family:' + fontStack(spec) + ';font-size:' + r.size + ';font-weight:' + r.weight + ';color:' + esc(r.color) + '">' + esc(r.sample) + '</p></div>';
+      return '<div class="type-row" data-od-id="brand-type-' + i + '" data-od-edit="container"><div class="type-meta">' +
+        '<span class="type-label" data-od-id="brand-type-label-' + i + '" data-od-edit="text">' + esc(r.label) + '</span>' +
+        '<span class="type-font" data-od-id="brand-type-font-' + i + '" data-od-edit="text">' + esc(spec.family || '—') + esc(weights) + note + '</span></div>' +
+        '<p class="type-sample" data-od-id="brand-type-sample-' + i + '" data-od-edit="text" style="font-family:' + fontStack(spec) + ';font-size:' + r.size + ';font-weight:' + r.weight + ';color:' + esc(r.color) + '">' + esc(r.sample) + '</p></div>';
     }).join('');
   }
 
@@ -405,16 +405,16 @@
     if (!colors.length) {
       if (!extracting) return emptyCard(txt('noPaletteCaptured', 'No palette captured.'));
       var sk = '';
-      for (var i = 0; i < 7; i++) sk += '<div class="swatch"><div class="skel" style="height:92px"></div><div class="swatch-body"><div class="skel skel-line" style="width:70%"></div></div></div>';
+      for (var i = 0; i < 7; i++) sk += '<div class="swatch" data-od-id="brand-color-skeleton-' + i + '" data-od-edit="container"><div class="skel" style="height:92px"></div><div class="swatch-body"><div class="skel skel-line" style="width:70%"></div></div></div>';
       return '<div class="palette">' + sk + '</div>';
     }
-    return '<div class="palette">' + colors.map(function (c) {
+    return '<div class="palette" data-od-id="brand-palette" data-od-edit="container">' + colors.map(function (c, i) {
       var light = isLight(c.hex);
-      return '<div class="swatch"><div class="swatch-chip" style="background:' + esc(c.hex) + '">' +
-        '<span class="hex" style="color:' + (light ? 'rgba(0,0,0,.65)' : 'rgba(255,255,255,.9)') + '">' + esc(c.hex) + '</span></div>' +
-        '<div class="swatch-body"><div class="swatch-name">' + esc(c.name || c.role) + '</div>' +
-        '<div class="swatch-role">' + esc(c.role || '') + '</div>' +
-        (c.usage ? '<div class="swatch-usage">' + esc(c.usage) + '</div>' : '') + '</div></div>';
+      return '<div class="swatch" data-od-id="brand-color-' + i + '" data-od-edit="container"><div class="swatch-chip" style="background:' + esc(c.hex) + '">' +
+        '<span class="hex" data-od-id="brand-color-hex-' + i + '" data-od-edit="text" style="color:' + (light ? 'rgba(0,0,0,.65)' : 'rgba(255,255,255,.9)') + '">' + esc(c.hex) + '</span></div>' +
+        '<div class="swatch-body"><div class="swatch-name" data-od-id="brand-color-name-' + i + '" data-od-edit="text">' + esc(c.name || c.role) + '</div>' +
+        '<div class="swatch-role" data-od-id="brand-color-role-' + i + '" data-od-edit="text">' + esc(c.role || '') + '</div>' +
+        (c.usage ? '<div class="swatch-usage" data-od-id="brand-color-usage-' + i + '" data-od-edit="text">' + esc(c.usage) + '</div>' : '') + '</div></div>';
     }).join('') + '</div>';
   }
 
@@ -424,17 +424,17 @@
       if (!extracting) return emptyCard(txt('noVoiceNotesCaptured', 'No voice notes captured.'));
       return '<div class="card"><div class="skel skel-line" style="width:40%"></div><div class="skel skel-line" style="width:85%"></div><div class="skel skel-line" style="width:75%"></div></div>';
     }
-    var chips = arr(v.adjectives).map(function (a) {
-      return '<span class="chip" style="background:' + esc(accent) + '1f;color:' + esc(accent) + '">' + esc(a) + '</span>';
+    var chips = arr(v.adjectives).map(function (a, i) {
+      return '<span class="chip" data-od-id="brand-voice-adjective-' + i + '" data-od-edit="text" style="background:' + esc(accent) + '1f;color:' + esc(accent) + '">' + esc(a) + '</span>';
     }).join('');
-    var pillars = arr(v.messagingPillars).length ? '<ul class="pillars">' + arr(v.messagingPillars).map(function (p) {
-      return '<li><span style="color:' + esc(accent) + '">—</span><span>' + esc(p) + '</span></li>';
+    var pillars = arr(v.messagingPillars).length ? '<ul class="pillars">' + arr(v.messagingPillars).map(function (p, i) {
+      return '<li><span style="color:' + esc(accent) + '">—</span><span data-od-id="brand-voice-pillar-' + i + '" data-od-edit="text">' + esc(p) + '</span></li>';
     }).join('') + '</ul>' : '';
     var vocab = (v.vocabulary && (arr(v.vocabulary.use).length || arr(v.vocabulary.avoid).length))
-      ? '<div class="vocab"><div class="use"><div class="k">' + esc(txt('use', 'Use')) + '</div><div class="v">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
-        '<div class="avoid"><div class="k">' + esc(txt('avoid', 'Avoid')) + '</div><div class="v">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
-    return '<div class="card"><div class="chips">' + chips + '</div>' +
-      (v.tone ? '<p class="voice-tone">' + esc(v.tone) + '</p>' : '') + pillars + vocab + '</div>';
+      ? '<div class="vocab"><div class="use"><div class="k">' + esc(txt('use', 'Use')) + '</div><div class="v" data-od-id="brand-voice-vocab-use" data-od-edit="text">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
+        '<div class="avoid"><div class="k">' + esc(txt('avoid', 'Avoid')) + '</div><div class="v" data-od-id="brand-voice-vocab-avoid" data-od-edit="text">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
+    return '<div class="card" data-od-id="brand-voice-card" data-od-edit="container"><div class="chips">' + chips + '</div>' +
+      (v.tone ? '<p class="voice-tone" data-od-id="brand-voice-tone" data-od-edit="text">' + esc(v.tone) + '</p>' : '') + pillars + vocab + '</div>';
   }
 
   function imageryHtml() {
@@ -446,11 +446,11 @@
     }
     var posture = arr(lay.postureRules).length ? '<div class="posture"><div class="type-label">' + esc(txt('layoutPosture', 'Layout posture')) + '</div><ul>' +
       arr(lay.postureRules).map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul></div>' : '';
-    return '<div class="card imagery">' +
-      (im.style ? '<p>' + esc(im.style) + '</p>' : '') +
-      (arr(im.subjects).length ? '<p><span class="k">' + esc(txt('subjects', 'Subjects')) + ':</span> ' + esc(arr(im.subjects).join(', ')) + '</p>' : '') +
-      (im.treatment ? '<p><span class="k">' + esc(txt('treatment', 'Treatment')) + ':</span> ' + esc(im.treatment) + '</p>' : '') +
-      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">' + esc(txt('avoid', 'Avoid')) + ':</span> ' + esc(arr(im.avoid).join(', ')) + '</p>' : '') +
+    return '<div class="card imagery" data-od-id="brand-imagery-card" data-od-edit="container">' +
+      (im.style ? '<p data-od-id="brand-imagery-style" data-od-edit="text">' + esc(im.style) + '</p>' : '') +
+      (arr(im.subjects).length ? '<p><span class="k">' + esc(txt('subjects', 'Subjects')) + ':</span> <span data-od-id="brand-imagery-subjects" data-od-edit="text">' + esc(arr(im.subjects).join(', ')) + '</span></p>' : '') +
+      (im.treatment ? '<p><span class="k">' + esc(txt('treatment', 'Treatment')) + ':</span> <span data-od-id="brand-imagery-treatment" data-od-edit="text">' + esc(im.treatment) + '</span></p>' : '') +
+      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">' + esc(txt('avoid', 'Avoid')) + ':</span> <span data-od-id="brand-imagery-avoid" data-od-edit="text">' + esc(arr(im.avoid).join(', ')) + '</span></p>' : '') +
       posture + '</div>';
   }
 
@@ -478,9 +478,9 @@
         '</div>';
     }
     var themes = arr(sys.themes).length ? arr(sys.themes).join(' · ') : 'default · dark · compact';
-    return '<section class="sec"><div class="ds-head"><div>' +
-        '<h2 class="sec-title">' + esc(txt('designSystem', 'Design system')) + '</h2>' +
-        '<p class="ds-sub">' + esc(txt('designSystemDescription', 'Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.')) + '</p>' +
+    return '<section class="sec" data-od-id="brand-system-section" data-od-edit="container"><div class="ds-head"><div>' +
+        '<h2 class="sec-title" data-od-id="brand-system-title" data-od-edit="text">' + esc(txt('designSystem', 'Design system')) + '</h2>' +
+        '<p class="ds-sub" data-od-id="brand-system-description" data-od-edit="text">' + esc(txt('designSystemDescription', 'Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.')) + '</p>' +
       '</div></div>' +
       '<div class="ds-frame-wrap"><div class="ds-bar">' +
         '<div class="ds-tabs" id="ds-tabs">' +
@@ -495,11 +495,11 @@
 
   function assetsHtml() {
     if (!assets.length) return '';
-    return '<section class="sec">' + sectionTitle(txt('brandAssets', 'Brand assets')) +
-      '<p class="muted" style="margin:-6px 0 14px">' + (extracting
+    return '<section class="sec" data-od-id="brand-assets-section" data-od-edit="container"><h2 class="sec-title" data-od-id="brand-assets-title" data-od-edit="text">' + esc(txt('brandAssets', 'Brand assets')) + '</h2>' +
+      '<p class="muted" data-od-id="brand-assets-copy" data-od-edit="text" style="margin:-6px 0 14px">' + (extracting
         ? esc(txt('assetsExtracting', 'Generated once extraction finishes - click any tile to preview the full page.'))
         : esc(txt('assetsReady', 'Click any tile to preview the full page; everything is colored from this one brand.'))) + '</p>' +
-      '<div class="assets">' + assets.map(function (a) {
+      '<div class="assets">' + assets.map(function (a, i) {
         var pending = !a.available;
         var inner = pending
           ? '<div class="asset-frame"><div class="skel" style="position:absolute;inset:0"></div></div>'
@@ -511,18 +511,18 @@
           ? ''
           : ' data-asset-href="' + esc(a.href) + '" data-asset-label="' + esc(a.label) +
             '" data-asset-desc="' + esc(a.desc || '') + '" tabindex="0" role="button"';
-        return '<div class="asset' + (pending ? ' pending' : '') + '"' + attrs + '>' + inner +
-          '<div class="asset-meta"><div class="asset-name">' + esc(a.label) + (pending ? '' : '<span class="open">' + esc(txt('preview', 'Preview')) + ' →</span>') + '</div>' +
-          (a.desc ? '<div class="asset-desc">' + esc(a.desc) + '</div>' : '') + '</div></div>';
+        return '<div class="asset' + (pending ? ' pending' : '') + '" data-od-id="brand-asset-' + i + '" data-od-edit="container"' + attrs + '>' + inner +
+          '<div class="asset-meta"><div class="asset-name" data-od-id="brand-asset-name-' + i + '" data-od-edit="text">' + esc(a.label) + (pending ? '' : '<span class="open">' + esc(txt('preview', 'Preview')) + ' →</span>') + '</div>' +
+          (a.desc ? '<div class="asset-desc" data-od-id="brand-asset-desc-' + i + '" data-od-edit="text">' + esc(a.desc) + '</div>' : '') + '</div></div>';
       }).join('') + '</div></section>';
   }
 
   var html = '' +
-    '<header class="kit-head"><div>' +
-      '<h1 class="kit-title" style="font-family:' + fontStack(typo.display || {}) + '">' + esc(brand.name || (data.host || 'Brand')) + '</h1>' +
-      (brand.tagline ? '<p class="kit-tagline">' + esc(brand.tagline) + '</p>' : '') +
-      (brand.sourceUrl ? '<a class="kit-source" href="' + esc(brand.sourceUrl) + '" target="_blank" rel="noreferrer noopener">' + esc(brand.sourceUrl) + ' ↗</a>' : '') +
-    '</div><div class="head-actions">' +
+    '<header class="kit-head" data-od-id="brand-header" data-od-edit="container"><div>' +
+      '<h1 class="kit-title" data-od-id="brand-name" data-od-edit="text" style="font-family:' + fontStack(typo.display || {}) + '">' + esc(brand.name || (data.host || 'Brand')) + '</h1>' +
+      (brand.tagline ? '<p class="kit-tagline" data-od-id="brand-tagline" data-od-edit="text">' + esc(brand.tagline) + '</p>' : '') +
+      (brand.sourceUrl ? '<a class="kit-source" data-od-id="brand-source" data-od-edit="link" href="' + esc(brand.sourceUrl) + '" target="_blank" rel="noreferrer noopener">' + esc(brand.sourceUrl) + ' ↗</a>' : '') +
+    '</div><div class="head-actions" data-od-id="brand-header-actions" data-od-edit="container">' +
       '<span class="status-pill ' + (extracting ? 'extracting' : 'ready') + '"><span class="dot"></span>' + esc(extracting ? txt('extracting', 'Extracting...') : txt('brandReady', 'Brand ready')) + '</span>' +
     '</div></header>' +
     heroHtml() +

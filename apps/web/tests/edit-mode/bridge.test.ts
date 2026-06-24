@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import {
   buildManualEditBridge,
+  buildManualEditBridgeStyle,
   buildManualEditKeyboardGuard,
   isMeaningfulManualEditElement,
   isManualEditHostNode,
@@ -312,6 +313,71 @@ describe('manual edit bridge target normalization', () => {
       type: 'od-edit-hover',
     }), '*');
     expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-background' }, '*');
+
+    dom.window.close();
+  });
+
+  it('selects runtime-inserted brand kit elements that carry stable data-od-id markers', () => {
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><div id="root"></div></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.createElement('h1');
+    title.setAttribute('data-od-id', 'brand-name');
+    title.setAttribute('data-od-edit', 'text');
+    title.textContent = 'Runtime brand';
+    title.getBoundingClientRect = () => ({
+      x: 0, y: 0, width: 180, height: 42,
+      top: 0, right: 180, bottom: 42, left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    dom.window.document.getElementById('root')?.appendChild(title);
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-hover',
+      target: expect.objectContaining({ id: 'brand-name', label: 'Runtime brand' }),
+    }, '*');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-select',
+      target: expect.objectContaining({ id: 'brand-name', kind: 'text' }),
+    }, '*');
+
+    dom.window.close();
+  });
+
+  it('adds stable ids to legacy runtime brand kit elements before selection', () => {
+    const dom = new JSDOM(
+      `<script id="od-brand-payload" type="application/json">{"brand":{"name":"Runtime brand"}}</script><main data-od-source-path="path-0"><div id="root"></div></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.createElement('h1');
+    title.className = 'kit-title';
+    title.textContent = 'Runtime brand';
+    title.getBoundingClientRect = () => ({
+      x: 0, y: 0, width: 180, height: 42,
+      top: 0, right: 180, bottom: 42, left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    dom.window.document.getElementById('root')?.appendChild(title);
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(title.getAttribute('data-od-id')).toBe('brand-name');
+    expect(title.getAttribute('data-od-edit')).toBe('text');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-hover',
+      target: expect.objectContaining({ id: 'brand-name', label: 'Runtime brand' }),
+    }, '*');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-select',
+      target: expect.objectContaining({ id: 'brand-name', kind: 'text' }),
+    }, '*');
 
     dom.window.close();
   });

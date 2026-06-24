@@ -107,7 +107,7 @@ import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
-import { extractBrandFromHtml } from '../runtime/brands';
+import { extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
 import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
 import {
   BROWSER_SERIALIZE_HTML_SCRIPT,
@@ -888,6 +888,9 @@ export function ProjectView({
     detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
   const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
   const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
+  const designSystemBrandId = projectIsDesignSystemProject
+    ? currentProject.metadata?.brandId?.trim() || null
+    : null;
   const projectIsProgrammaticBrandExtraction =
     isProgrammaticBrandExtractionProject(currentProject.metadata);
   // P0 page_view page_name=chat_panel — fire once per project mount.
@@ -2659,8 +2662,55 @@ export function ProjectView({
 
   const auditDesignSystemWorkspaceAfterRun = useCallback(
     async (assistantMessageId: string) => {
-      if (!isDesignSystemWorkspaceMetadata(project.metadata)) return;
+      const isDesignSystemWorkspace =
+        isDesignSystemWorkspaceMetadata(currentProject.metadata) || projectIsDesignSystemProject;
+      if (!isDesignSystemWorkspace) return;
       try {
+        if (designSystemBrandId) {
+          const outcome = await finalizeBrandProject(designSystemBrandId, project.id);
+          if (outcome.ok) {
+            await Promise.all([
+              projectDetail.refresh(),
+              Promise.resolve(onDesignSystemsRefresh?.()),
+              refreshWorkspaceItems(),
+            ]);
+            onProjectsRefresh();
+            setDesignMdRefreshKey((n) => n + 1);
+            updateMessageById(
+              assistantMessageId,
+              (prev) => ({
+                ...prev,
+                events: [
+                  ...(prev.events ?? []),
+                  {
+                    kind: 'status',
+                    label: 'design_system',
+                    detail: 'Rebuilt derived kit, assets, and registered design system from brand.json.',
+                  },
+                ],
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+          } else {
+            updateMessageById(
+              assistantMessageId,
+              (prev) => ({
+                ...prev,
+                events: [
+                  ...(prev.events ?? []),
+                  {
+                    kind: 'status',
+                    label: 'design_system',
+                    detail: `Design system sync could not run: ${outcome.error}`,
+                  },
+                ],
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+          }
+        }
         const audit = await fetchProjectDesignSystemPackageAudit(project.id);
         if (!audit) return;
         const auditSummary = summarizeDesignSystemPackageAudit(audit);
@@ -2699,7 +2749,17 @@ export function ProjectView({
         );
       }
     },
-    [project.id, project.metadata, updateMessageById],
+    [
+      currentProject.metadata,
+      designSystemBrandId,
+      onDesignSystemsRefresh,
+      onProjectsRefresh,
+      project.id,
+      projectDetail.refresh,
+      projectIsDesignSystemProject,
+      refreshWorkspaceItems,
+      updateMessageById,
+    ],
   );
 
   const refreshPreviewComments = useCallback(async () => {
@@ -6582,7 +6642,7 @@ export function ProjectView({
           liveArtifacts={liveArtifacts}
           filesRefreshKey={filesRefresh}
           onRefreshFiles={() => {
-            void refreshWorkspaceItems();
+            return refreshWorkspaceItems();
           }}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
@@ -6608,6 +6668,7 @@ export function ProjectView({
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
+          designSystemBrandId={designSystemBrandId}
           defaultDesignSystemId={config.designSystemId}
           onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
           onDesignSystemsRefresh={onDesignSystemsRefresh}

@@ -2438,6 +2438,7 @@ export function FileWorkspace({
 function DesignSystemProjectPanel({
   projectId,
   system,
+  brandId,
   files,
   streaming,
   activityEvents,
@@ -2523,13 +2524,17 @@ function DesignSystemProjectPanel({
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
 
-  const refreshKitDependencies = useCallback(async () => {
+  const refreshKitDependencies = useCallback(async (options?: { finalizeBrand?: boolean }) => {
+    if (options?.finalizeBrand && brandId) {
+      const outcome = await finalizeBrandProject(brandId, projectId);
+      if (!outcome.ok) throw new Error(outcome.error);
+    }
     setKitReloadKey((k) => k + 1);
     await Promise.all([
       Promise.resolve(onRefreshFiles()),
       Promise.resolve(onDesignSystemsRefresh?.()),
     ]);
-  }, [onDesignSystemsRefresh, onRefreshFiles]);
+  }, [brandId, onDesignSystemsRefresh, onRefreshFiles, projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2556,7 +2561,7 @@ function DesignSystemProjectPanel({
     projectId,
     title: system.title,
     onUploaded: () => {
-      void refreshKitDependencies()
+      void refreshKitDependencies({ finalizeBrand: true })
         .then(() => notifyKit('success', t('ds.uploadDone')))
         .catch(() => notifyKit('error', t('ds.actionFailed')));
     },
@@ -2588,8 +2593,12 @@ function DesignSystemProjectPanel({
     if (kitActionBusy) return;
     setKitActionBusy('refresh');
     try {
-      await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
-      await refreshKitDependencies();
+      if (brandId) {
+        await refreshKitDependencies({ finalizeBrand: true });
+      } else {
+        await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
+        await refreshKitDependencies();
+      }
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2602,7 +2611,7 @@ function DesignSystemProjectPanel({
     if (kitActionBusy) return;
     setKitActionBusy('download');
     try {
-      await refreshKitDependencies();
+      await refreshKitDependencies({ finalizeBrand: true });
       const ok =
         await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
         await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title });
@@ -2628,7 +2637,7 @@ function DesignSystemProjectPanel({
         await deleteProjectFile(projectId, 'brand.json');
       }
       setDesignMdBody(originalMd);
-      await refreshKitDependencies();
+      await refreshKitDependencies({ finalizeBrand: true });
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2680,7 +2689,7 @@ function DesignSystemProjectPanel({
       await saveDesignMd(nextBody);
       return;
     }
-    await refreshKitDependencies();
+    await refreshKitDependencies({ finalizeBrand: true });
   }
 
   async function resetKitColor(index: number) {
@@ -2700,7 +2709,7 @@ function DesignSystemProjectPanel({
       notifyKit('error', t('ds.actionFailed'));
       return;
     }
-    await refreshKitDependencies();
+    await refreshKitDependencies({ finalizeBrand: true });
     notifyKit('success', t('ds.actionDone'));
   }
 
@@ -2710,7 +2719,7 @@ function DesignSystemProjectPanel({
       notifyKit('error', t('ds.actionFailed'));
       return;
     }
-    await refreshKitDependencies();
+    await refreshKitDependencies({ finalizeBrand: true });
     notifyKit('success', t('ds.actionDone'));
   }
 
