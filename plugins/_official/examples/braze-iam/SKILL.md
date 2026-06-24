@@ -203,8 +203,8 @@ od braze interview <braze_message_id> \
 od braze plan <braze_message_id> --plan-file - << 'EOF'
 {
   "version": "braze_plan_v1",
-  "summary": "<캠페인 한 줄 요약>",
-  "iam_format": "<modal|halfsheet|fullscreen>",
+  "summary": "<배경·가설·목적 요약>",
+  "iamFormat": "modal",
   "tone": "<톤>",
   "emphasis": ["<핵심 강조 1>", "<핵심 강조 2>"],
   "variants": [
@@ -213,15 +213,12 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
   ],
   "targeting": {
     "segment": "<세그먼트 조건>",
-    "trigger_event_candidates": ["<후보 트리거 1>", "<후보 트리거 2>"],
-    "delivery_model": "action_based"
+    "triggerEvent": "session_start",
+    "deliveryModel": "action_based"
   },
   "cta": [
-    { "label": "<주 CTA 텍스트>", "deeplink": "<딥링크 또는 null>" },
-    { "label": "<보조 CTA 텍스트>", "deeplink": null }
-  ],
-  "liquid_attrs": [
-    { "liquid": "{{custom_attribute.${attr}}}", "attr": "<attr_name>", "reason": "<선정 근거>" }
+    { "label": "<주 CTA 텍스트>", "deeplink": "<딥링크>" },
+    { "label": "<보조 CTA 텍스트>" }
   ],
   "image": { "needed": false, "ratio": null, "format": "PNG" },
   "rejections": []
@@ -243,10 +240,9 @@ EOF
 | 핵심 강조 | <emphasis> |
 | Variant A | <angle A> |
 | Variant B | <angle B> |
-| 트리거 이벤트 후보 | <candidates> (Braze 콘솔에서 설정) |
+| 트리거 이벤트 | <triggerEvent> (session_start / push_click / any_purchase / specific_purchase / custom_event) |
 | 주 CTA | <cta[0].label> |
 | 보조 CTA | <cta[1].label> |
-| 개인화 변수 | <liquid_attrs> |
 ```
 
 ### 자가 카피 검토 (Step 3~4 사이)
