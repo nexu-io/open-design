@@ -26,17 +26,117 @@
 //   prevSourceBeforeReloadRef.  The old snapshot stays armed, so navigating
 //   back to file A on a later normal failed load (no Reload click) wrongly
 //   restores the old A snapshot instead of showing the loading indicator.
+//
+// Race P3 (Codex P2 line 7377) — Manual Edit save silently fails during Reload:
+//   reloadHtmlPreview calls setSource(null) unconditionally.  The [source]
+//   effect then writes null into sourceRef.current.  If the user makes or
+//   saves a manual edit before the reload fetch resolves, applyManualEdit
+//   hits sourceRef.current == null and returns false without calling the file
+//   API — a silent, invisible failure even though the preview is still
+//   interactive (manualEditFrozenSource still shows the old HTML).
 
+import type { ComponentProps } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FileViewer } from '../../src/components/FileViewer';
 import type { ProjectFile } from '../../src/types';
+import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
+
+// ---------------------------------------------------------------------------
+// ManualEditPanel mock — captures the props FileViewer passes so tests can
+// invoke onApplyPatch / onStyleChange without needing real iframe interaction.
+// The mock renders a lightweight sentinel so no real panel DOM is created.
+// ---------------------------------------------------------------------------
+const panelState = vi.hoisted(() => ({
+  props: null as ComponentProps<typeof import('../../src/components/ManualEditPanel').ManualEditPanel> | null,
+}));
+
+vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/components/ManualEditPanel')>();
+  return {
+    ...actual,
+    ManualEditPanel: (
+      props: ComponentProps<typeof actual.ManualEditPanel>,
+    ) => {
+      panelState.props = props;
+      return <div data-testid="mock-manual-edit-panel" />;
+    },
+  };
+});
+
+import { FileViewer } from '../../src/components/FileViewer';
 
 afterEach(() => {
   cleanup();
+  panelState.props = null;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+// ---------------------------------------------------------------------------
+// Shared fixture helpers
+// ---------------------------------------------------------------------------
+
+// A plain HTML file (not a deck) that supports Manual Edit (has data-od-id
+// elements).  The manifest marks it as an 'html' artifact so the component
+// uses the HTML preview path without needing deck logic.
+function manualEditFile(): ProjectFile {
+  return {
+    name: 'preview.html',
+    path: 'preview.html',
+    type: 'file',
+    size: 1024,
+    mtime: 1710000000,
+    kind: 'html',
+    mime: 'text/html',
+    artifactManifest: {
+      version: 1,
+      kind: 'html',
+      title: 'Preview',
+      entry: 'preview.html',
+      renderer: 'html',
+      exports: ['html'],
+    },
+  };
+}
+
+// Minimal target shape that the component accepts via od-edit-select.
+function heroTarget(): ManualEditTarget {
+  return {
+    id: 'hero',
+    kind: 'text',
+    label: 'Hero',
+    tagName: 'h1',
+    className: '',
+    text: 'Hello',
+    rect: { x: 0, y: 0, width: 120, height: 40 },
+    fields: { text: 'Hello' },
+    attributes: { 'data-od-id': 'hero' },
+    styles: emptyManualEditStyles(),
+    isLayoutContainer: false,
+    outerHtml: '<h1 data-od-id="hero">Hello</h1>',
+  };
+}
+
+// Pins the inspector to a target by dispatching the od-edit-select message
+// that the edit-mode iframe bridge would normally send.  Returns the iframe
+// element so callers can inspect it or use it for further messages.
+async function selectManualEditTarget(target = heroTarget()): Promise<HTMLIFrameElement> {
+  const frame = await waitFor(() => {
+    const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    if (!node.contentWindow) throw new Error('Preview frame not ready');
+    return node;
+  });
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'od-edit-select', target },
+        source: frame.contentWindow,
+      }),
+    );
+  });
+  await waitFor(() => expect(panelState.props).not.toBeNull());
+  return frame;
+}
 
 // Minimal deck file fixture that forces the srcDoc render path.
 function deckFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
@@ -801,5 +901,157 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
         await Promise.resolve();
       });
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race P3 (Codex P2 line 7377): Manual Edit save silently fails during Reload
+  //
+  // Sequence:
+  //   1. Mount preview.html, wait for source V1 to load into the iframe.
+  //   2. Enter Manual Edit mode — manualEditFrozenSource captures V1,
+  //      sourceRef.current = V1.
+  //   3. Select a target via od-edit-select postMessage (opens the panel so
+  //      onApplyPatch is reachable).
+  //   4. Click Reload — setSource(null) fires.  The [source] effect then sets
+  //      sourceRef.current = null.  The reload fetch is deferred (in flight).
+  //   5. BEFORE the fetch resolves: call panelState.props!.onApplyPatch(…).
+  //      On the buggy build applyManualEdit returns false immediately because
+  //      sourceRef.current == null — no file-write API call is made.
+  //
+  // Fix: either skip the setSource(null) when manualEditFrozenSource !== null,
+  // or keep sourceRef.current pointed at the last-good source across the
+  // reload window so applyManualEdit can still operate.
+  //
+  // Observable assertion: the file-write API is called, confirming the edit
+  // was not silently dropped.
+  // ---------------------------------------------------------------------------
+  it('saves a Manual Edit patch made during the Reload window instead of silently discarding it', async () => {
+    // Include localStorage to trigger htmlNeedsSandboxShim → forceInline=true
+    // → srcDoc render path even before Manual Edit mode is entered.  This lets
+    // the test confirm srcdoc content in Step 1 and verify the iframe is active.
+    const initialSource =
+      '<!doctype html><html><body>' +
+      '<script>localStorage.setItem("k","v");</script>' +
+      '<h1 data-od-id="hero">Hello</h1>' +
+      '</body></html>';
+
+    const savedSources: string[] = [];
+    let resolveReloadFetch!: (resp: Response) => void;
+    let reloadFetchStarted = false;
+
+    // Initial fetch returns V1 immediately.  Subsequent fetches (reload) are
+    // deferred so the test can act while source is null.
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+
+      // File-write (save) POST — record and return success.
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        savedSources.push(payload.content);
+        return new Response(
+          JSON.stringify({ file: manualEditFile() }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Deployments — not relevant but FileViewer fetches this on mount.
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(
+          JSON.stringify({ deployments: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Raw source GET — first call (initial load) resolves immediately with
+      // V1.  Subsequent calls (triggered by Reload) are deferred so the test
+      // can assert behavior while source is null.
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        if (!reloadFetchStarted) {
+          // Initial load: resolve immediately.
+          return new Response(initialSource, { status: 200 });
+        }
+        // Reload fetch: deferred.
+        return new Promise<Response>((ok) => {
+          resolveReloadFetch = ok;
+        });
+      }
+
+      return new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Step 1: mount and wait for source V1 to land in the preview.
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={manualEditFile()}
+      />,
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.srcdoc).toContain('Hello');
+    });
+
+    // Step 2: enter Manual Edit mode — manualEditFrozenSource captures V1.
+    act(() => {
+      fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    });
+
+    // Step 3: select a target so the panel (and onApplyPatch) is available.
+    await selectManualEditTarget();
+
+    // Step 4: arm the deferred reload fetch, then click Reload.
+    // setSource(null) fires synchronously; the [source] effect will set
+    // sourceRef.current = null on the next render.
+    reloadFetchStarted = true;
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    });
+
+    // Drain one microtask tick so React flushes the setSource(null) render and
+    // the [source] useEffect runs, writing null into sourceRef.current.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Step 5: attempt to save a Manual Edit patch BEFORE the reload fetch
+    // resolves.  sourceRef.current is null at this point on the buggy build.
+    // applyManualEdit should use manualEditFrozenSource as a fallback (or keep
+    // sourceRef.current pointing at the last-good value) so the save proceeds.
+    act(() => {
+      panelState.props!.onApplyPatch(
+        { id: 'hero', kind: 'set-text', value: 'Updated text' },
+        'Content: Hero',
+      );
+    });
+
+    // --- KEY ASSERTION ---
+    // The file-write API must have been called.  On the buggy build
+    // applyManualEdit returns false at the sourceRef.current == null guard
+    // (line 6537) before reaching writeProjectTextFileDetailed, so
+    // savedSources stays empty.
+    await waitFor(() => {
+      expect(savedSources).toHaveLength(1);
+    });
+
+    // The written content must contain the user's edit.
+    expect(savedSources[0]).toContain('Updated text');
+
+    // Drain the deferred reload fetch so it doesn't leak into subsequent tests.
+    await act(async () => {
+      resolveReloadFetch(new Response(initialSource, { status: 200 }));
+      await Promise.resolve();
+    });
   });
 });
