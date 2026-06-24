@@ -5,7 +5,7 @@ import {
   configureVisualPage,
   gotoVisualHome,
   gotoVisualWorkspace,
-  openSettingsDetailsFromHeader,
+  prepareVisualSettingsDialog,
   VISUAL_CLI_AGENTS,
   waitForVisualFonts,
 } from '@/playwright/visual';
@@ -15,12 +15,11 @@ test('[P2] captures the settings execution surface', async ({ page }) => {
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const dialog = await openSettingsDetailsFromHeader(page);
+  const dialog = await prepareVisualSettingsDialog(page);
   await expect(dialog.getByRole('tab', { name: /Local CLI/i })).toBeVisible();
-  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-execution');
+  await captureVisual(page, 'visual-settings-execution', { target: dialog });
 });
 
 test('[P2] captures the settings local CLI surface', async ({ page }) => {
@@ -34,12 +33,12 @@ test('[P2] captures the settings local CLI surface', async ({ page }) => {
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const dialog = await openSettingsDetailsFromHeader(page);
+  const dialog = await prepareVisualSettingsDialog(page);
   await dialog.getByRole('tab', { name: /Local CLI/i }).click();
   await expect(dialog.getByTestId('settings-agent-select-codex')).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-local-cli');
+  await captureVisual(page, 'visual-settings-local-cli', { target: dialog });
 });
 
 test('[P2] captures the settings local CLI model dropdown surface', async ({ page }) => {
@@ -53,7 +52,7 @@ test('[P2] captures the settings local CLI model dropdown surface', async ({ pag
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const dialog = await openSettingsDetailsFromHeader(page);
+  const dialog = await prepareVisualSettingsDialog(page);
   await dialog.getByRole('tab', { name: /Local CLI/i }).click();
   await dialog.getByTestId('settings-agent-select-codex').click();
   const modelSelect = dialog.locator('.agent-card.active [role="combobox"]').first();
@@ -73,13 +72,13 @@ test('[P2] captures the settings BYOK surface', async ({ page }) => {
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const dialog = await openSettingsDetailsFromHeader(page);
+  const dialog = await prepareVisualSettingsDialog(page);
   await dialog.getByRole('tab', { name: 'BYOK' }).click();
   await expect(dialog.getByRole('tablist', { name: 'API protocol' })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-byok');
+  await captureVisual(page, 'visual-settings-byok', { target: dialog });
 });
 
 test('[P2] captures the settings BYOK OpenAI surface', async ({ page }) => {
@@ -96,13 +95,13 @@ test('[P2] captures the settings BYOK OpenAI surface', async ({ page }) => {
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const dialog = await openSettingsDetailsFromHeader(page);
+  const dialog = await prepareVisualSettingsDialog(page);
   await dialog.getByRole('tab', { name: 'BYOK' }).click();
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-byok-openai');
+  await captureVisual(page, 'visual-settings-byok-openai', { target: dialog });
 });
 
 test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) => {
@@ -119,7 +118,7 @@ test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) 
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const dialog = await openSettingsDetailsFromHeader(page);
+  const dialog = await prepareVisualSettingsDialog(page);
   await dialog.getByRole('tab', { name: 'BYOK' }).click();
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   const modelSelect = dialog.getByRole('combobox', { name: 'Model', exact: true });

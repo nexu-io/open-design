@@ -553,6 +553,52 @@ export async function gotoVisualWorkspace(page: Page): Promise<void> {
     .click();
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await prepareVisualWorkspaceFileList(page);
+}
+
+export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> {
+  await page.getByTestId('design-files-tab').click();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
+  await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
+  await resetVisualScroll(page);
+  await waitForVisualStable(page);
+}
+
+export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
+  await prepareVisualWorkspaceFileList(page);
+  const fileRow = page.getByTestId('design-file-row-index.html');
+  await fileRow.getByRole('button').first().click();
+  const preview = page.getByTestId('design-file-preview');
+  await expect(preview).toBeVisible();
+  await preview.getByRole('button', { name: /^Open$/ }).click();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+      name: 'Visual CSS Smoke',
+    }),
+  ).toBeVisible();
+  await resetVisualScroll(page);
+  await waitForVisualStable(page);
+}
+
+export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
+  await prepareVisualWorkspaceFileList(page);
+  const menu = await openAvatarMenu(page);
+  await expect(menu.locator('.avatar-item').first()).toBeVisible();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
+  await waitForVisualStable(page);
+  return menu;
+}
+
+export async function prepareVisualSettingsDialog(page: Page): Promise<Locator> {
+  await prepareVisualWorkspaceFileList(page);
+  const dialog = await openSettingsDetailsFromHeader(page);
+  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  await waitForVisualStable(page);
+  return dialog;
 }
 
 export async function openAvatarMenu(page: Page): Promise<Locator> {
@@ -577,12 +623,28 @@ export async function waitForVisualFonts(page: Page): Promise<void> {
   });
 }
 
-export async function captureVisual(page: Page, name: string): Promise<string> {
+export async function resetVisualScroll(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document.scrollingElement?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    for (const element of document.querySelectorAll<HTMLElement>(
+      '.entry-main--scroll, .workspace, .file-workspace, [data-testid="file-workspace"]',
+    )) {
+      element.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  });
+}
+
+export async function captureVisual(page: Page, name: string, options: { target?: Locator } = {}): Promise<string> {
   const outputDir = path.resolve(process.env.OD_VISUAL_OUTPUT_DIR || 'ui/reports/visual-screenshots');
   const safeName = sanitizeVisualName(name);
   const outputPath = path.join(outputDir, `${safeName}.png`);
   await mkdir(outputDir, { recursive: true });
   await waitForVisualStable(page);
+  if (options.target != null) {
+    await expect(options.target).toBeVisible();
+    await options.target.screenshot({ path: outputPath, animations: 'disabled', caret: 'hide' });
+    return outputPath;
+  }
   await page.screenshot({ path: outputPath, animations: 'disabled', caret: 'hide' });
   return outputPath;
 }
