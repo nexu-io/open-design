@@ -890,26 +890,31 @@ jobs:
           fi
 
       - name: Block merge while the needs-validation label is present
-        # Hard gate: a PR that still carries `needs-validation` must not merge. Fails closed —
-        # any label-lookup error blocks rather than silently waving the merge through. Respects
-        # the skip-validation override implicitly (that override means needs-validation is never
-        # added). On pull_request the labels come straight from the event payload (no API call);
-        # on merge_group we resolve every PR in the queued group.
+        # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
+        # the merge_group (merge-queue) context — never on pull_request. main requires the merge
+        # queue, so every merge passes through merge_group; a needs-validation entry fails this
+        # step there and is ejected from the queue, so it can never land.
+        #
+        # Why not also fail on pull_request: that turns the PR's own required `Validate workspace`
+        # check red, and a deliberately-red required check is indistinguishable from a real CI
+        # failure to everything downstream — it flips the PR's mergeStateStatus to BLOCKED and
+        # reads as ci_status=failure to the review bot, which deadlocks the very QA/validation that
+        # is supposed to clear the label (QA never gets requested → label never removed → blocked
+        # forever). The merge_group run executes on the queue's transient ref, so this failure does
+        # NOT appear in the PR head's status rollup; the PR stays green until the label is cleared.
+        # Fails closed: any label-lookup error blocks rather than silently waving the merge through.
+        # Respects skip-validation implicitly (that override means needs-validation is never added).
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            if printf '%s' "$PR_LABELS" | jq -e 'index("needs-validation")' >/dev/null; then
-              echo "::error::PR still has 'needs-validation' — validate (/explore Pass or manual QA) and remove the label before merging."
-              exit 1
-            fi
-          elif [ "$EVENT_NAME" = "merge_group" ]; then
+          if [ "$EVENT_NAME" != "merge_group" ]; then
+            echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
+          else
             # Fail closed: capture each gh result into a plain assignment so a failed lookup
             # trips set -e / pipefail and blocks the merge. Do NOT put the gh call in an `if`
             # condition — a nonzero exit there is swallowed (read as "no label") and waves the
@@ -927,8 +932,8 @@ jobs:
                 exit 1
               fi
             done
+            echo "No 'needs-validation' label in the queued group — clear to merge."
           fi
-          echo "No 'needs-validation' label in scope — clear to merge."
 
   runtime_summary:
     name: Runtime summary
