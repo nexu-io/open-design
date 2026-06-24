@@ -967,15 +967,32 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
         );
       }
 
-      // Raw source GET — first call (initial load) resolves immediately with
-      // V1.  Subsequent calls (triggered by Reload) are deferred so the test
-      // can assert behavior while source is null.
+      // Raw source GET — the same URL is used by three distinct callers:
+      //   (a) Initial load effect: cacheBust=<mtime>-<reloadKey>-<filesRefreshKey>
+      //       → resolve immediately before reloadFetchStarted.
+      //   (b) Reload effect (after Reload click): cacheBust=<mtime>-<N>-<N>
+      //       → deferred so the test can assert inside the reload window.
+      //   (c) confirmManualEditHistorySource: cacheBust=<Date.now() timestamp>
+      //       → pure 13-digit integer, no dashes; resolve immediately with
+      //       initialSource so applyManualEdit can proceed without blocking on
+      //       the deferred reload fetch (avoids test deadlock after revert of
+      //       the sourceMatchesFrozen shortcut, PR #4652 8th-pass review).
       if (url.includes('/api/projects/project-1/raw/preview.html')) {
         if (!reloadFetchStarted) {
-          // Initial load: resolve immediately.
+          // (a) Initial load: resolve immediately.
           return new Response(initialSource, { status: 200 });
         }
-        // Reload fetch: deferred.
+        // Distinguish reload-effect fetch (cacheBust contains dashes, e.g.
+        // "1710000000-1-0") from confirm-source fetch (cacheBust is a pure
+        // integer timestamp, e.g. "1750800000000").
+        const cacheBustParam = new URL(url, 'http://x').searchParams.get('cacheBust') ?? '';
+        const isConfirmSourceFetch = /^\d+$/.test(cacheBustParam);
+        if (isConfirmSourceFetch) {
+          // (c) confirmManualEditHistorySource: resolve immediately so it can
+          // return true and let applyManualEdit proceed to the file-write call.
+          return new Response(initialSource, { status: 200 });
+        }
+        // (b) Reload fetch: deferred.
         return new Promise<Response>((ok) => {
           resolveReloadFetch = ok;
         });
@@ -1012,23 +1029,27 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     await selectManualEditTarget();
 
     // Step 4: arm the deferred reload fetch, then click Reload.
-    // setSource(null) fires synchronously; the [source] effect will set
-    // sourceRef.current = null on the next render.
+    // reloadHtmlPreview skips setSource(null) when manualEditFrozenSource !== null
+    // (PR #4652 Codex P2 fix, kept), so sourceRef.current stays non-null.
+    // The reload re-fetch is still triggered via reloadKey increment.
     reloadFetchStarted = true;
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
     });
 
-    // Drain one microtask tick so React flushes the setSource(null) render and
-    // the [source] useEffect runs, writing null into sourceRef.current.
+    // Drain one microtask tick so React flushes the Reload render and any
+    // synchronous state updates from the click handler settle.
     await act(async () => {
       await Promise.resolve();
     });
 
     // Step 5: attempt to save a Manual Edit patch BEFORE the reload fetch
-    // resolves.  sourceRef.current is null at this point on the buggy build.
-    // applyManualEdit should use manualEditFrozenSource as a fallback (or keep
-    // sourceRef.current pointing at the last-good value) so the save proceeds.
+    // resolves.  applyManualEdit calls confirmManualEditHistorySource (unconditional
+    // after revert of the sourceMatchesFrozen shortcut), which fetches the
+    // persisted source.  The confirm-source fetch is mocked to resolve immediately
+    // (it uses a pure-integer cacheBust from Date.now(), distinguishable from the
+    // reload-effect cacheBust which includes dashes), so applyManualEdit proceeds
+    // to the file-write call while the reload fetch is still deferred.
     act(() => {
       panelState.props!.onApplyPatch(
         { id: 'hero', kind: 'set-text', value: 'Updated text' },
@@ -1037,10 +1058,11 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     });
 
     // --- KEY ASSERTION ---
-    // The file-write API must have been called.  On the buggy build
-    // applyManualEdit returns false at the sourceRef.current == null guard
-    // (line 6537) before reaching writeProjectTextFileDetailed, so
-    // savedSources stays empty.
+    // The file-write API must have been called.  The pre-fix regression was
+    // applyManualEdit returning false at the sourceRef.current == null guard
+    // before reaching writeProjectTextFileDetailed (savedSources stays empty).
+    // The fix (reloadHtmlPreview skipping setSource(null) when Manual Edit is
+    // active) keeps sourceRef.current non-null throughout the reload window.
     await waitFor(() => {
       expect(savedSources).toHaveLength(1);
     });

@@ -6545,16 +6545,7 @@ function HtmlViewer({
         setManualEditError(result.error ?? 'Could not apply edit.');
         return false;
       }
-      // Skip the server-confirmation round-trip when the base source is the
-      // frozen Manual Edit snapshot captured at mode entry.  The frozen source
-      // IS the server's persisted copy at that instant — an external write in
-      // the milliseconds between freeze and save is implausible and not worth a
-      // blocking network fetch.  This also prevents a false-block during a
-      // srcDoc Reload window: reloadHtmlPreview skips setSource(null) while
-      // manualEditFrozenSource is set (PR #4652 Codex P2), so baseSource stays
-      // at the frozen value and the round-trip can be skipped safely.
-      const sourceMatchesFrozen = manualEditFrozenSource !== null && baseSource === manualEditFrozenSource;
-      if (!sourceMatchesFrozen && !(await confirmManualEditHistorySource(
+      if (!(await confirmManualEditHistorySource(
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
       ))) return false;
