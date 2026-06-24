@@ -44,19 +44,18 @@ Load the relevant reference file based on the task. Do not load all of them at o
 
 | Task | Reference File |
 |---|---|
-| Finding or validating a video topic | `references/topic-ideation.md` |
-| Researching a topic deeply | `references/research-workflow.md` |
-| Writing or fixing a reel script | `references/reel-scripting.md` |
-| Writing a documentary/long-form script | `references/documentary-scripting.md` |
-| Writing or diagnosing a hook | `references/hooks-and-retention.md` |
-| Monetizing scripting as a freelancer | `references/scripting-monetization.md` |
+| Finding or validating a video topic | `references/source-6-topic-ideation.md` |
+| Writing or fixing a reel script | `references/source-5-reel-scripting.md` |
+| Writing a documentary/long-form script | `references/source-4-documentary-scripting.md` |
+| Writing or diagnosing a hook | `references/source-7-techniques.md` |
+| Monetizing scripting as a freelancer | `references/source-3-scripting-monetization.md` |
 
 **Multi-task rules:**
-- Full reel from scratch → load `topic-ideation.md` + `reel-scripting.md`
-- Full documentary from scratch → load `topic-ideation.md` + `research-workflow.md` + `documentary-scripting.md`
-- Hook only → load `hooks-and-retention.md` only
-- Research only → load `research-workflow.md` only
-- Freelancing → load `scripting-monetization.md` only
+- Full reel from scratch → load `source-6-topic-ideation.md` + `source-5-reel-scripting.md`
+- Full documentary from scratch → load `source-6-topic-ideation.md` + `source-11-story-bank-and-delivery.md` + `source-4-documentary-scripting.md`
+- Hook only → load `source-7-techniques.md` only
+- Research only → load `source-11-story-bank-and-delivery.md` only
+- Freelancing → load `source-3-scripting-monetization.md` only
 
 ---
 
