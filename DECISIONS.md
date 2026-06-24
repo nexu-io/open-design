@@ -84,3 +84,23 @@
 - 검증 = task별 리뷰 + 최종 whole-branch 리뷰(opus) Ready-to-merge YES. dual-track 4-홉 필드명 정합·imported-folder baseDir·status allowlist·bodoc 0 확인. M-2(unreachable EEXIST) 직접 정리 (출처: 최종 리뷰)
 - e2e = production HTTP/CLI 직접 구동(메시지→plan→confirm→od braze brief→od braze get→디스크). 가드 400/404·json·resave overwrite 통과. web 패널 렌더+콘솔에러 0, 링크 클릭 시각확인만 사람 잔여 (출처: HANDOFF e2e)
 - 전체 daemon 1 fail(chat-route.test.ts:298)=braze 무관 기존결함(8커밋이 chat/permission/external 파일 0건 변경)—회귀 아님 (출처: 베이스라인 파일-동일성 증명)
+
+## 2026-06-24 — bodoc 디자인시스템 포팅 (브랜드-블라인드 IAM 수정)
+- 문제 = IAM 제작이 보닥 컨텍스트 없이 수행 — variant HTML 제네릭 인디고(#4f46e5)·bodoc:// 딥링크 0, brief도 yourapp://signup 플레이스홀더. 근본원인 = daemon이 활성 DS의 DESIGN.md를 produce 프롬프트에 자동 stack하나 design-systems/에 bodoc 없음 + 보닥 사실은 gitignored 카탈로그에만 고립 (출처: bodoc 디자인시스템 포팅 설계)
+- 컨텍스트 범위 = 옵션 A: bodoc DESIGN.md = 시각브랜드+보이스+Liquid룰+§딥링크13(committed), 어트리뷰트122/이벤트128 벌크 제외(PII). 딥링크는 레퍼런스 HTML에 이미 노출된 앱 라우트라 저민감 (출처: 사용자 승인)
+- 칩 자동 디폴트 채택 = braze 칩 config od.context.designSystem을 {primary:true}→bodoc {ref} pin (manifest 스키마 {ref?,primary?} 지원). 칩 누르면 bodoc 자동 활성, 수동선택 불요 (출처: 사용자 "넣어")
+- DS 발견 = 자동스캔(listDesignSystems readdir) — 폴더 드롭만으로 드롭다운 노출, 레지스트리 편집 불요. 소스 자재 = braze-iam/brand/{DESIGN.md,tokens.css/json,braze-fonts.css}(TRACKED·저민감) 포팅 (출처: 코드 추적)
+- bodoc 갭이 HTML produce + brief 저작 둘 다 영향 — Component 1이 활성DS stack으로 동시 해소. 검증에 brief 딥링크 포함 (출처: 사용자 brief.md 스크린샷 지적)
+
+## 2026-06-24 — bodoc 디자인시스템 포팅 구현 (SDD+TDD, Task 1·2 머지레디)
+- 구현 = subagent-driven-development + TDD: writing-plans로 TDD스텝 플랜 작성 → task별 fresh implementer + task리뷰(spec+quality) + final whole-branch 리뷰. Task1·2 disjoint이나 단일 git index 공유라 직렬(SDD 병렬-implementer 금지 룰 준수, worktree 격리는 trivial 2커밋엔 과함). 사용자 지시로 향후 SDD+TDD+병렬 디폴트화 (출처: 사용자 "앞으로 SDD/TDD/병렬")
+- **스펙 이탈 확정**: bodoc DS = design-systems/bodoc/DESIGN.md 단일(prose-only). 스펙은 tokens.css/json/braze-fonts.css 4파일 포팅이었으나 코드검증서 tokens.css 단독 = pnpm guard FAIL(check-tokens-fixture-sync 페어링 tokens.css↔components.html + 토큰스키마 A1/A2/B-slot 요구, bodoc는 --primary/--text-primary만). → 토큰 :root·Braze 폰트자산문자열·딥링크13 전부 DESIGN.md 안 fenced 임베드. daemon이 활성DS DESIGN.md 전체 body를 produce(system.ts:665)+brief(panel.ts <BRAND_SOURCE>) 주입하므로 정보 동일 도달, 스펙 의도(옵션A·manifest 생략) 보존 (출처: Explore 코드추적 + 구현)
+- 칩 바인딩 = open-design.json designSystem {primary:true}→{ref:"bodoc"}. pickDesignSystemId(apply.ts:326) ds.ref.trim() 우선. ReferenceSchema {ref?,path?}, 매니페스트 designSystem union 허용. 키는 ref(not id/path) (출처: 유닛테스트 증명 + apply.ts)
+- guard 보강 = check-components-manifest-extraction.ts가 prose-only 폴더서 components.html ENOENT 크래시 → 3-branch(both-absent skip / XOR pairingError→guard fail / both-present process)로 수정, 형제 check-tokens-fixture-sync 패턴 미러. task-review Important 픽스 (출처: Task1 리뷰)
+- 라이브검증 = rebuild+restart 후 /api/design-systems에 bodoc 노출. final whole-branch 리뷰 Ready-to-merge YES(0 blocking, XOR-fail fixture 재현, 5 DS guard prose-only skip 확인). Task 3(실 produce e2e + 시각확인 사람게이트 + 테스트잔여 정리) user-gated 잔여 (출처: final review + HANDOFF)
+
+## 2026-06-24 — bodoc 디자인시스템 포팅 Task 3 e2e 검증 (브라우저 produce, PASS)
+- Task 3 = 실 IAM produce e2e + 시각확인 사람게이트. browse 헤드리스로 web :62911서 Braze IAM 칩→인터뷰(목적=온보딩/사이즈=모달/톤=축하)→plan confirm→produce 완주. 신규 프로젝트 3c2f042d, 칩 선택만으로 bodoc 자동 활성(에이전트가 "보닥 브랜드 컨텍스트 기반으로 정합니다" 발화로 인지 확인) (출처: browse e2e)
+- 산출물 grep PASS(Step 3·4): variant-a/b.html 둘 다 #16C5FF≥1·bodoc://action/≥1·슬롭색(#4f46e5/#0f172a)=0·플레이스홀더(yourapp/example.com)=0. brief.md(2 slug) 둘 다 bodoc://action/≥1·플레이스홀더=0. 이전 브랜드-블라인드(제네릭 인디고·yourapp://signup) 완전 해소 증명 (출처: 디스크 grep)
+- 시각확인(Step 5) PASS: 모달 렌더 강제표시 후 캡처 — 보닥 cyan 별아이콘·"보닥" cyan 하이라이트·cyan CTA "내 보험 진단 시작하기"·보조 "다음에 볼게요"·흰표면·Braze Liquid 개인화({% if custom_attribute.name %}). variant-a=위계중심 모달, variant-b=상단 primary-tint 그래픽 대비강조. slop 0 (출처: 스크린샷 시각검증)
+- 검증게이트(Step 7) PASS: pnpm guard 63/63, typecheck 0에러, 2 컨트랙트 테스트(design-system-bodoc-contract·braze-chip-design-system-bind) vitest 2/2 pass. 코드변경 0(검증 전용 트랙)이라 신규 커밋은 DECISIONS/핸드오프 로그뿐. bodoc DS 3커밋(a7294807b·51d448b4c·1dd2ed080) 머지레디 확정 (출처: 검증 실행)
