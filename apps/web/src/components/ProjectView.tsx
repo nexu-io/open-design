@@ -2907,10 +2907,15 @@ export function ProjectView({
         if (needsFullReplay && daemonStatusIsRecoverable) {
           updateMessageById(
             message.id,
-            // Clear endedAt so the replay finalizers stamp Date.now() on real
-            // completion instead of preserving the SSE-disconnect timestamp that
-            // onError set when the browser-side reconnect loop gave up.
-            (prev) => ({ ...prev, content: '', events: [], producedFiles: undefined, endedAt: undefined }),
+            // Clear endedAt only for spuriously-failed pending messages so the
+            // replay finalizers stamp Date.now() on real completion instead of
+            // preserving the SSE-disconnect timestamp that onError set when the
+            // browser-side reconnect loop gave up.  Already-succeeded rows
+            // reaching needsFullReplay via shouldReplayTerminalRunMessage must
+            // keep their original terminal timestamp; resetting it here causes
+            // prev.endedAt ?? Date.now() to re-stamp to reload time and drifts
+            // persisted run durations forward.
+            (prev) => ({ ...prev, content: '', events: [], producedFiles: undefined, ...(spuriouslyFailedPending ? { endedAt: undefined } : {}) }),
           );
           // When the failed-message recovery moves back to running/succeeded,
           // clear any stale "daemon stream disconnected" error banner that the
@@ -4180,7 +4185,19 @@ export function ProjectView({
           // attempt a daemon status fetch on a run the client already knows
           // failed — overwriting the assistant message's resumable flag with
           // the fetched status before the ChatPane has had a chance to render.
-          if (currentRunId) completedReattachRunsRef.current.add(currentRunId);
+          //
+          // EXCEPTION: the generic "daemon stream disconnected before run
+          // completed" error is a browser-side SSE reconnect-budget exhaustion,
+          // NOT an authoritative terminal failure.  The daemon may still report
+          // the run as queued/running on the next tick, so we must leave the
+          // runId eligible for attachRecoverableRuns to re-query.  Only seal
+          // the registry entry on authoritative terminal failures (any error
+          // that is NOT the generic disconnect message).
+          const isGenericDisconnect =
+            err.message === 'daemon stream disconnected before run completed';
+          if (currentRunId && !isGenericDisconnect) {
+            completedReattachRunsRef.current.add(currentRunId);
+          }
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
             runConversationId,
             controller,
