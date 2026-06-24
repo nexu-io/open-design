@@ -771,6 +771,7 @@ function AppInner() {
   useEffect(() => {
     let cancelled = false;
     const agentStreamAbort = new AbortController();
+    const bootstrapAbort = new AbortController();
     (async () => {
       const alive = await daemonIsLive();
       if (cancelled) return;
@@ -803,7 +804,6 @@ function AppInner() {
         // Awaiting the exchange ensures the cookie is visible to the concurrent
         // fetchAgentsStream / fetchSkills / listProjects calls that follow.
         // 10s timeout guards against a hung daemon blocking the entire boot.
-        const bootstrapAbort = new AbortController();
         const bootstrapTimeout = setTimeout(() => bootstrapAbort.abort(), 10_000);
         try {
           // Generate clientTag inside the guarded block so a crypto
@@ -897,6 +897,7 @@ function AppInner() {
         }
       }
 
+      if (cancelled) return;
       const agentRequestId = beginAgentStreamRequest();
       void fetchAgentsStream({
         signal: agentStreamAbort.signal,
@@ -1073,6 +1074,7 @@ function AppInner() {
     return () => {
       cancelled = true;
       agentStreamAbort.abort();
+      bootstrapAbort.abort();
     };
   }, [
     beginAgentStreamRequest,
