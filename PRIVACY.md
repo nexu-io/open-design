@@ -52,12 +52,20 @@ diagnostics are always-on reliability data.
 
 ## How telemetry is sent
 
-Redacted telemetry batches are sent to a Cloudflare Worker relay operated by
-the Open Design team, which forwards them to [Langfuse](https://langfuse.com)
-for analysis. The relay holds the Langfuse write credentials server-side, so
-packaged clients only ever ship a public relay URL — no secret keys. If the
-relay is unavailable the app retries quietly and keeps working; telemetry
-never blocks your workflow.
+Optional usage telemetry batches are sent to a Cloudflare Worker relay operated
+by the Open Design team, which forwards them to
+[Langfuse](https://langfuse.com) for analysis. The relay holds the Langfuse
+write credentials server-side, so packaged clients only ever ship a public
+relay URL — no secret keys.
+
+Safety and crash diagnostics use a separate reliability transport. Browser
+exception and safety events are sent directly to the configured PostHog ingest
+host, and daemon safety events are sent through the PostHog node client. These
+events use the same redaction rules described above and do not include prompts
+or generated artifact contents.
+
+If either transport is unavailable the app retries quietly and keeps working;
+telemetry never blocks your workflow.
 
 ## Your anonymous ID
 
