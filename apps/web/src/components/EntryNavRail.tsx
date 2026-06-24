@@ -157,7 +157,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           onClick={() => selectView('design-systems')}
           testId="entry-nav-design-systems"
         >
-          <Icon name="swatchbook" size={18} />
+          <Icon name="palette" size={18} />
         </NavButton>
         {LIBRARY_UI_VISIBLE ? (
           <NavButton
