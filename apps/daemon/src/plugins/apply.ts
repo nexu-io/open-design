@@ -318,7 +318,7 @@ export function pickFirstLocalSkillPath(manifest: PluginManifest): string | unde
   return undefined;
 }
 
-function pickDesignSystemId(
+export function pickDesignSystemId(
   manifest: PluginManifest,
   active?: { id: string; title?: string },
 ): string | undefined {
