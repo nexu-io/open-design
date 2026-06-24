@@ -172,6 +172,12 @@ function hasLayout(layout: KitLayout | undefined): boolean {
   );
 }
 
+function withCacheBust(url: string, cacheBustKey: number | string | undefined): string {
+  if (cacheBustKey === undefined || cacheBustKey === '') return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}v=${encodeURIComponent(String(cacheBustKey))}`;
+}
+
 /**
  * Overlay a DESIGN.md edit onto an extracted kit module-by-module, field-by-field.
  *
@@ -274,6 +280,7 @@ interface BrandKitOptions {
   editable: boolean;
   host?: string;
   showcaseHtml?: string | null;
+  reloadKey?: number | string;
   /** The system/ artifacts only exist once a brand is finalized; gate the kit
    *  iframe + asset tiles so an in-flight brand does not point at 404s. */
   ready?: boolean;
@@ -285,7 +292,8 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const { projectId } = opts;
   const ready = opts.ready !== false;
   const showSystem = ready && Boolean(projectId);
-  const asset = (rel: string): string | null => (projectId ? projectRawUrl(projectId, rel) : null);
+  const asset = (rel: string): string | null =>
+    projectId ? withCacheBust(projectRawUrl(projectId, rel), opts.reloadKey) : null;
   const host = opts.host || hostnameOf(brand.sourceUrl || '');
   const imagery: KitImagery | undefined = brand.imagery
     ? {
@@ -335,14 +343,14 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
     layout: hasLayout(brand.layout) ? brand.layout : undefined,
     system: showSystem
       ? {
-          kitUrl: projectRawUrl(projectId!, 'system/kit.html'),
-          kitDarkUrl: projectRawUrl(projectId!, 'system/kit.dark.html'),
-          tokensUrl: projectRawUrl(projectId!, 'system/tokens.default.json'),
-          indexUrl: projectRawUrl(projectId!, 'system/index.html'),
+          kitUrl: withCacheBust(projectRawUrl(projectId!, 'system/kit.html'), opts.reloadKey),
+          kitDarkUrl: withCacheBust(projectRawUrl(projectId!, 'system/kit.dark.html'), opts.reloadKey),
+          tokensUrl: withCacheBust(projectRawUrl(projectId!, 'system/tokens.default.json'), opts.reloadKey),
+          indexUrl: withCacheBust(projectRawUrl(projectId!, 'system/index.html'), opts.reloadKey),
         }
       : undefined,
     assets: showSystem
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: projectRawUrl(projectId!, a.file) }))
+      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: asset(a.file)! }))
       : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
@@ -386,6 +394,7 @@ interface ParsedKitOptions {
   swatches?: string[];
   packageInfo?: DesignSystemPackageInfo;
   showcaseHtml?: string | null;
+  reloadKey?: number | string;
 }
 
 function packageFontsToTypography(
@@ -541,6 +550,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         swatches,
         packageInfo,
         showcaseHtml,
+        reloadKey,
       });
 
     if (!projectId) {
@@ -564,7 +574,14 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
       if (cancelled) return;
       const brand = tryParseBrand(rawBrand);
       if (brand) {
-        const brandKit = brandToKit(brand, { designSystemId, projectId, editable, host, showcaseHtml });
+        const brandKit = brandToKit(brand, {
+          designSystemId,
+          projectId,
+          editable,
+          host,
+          showcaseHtml,
+          reloadKey,
+        });
         setKit(mergeBrandKitWithDesignMd(brandKit, rawDesignMd ?? '', {
           designSystemId,
           projectId,

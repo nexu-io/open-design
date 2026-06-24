@@ -10,6 +10,7 @@ import { FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
 
 const registryMocks = vi.hoisted(() => ({
+  deleteProjectFile: vi.fn(),
   fetchProjectFileText: vi.fn(),
   updateDesignSystemDraft: vi.fn(),
   writeProjectTextFile: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    deleteProjectFile: registryMocks.deleteProjectFile,
     fetchProjectFileText: registryMocks.fetchProjectFileText,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
     writeProjectTextFile: registryMocks.writeProjectTextFile,
@@ -239,6 +241,132 @@ describe('FileWorkspace design-system project surface', () => {
       'DESIGN.md',
       expect.stringContaining('`#10B981`'),
     ));
+  });
+
+  it('deletes image module assets from the project and refreshes dependents', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve('# Acme');
+      if (name === 'brand.json') {
+        return Promise.resolve(JSON.stringify({
+          name: 'Acme',
+          sourceUrl: 'https://acme.test',
+          logo: { primary: null, alternates: [] },
+          colors: [],
+          typography: {},
+          imagery: {
+            style: 'Product imagery',
+            subjects: [],
+            treatment: '',
+            avoid: [],
+            samples: [{ file: 'imagery/hero.png', caption: 'Hero', kind: 'hero' }],
+          },
+          voice: {
+            adjectives: [],
+            tone: '',
+            messagingPillars: [],
+            vocabulary: { use: [], avoid: [] },
+          },
+          layout: { radius: '', borderWeight: '', spacing: '', postureRules: [] },
+        }));
+      }
+      return Promise.resolve(null);
+    });
+    registryMocks.writeProjectTextFile.mockResolvedValue(workspaceFile('brand.json'));
+    registryMocks.deleteProjectFile.mockResolvedValue(true);
+    const onRefreshFiles = vi.fn();
+    const onDesignSystemsRefresh = vi.fn();
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md'), workspaceFile('imagery/hero.png')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        onDesignSystemsRefresh={onDesignSystemsRefresh}
+      />,
+    );
+
+    await flushKit();
+
+    const deleteImage = container.querySelector<HTMLButtonElement>('button[aria-label="Delete image Hero"]');
+    expect(deleteImage).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(deleteImage!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(registryMocks.writeProjectTextFile).toHaveBeenCalledWith(
+      'ds-acme',
+      'brand.json',
+      expect.not.stringContaining('imagery/hero.png'),
+    ));
+    expect(registryMocks.deleteProjectFile).toHaveBeenCalledWith('ds-acme', 'imagery/hero.png');
+    expect(onRefreshFiles).toHaveBeenCalled();
+    expect(onDesignSystemsRefresh).toHaveBeenCalled();
+  });
+
+  it('refreshes before downloading the current project archive', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve('# Acme');
+      return Promise.resolve(null);
+    });
+    const events: string[] = [];
+    const onRefreshFiles = vi.fn(async () => {
+      events.push('refresh-files');
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      events.push(String(input));
+      return new Response(new Blob(['zip']), {
+        status: 200,
+        headers: { 'Content-Disposition': 'attachment; filename="acme.zip"' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const NativeUrl = URL;
+    class MockUrl extends NativeUrl {
+      static createObjectURL = vi.fn(() => 'blob:archive');
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal('URL', MockUrl);
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        onDesignSystemsRefresh={vi.fn()}
+      />,
+    );
+
+    await flushKit();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="design-kit-more-actions"]')?.click();
+      await Promise.resolve();
+    });
+    const downloadItem = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ).find((button) => button.textContent?.includes('Download'));
+    expect(downloadItem).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(downloadItem!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(events[0]).toBe('refresh-files');
+    expect(events[1]).toBe('/api/projects/ds-acme/archive');
   });
 
   it('reports malformed design-system card manifests instead of silently falling back', async () => {

@@ -50,6 +50,37 @@ export type ExtractBrandFromHtmlOutcome =
   | { ok: true; result: BrandFinalizeResponse }
   | { ok: false; error: string };
 
+export async function finalizeBrandProject(
+  brandId: string,
+  projectId: string,
+): Promise<ExtractBrandFromHtmlOutcome> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/finalize`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ projectId }),
+    });
+    if (!resp.ok) {
+      let error = `Brand finalize failed (${resp.status})`;
+      try {
+        const data = (await resp.json()) as { error?: string };
+        if (data?.error) error = data.error;
+      } catch {
+        // Non-JSON error body — keep the status-based message.
+      }
+      return { ok: false, error };
+    }
+    const result = (await resp.json()) as BrandFinalizeResponse;
+    return { ok: true, result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not reach the daemon',
+    };
+  }
+}
+
 /** POST the DOM the web read out of the unblocked in-app browser tab so the
  *  daemon re-runs extraction against it (no fresh fetch). Resolves with the
  *  finalized brand on success, or a failure reason the assist card can show. */
