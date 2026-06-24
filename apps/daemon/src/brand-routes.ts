@@ -22,6 +22,7 @@ import {
 } from './db.js';
 import { resolveProjectDir } from './projects.js';
 import {
+  extractBrandFromHtml,
   finalizeBrand,
   listBrandSummaries,
   readBrandDetail,
@@ -176,6 +177,52 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const message = err instanceof Error ? err.message : String(err);
       const status = /not found/i.test(message) ? 404 : 422;
       res.status(status).json({ error: message });
+    }
+  });
+
+  // POST /api/brands/:id/extract-from-html { html, css?, baseUrl? } — re-run the
+  // programmatic harvest against HTML the web read out of the in-app browser tab
+  // after the user cleared an anti-bot wall, instead of a fresh (blocked) fetch.
+  // Registers the `user:<id>` design system and marks the brand `ready`.
+  app.post('/api/brands/:id/extract-from-html', async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const html = typeof req.body?.html === 'string' ? req.body.html : '';
+    const css = typeof req.body?.css === 'string' ? req.body.css : '';
+    const baseUrl = typeof req.body?.baseUrl === 'string' ? req.body.baseUrl : '';
+    if (!html.trim()) {
+      res.status(400).json({ error: 'html is required' });
+      return;
+    }
+    try {
+      const meta = readBrandDetail(brandsRoot, id)?.meta;
+      if (!meta) {
+        res.status(404).json({ error: 'brand not found' });
+        return;
+      }
+      const result = await extractBrandFromHtml({
+        id,
+        meta,
+        brandsRoot,
+        userDesignSystemsRoot,
+        projectsRoot,
+        skillsRoot,
+        dataDir,
+        db,
+        hasWebsiteSource: true,
+        html,
+        ...(css.trim() ? { css } : {}),
+        ...(baseUrl.trim() ? { baseUrl } : {}),
+      });
+      if (!result) {
+        res
+          .status(422)
+          .json({ error: 'Could not extract a design system from the provided page.' });
+        return;
+      }
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(/not found/i.test(message) ? 404 : 500).json({ error: message });
     }
   });
 

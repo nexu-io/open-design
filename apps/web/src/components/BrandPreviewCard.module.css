@@ -302,6 +302,7 @@
 .headerMenu {
   position: relative;
   display: inline-flex;
+  align-items: center;
 }
 
 .headerMenuTrigger {
@@ -309,7 +310,7 @@
   align-items: center;
   justify-content: center;
   width: 34px;
-  height: 34px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

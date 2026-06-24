@@ -50,7 +50,7 @@ import { reflowBrandToMemory } from './memory.js';
 import { brandSystemDir, rebuildSystem } from './system.js';
 import { extractJsonBlock, validateBrand } from './validate.js';
 import { brandFromMaterial } from './provisional.js';
-import { prefetchBrand, type PrefetchResult } from './prefetch.js';
+import { prefetchBrand, prefetchFromHtml, type PrefetchResult } from './prefetch.js';
 import { BRAND_KIT_FILE, writeBrandKitPreview } from './kit-render.js';
 import { selfHostGoogleFonts } from './fonts.js';
 import { adoptExistingLogos, ensureLogoFallback, type LogoFallbackFn, type LogoSlot } from './logo-fallback.js';
@@ -640,6 +640,10 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     designSystemId,
     systemFiles: systemBuild.files,
     projectId,
+    // Any anti-bot wall the programmatic pass flagged is moot now the brand is
+    // finalized — clear it so the web stops prompting the browser fallback.
+    blocked: false,
+    blockedReason: undefined,
   });
 
   // Sediment the brand into memory so future chats can ground a vague request
@@ -725,12 +729,73 @@ export async function runProgrammaticExtraction(
 
   const material = await prefetch(meta.sourceUrl, brandDir);
   if (!material) return null;
-  if (material.blocked || material.thin) return null;
+  if (material.blocked) {
+    // Anti-bot wall: persist the signal so the web can prompt the user to clear
+    // it in the in-app browser tab and re-extract from the rendered DOM. The
+    // brand stays `extracting`, so the agent fallback still works either way.
+    patchMeta(brandsRoot, id, { blocked: true, blockedReason: 'Cloudflare' });
+    return null;
+  }
+  if (material.thin) return null;
 
   const brand = brandFromMaterial(material, meta.sourceUrl);
   const guideMd = brandGuideMd(brand);
   const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
   updateProject(opts.db, opts.projectId, {
+    pendingPrompt: brandExtractionPrompt({
+      url: meta.sourceUrl,
+      brandId: id,
+      host: hostnameOf(meta.sourceUrl),
+      hasWebsiteSource: true,
+      hasDesignMdSource: false,
+    }),
+  });
+  return finalized;
+}
+
+export interface ExtractBrandFromHtmlOptions
+  extends Omit<RunProgrammaticExtractionOptions, 'prefetch' | 'designMd' | 'projectId'> {
+  /** Backing project to sync the finalized system into; defaults to the brand's
+   *  recorded project. */
+  projectId?: string;
+  /** Rendered DOM (`document.documentElement.outerHTML`) the web read out of the
+   *  in-app browser tab after the user cleared an anti-bot wall. */
+  html: string;
+  /** Stylesheet text + computed-style harvest collected from the rendered page. */
+  css?: string;
+  /** Page URL used as the asset base; defaults to the brand's `sourceUrl`. */
+  baseUrl?: string;
+}
+
+/**
+ * Re-run programmatic extraction against HTML the web already rendered (the
+ * in-app browser tab the user unblocked), instead of fetching. Same
+ * harvest → synthesize → finalize pipeline as `runProgrammaticExtraction`, but
+ * fed the post-wall DOM via `prefetchFromHtml` (no network fetch, no Chrome).
+ * On success the brand is finalized `ready` and its `user:<id>` design system
+ * registered (reusing the existing id — never duplicated). Returns null when the
+ * provided page is still too thin to synthesize a system.
+ */
+export async function extractBrandFromHtml(
+  opts: ExtractBrandFromHtmlOptions,
+): Promise<BrandFinalizeResponse | null> {
+  const { id, meta, brandsRoot } = opts;
+  const brandDir = resolveBrandFile(brandsRoot, id, []);
+  if (!brandDir) return null;
+  const projectId = opts.projectId ?? meta.projectId ?? brandProjectId(id);
+  const baseUrl = opts.baseUrl?.trim() || meta.sourceUrl;
+
+  const material = await prefetchFromHtml(opts.html, opts.css ?? '', baseUrl, brandDir);
+  // The page is already past the wall, so do NOT bail on `material.blocked`; only
+  // a genuinely thin harvest (confirmed too early, wrong tab) can't synthesize.
+  if (!material || material.thin) return null;
+
+  const brand = brandFromMaterial(material, meta.sourceUrl);
+  const guideMd = brandGuideMd(brand);
+  const finalized = await finalizeBrandCore({ ...opts, projectId, brand, guideMd });
+  // Flip the project to enrichment mode so a follow-up "AI Optimize" refines the
+  // same design system in place rather than re-running the blocked extraction.
+  updateProject(opts.db, projectId, {
     pendingPrompt: brandExtractionPrompt({
       url: meta.sourceUrl,
       brandId: id,

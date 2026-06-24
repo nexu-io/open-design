@@ -602,6 +602,38 @@ export async function prefetchBrand(
       return null;
     }
   }
+  return harvestFromHtml(html, baseUrl, brandDir, { url, renderedDom, onProgress });
+}
+
+interface HarvestFromHtmlOptions {
+  /** Original input URL recorded as `result.url`. */
+  url: string;
+  /** Pre-rendered DOM (headless Chrome) captured during fetch, used as a logo
+   *  fallback source. Null for the extract-from-html path. */
+  renderedDom?: string | null;
+  /** Extra CSS folded into the harvest before parsing (e.g. stylesheet text the
+   *  web read out of the rendered browser page). */
+  cssSeed?: string;
+  /** Whether headless-Chrome rescue passes (thin-CSS re-harvest, screenshot) may
+   *  run. False when the caller already supplied rendered DOM. Defaults true. */
+  allowChrome?: boolean;
+  onProgress?: PrefetchProgress;
+}
+
+/** Turn page HTML (+ optional seed CSS) into a PrefetchResult: harvest colors,
+ *  fonts, logos, and copy, self-host webfonts, and build the material digest.
+ *  `prefetchBrand` feeds fetched / Chrome-rendered HTML; `prefetchFromHtml`
+ *  feeds the DOM the web read out of the unblocked in-app browser tab. */
+async function harvestFromHtml(
+  html: string,
+  baseUrl: string,
+  brandDir: string,
+  opts: HarvestFromHtmlOptions,
+): Promise<PrefetchResult> {
+  const { url } = opts;
+  const onProgress: PrefetchProgress = opts.onProgress ?? (() => {});
+  const allowChrome = opts.allowChrome ?? true;
+  let renderedDom = opts.renderedDom ?? null;
   // Chrome can render a challenge page too (interactive Turnstile etc.) —
   // re-check the HTML we actually ended up with.
   const blocked = isChallengePage(html);
@@ -620,6 +652,7 @@ export async function prefetchBrand(
   if (!blocked) {
     onProgress("css");
     const cssChunks: string[] = [];
+    if (opts.cssSeed && opts.cssSeed.trim()) cssChunks.push(opts.cssSeed);
     for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1]);
     for (const m of html.matchAll(/style=["']([^"']{1,2000})["']/gi)) cssChunks.push(m[1] + ";");
 
@@ -652,7 +685,7 @@ export async function prefetchBrand(
     // CSS-in-JS rescue: a thin static harvest usually means styles are injected
     // at runtime. Render once with headless Chrome — the dumped DOM carries the
     // injected <style> tags and inline styles — and re-extract.
-    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && findChrome()) {
+    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && allowChrome && findChrome()) {
       onProgress("chrome", "thin static CSS — re-harvesting from the rendered DOM");
       renderedDom = await chromeDumpDom(baseUrl);
       if (renderedDom) {
@@ -737,7 +770,7 @@ export async function prefetchBrand(
   const prefetchDir = path.join(brandDir, "prefetch");
   fs.mkdirSync(prefetchDir, { recursive: true });
   let screenshot: string | null = null;
-  if (logos.length === 0 && !blocked && findChrome()) {
+  if (logos.length === 0 && !blocked && allowChrome && findChrome()) {
     onProgress("chrome", "no logo downloadable — capturing a page screenshot");
     const shotPath = path.join(prefetchDir, "screenshot.png");
     if (await chromeScreenshot(baseUrl, shotPath)) screenshot = "prefetch/screenshot.png";
@@ -825,4 +858,33 @@ export async function prefetchBrand(
   fs.writeFileSync(path.join(prefetchDir, "styles.css"), allCss.slice(0, 2_000_000));
 
   return { ...partial, thin, materialMd };
+}
+
+/** Harvest a brand from HTML the web already rendered (e.g. the in-app browser
+ *  tab after the user cleared an anti-bot wall) instead of fetching it. Skips
+ *  all main-page network fetching and headless-Chrome rescue; logo/webfont
+ *  downloads still run best-effort against `baseUrl`. Returns null on empty
+ *  input. The provided `css` (stylesheet text + computed styles collected from
+ *  the rendered page) is folded in alongside the inline `<style>` in `html`. */
+export async function prefetchFromHtml(
+  html: string,
+  css: string,
+  baseUrl: string,
+  brandDir: string,
+  onProgress: PrefetchProgress = () => {},
+): Promise<PrefetchResult | null> {
+  if (!html || !html.trim()) return null;
+  let resolvedBase = baseUrl;
+  try {
+    resolvedBase = new URL(baseUrl).href;
+  } catch {
+    // Keep the raw string; downstream `new URL(..., baseUrl)` calls guard themselves.
+  }
+  return harvestFromHtml(html.slice(0, HTML_CAP), resolvedBase, brandDir, {
+    url: baseUrl,
+    cssSeed: css ?? "",
+    renderedDom: null,
+    allowChrome: false,
+    onProgress,
+  });
 }
