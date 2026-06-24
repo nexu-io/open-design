@@ -37,11 +37,22 @@ describe('api protocol labels', () => {
     };
 
     expect(supportsNativeImageAttachmentSerialization(baseConfig)).toBe(true);
-    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.5' })).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: false })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: true })).toBe(true);
-    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-3.5-turbo' })).toBe(false);
+    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-3.5-turbo' })).toBe(false);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'anthropic/claude-3.7-sonnet',
+    })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'anthropic/claude-3.7-sonnet',
+    })).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({
       ...baseConfig,
       apiProtocol: 'openai',
@@ -53,7 +64,7 @@ describe('api protocol labels', () => {
       apiProtocol: 'openai',
       baseUrl: 'https://openrouter.ai/api/v1',
       model: 'openai/o3-mini',
-    })).toBe(true);
+    })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({
       ...baseConfig,
       apiProtocol: 'openai',
@@ -84,7 +95,7 @@ describe('api protocol labels', () => {
     })).toBe(false);
     expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: false })).toBe(false);
     expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: true })).toBe(false);
-    expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
+    expect(shouldOmitNativeImageAttachmentMetadata({ ...baseConfig, apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.5' })).toBe(true);
   });
 
   it('includes explicit local CLI models when labeling agent messages', () => {

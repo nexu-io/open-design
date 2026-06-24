@@ -1,4 +1,5 @@
 import { isOpenAICompatible } from '../providers/openai-compatible';
+import { KNOWN_PROVIDERS } from '../state/config';
 import type { ApiProtocol, AppConfig } from '../types';
 
 const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -58,7 +59,7 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
 export function supportsNativeImageAttachmentSerialization(cfg: AppConfig): boolean {
   if (cfg.apiProtocol === 'azure') return cfg.nativeImageInputEnabled === true;
   if (cfg.apiProtocol === 'openai') {
-    return isKnownNativeImageModel(cfg.model);
+    return isKnownImageCapableProviderModel(cfg, 'openai');
   }
   if (
     cfg.apiProtocol === 'google' ||
@@ -70,7 +71,7 @@ export function supportsNativeImageAttachmentSerialization(cfg: AppConfig): bool
   }
   if (cfg.apiProtocol === 'anthropic') return true;
   if (isOpenAICompatible(cfg.model, cfg.baseUrl)) {
-    return isKnownNativeImageModel(cfg.model);
+    return isKnownImageCapableProviderModel(cfg, 'openai');
   }
   return true;
 }
@@ -80,23 +81,33 @@ export function shouldOmitNativeImageAttachmentMetadata(cfg: AppConfig): boolean
   return supportsNativeImageAttachmentSerialization(cfg);
 }
 
-function isKnownNativeImageModel(model: string): boolean {
-  const normalized = model.trim().toLowerCase();
-  const providerModel = normalized.split('/').pop() ?? normalized;
-  return isKnownNativeImageModelId(normalized) || isKnownNativeImageModelId(providerModel);
+function isKnownImageCapableProviderModel(
+  cfg: AppConfig,
+  protocol: ApiProtocol,
+): boolean {
+  const provider = KNOWN_PROVIDERS.find(
+    (candidate) =>
+      candidate.protocol === protocol &&
+      normalizeProviderBaseUrl(candidate.baseUrl) === providerBaseUrlForConfig(cfg),
+  );
+  const normalizedModel = normalizeProviderModel(cfg.model);
+  return Boolean(
+    provider?.imageCapableModels?.some(
+      (model) => normalizeProviderModel(model) === normalizedModel,
+    ),
+  );
 }
 
-function isKnownNativeImageModelId(model: string): boolean {
-  return (
-    model === 'chat-gpt-latest' ||
-    model.startsWith('gpt-5') ||
-    model.startsWith('gpt-4o') ||
-    model.startsWith('gpt-4.1') ||
-    model.startsWith('gpt-4-turbo') ||
-    model.startsWith('o3') ||
-    model.startsWith('o4') ||
-    model.startsWith('gemini-2.5')
-  );
+function providerBaseUrlForConfig(cfg: AppConfig): string {
+  return normalizeProviderBaseUrl(cfg.apiProviderBaseUrl ?? cfg.baseUrl);
+}
+
+function normalizeProviderBaseUrl(baseUrl: string | null | undefined): string {
+  return (baseUrl ?? '').trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function normalizeProviderModel(model: string): string {
+  return model.trim().toLowerCase();
 }
 
 export function isAnthropicSupportedImagePath(path: string): boolean {
