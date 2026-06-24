@@ -110,6 +110,7 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
+import { LanguageMenu } from './LanguageMenu';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
 import {
@@ -203,6 +204,8 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 const NEWSLETTER_SUBSCRIBE_URL =
   process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
 const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
+const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
 
 const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
@@ -696,13 +699,6 @@ export function EntryShell({
   if (view === 'onboarding') {
     return (
       <div className="entry-shell entry-shell--no-header entry-shell--onboarding">
-        <div className="entry-onboarding-settings">
-          <EntrySettingsMenu
-            config={config}
-            onThemeChange={onThemeChange}
-            onOpenSettings={onOpenSettings}
-          />
-        </div>
         <main className="entry-onboarding-modal" aria-label={t('settings.welcomeTitle')}>
           <OnboardingView
             config={config}
@@ -719,6 +715,7 @@ export function EntryShell({
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
             onFinish={finishOnboarding}
+            onThemeChange={onThemeChange}
             onGoBuild={() => {
               onCompleteOnboarding();
               navigate({ kind: 'design-system-create' });
@@ -1001,6 +998,7 @@ function OnboardingView({
   onConfigPersist,
   onRefreshAgents,
   onFinish,
+  onThemeChange,
   onGoBuild,
 }: {
   config: AppConfig;
@@ -1020,30 +1018,25 @@ function OnboardingView({
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   onFinish: () => void;
+  onThemeChange: (theme: AppTheme) => void;
   onGoBuild: () => void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
-  // Furthest step the user has legitimately reached. The stepper lets you jump
-  // back to any already-visited step, but never *forward* past it — forward
-  // progress only happens through the gated Continue CTA (which itself can't
-  // leave the Connect step until a runtime is ready). This keeps the wizard
-  // strictly sequential and, unlike gating the stepper on the async AMR
-  // login probe, never flickers disabled→enabled while that status resolves.
-  const [maxStepReached, setMaxStepReached] = useState(0);
-  useEffect(() => {
-    setMaxStepReached((reached) => Math.max(reached, step));
-  }, [step]);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  // Connect step (step 0) faces: the minimal cloud sign-in landing (null), or
+  // a single dedicated setup page for the local CLI or BYOK that the landing's
+  // two secondary links open directly. AMR has no card anymore — it signs in
+  // straight from the landing's primary button.
+  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
-  // True while the one-shot AMR re-probe (fired when the cold-start stream
-  // settled without surfacing AMR) is in flight. Combined with
-  // `agentsLoading`, this is the full window during which AMR availability
-  // is still undecided — and the AMR cloud card renders its skeleton.
-  const [amrRefreshPending, setAmrRefreshPending] = useState(false);
+  // Initial login status fetch has settled, whether signed in or not. The
+  // cloud landing uses this to avoid flashing "Sign in" before flipping to
+  // "Continue" for already-authenticated users.
+  const [amrStatusResolved, setAmrStatusResolved] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
@@ -1093,8 +1086,22 @@ function OnboardingView({
   }, [profile]);
   const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const cliScanTokenRef = useRef(0);
+  const cliScanTelemetryRef = useRef<{
+    token: number;
+    startedAt: number;
+    onboardingSessionId: string;
+  } | null>(null);
+  const cliRefreshPendingTokenRef = useRef<number | null>(null);
   const amrLoginPollCancelledRef = useRef(false);
   const amrAgentRefreshAttemptedRef = useRef(false);
+  const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
+  const providerAutoTestKeyRef = useRef<string | null>(null);
+  const providerModelAutoSelectRef = useRef({
+    model: config.model,
+    providerModelsInputKey: '',
+    runtime,
+    step,
+  });
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerTestInputKey = [
     apiProtocol,
@@ -1109,6 +1116,12 @@ function OnboardingView({
     config.apiKey,
     config.apiVersion ?? '',
   );
+  providerModelAutoSelectRef.current = {
+    model: config.model,
+    providerModelsInputKey,
+    runtime,
+    step,
+  };
   const canTestProvider =
     Boolean(config.apiKey.trim()) &&
     Boolean(config.baseUrl.trim()) &&
@@ -1134,46 +1147,11 @@ function OnboardingView({
       provider.protocol === apiProtocol &&
       provider.baseUrl === (config.apiProviderBaseUrl ?? config.baseUrl),
   ) ?? null;
-  const visibleAgents = agents.filter(
-    (agent) => agent.available && agent.id !== 'amr' && visibleAgentIds.includes(agent.id),
-  );
+  const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
+  const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
-  // AMR availability is still undecided while the cold-start stream runs or
-  // the one-shot re-probe is in flight. During that window we show the AMR
-  // cloud card in a skeleton state rather than hiding it (the gap users hit
-  // today: card absent for several seconds, then it pops in). Once detection
-  // settles, the card is either real (amrAgent) or omitted.
-  const amrDetecting = !amrAgent && (agentsLoading || amrRefreshPending);
-  // AMR is Open Design's officially recommended cloud runtime and the hero
-  // card on the runtime step. While availability is still undecided we show
-  // the skeleton; once detection settles we always render the real card —
-  // never unmount it. Previously the card was gated on a locally-detected
-  // `vela` runtime, so on machines where the probe never surfaced AMR the
-  // card showed its skeleton through the cold-start stream and the one-shot
-  // re-probe, then vanished ("loads forever then disappears"). When AMR is
-  // genuinely unavailable the card degrades to its fallback content and its
-  // sign-in flow, which already surfaces the daemon error gracefully.
-  const showAmrCloudOption = amrAgent !== null || !amrDetecting;
   const amrSignedIn = amrStatus?.loggedIn === true;
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
-  const amrAgentChoice = config.agentModels?.amr ?? {};
-  const amrModels =
-    amrAgent?.models && amrAgent.models.length > 0
-      ? amrAgent.models
-      : ONBOARDING_AMR_MODEL_OPTIONS;
-  const amrModelsSource =
-    amrAgent?.models && amrAgent.models.length > 0
-      ? amrAgent.modelsSource ?? 'fallback'
-      : 'fallback';
-  const amrKnownModelIds = amrModels.map((model) => model.id);
-  const amrConfiguredModel =
-    typeof amrAgentChoice.model === 'string' && amrAgentChoice.model
-      ? amrAgentChoice.model
-      : null;
-  const amrSelectedModel =
-    amrConfiguredModel && amrKnownModelIds.includes(amrConfiguredModel)
-      ? amrConfiguredModel
-      : amrModels[0]?.id ?? '';
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
   // Connect-step (step 0) gate. Continue may only advance once the selected
@@ -1190,6 +1168,32 @@ function OnboardingView({
     (runtime === 'byok' && byokConnectionVerified);
   const connectStepBlocked =
     step === 0 && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
+  // Which Connect gate is in the way, for the Continue tooltip. The three
+  // "blocked" reasons hold Continue disabled; `amr_signed_out` is the
+  // "Sign in to continue" CTA — still clickable, but the tooltip explains why
+  // the next steps need a runtime first.
+  const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | null =
+    step !== 0
+      ? null
+      : amrSelectedAndSignedOut
+        ? 'amr_signed_out'
+        : connectStepBlocked
+          ? runtime === 'local'
+            ? 'local_agent_unavailable'
+            : runtime === 'byok'
+              ? 'byok_unverified'
+              : 'no_runtime'
+          : null;
+  const connectGateTooltip =
+    connectGateReason === 'amr_signed_out'
+      ? t('settings.onboardingGateTooltipAmr')
+      : connectGateReason === 'local_agent_unavailable'
+        ? t('settings.onboardingGateTooltipLocal')
+        : connectGateReason === 'byok_unverified'
+          ? t('settings.onboardingGateTooltipByok')
+          : connectGateReason === 'no_runtime'
+            ? t('settings.onboardingGateTooltipNoRuntime')
+            : null;
 
   useEffect(() => {
     return () => {
@@ -1207,27 +1211,59 @@ function OnboardingView({
   }, [amrAgent, onAgentChange, onModeChange, runtime]);
 
   useEffect(() => {
+    if (runtime !== 'local') return;
+    const scanToken = cliScanTokenRef.current;
+    if (cliRefreshPendingTokenRef.current === scanToken) return;
+    const currentAvailableAgents = agents.filter(
+      (agent) => agent.available && agent.id !== 'amr',
+    );
+    if (currentAvailableAgents.length > 0) {
+      const selectedCliAgent = selectDefaultCliAgent(currentAvailableAgents);
+      showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
+      setCliScanStatus('done');
+      emitPendingCliScanResult(scanToken, {
+        result: 'success',
+        detected: agents.length,
+        available: currentAvailableAgents.length,
+        selectedCliId: selectedCliAgent ? agentIdToTracking(selectedCliAgent.id) : undefined,
+      });
+      return;
+    }
+    if (!agentsLoading && cliScanStatus === 'scanning') {
+      setCliScanStatus('done');
+      emitPendingCliScanResult(scanToken, {
+        result: 'failed',
+        detected: agents.length,
+        available: 0,
+        errorCode: 'NO_AVAILABLE_CLI',
+      });
+    }
+  }, [agents, agentsLoading, cliScanStatus, config.agentId, runtime]);
+
+  useEffect(() => {
     // The cold-start stream finished without AMR. Re-probe once before we
-    // conclude AMR is unavailable, and keep the card in its skeleton state
-    // for the duration so it doesn't flash out-and-back-in.
+    // conclude AMR is unavailable, so the cloud sign-in stays usable even when
+    // AMR was slow to surface in the initial agent list.
     if (amrAgent || amrAgentRefreshAttemptedRef.current || agentsLoading) return;
     amrAgentRefreshAttemptedRef.current = true;
-    setAmrRefreshPending(true);
-    void Promise.resolve(onRefreshAgents())
-      .catch(() => undefined)
-      .finally(() => setAmrRefreshPending(false));
+    void Promise.resolve(onRefreshAgents()).catch(() => undefined);
   }, [amrAgent, agentsLoading, onRefreshAgents]);
 
   useEffect(() => {
-    if (!amrAgent) return;
+    // Fetch login status on mount in parallel with agent discovery so the
+    // landing CTA settles quickly for already-authenticated users.
     let cancelled = false;
-    void fetchVelaLoginStatus().then((next) => {
-      if (!cancelled && next) setAmrStatus(next);
-    });
+    void fetchVelaLoginStatus()
+      .then((next) => {
+        if (!cancelled && next) setAmrStatus(next);
+      })
+      .finally(() => {
+        if (!cancelled) setAmrStatusResolved(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [amrAgent]);
+  }, []);
 
   useEffect(() => {
     if (runtime === 'amr') return;
@@ -1379,51 +1415,13 @@ function OnboardingView({
     });
   }
 
-  const steps = [
-    t('settings.onboardingStepConnect'),
-    t('settings.onboardingStepProfile'),
-    t('settings.onboardingStepNewsletter'),
-    t('settings.onboardingStepDesignSystem'),
-  ];
-  const isLastStep = step === steps.length - 1;
-
-  const runtimeItems: Array<{
-    id: 'local' | 'byok';
-    icon: 'hammer' | 'sliders';
-    title: string;
-    body: string;
-    onSelect: () => void;
-  }> = [
-    {
-      id: 'local',
-      icon: 'hammer',
-      title: t('settings.onboardingLocalTitle'),
-      body: t('settings.onboardingLocalBody'),
-      onSelect: () => {
-        emitOnboardingClick('local_coding_agent', 'select_runtime', {
-          runtime_type: 'local_cli',
-        });
-        void scanCliAgents();
-      },
-    },
-    {
-      id: 'byok',
-      icon: 'sliders',
-      title: t('settings.onboardingByokTitle'),
-      body: t('settings.onboardingByokBody'),
-      onSelect: () => {
-        emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-        setRuntime('byok');
-        onModeChange('api');
-      },
-    },
-  ];
+  const isLastStep = step === 3;
 
   const roleOptions = [
+    { value: 'agency', label: t('settings.onboardingRoleAgency') },
     { value: 'pm', label: t('settings.onboardingRolePm') },
     { value: 'designer', label: t('settings.onboardingRoleDesigner') },
     { value: 'engineer', label: t('settings.onboardingRoleEngineer') },
-    { value: 'marketing', label: t('settings.onboardingRoleMarketing') },
     { value: 'growth', label: t('settings.onboardingRoleGrowth') },
     { value: 'ops', label: t('settings.onboardingRoleOps') },
     { value: 'founder', label: t('settings.onboardingRoleFounder') },
@@ -1572,9 +1570,112 @@ function OnboardingView({
     void onConfigPersist(nextConfig);
   }
 
+  function selectFirstProviderModelWhenEmpty(
+    models: readonly ProviderModelOption[],
+    expectedInputKey: string,
+  ) {
+    const firstModel = models[0];
+    const current = providerModelAutoSelectRef.current;
+    if (
+      !firstModel ||
+      current.runtime !== 'byok' ||
+      current.step !== 0 ||
+      current.providerModelsInputKey !== expectedInputKey ||
+      current.model.trim()
+    ) {
+      return;
+    }
+    onApiModelChange(firstModel.id);
+    updateApiConfig({ model: firstModel.id });
+  }
+
   function clearAgentRevealTimers() {
     agentRevealTimersRef.current.forEach((timer) => clearTimeout(timer));
     agentRevealTimersRef.current = [];
+  }
+
+  function selectDefaultCliAgent(availableAgents: AgentInfo[]): AgentInfo | null {
+    const selectedAgent =
+      availableAgents.find((agent) => agent.id === config.agentId) ?? availableAgents[0] ?? null;
+    if (!selectedAgent) return null;
+    if (selectedAgent.id !== config.agentId) {
+      onAgentChange(selectedAgent.id);
+    }
+    return selectedAgent;
+  }
+
+  function emitPendingCliScanResult(
+    token: number,
+    args: {
+      result: 'success' | 'failed';
+      detected: number;
+      available: number;
+      selectedCliId?: TrackingCliProviderId;
+      errorCode?: string;
+    },
+  ): void {
+    const telemetry = cliScanTelemetryRef.current;
+    if (!telemetry || telemetry.token !== token) return;
+    cliScanTelemetryRef.current = null;
+    trackOnboardingRuntimeScanResult(analytics.track, {
+      page_name: 'onboarding',
+      area: 'runtime',
+      runtime_type: 'local_cli',
+      result: args.result,
+      detected_cli_count: args.detected,
+      available_cli_count: args.available,
+      ...(args.selectedCliId ? { selected_cli_id: args.selectedCliId } : {}),
+      ...(args.errorCode ? { error_code: args.errorCode } : {}),
+      duration_ms: Math.max(0, Date.now() - telemetry.startedAt),
+      onboarding_session_id: telemetry.onboardingSessionId,
+    });
+  }
+
+  function beginCliScan(options: { clearVisible: boolean }): number {
+    const scanToken = cliScanTokenRef.current + 1;
+    cliScanTokenRef.current = scanToken;
+    clearAgentRevealTimers();
+    setRuntime('local');
+    onModeChange('daemon');
+    setCliScanStatus('scanning');
+    if (options.clearVisible) setVisibleAgentIds([]);
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    cliScanTelemetryRef.current = onboardingSessionId
+      ? {
+          token: scanToken,
+          startedAt: Date.now(),
+          onboardingSessionId,
+        }
+      : null;
+    return scanToken;
+  }
+
+  function showCliAgents(
+    token: number,
+    availableAgents: AgentInfo[],
+    options: { stagger: boolean },
+  ): void {
+    if (!options.stagger) {
+      const nextIds = availableAgents.map((agent) => agent.id);
+      setVisibleAgentIds((current) =>
+        current.length === nextIds.length && current.every((id, index) => id === nextIds[index])
+          ? current
+          : nextIds,
+      );
+      return;
+    }
+    availableAgents.forEach((agent, index) => {
+      const timer = setTimeout(() => {
+        if (cliScanTokenRef.current !== token) return;
+        setVisibleAgentIds((current) =>
+          current.includes(agent.id) ? current : [...current, agent.id],
+        );
+        if (index === availableAgents.length - 1) {
+          setCliScanStatus('done');
+        }
+      }, 110 * (index + 1));
+      agentRevealTimersRef.current.push(timer);
+    });
   }
 
   function handleBackWithTracking(): void {
@@ -1587,14 +1688,12 @@ function OnboardingView({
     emitOnboardingClick('back', 'back');
     setStep((current) => current - 1);
   }
-  function handleStepNavigation(index: number): void {
-    if (index !== step && step === 1) {
-      void persistOnboardingProfileToMemory();
-    }
-    setStep(index);
-  }
   async function handlePrimaryAction() {
     if (newsletterSubmitting) return;
+    // Connect gate: the button is `aria-disabled` (not natively disabled, so it
+    // can still surface its tooltip on hover), so guard the click here — a
+    // blocked Continue must not advance past the Connect step.
+    if (connectStepBlocked) return;
     if (step === 0 && amrSelectedAndSignedOut) {
       const attribution = recordAmrEntry(
         analytics.track,
@@ -1618,6 +1717,33 @@ function OnboardingView({
       void persistOnboardingProfileToMemory();
     }
     setStep((current) => current + 1);
+  }
+
+  // Cloud-landing primary CTA: pick the AMR cloud runtime and kick off the
+  // Open Design Cloud sign-in in one gesture. Mirrors the old AMR card's
+  // selection side effects (mode/agent) followed by the sign-in path, so a
+  // successful login advances to the next onboarding step exactly the same way.
+  async function handleCloudSignIn() {
+    if (amrLoginPending || amrLoginCancelPending) return;
+    const cardAttribution = recordAmrEntry(
+      analytics.track,
+      'onboarding_amr_card',
+      new Date(),
+      { metricsConsent: config.telemetry?.metrics === true },
+    );
+    setRuntime('amr');
+    onModeChange('daemon');
+    onAgentChange('amr');
+    const attribution = recordAmrEntry(
+      analytics.track,
+      'onboarding_amr_sign_in_continue',
+      new Date(),
+      {
+        metricsConsent: config.telemetry?.metrics === true,
+        reuseExistingFrom: ['onboarding_amr_card'],
+      },
+    ) ?? cardAttribution;
+    await handleAmrSignInToContinue(attribution);
   }
 
   // Shared finish work for the final step, independent of where the user lands
@@ -1838,52 +1964,34 @@ function OnboardingView({
     }
   }
 
-  async function scanCliAgents() {
-    const scanToken = cliScanTokenRef.current + 1;
-    cliScanTokenRef.current = scanToken;
-    clearAgentRevealTimers();
-    setRuntime('local');
-    onModeChange('daemon');
-    setCliScanStatus('scanning');
-    setVisibleAgentIds([]);
-    const scanStartedAt = Date.now();
-    const onboardingSessionId = onboardingSessionIdRef.current;
-    const emitScanResult = (
-      args: {
-        result: 'success' | 'failed';
-        detected: number;
-        available: number;
-        selectedCliId?: TrackingCliProviderId;
-        errorCode?: string;
-      },
-    ): void => {
-      if (!onboardingSessionId) return;
-      trackOnboardingRuntimeScanResult(analytics.track, {
-        page_name: 'onboarding',
-        area: 'runtime',
-        runtime_type: 'local_cli',
-        result: args.result,
-        detected_cli_count: args.detected,
-        available_cli_count: args.available,
-        ...(args.selectedCliId ? { selected_cli_id: args.selectedCliId } : {}),
-        ...(args.errorCode ? { error_code: args.errorCode } : {}),
-        duration_ms: Math.max(0, Date.now() - scanStartedAt),
-        onboarding_session_id: onboardingSessionId,
+  async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
+    const scanToken = beginCliScan({ clearVisible: !options.preferExisting });
+    const currentAvailableAgents = agents.filter(
+      (agent) => agent.available && agent.id !== 'amr',
+    );
+    if (options.preferExisting && currentAvailableAgents.length > 0) {
+      const selectedCliAgent = selectDefaultCliAgent(currentAvailableAgents);
+      showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
+      setCliScanStatus('done');
+      emitPendingCliScanResult(scanToken, {
+        result: 'success',
+        detected: agents.length,
+        available: currentAvailableAgents.length,
+        selectedCliId: selectedCliAgent ? agentIdToTracking(selectedCliAgent.id) : undefined,
       });
-    };
+      return currentAvailableAgents;
+    }
+    if (options.preferExisting && agentsLoading) {
+      showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
+      return currentAvailableAgents;
+    }
+    cliRefreshPendingTokenRef.current = scanToken;
     try {
       const nextAgents = await onRefreshAgents();
       if (cliScanTokenRef.current !== scanToken) return;
+      cliRefreshPendingTokenRef.current = null;
       const availableAgents = nextAgents.filter((agent) => agent.available && agent.id !== 'amr');
-      // If the user previously had AMR selected (e.g. it was auto-picked once
-      // we detected vela) and they have now chosen the Local CLI path, the
-      // persisted agentId is still 'amr' and would survive Continue without
-      // an explicit click on a local agent card. Switch the selection to the
-      // first available local agent as soon as we have one, so the runtime
-      // and the persisted agent always agree.
-      if (config.agentId === 'amr' && availableAgents[0]) {
-        onAgentChange(availableAgents[0].id);
-      }
+      const selectedCliAgent = selectDefaultCliAgent(availableAgents);
       // Scan-result semantics: zero available CLIs is a `failed` outcome
       // because the user's runtime path is blocked, even though the
       // detect call itself returned successfully. `detected_cli_count`
@@ -1891,7 +1999,7 @@ function OnboardingView({
       // "user has no CLI installed" from "detect crashed".
       if (availableAgents.length === 0) {
         setCliScanStatus('done');
-        emitScanResult({
+        emitPendingCliScanResult(scanToken, {
           result: 'failed',
           detected: nextAgents.length,
           available: 0,
@@ -1899,30 +2007,20 @@ function OnboardingView({
         });
         return;
       }
-      emitScanResult({
+      emitPendingCliScanResult(scanToken, {
         result: 'success',
         detected: nextAgents.length,
         available: availableAgents.length,
-        ...(availableAgents[0]
-          ? { selectedCliId: agentIdToTracking(availableAgents[0].id) }
+        ...(selectedCliAgent
+          ? { selectedCliId: agentIdToTracking(selectedCliAgent.id) }
           : {}),
       });
-      availableAgents.forEach((agent, index) => {
-        const timer = setTimeout(() => {
-          if (cliScanTokenRef.current !== scanToken) return;
-          setVisibleAgentIds((current) =>
-            current.includes(agent.id) ? current : [...current, agent.id],
-          );
-          if (index === availableAgents.length - 1) {
-            setCliScanStatus('done');
-          }
-        }, 110 * (index + 1));
-        agentRevealTimersRef.current.push(timer);
-      });
+      showCliAgents(scanToken, availableAgents, { stagger: true });
     } catch (err) {
       if (cliScanTokenRef.current === scanToken) {
+        cliRefreshPendingTokenRef.current = null;
         setCliScanStatus('done');
-        emitScanResult({
+        emitPendingCliScanResult(scanToken, {
           result: 'failed',
           detected: 0,
           available: 0,
@@ -1935,6 +2033,7 @@ function OnboardingView({
   async function testProviderInline() {
     if (!canTestProvider || providerTestState.status === 'running') return;
     const inputKey = providerTestInputKey;
+    providerAutoTestKeyRef.current = inputKey;
     setProviderTestState({ status: 'running', inputKey });
     try {
       const result = await testApiProvider({
@@ -1966,8 +2065,10 @@ function OnboardingView({
   async function fetchProviderModelsInline() {
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
+    providerModelsAutoFetchKeyRef.current = inputKey;
     const cachedModels = activeProviderModelsCache[inputKey];
     if (cachedModels) {
+      selectFirstProviderModelWhenEmpty(cachedModels, inputKey);
       setProviderModelsState({
         status: 'done',
         inputKey,
@@ -1988,6 +2089,7 @@ function OnboardingView({
         apiKey: config.apiKey,
       });
       if (result.ok && result.models?.length) {
+        selectFirstProviderModelWhenEmpty(result.models, inputKey);
         activeSetProviderModelsCache((current) => ({
           ...current,
           [inputKey]: result.models ?? [],
@@ -2008,6 +2110,40 @@ function OnboardingView({
     }
   }
 
+  useEffect(() => {
+    if (runtime !== 'byok' || step !== 0) return;
+    if (!canFetchProviderModels) return;
+    if (providerModelsState.status === 'running') return;
+    if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
+    const timer = window.setTimeout(() => {
+      void fetchProviderModelsInline();
+    }, ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    canFetchProviderModels,
+    providerModelsInputKey,
+    providerModelsState.status,
+    runtime,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (runtime !== 'byok' || step !== 0) return;
+    if (!canTestProvider) return;
+    if (providerTestState.status === 'running') return;
+    if (providerAutoTestKeyRef.current === providerTestInputKey) return;
+    const timer = window.setTimeout(() => {
+      void testProviderInline();
+    }, ONBOARDING_BYOK_AUTO_TEST_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    canTestProvider,
+    providerTestInputKey,
+    providerTestState.status,
+    runtime,
+    step,
+  ]);
+
   const onboardingNavigationLocked = newsletterSubmitting;
   const primaryActionLabel = isLastStep && newsletterSubmitting
     ? t('common.loading')
@@ -2019,122 +2155,177 @@ function OnboardingView({
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
 
-  return (
-    <section className="onboarding-view" aria-label={t('settings.welcomeTitle')}>
-      <header className="onboarding-view__hero">
-        <span className="onboarding-view__hero-mark" aria-hidden>
-          <img src="/app-icon.svg" alt="" draggable={false} />
-        </span>
-        {t('settings.welcomeKicker') ? (
-          <span className="onboarding-view__kicker">{t('settings.welcomeKicker')}</span>
-        ) : null}
-        <h1>{t('settings.welcomeTitle')}</h1>
-        {t('settings.welcomeSubtitle') ? <p>{t('settings.welcomeSubtitle')}</p> : null}
-      </header>
-      <ol className="onboarding-view__steps" aria-label={t('settings.welcomeTitle')}>
-        {steps.map((label, index) => {
-          const isDone = index < step;
-          const isActive = index === step;
-          const isReached = index <= maxStepReached;
-          return (
-            <li
-              key={label}
-              className={[
-                isActive ? 'is-active' : '',
-                isDone ? 'is-done' : '',
-                isReached ? 'is-reached' : 'is-upcoming',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              aria-current={isActive ? 'step' : undefined}
+  // Connect step, default face: a minimal, centered Open Design Cloud sign-in
+  // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
+  // link into the full runtime chooser, and a top-left language/theme bar.
+  if (step === 0 && connectExpanded === null) {
+    const activeTheme: AppTheme = config.theme ?? 'system';
+    const resolvedDark =
+      activeTheme === 'dark' ||
+      (activeTheme === 'system' &&
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const themeIcon: 'sun' | 'moon' = resolvedDark ? 'moon' : 'sun';
+    const cloudBusy = amrLoginPending;
+    const amrStatusResolving = !amrStatusResolved;
+    return (
+      <section
+        className="onboarding-view onboarding-view--cloud"
+        aria-label={t('settings.welcomeTitle')}
+      >
+        <div className="onboarding-cloud__topbar">
+          <LanguageMenu compact />
+          <button
+            type="button"
+            className="onboarding-cloud__theme"
+            aria-label={resolvedDark ? t('settings.themeLight') : t('settings.themeDark')}
+            title={resolvedDark ? t('settings.themeLight') : t('settings.themeDark')}
+            onClick={() => onThemeChange(resolvedDark ? 'light' : 'dark')}
+          >
+            <Icon name={themeIcon} size={25} />
+          </button>
+        </div>
+        <div className="onboarding-cloud__center">
+          <span
+            className="onboarding-cloud__logo"
+            role="img"
+            aria-label="Open Design"
+          />
+          <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
+          <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
+          <button
+            type="button"
+            className="onboarding-cloud__primary"
+            onClick={() => {
+              if (amrStatusResolving) return;
+              if (amrSignedIn) {
+                recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
+                  metricsConsent: config.telemetry?.metrics === true,
+                });
+                setRuntime('amr');
+                onModeChange('daemon');
+                onAgentChange('amr');
+                recordAmrEntry(
+                  analytics.track,
+                  'onboarding_amr_sign_in_continue',
+                  new Date(),
+                  {
+                    metricsConsent: config.telemetry?.metrics === true,
+                    reuseExistingFrom: ['onboarding_amr_card'],
+                  },
+                );
+                setStep((current) => current + 1);
+                return;
+              }
+              void handleCloudSignIn();
+            }}
+            disabled={cloudBusy || amrLoginCancelPending || amrStatusResolving}
+            aria-busy={cloudBusy || amrStatusResolving ? true : undefined}
+          >
+            <Icon name="orbit" size={17} />
+            <span>
+              {cloudBusy
+                ? t('settings.amrSigningIn')
+                : amrStatusResolving
+                  ? t('common.loading')
+                  : amrSignedIn
+                    ? t('settings.onboardingCloudContinue')
+                    : t('settings.onboardingCloudSignIn')}
+            </span>
+          </button>
+          {amrLoginError ? (
+            <span className="onboarding-cloud__error" role="alert">
+              {amrLoginError}
+            </span>
+          ) : null}
+          {cloudBusy ? (
+            <button
+              type="button"
+              className="onboarding-cloud__cancel"
+              onClick={handleCancelAmrLogin}
+              disabled={amrLoginCancelPending}
             >
+              {t('settings.amrCancelSignIn')}
+            </button>
+          ) : (
+            <div className="onboarding-cloud__alts">
               <button
                 type="button"
-                className="onboarding-view__step-btn"
-                onClick={() => handleStepNavigation(index)}
-                disabled={onboardingNavigationLocked || index > maxStepReached}
+                className="onboarding-cloud__secondary"
+                onClick={() => {
+                  emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                    runtime_type: 'local_cli',
+                  });
+                  setRuntime('local');
+                  onModeChange('daemon');
+                  void scanCliAgents({ preferExisting: true });
+                  setConnectExpanded('local');
+                }}
               >
-                <span className="onboarding-view__step-node" aria-hidden>
-                  {isDone ? <Icon name="check" size={14} /> : index + 1}
-                </span>
-                <span className="onboarding-view__step-label">{label}</span>
+                {t('settings.onboardingLocalTitle')}
               </button>
-            </li>
-          );
-        })}
-      </ol>
+              <span className="onboarding-cloud__alts-or">
+                {t('settings.onboardingCloudOr')}
+              </span>
+              <button
+                type="button"
+                className="onboarding-cloud__secondary"
+                onClick={() => {
+                  emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                  setRuntime('byok');
+                  onModeChange('api');
+                  setConnectExpanded('byok');
+                }}
+              >
+                {t('settings.onboardingByokTitle')}
+              </button>
+            </div>
+          )}
+        </div>
+        <footer className="onboarding-cloud__footer">
+          © {new Date().getFullYear()} Open Design · {t('settings.onboardingCloudRights')}
+        </footer>
+      </section>
+    );
+  }
+
+  return (
+    <section className="onboarding-view" aria-label={t('settings.welcomeTitle')}>
+      {t('settings.welcomeKicker') || t('settings.welcomeSubtitle') ? (
+        <header className="onboarding-view__hero">
+          {t('settings.welcomeKicker') ? (
+            <span className="onboarding-view__kicker">{t('settings.welcomeKicker')}</span>
+          ) : null}
+          {t('settings.welcomeSubtitle') ? <p>{t('settings.welcomeSubtitle')}</p> : null}
+        </header>
+      ) : null}
       <div className="onboarding-view__body">
         <div className="onboarding-view__content">
           {step === 0 ? (
             <div className="onboarding-view__panel">
+              <button
+                type="button"
+                className="onboarding-view__back-to-cloud"
+                onClick={() => setConnectExpanded(null)}
+              >
+                <Icon name="chevron-left" size={14} />
+                <span>{t('settings.onboardingBack')}</span>
+              </button>
               <OnboardingPanelHeader
-                title={t('settings.onboardingConnectTitle')}
-                body={t('settings.onboardingConnectBody')}
+                title={
+                  connectExpanded === 'byok'
+                    ? t('settings.onboardingByokTitle')
+                    : t('settings.onboardingLocalTitle')
+                }
+                body={
+                  connectExpanded === 'byok'
+                    ? t('settings.onboardingByokBody')
+                    : t('settings.onboardingLocalBody')
+                }
               />
               <div className="onboarding-view__runtime-stack">
-                {showAmrCloudOption ? (
-                  <div className="onboarding-view__amr-cloud-card">
-                    <OnboardingChoiceCard
-                      icon="orbit"
-                      agentIconId="amr"
-                      title={t('settings.amrCloud')}
-                      body={t('settings.onboardingExecutionBody')}
-                      benefits={[
-                        t('settings.onboardingAmrCloudBenefitOfficial'),
-                        t('settings.onboardingAmrCloudBenefitReady'),
-                        t('settings.onboardingAmrCloudBenefitModels'),
-                        t('settings.onboardingAmrCloudBenefitPricing'),
-                      ]}
-                      upcomingLabel={t('settings.onboardingAmrCloudUpcomingLabel')}
-                      upcomingBenefits={[
-                        t('settings.onboardingAmrCloudUpcomingImageVideo'),
-                        t('settings.onboardingAmrCloudUpcomingSkills'),
-                        t('settings.onboardingAmrCloudUpcomingRouting'),
-                      ]}
-                      benefitPlacement="aside"
-                      metaLabel="AMR v0.1.0"
-                      modelSlot={
-                        amrModels.length > 0 ? (
-                          <OnboardingAmrModelSelect
-                            models={amrModels}
-                            modelsSource={amrModelsSource}
-                            selectedModel={amrSelectedModel}
-                            onSelectModel={(model) => onAgentModelChange('amr', { model })}
-                          />
-                        ) : null
-                      }
-                      variant="amr"
-                      featured
-                      selected={runtime === 'amr'}
-                      onClick={() => {
-                        recordAmrEntry(
-                          analytics.track,
-                          'onboarding_amr_card',
-                          new Date(),
-                          { metricsConsent: config.telemetry?.metrics === true },
-                        );
-                        setRuntime('amr');
-                        onModeChange('daemon');
-                        onAgentChange('amr');
-                      }}
-                    />
-                  </div>
-                ) : amrDetecting ? (
-                  <OnboardingAmrCloudSkeleton />
-                ) : null}
-                <div className="onboarding-view__alternatives">
-                  {runtimeItems.map((item) => (
-                    <OnboardingChoiceCard
-                      key={item.id}
-                      icon={item.icon}
-                      title={item.title}
-                      body={item.body}
-                      selected={runtime === item.id}
-                      onClick={item.onSelect}
-                    />
-                  ))}
-                </div>
-                {runtime === 'local' ? (
+                {connectExpanded === 'local' ? (
                   <OnboardingCliSetupPanel
                     agents={visibleAgents}
                     daemonLive={daemonLive}
@@ -2154,7 +2345,7 @@ function OnboardingView({
                     }}
                   />
                 ) : null}
-                {runtime === 'byok' ? (
+                {connectExpanded === 'byok' ? (
                   <OnboardingByokSetupPanel
                     apiProtocol={apiProtocol}
                     apiKey={config.apiKey}
@@ -2200,6 +2391,15 @@ function OnboardingView({
 
           {step === 1 ? (
             <div className="onboarding-view__panel">
+              <button
+                type="button"
+                className="onboarding-view__back-to-cloud"
+                onClick={handleBackWithTracking}
+                disabled={onboardingNavigationLocked}
+              >
+                <Icon name="chevron-left" size={14} />
+                <span>{t('settings.onboardingBack')}</span>
+              </button>
               <OnboardingPanelHeader
                 title={t('settings.onboardingProfileTitle')}
                 body={t('settings.onboardingProfileBody')}
@@ -2279,6 +2479,15 @@ function OnboardingView({
 
           {step === 2 ? (
             <div className="onboarding-view__panel onboarding-view__panel--newsletter">
+              <button
+                type="button"
+                className="onboarding-view__back-to-cloud"
+                onClick={handleBackWithTracking}
+                disabled={onboardingNavigationLocked}
+              >
+                <Icon name="chevron-left" size={14} />
+                <span>{t('settings.onboardingBack')}</span>
+              </button>
               <OnboardingPanelHeader
                 title={t('settings.onboardingNewsletterTitle')}
                 body={t('settings.onboardingNewsletterBody')}
@@ -2406,16 +2615,6 @@ function OnboardingView({
                   {amrLoginError}
                 </span>
               ) : null}
-              {step > 0 ? (
-                <button
-                  type="button"
-                  className="onboarding-view__secondary"
-                  onClick={handleBackWithTracking}
-                  disabled={onboardingNavigationLocked}
-                >
-                  {t('settings.onboardingBack')}
-                </button>
-              ) : null}
               {step === 0 && amrLoginPending ? (
                 <button
                   type="button"
@@ -2428,14 +2627,14 @@ function OnboardingView({
               ) : null}
               <button
                 type="button"
-                className="onboarding-view__primary"
+                className={`onboarding-view__primary${
+                  connectGateTooltip ? ' od-tooltip' : ''
+                }`}
                 onClick={handlePrimaryAction}
-                disabled={
-                  amrLoginPending ||
-                  amrLoginCancelPending ||
-                  newsletterSubmitting ||
-                  connectStepBlocked
-                }
+                disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
+                aria-disabled={connectStepBlocked || undefined}
+                data-tooltip={connectGateTooltip ?? undefined}
+                data-tooltip-placement="top"
                 aria-busy={newsletterSubmitting ? true : undefined}
               >
                 <span>{primaryActionLabel}</span>

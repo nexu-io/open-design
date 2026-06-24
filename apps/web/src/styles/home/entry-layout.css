@@ -23,15 +23,6 @@
   background: var(--bg);
 }
 
-/* Settings access (language / appearance) pinned to the onboarding top-right.
-   Lives outside the scrolling modal so it stays put for the whole flow. */
-.entry-onboarding-settings {
-  position: absolute;
-  top: 14px;
-  inset-inline-end: 18px;
-  z-index: 50;
-}
-
 .entry-onboarding-modal {
   width: 100%;
   height: 100vh;
@@ -1673,11 +1664,231 @@
 
 .onboarding-view__hero {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   max-width: none;
-  padding-top: 4px;
+  padding-top: 0;
   text-align: center;
   justify-items: center;
+}
+
+/* Connect step, cloud sign-in landing. Replaces the grid layout with a
+   centered single column: a top-left language/theme bar, the centered CTA
+   block, and a footer pinned to the bottom. */
+.onboarding-view--cloud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
+  padding: 72px 24px 64px;
+  gap: 0;
+}
+
+.onboarding-cloud__topbar {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Brand mark above the title. Uses the monochrome brand glyph masked with
+   --text-strong so it reads as black in light mode and white in dark mode. */
+.onboarding-cloud__logo {
+  display: block;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 22px;
+  background-color: var(--text-strong);
+  -webkit-mask: url(/brand-icon.svg) center / contain no-repeat;
+  mask: url(/brand-icon.svg) center / contain no-repeat;
+}
+
+/* Compact, icon-only language switcher used in the cloud landing top bar —
+   matches the round theme toggle next to it instead of the labelled foot-pill. */
+.lang-pill--compact {
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+}
+
+.lang-pill--compact:hover {
+  color: var(--text-strong);
+}
+
+.onboarding-cloud__theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__theme:hover:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--text-muted);
+  color: var(--text-strong);
+}
+
+.onboarding-cloud__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: min(440px, 100%);
+}
+
+.onboarding-cloud__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.onboarding-cloud__body {
+  margin: 14px 0 0;
+  max-width: 42ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-cloud__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 32px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--text-strong);
+  color: var(--bg);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__primary:hover:not(:disabled) {
+  /* Keep the dark fill on hover — the global `button:hover` rule in
+     primitives.css would otherwise repaint the background to --bg-subtle and
+     wash the white label away. Opacity alone carries the hover feedback. */
+  background: var(--text-strong);
+  border-color: transparent;
+  opacity: 0.88;
+}
+
+.onboarding-cloud__primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.onboarding-cloud__primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.onboarding-cloud__primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.onboarding-cloud__secondary,
+.onboarding-cloud__cancel {
+  margin-top: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__secondary:hover,
+.onboarding-cloud__cancel:hover {
+  color: var(--text-strong);
+}
+
+/* Two secondary links ("local CLI" or "your own key") on one row. */
+.onboarding-cloud__alts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.onboarding-cloud__alts .onboarding-cloud__secondary {
+  margin-top: 0;
+}
+
+.onboarding-cloud__alts-or {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.onboarding-cloud__error {
+  margin-top: 16px;
+  color: var(--danger-text, #991b1b);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.onboarding-cloud__footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Back link from the expanded runtime chooser to the cloud landing. */
+.onboarding-view__back-to-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-view__back-to-cloud:hover {
+  color: var(--text-strong);
 }
 
 /* Brand mark above the welcome heading — the app icon in a soft rounded
@@ -1686,20 +1897,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  margin-bottom: 6px;
-  border-radius: 15px;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+  border-radius: 16px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
-  padding: 0;
+  padding: 8px;
 }
 .onboarding-view__hero-mark img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -1707,40 +1918,34 @@
 .onboarding-view__kicker {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .onboarding-view__hero h1 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  font-size: 64px;
+  line-height: 0.98;
+  letter-spacing: 0;
 }
 
 .onboarding-view__hero p {
-  margin: 2px 0 0;
-  max-width: 56ch;
+  margin: 0;
+  max-width: 62ch;
   color: var(--text-muted);
-  font-size: 14.5px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
-/* Premium step indicator: numbered nodes joined by a progress track, with a
-   label under each node. Completed steps fill solid and show a check, the
-   current step fills solid with a soft focus ring, upcoming steps stay as a
-   hollow outline. It reads as "step N of 4" at a glance and animates as the
-   user advances. */
 .onboarding-view__steps {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   gap: 0;
-  width: min(640px, 100%);
-  margin: 6px 0 12px;
+  width: min(620px, 100%);
+  margin: -4px 0 6px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1750,127 +1955,73 @@
   box-shadow: none;
 }
 
+/* Segmented progress indicator: a horizontal bar per step with the label
+   below it. Bars read as progress, not as clickable cards — upcoming steps
+   are clearly muted and non-interactive. */
 .onboarding-view__steps li {
   position: relative;
-  flex: 1 1 0;
-  min-width: 0;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text-muted);
 }
 
-/* Connector resting in the gap between this node and its predecessor. It
-   stops short of both discs (node radius 13px + 5px clearance) so the line
-   never runs through the numbers. Muted by default; fills with accent once
-   this step has been reached (which means its predecessor is complete). */
-.onboarding-view__steps li:not(:first-child)::before {
+/* The "line" for each step. Grey while upcoming, accent once the step has
+   been reached (current or earlier). */
+.onboarding-view__steps li::before {
   content: '';
-  position: absolute;
-  top: 13px;
-  inset-inline-start: calc(-50% + 18px);
-  inset-inline-end: calc(50% + 18px);
-  height: 2px;
+  display: block;
+  height: 3px;
   border-radius: var(--radius-pill);
   background: var(--border);
-  transition: background 240ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: background 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.onboarding-view__steps li.is-reached:not(:first-child)::before {
+.onboarding-view__steps li.is-reached::before {
   background: var(--accent);
 }
 
-.onboarding-view__step-btn {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
+/* The legacy number badge is dropped in the bar+label design. */
+.onboarding-view__steps li span {
+  display: none;
+}
+
+.onboarding-view__steps li button {
   width: 100%;
   min-width: 0;
-  padding: 0 6px;
   border: 0;
+  padding: 0;
   background: transparent;
   color: inherit;
   font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
   cursor: pointer;
 }
 
-.onboarding-view__step-btn:disabled {
-  cursor: default;
-}
-
-/* The node disc. Numbered while pending, swaps to a check once complete. */
-.onboarding-view__step-node {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--bg-panel);
-  border: 1.5px solid var(--border);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  transition:
-    background 240ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 240ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 240ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 240ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-/* Completed steps: solid accent disc with the check glyph. */
-.onboarding-view__steps li.is-done .onboarding-view__step-node {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast, #fff);
-}
-
-/* Current step: solid accent disc lifted by a soft ring. */
-.onboarding-view__steps li.is-active .onboarding-view__step-node {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast, #fff);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.onboarding-view__step-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-align: center;
-  color: var(--text-muted);
-  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
 /* Reached-but-not-current steps stay navigable (jump back). */
-.onboarding-view__steps li.is-reached .onboarding-view__step-label {
+.onboarding-view__steps li.is-reached button {
   color: var(--text);
 }
 
-.onboarding-view__steps li.is-active .onboarding-view__step-label {
+/* Upcoming steps are not navigable yet — muted and not-allowed. */
+.onboarding-view__steps li.is-upcoming button,
+.onboarding-view__steps li button:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.onboarding-view__steps li.is-active {
+  color: var(--text-strong);
+}
+
+.onboarding-view__steps li.is-active button {
   color: var(--text-strong);
   font-weight: 700;
-}
-
-/* Upcoming steps are not navigable yet — muted. */
-.onboarding-view__steps li.is-upcoming .onboarding-view__step-label {
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
-/* Hover affordance only on navigable (reached, non-active) steps. */
-.onboarding-view__steps li.is-reached:not(.is-active)
-  .onboarding-view__step-btn:not(:disabled):hover
-  .onboarding-view__step-node {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.onboarding-view__steps li.is-reached:not(.is-active)
-  .onboarding-view__step-btn:not(:disabled):hover
-  .onboarding-view__step-label {
-  color: var(--text-strong);
 }
 
 .onboarding-view__body {
@@ -1943,28 +2094,6 @@
   line-height: 1.45;
 }
 
-.onboarding-view__ds-skip {
-  justify-self: start;
-  min-height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0 12px;
-  color: var(--text);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.onboarding-view__ds-skip:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%);
-  transform: translateY(-1px);
-}
-
 .onboarding-view__panel-head {
   display: grid;
   gap: 7px;
@@ -2029,260 +2158,6 @@
   align-items: center;
   justify-content: flex-end;
   margin-top: 4px;
-}
-
-/* Final onboarding step: a short, illustrative invitation to build with the
-   brand + design system instead of an inline extraction surface. The two CTAs
-   route to either the home view or the design-system create flow, so onboarding
-   no longer carries the extraction logic. */
-.onboarding-view__build {
-  justify-self: center;
-  width: min(980px, 100%);
-  max-width: none;
-  gap: 24px;
-}
-
-.onboarding-view__build-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-self: center;
-  align-self: center;
-  padding: 5px 11px 5px 9px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.onboarding-view__build-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr);
-  align-items: center;
-  gap: 28px;
-}
-
-.onboarding-view__build-copy {
-  min-width: 0;
-  display: grid;
-  gap: 18px;
-}
-
-.onboarding-view__build-head {
-  display: grid;
-  gap: 10px;
-}
-.onboarding-view__build-head h2 {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 38px;
-  line-height: 1.15;
-  letter-spacing: 0;
-}
-.onboarding-view__build-head p {
-  margin: 0;
-  max-width: 62ch;
-  color: var(--text-muted);
-  font-size: 16px;
-  line-height: 1.6;
-}
-
-.onboarding-view__build-benefits {
-  display: grid;
-  gap: 10px;
-}
-
-.onboarding-view__build-benefits > div {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 4px 10px;
-  align-items: start;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle) 4%);
-  box-shadow: var(--shadow-xs);
-}
-
-.onboarding-view__build-benefits svg {
-  grid-row: 1 / span 2;
-  margin-top: 2px;
-  color: var(--accent);
-}
-
-.onboarding-view__build-benefits strong {
-  min-width: 0;
-  color: var(--text-strong);
-  font-size: 13.5px;
-  line-height: 1.3;
-}
-
-.onboarding-view__build-benefits span {
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-
-.onboarding-view__build-preview {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%), var(--bg-panel));
-  box-shadow: 0 22px 54px color-mix(in srgb, var(--shadow-color, var(--text)) 10%, transparent);
-}
-
-.onboarding-view__build-preview-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--text-muted);
-}
-
-.onboarding-view__build-preview-head span {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--radius-pill);
-  background: var(--red);
-}
-
-.onboarding-view__build-preview-head span:nth-child(2) {
-  background: var(--amber);
-}
-
-.onboarding-view__build-preview-head span:nth-child(3) {
-  background: var(--green);
-}
-
-.onboarding-view__build-preview-head strong {
-  margin-left: 4px;
-  color: var(--text);
-  font-size: 12px;
-}
-
-.onboarding-view__build-preview-body {
-  display: grid;
-  gap: 16px;
-  padding: 18px;
-}
-
-.onboarding-view__build-preview-body small {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.onboarding-view__build-preview-swatches {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.onboarding-view__build-preview-swatches i {
-  height: 44px;
-  border-radius: 10px;
-  background: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
-}
-
-.onboarding-view__build-preview-swatches i:nth-child(2) {
-  background: var(--green);
-}
-
-.onboarding-view__build-preview-swatches i:nth-child(3) {
-  background: var(--amber);
-}
-
-.onboarding-view__build-preview-swatches i:nth-child(4) {
-  background: var(--red);
-}
-
-.onboarding-view__build-preview-type {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  color: var(--text-strong);
-}
-
-.onboarding-view__build-preview-type strong {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 44px;
-  line-height: 1;
-}
-
-.onboarding-view__build-preview-type span {
-  font-size: 26px;
-  font-weight: 760;
-}
-
-.onboarding-view__build-preview-type em {
-  color: var(--text-muted);
-  font-size: 16px;
-  font-style: normal;
-  font-weight: 650;
-}
-
-.onboarding-view__build-preview-lines {
-  display: grid;
-  gap: 8px;
-}
-
-.onboarding-view__build-preview-lines span {
-  height: 10px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
-}
-
-.onboarding-view__build-preview-lines span:nth-child(2) {
-  width: 82%;
-}
-
-.onboarding-view__build-preview-lines span:nth-child(3) {
-  width: 58%;
-}
-
-/* Artifact examples — the visual "indicator" of what stays on-brand. */
-.onboarding-view__build-chips {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.onboarding-view__build-chips li {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-panel) 94%, var(--accent) 6%);
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.onboarding-view__build-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin-top: 4px;
-}
-/* Back stays quiet and pushed to the far left; the two finish choices group on
-   the right (Finish/home secondary, Build primary). */
-.onboarding-view__build-back {
-  margin-inline-end: auto;
 }
 
 .onboarding-view__action-status {
@@ -2356,19 +2231,25 @@
   box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+/* Connect gate: aria-disabled (not native disabled, so the tooltip still
+   fires on hover) reads as disabled — dimmed, not-allowed, and no hover lift. */
+.onboarding-view__primary[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.onboarding-view__primary[aria-disabled='true']:hover {
+  transform: none;
+  color: var(--accent-contrast, #fff);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
 .onboarding-view__primary:focus-visible,
 .onboarding-view__secondary:focus-visible,
 .onboarding-view__ghost:focus-visible,
+.onboarding-view__steps li button:focus-visible,
 .onboarding-view__card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* Keyboard focus rings the node disc, following its circular shape. */
-.onboarding-view__step-btn:focus-visible {
-  outline: none;
-}
-.onboarding-view__step-btn:focus-visible .onboarding-view__step-node {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -3242,7 +3123,71 @@
 .onboarding-view__form-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Profile fields as flat, tappable chips (replaces dropdowns). */
+.onboarding-chip-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.onboarding-chip-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.onboarding-chip-field__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onboarding-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Override the global button:hover. Unselected chips get a soft accent-tinted
+   wash + accent-leaning border and a slight lift, so the hover reads as "this
+   is pickable" and previews the selected look. Selected chips deepen toward
+   the accent fill instead. */
+.onboarding-chip:hover:not(:disabled) {
+  background: var(--accent-tint);
+  border-color: var(--accent-soft);
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+
+.onboarding-chip:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.onboarding-chip.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.onboarding-chip.is-selected:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 /* Step 2 memory callout — makes it explicit that the answers above are saved
@@ -3591,6 +3536,256 @@
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Final onboarding step: current branch keeps a design-system CTA while the
+   preceding onboarding layout stays aligned with origin/main. */
+.onboarding-view__build {
+  justify-self: center;
+  width: min(980px, 100%);
+  max-width: none;
+  gap: 24px;
+}
+
+.onboarding-view__build-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: center;
+  align-self: center;
+  padding: 5px 11px 5px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.onboarding-view__build-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.onboarding-view__build-copy {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+}
+
+.onboarding-view__build-head {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-view__build-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 42px;
+  line-height: 1.03;
+  letter-spacing: 0;
+}
+
+.onboarding-view__build-head p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-view__build-benefits {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-view__build-benefits > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+}
+
+.onboarding-view__build-benefits svg {
+  grid-row: 1 / span 2;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.onboarding-view__build-benefits strong {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.onboarding-view__build-benefits span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.onboarding-view__build-preview {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.onboarding-view__build-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.onboarding-view__build-preview-head span {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--red);
+}
+
+.onboarding-view__build-preview-head span:nth-child(2) {
+  background: var(--amber);
+}
+
+.onboarding-view__build-preview-head span:nth-child(3) {
+  background: var(--green);
+}
+
+.onboarding-view__build-preview-head strong {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.onboarding-view__build-preview-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.onboarding-view__build-preview-body small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.onboarding-view__build-preview-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.onboarding-view__build-preview-swatches i {
+  height: 44px;
+  border-radius: 10px;
+  background: var(--accent);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(2) {
+  background: var(--green);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(3) {
+  background: var(--amber);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(4) {
+  background: var(--red);
+}
+
+.onboarding-view__build-preview-type {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+  color: var(--text-strong);
+}
+
+.onboarding-view__build-preview-type strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.onboarding-view__build-preview-type span {
+  font-size: 26px;
+  font-weight: 760;
+}
+
+.onboarding-view__build-preview-type em {
+  color: var(--text-muted);
+  font-size: 16px;
+  font-style: normal;
+}
+
+.onboarding-view__build-preview-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.onboarding-view__build-preview-lines span {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
+
+.onboarding-view__build-preview-lines span:nth-child(2) {
+  width: 82%;
+}
+
+.onboarding-view__build-preview-lines span:nth-child(3) {
+  width: 58%;
+}
+
+.onboarding-view__build-chips {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-view__build-chips li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  background: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.onboarding-view__build-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.onboarding-view__build-back {
+  margin-inline-end: auto;
+}
+
+
 
 /* ============================================================
    GitHub star pill — sticky top-bar CTA.
