@@ -1,5 +1,5 @@
 // Client-side export helpers used by the Share menu in the HTML viewer.
-// Four of the five formats run entirely in the browser:
+// Export formats run entirely in the browser:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
@@ -9,8 +9,6 @@
 //            windows, vault apps, etc.). No conversion is performed — the
 //            file content is the same source the Source view shows. See
 //            issue #279.
-// PPTX export is fundamentally different — it asks the agent to convert the
-// artifact server-side, so it lives in ProjectView.tsx (not here).
 
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';

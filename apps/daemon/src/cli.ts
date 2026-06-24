@@ -337,7 +337,7 @@ const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'image-format', 'title', 'file',
 ]);
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck']);
-const EXPORT_FORMATS = ['pdf', 'pptx', 'pptx-editable', 'image'];
+const EXPORT_FORMATS = ['pdf', 'image'];
 // Mirrors EXPORT_IMAGE_FORMATS in packages/contracts. The desktop renderer
 // (Electron nativeImage) can only encode PNG/JPEG, so WebP is rejected here
 // with a clear error instead of silently downgrading to PNG.
@@ -347,7 +347,7 @@ function printExportHelp() {
   console.log(`Usage:
   od export <file> --project <id> --format <fmt> [options]
 
-Programmatic export of an HTML/deck artifact to PDF, PPTX, or image. Runs
+Programmatic export of an HTML/deck artifact to PDF or image. Runs
 entirely from the rendered design (no model/agent calls). Rasterization uses
 the desktop runtime's bundled Chromium, so a desktop/packaged runtime must be
 reachable; otherwise the command reports that the renderer is unavailable.
@@ -365,7 +365,6 @@ Options:
   --daemon-url <url>       Override daemon URL
 
 Examples:
-  od export deck.html --project p1 --format pptx --out deck.pptx
   od export index.html --project p1 --format pdf --out page.pdf
   od export slide.html --project p1 --format image --image-format png --out slide.png`);
 }
@@ -425,7 +424,7 @@ async function runExport(args) {
     if (!out) {
       const ext = format === 'image'
         ? (flags['image-format'] === 'jpeg' ? 'jpg' : 'png')
-        : format === 'pdf' ? 'pdf' : 'pptx';
+        : 'pdf';
       out = `artifact.${ext}`;
     }
   }
@@ -546,8 +545,8 @@ function printRootHelp() {
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
-  od export <file> --project <id> --format <pdf|pptx|pptx-editable|image> [--out <path>]
-      Programmatically export an HTML/deck artifact to PDF, PPTX, or image
+  od export <file> --project <id> --format <pdf|image> [--out <path>]
+      Programmatically export an HTML/deck artifact to PDF or image
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
       the desktop runtime's bundled Chromium.
 

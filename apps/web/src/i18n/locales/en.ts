@@ -1974,7 +1974,7 @@ export const en: Dict = {
   'designFiles.searchPlaceholder': 'Search files…',
   'designFiles.up': 'Up',
   'designFiles.back': 'Back',
-  'designFiles.crumbs': 'project',
+  'designFiles.crumbs': 'Project',
   'designFiles.rowMenu': 'Row menu',
   'designFiles.openInTab': 'Open in tab',
   'designFiles.download': 'Download',

@@ -504,7 +504,7 @@ function injectSnapshotBridge(doc: string): string {
   // Rasterize the current view (or the whole document, when opts.full) via an
   // SVG <foreignObject>. Returns a Promise so it can be reused by both the
   // od:snapshot message handler AND the export-capture bridge (image export /
-  // PDF / PPTX) — the foreignObject path is fast and never blocks on external
+  // PDF) — the foreignObject path is fast and never blocks on external
   // image network loads the way a DOM-cloning rasterizer does.
   function captureSnapshot(opts){
     opts = opts || {};
@@ -579,19 +579,19 @@ function injectSnapshotBridge(doc: string): string {
   return injectBeforeBodyEnd(doc, script);
 }
 
-// Export-capture bridge: the in-iframe half of the programmatic PDF / PPTX /
+// Export-capture bridge: the in-iframe half of the programmatic PDF /
 // image exporters (apps/web/src/runtime/exports.ts). The preview iframe is
 // sandbox="allow-scripts" WITHOUT allow-same-origin, so the host cannot read
 // iframe.contentDocument — capture must run inside the frame, exactly like the
 // snapshot bridge above. The orchestrator (host) creates a hidden, full-
 // resolution export iframe, posts `od:export-capture`, and assembles the
-// returned per-slide images/shapes with pptxgenjs / jsPDF.
+// returned per-slide images with jsPDF.
 //
 // Protocol:
-//   in:  { type:'od:export-capture', id, mode:'image'|'editable',
-//          deck:boolean, single?:boolean, delay:number }
+//   in:  { type:'od:export-capture', id, mode:'image', deck:boolean,
+//          single?:boolean, delay:number }
 //   out: { type:'od:export-capture:slide', id, index, total,
-//          dataUrl?|shapes?, w, h, notes }   (one per slide)
+//          dataUrl, w, h, notes }   (one per slide)
 //   out: { type:'od:export-capture:done',  id, total }
 //   out: { type:'od:export-capture:error', id, error }
 //
@@ -627,24 +627,6 @@ function injectExportCaptureBridge(doc: string): string {
       setTimeout(check, Math.max(60, delay||0));
     });
   }
-  function bg(){
-    try {
-      var c = window.getComputedStyle(document.body||document.documentElement).backgroundColor;
-      if (!c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)') return '#ffffff';
-      return c;
-    } catch(_) { return '#ffffff'; }
-  }
-  function slideEls(){
-    var list = document.querySelectorAll('.deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
-    if (!list.length) list = document.querySelectorAll('.slide');
-    return list;
-  }
-  function activeSlideEl(){
-    var list = slideEls();
-    if (!list.length) return null;
-    var st = deckState();
-    return list[Math.max(0, Math.min(list.length-1, st.active))] || null;
-  }
   function captureImage(deck){
     // Reuse the shared SVG-foreignObject renderer (injectSnapshotBridge). For a
     // deck the active slide fills the viewport, so a viewport capture IS the
@@ -653,76 +635,6 @@ function injectExportCaptureBridge(doc: string): string {
       return Promise.reject(new Error('snapshot renderer unavailable'));
     }
     return window.__odCaptureSnapshot({ full: !deck });
-  }
-  function num(v){ var n = parseFloat(v); return isFinite(n) ? n : 0; }
-  function parseRgb(c){
-    if (!c) return null; c = String(c).trim();
-    if (c === 'transparent' || c === 'rgba(0, 0, 0, 0)') return null;
-    var m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return null;
-    var p = m[1].split(/[\\s,\\/]+/).filter(Boolean).map(Number);
-    if (p.length >= 4 && p[3] === 0) return null;
-    return { r: p[0]||0, g: p[1]||0, b: p[2]||0 };
-  }
-  function toHex(c){
-    var rgb = parseRgb(c); if (!rgb) return null;
-    function h(x){ x = Math.max(0, Math.min(255, Math.round(x))).toString(16); return x.length<2?'0'+x:x; }
-    return (h(rgb.r) + h(rgb.g) + h(rgb.b)).toUpperCase();
-  }
-  function imgToDataUrl(img){
-    try {
-      var c = document.createElement('canvas');
-      c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
-      if (!c.width || !c.height) return null;
-      c.getContext('2d').drawImage(img, 0, 0);
-      return c.toDataURL('image/png');
-    } catch(_) { return null; }
-  }
-  function hasDirectText(el){
-    for (var n = el.firstChild; n; n = n.nextSibling){
-      if (n.nodeType === 3 && (n.nodeValue||'').replace(/\\s+/g,' ').trim()) return true;
-    }
-    return false;
-  }
-  function captureEditable(deck){
-    var root = deck ? (activeSlideEl() || document.body) : document.body;
-    var base = root.getBoundingClientRect();
-    var shapes = [];
-    var MAX = 600;
-    var rootBg = toHex(getComputedStyle(root).backgroundColor);
-    if (rootBg) shapes.push({ type:'rect', x:0, y:0, w: base.width, h: base.height, fill: rootBg });
-    var all = root.querySelectorAll('*');
-    for (var i = 0; i < all.length && shapes.length < MAX; i++){
-      var el = all[i];
-      var cs = getComputedStyle(el);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || num(cs.opacity) === 0) continue;
-      var r = el.getBoundingClientRect();
-      if (r.width < 2 || r.height < 2) continue;
-      var x = r.left - base.left, y = r.top - base.top;
-      var tag = el.tagName.toLowerCase();
-      if (tag === 'img'){
-        shapes.push({ type:'image', x:x, y:y, w:r.width, h:r.height, dataUrl: imgToDataUrl(el), src: el.currentSrc || el.src || '' });
-        continue;
-      }
-      if (tag === 'script' || tag === 'style' || tag === 'noscript') continue;
-      var fill = toHex(cs.backgroundColor);
-      if (fill) shapes.push({ type:'rect', x:x, y:y, w:r.width, h:r.height, fill: fill });
-      if (hasDirectText(el)){
-        var text = (el.textContent || '').replace(/\\s+/g,' ').trim();
-        if (text){
-          var fw = cs.fontWeight;
-          shapes.push({
-            type:'text', x:x, y:y, w:r.width, h:r.height, text: text,
-            fontSize: num(cs.fontSize),
-            fontFamily: (cs.fontFamily||'').split(',')[0].replace(/["']/g,'').trim(),
-            bold: (fw === 'bold' || fw === 'bolder' || parseInt(fw,10) >= 600),
-            italic: (cs.fontStyle === 'italic'),
-            color: toHex(cs.color) || '000000',
-            align: (cs.textAlign === 'center' || cs.textAlign === 'right' || cs.textAlign === 'justify') ? cs.textAlign : 'left'
-          });
-        }
-      }
-    }
-    return { shapes: shapes, w: base.width, h: base.height };
   }
   function notes(){
     var el = document.getElementById('speaker-notes');
@@ -736,7 +648,6 @@ function injectExportCaptureBridge(doc: string): string {
     var id = req.id;
     var deck = !!req.deck;
     var single = !!req.single;
-    var mode = req.mode === 'editable' ? 'editable' : 'image';
     var delay = req.delay || 350;
     Promise.resolve().then(function(){
       var st = deckState();
@@ -750,12 +661,6 @@ function injectExportCaptureBridge(doc: string): string {
         var navP = (!single && deck && total > 1) ? navTo(i, delay) : Promise.resolve();
         navP.then(settle).then(function(){
           try {
-            if (mode === 'editable'){
-              var e = captureEditable(deck);
-              send({ type:'od:export-capture:slide', id:id, index:i, total:total, shapes:e.shapes, w:e.w, h:e.h, notes: noteFor(i) });
-              idx++; setTimeout(step, 0);
-              return;
-            }
             captureImage(deck).then(function(img){
               send({ type:'od:export-capture:slide', id:id, index:i, total:total, dataUrl: img.dataUrl, w: img.w, h: img.h, notes: noteFor(i) });
               idx++; setTimeout(step, 0);
