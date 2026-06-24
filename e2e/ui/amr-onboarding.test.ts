@@ -500,17 +500,32 @@ test('[P0] onboarding about-you step accepts profile selections and completes se
   await clickCloudPrimary(page);
   await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
 
-  await selectOnboardingOption(page, 'Your role', 'Engineer');
-  await selectOnboardingOption(page, 'Organization size', 'Growth company');
-  await selectOnboardingOption(page, 'Use case', 'Product design');
-  await selectOnboardingOption(page, 'Use case', 'Prototype / app UI');
-  await selectOnboardingOption(page, 'Where did you hear about us?', 'Search');
+  await selectOnboardingChip(page, 'Your role', 'Engineer');
+  await selectOnboardingChip(page, 'Organization size', 'Growth company');
+  await selectOnboardingChip(page, 'Use case', 'Product design');
+  await selectOnboardingChip(page, 'Use case', 'Prototype / app UI');
+  await selectOnboardingChip(page, 'Where did you hear about us?', 'Search');
 
-  await expect(expectOnboardingTrigger(page, 'Your role')).toContainText('Engineer');
-  await expect(expectOnboardingTrigger(page, 'Organization size')).toContainText('Growth company');
-  await expect(expectOnboardingTrigger(page, 'Use case')).toContainText('Product design');
-  await expect(expectOnboardingTrigger(page, 'Use case')).toContainText('Prototype / app UI');
-  await expect(expectOnboardingTrigger(page, 'Where did you hear about us?')).toContainText('Search');
+  await expect(expectOnboardingChip(page, 'Your role', 'Engineer')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(expectOnboardingChip(page, 'Organization size', 'Growth company')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(expectOnboardingChip(page, 'Use case', 'Product design')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(expectOnboardingChip(page, 'Use case', 'Prototype / app UI')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(expectOnboardingChip(page, 'Where did you hear about us?', 'Search')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 
   // About you is no longer the final step; advance through newsletter before finishing.
   await advanceFromAboutYouToBrand(page);
@@ -1122,6 +1137,28 @@ async function selectOnboardingOption(root: OnboardingLocatorRoot, label: string
 
 async function fillInlineField(page: Page, label: string, value: string) {
   await onboardingField(page, label).locator('input').fill(value);
+}
+
+function onboardingChipField(page: Page, label: string): Locator {
+  return page
+    .locator('.onboarding-chip-field')
+    .filter({ hasText: new RegExp(label, 'i') })
+    .first();
+}
+
+async function selectOnboardingChip(page: Page, label: string, option: string) {
+  await onboardingChipField(page, label)
+    .locator('button.onboarding-chip')
+    .filter({ hasText: new RegExp(option, 'i') })
+    .first()
+    .click();
+}
+
+function expectOnboardingChip(page: Page, label: string, option: string): Locator {
+  return onboardingChipField(page, label)
+    .locator('button.onboarding-chip')
+    .filter({ hasText: new RegExp(option, 'i') })
+    .first();
 }
 
 function pageForOnboardingRoot(root: OnboardingLocatorRoot): Page {
