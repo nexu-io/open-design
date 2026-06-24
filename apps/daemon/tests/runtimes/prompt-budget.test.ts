@@ -162,6 +162,41 @@ test('Kimi prompt mode declares and enforces an argv-byte budget', () => {
   assert.equal(checkPromptArgvBudget(kimi, 'hello'), null);
 });
 
+// Kimi does not support a stdin sentinel or prompt-file flag, so the composed
+// prompt must travel as a single `-p <prompt>` argv argument. Windows keeps the
+// conservative CreateProcess budget, but POSIX ceilings are far higher; allow
+// larger prompts there so the default design router and other context-heavy
+// skills don't false-positive as "prompt too long".
+test('Kimi uses a higher argv-byte budget on POSIX while keeping Windows conservative', () => {
+  assert.equal(kimi.maxPromptArgBytes, 30_000);
+  assert.equal(kimi.maxPromptArgBytesPosix, 120_000);
+
+  // A 104 KB prompt like the default design router composes: over the Windows
+  // budget, under the POSIX budget, so it must pass on POSIX and fail on Windows.
+  const contextHeavyPrompt = 'x'.repeat(104_000);
+  assert.equal(
+    checkPromptArgvBudget(kimi, contextHeavyPrompt, 'darwin'),
+    null,
+    'macOS must allow ~104 KB Kimi argv prompts',
+  );
+  assert.equal(
+    checkPromptArgvBudget(kimi, contextHeavyPrompt, 'linux'),
+    null,
+    'Linux must allow ~104 KB Kimi argv prompts (under MAX_ARG_STRLEN)',
+  );
+  const win = checkPromptArgvBudget(kimi, contextHeavyPrompt, 'win32');
+  assert.ok(win, 'Windows must still reject ~104 KB Kimi argv prompts');
+  assert.equal(win.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.equal(win.limit, 30_000);
+
+  // Runaway prompts still fail fast on POSIX.
+  const huge = 'x'.repeat(150_000);
+  assert.ok(
+    checkPromptArgvBudget(kimi, huge, 'darwin'),
+    'POSIX must still flag a 150 KB Kimi argv prompt',
+  );
+});
+
 test('checkPromptArgvBudget is a no-op for Grok Build because it uses prompt files', () => {
   assert.equal(grokBuild.promptViaFile, true);
   assert.equal(grokBuild.maxPromptArgBytes, undefined);

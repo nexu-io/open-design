@@ -32,9 +32,16 @@ const POSIX_ARGV_PROMPT_BUDGET = 100_000;
 
 function resolveArgvPromptBudget(
   maxPromptArgBytes: number,
+  maxPromptArgBytesPosix: number | undefined,
   platform: NodeJS.Platform,
 ): number {
   if (platform === 'win32') return maxPromptArgBytes;
+  // Adapters may declare a higher POSIX-specific budget while keeping the
+  // Windows budget conservative. Keep the universal POSIX floor as a default
+  // so runaway prompts still fail fast with an actionable message.
+  if (typeof maxPromptArgBytesPosix === 'number') {
+    return Math.max(maxPromptArgBytesPosix, POSIX_ARGV_PROMPT_BUDGET);
+  }
   return Math.max(maxPromptArgBytes, POSIX_ARGV_PROMPT_BUDGET);
 }
 
@@ -48,7 +55,11 @@ export function checkPromptArgvBudget(
     typeof composed === 'string' ? composed : '',
     'utf8',
   );
-  const limit = resolveArgvPromptBudget(def.maxPromptArgBytes, platform);
+  const limit = resolveArgvPromptBudget(
+    def.maxPromptArgBytes,
+    def.maxPromptArgBytesPosix,
+    platform,
+  );
   if (bytes <= limit) return null;
   return {
     code: 'AGENT_PROMPT_TOO_LARGE',
