@@ -3371,6 +3371,11 @@ export async function startServer({
   // the ingest body before the global one (express.json is a no-op once a body
   // has already been read).
   app.use('/api/library/ingest', express.json({ limit: '128mb' }));
+  // Brand extract-from-html carries the full rendered page DOM (+ collected CSS)
+  // the web read out of the in-app browser tab after the user cleared an anti-bot
+  // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
+  // (registered before the global parser so it claims the body first).
+  app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 

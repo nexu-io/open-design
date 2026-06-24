@@ -259,6 +259,7 @@ const FIGMA_BOOLEAN_FLAGS = new Set([
 // module evaluation — a const declared further down would still be in TDZ.
 const BRAND_STRING_FLAGS = new Set([
   'daemon-url', 'prompt-file', 'project',
+  'html-file', 'css-file', 'base-url',
 ]);
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
@@ -5092,6 +5093,7 @@ async function runBrand(args) {
     case 'extract':  return runBrandCreate(rest);
     case 'preview':  return runBrandPreview(rest);
     case 'finalize': return runBrandFinalize(rest);
+    case 'extract-from-html': return runBrandExtractFromHtml(rest);
     case 'get':      return runBrandGet(rest);
     case 'show':     return runBrandGet(rest);
     case 'delete':   return runBrandDelete(rest);
@@ -5229,6 +5231,98 @@ async function runBrandFinalize(rest) {
   const name = data?.brand?.name ?? data?.id ?? id;
   console.log(`${data?.id ?? id}\t${name}`);
   if (data?.designSystemId) process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
+}
+
+// Read a flag value as file content (or stdin when the value is "-"). Returns
+// null when the flag is unset. Mirrors readPromptFromFlags' file/stdin handling
+// but for an arbitrary flag name (--html-file / --css-file).
+async function readFileFlagOrStdin(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (value === '-') {
+    return await new Promise((resolve, reject) => {
+      let buf = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', (chunk) => { buf += chunk; });
+      process.stdin.on('end', () => resolve(buf));
+      process.stdin.on('error', reject);
+    });
+  }
+  const { readFile } = await import('node:fs/promises');
+  return await readFile(value, 'utf8');
+}
+
+// od brand extract-from-html <id> --html-file <path|-> [--css-file <path>]
+//   [--base-url <url>] [--json]
+// Re-runs extraction against pre-captured rendered HTML (e.g. a page an external
+// agent already loaded past an anti-bot wall), mirroring the UI's browser-assist
+// confirm path so the capability is reachable from the CLI too.
+async function runBrandExtractFromHtml(rest) {
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od brand extract-from-html <id> --html-file <path|-> '
+      + '[--css-file <path>] [--base-url <url>] [--json]');
+    process.exit(2);
+  }
+  let html;
+  try {
+    html = await readFileFlagOrStdin(flags['html-file']);
+  } catch (err) {
+    console.error(`could not read --html-file: ${err.message}`);
+    process.exit(2);
+  }
+  if (!html || !html.trim()) {
+    console.error('--html-file <path|-> is required (the rendered page HTML)');
+    process.exit(2);
+  }
+  let css = '';
+  if (typeof flags['css-file'] === 'string' && flags['css-file'].length > 0) {
+    try {
+      css = (await readFileFlagOrStdin(flags['css-file'])) ?? '';
+    } catch (err) {
+      console.error(`could not read --css-file: ${err.message}`);
+      process.exit(2);
+    }
+  }
+  const body = { html };
+  if (css.trim()) body.css = css;
+  if (typeof flags['base-url'] === 'string' && flags['base-url'].trim()) {
+    body.baseUrl = flags['base-url'].trim();
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/extract-from-html`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (resp.status === 404) {
+    console.error(`brand not found: ${id}`);
+    process.exit(4);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
+    return;
+  }
+  const name = data?.brand?.name ?? data?.id ?? id;
+  console.log(`${data?.id ?? id}\t${name}`);
+  if (data?.designSystemId) {
+    process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
+  }
 }
 
 async function runBrandPreview(rest) {
