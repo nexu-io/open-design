@@ -713,9 +713,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
         }),
         expect.objectContaining({
           page_name: 'onboarding',
-          area: 'brand',
+          area: 'design_system',
           step_index: '4',
-          step_name: 'brand_extract',
+          step_name: 'design_system',
         }),
       ]),
     );
@@ -737,6 +737,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       page_name: 'onboarding',
       area: 'onboarding',
       result: 'completed',
+      exit_step_name: 'design_system',
       completion_type: 'completed_without_design_system',
       runtime_type: 'amr_cloud',
       has_about_you: true,

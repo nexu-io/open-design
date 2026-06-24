@@ -471,8 +471,8 @@ export type TrackingChatPanelPageViewSource =
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
 // welcome flow. The current first-run flow is Connect → About you →
-// Newsletter → Brand extraction; the design-system and generation literals
-// remain in the contract for historical rows and a future reintroduction.
+// Newsletter → Design system CTA. The legacy brand-extraction literal remains
+// in the contract for historical rows only.
 // Each step's `step_index` / `step_name` must match the enum pairs below.
 // `onboarding_session_id` is generated once per session so dashboards can
 // stitch the funnel.
@@ -480,8 +480,9 @@ export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
   | 'newsletter'
-  | 'brand'
   | 'design_system'
+  /** @deprecated legacy onboarding final-step area; use `design_system`. */
+  | 'brand'
   | 'generation_progress';
 
 // Mixed string enum: numeric steps render as the strings `'1' | '2' | '3' | '4'`
@@ -492,8 +493,9 @@ export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
   | 'newsletter'
-  | 'brand_extract'
   | 'design_system'
+  /** @deprecated legacy onboarding final-step name; use `design_system`. */
+  | 'brand_extract'
   | 'generation';
 
 // How the user chose to connect to a model provider. `amr_cloud` is the
@@ -506,7 +508,7 @@ export type TrackingOnboardingStepName =
 export type TrackingOnboardingRuntimeType = TrackingRuntimeType;
 
 // What kind of source material the user pinned in the design-system
-// step. `text` covers the brand description textarea; `mixed` is
+// step. `text` covers the freeform design-system description; `mixed` is
 // reserved for batches that combined more than one type.
 export type TrackingOnboardingSourceType =
   | 'text'
@@ -625,8 +627,8 @@ export type TrackingOnboardingClickAction =
 // ride along on About-you clicks AND on the `about_you_submit` snapshot
 // click. `source_type`/`has_brand_description`/`source_count` only on
 // Design-system source clicks. `runtime_type`/`is_recommended` only on
-// Connect clicks. Doc explicitly forbids brand text, GitHub URL, file
-// name, or path values — all enum + bool + count, no free-text.
+// Connect clicks. Doc explicitly forbids freeform design-system description,
+// GitHub URL, file name, or path values — all enum + bool + count, no free-text.
 export interface OnboardingClickProps {
   page_name: 'onboarding';
   area: TrackingOnboardingArea;

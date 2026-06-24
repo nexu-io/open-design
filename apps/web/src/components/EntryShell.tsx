@@ -1324,7 +1324,7 @@ function OnboardingView({
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
     if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
     if (stepIdx === 2) return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
-    return { area: 'brand', stepIndex: '4', stepName: 'brand_extract' };
+    return { area: 'design_system', stepIndex: '4', stepName: 'design_system' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
