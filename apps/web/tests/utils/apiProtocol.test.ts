@@ -38,6 +38,7 @@ describe('api protocol labels', () => {
 
     expect(supportsNativeImageAttachmentSerialization(baseConfig)).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.5' })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini-2024-07-18' })).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: false })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod', nativeImageInputEnabled: true })).toBe(true);
@@ -58,6 +59,12 @@ describe('api protocol labels', () => {
       apiProtocol: 'openai',
       baseUrl: 'https://openrouter.ai/api/v1',
       model: 'openai/gpt-4o',
+    })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openrouter/openai/gpt-4o-2024-05-13',
     })).toBe(true);
     expect(supportsNativeImageAttachmentSerialization({
       ...baseConfig,

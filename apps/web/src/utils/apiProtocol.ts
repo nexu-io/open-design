@@ -93,9 +93,26 @@ function isKnownImageCapableProviderModel(
   const normalizedModel = normalizeProviderModel(cfg.model);
   return Boolean(
     provider?.imageCapableModels?.some(
-      (model) => normalizeProviderModel(model) === normalizedModel,
+      (model) => imageCapableModelMatches(model, normalizedModel),
     ),
   );
+}
+
+function imageCapableModelMatches(capableModel: string, actualModel: string): boolean {
+  const normalizedCapableModel = normalizeProviderModel(capableModel);
+  return [actualModel, withoutRoutingProviderPrefix(actualModel)].some(
+    (candidate) =>
+      candidate === normalizedCapableModel ||
+      candidate.startsWith(`${normalizedCapableModel}-`),
+  );
+}
+
+function withoutRoutingProviderPrefix(model: string): string {
+  const parts = model.split('/');
+  if (parts[0] === 'openrouter' && parts.length > 2) {
+    return parts.slice(1).join('/');
+  }
+  return model;
 }
 
 function providerBaseUrlForConfig(cfg: AppConfig): string {
