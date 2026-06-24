@@ -2557,6 +2557,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(downloadItems).not.toContain('Copy share link');
     expect(downloadItems).not.toContain('Deploy to Vercel');
     expect(downloadItems).not.toContain('Export as PPTX');
+    expect(downloadItems).not.toContain('Export as PPTX (images)');
+    expect(downloadItems).not.toContain('Export as PPTX (editable)');
     expect(downloadItems).not.toContain('Export as Markdown');
   });
 

@@ -38,6 +38,7 @@ export function BrandReadyPrompt({
   const title = brandName
     ? t('project.brandReadyTitle', { name: brandName })
     : t('project.brandReadyTitleGeneric');
+  const dismissLabel = t('project.brandReadyDismiss');
   const refine = showRefinement && (onAiOptimize || onEditManually);
 
   return (
@@ -83,9 +84,10 @@ export function BrandReadyPrompt({
         type="button"
         className={styles.dismiss}
         onClick={onDismiss}
-        aria-label={t('project.brandReadyDismiss')}
+        aria-label={dismissLabel}
+        title={dismissLabel}
       >
-        <Icon name="close" size={14} />
+        <Icon name="close" size={14} strokeWidth={2.1} />
       </button>
     </motion.div>
   );

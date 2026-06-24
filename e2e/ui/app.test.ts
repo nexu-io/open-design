@@ -1217,7 +1217,7 @@ async function seedDeckArtifact(
       title,
       entry: fileName,
       renderer: 'deck-html',
-      exports: ['html', 'pptx'],
+      exports: ['html', 'pdf'],
     },
   );
 }
