@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { test } from 'node:test';
@@ -51,6 +52,22 @@ async function setupTestDir(port: number): Promise<TestContext> {
 
   const tmpDir = await mkdtemp(join(tmpdir(), `${TEST_ID}-`));
   await execFileAsync('cp', ['-r', join(repoRoot, 'deploy'), tmpDir]);
+
+  // Symlink the repo-root files that docker-compose.yml's build.context: ..
+  // resolves to (<tmpDir>).  Without these the fallback local-build path
+  // (when image pull fails) fails with missing-context errors.
+  for (const name of [
+    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
+    'scripts', 'packages', 'tools', 'apps', 'e2e',
+    'skills', 'design-systems', 'craft', 'prompt-templates',
+    'assets', 'plugins',
+  ]) {
+    const src = join(repoRoot, name);
+    const dst = join(tmpDir, name);
+    if (existsSync(src) && !existsSync(dst)) {
+      try { await symlink(src, dst); } catch { /* symlink may fail on Windows without developer mode */ }
+    }
+  }
 
   // Write a compose override that replaces the hardcoded names
   const override = {

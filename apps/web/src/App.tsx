@@ -876,6 +876,22 @@ function AppInner() {
           }
         } catch (err) {
           console.warn('[od] Bootstrap auth failed, proceeding without cookie:', err);
+          // Bootstrap fetch itself rejected/aborted (network error, timeout).
+          // Probe for a still-valid cookie before prompting.
+          try {
+            const probe = await fetch('/api/plugins');
+            if (probe.ok || probe.status !== 401) {
+              // Cookie is still valid — proceed with fan-out below.
+            } else {
+              setNeedsToken(true);
+              clearTimeout(bootstrapTimeout);
+              return;
+            }
+          } catch {
+            setNeedsToken(true);
+            clearTimeout(bootstrapTimeout);
+            return;
+          }
         } finally {
           clearTimeout(bootstrapTimeout);
         }

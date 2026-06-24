@@ -382,4 +382,63 @@ describe('bootstrap nonce exchange failure gate', () => {
     });
     expect(screen.queryByTestId('entry-view')).toBeNull();
   });
+
+  it('shows ApiTokenPrompt when bootstrap-token fetch rejects (network error / timeout) and cookie probe also 401', async () => {
+    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : '';
+      if (url.includes('/api/auth/bootstrap-token')) {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      if (url.includes('/api/plugins')) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('api-token-prompt')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('entry-view')).toBeNull();
+  });
+
+  it('proceeds to fan-out when bootstrap-token fetch rejects but cookie probe succeeds (existing cookie valid)', async () => {
+    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : '';
+      if (url.includes('/api/auth/bootstrap-token')) {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      if (url.includes('/api/plugins')) {
+        // Cookie probe succeeds — existing cookie is still valid
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-view')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('api-token-prompt')).toBeNull();
+  });
 });
