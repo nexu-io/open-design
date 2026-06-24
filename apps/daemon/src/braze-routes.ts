@@ -212,11 +212,10 @@ export function registerBrazeRoutes(app: Express, ctx: RegisterBrazeRoutesDeps) 
 
     try {
       // artifactManifest 생략 — .md 확장자가 markdown-document 매니페스트를 자동 추론.
+      // opts {} → overwrite 기본 true: brief 재저장은 의도적 갱신(spec §4 "브리프 갱신")이라 같은 경로 덮어쓰기 허용.
       await writeProjectFile(PROJECTS_DIR, message.projectId, relPath, Buffer.from(markdown, 'utf8'), {}, project.metadata);
     } catch (err) {
-      // project-routes.ts의 업로드 에러 매핑과 동형.
-      const code = (err as { code?: string })?.code;
-      if (code === 'EEXIST') return sendApiError(res, 409, 'CONFLICT', 'brief already exists');
+      // 쓰기 실패는 일괄 422로 매핑(EEXIST는 overwrite=true라 발생하지 않음).
       return sendApiError(res, 422, 'UNPROCESSABLE', `failed to write brief: ${(err as Error)?.message ?? 'unknown'}`);
     }
 
