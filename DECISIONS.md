@@ -67,3 +67,20 @@
 - 트리거 옵셔널화 = **보류(follow-up)**: daemon /interview가 triggerEvent 필수지만 검증된 워크플로우는 트리거=콘솔 설정. skill이 추론 후보 전달로 우회. 완화는 후속 (출처: DATA-MODEL §5.1)
 - bodoc 카탈로그 PII → `.gitignore` 추가. 설계문서(BRAZE-DOMAIN/DATA-MODEL/DECISIONS/ARCHITECTURE-BRAZE/FORK-DELTA)는 PR 포함 (출처: 사용자 "gitignore 추가하고 설계문서 포함 PR")
 - PR #1 오픈 (Gmin82/open-design, base main ← marketing-ax/braze-iam): dual-track web panel + od braze CLI + skill/craft (출처: 사용자 "A로 진행")
+
+## 2026-06-23 — Braze IAM 홈 칩 + brief.md 저장 트랙 분리
+- braze-iam 칩 미작동 근본원인 = design-templates 스킬일 뿐 칩-활성 번들 플러그인 아님. 자유 프롬프트가 od-default 라우터로 빠져 제네릭 폼+컨펌게이트 누락. `triggers:`는 UI 검색전용·런타임 라우팅 안 함 (출처: HANDOFF 칩 진단)
+- 칩 활성화 = 접근 A(번들 example 플러그인 패키징, HyperFrames 패턴) — apply-scenario 재사용, 최검증 경로. 커밋 5feaf5677, 브라우저 E2E로 braze 인터뷰 구동 확인 (출처: 사용자 선택 + 테스트)
+- 컨펌 기획안→brief.md 문서 저장 = 별도 신규 트랙, 설계부터 새 세션. 참조 포맷 = /Users/gyumin/Project/braze-iam/output/2026-06-22-signup-encourage/brief.md (더 디벨롭된 형태로 디자인 프로젝트에 저장). 설계 미결정 4건(생성주체/저장위치/데이터계약/트리거지점) brainstorming 필요 (출처: 사용자 퍼즈 지시)
+
+## 2026-06-24 — Braze brief.md 저장: 설계+플랜 이중검증
+- 생성주체 = 접근 A(SKILL/에이전트 저작 + daemon은 경로·저장·표면노출만): 참조 brief가 LLM 산문 다수(개인화 선정근거·디자인방향·가설)라 결정론 템플릿으로 재현 불가, OD 기존 패턴(에이전트 저작·daemon 영속) 정합. plan 스키마 불변 + briefPath 1필드 (출처: HANDOFF brief.md 설계 brainstorming §2)
+- 저장 = 신규 POST /api/braze/messages/:id/brief → writeProjectFile로 PROJECTS_DIR/<proj>/braze/<messageId>-<slug>/brief.md. <messageId> 접두로 충돌 데이터손실 방지. confirm 분기 불변(자동생성 X, SKILL이 컨펌후 명시호출) (출처: HANDOFF 설계)
+- 이중 적대검증 = codex(스펙 13건) + plan-reviewer(플랜 9건). 멀티서피스 기능은 격리리뷰 부족, 통합/적대 검증이 사실오류 포착(C-1 getProject 출처·C-2 paths 타입무효·C-3 openProjectFile 부재·C-4 테스트하네스 부재) — 구현 전 차단 (출처: HANDOFF 검증)
+- 산출물 = docs/superpowers/{specs,plans}/2026-06-24-braze-brief-md*.md. 단 docs/superpowers/ gitignored → git 미추적, 디스크 영속. 새 세션 resume서 직접 Read (출처: HANDOFF Uncommitted 정합성 체크)
+
+## 2026-06-24 — Braze brief.md 저장 구현 (SDD 병렬, 8 tasks)
+- 구현 = subagent-driven-development 병렬 실행: daemon 체인(contracts→persistence→route→CLI) 직렬 필수(타입+런타임 의존), Task7(SKILL doc)=worktree 격리로 병렬→cherry-pick, 리뷰어(read-only)∥다음 implementer(disjoint) 매 웨이브 중첩. pnpm monorepo node_modules 제약으로 코드 task는 main tree 직렬(worktree typecheck 불가) (출처: HANDOFF 8/8 완료)
+- 검증 = task별 리뷰 + 최종 whole-branch 리뷰(opus) Ready-to-merge YES. dual-track 4-홉 필드명 정합·imported-folder baseDir·status allowlist·bodoc 0 확인. M-2(unreachable EEXIST) 직접 정리 (출처: 최종 리뷰)
+- e2e = production HTTP/CLI 직접 구동(메시지→plan→confirm→od braze brief→od braze get→디스크). 가드 400/404·json·resave overwrite 통과. web 패널 렌더+콘솔에러 0, 링크 클릭 시각확인만 사람 잔여 (출처: HANDOFF e2e)
+- 전체 daemon 1 fail(chat-route.test.ts:298)=braze 무관 기존결함(8커밋이 chat/permission/external 파일 0건 변경)—회귀 아님 (출처: 베이스라인 파일-동일성 증명)
