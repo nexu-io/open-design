@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
+import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -44,6 +45,7 @@ import {
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
 import {
+  fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
@@ -952,6 +954,23 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   };
 }
 
+export function amrWalletValueLabel(input: {
+  balance: string | null;
+  loadingLabel: string;
+  ready: boolean;
+  snapshot: AmrWalletSnapshot | null;
+  unavailableLabel: string;
+}): string {
+  if (!input.ready) return input.loadingLabel;
+  if (input.balance) return input.balance;
+  const code = input.snapshot?.error?.code;
+  if (code === 'missing_control_key' || code === 'unauthorized') {
+    const message = input.snapshot?.error?.message?.trim();
+    if (message) return message;
+  }
+  return input.unavailableLabel;
+}
+
 function apiModelOptionLabel(
   model: ProviderModelOption,
   sourceLabel?: string,
@@ -1209,6 +1228,9 @@ export function SettingsDialog({
   });
   const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
   const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
+  const [amrWalletSnapshot, setAmrWalletSnapshot] = useState<AmrWalletSnapshot | null>(null);
+  const [amrWalletReady, setAmrWalletReady] = useState(false);
+  const [amrWalletRefreshing, setAmrWalletRefreshing] = useState(false);
   const [hoveredAgentCardId, setHoveredAgentCardId] = useState<string | null>(null);
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
@@ -1217,6 +1239,44 @@ export function SettingsDialog({
   useEffect(() => {
     onAmrLoginStatusChange?.(amrCardStatus);
   }, [amrCardStatus, onAmrLoginStatusChange]);
+
+  const refreshAmrWallet = useCallback(async (refresh = false) => {
+    if (amrCardStatus?.loggedIn !== true) {
+      setAmrWalletSnapshot(null);
+      setAmrWalletReady(false);
+      return;
+    }
+    if (refresh) setAmrWalletRefreshing(true);
+    try {
+      const next = await fetchAmrWalletSnapshot({ refresh });
+      setAmrWalletSnapshot(next);
+      setAmrWalletReady(true);
+    } finally {
+      if (refresh) setAmrWalletRefreshing(false);
+    }
+  }, [amrCardStatus?.loggedIn]);
+
+  const formatAmrWalletBalance = useCallback((balanceUsd: string | null | undefined) => {
+    if (!balanceUsd) return null;
+    const amount = Number(balanceUsd);
+    if (!Number.isFinite(amount)) return `$${balanceUsd}`;
+    return new Intl.NumberFormat(locale, {
+      currency: 'USD',
+      maximumFractionDigits: 4,
+      minimumFractionDigits: 2,
+      style: 'currency',
+    }).format(amount);
+  }, [locale]);
+
+  const formatAmrWalletTime = useCallback((value: string | null | undefined) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(locale, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date);
+  }, [locale]);
 
   useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
@@ -1244,6 +1304,32 @@ export function SettingsDialog({
       cancelled = true;
     };
   }, [agents]);
+
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent || amrCardStatus?.loggedIn !== true) {
+      setAmrWalletSnapshot(null);
+      setAmrWalletReady(false);
+      setAmrWalletRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    setAmrWalletReady(false);
+    void fetchAmrWalletSnapshot().then((next) => {
+      if (cancelled) return;
+      setAmrWalletSnapshot(next);
+      setAmrWalletReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    agents,
+    amrCardStatus?.loggedIn,
+    amrCardStatus?.profile,
+    amrCardStatus?.user?.id,
+    amrCardStatus?.user?.email,
+  ]);
 
   // Reconcile AMR sign-in state whenever the user returns to the window. The
   // vela device-login flow completes in an external browser / AMR console; if
@@ -3615,6 +3701,18 @@ export function SettingsDialog({
                             isAmrAgent && active && amrCardStatus?.loggedIn
                               ? amrProfileBadgeLabel(amrCardStatus.profile)
                               : null;
+                          const amrWalletVisible =
+                            isAmrAgent && active && amrCardStatus?.loggedIn === true;
+                          const amrWalletBalance =
+                            amrWalletVisible && amrWalletSnapshot?.status === 'available'
+                              ? formatAmrWalletBalance(amrWalletSnapshot.balanceUsd)
+                              : null;
+                          const amrWalletTime =
+                            amrWalletVisible && amrWalletSnapshot?.status === 'available'
+                              ? formatAmrWalletTime(
+                                  amrWalletSnapshot?.updatedAt ?? amrWalletSnapshot?.fetchedAt,
+                                )
+                              : null;
                           const amrRevealPendingCancelAction =
                             isAmrAgent &&
                             active &&
@@ -3728,6 +3826,30 @@ export function SettingsDialog({
                                           ) : null}
                                         </div>
                                       ) : null}
+                                      {amrWalletVisible ? (
+                                        <div className="agent-card-amr-wallet">
+                                          <span className="agent-card-amr-wallet__label">
+                                            {t('settings.amrWalletBalance')}
+                                          </span>
+                                          <span className="agent-card-amr-wallet__value">
+                                            {amrWalletValueLabel({
+                                              balance: amrWalletBalance,
+                                              loadingLabel: t('common.loading'),
+                                              ready: amrWalletReady,
+                                              snapshot: amrWalletSnapshot,
+                                              unavailableLabel: t('settings.amrWalletUnavailable'),
+                                            })}
+                                          </span>
+                                          {amrWalletTime ? (
+                                            <span className="agent-card-amr-wallet__meta">
+                                              {t('settings.amrWalletUpdatedAt', { time: amrWalletTime })}
+                                              {amrWalletSnapshot?.source === 'daemon_cache'
+                                                ? ` · ${t('settings.amrWalletCached')}`
+                                                : ''}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
                                       {!active && modelSummary ? (
                                         <div className="agent-card-model-summary">
                                           <span>{t('settings.modelPicker')}</span>
@@ -3736,6 +3858,23 @@ export function SettingsDialog({
                                       ) : null}
                                   </div>
                                 </button>
+                                {amrWalletVisible ? (
+                                  <button
+                                    type="button"
+                                    className="agent-card-amr-wallet-refresh"
+                                    title={t('settings.amrWalletRefreshTitle')}
+                                    aria-label={t('settings.amrWalletRefreshTitle')}
+                                    disabled={amrWalletRefreshing}
+                                    onClick={() => void refreshAmrWallet(true)}
+                                  >
+                                    <Icon
+                                      name={amrWalletRefreshing ? 'spinner' : 'refresh'}
+                                      size={13}
+                                      className={amrWalletRefreshing ? 'icon-spin' : undefined}
+                                    />
+                                    <VisuallyHidden>{t('settings.amrWalletRefresh')}</VisuallyHidden>
+                                  </button>
+                                ) : null}
                                 {isAmrAgent ? (
                                   active && amrCardStatusReady ? (
                                     <span

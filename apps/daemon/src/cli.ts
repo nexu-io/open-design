@@ -179,6 +179,8 @@ const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const AMR_STRING_FLAGS = new Set(['daemon-url']);
+const AMR_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'refresh']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
@@ -283,6 +285,7 @@ const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
+  amr: runAmr,
   research: runResearch,
   plugin: runPlugin,
   ui: runUi,
@@ -448,6 +451,51 @@ What the daemon does:
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
      dispatcher that the agent calls via \`od media generate\`.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od amr …
+// ---------------------------------------------------------------------------
+
+async function runAmr(args) {
+  const sub = args[0];
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od amr status [--refresh] [--json]
+
+Options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --refresh            Bypass the daemon's short wallet display cache.
+  --json               Emit raw JSON.`);
+    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: AMR_STRING_FLAGS, boolean: AMR_BOOLEAN_FLAGS });
+  const base = await cliDaemonBaseUrl(flags);
+  switch (sub) {
+    case 'status': {
+      const query = flags.refresh ? '?refresh=1' : '';
+      const resp = await fetch(`${base}/api/integrations/vela/wallet${query}`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const snapshot = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(snapshot, null, 2) + '\n');
+      const account = snapshot?.user?.email ?? snapshot?.user?.id ?? '-';
+      console.log(`AMR account\t${account}`);
+      if (snapshot?.status === 'available') {
+        console.log(`Wallet balance\t$${snapshot.balanceUsd}`);
+        console.log(`Updated\t${snapshot.updatedAt ?? snapshot.fetchedAt ?? '-'}`);
+        console.log(`Source\t${snapshot.source ?? '-'}`);
+        return;
+      }
+      console.log(`Wallet balance\tunavailable`);
+      console.log(`Status\t${snapshot?.status ?? 'unknown'}`);
+      if (snapshot?.error?.message) console.log(`Reason\t${snapshot.error.message}`);
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od amr ${sub}`);
+      process.exit(2);
+  }
 }
 
 // ---------------------------------------------------------------------------

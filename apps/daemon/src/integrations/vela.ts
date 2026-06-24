@@ -228,6 +228,14 @@ export interface VelaCredentialRevision {
   configMtimeMs: number | null;
 }
 
+export interface VelaControlApiContext {
+  profile: string;
+  apiUrl: string;
+  controlKey: string;
+  user: VelaUser | null;
+  configMtimeMs: number | null;
+}
+
 interface VelaProfileShape {
   controlKey?: string;
   runtimeKey?: string;
@@ -345,6 +353,37 @@ export function readVelaCredentialRevision(
       hasEnvCredentials || !existsSync(status.configPath)
         ? null
         : statSync(status.configPath).mtimeMs,
+  };
+}
+
+export function readVelaControlApiContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaControlApiContext | null {
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  const profile = resolveAmrProfile(mergedEnv);
+  const envControlKey = mergedEnv.VELA_CONTROL_KEY?.trim() ?? '';
+  const envApiUrl = mergedEnv.VELA_API_URL?.trim() ?? '';
+  if (envControlKey) {
+    const status = readVelaLoginStatus(env, configuredEnv);
+    return {
+      profile,
+      apiUrl: envApiUrl || 'https://amr-api.open-design.ai',
+      controlKey: envControlKey,
+      user: status.user,
+      configMtimeMs: null,
+    };
+  }
+  const file = readConfigFile();
+  const stored = file?.profiles?.[profile];
+  const controlKey = stored?.controlKey?.trim() ?? '';
+  if (!controlKey) return null;
+  return {
+    profile,
+    apiUrl: stored?.apiUrl?.trim() || envApiUrl || 'https://amr-api.open-design.ai',
+    controlKey,
+    user: stored?.user ?? null,
+    configMtimeMs: existsSync(amrConfigPath()) ? statSync(amrConfigPath()).mtimeMs : null,
   };
 }
 

@@ -1366,6 +1366,64 @@
   font-weight: 800;
   line-height: 1.2;
 }
+.agent-card-amr-wallet {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  max-width: 100%;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+.agent-card-amr-wallet__label {
+  color: var(--text-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agent-card-amr-wallet__value {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-card-amr-wallet__meta {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 10.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-card-amr-wallet-refresh {
+  align-self: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.agent-card-amr-wallet-refresh:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent-tint) 62%, var(--bg-panel));
+  color: var(--accent-strong);
+}
+.agent-card-amr-wallet-refresh:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
 .agent-card-model-summary {
   display: flex;
   align-items: baseline;
