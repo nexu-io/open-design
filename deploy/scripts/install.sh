@@ -81,6 +81,7 @@ OPT_PORT=""
 OPT_IMAGE=""
 OPT_SKIP_DOCKER=0
 OPT_NO_SYSTEMD=0
+OPT_BUILD_ON_PULL_FAILURE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -91,6 +92,7 @@ while [ $# -gt 0 ]; do
     --image=*) OPT_IMAGE="${1#--image=}" ;;
     --skip-docker-install) OPT_SKIP_DOCKER=1 ;;
     --no-systemd) OPT_NO_SYSTEMD=1 ;;
+    --build-on-pull-failure) OPT_BUILD_ON_PULL_FAILURE=1 ;;
     --help|-h)
       echo "Usage: install.sh [options]"
       echo ""
@@ -99,6 +101,7 @@ while [ $# -gt 0 ]; do
       echo "  --port <n>              Host port (default: ${DEFAULT_PORT})"
       echo "  --image <ref>           Docker image reference"
       echo "  --skip-docker-install   Do not attempt to install Docker"
+      echo "  --build-on-pull-failure  If image pull fails, build from source instead of exiting"
       echo "  --no-systemd            Skip systemd unit creation"
       echo "  --help                  Show this help"
       exit 0
@@ -412,11 +415,16 @@ step "Pulling image: ${IMAGE}"
 if $COMPOSE_CMD "${COMPOSE_FILES[@]}" pull; then
   step "Starting Open Design..."
   $COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d --no-build
-else
-  warn "Image pull failed — attempting local build from source."
+elif [ "$OPT_BUILD_ON_PULL_FAILURE" = "1" ]; then
+  warn "Image pull failed — building from source (--build-on-pull-failure)."
   $COMPOSE_CMD "${COMPOSE_FILES[@]}" build
   step "Starting Open Design from local build..."
   $COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d
+else
+  error "Failed to pull image: ${IMAGE}"
+  error "Use --build-on-pull-failure to fall back to a local source build, or"
+  error "check your credentials and network access, then re-run."
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
