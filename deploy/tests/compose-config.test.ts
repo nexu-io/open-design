@@ -117,3 +117,47 @@ test(
     }
   },
 );
+
+test(
+  '.env file values reach docker compose config (install.sh / .env.example key alignment)',
+  { skip: !dockerAvailable ? 'Docker not available' : false },
+  async () => {
+    const tmpDir = await setupTempDir();
+    try {
+      // Write a .env file mimicking what install.sh or the template .env.example
+      // produces.  Catches silent regressions where a key is misspelled in the
+      // installer or template — compose silently uses the default from the
+      // compose YAML instead of the user's intent.
+      await writeFile(
+        join(tmpDir, '.env'),
+        [
+          'OPEN_DESIGN_IMAGE=ghcr.io/example/test:latest',
+          'OPEN_DESIGN_PORT=9999',
+          'OD_BIND_HOST=127.0.0.1',
+          'OD_ALLOWED_ORIGINS=https://app.example.com',
+          'OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=0',
+          'OD_DISABLE_API_AUTH=0',
+          'OD_API_TOKEN=deadbeefdeadbeefdeadbeefdeadbeef',
+          'OD_TRUST_PROXY=1',
+          'OD_PUBLIC_BASE_URL=https://od.example.com',
+          'OD_WEB_PORT=9999',
+          'OPEN_DESIGN_MEM_LIMIT=512m',
+          'NODE_OPTIONS=--max-old-space-size=256',
+        ].join('\n'),
+      );
+      const stdout = await runComposeConfig(tmpDir);
+      const env = parseEnvLines(stdout);
+
+      assert.equal(env.get('OD_BIND_HOST'), '127.0.0.1', 'expected OD_BIND_HOST from .env');
+      assert.equal(env.get('OD_ALLOWED_ORIGINS'), 'https://app.example.com', 'expected OD_ALLOWED_ORIGINS from .env');
+      assert.equal(env.get('OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET'), '0', 'expected OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET from .env');
+      assert.equal(env.get('OD_DISABLE_API_AUTH'), '0', 'expected OD_DISABLE_API_AUTH from .env');
+      assert.equal(env.get('OD_API_TOKEN'), 'deadbeefdeadbeefdeadbeefdeadbeef', 'expected OD_API_TOKEN from .env');
+      assert.equal(env.get('OD_TRUST_PROXY'), '1', 'expected OD_TRUST_PROXY from .env');
+      assert.equal(env.get('OD_PUBLIC_BASE_URL'), 'https://od.example.com', 'expected OD_PUBLIC_BASE_URL from .env');
+      assert.equal(env.get('OD_WEB_PORT'), '9999', 'expected OD_WEB_PORT from .env');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  },
+);
