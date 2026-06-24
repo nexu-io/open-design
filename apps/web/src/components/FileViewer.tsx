@@ -6545,7 +6545,16 @@ function HtmlViewer({
         setManualEditError(result.error ?? 'Could not apply edit.');
         return false;
       }
-      if (!(await confirmManualEditHistorySource(
+      // Skip the server-confirmation round-trip when the base source is the
+      // frozen Manual Edit snapshot captured at mode entry.  The frozen source
+      // IS the server's persisted copy at that instant — an external write in
+      // the milliseconds between freeze and save is implausible and not worth a
+      // blocking network fetch.  This also prevents a false-block during a
+      // srcDoc Reload window: reloadHtmlPreview skips setSource(null) while
+      // manualEditFrozenSource is set (PR #4652 Codex P2), so baseSource stays
+      // at the frozen value and the round-trip can be skipped safely.
+      const sourceMatchesFrozen = manualEditFrozenSource !== null && baseSource === manualEditFrozenSource;
+      if (!sourceMatchesFrozen && !(await confirmManualEditHistorySource(
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
       ))) return false;
@@ -7374,7 +7383,18 @@ function HtmlViewer({
       // srcDoc memo recomputes to '' before the async re-fetch resolves.
       // Without this, the remounted iframe carries stale srcdoc content
       // until the fetch completes (issue #4650).
-      setSource(null);
+      //
+      // Skip the synchronous clear when Manual Edit is active
+      // (manualEditFrozenSource !== null).  Nulling source here also nulls
+      // sourceRef.current (via the [source] useEffect at ~line 5962), which
+      // causes applyManualEdit to hit its null guard and silently drop the
+      // save before the reload fetch resolves (PR #4652 Codex P2 / issue #4650).
+      // The reload still re-fetches via the reloadKey increment above; source
+      // stays at the last-good frozen value until the fetch resolves, so
+      // applyManualEdit continues to work throughout the reload window.
+      if (!manualEditFrozenSource) {
+        setSource(null);
+      }
       // Clear the annotation-freeze snapshot so previewSource is not pinned
       // to the stale V1 content while annotationFreezeActive is true.  The
       // annotation-freeze useEffect (deps: annotationFreezeActive,
