@@ -30,6 +30,7 @@ type OnError = (message: string) => void;
 type OnClearSelection = () => void;
 type OnSaveDraft = () => void;
 type OnCancelDraft = () => void;
+type OnResetDraft = () => void;
 
 describe('ManualEditPanel', () => {
   let dom: JSDOM;
@@ -110,8 +111,9 @@ describe('ManualEditPanel', () => {
     expect(footer?.textContent).toContain('Save');
   });
 
-  it('keeps delete confirmation as an icon-only action', () => {
-    renderPanel();
+  it('routes delete as a direct icon-only action', () => {
+    const onApplyPatch = vi.fn<OnApplyPatch>();
+    renderPanel({ onApplyPatch });
 
     const footer = host.querySelector('.manual-edit-footer');
     const deleteButton = host.querySelector('button[aria-label="Delete element"]') as HTMLButtonElement | null;
@@ -121,34 +123,51 @@ describe('ManualEditPanel', () => {
       deleteButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     });
 
-    const confirmDeleteButton = host.querySelector(
-      '.manual-edit-delete-confirm-action[aria-label="Delete element"]',
-    ) as HTMLButtonElement | null;
-    if (!confirmDeleteButton) throw new Error('Confirm delete button not found');
-
-    expect(footer?.contains(confirmDeleteButton)).toBe(true);
-    expect(confirmDeleteButton.textContent).toBe('');
-    expect(confirmDeleteButton.className).toContain('manual-edit-delete-btn');
-    expect(host.querySelector('.manual-edit-delete-confirm')?.textContent).toBe('Cancel');
+    expect(footer?.contains(deleteButton)).toBe(true);
+    expect(deleteButton.textContent).toBe('');
+    expect(deleteButton.className).toContain('manual-edit-delete-btn');
+    expect(onApplyPatch).toHaveBeenCalledWith(
+      { id: 'hero-title', kind: 'remove-element' },
+      'Delete element',
+    );
   });
 
-  it('routes footer cancel and save actions', () => {
+  it('routes footer reset, cancel, and save actions', () => {
+    const onResetDraft = vi.fn<OnResetDraft>();
     const onCancelDraft = vi.fn<OnCancelDraft>();
     const onSaveDraft = vi.fn<OnSaveDraft>();
-    renderPanel({ onCancelDraft, onSaveDraft });
+    renderPanel({ resetAvailable: true, onResetDraft, onCancelDraft, onSaveDraft });
 
     const footerButtons = Array.from(host.querySelectorAll('.manual-edit-footer button'));
+    const reset = footerButtons.find((button) => button.textContent === 'Reset') as HTMLButtonElement | undefined;
     const cancel = footerButtons.find((button) => button.textContent === 'Cancel') as HTMLButtonElement | undefined;
     const save = footerButtons.find((button) => button.textContent === 'Save') as HTMLButtonElement | undefined;
-    if (!cancel || !save) throw new Error('Footer action buttons not found');
+    if (!reset || !cancel || !save) throw new Error('Footer action buttons not found');
 
     act(() => {
+      reset.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       cancel.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       save.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     });
 
+    expect(onResetDraft).toHaveBeenCalledTimes(1);
     expect(onCancelDraft).toHaveBeenCalledTimes(1);
     expect(onSaveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('edits selected text content from the panel', () => {
+    const onDraftChange = vi.fn<OnDraftChange>();
+    renderPanel({ onDraftChange });
+
+    const textArea = sectionByTitle('CONTENT').querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textArea) throw new Error('Content textarea not found');
+
+    act(() => {
+      textArea.value = 'Panel edited copy';
+      Simulate.change(textArea);
+    });
+
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ text: 'Panel edited copy' }));
   });
 
   it('normalizes font stacks and writes a usable font-family value', () => {
@@ -518,9 +537,11 @@ describe('ManualEditPanel', () => {
     onClearSelection = vi.fn<OnClearSelection>(),
     onCancelDraft = vi.fn<OnCancelDraft>(),
     onSaveDraft = vi.fn<OnSaveDraft>(),
+    onResetDraft = vi.fn<OnResetDraft>(),
     attributesText = '{}',
     selectedTarget = target,
     styles = emptyManualEditStyles(),
+    resetAvailable = false,
     pageStylesEnabled = true,
     floatingStyle,
     onFloatingPositionChange,
@@ -533,9 +554,11 @@ describe('ManualEditPanel', () => {
     onClearSelection?: OnClearSelection;
     onCancelDraft?: OnCancelDraft;
     onSaveDraft?: OnSaveDraft;
+    onResetDraft?: OnResetDraft;
     attributesText?: string;
     selectedTarget?: ManualEditTarget | null;
     styles?: ReturnType<typeof emptyManualEditStyles>;
+    resetAvailable?: boolean;
     pageStylesEnabled?: boolean;
     floatingStyle?: CSSProperties;
     onFloatingPositionChange?: (position: { left: number; top: number }) => void;
@@ -557,6 +580,7 @@ describe('ManualEditPanel', () => {
           error={null}
           canUndo={false}
           canRedo={false}
+          resetAvailable={resetAvailable}
           pageStylesEnabled={pageStylesEnabled}
           onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
           onDraftChange={onDraftChange}
@@ -567,6 +591,7 @@ describe('ManualEditPanel', () => {
           onClearSelection={onClearSelection}
           onCancelDraft={onCancelDraft}
           onSaveDraft={onSaveDraft}
+          onResetDraft={onResetDraft}
           onUndo={vi.fn<() => void>()}
           onRedo={vi.fn<() => void>()}
           floatingStyle={floatingStyle}

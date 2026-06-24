@@ -43,6 +43,7 @@ export function isMeaningfulManualEditElement(el: Element, rect: Pick<DOMRect, '
 }
 
 export function isSourceMappableManualEditElement(el: Element): boolean {
+  if (isManualEditHostNode(el)) return false;
   return el.hasAttribute('data-od-id') || el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
 }
 
@@ -193,7 +194,8 @@ export function buildManualEditBridge(enabled: boolean): string {
     return generated || 'unknown';
   }
   function isSourceMappable(el){
-    return !!(el && el.hasAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr)));
+    if (!el || !el.hasAttribute || isHostNode(el)) return false;
+    return !!(el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr));
   }
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
@@ -286,7 +288,7 @@ export function buildManualEditBridge(enabled: boolean): string {
       styles: stylesFor(el),
       isLayoutContainer: isLayoutContainer(el),
       isHidden: hidden,
-      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
+      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-id="path-[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
     };
   }
   function allTargets(){

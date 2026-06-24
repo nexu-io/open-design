@@ -244,7 +244,7 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
-  it('does not expose path targets unless they carry a source path marker', () => {
+  it('does not expose runtime-only path targets unless they carry a source marker', () => {
     const dom = new JSDOM('<main><h1>Runtime title</h1><p data-od-source-path="path-0-1">Source text</p></main>');
     const runtimeTitle = dom.window.document.querySelector('h1')!;
     const sourceText = dom.window.document.querySelector('p')!;
@@ -262,6 +262,58 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain('if (!isSourceMappable(nodes[i])) continue;');
     expect(bridge).toContain('return el;');
     expect(bridge).not.toContain('if (isPrimaryTarget(el)) return el;');
+  });
+
+  it('selects and announces ordinary HTML elements after srcdoc source-path annotation', () => {
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><section data-od-source-path="path-0-0"><h1 data-od-source-path="path-0-0-0">Plain title</h1><p data-od-source-path="path-0-0-1">Plain body</p></section></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('h1') as HTMLElement;
+    title.getBoundingClientRect = () => ({
+      x: 0, y: 0, width: 160, height: 36,
+      top: 0, right: 160, bottom: 36, left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(title.getAttribute('data-od-runtime-id')).toBe('path-0-0-0');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-hover',
+      target: expect.objectContaining({ id: 'path-0-0-0', label: 'Plain title' }),
+    }, '*');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-select',
+      target: expect.objectContaining({ id: 'path-0-0-0', kind: 'text' }),
+    }, '*');
+
+    dom.window.close();
+  });
+
+  it('ignores runtime-inserted elements that are not present in source', () => {
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><h1 data-od-source-path="path-0-0">Source title</h1></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const runtimePill = dom.window.document.createElement('span');
+    runtimePill.className = 'status-pill ready';
+    runtimePill.textContent = 'Brand ready';
+    dom.window.document.body.appendChild(runtimePill);
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    runtimePill.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    runtimePill.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(runtimePill.hasAttribute('data-od-runtime-id')).toBe(false);
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-hover',
+    }), '*');
+    expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-background' }, '*');
+
+    dom.window.close();
   });
 
   it('prefers the deepest source-mapped child over an annotated group on hover', async () => {
