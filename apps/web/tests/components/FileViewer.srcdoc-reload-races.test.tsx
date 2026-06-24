@@ -554,6 +554,77 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   });
 
   // ---------------------------------------------------------------------------
+  // Annotation-freeze stale: Reload while Draw mode is active must update the
+  // visible iframe to the freshly-fetched content, not stay frozen on the
+  // snapshot captured at mode entry.
+  //
+  // Sequence:
+  //   1. Mount deck, wait for "V1-HTML" to load in the srcdoc iframe.
+  //   2. Click the Mark (Draw) button — drawOverlayOpen=true →
+  //      annotationFreezeActive=true → annotationFrozenSource="V1-HTML".
+  //   3. Click Reload — source cleared, fetch deferred (in flight).
+  //   4. Resolve fetch with "V2-NEW-HTML".
+  //   5. Assert: while still in Draw mode the srcdoc iframe shows "V2-NEW-HTML",
+  //      NOT "V1-HTML".  On the current buggy branch previewSource is selected
+  //      from annotationFrozenSource (line 5352 of FileViewer.tsx) whenever
+  //      annotationFreezeActive && annotationFrozenSource !== null, so the reload
+  //      lands in `source` / `livePreviewSource` but is never forwarded to the
+  //      iframe because annotationFrozenSource still holds the stale V1 snapshot.
+  // ---------------------------------------------------------------------------
+  it('updates the srcdoc iframe to the reloaded content when Draw mode is active while Reload resolves', async () => {
+    const v1 = deckHtml('V1-HTML');
+    const v2 = deckHtml('V2-NEW-HTML');
+
+    // Step 1: initial render — "V1-HTML" lands in the iframe srcdoc.
+    vi.stubGlobal('fetch', fetchReturning(v1));
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={deckFile()}
+        isDeck
+      />,
+    );
+
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('V1-HTML');
+    });
+
+    // Step 2: enter Draw (Mark) mode — drawOverlayOpen becomes true, which
+    // sets annotationFreezeActive=true and captures annotationFrozenSource="V1".
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^mark$/i }));
+    });
+
+    // Step 3: click Reload while Draw mode is active.
+    // source goes null; the deferred fetch is now in flight.
+    const { handle: reloadHandle, stub: reloadStub } = deferredFetch();
+    vi.stubGlobal('fetch', reloadStub);
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    });
+
+    // Step 4: resolve fetch with V2 content.
+    await act(async () => {
+      reloadHandle.resolve(v2);
+      await Promise.resolve();
+    });
+
+    // Step 5: KEY ASSERTION — the active srcdoc iframe must show V2 content.
+    // On the buggy branch previewSource is pinned to annotationFrozenSource
+    // ("V1-HTML") while annotationFreezeActive is true, so the iframe never
+    // receives the new source even though `source` state was updated.
+    await waitFor(() => {
+      const srcdoc = srcDocFrame().getAttribute('srcDoc') ?? '';
+      expect(srcdoc).toContain('V2-NEW-HTML');
+    });
+    // Confirm the stale snapshot is not what the user sees.
+    expect(srcDocFrame().getAttribute('srcDoc') ?? '').not.toContain('V1-HTML');
+  });
+
+  // ---------------------------------------------------------------------------
   // Race P2 (Codex P2 #5): canceled-fetch ref leak
   //
   // Sequence:
