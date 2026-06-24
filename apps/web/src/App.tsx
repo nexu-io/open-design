@@ -805,16 +805,26 @@ function AppInner() {
         // 10s timeout guards against a hung daemon blocking the entire boot.
         const bootstrapAbort = new AbortController();
         const bootstrapTimeout = setTimeout(() => bootstrapAbort.abort(), 10_000);
-        const clientTag = crypto.randomUUID();
         try {
+          // Generate clientTag inside the guarded block so a crypto
+          // failure is caught here instead of throwing before any
+          // fallback runs.
+          const clientTag = (() => {
+            try {
+              return crypto.randomUUID();
+            } catch {
+              return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            }
+          })();
           const tokenRes = await fetch(`/api/auth/bootstrap-token?clientTag=${clientTag}`, {
             signal: bootstrapAbort.signal,
           });
-          if (!tokenRes.ok && tokenRes.status === 403) {
-            // Daemon refuses bootstrap (e.g. proxied request).
-            // The user may have a valid od-api-token cookie from a prior
-            // manual token entry that still authenticates.  Probe a cheap
-            // guarded endpoint to check; only prompt if that also fails.
+          if (!tokenRes.ok) {
+            // Daemon refuses bootstrap (e.g. proxied request,
+            // rate-limited).  The user may have a valid od-api-token
+            // cookie from a prior manual token entry that still
+            // authenticates.  Probe a cheap guarded endpoint to check;
+            // only prompt if that also fails.
             try {
               const probe = await fetch('/api/plugins');
               if (probe.ok || probe.status !== 401) {

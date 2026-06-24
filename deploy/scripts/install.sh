@@ -409,10 +409,15 @@ ok "Written ${ENV_FILE}"
 # 6. Pull and start
 # ---------------------------------------------------------------------------
 step "Pulling image: ${IMAGE}"
-$COMPOSE_CMD "${COMPOSE_FILES[@]}" pull
-
-step "Starting Open Design..."
-$COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d --no-build
+if $COMPOSE_CMD "${COMPOSE_FILES[@]}" pull; then
+  step "Starting Open Design..."
+  $COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d --no-build
+else
+  warn "Image pull failed — attempting local build from source."
+  $COMPOSE_CMD "${COMPOSE_FILES[@]}" build
+  step "Starting Open Design from local build..."
+  $COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d
+fi
 
 # ---------------------------------------------------------------------------
 # 7. Health check
