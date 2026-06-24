@@ -40,7 +40,12 @@
       }
     },
     "context": {
-      "assets": ["./SKILL.md", "./references/LIBRARIES.md"]
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": ["./references/LIBRARIES.md"]
     },
     "inputs": [
       {
