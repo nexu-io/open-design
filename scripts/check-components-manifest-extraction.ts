@@ -18,9 +18,11 @@ type BrandSources = {
   fixtureHtml: string;
 };
 
+type BrandDiscovery = { sources: BrandSources[]; pairingErrors: string[] };
+
 export async function checkComponentsManifestExtraction(): Promise<boolean> {
-  const sources = await discoverBrandSources();
-  const violations: string[] = [];
+  const { sources, pairingErrors } = await discoverBrandSources();
+  const violations: string[] = [...pairingErrors];
   let selectorCount = 0;
   let groupCount = 0;
 
@@ -69,9 +71,10 @@ export async function checkComponentsManifestExtraction(): Promise<boolean> {
   return true;
 }
 
-async function discoverBrandSources(): Promise<BrandSources[]> {
+async function discoverBrandSources(): Promise<BrandDiscovery> {
   const entries = await readdir(designSystemsRoot, { withFileTypes: true });
   const sources: BrandSources[] = [];
+  const pairingErrors: string[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory() || skippedDesignSystemDirectories.has(entry.name)) continue;
@@ -80,13 +83,26 @@ async function discoverBrandSources(): Promise<BrandSources[]> {
     const tokensPath = path.join(brandRoot, 'tokens.css');
     const fixturePath = path.join(brandRoot, 'components.html');
 
-    // prose-only 브랜드(tokens.css/components.html 없는 DESIGN.md 전용 폴더)는 건너뜀
     const [hasTokens, hasFixture] = await Promise.all([
       access(tokensPath).then(() => true, () => false),
       access(fixturePath).then(() => true, () => false),
     ]);
-    if (!hasTokens || !hasFixture) continue;
 
+    // 둘 다 없으면 prose-only 폴더(DESIGN.md 전용) — 건너뜀
+    if (!hasTokens && !hasFixture) continue;
+
+    // 한쪽만 있으면 페어링 위반 — tokens.css / components.html 은 함께 존재해야 함
+    if (hasTokens !== hasFixture) {
+      const present = hasTokens ? tokensPath : fixturePath;
+      const missing = hasTokens ? fixturePath : tokensPath;
+      pairingErrors.push(
+        `${toRepositoryPath(present)} exists but ${toRepositoryPath(missing)} does not — ` +
+          `token / fixture pairs must travel together so agents always have both the values and a working example.`,
+      );
+      continue;
+    }
+
+    // 둘 다 있으면 정상 처리
     const [tokensCss, fixtureHtml] = await Promise.all([
       readFile(tokensPath, 'utf8'),
       readFile(fixturePath, 'utf8'),
@@ -99,7 +115,7 @@ async function discoverBrandSources(): Promise<BrandSources[]> {
     });
   }
 
-  return sources.sort((a, b) => a.id.localeCompare(b.id));
+  return { sources: sources.sort((a, b) => a.id.localeCompare(b.id)), pairingErrors };
 }
 
 function toRepositoryPath(filePath: string): string {
