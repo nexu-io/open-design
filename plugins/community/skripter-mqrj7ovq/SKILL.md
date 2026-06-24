@@ -54,7 +54,6 @@ Load the relevant reference file based on the task. Do not load all of them at o
 - Full reel from scratch → load `source-6-topic-ideation.md` + `source-5-reel-scripting.md`
 - Full documentary from scratch → load `source-6-topic-ideation.md` + `source-4-documentary-scripting.md`
 - Hook only → load `source-7-techniques.md` only
-- Research only → load  only
 - Freelancing → load `source-3-scripting-monetization.md` only
 
 ---
