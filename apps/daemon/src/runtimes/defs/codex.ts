@@ -70,10 +70,6 @@ export const codexAgentDef = {
       parse: parseCodexDebugModels,
       timeoutMs: 5000,
     },
-    authProbe: {
-      args: ['login', 'status'],
-      timeoutMs: 5000,
-    },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       { id: 'gpt-5.5', label: 'gpt-5.5' },
@@ -154,6 +150,11 @@ export const codexAgentDef = {
       const args = resumeSessionId
         ? ['exec', 'resume', '--json', '--skip-git-repo-check', ...sandboxArgs]
         : ['exec', '--json', '--skip-git-repo-check', ...sandboxArgs];
+      // Newer Codex builds honor permissions config over legacy sandbox
+      // flags; without this, Windows/WSL launches can stay read-only (#2834).
+      // codex 0.125.0+ changed default_permissions to a struct — use
+      // sandbox_permissions array which remains string-based and compatible.
+      args.push('-c', 'sandbox_permissions=["disk-full-read-access","workspace-write"]');
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }
