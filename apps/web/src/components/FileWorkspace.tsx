@@ -2728,10 +2728,11 @@ function DesignSystemProjectPanel({
   const manifestFile = files.find((file) => normalizeDesignSystemPath(file.name) === '_ds_manifest.json');
   const manifestFileName = manifestFile?.name ?? null;
   const manifestCacheBustKey = manifestFile ? Math.round(manifestFile.mtime) : null;
+  const manifestReadFailedLabel = t('ds.manifestReadFailed');
   useEffect(() => {
     if (!system.id || !manifestFileName || manifestCacheBustKey === null) {
-      setCardManifest(new Map());
-      setCardManifestError(null);
+      setCardManifest((current) => (current.size === 0 ? current : new Map()));
+      setCardManifestError((current) => (current === null ? current : null));
       return undefined;
     }
     let cancelled = false;
@@ -2745,12 +2746,12 @@ function DesignSystemProjectPanel({
     }).catch((err: unknown) => {
       if (cancelled) return;
       setCardManifest(new Map());
-      setCardManifestError(err instanceof Error ? err.message : t('ds.manifestReadFailed'));
+      setCardManifestError(err instanceof Error ? err.message : manifestReadFailedLabel);
     });
     return () => {
       cancelled = true;
     };
-  }, [manifestCacheBustKey, manifestFileName, projectId, system.id, t]);
+  }, [manifestCacheBustKey, manifestFileName, manifestReadFailedLabel, projectId, system.id]);
   const fontFiles = allFileNames.filter((name) =>
     /\.(otf|ttf|woff|woff2)$/i.test(name) || name.toLowerCase().includes('/fonts/'),
   );

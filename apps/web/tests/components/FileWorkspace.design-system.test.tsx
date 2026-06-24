@@ -4,7 +4,7 @@ import { act } from 'react';
 import { fireEvent, waitFor } from '@testing-library/react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
@@ -12,6 +12,7 @@ import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/typ
 const registryMocks = vi.hoisted(() => ({
   deleteProjectFile: vi.fn(),
   fetchProjectFileText: vi.fn(),
+  fetchProjectFolders: vi.fn(async () => []),
   updateDesignSystemDraft: vi.fn(),
   writeProjectTextFile: vi.fn(),
 }));
@@ -24,15 +25,35 @@ vi.mock('../../src/providers/registry', async () => {
     ...actual,
     deleteProjectFile: registryMocks.deleteProjectFile,
     fetchProjectFileText: registryMocks.fetchProjectFileText,
+    fetchProjectFolders: registryMocks.fetchProjectFolders,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
     writeProjectTextFile: registryMocks.writeProjectTextFile,
   };
 });
 
+vi.mock('../../src/components/DesignBrowserPanel', () => ({
+  DesignBrowserPanel: () => <div data-testid="design-browser-panel" />,
+  labelFromUrl: (url: string) => url,
+}));
+
+vi.mock('../../src/components/workspace/TerminalViewer', () => ({
+  TerminalViewer: ({ terminalId }: { terminalId: string }) => (
+    <div data-testid="terminal-viewer">{terminalId}</div>
+  ),
+}));
+
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+  };
+});
 
 afterEach(() => {
   if (root) {
@@ -270,7 +291,11 @@ describe('FileWorkspace design-system project surface', () => {
     });
     const events: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      events.push(String(input));
+      const url = String(input);
+      if (url.includes('/raw/fonts/') || url.includes('/raw/system/tokens.')) {
+        return new Response(null, { status: 404 });
+      }
+      events.push(url);
       return new Response(JSON.stringify({ id: 'brand-acme' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -373,7 +398,11 @@ describe('FileWorkspace design-system project surface', () => {
     registryMocks.deleteProjectFile.mockResolvedValue(true);
     const events: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      events.push(String(input));
+      const url = String(input);
+      if (url.includes('/raw/fonts/') || url.includes('/raw/system/tokens.')) {
+        return new Response(null, { status: 404 });
+      }
+      events.push(url);
       return new Response(JSON.stringify({ id: 'brand-acme' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -391,7 +420,7 @@ describe('FileWorkspace design-system project surface', () => {
       <FileWorkspace
         projectId="ds-acme"
         projectKind="prototype"
-        files={[workspaceFile('DESIGN.md'), workspaceFile('imagery/hero.png')]}
+        files={[workspaceFile('DESIGN.md'), workspaceFile('brand.json'), workspaceFile('imagery/hero.png')]}
         liveArtifacts={[]}
         onRefreshFiles={onRefreshFiles}
         isDeck={false}
@@ -405,7 +434,7 @@ describe('FileWorkspace design-system project surface', () => {
 
     await flushKit();
 
-    const deleteImage = container.querySelector<HTMLButtonElement>('button[aria-label="Delete image Hero"]');
+    const deleteImage = container.querySelector<HTMLButtonElement>('button[aria-label="Delete Hero"]');
     expect(deleteImage).toBeTruthy();
     await act(async () => {
       fireEvent.click(deleteImage!);
@@ -445,8 +474,12 @@ describe('FileWorkspace design-system project surface', () => {
       events.push('refresh-design-systems');
     });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      events.push(String(input));
-      if (String(input) === '/api/brands/brand-acme/finalize') {
+      const url = String(input);
+      if (url.includes('/raw/fonts/') || url.includes('/raw/system/tokens.')) {
+        return new Response(null, { status: 404 });
+      }
+      events.push(url);
+      if (url === '/api/brands/brand-acme/finalize') {
         return new Response(JSON.stringify({ id: 'brand-acme' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
