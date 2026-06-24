@@ -220,7 +220,7 @@ const MEMORY_BOOLEAN_FLAGS = new Set([
 const BRAZE_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'conversation', 'title', 'goal', 'brand',
   'format', 'delivery', 'trigger', 'custom-event', 'segment', 'tone',
-  'emphasis', 'variants', 'plan-file', 'reason', 'variant', 'artifact',
+  'emphasis', 'variants', 'plan-file', 'brief-file', 'reason', 'variant', 'artifact',
   'status',
 ]);
 const BRAZE_BOOLEAN_FLAGS = new Set([
@@ -7981,6 +7981,7 @@ function printBrazeHelp() {
   od braze plan <messageId> --plan-file <path|->   [--json]
   od braze confirm <messageId> [--json]
   od braze reject  <messageId> --reason "<why>" [--json]
+  od braze brief   <messageId> --brief-file <path|-> [--json]
   od braze produce <messageId> --variant <variantId> --artifact <path> [--json]
   od braze variant <messageId> --variant <variantId>
                    [--status <pending|produced|editing|done>]
@@ -7989,8 +7990,9 @@ function printBrazeHelp() {
 
 Output:
   Plain text: tab-separated rows for list, human-readable lines for get / mutations.
-  --json     Raw JSON for any subcommand.
-  --plan-file accepts a file path or - to read from stdin.
+  --json       Raw JSON for any subcommand.
+  --plan-file  accepts a file path or - to read from stdin.
+  --brief-file accepts a file path or - to read from stdin.
   Designed so external agents (hermes-agent, openclaw, scripted jobs)
   can drive the full Braze IAM authoring lifecycle headlessly.
 
@@ -8087,6 +8089,8 @@ async function runBraze(args) {
       if (m.goal) console.log(`goal\t${m.goal}`);
       if (m.tone) console.log(`tone\t${m.tone}`);
       if (m.segment) console.log(`segment\t${JSON.stringify(m.segment)}`);
+      // briefPath — SKILL이 저장한 기획 문서 경로 (있을 때만 출력)
+      if (m.briefPath) console.log(`briefPath\t${m.briefPath}`);
       const variants = m.variants ?? [];
       if (variants.length > 0) {
         console.log('# variant-id\tlabel\tstatus\tartifactPath');
@@ -8323,6 +8327,47 @@ async function runBraze(args) {
       const data = await resp.json();
       if (flags.json) return writeJson(data);
       console.log(`[braze] deleted ${id}`);
+      return;
+    }
+    case 'brief': {
+      // od braze brief <messageId> --brief-file <path|-> [--json]
+      // 기획 문서(마크다운)를 POST /api/braze/messages/:id/brief 로 저장.
+      // 파일 읽기는 기존 readPromptFromFlags 패턴을 --brief-file 에 맞게 적용.
+      const id = requireMessageId('brief');
+      const briefFilePath = flags['brief-file'] ?? '';
+      if (!briefFilePath) {
+        console.error('--brief-file <path|-> is required');
+        process.exit(2);
+      }
+      let markdown: string;
+      if (briefFilePath === '-') {
+        // stdin 에서 읽기 — readPromptFromFlags 와 동일 패턴
+        markdown = await new Promise<string>((resolve, reject) => {
+          let buf = '';
+          process.stdin.setEncoding('utf8');
+          process.stdin.on('data', (chunk) => { buf += chunk; });
+          process.stdin.on('end', () => resolve(buf));
+          process.stdin.on('error', reject);
+        });
+      } else {
+        const { readFile } = await import('node:fs/promises');
+        markdown = await readFile(briefFilePath, 'utf8');
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/braze/messages/${encodeURIComponent(id)}/brief`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ markdown }),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) { console.log(JSON.stringify(data, null, 2)); return; }
+      console.log(`[braze] brief saved for message ${id}: ${data.path}`);
       return;
     }
     default:
