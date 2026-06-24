@@ -247,6 +247,7 @@
   filter: brightness(0.85);
 }
 .plugin-action-card__notice {
+  margin-top: 8px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
