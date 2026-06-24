@@ -13,6 +13,7 @@ import {
   upsertMessage,
 } from '../src/db.js';
 import {
+  backfillBrandExtractionTranscriptForProject,
   finalizeBrand,
   readBrandDetail,
   renderBrandPreviewIntoProject,
@@ -332,6 +333,14 @@ describe('agent-driven brand extraction engine', () => {
 
     expect(result.status).toBe('extracting');
     if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('https://acme.com/');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.agentId).toBe('claude');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+    expect(initialMessages[1]?.startedAt).toBe(initialMessages[0]?.createdAt);
+
     upsertMessage(db, result.conversationId, {
       id: 'manual-user-message',
       role: 'user',
@@ -351,7 +360,40 @@ describe('agent-driven brand extraction engine', () => {
     const assistant = messages.find((message) => message.content.includes('Programmatic extraction finished'));
     expect(assistant?.role).toBe('assistant');
     expect(assistant?.agentId).toBe('claude');
+    expect(assistant?.runStatus).toBe('succeeded');
     expect(assistant?.producedFiles?.length).toBeGreaterThan(1);
+  });
+
+  it('backfills a programmatic transcript for empty legacy brand conversations', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+    expect(listMessages(db, result.conversationId)).toEqual([]);
+    const project = getProject(db, result.projectId);
+    if (!project) throw new Error('expected project');
+    let seq = 0;
+
+    await backfillBrandExtractionTranscriptForProject({
+      db,
+      conversationId: result.conversationId,
+      randomId: () => `backfill-message-${seq += 1}`,
+      brandsRoot,
+      projectsRoot,
+      project,
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(messages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(messages[1]?.agentId).toBe('claude');
+    expect(messages[1]?.runStatus).toBe('running');
   });
 
   it('rejects a non-http(s) URL', async () => {

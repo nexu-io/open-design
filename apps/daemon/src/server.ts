@@ -4196,6 +4196,7 @@ export async function startServer({
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
     appConfig: appConfigDeps,
+    agents: agentDeps,
     validation: validationDeps,
   });
   registerTerminalRoutes(app, {

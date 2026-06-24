@@ -338,6 +338,18 @@ export async function startBrandExtraction(
   // and best-effort: a slow / blocked site (or any failure) leaves the brand
   // `extracting` and the agent drives the extraction from the scaffold instead.
   const programmaticStartedAt = Date.now();
+  const programmaticTranscript = runProgrammatic && opts.userDesignSystemsRoot
+    ? seedProgrammaticExtractionStartTranscript({
+        db,
+        conversationId,
+        randomId,
+        sourceUrl: url,
+        sourceLabel: host,
+        locale,
+        startedAt: programmaticStartedAt,
+        transcriptAgent: opts.transcriptAgent,
+      })
+    : null;
   if (runProgrammatic && opts.userDesignSystemsRoot) {
     const programmaticOptions: RunProgrammaticExtractionOptions = {
       id,
@@ -395,6 +407,7 @@ export async function startBrandExtraction(
             projectId,
             locale,
             startedAt: programmaticStartedAt,
+            transcript: programmaticTranscript,
             transcriptAgent: opts.transcriptAgent,
             metadata: {
               ...metadata,
@@ -423,6 +436,7 @@ export async function startBrandExtraction(
       projectId,
       locale,
       startedAt: programmaticStartedAt,
+      transcript: programmaticTranscript,
       transcriptAgent: opts.transcriptAgent,
       metadata: {
         ...metadata,
@@ -442,6 +456,65 @@ export async function startBrandExtraction(
   };
 }
 
+export async function backfillBrandExtractionTranscriptForProject(input: {
+  db: Parameters<typeof insertProject>[0];
+  conversationId: string;
+  randomId: () => string;
+  brandsRoot: string;
+  projectsRoot: string;
+  project: {
+    id: string;
+    createdAt?: number | null;
+    metadata?: ProjectMetadata | null;
+  };
+  transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
+}): Promise<void> {
+  if (listMessages(input.db, input.conversationId).length > 0) return;
+  const metadata = input.project.metadata;
+  if (!metadata || metadata.kind !== 'brand' || metadata.importedFrom !== 'brand-extraction') return;
+  const brandId = metadata.brandId;
+  if (!brandId) return;
+  const latest = readBrandDetail(input.brandsRoot, brandId);
+  const sourceUrl = latest?.meta.sourceUrl || metadata.brandSourceUrl || '';
+  if (!sourceUrl) return;
+  const startedAt = typeof input.project.createdAt === 'number' && Number.isFinite(input.project.createdAt)
+    ? input.project.createdAt
+    : Date.now();
+  const locale = normalizeBrandKitLocale(latest?.meta.locale);
+  const sourceLabel = metadata.sourceFileName?.trim() || hostnameOf(sourceUrl);
+  const transcriptInput = {
+    db: input.db,
+    conversationId: input.conversationId,
+    randomId: input.randomId,
+    sourceUrl,
+    sourceLabel,
+    locale,
+    startedAt,
+    transcriptAgent: input.transcriptAgent,
+  };
+  if (latest?.meta.status === 'ready' && latest.meta.designSystemId) {
+    await seedProgrammaticExtractionTranscript({
+      ...transcriptInput,
+      brandName: latest.brand?.name ?? sourceLabel,
+      designSystemId: latest.meta.designSystemId,
+      projectsRoot: input.projectsRoot,
+      projectId: input.project.id,
+      metadata: {
+        ...metadata,
+        entryFile: BRAND_KIT_FILE,
+        brandDesignSystemId: latest.meta.designSystemId,
+      },
+    });
+    return;
+  }
+  seedProgrammaticExtractionStartTranscript(transcriptInput);
+}
+
+interface ProgrammaticExtractionTranscript {
+  userMessageId: string;
+  assistantMessageId: string;
+}
+
 async function seedReadyProgrammaticExtractionTranscript(input: {
   db: Parameters<typeof insertProject>[0];
   conversationId: string;
@@ -453,6 +526,7 @@ async function seedReadyProgrammaticExtractionTranscript(input: {
   projectId: string;
   locale: string;
   startedAt: number;
+  transcript?: ProgrammaticExtractionTranscript | null | undefined;
   transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
   metadata: ProjectMetadata;
 }): Promise<void> {
@@ -462,6 +536,7 @@ async function seedReadyProgrammaticExtractionTranscript(input: {
     ...input,
     brandName: latest.brand?.name ?? input.sourceLabel,
     designSystemId: latest.meta.designSystemId,
+    transcript: input.transcript,
     metadata: {
       ...input.metadata,
       brandDesignSystemId: latest.meta.designSystemId,
@@ -481,6 +556,7 @@ async function seedProgrammaticExtractionTranscript(input: {
   projectId: string;
   locale: string;
   startedAt: number;
+  transcript?: ProgrammaticExtractionTranscript | null | undefined;
   transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
   metadata: ProjectMetadata;
 }): Promise<void> {
@@ -499,14 +575,18 @@ async function seedProgrammaticExtractionTranscript(input: {
     message.role === 'assistant' && message.content === assistantContent
   );
   if (alreadySeeded) return;
+  const transcript = input.transcript ?? {
+    userMessageId: input.randomId(),
+    assistantMessageId: input.randomId(),
+  };
   upsertMessage(input.db, input.conversationId, {
-    id: input.randomId(),
+    id: transcript.userMessageId,
     role: 'user',
     content: copy.user(sourceLine),
     createdAt: input.startedAt,
   });
   upsertMessage(input.db, input.conversationId, {
-    id: input.randomId(),
+    id: transcript.assistantMessageId,
     role: 'assistant',
     content: assistantContent,
     ...(input.transcriptAgent?.agentId ? { agentId: input.transcriptAgent.agentId } : {}),
@@ -526,10 +606,48 @@ async function seedProgrammaticExtractionTranscript(input: {
   });
 }
 
+function seedProgrammaticExtractionStartTranscript(input: {
+  db: Parameters<typeof insertProject>[0];
+  conversationId: string;
+  randomId: () => string;
+  sourceUrl: string;
+  sourceLabel: string;
+  locale: string;
+  startedAt: number;
+  transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
+}): ProgrammaticExtractionTranscript {
+  const copy = brandExtractionTranscriptCopy(input.locale);
+  const sourceLine = input.sourceUrl.startsWith('designmd://')
+    ? copy.sourceDesignMd
+    : input.sourceUrl;
+  const userMessageId = input.randomId();
+  const assistantMessageId = input.randomId();
+  const startedText = copy.started(sourceLine);
+  upsertMessage(input.db, input.conversationId, {
+    id: userMessageId,
+    role: 'user',
+    content: copy.user(sourceLine),
+    createdAt: input.startedAt,
+  });
+  upsertMessage(input.db, input.conversationId, {
+    id: assistantMessageId,
+    role: 'assistant',
+    content: startedText,
+    ...(input.transcriptAgent?.agentId ? { agentId: input.transcriptAgent.agentId } : {}),
+    ...(input.transcriptAgent?.agentName ? { agentName: input.transcriptAgent.agentName } : {}),
+    events: [{ kind: 'text', text: startedText }],
+    runStatus: 'running',
+    createdAt: input.startedAt,
+    startedAt: input.startedAt,
+  });
+  return { userMessageId, assistantMessageId };
+}
+
 interface BrandExtractionTranscriptCopy {
   sourceDesignMd: string;
   next: string;
   user: (source: string) => string;
+  started: (source: string) => string;
   doneTitle: (name: string) => string;
   doneBody: (designSystemId: string, source: string) => string;
 }
@@ -540,6 +658,7 @@ function brandExtractionTranscriptCopy(locale?: string | null): BrandExtractionT
       return {
         sourceDesignMd: '粘贴的 DESIGN.md',
         user: (source) => `从 ${source} 抽取一个设计系统。`,
+        started: (source) => `正在从 ${source} 进行程序化设计系统抽取。`,
         doneTitle: (name) => `${name} 的程序化抽取已完成。`,
         doneBody: (designSystemId, source) =>
           `我已经从 ${source} 创建并注册了 ${designSystemId} 设计系统。现在可以预览，也可以直接用于新设计。`,
@@ -549,6 +668,7 @@ function brandExtractionTranscriptCopy(locale?: string | null): BrandExtractionT
       return {
         sourceDesignMd: '貼上的 DESIGN.md',
         user: (source) => `從 ${source} 抽取一個設計系統。`,
+        started: (source) => `正在從 ${source} 進行程式化設計系統抽取。`,
         doneTitle: (name) => `${name} 的程式化抽取已完成。`,
         doneBody: (designSystemId, source) =>
           `我已經從 ${source} 建立並註冊了 ${designSystemId} 設計系統。現在可以預覽，也可以直接用於新設計。`,
@@ -558,6 +678,7 @@ function brandExtractionTranscriptCopy(locale?: string | null): BrandExtractionT
       return {
         sourceDesignMd: 'pasted DESIGN.md',
         user: (source) => `Extract a design system from ${source}.`,
+        started: (source) => `Programmatic design-system extraction started from ${source}.`,
         doneTitle: (name) => `Programmatic extraction finished for ${name}.`,
         doneBody: (designSystemId, source) =>
           `I created and registered the ${designSystemId} design system from ${source}. It is ready to preview and can be used in new designs now.`,
