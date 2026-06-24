@@ -277,8 +277,51 @@ P0(발송 차단) 발견 시 → 기획안 수정 후 재확인. P1·P2는 평�
 </question-form>
 ```
 
-- **컨펌**: `od braze confirm <braze_message_id>` → status `plan_confirmed` → Step 4
+- **컨펌**: `od braze confirm <braze_message_id>` → status `plan_confirmed` → Step 3.5
 - **반려**: `od braze reject <braze_message_id> --reason "<사유>"` → `rejections` 누적 + 기획안 재작성
+
+---
+
+## Step 3.5 — brief.md 저작 및 저장
+
+`plan_confirmed` 수신 후, HTML 제작(Step 4) **전에** brief.md 마크다운을 저작해 저장한다.
+
+### brief.md 섹션 구조
+
+① **기본 정보**
+- 캠페인 slug, 요청일, 요청 내용 요약
+
+② **인터뷰 결정 사항**
+- 목적, 타겟, 형식, 톤, 트리거
+- 개인화 어트리뷰트 선정/제외 + **근거**
+- CTA
+
+③ **기획안**
+- 기본정보, 요약(배경·가설·목적), 타겟팅
+- 콘텐츠: 핵심카피 A/B, CTA, 톤, 타입
+- 트리거/스케줄, 성과지표
+
+④ **부록**
+- 개인화 변수 선정/제외 표 + 근거
+- 디자인 방향: 차용 레퍼런스, 토큰 매핑, variant 차별화
+
+### 브랜드 중립성 원칙
+
+개인화 변수·딥링크·attributes 등 **브랜드 사실은 활성 design_system(`design-systems/<brand>/DESIGN.md`)에서만** 로드한다. `bodoc://` 식별자·브랜드명·속성을 하드코딩하지 않는다.
+
+### brief 저장
+
+```bash
+od braze brief <braze_message_id> --brief-file -
+```
+
+stdin(파이프)으로 저작한 마크다운을 전달한다. 파일 경로로 저장할 경우:
+
+```bash
+od braze brief <braze_message_id> --brief-file <path>
+```
+
+> **주의**: `od braze confirm`은 이미 Step 3에서 1회 호출했다. brief 저장 실패 시 `confirm`을 재호출하지 말고 `od braze brief` 엔드포인트만 재시도한다. confirm 중복 호출은 variant 중복을 유발한다.
 
 ---
 
@@ -497,6 +540,7 @@ od braze variant <braze_message_id> --variant <uuid-B> --status done
 A: variant-a.html (<상태>)
 B: variant-b.html (<상태>)
 기획안: braze_plan_v1 (DB)
+기획 문서: braze/<messageId>-<slug>/brief.md (디자인 프로젝트 파일)
 
 Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-DOMAIN §4.4)
 트리거 이벤트 설정 후보: <candidates>
