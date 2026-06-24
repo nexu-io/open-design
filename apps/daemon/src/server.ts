@@ -5800,7 +5800,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
   });
   registerSocialShareRoutes(app, { http: httpDeps });
-  registerBrazeRoutes(app, { db, http: httpDeps });
+  registerBrazeRoutes(app, { db, http: httpDeps, paths: pathDeps });
   registerProjectRoutes(app, {
     db,
     design,

@@ -6,8 +6,10 @@
 import type { Express } from 'express';
 import { randomUUID } from 'node:crypto';
 import type {
+  BrazeBriefSaveRequest,
   BrazeInterviewRequest,
   BrazeMessageCreateRequest,
+  BrazeMessageStatus,
   BrazePlan,
   BrazePlanDecisionRequest,
   BrazePlanUpsertRequest,
@@ -25,9 +27,11 @@ import {
   updateBrazeMessage,
   updateBrazeVariant,
 } from './braze/persistence.js';
+import { getProject } from './db.js';
+import { writeProjectFile } from './projects.js';
 import type { RouteDeps } from './server-context.js';
 
-export interface RegisterBrazeRoutesDeps extends RouteDeps<'db' | 'http'> {}
+export interface RegisterBrazeRoutesDeps extends RouteDeps<'db' | 'http' | 'paths'> {}
 
 // A→Z labels for generated variants.
 function variantLabel(index: number): string {
@@ -36,6 +40,7 @@ function variantLabel(index: number): string {
 
 export function registerBrazeRoutes(app: Express, ctx: RegisterBrazeRoutesDeps) {
   const { db } = ctx;
+  const { PROJECTS_DIR } = ctx.paths;
   const { sendApiError } = ctx.http;
   const now = () => Date.now();
 
@@ -176,6 +181,47 @@ export function registerBrazeRoutes(app: Express, ctx: RegisterBrazeRoutesDeps) 
     }
 
     return sendApiError(res, 400, 'BAD_REQUEST', "decision must be 'confirm' or 'reject'");
+  });
+
+  // SKILL이 저작한 기획 문서(brief.md)를 프로젝트 파일로 저장한다.
+  // 경로·저장·표면노출만 소유 — 내용은 검증하지 않음(접근 A).
+  const BRIEF_ALLOWED: BrazeMessageStatus[] = ['plan_confirmed', 'producing', 'produced', 'editing', 'done'];
+  app.post('/api/braze/messages/:id/brief', async (req, res) => {
+    const message = getBrazeMessage(db, req.params.id);
+    if (!message) return sendApiError(res, 404, 'NOT_FOUND', 'braze message not found');
+    if (!message.plan) return sendApiError(res, 409, 'CONFLICT', 'no plan — brief requires a confirmed plan');
+    if (!BRIEF_ALLOWED.includes(message.status)) {
+      return sendApiError(res, 409, 'CONFLICT', `brief not allowed in status ${message.status}`);
+    }
+    const body = (req.body ?? {}) as Partial<BrazeBriefSaveRequest>;
+    const markdown = typeof body.markdown === 'string' ? body.markdown : '';
+    if (markdown.trim().length === 0) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'markdown is required');
+    }
+    const project = getProject(db, message.projectId);
+    if (!project) return sendApiError(res, 404, 'NOT_FOUND', 'project not found');
+
+    // 결정적 폴더명: <messageId>-<slug>. title이 비면 messageId만.
+    const slug = message.title
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    const folder = slug ? `${message.id}-${slug}` : message.id;
+    const relPath = `braze/${folder}/brief.md`;
+
+    try {
+      // artifactManifest 생략 — .md 확장자가 markdown-document 매니페스트를 자동 추론.
+      await writeProjectFile(PROJECTS_DIR, message.projectId, relPath, Buffer.from(markdown, 'utf8'), {}, project.metadata);
+    } catch (err) {
+      // project-routes.ts의 업로드 에러 매핑과 동형.
+      const code = (err as { code?: string })?.code;
+      if (code === 'EEXIST') return sendApiError(res, 409, 'CONFLICT', 'brief already exists');
+      return sendApiError(res, 422, 'UNPROCESSABLE', `failed to write brief: ${(err as Error)?.message ?? 'unknown'}`);
+    }
+
+    updateBrazeMessage(db, message.id, { briefPath: relPath }, now());
+    return res.json({ message: getBrazeMessage(db, message.id), path: relPath });
   });
 
   // Record a produced HTML file against a variant. When every variant is
