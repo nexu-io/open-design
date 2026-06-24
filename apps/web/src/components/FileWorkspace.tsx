@@ -27,6 +27,7 @@ import {
   projectRawUrl,
   applyLibraryAsset,
   createProjectFolder,
+  deleteDesignSystemDraft,
   deleteProjectFolder,
   renameProjectFile,
   startDesignSystemTokenContractRebuildJob,
@@ -163,6 +164,9 @@ interface Props {
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
+  // Delete the backing project (and navigate away) for the design-system project
+  // tab's "..." menu. Resolves to handleDeleteProject in App.
+  onDeleteDesignSystemProject?: (id: string) => Promise<boolean> | boolean;
   onDesignSystemNeedsWork?: (
     sectionTitle: string,
     feedback: string,
@@ -416,6 +420,7 @@ export function FileWorkspace({
   defaultDesignSystemId = null,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
+  onDeleteDesignSystemProject,
   onDesignSystemNeedsWork,
   designSystemReview,
   onDesignSystemReviewDecision,
@@ -2134,6 +2139,7 @@ export function FileWorkspace({
             defaultDesignSystemId={defaultDesignSystemId}
             onSetDefaultDesignSystem={onSetDefaultDesignSystem}
             onDesignSystemsRefresh={onDesignSystemsRefresh}
+            onDeleteDesignSystemProject={onDeleteDesignSystemProject}
             onNeedsWork={onDesignSystemNeedsWork}
             designSystemReview={designSystemReview}
             onReviewDecision={onDesignSystemReviewDecision}
@@ -2417,6 +2423,7 @@ function DesignSystemProjectPanel({
   defaultDesignSystemId,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
+  onDeleteDesignSystemProject,
   onNeedsWork,
   designSystemReview,
   onReviewDecision,
@@ -2434,6 +2441,7 @@ function DesignSystemProjectPanel({
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
+  onDeleteDesignSystemProject?: (id: string) => Promise<boolean> | boolean;
   onNeedsWork?: (
     sectionTitle: string,
     feedback: string,
@@ -2594,9 +2602,43 @@ function DesignSystemProjectPanel({
     }
   }
 
+  // Delete the whole design system from the project tab's "..." menu: remove the
+  // registered design system (so it leaves the Design Systems list) AND its
+  // backing project, then exit the tab. onDeleteDesignSystemProject is App's
+  // handleDeleteProject, which deletes the project, clears local state and
+  // navigates home — so the panel unmounts on success and there's no busy reset
+  // to do in the happy path.
+  async function deleteDesignSystemProject() {
+    if (kitActionBusy || !onDeleteDesignSystemProject) return;
+    const ok = window.confirm(
+      t('ds.deleteProjectConfirm', { title: system.title }),
+    );
+    if (!ok) return;
+    setKitActionBusy('delete');
+    try {
+      // Delete the backing project first: this navigates home and unmounts the
+      // panel, so the tab exits cleanly instead of briefly rendering an empty
+      // design-system view. Only on success do we drop the registered design
+      // system (so the Design Systems list keeps no ghost row) and refresh that
+      // list. deleteDesignSystemDraft is a no-op (404 → false) for systems that
+      // aren't user-editable; that's fine.
+      const deleted = await onDeleteDesignSystemProject(projectId);
+      if (!deleted) {
+        notifyKit('error', t('ds.actionFailed'));
+        setKitActionBusy(null);
+        return;
+      }
+      await deleteDesignSystemDraft(system.id);
+      await onDesignSystemsRefresh?.();
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
+      setKitActionBusy(null);
+    }
+  }
+
   async function changeKitColor(index: number, hex: string) {
     const nextHex = normalizeDesignKitHex(hex);
-    if (!nextHex) throw new Error('Enter a valid hex color.');
+    if (!nextHex) throw new Error(t('ds.invalidHexColor'));
     const ok = await updateBrandColor(projectId, index, nextHex);
     if (!ok) {
       const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
@@ -3056,7 +3098,7 @@ function DesignSystemProjectPanel({
     },
     {
       id: 'reset',
-      label: 'Reset',
+      label: t('ds.reset'),
       icon: 'reload',
       onClick: () => void resetKitEdits(),
       disabled: Boolean(kitActionBusy),
@@ -3065,11 +3107,22 @@ function DesignSystemProjectPanel({
       ? [
           {
             id: 'default',
-            label: isDefault ? 'Chat default' : 'Default for new chats',
+            label: isDefault ? t('dsManager.badgeDefault') : t('dsManager.makeDefault'),
             icon: (isDefault ? 'check' : 'star') as IconName,
             onClick: () => void toggleDefault(!isDefault),
             disabled: statusBusy || defaultBusy,
             active: isDefault,
+          } satisfies HeaderMenuAction,
+        ]
+      : []),
+    ...(onDeleteDesignSystemProject
+      ? [
+          {
+            id: 'delete',
+            label: t('ds.deleteProjectAction', { title: system.title }),
+            icon: 'trash' as IconName,
+            onClick: () => void deleteDesignSystemProject(),
+            disabled: Boolean(kitActionBusy),
           } satisfies HeaderMenuAction,
         ]
       : []),

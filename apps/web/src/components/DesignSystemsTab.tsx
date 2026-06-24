@@ -461,7 +461,7 @@ export function DesignSystemsTab({
   }
 
   async function deleteSystem(system: DesignSystemSummary) {
-    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
+    const ok = window.confirm(t('dsManager.deleteConfirm', { title: system.title }));
     if (!ok) {
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',

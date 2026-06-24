@@ -522,7 +522,7 @@ function DesignKitViewInner({
 
   function openFullSystemPreview() {
     if (!fullSystemUrl) return;
-    setAssetPreview({ url: fullSystemUrl, label: `${kit.name} full system` });
+    setAssetPreview({ url: fullSystemUrl, label: t('ds.fullSystemLabel', { name: kit.name }) });
   }
 
   function openUrlInNewTab(url: string) {
@@ -656,7 +656,7 @@ function DesignKitViewInner({
     if (!colorEditor || !onColorChange) return;
     const nextHex = normalizeEditableHex(colorDraft);
     if (!nextHex) {
-      setColorError('Enter a valid hex color, such as #FF6A3D.');
+      setColorError(t('ds.invalidHexColor'));
       return;
     }
     const previousHex = colors[colorEditor.index]?.hex;
@@ -667,7 +667,7 @@ function DesignKitViewInner({
       await onColorChange(colorEditor.index, nextHex);
       setColorEditor(null);
     } catch (err) {
-      setColorError(err instanceof Error ? err.message : 'Could not save this color.');
+      setColorError(err instanceof Error ? err.message : t('ds.colorSaveFailed'));
       if (previousHex) {
         setColorOverrides((current) => ({ ...current, [colorEditor.index]: previousHex }));
       }
@@ -689,7 +689,7 @@ function DesignKitViewInner({
       });
       setColorEditor(null);
     } catch (err) {
-      setColorError(err instanceof Error ? err.message : 'Could not reset this color.');
+      setColorError(err instanceof Error ? err.message : t('ds.colorResetFailed'));
     } finally {
       setColorSaving(false);
     }
@@ -868,6 +868,9 @@ function DesignKitViewInner({
     !compact && (canEditDesignMd || canUpload || Boolean(onRefresh) || Boolean(designMd?.body)) ? (
       <ShortcutsHintButton label={t('ds.shortcutsLabel')} hint={t('ds.shortcutsHint')} />
     ) : null;
+  const designMdDialogLabel = designMdTarget.kind === 'module'
+    ? t('ds.designMdSectionLabel', { module: designMdTarget.module.label })
+    : 'DESIGN.md';
 
   return (
     <div
@@ -1055,9 +1058,9 @@ function DesignKitViewInner({
                 {moduleActions(
                   <>
                     {uploadAction('logo')}
-                    {canUpload ? moduleActionButton('Paste image', 'copy', () => void pasteImage('logo'), Boolean(uploading)) : null}
+                    {canUpload ? moduleActionButton(t('ds.pasteImage'), 'copy', () => void pasteImage('logo'), Boolean(uploading)) : null}
                     {activeLogoSrc && onDeleteLogo
-                      ? moduleActionButton('Delete', 'trash', () => onDeleteLogo(activeLogo), Boolean(uploading))
+                      ? moduleActionButton(t('ds.deleteLogo'), 'trash', () => onDeleteLogo(activeLogo), Boolean(uploading))
                       : null}
                   </>,
                 )}
@@ -1162,7 +1165,7 @@ function DesignKitViewInner({
                 <h3 className={styles.sectionTitle}>{t('brandDetail.typography')}</h3>
                 {moduleActions(uploadAction('font'))}
               </div>
-              {emptyModule('No fonts captured.', 'font')}
+              {emptyModule(t('ds.moduleEmptyFonts'), 'font')}
             </section>
           ) : null}
 
@@ -1180,8 +1183,8 @@ function DesignKitViewInner({
                         <button
                           className={styles.swatchPicker}
                           type="button"
-                          aria-label={`Edit ${c.name || c.role || 'color'}`}
-                          title={`Edit ${c.name || c.role || 'color'}`}
+                          aria-label={t('ds.editColor', { name: c.name || c.role || t('ds.colorLabel') })}
+                          title={t('ds.editColor', { name: c.name || c.role || t('ds.colorLabel') })}
                           onClick={() => openColorEditor(i)}
                         >
                           <Icon name="edit" size={13} />
@@ -1297,7 +1300,7 @@ function DesignKitViewInner({
                 {moduleActions(
                   <>
                     {uploadAction('image')}
-                    {canUpload ? moduleActionButton('Paste image', 'copy', () => void pasteImage('image'), Boolean(uploading)) : null}
+                    {canUpload ? moduleActionButton(t('ds.pasteImage'), 'copy', () => void pasteImage('image'), Boolean(uploading)) : null}
                     {samples.length > IMAGE_CAP ? (
                       <button
                         type="button"
@@ -1336,8 +1339,8 @@ function DesignKitViewInner({
                             type="button"
                             className={styles.shotDelete}
                             onClick={() => onDeleteImage(sampleIndex)}
-                            aria-label={`Delete ${cap}`}
-                            title="Delete"
+                            aria-label={t('ds.deleteImage', { caption: cap })}
+                            title={t('ds.deleteImage', { caption: cap })}
                           >
                             <Icon name="trash" size={13} />
                           </button>
@@ -1579,7 +1582,7 @@ function DesignKitViewInner({
                   className={styles.assetModal}
                   role="dialog"
                   aria-modal="true"
-                  aria-label={designMdTarget.kind === 'module' ? `${designMdTarget.module.label} DESIGN.md section` : 'DESIGN.md'}
+                  aria-label={designMdDialogLabel}
                   onClick={() => setDesignMdOpen(false)}
                 >
                   <div className={`${styles.assetModalPanel} ${styles.designMdModalPanel}`} onClick={(event) => event.stopPropagation()}>
@@ -1600,16 +1603,16 @@ function DesignKitViewInner({
                       onChange={(event) => setDesignMdDraft(event.target.value)}
                       rows={20}
                       spellCheck={false}
-                      aria-label={designMdTarget.kind === 'module' ? `${designMdTarget.module.label} DESIGN.md section` : 'DESIGN.md'}
+                      aria-label={designMdDialogLabel}
                     />
                     <div className={styles.designMdModalBar}>
                       <span>
                         {designMdTarget.kind === 'module'
-                          ? `Editing only the ${designMdTarget.module.label} module.`
+                          ? t('ds.editingModuleHint', { module: designMdTarget.module.label })
                           : t('ds.editingDesignMdHint')}
                       </span>
                       <Button variant="primary" disabled={Boolean(designMd.saving)} onClick={() => void saveDesignMdDraft()}>
-                        {designMd.saving ? t('ds.saving') : designMdTarget.kind === 'module' ? 'Save module' : t('ds.saveDesignMd')}
+                        {designMd.saving ? t('ds.saving') : designMdTarget.kind === 'module' ? t('ds.saveModule') : t('ds.saveDesignMd')}
                       </Button>
                     </div>
                   </div>
@@ -1621,7 +1624,7 @@ function DesignKitViewInner({
                   className={styles.assetModal}
                   role="dialog"
                   aria-modal="true"
-                  aria-label={`Edit ${colorEditor.label}`}
+                  aria-label={t('ds.editColor', { name: colorEditor.label })}
                   data-testid="design-kit-color-editor"
                   onClick={() => {
                     if (colorSaving) return;
@@ -1634,7 +1637,7 @@ function DesignKitViewInner({
                     onClick={(event) => event.stopPropagation()}
                   >
                     <div className={styles.assetModalHeader}>
-                      <h3>Edit {colorEditor.label}</h3>
+                      <h3>{t('ds.editColor', { name: colorEditor.label })}</h3>
                       <button
                         type="button"
                         className={styles.assetModalClose}
@@ -1661,7 +1664,7 @@ function DesignKitViewInner({
                         </span>
                       </div>
                       <label className={styles.colorModalField}>
-                        <span>Color</span>
+                        <span>{t('ds.colorLabel')}</span>
                         <input
                           type="color"
                           value={normalizeColorInput(colorDraft)}
@@ -1672,14 +1675,14 @@ function DesignKitViewInner({
                         />
                       </label>
                       <label className={styles.colorModalField}>
-                        <span>Hex</span>
+                        <span>{t('ds.hexLabel')}</span>
                         <input
                           type="text"
                           value={colorDraft}
                           inputMode="text"
                           autoCapitalize="characters"
                           spellCheck={false}
-                          aria-label="Hex value"
+                          aria-label={t('ds.hexValueLabel')}
                           onChange={(event) => {
                             setColorDraft(event.target.value.toUpperCase());
                             setColorError(null);
@@ -1696,10 +1699,10 @@ function DesignKitViewInner({
                         onClick={() => void resetColorDraft()}
                       >
                         <Icon name="reload" size={13} />
-                        <span>Reset</span>
+                        <span>{t('ds.reset')}</span>
                       </button>
                       <Button variant="primary" disabled={colorSaving} onClick={() => void saveColorDraft()}>
-                        {colorSaving ? t('ds.saving') : 'Save color'}
+                        {colorSaving ? t('ds.saving') : t('ds.saveColor')}
                       </Button>
                     </div>
                   </div>

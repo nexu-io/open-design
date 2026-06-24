@@ -350,6 +350,7 @@ interface Props {
   onTouchProject: () => void;
   onProjectChange: (next: Project) => void;
   onProjectsRefresh: () => void;
+  onDeleteProject?: (id: string) => Promise<boolean> | boolean;
   onChangeDefaultDesignSystem?: (designSystemId: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
@@ -865,6 +866,7 @@ export function ProjectView({
   onTouchProject,
   onProjectChange,
   onProjectsRefresh,
+  onDeleteProject,
   onChangeDefaultDesignSystem,
   onDesignSystemsRefresh,
   onCreateProjectFromDesignSystem,
@@ -6414,6 +6416,7 @@ export function ProjectView({
           defaultDesignSystemId={config.designSystemId}
           onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
           onDesignSystemsRefresh={onDesignSystemsRefresh}
+          onDeleteDesignSystemProject={onDeleteProject}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
           designSystemReview={project.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}

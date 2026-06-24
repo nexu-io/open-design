@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
 import type {
   ApplyResult,
+  ChatSessionMode,
   ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
@@ -275,6 +276,7 @@ export function HomeView({
   const [fallbackProjectMetadata, setFallbackProjectMetadata] =
     useState<ProjectMetadata | null>(null);
   const [active, setActive] = useState<ActivePlugin | null>(null);
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   // A placeholder-carousel scenario the user submitted on an empty composer.
   // We seed the prompt + bind the template synchronously, then let an effect
   // fire submit() once both have committed (submit() reads state, not args).
@@ -1697,10 +1699,15 @@ export function HomeView({
             submittedActive?.inputs ?? null,
             submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
           );
-      // Picked scenario plugins own the skill slot; otherwise the fixed design
-      // router handles the home composer by default.
+      // Scenario plugins (chips / preset cards) and explicit skill picks are
+      // mutually exclusive routing sources. In Design mode, free-form prompts
+      // route through the default design router; in Ask mode, they stay a plain
+      // chat conversation with no hidden plugin.
       const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
-      const routedPluginId = submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID;
+      const routedPluginId =
+        sessionMode === 'design'
+          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          : submittedActive?.record.id ?? null;
       // The example-prompt override is a one-shot marker. Decide whether to
       // send it now, but defer spending the marker until the create is
       // accepted — a rejected attempt stays retryable and must resend it.
@@ -1727,7 +1734,7 @@ export function HomeView({
         attachments: stagedFiles,
         ...(workingDir ? { workingDir } : {}),
         ...(workingDirToken ? { workingDirToken } : {}),
-        conversationMode: 'design',
+        conversationMode: sessionMode,
         ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
       });
       if (accepted === false) {
@@ -1761,6 +1768,8 @@ export function HomeView({
         onPromptChange={handlePromptChange}
         onSubmit={submit}
         onSubmitScenario={submitScenario}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         submitting={sending}
         activePluginTitle={activeBadgeTitle}
         activePluginIsExplicit={activePluginIsExplicit}
