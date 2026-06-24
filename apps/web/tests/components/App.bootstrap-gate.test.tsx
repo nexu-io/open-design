@@ -217,7 +217,7 @@ describe('bootstrap nonce exchange failure gate', () => {
           status: 401,
         } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({
           ok: false,
           status: 401,
@@ -257,7 +257,7 @@ describe('bootstrap nonce exchange failure gate', () => {
           status: 403,
         } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({
           ok: false,
           status: 401,
@@ -295,7 +295,7 @@ describe('bootstrap nonce exchange failure gate', () => {
           status: 500,
         } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({
           ok: false,
           status: 401,
@@ -333,7 +333,7 @@ describe('bootstrap nonce exchange failure gate', () => {
           status: 401,
         } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         // Cookie probe succeeds — existing cookie is still valid
         return Promise.resolve({
           ok: true,
@@ -368,7 +368,7 @@ describe('bootstrap nonce exchange failure gate', () => {
           status: 403,
         } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({
           ok: false,
           status: 401,
@@ -396,7 +396,7 @@ describe('bootstrap nonce exchange failure gate', () => {
       if (url.includes('/api/auth/bootstrap-token')) {
         return Promise.reject(new TypeError('Failed to fetch'));
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({
           ok: false,
           status: 401,
@@ -424,7 +424,7 @@ describe('bootstrap nonce exchange failure gate', () => {
       if (url.includes('/api/auth/bootstrap-token')) {
         return Promise.reject(new TypeError('Failed to fetch'));
       }
-      if (url.includes('/api/plugins')) {
+      if (url.includes('/api/auth/verify')) {
         // Cookie probe succeeds — existing cookie is still valid
         return Promise.resolve({
           ok: true,
@@ -475,13 +475,14 @@ describe('handleApiTokenSubmit probe verification', () => {
   });
 
   it('rejects token and shows error when probe returns 403', async () => {
-    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+    const mockFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : '';
       // Bootstrap flow — trigger the token prompt
       if (url.includes('/api/auth/bootstrap-token')) {
         return Promise.resolve({ ok: false, status: 403 } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      // Cookie probe from bootstrap (no Authorization header)
+      if (url.includes('/api/auth/verify') && !init?.headers) {
         return Promise.resolve({ ok: false, status: 401 } as Response);
       }
       // Token verification probe — 403 Forbidden
@@ -515,13 +516,14 @@ describe('handleApiTokenSubmit probe verification', () => {
   });
 
   it('rejects token and shows error when probe returns 500', async () => {
-    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+    const mockFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : '';
       // Bootstrap flow — trigger the token prompt
       if (url.includes('/api/auth/bootstrap-token')) {
         return Promise.resolve({ ok: false, status: 403 } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      // Cookie probe from bootstrap (no Authorization header)
+      if (url.includes('/api/auth/verify') && !init?.headers) {
         return Promise.resolve({ ok: false, status: 401 } as Response);
       }
       // Token verification probe — 500 Server Error
@@ -551,13 +553,14 @@ describe('handleApiTokenSubmit probe verification', () => {
   });
 
   it('accepts token and proceeds to fan-out when probe returns 200', async () => {
-    const mockFetch = vi.fn((input: RequestInfo | URL) => {
+    const mockFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : '';
       // Bootstrap flow — trigger the token prompt
       if (url.includes('/api/auth/bootstrap-token')) {
         return Promise.resolve({ ok: false, status: 403 } as Response);
       }
-      if (url.includes('/api/plugins')) {
+      // Cookie probe from bootstrap (no Authorization header)
+      if (url.includes('/api/auth/verify') && !init?.headers) {
         return Promise.resolve({ ok: false, status: 401 } as Response);
       }
       // Token verification probe — 200 OK (token accepted)

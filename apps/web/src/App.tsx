@@ -319,6 +319,26 @@ function isAbortError(err: unknown): boolean {
   );
 }
 
+/**
+ * Probe the daemon with the existing od-api-token cookie (no explicit
+ * Authorization header) to see if it is still valid.  Uses the dedicated
+ * auth-only endpoint /api/auth/verify so the check is independent of
+ * plugin-route or any other subsystem health.
+ *
+ * Returns true when the cookie authenticates (2xx) or when the server
+ * responds with a non-401 error (auth may have passed; the error is
+ * something else).  Returns false on 401 (cookie definitely invalid) or
+ * on network error.
+ */
+async function probeCookieAuth(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/verify');
+    return res.ok || res.status !== 401;
+  } catch {
+    return false;
+  }
+}
+
 export function App() {
   // `reducedMotion="user"` makes every motion/react component honor the OS
   // `prefers-reduced-motion` setting: transform/layout animations are zeroed
@@ -823,21 +843,9 @@ function AppInner() {
             // Daemon refuses bootstrap (e.g. proxied request,
             // rate-limited).  The user may have a valid od-api-token
             // cookie from a prior manual token entry that still
-            // authenticates.  Probe a cheap guarded endpoint to check;
+            // authenticates.  Probe the auth-only endpoint to check;
             // only prompt if that also fails.
-            try {
-              const probe = await fetch('/api/plugins');
-              if (probe.ok || probe.status !== 401) {
-                // Cookie is still valid — proceed with fan-out below.
-                // A non-401 error (e.g. 500, 404) means authentication
-                // passed but the endpoint itself has an issue; that is
-                // not a reason to prompt for the token again.
-              } else {
-                setNeedsToken(true);
-                clearTimeout(bootstrapTimeout);
-                return;
-              }
-            } catch {
+            if (!await probeCookieAuth()) {
               setNeedsToken(true);
               clearTimeout(bootstrapTimeout);
               return;
@@ -857,16 +865,7 @@ function AppInner() {
                 // clientTag mismatch, or transient daemon error.
                 // Probe for a still-valid cookie before falling back
                 // to the token prompt.
-                try {
-                  const probe = await fetch('/api/plugins');
-                  if (probe.ok || probe.status !== 401) {
-                    // Cookie is still valid — proceed with fan-out.
-                  } else {
-                    setNeedsToken(true);
-                    clearTimeout(bootstrapTimeout);
-                    return;
-                  }
-                } catch {
+                if (!await probeCookieAuth()) {
                   setNeedsToken(true);
                   clearTimeout(bootstrapTimeout);
                   return;
@@ -878,16 +877,7 @@ function AppInner() {
           console.warn('[od] Bootstrap auth failed, proceeding without cookie:', err);
           // Bootstrap fetch itself rejected/aborted (network error, timeout).
           // Probe for a still-valid cookie before prompting.
-          try {
-            const probe = await fetch('/api/plugins');
-            if (probe.ok || probe.status !== 401) {
-              // Cookie is still valid — proceed with fan-out below.
-            } else {
-              setNeedsToken(true);
-              clearTimeout(bootstrapTimeout);
-              return;
-            }
-          } catch {
+          if (!await probeCookieAuth()) {
             setNeedsToken(true);
             clearTimeout(bootstrapTimeout);
             return;
