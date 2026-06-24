@@ -40,11 +40,10 @@ test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after 
 
   await gotoOnboarding(page);
 
-  // Signed-out AMR selection: the primary button reads "Sign in to continue"
-  // and starts the AMR authorization flow.
+  // Signed-out cloud landing: the primary button starts the AMR authorization flow.
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
-  await expect(primary).toHaveText(/Sign in to continue|授权后继续/i);
+  await expect(primary).toHaveText(cloudSignInText());
   const statusCallsBeforeLogin = await page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0);
   await clickCloudPrimary(page);
 
@@ -79,11 +78,11 @@ test('[P0] onboarding signed-out AMR authorization cannot be skipped or bypassed
   // forward path.
   await expect(page.getByRole('button', { name: /Skip for now/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Continue$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /About you|了解你/i })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /About you|了解你/i })).toHaveCount(0);
 
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
-  await expect(primary).toHaveText(/Sign in to continue|授权后继续/i);
+  await expect(primary).toHaveText(cloudSignInText());
   await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
 
   // Trigger sign-in: it stays pending (login never completes), so we remain on
@@ -181,7 +180,7 @@ test('[P0] onboarding falls back to Local CLI when AMR is unavailable', async ({
 
   await gotoOnboarding(page);
 
-  await expect(page.getByRole('button', { name: /Open Design AMR/i })).toBeVisible();
+  await expect(connectLandingHeading(page)).toBeVisible();
   await clickLocalRuntime(page);
   await expect(page.getByText('Local CLI')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Continue$/i })).toBeVisible();
@@ -224,10 +223,10 @@ test('[P0] onboarding signed-in AMR status failure stays gated instead of bypass
   // is no Skip, no Continue, and no enabled stepper to bypass the gate.
   await expect(page.getByRole('button', { name: /Skip for now/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Continue$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /About you|了解你/i })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /About you|了解你/i })).toHaveCount(0);
   const primary = cloudPrimaryButton(page);
   await expect(primary).toBeVisible();
-  await expect(primary).toHaveText(/Sign in to continue|授权后继续/i);
+  await expect(primary).toHaveText(cloudSignInText());
   await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -257,7 +256,7 @@ test('[P0] onboarding lets the user cancel an incomplete AMR sign-in and retry',
   await expect(cancelSignIn).toBeVisible();
   await cancelSignIn.click();
 
-  await expect(primary).toHaveText(/Sign in to continue|授权后继续/i);
+  await expect(primary).toHaveText(cloudSignInText());
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(1);
@@ -293,7 +292,7 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
   await cancelSignIn.click();
 
   const primary = cloudPrimaryButton(page);
-  await expect(primary).toHaveText(/Sign in to continue|授权后继续/i);
+  await expect(primary).toHaveText(cloudSignInText());
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
@@ -1015,16 +1014,18 @@ async function gotoOnboarding(page: Page) {
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await dismissPrivacyDialog(page);
-  // The Connect step opens on the runtime picker.
-  await expect(
-    page.getByRole('heading', { name: /Choose a runtime|选择运行方式/i }),
-  ).toBeVisible();
+  // The Connect step opens on the cloud sign-in landing.
+  await expect(connectLandingHeading(page)).toBeVisible();
 }
 
-// The connect step's primary button is the AMR sign-in trigger when AMR is
-// selected and signed out.
+// The cloud landing's primary button is the AMR sign-in trigger when signed out,
+// and advances directly when already signed in.
 function cloudPrimaryButton(page: Page): Locator {
-  return page.locator('.onboarding-view__actions .onboarding-view__primary');
+  return page.locator('.onboarding-cloud__primary');
+}
+
+function cloudSignInText(): RegExp {
+  return /Sign in to Open Design Cloud|登录 Open Design 云端/i;
 }
 
 async function clickCloudPrimary(page: Page) {
@@ -1041,7 +1042,7 @@ async function clickLocalRuntime(page: Page) {
 
 // The connect step heading — the stable "we're still on Connect" marker.
 function connectLandingHeading(page: Page): Locator {
-  return page.getByRole('heading', { name: /Choose a runtime|选择运行方式/i });
+  return page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i });
 }
 
 async function seedOnboardingConfig(page: Page, config: OnboardingConfig) {
@@ -1108,16 +1109,23 @@ function expectOnboardingTrigger(root: OnboardingLocatorRoot, label: string) {
 }
 
 async function selectOnboardingOption(root: OnboardingLocatorRoot, label: string, option: string) {
+  const page = pageForOnboardingRoot(root);
+  await page.keyboard.press('Escape');
   const field = onboardingField(root, label);
   const listbox = field.getByRole('listbox', { name: new RegExp(label, 'i') });
   if (!(await listbox.isVisible().catch(() => false))) {
-    await field.getByRole('button').click();
+    await field.getByRole('button').first().click();
   }
   await listbox.getByRole('option').filter({ hasText: new RegExp(option, 'i') }).first().click();
+  await page.keyboard.press('Escape');
 }
 
 async function fillInlineField(page: Page, label: string, value: string) {
   await onboardingField(page, label).locator('input').fill(value);
+}
+
+function pageForOnboardingRoot(root: OnboardingLocatorRoot): Page {
+  return 'keyboard' in root ? root : root.page();
 }
 
 function byokSetupPanel(page: Page): Locator {
