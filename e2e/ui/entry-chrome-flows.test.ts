@@ -1166,12 +1166,10 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
   expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
 });
 
-test('[P0] @critical home Ask mode creates a chat conversation without the default design router plugin', async ({ page }) => {
+test('[P0] @critical home composer defaults to the design router without a mode switcher', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByTestId('session-mode-trigger').click();
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
-  await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
+  await expect(page.getByTestId('session-mode-trigger')).toHaveCount(0);
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -1191,8 +1189,8 @@ test('[P0] @critical home Ask mode creates a chat conversation without the defau
   };
   expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
-  expect(body.conversationMode).toBe('chat');
-  expect(body.pluginId).toBeUndefined();
+  expect(body.conversationMode).toBe('design');
+  expect(body.pluginId).toBe('od-default');
   expect(body.metadata?.kind).toBe('other');
 });
 

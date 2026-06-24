@@ -2452,91 +2452,300 @@ a.ds-source-link-open:focus-visible {
   background: var(--bg);
   padding: 28px 32px 48px;
 }
+/* The design-system kit tab supplies its own internal padding through
+   DesignKitView's sticky inner layout, so the panel itself runs edge-to-edge:
+   the sticky header background then fills the full container width, and
+   `position: sticky; top: 0` rests flush against the panel's top edge so the
+   stuck state engages reliably. */
+.ds-project-panel--kit {
+  padding: 0;
+}
 .ds-project-panel--generating {
   display: grid;
   place-items: center;
   overflow: hidden;
+  position: relative;
 }
-.ds-project-generation-stage {
-  width: min(560px, calc(100% - 48px));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.ds-project-panel--generating::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--accent) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--blue, #3b82f6) 7%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 76%, transparent 100%);
+  opacity: 0.7;
+}
+.ds-project-loading-stage {
+  position: relative;
+  z-index: 1;
+  width: min(660px, 100%);
+  min-height: 360px;
+  margin: max(10vh, 48px) auto;
+  padding: 28px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 18px;
   text-align: center;
-  gap: 14px;
 }
-.ds-project-generation-mark {
-  width: 48px;
-  height: 48px;
+.ds-project-loading-stage::before {
+  content: "";
+  position: absolute;
+  inset: 28px 8px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 18%, transparent), transparent),
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--green, #3d7a4f) 10%, transparent), transparent);
+  background-size: 240% 1px, 1px 220%;
+  background-repeat: no-repeat;
+  background-position: 50% 22%, 50% 50%;
+  animation: ds-project-loading-lines 3.2s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+.ds-project-loading-emblem {
+  position: relative;
+  width: 92px;
+  height: 92px;
   display: grid;
   place-items: center;
   color: var(--accent);
+  animation: ds-project-emblem-float 2.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
-/* While the design system is generating (and other waiting states), the small
-   block of the blocks icon hops, spins, and bounces back into the cluster. The
-   <rect> is the small block; transform-box keeps it spinning on its own center.
-   overflow: visible lets the hop rise past the 24-unit viewBox without clipping. */
-.ds-project-generation-mark svg {
+.ds-project-loading-emblem__grid {
+  position: absolute;
+  inset: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 8px;
+  opacity: 0.68;
+  transform: rotate(45deg);
+}
+.ds-project-loading-emblem__grid::before,
+.ds-project-loading-emblem__grid::after {
+  content: "";
+  position: absolute;
+  inset: 50% 8px auto;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 26%, var(--border));
+}
+.ds-project-loading-emblem__grid::after {
+  inset: 8px auto 8px 50%;
+  width: 1px;
+  height: auto;
+}
+.ds-project-loading-mark {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 86%, transparent);
+  box-shadow:
+    0 16px 46px color-mix(in srgb, var(--accent) 16%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent);
+}
+.ds-project-loading-mark::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--blue, #3b82f6) 18%, transparent);
+  opacity: 0.7;
+}
+.ds-project-loading-mark svg {
+  position: relative;
+  z-index: 1;
   overflow: visible;
 }
-.ds-project-generation-mark svg rect {
+.ds-project-loading-mark svg rect {
   transform-box: fill-box;
   transform-origin: center;
-  animation: ds-generation-block 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: ds-project-block-compose 1.55s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
-@keyframes ds-generation-block {
-  0% {
-    transform: translateY(0) rotate(0deg);
-  }
-  35% {
-    transform: translateY(-4px) rotate(180deg);
-  }
-  60% {
-    transform: translateY(0) rotate(360deg);
-  }
-  72% {
-    transform: translateY(-2px) rotate(360deg);
-  }
-  85% {
-    transform: translateY(0) rotate(360deg);
-  }
-  100% {
-    transform: translateY(0) rotate(360deg);
-  }
+.ds-project-loading-copy {
+  display: grid;
+  gap: 7px;
+  max-width: 520px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .ds-project-generation-mark svg rect {
-    animation: none;
-  }
+.ds-project-loading-kicker {
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
-.ds-project-generation-stage h1 {
+.ds-project-loading-copy h1 {
   margin: 0;
   color: var(--text);
   font-family: var(--serif);
-  font-size: clamp(28px, 4vw, 38px);
+  font-size: 42px;
   font-weight: 500;
+  line-height: 1.04;
   letter-spacing: 0;
 }
-.ds-project-generation-stage p {
+.ds-project-loading-copy p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
 }
-.ds-project-generation-progress {
-  width: min(320px, 100%);
-  height: 4px;
+.ds-project-loading-progress {
+  position: relative;
+  width: min(360px, 100%);
+  height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--border-soft);
+  background: color-mix(in srgb, var(--border-soft) 80%, var(--bg-subtle));
 }
-.ds-project-generation-progress span {
+.ds-project-loading-progress span {
   display: block;
   height: 100%;
-  min-width: 10%;
+  min-width: 12%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 24%, transparent));
-  transition: width 180ms ease;
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    color-mix(in srgb, var(--blue, #3b82f6) 42%, var(--accent)),
+    color-mix(in srgb, var(--green, #3d7a4f) 38%, var(--accent))
+  );
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.ds-project-loading-progress.is-determinate span {
+  transition: width 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-project-loading-progress.is-indeterminate span {
+  width: 42%;
+  min-width: 42%;
+  animation: ds-project-progress-sweep 1.75s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+.ds-project-loading-skeleton {
+  width: min(380px, 100%);
+  display: grid;
+  grid-template-columns: 0.86fr 1.22fr 0.72fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+.ds-project-loading-skeleton span {
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 13%, var(--bg-panel)) 42%,
+      color-mix(in srgb, var(--blue, #3b82f6) 9%, var(--bg-panel)) 54%,
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%
+    );
+  background-size: 220% 100%;
+  animation: ds-project-skeleton-sheen 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+.ds-project-loading-skeleton span:nth-child(2) {
+  animation-delay: 120ms;
+}
+.ds-project-loading-skeleton span:nth-child(3) {
+  animation-delay: 240ms;
+}
+@keyframes ds-project-block-compose {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  36% {
+    transform: translate(2px, -5px) rotate(180deg);
+  }
+  64% {
+    transform: translate(0, 0) rotate(360deg);
+  }
+  78% {
+    transform: translate(0, -2px) rotate(360deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(360deg);
+  }
+}
+@keyframes ds-project-emblem-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes ds-project-loading-lines {
+  0% {
+    background-position: -80% 22%, 50% -90%;
+    opacity: 0.35;
+  }
+  45% {
+    opacity: 0.95;
+  }
+  100% {
+    background-position: 180% 22%, 50% 190%;
+    opacity: 0.35;
+  }
+}
+@keyframes ds-project-progress-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(240%);
+  }
+}
+@keyframes ds-project-skeleton-sheen {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-project-loading-stage::before,
+  .ds-project-loading-emblem,
+  .ds-project-loading-mark svg rect,
+  .ds-project-loading-progress.is-indeterminate span,
+  .ds-project-loading-skeleton span {
+    animation: none;
+  }
+
+  .ds-project-loading-progress.is-indeterminate span {
+    transform: none;
+    width: 62%;
+    min-width: 62%;
+  }
+}
+@media (max-width: 760px) {
+  .ds-project-loading-stage {
+    min-height: 300px;
+    margin: 48px auto;
+    padding: 22px 8px;
+    gap: 16px;
+  }
+
+  .ds-project-loading-emblem {
+    width: 78px;
+    height: 78px;
+  }
+
+  .ds-project-loading-mark {
+    width: 52px;
+    height: 52px;
+  }
+
+  .ds-project-loading-copy h1 {
+    font-size: 32px;
+  }
+
+  .ds-project-loading-skeleton {
+    grid-template-columns: 1fr;
+    width: min(260px, 100%);
+  }
 }
 .ds-project-main {
   width: min(940px, 100%);
@@ -2934,7 +3143,7 @@ a.ds-source-link-open:focus-visible {
   gap: 7px;
   white-space: nowrap;
 }
-/* Holds the Upload fonts + Use system fonts actions in the card's last cell.
+/* Holds the add-font-files + keep-substitutes actions in the card's last cell.
    Issue #2814. */
 .ds-warning-card-actions {
   display: flex;

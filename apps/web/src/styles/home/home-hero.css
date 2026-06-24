@@ -346,25 +346,10 @@
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .home-hero__input-card:has(.inline-switcher__popover),
-.home-hero__input-card:has(.session-mode-toggle__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker),
 .home-hero__input-card:has(.home-hero__template-menu) {
   z-index: 1700;
   overflow: visible;
-}
-/* The mode toggle's description card (chat.css) anchors upward and is only
-   shown on the home hero — it is `display:none` inside the chat composer.
-   The home-hero toggle sits well down the composer, so the card grows up
-   toward the page header; at its default 360px it crowds (and on smaller
-   windows clips) the top chrome. Cap it shorter here so it always clears the
-   header, and keep the inner scroll for the overflow. */
-.home-hero__input-card .session-mode-toggle__popover-card {
-  max-height: min(300px, calc(100vh - 120px));
-}
-.home-hero__input-card .session-mode-toggle__popover {
-  right: 0;
-  left: auto;
-  flex-direction: row-reverse;
 }
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
@@ -968,23 +953,6 @@
 }
 .home-hero__execution-switcher .inline-switcher__chip-chevron {
   flex: 0 0 auto;
-}
-.home-hero__foot-right .session-mode-toggle {
-  height: 32px;
-}
-.home-hero__foot-right .session-mode-toggle__trigger {
-  height: 32px;
-  max-width: 120px;
-  padding: 0 12px;
-  gap: 6px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-}
-.home-hero__foot-right .session-mode-toggle__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .home-hero__execution-switcher .inline-switcher__popover {
   right: 0;
@@ -2865,6 +2833,12 @@
   font: inherit;
   font-size: 12.5px;
   color: var(--text);
+}
+.home-hero__template-search input:focus,
+.home-hero__template-search input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 .home-hero__template-clear {
   appearance: none;

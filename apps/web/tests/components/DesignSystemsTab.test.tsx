@@ -129,14 +129,13 @@ describe('DesignSystemsTab', () => {
     expect(onOpenSystem).toHaveBeenCalledWith('user:acme');
   });
 
-  it('keeps preview distinct from edit for built-in library systems', async () => {
+  it('keeps built-in library systems read-only with the redundant cover removed', async () => {
     const onOpenSystem = vi.fn();
-    const onPreview = vi.fn();
     render(
       <DesignSystemsTab
         systems={systems}
         selectedId={null}
-        onPreview={onPreview}
+        onPreview={() => {}}
         onSelect={() => {}}
         onCreate={() => {}}
         onOpenSystem={onOpenSystem}
@@ -144,12 +143,13 @@ describe('DesignSystemsTab', () => {
     );
 
     openOfficialPresets();
-    // Linear auto-selects; a built-in preset is previewable but not editable.
+    // Linear auto-selects into the read-only detail pane.
+    await screen.findByTestId('design-kit-view-linear');
+    // A built-in preset is browse-only: no agent edit affordance, and the
+    // redundant top showcase cover (with its preview button) has been removed.
     expect(screen.queryByRole('button', { name: /Edit with agent/i })).toBeNull();
-    fireEvent.click(await screen.findByTestId('design-kit-cover-preview'));
-
-    expect(onPreview).toHaveBeenCalledWith('linear');
-    expect(onOpenSystem).not.toHaveBeenCalledWith('linear');
+    expect(screen.queryByTestId('design-kit-cover-preview')).toBeNull();
+    expect(onOpenSystem).not.toHaveBeenCalled();
   });
 
   it('sets a system as the global default through the detail pane', () => {
@@ -166,7 +166,9 @@ describe('DesignSystemsTab', () => {
     );
 
     openOfficialPresets();
-    fireEvent.click(screen.getByTestId('design-system-select-linear'));
+    // "Make default" now lives in the detail's ⋯ overflow menu.
+    fireEvent.click(screen.getByTestId('design-kit-more-actions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Default for new chats' }));
     expect(onSelect).toHaveBeenCalledWith('linear');
   });
 });

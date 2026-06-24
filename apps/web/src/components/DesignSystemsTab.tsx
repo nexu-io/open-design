@@ -22,25 +22,16 @@ import {
 import { BRAND_REFERENCES } from '../runtime/brand-references';
 import { takeDesignSystemFocus } from '../runtime/brands';
 import {
-  deleteProjectFile,
   deleteDesignSystemDraft,
   fetchDesignSystem,
   fetchDesignSystemShowcase,
   fetchProjectFileText,
-  startDesignSystemTokenContractRebuildJob,
+  projectRawUrl,
   updateDesignSystemDraft,
-  writeProjectTextFile,
 } from '../providers/registry';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
 import { useDesignKit } from '../runtime/design-kit';
-import {
-  deleteBrandImage,
-  deleteBrandLogo,
-  replaceDesignMdColorAtIndex,
-  updateBrandColor,
-} from '../runtime/kit-edit';
-import { useKitModuleUpload } from '../runtime/kit-upload';
-import { DesignKitView } from './DesignKitView';
+import { DesignKitView, HeaderActionsMenu, type HeaderMenuAction } from './DesignKitView';
 import { hostnameOf } from './BrandPreviewCard';
 import { Icon } from './Icon';
 import type { DesignSystemDetail, DesignSystemSummary, ProjectTemplate, Surface } from '../types';
@@ -733,7 +724,16 @@ export function DesignSystemsTab({
         system={system}
         active={system.id === previewId}
         isDefault={system.id === selectedId}
-        categoryLabel={localizeDesignSystemCategory(locale, system.category || 'Uncategorized')}
+        subtitle={
+          // User systems: prefer the scenario (summary), then the source link
+          // (host, truncated by CSS), then the generic placeholder. Presets keep
+          // their localized category, which already reads as their scenario.
+          isUserSystem(system)
+            ? (system.summary?.trim()
+              || designSystemLogoHost(system)
+              || t('brandDetail.designSystem'))
+            : localizeDesignSystemCategory(locale, system.category || 'Uncategorized')
+        }
         statusLabel={(system.status ?? 'draft') === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}
         onSelect={() => handleSelectSystem(system)}
       />
@@ -792,7 +792,7 @@ interface SystemRowProps {
   system: DesignSystemSummary;
   active: boolean;
   isDefault: boolean;
-  categoryLabel: string;
+  subtitle: string;
   statusLabel: string;
   onSelect: () => void;
 }
@@ -822,30 +822,80 @@ function SystemRowPaletteLogo({ system }: { system: DesignSystemSummary }) {
   );
 }
 
-// Row thumbnail: prefer a real site favicon (captured source URL, reference
-// brand, or curated official-preset domain), otherwise fall back to palette.
+// Resolve a system's own logo from its backing project's brand.json
+// (`logo.primary`), exactly mirroring how the detail kit loads it via
+// `useDesignKit`. The list row can't use `/api/brands/:id/logo` because the row
+// only knows the *design-system* id, which differs from the brand id the brands
+// route expects. Returns `undefined` while the fetch is in flight, `null` when
+// the project has no logo, or the raw URL string.
+function useProjectLogoSrc(projectId: string | undefined): string | null | undefined {
+  const [src, setSrc] = useState<string | null | undefined>(projectId ? undefined : null);
+  useEffect(() => {
+    if (!projectId) {
+      setSrc(null);
+      return;
+    }
+    let cancelled = false;
+    setSrc(undefined);
+    void fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }).then((raw) => {
+      if (cancelled) return;
+      let primary: string | null = null;
+      if (raw) {
+        try {
+          const data = JSON.parse(raw) as { logo?: { primary?: unknown } };
+          const candidate = data?.logo?.primary;
+          if (typeof candidate === 'string' && candidate.trim()) primary = candidate.trim();
+        } catch {
+          // Not a valid brand.json (e.g. a non-brand "Create"d system) — no logo.
+        }
+      }
+      setSrc(primary ? projectRawUrl(projectId, primary) : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+  return src;
+}
+
+// Row thumbnail. Prefer the system's real logo (resolved from the backing
+// project's brand.json), then a site favicon (captured source URL, reference
+// brand, or curated official-preset domain), falling back to the palette stripe
+// when neither resolves. The palette also holds the slot while a user system's
+// logo is still loading, so the thumbnail never flashes a broken image first.
 function SystemRowLogo({ system }: { system: DesignSystemSummary }) {
   const host = designSystemLogoHost(system);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [host, system.id]);
+  const projectLogo = useProjectLogoSrc(isUserSystem(system) ? system.projectId : undefined);
 
-  if (!host) {
-    return <SystemRowPaletteLogo system={system} />;
-  }
-  if (failed) return <SystemRowPaletteLogo system={system} />;
+  // Candidate srcs in priority order, skipping empties; `onError` advances to
+  // the next, and exhausting them collapses to the palette stripe.
+  const candidates = useMemo(() => {
+    const list: string[] = [];
+    if (typeof projectLogo === 'string') list.push(projectLogo);
+    if (host) list.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`);
+    return list;
+  }, [projectLogo, host]);
+
+  const [failedCount, setFailedCount] = useState(0);
+  useEffect(() => setFailedCount(0), [candidates]);
+
+  const resolving = projectLogo === undefined;
+  const src = !resolving && failedCount < candidates.length ? candidates[failedCount] : null;
+
+  if (!src) return <SystemRowPaletteLogo system={system} />;
   return (
     <img
       className={styles.itemLogo}
-      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
+      src={src}
       alt=""
       loading="lazy"
       referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
+      onError={() => setFailedCount((n) => n + 1)}
     />
   );
 }
 
-function SystemRow({ system, active, isDefault, categoryLabel, statusLabel, onSelect }: SystemRowProps) {
+function SystemRow({ system, active, isDefault, subtitle, statusLabel, onSelect }: SystemRowProps) {
   const { t } = useI18n();
   const status = system.status ?? 'draft';
   const isUser = isUserSystem(system);
@@ -917,39 +967,43 @@ function DesignSystemDetail({
   // the full detail. The kit view derives every module from brand.json (when a
   // backing project carries one) or the parsed DESIGN.md (presets).
   const [detail, setDetail] = useState<DesignSystemDetail | null>(null);
-  const [designMdBody, setDesignMdBody] = useState('');
-  const [savingDesignMd, setSavingDesignMd] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
-  const initialDesignMdRef = useRef<string | null>(null);
-  const initialBrandJsonRef = useRef<string | null>(null);
-  const initialBrandJsonLoadedRef = useRef(false);
+  const lastSystemIdRef = useRef<string | null>(null);
 
+  // The design-system project is the single source of truth. Re-read the full
+  // detail whenever the selected `system` changes — that covers both a new
+  // selection AND the parent refreshing the list after an edit anywhere (e.g.
+  // the in-project Design System tab), since `onSystemsRefresh` replaces the
+  // summary objects. A same-system refresh updates in place (no loading flash)
+  // and bumps `reloadKey` so brand.json-derived modules (logo / images /
+  // palette) re-read too.
   useEffect(() => {
     let cancelled = false;
-    setDetail(null);
-    setDesignMdBody('');
-    setDownloadFailed(false);
-    initialDesignMdRef.current = null;
-    initialBrandJsonRef.current = null;
+    const isNewSelection = lastSystemIdRef.current !== system.id;
+    lastSystemIdRef.current = system.id;
+    if (isNewSelection) {
+      setDetail(null);
+      setDownloadFailed(false);
+    } else {
+      setReloadKey((k) => k + 1);
+    }
     void fetchDesignSystem(system.id).then((d) => {
-      if (cancelled) return;
-      setDetail(d);
-      const body = d?.body ?? '';
-      setDesignMdBody(body);
-      initialDesignMdRef.current = body;
+      if (!cancelled && d) setDetail(d);
     });
     return () => {
       cancelled = true;
     };
-  }, [system.id]);
+  }, [system]);
 
   const host = designSystemLogoHost(system) || undefined;
   const projectId = detail?.projectId ?? system.projectId;
 
-  // Direct in-panel DS edits (E3 / §3.6). All carry edit_surface=direct_module
-  // + artifact_kind=design_system + the DS id so "edit depth" drills down.
+  // Direct in-panel DS edits that survive iodized-nephew's refactor: the
+  // edit-with-agent + download actions (the module-level editing moved to
+  // DesignSystemExtractionPanel and is re-instrumented there separately).
+  // E3 / §3.6 — carries edit_surface=direct_module + artifact_kind + DS id.
   function emitEditClick(
     element: DesignSystemEditClickProps['element'],
     module: DesignSystemEditClickProps['module'],
@@ -966,37 +1020,17 @@ function DesignSystemDetail({
     });
   }
 
-  useEffect(() => {
-    if (!projectId) return;
-    let cancelled = false;
-    void fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }).then((text) => {
-      if (!cancelled && !initialBrandJsonLoadedRef.current) {
-        initialBrandJsonRef.current = text;
-        initialBrandJsonLoadedRef.current = true;
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
-
-  const { uploading, uploadModule } = useKitModuleUpload({
-    projectId,
-    title: system.title,
-    onUploaded: () => {
-      setReloadKey((k) => k + 1);
-      void onSystemsRefresh?.();
-    },
-  });
-
   const { kit } = useDesignKit({
     designSystemId: system.id,
     title: system.title,
     projectId,
-    body: designMdBody || detail?.body,
+    body: detail?.body,
     packageInfo: detail?.packageInfo,
     swatches: system.swatches,
     showcaseHtml: showcaseHtml ?? null,
+    // Read-only is enforced by withholding the edit handlers below — not by
+    // this flag. Keep user systems "editable" so their kit renders live from
+    // the project (the SSOT / latest) rather than a stale published snapshot.
     editable: isUser,
     host,
     reloadKey,
@@ -1021,88 +1055,48 @@ function DesignSystemDetail({
     }
   }
 
-  async function saveDesignMd(nextBody: string) {
-    if (!isUser) return;
-    emitEditClick('design_md_edit', 'design_md');
-    setSavingDesignMd(true);
-    try {
-      const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
-      if (projectId) await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
-      setDesignMdBody(nextBody);
-      if (updated) setDetail((current) => current ? { ...current, body: nextBody } : updated);
-      setReloadKey((k) => k + 1);
-      await onSystemsRefresh?.();
-    } finally {
-      setSavingDesignMd(false);
-    }
-  }
-
-  async function refreshKit() {
-    emitEditClick('refresh', 'general');
-    await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
-    setReloadKey((k) => k + 1);
-    await onSystemsRefresh?.();
-  }
-
-  async function resetKitEdits() {
-    if (!isUser) return;
-    emitEditClick('kit_reset', 'kit');
-    const originalMd = initialDesignMdRef.current ?? designMdBody;
-    await updateDesignSystemDraft(system.id, { body: originalMd });
-    if (projectId) {
-      await writeProjectTextFile(projectId, 'DESIGN.md', originalMd);
-      if (initialBrandJsonRef.current !== null) {
-        await writeProjectTextFile(projectId, 'brand.json', initialBrandJsonRef.current);
-      } else if (initialBrandJsonLoadedRef.current) {
-        await deleteProjectFile(projectId, 'brand.json');
-      }
-    }
-    setDesignMdBody(originalMd);
-    setReloadKey((k) => k + 1);
-    await onSystemsRefresh?.();
-  }
-
-  async function changeKitColor(index: number, hex: string) {
-    if (!projectId) return;
-    emitEditClick('color_edit', 'palette');
-    const ok = await updateBrandColor(projectId, index, hex);
-    if (!ok) {
-      const nextBody = replaceDesignMdColorAtIndex(designMdBody || detail?.body || '', index, hex);
-      if (!nextBody) return;
-      await saveDesignMd(nextBody);
-      return;
-    }
-    setReloadKey((k) => k + 1);
-    await onSystemsRefresh?.();
-  }
-
-  async function removeKitLogo(index: number) {
-    if (!projectId) return;
-    emitEditClick('logo_delete', 'logo');
-    const ok = await deleteBrandLogo(projectId, index);
-    if (!ok) return;
-    setReloadKey((k) => k + 1);
-    await onSystemsRefresh?.();
-  }
-
-  async function removeKitImage(index: number) {
-    if (!projectId) return;
-    emitEditClick('image_delete', 'images');
-    const ok = await deleteBrandImage(projectId, index);
-    if (!ok) return;
-    setReloadKey((k) => k + 1);
-    await onSystemsRefresh?.();
-  }
-
   const badgeSlot = isDefault ? (
     <span className={styles.badgeDefault}>{t('dsManager.badgeDefault')}</span>
   ) : null;
+
+  // Keep only the two primary actions on the bar — "Edit with agent" and the
+  // publish toggle — and tuck the secondary actions (download / make-default /
+  // delete) into a single ⋯ overflow so the toolbar reads clean (issue #5).
+  const overflowActions: HeaderMenuAction[] = [
+    ...(isUser
+      ? [{
+          id: 'download',
+          label: t('dsManager.downloadTitle'),
+          icon: 'download' as const,
+          onClick: () => void handleDownload(),
+          disabled: busy || downloading,
+        }]
+      : []),
+    ...(canBeDefault && !isDefault
+      ? [{
+          id: 'make-default',
+          label: t('dsManager.makeDefault'),
+          icon: 'star' as const,
+          onClick: () => onMakeDefault(system),
+          disabled: busy,
+        }]
+      : []),
+    ...(isUser
+      ? [{
+          id: 'delete',
+          label: t('dsManager.deleteSystemAria', { title: system.title }),
+          icon: 'trash' as const,
+          onClick: () => void onDelete(system),
+          disabled: busy,
+        }]
+      : []),
+  ];
 
   const actionsSlot = (
     <>
       {isUser && onEdit ? (
         <Button
-          variant="ghost"
+          variant="primary"
           className={styles.actionButton}
           onClick={() => {
             emitEditClick('edit_with_agent', 'general');
@@ -1113,57 +1107,6 @@ function DesignSystemDetail({
         >
           <Icon name="sparkles" />
           {t('dsManager.editWithAgent')}
-        </Button>
-      ) : null}
-      {isUser ? (
-        <Button
-          variant="ghost"
-          className={styles.actionButton}
-          onClick={() => void refreshKit()}
-          disabled={busy}
-          title="Refresh generated design-system assets"
-        >
-          <Icon name="refresh" />
-          Refresh
-        </Button>
-      ) : null}
-      {isUser ? (
-        <Button
-          size="icon"
-          className={`${styles.downloadBtn} od-tooltip`}
-          data-testid={`design-system-download-${system.id}`}
-          aria-label={t('dsManager.downloadAria', { title: system.title })}
-          data-tooltip={t('dsManager.downloadTitle')}
-          data-tooltip-placement="top"
-          onClick={() => void handleDownload()}
-          disabled={busy || downloading}
-        >
-          <Icon name={downloading ? 'spinner' : 'download'} />
-        </Button>
-      ) : null}
-      {isUser ? (
-        <Button
-          size="icon"
-          className={`${styles.downloadBtn} od-tooltip`}
-          aria-label="Reset design-system edits"
-          data-tooltip="Reset this session's DESIGN.md and brand.json edits"
-          data-tooltip-placement="top"
-          onClick={() => void resetKitEdits()}
-          disabled={busy}
-        >
-          <Icon name="reload" />
-        </Button>
-      ) : null}
-      {canBeDefault && !isDefault ? (
-        <Button
-          variant="ghost"
-          className={styles.defaultButton}
-          data-testid={`design-system-select-${system.id}`}
-          onClick={() => onMakeDefault(system)}
-          disabled={busy}
-          title="Preselect this design system for new chats and new projects."
-        >
-          {t('dsManager.makeDefault')}
         </Button>
       ) : null}
       {isUser ? (
@@ -1178,18 +1121,8 @@ function DesignSystemDetail({
           <span className={styles.statusToggleTrack} aria-hidden />
         </button>
       ) : null}
-      {isUser ? (
-        <Button
-          size="icon"
-          className={`${styles.dangerBtn} od-tooltip`}
-          aria-label={t('dsManager.deleteSystemAria', { title: system.title })}
-          data-tooltip={t('dsManager.deleteSystemAria', { title: system.title })}
-          data-tooltip-placement="top"
-          onClick={() => void onDelete(system)}
-          disabled={busy}
-        >
-          <Icon name="close" />
-        </Button>
+      {overflowActions.length > 0 ? (
+        <HeaderActionsMenu groups={[overflowActions]} label={t('designs.menuMore')} />
       ) : null}
     </>
   );
@@ -1201,42 +1134,12 @@ function DesignSystemDetail({
           kit={kit}
           badgeSlot={badgeSlot}
           actionsSlot={actionsSlot}
+          showCover={false}
           noticeSlot={
             downloadFailed ? (
               <div className={styles.missingProjectNotice}>{t('dsManager.downloadFailed')}</div>
             ) : null
           }
-          onPreviewCover={() => onPreviewFull(system)}
-          designMd={
-            isUser
-              ? {
-                  body: designMdBody,
-                  onSave: saveDesignMd,
-                  saving: savingDesignMd,
-                  canEdit: true,
-                }
-              : detail?.body
-                ? { body: detail.body, canEdit: false }
-                : undefined
-          }
-          onUploadModule={(module, file) => {
-            emitEditClick(
-              module === 'logo'
-                ? 'logo_upload'
-                : module === 'font'
-                  ? 'font_upload'
-                  : 'image_upload',
-              module === 'logo' ? 'logo' : module === 'font' ? 'typography' : 'images',
-            );
-            void uploadModule(module, file);
-          }}
-          onColorChange={projectId ? (index, hex) => void changeKitColor(index, hex) : undefined}
-          onDeleteLogo={projectId ? (index) => void removeKitLogo(index) : undefined}
-          onDeleteImage={projectId ? (index) => void removeKitImage(index) : undefined}
-          onRefresh={isUser ? () => void refreshKit() : undefined}
-          onDownload={isUser ? () => void handleDownload() : undefined}
-          onReset={isUser ? () => void resetKitEdits() : undefined}
-          uploading={uploading}
           dataTestId={`design-kit-view-${system.id}`}
         />
       ) : (

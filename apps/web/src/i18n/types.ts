@@ -2053,6 +2053,9 @@ export interface Dict {
   'ds.copyDesignMd': string;
   'ds.editDesignMd': string;
   'ds.openDesignMd': string;
+  'ds.copyDesignMdModule': string;
+  'ds.editDesignMdModule': string;
+  'ds.openDesignMdModule': string;
   'ds.uploadMd': string;
   'ds.uploadFont': string;
   'ds.refresh': string;
@@ -2064,6 +2067,14 @@ export interface Dict {
   'ds.uploadImage': string;
   'ds.uploading': string;
   'ds.moduleEmptyLogo': string;
+  'ds.actionDone': string;
+  'ds.actionFailed': string;
+  'ds.uploadDone': string;
+  'ds.uploadFailed': string;
+  'ds.kitErrorTitle': string;
+  'ds.kitErrorRetry': string;
+  'ds.shortcutsLabel': string;
+  'ds.shortcutsHint': string;
   'ds.moduleEmptyImages': string;
   'ds.previewTitle': string;
   'ds.categoryAll': string;
@@ -2249,6 +2260,9 @@ export interface Dict {
   'brandEnrichment.body': string;
   'brandEnrichment.cta': string;
   'brandEnrichment.busy': string;
+  'chat.createDesignFromSystemTitle': string;
+  'chat.createDesignFromSystemBody': string;
+  'chat.createDesignFromSystemCta': string;
   'chat.fillInputTitle': string;
   'chat.jumpToLatest': string;
   'chat.scrollToLatest': string;
@@ -3459,7 +3473,6 @@ export interface Dict {
   'onboarding.buildBenefitSourcesTitle': string;
   'onboarding.buildBenefitSourcesBody': string;
   'onboarding.buildPreviewLabel': string;
-  'onboarding.buildArtifacts': string;
   'onboarding.buildStart': string;
   'onboarding.buildHome': string;
   'dsCreate.referenceLabel': string;

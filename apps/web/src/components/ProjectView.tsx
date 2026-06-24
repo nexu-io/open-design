@@ -197,7 +197,11 @@ import {
   selectAutoOpenProducedHtml,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
-import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
+import {
+  designSystemExtractionSource,
+  isDesignSystemProject,
+  resolveProjectDesignSystemId,
+} from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
 import {
@@ -1164,6 +1168,13 @@ export function ProjectView({
   const skillCache = useRef<Map<string, string>>(new Map());
   const designCache = useRef<Map<string, string>>(new Map());
   const templateCache = useRef<Map<string, ProjectTemplate>>(new Map());
+  // The composed prompt memoizes design-system bodies in designCache. Whenever
+  // the systems list refreshes (App re-fetches it after any edit — including
+  // edits made in the in-project Design System tab), drop the cached bodies so
+  // the next message consumes the latest content from the project (the SSOT).
+  useEffect(() => {
+    designCache.current.clear();
+  }, [designSystems]);
   // We auto-save the most recent artifact to the project folder. Track the
   // last name we persisted so re-renders during streaming don't spawn
   // duplicate writes.
@@ -6173,6 +6184,15 @@ export function ProjectView({
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!projectDesignSystemId}
               activeDesignSystem={chatDesignSystemSummary}
+              onCreateDesignFromActiveSystem={
+                designSystemProject && onCreateProjectFromDesignSystem
+                  ? () =>
+                      void onCreateProjectFromDesignSystem(
+                        designSystemProject.id,
+                        designSystemProject.title,
+                      )
+                  : undefined
+              }
               projectFileNames={projectFileNames}
               skills={skills}
               onEnsureProject={handleEnsureProject}

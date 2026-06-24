@@ -41,18 +41,12 @@ describe('HomeHero compact composer controls', () => {
     expect(ruleValue(results, 'overflow-y')).toBe('auto');
   });
 
-  it('keeps the session mode and execution buttons compact in the hero', () => {
-    const modeTrigger = cssDeclarations(
-      '.home-hero__foot-right .session-mode-toggle__trigger',
-    );
+  it('keeps the execution button compact in the hero', () => {
     const switcherChip = cssDeclarations(
       '.home-hero__execution-switcher .inline-switcher__chip',
     );
 
-    // The footer buttons were unified to a single 32px pill height; the
-    // execution switcher keeps a fixed icon+chevron footprint.
-    expect(ruleValue(modeTrigger, 'height')).toBe('32px');
-    expect(ruleValue(modeTrigger, 'max-width')).toBe('120px');
+    // The execution switcher keeps a fixed icon+chevron footprint.
     expect(ruleValue(switcherChip, 'height')).toBe('32px');
     expect(ruleValue(switcherChip, 'max-width')).toBe('58px');
   });
@@ -66,5 +60,12 @@ describe('HomeHero compact composer controls', () => {
     expect(ruleValue(switcher, 'flex-basis')).toBe('auto');
     expect(ruleValue(switcherChip, 'width')).toBe('58px');
     expect(ruleValue(switcherChip, 'max-width')).toBe('58px');
+  });
+
+  it('keeps the template picker search field free of the global input focus halo', () => {
+    const templateSearchFocus = cssDeclarations('.home-hero__template-search input:focus');
+
+    expect(ruleValue(templateSearchFocus, 'outline')).toBe('none');
+    expect(ruleValue(templateSearchFocus, 'box-shadow')).toBe('none');
   });
 });

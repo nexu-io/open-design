@@ -479,7 +479,9 @@ export async function fetchDesignSystemsResult(): Promise<DesignSystemsResult> {
 
 export async function fetchDesignSystem(id: string): Promise<DesignSystemDetail | null> {
   try {
-    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`);
+    // no-store so edits made elsewhere (the in-project Design System tab) are
+    // reflected the next time the manager / a consumer re-reads the system.
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return parseDesignSystemDetail(await resp.json());
   } catch {

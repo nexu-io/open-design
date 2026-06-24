@@ -341,6 +341,20 @@ export const CREATE_RAIL_ORDER = [
   'audio',
 ] as const;
 
+// Chip ids the onboarding "build a design system" teaser intentionally omits.
+// Video and Audio are the trailing pure-media outputs in CREATE_RAIL_ORDER and
+// the least central to the design-system story, so they are the first to drop
+// when keeping the teaser chips to a single tidy row.
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['video', 'audio']);
+
+// The artifact chips shown on the onboarding "build a design system" step — a
+// curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER
+// (not a separately maintained list) so it stays in the same priority order as
+// the Home rail and never drifts from the real template catalog.
+export const ONBOARDING_ARTIFACT_CHIP_IDS = CREATE_RAIL_ORDER.filter(
+  (id) => !ONBOARDING_ARTIFACT_OMIT.has(id),
+);
+
 // The `create` chips in rail-display order. Listed ids come first in
 // `CREATE_RAIL_ORDER`; any unlisted create chip (e.g. `create-brand-kit`)
 // trails in catalog order. Reordering through this helper keeps the catalog

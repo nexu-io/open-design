@@ -604,6 +604,20 @@
       const src = img.currentSrc || img.src;
       if (!src) continue;
       const r = img.getBoundingClientRect();
+      // Skip images that finished loading but produced no pixels — a broken src,
+      // a 404, or a decode failure. We only drop them when nothing renders
+      // either (a valid CSS-sized SVG can have naturalWidth 0 yet a real box),
+      // so a legitimately rendered mark is never discarded. This stops broken
+      // URLs from being captured and re-surfaced as a broken-image glyph later.
+      if (
+        img.complete &&
+        (img.naturalWidth | 0) === 0 &&
+        (img.naturalHeight | 0) === 0 &&
+        (r.width | 0) === 0 &&
+        (r.height | 0) === 0
+      ) {
+        continue;
+      }
       const naturalArea = Math.max(img.naturalWidth || r.width || 0, 1) * Math.max(img.naturalHeight || r.height || 0, 1);
       const renderedArea = Math.max(r.width || 0, 0) * Math.max(r.height || 0, 0);
       const hay = `${img.alt || ''} ${img.id || ''} ${img.className || ''} ${img.src || ''}`.toLowerCase();

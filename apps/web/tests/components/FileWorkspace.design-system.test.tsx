@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act } from 'react';
+import { fireEvent, waitFor } from '@testing-library/react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +12,7 @@ import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/typ
 const registryMocks = vi.hoisted(() => ({
   fetchProjectFileText: vi.fn(),
   updateDesignSystemDraft: vi.fn(),
+  writeProjectTextFile: vi.fn(),
 }));
 
 vi.mock('../../src/providers/registry', async () => {
@@ -21,6 +23,7 @@ vi.mock('../../src/providers/registry', async () => {
     ...actual,
     fetchProjectFileText: registryMocks.fetchProjectFileText,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
+    writeProjectTextFile: registryMocks.writeProjectTextFile,
   };
 });
 
@@ -140,8 +143,102 @@ describe('FileWorkspace design-system project surface', () => {
     // lowercase by the parser; CSS upper-cases them only visually).
     expect(container.textContent?.toLowerCase()).toContain('#10b981');
     expect(container.textContent?.toLowerCase()).toContain('#111827');
-    // The DESIGN.md edit affordance is available in the kit toolbar.
+    // The DESIGN.md edit affordance lives in the sticky header's "More" menu.
+    const moreTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-kit-more-actions"]',
+    );
+    expect(moreTrigger).toBeTruthy();
+    await act(async () => {
+      moreTrigger?.click();
+      await Promise.resolve();
+    });
     expect(container.textContent).toContain('Edit DESIGN.md');
+  });
+
+  it('edits and resets palette colors through the color editor dialog', async () => {
+    let designMdBody = [
+      '# Acme',
+      '',
+      '## Color Palette',
+      '',
+      '| Role | Name | Hex | Usage |',
+      '| --- | --- | --- | --- |',
+      '| accent | Emerald | `#10B981` | links and CTAs |',
+      '| foreground | Ink | `#111827` | body text |',
+    ].join('\n');
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve(designMdBody);
+      return Promise.resolve(null);
+    });
+    registryMocks.writeProjectTextFile.mockImplementation((_projectId: string, name: string, body: string) => {
+      if (name === 'DESIGN.md') designMdBody = body;
+      return Promise.resolve(workspaceFile(name));
+    });
+    registryMocks.updateDesignSystemDraft.mockResolvedValue(designSystem());
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await flushKit();
+
+    const editEmerald = container.querySelector<HTMLButtonElement>('button[aria-label="Edit Emerald"]');
+    expect(editEmerald).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(editEmerald!);
+    });
+    const dialog = document.body.querySelector<HTMLElement>('[data-testid="design-kit-color-editor"]');
+    expect(dialog).toBeTruthy();
+    const hexInput = dialog!.querySelector<HTMLInputElement>('input[aria-label="Hex value"]');
+    expect(hexInput).toBeTruthy();
+    await act(async () => {
+      fireEvent.change(hexInput!, { target: { value: '#FF6A3D' } });
+    });
+    const save = Array.from(dialog!.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('Save color'));
+    expect(save).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(save!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(registryMocks.writeProjectTextFile).toHaveBeenLastCalledWith(
+      'ds-acme',
+      'DESIGN.md',
+      expect.stringContaining('`#FF6A3D`'),
+    ));
+
+    await flushKit();
+    await waitFor(() => expect(document.body.querySelector('[data-testid="design-kit-color-editor"]')).toBeNull());
+    const editAgain = container.querySelector<HTMLButtonElement>('button[aria-label="Edit Emerald"]');
+    expect(editAgain).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(editAgain!);
+    });
+    const resetDialog = document.body.querySelector<HTMLElement>('[data-testid="design-kit-color-editor"]');
+    const reset = Array.from(resetDialog!.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('Reset'));
+    expect(reset).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(reset!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(registryMocks.writeProjectTextFile).toHaveBeenLastCalledWith(
+      'ds-acme',
+      'DESIGN.md',
+      expect.stringContaining('`#10B981`'),
+    ));
   });
 
   it('reports malformed design-system card manifests instead of silently falling back', async () => {
@@ -373,7 +470,7 @@ describe('FileWorkspace design-system project surface', () => {
     expect(onRefresh).toHaveBeenCalledOnce();
   });
 
-  it('routes New design to the selected design system', async () => {
+  it('routes Create new design to the selected design system', async () => {
     const onUseDesignSystem = vi.fn();
     const container = renderWorkspace(
       <FileWorkspace
@@ -393,7 +490,7 @@ describe('FileWorkspace design-system project surface', () => {
     await flushKit();
 
     const newDesignButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('New design'),
+      button.textContent?.includes('Create new design'),
     );
     expect(newDesignButton).toBeTruthy();
 
@@ -534,12 +631,23 @@ describe('FileWorkspace design-system project surface', () => {
 
     await flushKit();
 
-    const defaultToggle = container.querySelector<HTMLButtonElement>('.ds-project-default-toggle');
-    expect(defaultToggle).toBeTruthy();
-    expect(defaultToggle?.textContent).toContain('Default for new chats');
+    const moreTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-kit-more-actions"]',
+    );
+    expect(moreTrigger).toBeTruthy();
+    await act(async () => {
+      moreTrigger?.click();
+      await Promise.resolve();
+    });
+
+    const defaultItem = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+    ).find((button) => button.textContent?.includes('Default for new chats'));
+    expect(defaultItem).toBeTruthy();
+    expect(defaultItem?.getAttribute('aria-checked')).toBe('false');
 
     await act(async () => {
-      defaultToggle?.click();
+      defaultItem?.click();
       await Promise.resolve();
     });
 
@@ -566,12 +674,21 @@ describe('FileWorkspace design-system project surface', () => {
 
     await flushKit();
 
-    const defaultToggle = container.querySelector<HTMLButtonElement>('.ds-project-default-toggle');
-    expect(defaultToggle?.getAttribute('aria-pressed')).toBe('true');
-    expect(defaultToggle?.textContent).toContain('Chat default');
+    const moreTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-kit-more-actions"]',
+    );
+    await act(async () => {
+      moreTrigger?.click();
+      await Promise.resolve();
+    });
+
+    const defaultItem = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+    ).find((button) => button.textContent?.includes('Chat default'));
+    expect(defaultItem?.getAttribute('aria-checked')).toBe('true');
 
     await act(async () => {
-      defaultToggle?.click();
+      defaultItem?.click();
       await Promise.resolve();
     });
 

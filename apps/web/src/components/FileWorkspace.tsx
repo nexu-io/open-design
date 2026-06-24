@@ -37,6 +37,7 @@ import {
 } from '../providers/registry';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
+import { parseDesignMd } from '../runtime/design-md-parse';
 import {
   deleteBrandImage,
   deleteBrandLogo,
@@ -47,9 +48,9 @@ import {
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { useDesignKit, hostnameOf } from '../runtime/design-kit';
+import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
-import { DesignKitView } from './DesignKitView';
+import { DesignKitView, type HeaderMenuAction } from './DesignKitView';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -2450,6 +2451,7 @@ function DesignSystemProjectPanel({
   onConnectRepo?: () => void;
   githubConnected?: boolean;
 }) {
+  const t = useT();
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [feedbackSection, setFeedbackSection] = useState<string | null>(null);
@@ -2475,6 +2477,13 @@ function DesignSystemProjectPanel({
   const [designMdBody, setDesignMdBody] = useState('');
   const [savingDesignMd, setSavingDesignMd] = useState(false);
   const [kitActionBusy, setKitActionBusy] = useState<string | null>(null);
+  // Transient feedback for kit edits (upload / refresh / reset / delete) so an
+  // action that previously fired-and-forgot now reports success or failure.
+  const [kitToast, setKitToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+  const notifyKit = useCallback(
+    (tone: 'success' | 'error', message: string) => setKitToast({ tone, message }),
+    [],
+  );
   const [kitReloadKey, setKitReloadKey] = useState(0);
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
@@ -2506,7 +2515,9 @@ function DesignSystemProjectPanel({
     onUploaded: () => {
       setKitReloadKey((k) => k + 1);
       void onDesignSystemsRefresh?.();
+      notifyKit('success', t('ds.uploadDone'));
     },
+    onError: () => notifyKit('error', t('ds.uploadFailed')),
   });
   const { kit } = useDesignKit({
     designSystemId: system.id,
@@ -2538,6 +2549,9 @@ function DesignSystemProjectPanel({
       await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
       setKitReloadKey((k) => k + 1);
       await onDesignSystemsRefresh?.();
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setKitActionBusy(null);
     }
@@ -2550,7 +2564,9 @@ function DesignSystemProjectPanel({
       const ok =
         await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title }) ||
         await downloadProjectArchive({ projectId, fallbackTitle: system.title });
-      if (!ok) window.alert('Could not download the design system. Please try again.');
+      if (!ok) notifyKit('error', t('ds.actionFailed'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setKitActionBusy(null);
     }
@@ -2572,16 +2588,20 @@ function DesignSystemProjectPanel({
       setDesignMdBody(originalMd);
       setKitReloadKey((k) => k + 1);
       await onDesignSystemsRefresh?.();
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setKitActionBusy(null);
     }
   }
 
   async function changeKitColor(index: number, hex: string) {
-    const ok = await updateBrandColor(projectId, index, hex);
+    const nextHex = normalizeDesignKitHex(hex);
+    if (!nextHex) throw new Error('Enter a valid hex color.');
+    const ok = await updateBrandColor(projectId, index, nextHex);
     if (!ok) {
-      const nextBody = replaceDesignMdColorAtIndex(designMdBody, index, hex);
-      if (!nextBody) return;
+      const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
       await saveDesignMd(nextBody);
       return;
     }
@@ -2589,18 +2609,37 @@ function DesignSystemProjectPanel({
     await onDesignSystemsRefresh?.();
   }
 
+  async function resetKitColor(index: number) {
+    const originalHex = initialDesignKitColorHex(index, {
+      brandJson: initialBrandJsonRef.current,
+      designMdBody: initialDesignMdRef.current,
+      swatches: system.swatches,
+      currentColors: kit?.colors ?? [],
+    });
+    if (!originalHex) throw new Error('No original color is available for this swatch.');
+    await changeKitColor(index, originalHex);
+  }
+
   async function removeKitLogo(index: number) {
     const ok = await deleteBrandLogo(projectId, index);
-    if (!ok) return;
+    if (!ok) {
+      notifyKit('error', t('ds.actionFailed'));
+      return;
+    }
     setKitReloadKey((k) => k + 1);
     await onDesignSystemsRefresh?.();
+    notifyKit('success', t('ds.actionDone'));
   }
 
   async function removeKitImage(index: number) {
     const ok = await deleteBrandImage(projectId, index);
-    if (!ok) return;
+    if (!ok) {
+      notifyKit('error', t('ds.actionFailed'));
+      return;
+    }
     setKitReloadKey((k) => k + 1);
     await onDesignSystemsRefresh?.();
+    notifyKit('success', t('ds.actionDone'));
   }
 
   const allFileNames = files.map((file) => file.name);
@@ -2961,23 +3000,12 @@ function DesignSystemProjectPanel({
   if (creatingInitialDraft) {
     return (
       <div className="ds-project-panel ds-project-panel--generating">
-        <div className="ds-project-generation-stage">
-          <span className="ds-project-generation-mark">
-            <Icon name="blocks" size={24} />
-          </span>
-          <h1>Creating your design system...</h1>
-          <p>Keep this tab open. You can come back in a few minutes.</p>
-          <div
-            className="ds-project-generation-progress"
-            role="progressbar"
-            aria-label={`Design system generation progress ${generationProgress}%`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={generationProgress}
-          >
-            <span style={{ width: `${generationProgress}%` }} />
-          </div>
-        </div>
+        <DesignSystemProjectLoading
+          title="Creating your design system..."
+          subtitle="Keep this tab open. You can come back in a few minutes."
+          progress={generationProgress}
+          progressLabel={`Design system generation progress ${generationProgress}%`}
+        />
       </div>
     );
   }
@@ -2986,72 +3014,68 @@ function DesignSystemProjectPanel({
   // the kit header, and the publish card + repo / font / manifest warnings above
   // the modules. The Looks-good / Needs-work review flow is intentionally gone
   // here — the kit is the single, on-brand view of the system.
+  // The publish lifecycle button stays a visible primary; everything else
+  // (asset refresh/download/reset and the chat-default toggle) folds into the
+  // header's "More" dropdown so the sticky row reads as one clear action.
   const actionsSlot = (
-    <>
+    <span
+      className="ds-project-publish-trigger"
+      title={
+        !published && !githubEvidence.ready
+          ? 'Finish importing your GitHub repo before you can publish.'
+          : undefined
+      }
+    >
       <button
         type="button"
-        className="ghost compact"
-        disabled={Boolean(kitActionBusy)}
-        onClick={() => void refreshKit()}
-        title="Refresh generated design-system assets"
+        className={published ? 'ghost compact' : 'primary'}
+        data-testid="design-system-publish"
+        aria-label={published ? 'Unpublish design system' : 'Publish design system'}
+        title={published ? 'Unpublish design system' : 'Publish design system'}
+        disabled={statusBusy || (!published && !githubEvidence.ready)}
+        onClick={() => void togglePublished(!published)}
       >
-        <Icon name="refresh" size={13} />
-        Refresh
+        <Icon name={published ? 'check' : 'arrow-up'} size={14} />
+        {published ? 'Published' : 'Publish'}
       </button>
-      <button
-        type="button"
-        className="ghost compact"
-        disabled={Boolean(kitActionBusy)}
-        onClick={() => void downloadKit()}
-        title="Download design-system ZIP"
-      >
-        <Icon name="download" size={13} />
-        Download
-      </button>
-      <button
-        type="button"
-        className="ghost compact"
-        disabled={Boolean(kitActionBusy)}
-        onClick={() => void resetKitEdits()}
-        title="Reset this session's DESIGN.md and brand.json edits"
-      >
-        <Icon name="reload" size={13} />
-        Reset
-      </button>
-      <span
-        className="ds-project-publish-trigger"
-        title={
-          !published && !githubEvidence.ready
-            ? 'Finish importing your GitHub repo before you can publish.'
-            : undefined
-        }
-      >
-        <button
-          type="button"
-          className={published ? 'ghost compact' : 'primary'}
-          data-testid="design-system-publish"
-          disabled={statusBusy || (!published && !githubEvidence.ready)}
-          onClick={() => void togglePublished(!published)}
-        >
-          {published ? <Icon name="check" size={14} /> : null}
-          {published ? 'Published' : 'Publish'}
-        </button>
-      </span>
-      {published ? (
-        <button
-          type="button"
-          className={`ds-project-default-toggle ${isDefault ? 'is-on' : ''}`}
-          aria-pressed={isDefault}
-          title="Preselect this design system for new chats and new projects."
-          disabled={statusBusy || defaultBusy || !onSetDefaultDesignSystem}
-          onClick={() => void toggleDefault(!isDefault)}
-        >
-          {isDefault ? <Icon name="check" size={14} /> : null}
-          {isDefault ? 'Chat default' : 'Default for new chats'}
-        </button>
-      ) : null}
-    </>
+    </span>
   );
+
+  const headerMenuActions: HeaderMenuAction[] = [
+    {
+      id: 'refresh',
+      label: 'Refresh',
+      icon: 'refresh',
+      onClick: () => void refreshKit(),
+      disabled: Boolean(kitActionBusy),
+    },
+    {
+      id: 'download',
+      label: 'Download',
+      icon: 'download',
+      onClick: () => void downloadKit(),
+      disabled: Boolean(kitActionBusy),
+    },
+    {
+      id: 'reset',
+      label: 'Reset',
+      icon: 'reload',
+      onClick: () => void resetKitEdits(),
+      disabled: Boolean(kitActionBusy),
+    },
+    ...(published && onSetDefaultDesignSystem
+      ? [
+          {
+            id: 'default',
+            label: isDefault ? 'Chat default' : 'Default for new chats',
+            icon: (isDefault ? 'check' : 'star') as IconName,
+            onClick: () => void toggleDefault(!isDefault),
+            disabled: statusBusy || defaultBusy,
+            active: isDefault,
+          } satisfies HeaderMenuAction,
+        ]
+      : []),
+  ];
 
   const topSlot = (
     <>
@@ -3079,15 +3103,20 @@ function DesignSystemProjectPanel({
         </p>
         {published ? (
           <div className="ds-project-use-row">
-            <span>Use this system</span>
+            <span>
+              <strong>Use this system</strong>
+              <small>
+                Start a new design that inherits this system&apos;s colors, type, and
+                components — kept on-brand automatically.
+              </small>
+            </span>
             <Button
-              variant="ghost"
-              className="compact"
+              variant="primary"
               onClick={() => onUseDesignSystem?.(system.id, system.title)}
               disabled={!onUseDesignSystem}
             >
-              <Icon name="external-link" size={13} />
-              New design
+              <Icon name="plus" size={14} />
+              Create new design
             </Button>
           </div>
         ) : null}
@@ -3147,11 +3176,21 @@ function DesignSystemProjectPanel({
 
   return (
     <div className="ds-project-panel ds-project-panel--kit" data-testid="design-system-project-tab-panel">
+      {kitToast ? (
+        <Toast
+          message={kitToast.message}
+          tone={kitToast.tone}
+          role={kitToast.tone === 'error' ? 'alert' : 'status'}
+          onDismiss={() => setKitToast(null)}
+        />
+      ) : null}
       {kit ? (
         <DesignKitView
           kit={kit}
           actionsSlot={actionsSlot}
+          headerMenuActions={headerMenuActions}
           topSlot={topSlot}
+          stickyHeader
           designMd={{
             body: designMdBody,
             onSave: saveDesignMd,
@@ -3160,7 +3199,8 @@ function DesignSystemProjectPanel({
             canEdit: true,
           }}
           onUploadModule={kitUploadModule}
-          onColorChange={(index, hex) => void changeKitColor(index, hex)}
+          onColorChange={(index, hex) => changeKitColor(index, hex)}
+          onColorReset={(index) => resetKitColor(index)}
           onDeleteLogo={(index) => void removeKitLogo(index)}
           onDeleteImage={(index) => void removeKitImage(index)}
           onRefresh={() => void refreshKit()}
@@ -3170,15 +3210,142 @@ function DesignSystemProjectPanel({
           dataTestId="design-system-project-kit"
         />
       ) : (
-        <div className="ds-project-generation-stage">
-          <span className="ds-project-generation-mark">
-            <Icon name="blocks" size={24} />
-          </span>
-          <h1>{systemDisplayName}</h1>
-        </div>
+        <DesignSystemProjectLoading
+          title={systemDisplayName}
+          subtitle="Preparing the design system workspace."
+          progressLabel="Design system workspace is loading"
+        />
       )}
     </div>
   );
+}
+
+function DesignSystemProjectLoading({
+  title,
+  subtitle,
+  progress,
+  progressLabel,
+}: {
+  title: string;
+  subtitle: string;
+  progress?: number;
+  progressLabel: string;
+}) {
+  const hasProgress = typeof progress === 'number' && Number.isFinite(progress);
+  const clampedProgress = hasProgress
+    ? Math.max(0, Math.min(100, Math.round(progress)))
+    : undefined;
+  return (
+    <div className="ds-project-loading-stage" role="status" aria-live="polite">
+      <div className="ds-project-loading-emblem" aria-hidden="true">
+        <span className="ds-project-loading-emblem__grid" />
+        <span className="ds-project-loading-mark">
+          <Icon name="blocks" size={28} />
+        </span>
+      </div>
+      <div className="ds-project-loading-copy">
+        <span className="ds-project-loading-kicker">Design System</span>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <div
+        className={`ds-project-loading-progress ${hasProgress ? 'is-determinate' : 'is-indeterminate'}`}
+        role="progressbar"
+        aria-label={progressLabel}
+        aria-valuemin={hasProgress ? 0 : undefined}
+        aria-valuemax={hasProgress ? 100 : undefined}
+        aria-valuenow={clampedProgress}
+      >
+        <span style={hasProgress ? { width: `${clampedProgress}%` } : undefined} />
+      </div>
+      <div className="ds-project-loading-skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
+function normalizeDesignKitHex(value: string): string | null {
+  const trimmed = value.trim();
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  if (/^#[0-9a-fA-F]{6}$/.test(withHash)) return withHash.toUpperCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(withHash)) {
+    return `#${withHash[1]}${withHash[1]}${withHash[2]}${withHash[2]}${withHash[3]}${withHash[3]}`.toUpperCase();
+  }
+  return null;
+}
+
+function initialDesignKitColorHex(
+  index: number,
+  sources: {
+    brandJson: string | null;
+    designMdBody: string | null;
+    swatches: string[] | undefined;
+    currentColors: KitColor[];
+  },
+): string | null {
+  const brandColor = colorHexFromBrandJson(sources.brandJson, index);
+  if (brandColor) return brandColor;
+  const designMdColor = colorHexFromDesignMd(sources.designMdBody ?? '', index);
+  if (designMdColor) return designMdColor;
+  return normalizeDesignKitHex(sources.swatches?.[index] ?? sources.currentColors[index]?.hex ?? '');
+}
+
+function colorHexFromBrandJson(raw: string | null, index: number): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { colors?: Array<{ hex?: unknown }> };
+    const hex = parsed.colors?.[index]?.hex;
+    return typeof hex === 'string' ? normalizeDesignKitHex(hex) : null;
+  } catch {
+    return null;
+  }
+}
+
+function colorHexFromDesignMd(body: string, index: number): string | null {
+  if (!body.trim()) return null;
+  return normalizeDesignKitHex(parseDesignMd(body).colors[index]?.hex ?? '');
+}
+
+function designMdBodyWithColor(
+  body: string,
+  colors: KitColor[],
+  index: number,
+  hex: string,
+): string {
+  const replaced = replaceDesignMdColorAtIndex(body, index, hex);
+  if (replaced) return replaced;
+  const nextColors = colors.length > 0
+    ? colors.map((color, colorIndex) => ({
+        ...color,
+        hex: colorIndex === index ? hex : color.hex,
+      }))
+    : [];
+  while (nextColors.length <= index) {
+    nextColors.push({
+      role: `color-${nextColors.length + 1}`,
+      name: `Color ${nextColors.length + 1}`,
+      hex: nextColors.length === index ? hex : '#000000',
+      usage: '',
+    });
+  }
+  if (nextColors[index]) {
+    nextColors[index] = { ...nextColors[index], hex };
+  }
+  const table = [
+    '## Color Palette',
+    '',
+    '| Role | Name | Hex | Usage |',
+    '| --- | --- | --- | --- |',
+    ...nextColors.map((color, colorIndex) => {
+      const role = color.role || `color-${colorIndex + 1}`;
+      const name = color.name || role;
+      return `| ${role} | ${name} | \`${normalizeDesignKitHex(color.hex) ?? '#000000'}\` | ${color.usage || ''} |`;
+    }),
+  ].join('\n');
+  return `${body.trimEnd()}\n\n${table}\n`;
 }
 
 function designSystemHasSourceContext(system: DesignSystemSummary): boolean {

@@ -13,15 +13,19 @@
 // Empty modules expose upload affordances when the backing kit is writable.
 
 import {
+  Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Textarea } from '@open-design/components';
 import { useT } from '../i18n';
 import { openExternalUrl, projectRawUrl } from '../providers/registry';
@@ -34,10 +38,25 @@ import {
 } from '../runtime/design-kit';
 import type { KitUploadModule } from '../runtime/kit-upload';
 import { Icon, type IconName } from './Icon';
+import { KitErrorBoundary } from './KitErrorBoundary';
 import styles from './BrandPreviewCard.module.css';
 
 const IMAGE_CAP = 8;
 const DESIGN_KIT_PREVIEW_SANDBOX = 'allow-scripts allow-popups';
+
+type DesignMdModuleId = 'identity' | 'typography' | 'palette' | 'voice' | 'imageryLayout' | 'designSystem';
+
+interface DesignMdModuleSpec {
+  id: DesignMdModuleId;
+  label: string;
+  heading: string;
+  keywords: string[];
+  includePreamble?: boolean;
+}
+
+type DesignMdEditTarget =
+  | { kind: 'all' }
+  | { kind: 'module'; module: DesignMdModuleSpec };
 
 // ── Logo with fallback chain ────────────────────────────────────────
 // Brand stage (`/api/brands/:id/logo`) when a brandId is known, else an explicit
@@ -200,17 +219,40 @@ export interface KitDesignMdActions {
   canEdit?: boolean;
 }
 
+/** A single entry in the sticky header's "More" overflow dropdown. */
+export interface HeaderMenuAction {
+  id: string;
+  label: string;
+  icon: IconName;
+  onClick: () => void;
+  disabled?: boolean;
+  /** Toggles render with checkbox semantics + a trailing check when active. */
+  active?: boolean;
+}
+
 export interface DesignKitViewProps {
   kit: DesignKit;
   variant?: 'panel' | 'compact';
   /** Rendered next to the title (status badges). */
   badgeSlot?: ReactNode;
-  /** Rendered on the header's right (action buttons). */
+  /** Rendered on the header's right (primary action buttons). */
   actionsSlot?: ReactNode;
+  /**
+   * Overflow actions folded into the sticky header's "More" dropdown, shown
+   * after the kit's own DESIGN.md actions. Only used when `stickyHeader`.
+   */
+  headerMenuActions?: HeaderMenuAction[];
   /** Rendered directly under the header (notices / errors). */
   noticeSlot?: ReactNode;
   /** Rendered above the modules (e.g. publish / default card). */
   topSlot?: ReactNode;
+  /** Keep the identity and action row reachable while the panel scrolls. */
+  stickyHeader?: boolean;
+  /**
+   * Show the showcase/logo cover above the header. Defaults to true; the
+   * read-only Design Systems manager hides it as redundant.
+   */
+  showCover?: boolean;
   /**
    * Opens a full, scrollable preview when the user clicks the hover button
    * over the showcase cover. When omitted, the cover falls back to a built-in
@@ -220,7 +262,8 @@ export interface DesignKitViewProps {
   onPreviewCover?: () => void;
   designMd?: KitDesignMdActions;
   onUploadModule?: (module: KitUploadModule, file: File) => void;
-  onColorChange?: (index: number, hex: string) => void;
+  onColorChange?: (index: number, hex: string) => void | Promise<void>;
+  onColorReset?: (index: number) => void | Promise<void>;
   onDeleteLogo?: (index: number) => void;
   onDeleteImage?: (index: number) => void;
   onRefresh?: () => void;
@@ -231,17 +274,21 @@ export interface DesignKitViewProps {
   dataTestId?: string;
 }
 
-export function DesignKitView({
+function DesignKitViewInner({
   kit,
   variant = 'panel',
   badgeSlot,
   actionsSlot,
+  headerMenuActions,
   noticeSlot,
   topSlot,
+  stickyHeader = false,
+  showCover = true,
   onPreviewCover,
   designMd,
   onUploadModule,
   onColorChange,
+  onColorReset,
   onDeleteLogo,
   onDeleteImage,
   onRefresh,
@@ -258,20 +305,44 @@ export function DesignKitView({
   const [dsTheme, setDsTheme] = useState<'light' | 'dark'>('light');
   const [activeLogo, setActiveLogo] = useState(0);
   const [imagesExpanded, setImagesExpanded] = useState(false);
+  // Tracks logo/image srcs that failed to load so we drop them from the view
+  // instead of rendering the browser's broken-image glyph. A broken logo then
+  // advances to the next candidate (or collapses to the empty state); a broken
+  // gallery tile hides itself while preserving the other tiles' delete indices.
+  const [brokenSrc, setBrokenSrc] = useState<ReadonlySet<string>>(() => new Set());
+  const markBroken = useCallback((src: string) => {
+    setBrokenSrc((prev) => {
+      if (prev.has(src)) return prev;
+      const next = new Set(prev);
+      next.add(src);
+      return next;
+    });
+  }, []);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
   const [assetPreview, setAssetPreview] = useState<{ url: string; label: string } | null>(null);
   const [designMdOpen, setDesignMdOpen] = useState(false);
   const [designMdDraft, setDesignMdDraft] = useState('');
+  const [designMdTarget, setDesignMdTarget] = useState<DesignMdEditTarget>({ kind: 'all' });
+  const [stickyHeaderStuck, setStickyHeaderStuck] = useState(false);
+  const [colorEditor, setColorEditor] = useState<{ index: number; label: string } | null>(null);
+  const [colorDraft, setColorDraft] = useState('#000000');
+  const [colorError, setColorError] = useState<string | null>(null);
+  const [colorSaving, setColorSaving] = useState(false);
+  const [colorOverrides, setColorOverrides] = useState<Record<number, string>>({});
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fontInputRef = useRef<HTMLInputElement | null>(null);
   const designMdInputRef = useRef<HTMLInputElement | null>(null);
+  const stickyHeaderRef = useRef<HTMLElement | null>(null);
 
   useBrandFonts(kit.projectId, kit.fonts);
 
   const logoCandidates = useMemo(
-    () => [kit.logoSrc, ...kit.logoAlternates].filter((c): c is string => Boolean(c)),
-    [kit.logoSrc, kit.logoAlternates],
+    () =>
+      [kit.logoSrc, ...kit.logoAlternates]
+        .filter((c): c is string => Boolean(c))
+        .filter((c) => !brokenSrc.has(c)),
+    [kit.logoSrc, kit.logoAlternates, brokenSrc],
   );
   const activeLogoSrc = logoCandidates[activeLogo] ?? logoCandidates[0] ?? null;
 
@@ -281,10 +352,16 @@ export function DesignKitView({
     setLightbox(null);
     setAssetPreview(null);
     setCoverPreviewOpen(false);
+    setColorEditor(null);
+    setColorError(null);
   }, [kit.designSystemId, kit.brandId]);
 
   useEffect(() => {
-    if (!lightbox && !assetPreview && !coverPreviewOpen && !designMdOpen) return undefined;
+    setColorOverrides({});
+  }, [kit.designSystemId, kit.brandId, kit.projectId]);
+
+  useEffect(() => {
+    if (!lightbox && !assetPreview && !coverPreviewOpen && !designMdOpen && !colorEditor) return undefined;
     function onKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape') return;
       event.preventDefault();
@@ -292,10 +369,48 @@ export function DesignKitView({
       setAssetPreview(null);
       setCoverPreviewOpen(false);
       setDesignMdOpen(false);
+      setColorEditor(null);
+      setColorError(null);
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [assetPreview, coverPreviewOpen, designMdOpen, lightbox]);
+  }, [assetPreview, colorEditor, coverPreviewOpen, designMdOpen, lightbox]);
+
+  useEffect(() => {
+    if (!stickyHeader) {
+      setStickyHeaderStuck(false);
+      return undefined;
+    }
+    const header = stickyHeaderRef.current;
+    if (!header) return undefined;
+    const scrollParent = header.closest<HTMLElement>('.ds-project-panel');
+    const scrollTarget: HTMLElement | Window = scrollParent ?? window;
+    const update = () => {
+      const headerTop = header.getBoundingClientRect().top;
+      // The header pins at the scroll container's content-box top — below any
+      // top border/padding — not at its border-box top. Measure that resting
+      // offset so the stuck state engages even when the panel carries top
+      // padding; otherwise the stuck background never turns on and content
+      // scrolls through the still-transparent header.
+      let stickyTop = 0;
+      let scrollTop = window.scrollY;
+      if (scrollParent) {
+        const rect = scrollParent.getBoundingClientRect();
+        const cs = getComputedStyle(scrollParent);
+        stickyTop = rect.top + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.paddingTop) || 0);
+        scrollTop = scrollParent.scrollTop;
+      }
+      const nextStuck = scrollTop > 0 && headerTop <= stickyTop + 1;
+      setStickyHeaderStuck((current) => (current === nextStuck ? current : nextStuck));
+    };
+    update();
+    scrollTarget.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      scrollTarget.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [stickyHeader]);
 
   // Engine token chips, when the system dir exists.
   useEffect(() => {
@@ -328,7 +443,13 @@ export function DesignKitView({
     };
   }, [kit.system?.tokensUrl]);
 
-  const colors = kit.colors;
+  const colors = useMemo(
+    () => kit.colors.map((color, index) => ({
+      ...color,
+      hex: colorOverrides[index] ?? color.hex,
+    })),
+    [colorOverrides, kit.colors],
+  );
   const fonts = useMemo<{ font: KitFont; label: string }[]>(() => {
     const out: { font: KitFont; label: string }[] = [];
     if (kit.typography.display) out.push({ font: kit.typography.display, label: 'Display' });
@@ -342,8 +463,51 @@ export function DesignKitView({
   const layout = kit.layout;
   const samples = imagery?.samples ?? [];
   const dsKitUrl = dsTheme === 'dark' ? kit.system?.kitDarkUrl ?? kit.system?.kitUrl : kit.system?.kitUrl;
+  const fullSystemUrl = kit.system?.indexUrl ?? null;
   const canUpload = Boolean(kit.canUpload && onUploadModule);
   const canEditDesignMd = Boolean(designMd?.canEdit !== false && designMd?.onSave);
+  const designMdModules = useMemo<Record<DesignMdModuleId, DesignMdModuleSpec>>(
+    () => ({
+      identity: {
+        id: 'identity',
+        label: t('brandDetail.identity'),
+        heading: 'Identity',
+        keywords: ['identity', 'overview', 'brand'],
+        includePreamble: true,
+      },
+      typography: {
+        id: 'typography',
+        label: t('brandDetail.typography'),
+        heading: 'Typography',
+        keywords: ['typograph', 'type', 'font'],
+      },
+      palette: {
+        id: 'palette',
+        label: t('brandDetail.palette'),
+        heading: 'Color Palette',
+        keywords: ['color', 'palette'],
+      },
+      voice: {
+        id: 'voice',
+        label: t('brandDetail.voiceTone'),
+        heading: 'Voice & Tone',
+        keywords: ['voice', 'tone', 'messaging'],
+      },
+      imageryLayout: {
+        id: 'imageryLayout',
+        label: t('brandDetail.imageryLayout'),
+        heading: 'Imagery & Layout',
+        keywords: ['imagery', 'image', 'photograph', 'illustration', 'layout', 'spacing', 'grid', 'composition'],
+      },
+      designSystem: {
+        id: 'designSystem',
+        label: t('brandDetail.designSystem'),
+        heading: 'Design System',
+        keywords: ['design system', 'component', 'token', 'motion', 'interaction'],
+      },
+    }),
+    [t],
+  );
 
   function handleFile(module: KitUploadModule, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -354,6 +518,15 @@ export function DesignKitView({
   function openInBrowser(event: MouseEvent<HTMLAnchorElement>, url: string) {
     event.preventDefault();
     void openExternalUrl(url);
+  }
+
+  function openFullSystemPreview() {
+    if (!fullSystemUrl) return;
+    setAssetPreview({ url: fullSystemUrl, label: `${kit.name} full system` });
+  }
+
+  function openUrlInNewTab(url: string) {
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   function handleModuleDragOver(event: DragEvent<HTMLElement>) {
@@ -392,23 +565,134 @@ export function DesignKitView({
 
   function openDesignMdEditor() {
     if (!designMd) return;
+    setDesignMdTarget({ kind: 'all' });
     setDesignMdDraft(designMd.body);
     setDesignMdOpen(true);
   }
 
-  async function copyDesignMd() {
-    if (!designMd?.body || !navigator.clipboard?.writeText) return;
+  function openDesignMdModuleEditor(module: DesignMdModuleSpec) {
+    if (!designMd) return;
+    const slice = designMdModuleSlice(designMd.body, module);
+    setDesignMdTarget({ kind: 'module', module });
+    setDesignMdDraft(slice.text);
+    setDesignMdOpen(true);
+  }
+
+  async function copyDesignMdText(value: string) {
+    if (!value.trim() || !navigator.clipboard?.writeText) return;
     try {
-      await navigator.clipboard.writeText(designMd.body);
+      await navigator.clipboard.writeText(value);
     } catch {
       // Clipboard write failures are non-fatal.
     }
   }
 
+  async function copyDesignMd() {
+    if (!designMd?.body) return;
+    await copyDesignMdText(designMd.body);
+  }
+
+  async function copyDesignMdModule(module: DesignMdModuleSpec) {
+    if (!designMd?.body) return;
+    const slice = designMdModuleSlice(designMd.body, module);
+    await copyDesignMdText(slice.text);
+  }
+
+  // Core editing shortcuts, active when focus is within the kit (so they never
+  // hijack global typing). Plain letter keys only — modifier combos (⌘C copy,
+  // etc.) pass through, and inputs/editors/open modals are skipped. Delete is
+  // contextual: it only removes the logo when the logo stage itself is focused,
+  // so a stray keypress can't destroy an asset. See the "?" hint in the header.
+  function handleKitKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (designMdOpen || colorEditor || lightbox || assetPreview) return;
+    const key = event.key.toLowerCase();
+    if (key === 'e' && canEditDesignMd) {
+      event.preventDefault();
+      openDesignMdEditor();
+    } else if (key === 'c' && designMd?.body) {
+      event.preventDefault();
+      void copyDesignMd();
+    } else if (key === 'u' && canUpload) {
+      event.preventDefault();
+      logoInputRef.current?.click();
+    } else if (key === 'r' && onRefresh) {
+      event.preventDefault();
+      onRefresh();
+    } else if (
+      (event.key === 'Delete' || event.key === 'Backspace') &&
+      onDeleteLogo &&
+      activeLogoSrc &&
+      target.closest('[data-kit-logo-stage]')
+    ) {
+      event.preventDefault();
+      onDeleteLogo(activeLogo);
+    }
+  }
+
   async function saveDesignMdDraft() {
     if (!designMd?.onSave) return;
-    await designMd.onSave(designMdDraft);
+    const nextBody = designMdTarget.kind === 'module'
+      ? replaceDesignMdModule(designMd.body, designMdTarget.module, designMdDraft)
+      : designMdDraft;
+    await designMd.onSave(nextBody);
     setDesignMdOpen(false);
+  }
+
+  function openColorEditor(index: number) {
+    const color = colors[index];
+    if (!color) return;
+    setColorEditor({
+      index,
+      label: color.name || color.role || `Color ${index + 1}`,
+    });
+    setColorDraft(normalizeColorInput(color.hex).toUpperCase());
+    setColorError(null);
+  }
+
+  async function saveColorDraft() {
+    if (!colorEditor || !onColorChange) return;
+    const nextHex = normalizeEditableHex(colorDraft);
+    if (!nextHex) {
+      setColorError('Enter a valid hex color, such as #FF6A3D.');
+      return;
+    }
+    const previousHex = colors[colorEditor.index]?.hex;
+    setColorSaving(true);
+    setColorError(null);
+    setColorOverrides((current) => ({ ...current, [colorEditor.index]: nextHex }));
+    try {
+      await onColorChange(colorEditor.index, nextHex);
+      setColorEditor(null);
+    } catch (err) {
+      setColorError(err instanceof Error ? err.message : 'Could not save this color.');
+      if (previousHex) {
+        setColorOverrides((current) => ({ ...current, [colorEditor.index]: previousHex }));
+      }
+    } finally {
+      setColorSaving(false);
+    }
+  }
+
+  async function resetColorDraft() {
+    if (!colorEditor || !onColorReset) return;
+    setColorSaving(true);
+    setColorError(null);
+    try {
+      await onColorReset(colorEditor.index);
+      setColorOverrides((current) => {
+        const next = { ...current };
+        delete next[colorEditor.index];
+        return next;
+      });
+      setColorEditor(null);
+    } catch (err) {
+      setColorError(err instanceof Error ? err.message : 'Could not reset this color.');
+    } finally {
+      setColorSaving(false);
+    }
   }
 
   async function handleDesignMdUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -416,6 +700,7 @@ export function DesignKitView({
     event.target.value = '';
     if (!file) return;
     const text = await file.text();
+    setDesignMdTarget({ kind: 'all' });
     setDesignMdDraft(text);
     setDesignMdOpen(true);
   }
@@ -462,6 +747,22 @@ export function DesignKitView({
     );
   }
 
+  function designMdModuleActionButtons(module: DesignMdModuleSpec) {
+    if (!designMd) return null;
+    const slice = designMdModuleSlice(designMd.body, module);
+    const moduleVars = { module: module.label };
+    return (
+      <>
+        {moduleActionButton(t('ds.copyDesignMdModule', moduleVars), 'copy', () => void copyDesignMdModule(module), !slice.text.trim())}
+        {canEditDesignMd
+          ? moduleActionButton(t('ds.editDesignMdModule', moduleVars), 'edit', () => openDesignMdModuleEditor(module), Boolean(designMd.saving))
+          : designMd.onOpenFile
+            ? moduleActionButton(t('ds.openDesignMdModule', moduleVars), 'file-text', designMd.onOpenFile)
+            : null}
+      </>
+    );
+  }
+
   function uploadAction(module: KitUploadModule) {
     if (!canUpload) return null;
     const label =
@@ -504,11 +805,88 @@ export function DesignKitView({
     );
   }
 
+  // Sticky-header overflow menu: the kit's own DESIGN.md actions, then any
+  // consumer-supplied actions, then "Open full system" — each its own group so
+  // they read as separated clusters in the dropdown.
+  const designMdMenuActions: HeaderMenuAction[] = designMd
+    ? [
+        ...(canEditDesignMd
+          ? [{
+              id: 'design-md-edit',
+              label: t('ds.editDesignMd'),
+              icon: 'edit' as IconName,
+              onClick: openDesignMdEditor,
+              disabled: Boolean(designMd.saving),
+            }]
+          : designMd.onOpenFile
+            ? [{
+                id: 'design-md-open',
+                label: t('ds.openDesignMd'),
+                icon: 'file-text' as IconName,
+                onClick: designMd.onOpenFile,
+              }]
+            : []),
+        {
+          id: 'design-md-copy',
+          label: t('ds.copyDesignMd'),
+          icon: 'copy' as IconName,
+          onClick: () => void copyDesignMd(),
+          disabled: !designMd.body,
+        },
+        ...(canEditDesignMd
+          ? [{
+              id: 'design-md-upload',
+              label: t('ds.uploadMd'),
+              icon: 'upload' as IconName,
+              onClick: () => designMdInputRef.current?.click(),
+              disabled: Boolean(designMd.saving),
+            }]
+          : []),
+      ]
+    : [];
+  const openFullSystemMenuActions: HeaderMenuAction[] =
+    stickyHeader && fullSystemUrl
+      ? [{
+          id: 'open-full-system',
+          label: t('brandDetail.openFullSystem'),
+          icon: 'external-link' as IconName,
+          onClick: openFullSystemPreview,
+        }]
+      : [];
+  const headerMenuGroups: HeaderMenuAction[][] = [
+    designMdMenuActions,
+    headerMenuActions ?? [],
+    openFullSystemMenuActions,
+  ];
+  const hasHeaderMenu = headerMenuGroups.some((group) => group.length > 0);
+
+  // "?" affordance surfacing the keyboard shortcuts (E edit · C copy · U upload
+  // · R refresh · ⌫ delete logo). Only on full (non-compact) views where the
+  // shortcuts apply; tabIndex -1 keeps it out of the Tab order (info only).
+  const shortcutsHint =
+    !compact && (canEditDesignMd || canUpload || Boolean(onRefresh) || Boolean(designMd?.body)) ? (
+      <button
+        type="button"
+        className={styles.shortcutsHint}
+        title={t('ds.shortcutsHint')}
+        aria-label={t('ds.shortcutsLabel')}
+        tabIndex={-1}
+        data-testid="design-kit-shortcuts-hint"
+      >
+        <Icon name="help-circle" size={14} />
+      </button>
+    ) : null;
+
   return (
     <div
-      className={`${styles.previewInner} ${compact ? styles.compact : ''}`}
+      className={[
+        styles.previewInner,
+        compact ? styles.compact : '',
+        stickyHeader ? styles.previewInnerSticky : '',
+      ].filter(Boolean).join(' ')}
       data-testid={dataTestId}
       data-variant={variant}
+      onKeyDown={handleKitKeyDown}
     >
       <input
         ref={logoInputRef}
@@ -539,6 +917,7 @@ export function DesignKitView({
         onChange={(e) => void handleDesignMdUpload(e)}
       />
 
+      {showCover ? (
       <div className={styles.cover}>
         {kit.showcaseHtml ? (
           <>
@@ -597,28 +976,65 @@ export function DesignKitView({
           />
         )}
       </div>
+      ) : null}
 
-      <header className={styles.previewHead}>
-        <div className={styles.previewHeadText}>
-          <div className={styles.previewTitleRow}>
-            <h2 className={styles.previewName}>{kit.name}</h2>
-            {badgeSlot}
-          </div>
-          {kit.tagline ? <p className={styles.previewTagline}>{kit.tagline}</p> : null}
-          {kit.host && kit.sourceUrl ? (
-            <a
-              className={styles.previewDomain}
-              href={kit.sourceUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              onClick={(event) => openInBrowser(event, kit.sourceUrl!)}
-            >
-              {kit.host}
-              <ExternalGlyph />
-            </a>
+      <header
+        ref={stickyHeader ? stickyHeaderRef : undefined}
+        className={[
+          styles.previewHead,
+          stickyHeader ? styles.previewHeadSticky : '',
+          stickyHeaderStuck ? styles.previewHeadStuck : '',
+        ].filter(Boolean).join(' ')}
+      >
+        <div className={styles.previewHeadIdentity}>
+          {stickyHeader ? (
+            <span className={styles.previewHeadLogo} aria-hidden="true">
+              <BrandLogo
+                brandId={kit.brandId}
+                logoSrc={activeLogoSrc ?? kit.logoSrc}
+                host={kit.host}
+                name={kit.name}
+                faviconSize={40}
+                className={styles.previewHeadLogoImage}
+                fallbackClassName={styles.previewHeadLogoFallback}
+              />
+            </span>
           ) : null}
+          <div className={styles.previewHeadText}>
+            <div className={styles.previewTitleRow}>
+              <h2 className={styles.previewName}>{kit.name}</h2>
+              {badgeSlot}
+            </div>
+            {!stickyHeader && kit.tagline ? <p className={styles.previewTagline}>{kit.tagline}</p> : null}
+            {!stickyHeader && kit.host && kit.sourceUrl ? (
+              <a
+                className={styles.previewDomain}
+                href={kit.sourceUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={(event) => openInBrowser(event, kit.sourceUrl!)}
+              >
+                {kit.host}
+                <ExternalGlyph />
+              </a>
+            ) : null}
+          </div>
         </div>
-        {actionsSlot ? <div className={styles.previewActions}>{actionsSlot}</div> : null}
+        {stickyHeader ? (
+          actionsSlot || hasHeaderMenu || shortcutsHint ? (
+            <div className={styles.previewActions}>
+              {actionsSlot}
+              {shortcutsHint}
+              <HeaderActionsMenu groups={headerMenuGroups} label={t('designs.menuMore')} />
+            </div>
+          ) : null
+        ) : actionsSlot || (!compact && designMd) ? (
+          <div className={styles.previewActions}>
+            {!compact ? designMdActionButtons() : null}
+            {actionsSlot}
+            {shortcutsHint}
+          </div>
+        ) : null}
       </header>
 
       {noticeSlot}
@@ -629,7 +1045,7 @@ export function DesignKitView({
             <section className={styles.section} aria-label={t('brandDetail.identity')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.identity')}</h3>
-                {moduleActions(designMdActionButtons())}
+                {moduleActions(designMdModuleActionButtons(designMdModules.identity))}
               </div>
               <p className={styles.description}>{kit.description}</p>
             </section>
@@ -659,10 +1075,16 @@ export function DesignKitView({
                   <button
                     type="button"
                     className={`${styles.logoStage} ${styles.logoStageButton}`}
+                    data-kit-logo-stage
                     onClick={() => setLightbox({ src: activeLogoSrc, caption: kit.name })}
                     aria-label={`${t('common.openPreview')}: ${kit.name}`}
                   >
-                    <img className={styles.logoStageImg} src={activeLogoSrc} alt={kit.name} />
+                    <img
+                      className={styles.logoStageImg}
+                      src={activeLogoSrc}
+                      alt={kit.name}
+                      onError={() => markBroken(activeLogoSrc)}
+                    />
                   </button>
                   {logoCandidates.length > 1 ? (
                     <div className={styles.logoThumbs}>
@@ -674,7 +1096,7 @@ export function DesignKitView({
                           onClick={() => setActiveLogo(i)}
                           aria-pressed={i === activeLogo}
                         >
-                          <img src={cand} alt="" />
+                          <img src={cand} alt="" onError={() => markBroken(cand)} />
                         </button>
                       ))}
                     </div>
@@ -699,7 +1121,7 @@ export function DesignKitView({
                 {moduleActions(
                   <>
                     {uploadAction('font')}
-                    {designMdActionButtons()}
+                    {designMdModuleActionButtons(designMdModules.typography)}
                   </>,
                 )}
               </div>
@@ -756,20 +1178,22 @@ export function DesignKitView({
             <section className={styles.section} aria-label={t('brandDetail.palette')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.palette')}</h3>
-                {moduleActions(designMdActionButtons())}
+                {moduleActions(designMdModuleActionButtons(designMdModules.palette))}
               </div>
               <div className={styles.paletteGrid}>
                 {colors.map((c, i) => (
                   <div key={`${c.role}-${c.hex}-${i}`} className={styles.swatch}>
                     <span className={styles.swatchChip} style={{ background: c.hex }}>
                       {onColorChange ? (
-                        <input
+                        <button
                           className={styles.swatchPicker}
-                          type="color"
-                          value={normalizeColorInput(c.hex)}
+                          type="button"
                           aria-label={`Edit ${c.name || c.role || 'color'}`}
-                          onChange={(event) => onColorChange(i, event.target.value)}
-                        />
+                          title={`Edit ${c.name || c.role || 'color'}`}
+                          onClick={() => openColorEditor(i)}
+                        >
+                          <Icon name="edit" size={13} />
+                        </button>
                       ) : null}
                       <span
                         className={styles.swatchHex}
@@ -793,7 +1217,7 @@ export function DesignKitView({
             <section className={styles.section} aria-label={t('brandDetail.voiceTone')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.voiceTone')}</h3>
-                {moduleActions(designMdActionButtons())}
+                {moduleActions(designMdModuleActionButtons(designMdModules.voice))}
               </div>
               {voice.adjectives.length > 0 ? (
                 <div className={styles.pills}>
@@ -835,7 +1259,7 @@ export function DesignKitView({
             <section className={styles.section} aria-label={t('brandDetail.imageryLayout')}>
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.imageryLayout')}</h3>
-                {moduleActions(designMdActionButtons())}
+                {moduleActions(designMdModuleActionButtons(designMdModules.imageryLayout))}
               </div>
               {imagery?.style ? <p className={styles.description}>{imagery.style}</p> : null}
               {(imagery?.subjects.length ?? 0) > 0 ? (
@@ -900,6 +1324,10 @@ export function DesignKitView({
                 <div className={styles.gallery}>
                   {(imagesExpanded ? samples : samples.slice(0, IMAGE_CAP)).map((s, i) => {
                     const sampleIndex = imagesExpanded ? i : i;
+                    // Drop tiles whose source 404s/fails so the grid never shows
+                    // a broken-image glyph. Returning null keeps the remaining
+                    // tiles' indices aligned with the delete handler.
+                    if (brokenSrc.has(s.url)) return null;
                     const cap = s.caption || s.kind || kit.name;
                     return (
                       <figure key={`${s.url}-${i}`} className={styles.shot}>
@@ -909,7 +1337,7 @@ export function DesignKitView({
                           onClick={() => setLightbox({ src: s.url, caption: cap })}
                           aria-label={cap}
                         >
-                          <img src={s.url} alt={cap} loading="lazy" />
+                          <img src={s.url} alt={cap} loading="lazy" onError={() => markBroken(s.url)} />
                         </button>
                         {onDeleteImage ? (
                           <button
@@ -944,22 +1372,20 @@ export function DesignKitView({
                 <h3 className={styles.sectionTitle}>{t('brandDetail.designSystem')}</h3>
                 {moduleActions(
                   <>
-                    {designMdActionButtons()}
-                    {onRefresh ? moduleActionButton(t('ds.refresh'), 'refresh', onRefresh) : null}
-                    {onDownload ? moduleActionButton(t('ds.download'), 'download', onDownload) : null}
-                    {onImport ? moduleActionButton(t('ds.importFolder'), 'import', onImport) : null}
-                    {onReset ? moduleActionButton(t('ds.reset'), 'reload', onReset) : null}
-                    {kit.system.indexUrl ? (
-                      <a
-                        className={styles.dsOpen}
-                        href={kit.system.indexUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        onClick={(event) => openInBrowser(event, kit.system!.indexUrl!)}
+                    {designMdModuleActionButtons(designMdModules.designSystem)}
+                    {!stickyHeader && onRefresh ? moduleActionButton(t('ds.refresh'), 'refresh', onRefresh) : null}
+                    {!stickyHeader && onDownload ? moduleActionButton(t('ds.download'), 'download', onDownload) : null}
+                    {!stickyHeader && onImport ? moduleActionButton(t('ds.importFolder'), 'import', onImport) : null}
+                    {!stickyHeader && onReset ? moduleActionButton(t('ds.reset'), 'reload', onReset) : null}
+                    {!stickyHeader && fullSystemUrl ? (
+                      <button
+                        type="button"
+                        className={`${styles.dsOpen} ${styles.dsOpenButton}`}
+                        onClick={openFullSystemPreview}
                       >
                         {t('brandDetail.openFullSystem')}
                         <ExternalGlyph />
-                      </a>
+                      </button>
                     ) : null}
                   </>,
                 )}
@@ -1054,126 +1480,340 @@ export function DesignKitView({
           ) : null}
         </>
 
-      {lightbox ? (
-        <div
-          className={styles.lightbox}
-          role="dialog"
-          aria-modal="true"
-          aria-label={lightbox.caption}
-          onClick={() => setLightbox(null)}
-        >
-          <button
-            type="button"
-            className={styles.lightboxClose}
-            onClick={() => setLightbox(null)}
-            aria-label={t('newBrand.close')}
-          >
-            <CloseGlyph />
-          </button>
-          <img
-            className={styles.lightboxImg}
-            src={lightbox.src}
-            alt={lightbox.caption}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      ) : null}
+      {/* Overlays portal to <body> so their z-index resolves in the ROOT
+          stacking context. Rendered inline, the DesignKitView host pane traps
+          them in a lower stacking context and the chat composer (a root-level
+          position:fixed layer) paints over them despite their higher z-index. */}
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <>
+              {lightbox ? (
+                <div
+                  className={styles.lightbox}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={lightbox.caption}
+                  onClick={() => setLightbox(null)}
+                >
+                  <button
+                    type="button"
+                    className={styles.lightboxClose}
+                    onClick={() => setLightbox(null)}
+                    aria-label={t('newBrand.close')}
+                  >
+                    <CloseGlyph />
+                  </button>
+                  <img
+                    className={styles.lightboxImg}
+                    src={lightbox.src}
+                    alt={lightbox.caption}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              ) : null}
 
-      {assetPreview ? (
-        <div
-          className={styles.assetModal}
-          role="dialog"
-          aria-modal="true"
-          aria-label={assetPreview.label}
-          onClick={() => setAssetPreview(null)}
-        >
-          <div className={styles.assetModalPanel} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.assetModalHeader}>
-              <h3>{assetPreview.label}</h3>
-              <button
-                type="button"
-                className={styles.assetModalClose}
-                onClick={() => setAssetPreview(null)}
-                aria-label={t('newBrand.close')}
-              >
-                <CloseGlyph />
-              </button>
-            </div>
-            <iframe
-              className={styles.assetModalFrame}
-              src={assetPreview.url}
-              title={assetPreview.label}
-              sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
-            />
-          </div>
-        </div>
-      ) : null}
+              {assetPreview ? (
+                <div
+                  className={styles.assetModal}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={assetPreview.label}
+                  onClick={() => setAssetPreview(null)}
+                >
+                  <div className={styles.assetModalPanel} onClick={(event) => event.stopPropagation()}>
+                    <div className={styles.assetModalHeader}>
+                      <h3>{assetPreview.label}</h3>
+                      <div className={styles.assetModalHeaderActions}>
+                        <button
+                          type="button"
+                          className={styles.moduleAction}
+                          onClick={() => openUrlInNewTab(assetPreview.url)}
+                        >
+                          <Icon name="external-link" size={13} />
+                          <span>{t('preview.openInNewTab')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.assetModalClose}
+                          onClick={() => setAssetPreview(null)}
+                          aria-label={t('newBrand.close')}
+                        >
+                          <CloseGlyph />
+                        </button>
+                      </div>
+                    </div>
+                    <iframe
+                      className={styles.assetModalFrame}
+                      src={assetPreview.url}
+                      title={assetPreview.label}
+                      sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
+                    />
+                  </div>
+                </div>
+              ) : null}
 
-      {coverPreviewOpen && kit.showcaseHtml ? (
-        <div
-          className={styles.assetModal}
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${kit.name} preview`}
-          onClick={() => setCoverPreviewOpen(false)}
-        >
-          <div className={styles.assetModalPanel} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.assetModalHeader}>
-              <h3>{kit.name}</h3>
-              <button
-                type="button"
-                className={styles.assetModalClose}
-                onClick={() => setCoverPreviewOpen(false)}
-                aria-label={t('newBrand.close')}
-              >
-                <CloseGlyph />
-              </button>
-            </div>
-            <iframe
-              className={styles.assetModalFrame}
-              title={`${kit.name} preview`}
-              sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
-              srcDoc={buildSrcdoc(kit.showcaseHtml)}
-            />
-          </div>
-        </div>
-      ) : null}
+              {coverPreviewOpen && kit.showcaseHtml ? (
+                <div
+                  className={styles.assetModal}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`${kit.name} preview`}
+                  onClick={() => setCoverPreviewOpen(false)}
+                >
+                  <div className={styles.assetModalPanel} onClick={(event) => event.stopPropagation()}>
+                    <div className={styles.assetModalHeader}>
+                      <h3>{kit.name}</h3>
+                      <button
+                        type="button"
+                        className={styles.assetModalClose}
+                        onClick={() => setCoverPreviewOpen(false)}
+                        aria-label={t('newBrand.close')}
+                      >
+                        <CloseGlyph />
+                      </button>
+                    </div>
+                    <iframe
+                      className={styles.assetModalFrame}
+                      title={`${kit.name} preview`}
+                      sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
+                      srcDoc={buildSrcdoc(kit.showcaseHtml)}
+                    />
+                  </div>
+                </div>
+              ) : null}
 
-      {designMdOpen && designMd ? (
-        <div
-          className={styles.assetModal}
-          role="dialog"
-          aria-modal="true"
-          aria-label="DESIGN.md"
-          onClick={() => setDesignMdOpen(false)}
-        >
-          <div className={`${styles.assetModalPanel} ${styles.designMdModalPanel}`} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.assetModalHeader}>
-              <h3>DESIGN.md</h3>
-              <button
-                type="button"
-                className={styles.assetModalClose}
-                onClick={() => setDesignMdOpen(false)}
-                aria-label={t('newBrand.close')}
-              >
-                <CloseGlyph />
-              </button>
-            </div>
-            <Textarea
-              className={styles.designMdTextarea}
-              value={designMdDraft}
-              onChange={(event) => setDesignMdDraft(event.target.value)}
-              rows={20}
-              spellCheck={false}
-              aria-label="DESIGN.md"
-            />
-            <div className={styles.designMdModalBar}>
-              <span>{t('ds.editingDesignMdHint')}</span>
-              <Button variant="primary" disabled={Boolean(designMd.saving)} onClick={() => void saveDesignMdDraft()}>
-                {designMd.saving ? t('ds.saving') : t('ds.saveDesignMd')}
-              </Button>
-            </div>
-          </div>
+              {designMdOpen && designMd ? (
+                <div
+                  className={styles.assetModal}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={designMdTarget.kind === 'module' ? `${designMdTarget.module.label} DESIGN.md section` : 'DESIGN.md'}
+                  onClick={() => setDesignMdOpen(false)}
+                >
+                  <div className={`${styles.assetModalPanel} ${styles.designMdModalPanel}`} onClick={(event) => event.stopPropagation()}>
+                    <div className={styles.assetModalHeader}>
+                      <h3>{designMdTarget.kind === 'module' ? designMdTarget.module.label : 'DESIGN.md'}</h3>
+                      <button
+                        type="button"
+                        className={styles.assetModalClose}
+                        onClick={() => setDesignMdOpen(false)}
+                        aria-label={t('newBrand.close')}
+                      >
+                        <CloseGlyph />
+                      </button>
+                    </div>
+                    <Textarea
+                      className={styles.designMdTextarea}
+                      value={designMdDraft}
+                      onChange={(event) => setDesignMdDraft(event.target.value)}
+                      rows={20}
+                      spellCheck={false}
+                      aria-label={designMdTarget.kind === 'module' ? `${designMdTarget.module.label} DESIGN.md section` : 'DESIGN.md'}
+                    />
+                    <div className={styles.designMdModalBar}>
+                      <span>
+                        {designMdTarget.kind === 'module'
+                          ? `Editing only the ${designMdTarget.module.label} module.`
+                          : t('ds.editingDesignMdHint')}
+                      </span>
+                      <Button variant="primary" disabled={Boolean(designMd.saving)} onClick={() => void saveDesignMdDraft()}>
+                        {designMd.saving ? t('ds.saving') : designMdTarget.kind === 'module' ? 'Save module' : t('ds.saveDesignMd')}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {colorEditor ? (
+                <div
+                  className={styles.assetModal}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`Edit ${colorEditor.label}`}
+                  data-testid="design-kit-color-editor"
+                  onClick={() => {
+                    if (colorSaving) return;
+                    setColorEditor(null);
+                    setColorError(null);
+                  }}
+                >
+                  <div
+                    className={`${styles.assetModalPanel} ${styles.colorModalPanel}`}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className={styles.assetModalHeader}>
+                      <h3>Edit {colorEditor.label}</h3>
+                      <button
+                        type="button"
+                        className={styles.assetModalClose}
+                        onClick={() => {
+                          if (colorSaving) return;
+                          setColorEditor(null);
+                          setColorError(null);
+                        }}
+                        aria-label={t('newBrand.close')}
+                      >
+                        <CloseGlyph />
+                      </button>
+                    </div>
+                    <div className={styles.colorModalBody}>
+                      <div className={styles.colorModalPreview} style={{ background: normalizeColorInput(colorDraft) }}>
+                        <span
+                          style={{
+                            color: isLightHex(normalizeColorInput(colorDraft))
+                              ? 'rgba(0,0,0,.72)'
+                              : 'rgba(255,255,255,.9)',
+                          }}
+                        >
+                          {normalizeColorInput(colorDraft).toUpperCase()}
+                        </span>
+                      </div>
+                      <label className={styles.colorModalField}>
+                        <span>Color</span>
+                        <input
+                          type="color"
+                          value={normalizeColorInput(colorDraft)}
+                          onChange={(event) => {
+                            setColorDraft(event.target.value.toUpperCase());
+                            setColorError(null);
+                          }}
+                        />
+                      </label>
+                      <label className={styles.colorModalField}>
+                        <span>Hex</span>
+                        <input
+                          type="text"
+                          value={colorDraft}
+                          inputMode="text"
+                          autoCapitalize="characters"
+                          spellCheck={false}
+                          aria-label="Hex value"
+                          onChange={(event) => {
+                            setColorDraft(event.target.value.toUpperCase());
+                            setColorError(null);
+                          }}
+                        />
+                      </label>
+                      {colorError ? <p className={styles.colorModalError}>{colorError}</p> : null}
+                    </div>
+                    <div className={styles.designMdModalBar}>
+                      <button
+                        type="button"
+                        className={styles.moduleAction}
+                        disabled={colorSaving || !onColorReset}
+                        onClick={() => void resetColorDraft()}
+                      >
+                        <Icon name="reload" size={13} />
+                        <span>Reset</span>
+                      </button>
+                      <Button variant="primary" disabled={colorSaving} onClick={() => void saveColorDraft()}>
+                        {colorSaving ? t('ds.saving') : 'Save color'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+// Public entry point: the kit view wrapped in an error boundary so a render
+// exception (malformed brand.json, a just-deleted asset, etc.) degrades to a
+// recoverable fallback instead of white-screening the whole app.
+export function DesignKitView(props: DesignKitViewProps) {
+  return (
+    <KitErrorBoundary>
+      <DesignKitViewInner {...props} />
+    </KitErrorBoundary>
+  );
+}
+
+// Compact "More" overflow dropdown for the sticky header. Renders grouped
+// action items (icon + full label) so every action stays legible instead of
+// crowding the header as an anonymous icon-only square. Mirrors the
+// EntryHelpMenu popover pattern: click-outside + Escape to dismiss.
+// Exported so the Design Systems tab can tuck its secondary toolbar actions
+// (download / make-default / delete) into the same ⋯ menu.
+export function HeaderActionsMenu({
+  groups,
+  label,
+}: {
+  groups: HeaderMenuAction[][];
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onPointerDown(event: globalThis.MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const visibleGroups = groups.filter((group) => group.length > 0);
+  if (visibleGroups.length === 0) return null;
+
+  return (
+    <div className={styles.headerMenu} ref={wrapRef}>
+      <button
+        type="button"
+        className={styles.headerMenuTrigger}
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        data-testid="design-kit-more-actions"
+      >
+        <Icon name="more-horizontal" size={16} />
+      </button>
+      {open ? (
+        <div className={styles.headerMenuPopover} role="menu" aria-label={label}>
+          {visibleGroups.map((group, groupIndex) => (
+            <Fragment key={group[0]?.id ?? groupIndex}>
+              {groupIndex > 0 ? <div className={styles.headerMenuDivider} aria-hidden /> : null}
+              {group.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role={item.active === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                  aria-checked={item.active === undefined ? undefined : item.active}
+                  className={styles.headerMenuItem}
+                  disabled={item.disabled}
+                  onClick={() => {
+                    item.onClick();
+                    setOpen(false);
+                  }}
+                >
+                  <span className={styles.headerMenuItemIcon} aria-hidden>
+                    <Icon name={item.icon} size={15} />
+                  </span>
+                  <span className={styles.headerMenuItemLabel}>{item.label}</span>
+                  {item.active ? (
+                    <span className={styles.headerMenuItemCheck} aria-hidden>
+                      <Icon name="check" size={14} />
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </Fragment>
+          ))}
         </div>
       ) : null}
     </div>
@@ -1186,6 +1826,118 @@ function normalizeColorInput(hex: string): string {
     return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
   }
   return '#000000';
+}
+
+function normalizeEditableHex(value: string): string | null {
+  const trimmed = value.trim();
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  if (/^#[0-9a-fA-F]{6}$/.test(withHash)) return withHash.toUpperCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(withHash)) {
+    return `#${withHash[1]}${withHash[1]}${withHash[2]}${withHash[2]}${withHash[3]}${withHash[3]}`.toUpperCase();
+  }
+  return null;
+}
+
+interface DesignMdHeadingMatch {
+  start: number;
+  title: string;
+}
+
+interface DesignMdSlice {
+  text: string;
+  start: number;
+  end: number;
+  exists: boolean;
+}
+
+function designMdModuleSlice(body: string, module: DesignMdModuleSpec): DesignMdSlice {
+  const safe = body ?? '';
+  const frontmatter = safe.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  const contentStart = frontmatter ? frontmatter[0].length : 0;
+  const headings = designMdHeadings(safe, contentStart);
+  const preambleEnd = headings[0]?.start ?? safe.length;
+  const preamble = safe.slice(contentStart, preambleEnd).trim();
+  const matchedIndexes = headings
+    .map((heading, index) => (designMdHeadingMatches(heading.title, module) ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (module.includePreamble && preamble.length > 0) {
+    return {
+      text: preamble,
+      start: contentStart,
+      end: preambleEnd,
+      exists: true,
+    };
+  }
+
+  if (matchedIndexes.length > 0) {
+    const first = matchedIndexes[0]!;
+    const last = matchedIndexes[matchedIndexes.length - 1]!;
+    const start = headings[first]!.start;
+    const end = headings[last + 1]?.start ?? safe.length;
+    return {
+      text: safe.slice(start, end).trim(),
+      start,
+      end,
+      exists: true,
+    };
+  }
+
+  if (module.includePreamble) {
+    return {
+      text: designMdDefaultModuleText(module, preamble),
+      start: contentStart,
+      end: preambleEnd,
+      exists: false,
+    };
+  }
+
+  return {
+    text: designMdDefaultModuleText(module),
+    start: safe.length,
+    end: safe.length,
+    exists: false,
+  };
+}
+
+function replaceDesignMdModule(body: string, module: DesignMdModuleSpec, draft: string): string {
+  const safe = body ?? '';
+  const slice = designMdModuleSlice(safe, module);
+  const nextText = normalizeDesignMdModuleDraft(module, draft);
+  const before = safe.slice(0, slice.start).trimEnd();
+  const after = safe.slice(slice.end).trimStart();
+  return [before, nextText, after]
+    .filter((part) => part.trim().length > 0)
+    .join('\n\n')
+    .trimEnd()
+    .concat('\n');
+}
+
+function designMdHeadings(body: string, startOffset: number): DesignMdHeadingMatch[] {
+  return [...body.slice(startOffset).matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => {
+    const start = startOffset + (match.index ?? 0);
+    return {
+      start,
+      title: match[1] ?? '',
+    };
+  });
+}
+
+function designMdHeadingMatches(title: string, module: DesignMdModuleSpec): boolean {
+  const normalized = title.replace(/^\d+[.)]\s*/, '').trim().toLowerCase();
+  return module.keywords.some((keyword) => normalized.includes(keyword));
+}
+
+function designMdDefaultModuleText(module: DesignMdModuleSpec, preamble = ''): string {
+  if (module.includePreamble) return preamble || `# ${module.heading}\n`;
+  return `## ${module.heading}\n\n`;
+}
+
+function normalizeDesignMdModuleDraft(module: DesignMdModuleSpec, draft: string): string {
+  const trimmed = draft.trim();
+  if (module.includePreamble) return trimmed;
+  if (!trimmed) return `## ${module.heading}`;
+  return /^##\s+/m.test(trimmed) ? trimmed : `## ${module.heading}\n\n${trimmed}`;
 }
 
 function TokenChip({ label, hex }: { label: string; hex: string }) {

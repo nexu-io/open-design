@@ -24,9 +24,12 @@ export interface KitModuleUpload {
 export function useKitModuleUpload(opts: {
   projectId?: string;
   title?: string;
-  onUploaded?: () => void;
+  onUploaded?: (module: KitUploadModule) => void;
+  /** Called when the upload or the brand.json write fails, so the host can
+   *  surface a visible error instead of the action silently no-op'ing. */
+  onError?: (module: KitUploadModule, message: string) => void;
 }): KitModuleUpload {
-  const { projectId, title, onUploaded } = opts;
+  const { projectId, title, onUploaded, onError } = opts;
   const [uploading, setUploading] = useState<KitUploadModule | null>(null);
 
   const uploadModule = useCallback(
@@ -39,46 +42,61 @@ export function useKitModuleUpload(opts: {
           file.name.replace(/[^\w.\-]+/g, '-').replace(/^-+|-+$/g, '') || `${module}-asset`;
         const path = `${dir}/${safe}`;
         const uploaded = await uploadProjectFile(projectId, file, path);
-        if (!uploaded) return;
+        if (!uploaded) {
+          onError?.(module, 'upload-failed');
+          return;
+        }
+        // Trust the server-returned stored path, not the locally-computed one:
+        // the daemon sanitizes each path segment, so the on-disk name can differ
+        // from `path`. Referencing the actual stored name keeps brand.json
+        // pointing at a file that resolves (otherwise the tile renders broken).
+        const storedPath = uploaded.name || path;
+        const storedBase = storedPath.split('/').pop() || safe;
 
         const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
         const brand = brandFromRaw(raw, title);
         if (module === 'logo') {
           const prev = brand.logo.primary;
-          if (prev && prev !== path && !brand.logo.alternates.includes(prev)) {
+          if (prev && prev !== storedPath && !brand.logo.alternates.includes(prev)) {
             brand.logo.alternates = [prev, ...brand.logo.alternates];
           }
-          brand.logo.primary = path;
+          brand.logo.primary = storedPath;
         } else if (module === 'image') {
           brand.imagery.samples = brand.imagery.samples ?? [];
-          brand.imagery.samples.push({ file: path, kind: 'upload' });
+          brand.imagery.samples.push({ file: storedPath, kind: 'upload' });
         } else {
-          const family = fontFamilyFromFilename(safe);
+          const family = fontFamilyFromFilename(storedBase);
           const spec = { family, fallbacks: ['system-ui', 'sans-serif'], weights: [400] };
           brand.typography.display = spec;
           brand.typography.body = spec;
         }
-        await writeProjectTextFile(projectId, 'brand.json', JSON.stringify(brand, null, 2));
+        const wrote = await writeProjectTextFile(projectId, 'brand.json', JSON.stringify(brand, null, 2));
+        if (!wrote) {
+          onError?.(module, 'write-failed');
+          return;
+        }
         if (module === 'font') {
           const manifestRaw = await fetchProjectFileText(projectId, 'fonts/manifest.json', { cache: 'no-store' });
           const manifest = parseFontManifest(manifestRaw);
-          const family = fontFamilyFromFilename(safe);
-          manifest.files = manifest.files.filter((entry) => entry.file !== safe);
+          const family = fontFamilyFromFilename(storedBase);
+          manifest.files = manifest.files.filter((entry) => entry.file !== storedBase);
           manifest.files.push({
             family,
             weight: '400',
             style: 'normal',
-            file: safe,
-            format: fontFormat(safe),
+            file: storedBase,
+            format: fontFormat(storedBase),
           });
           await writeProjectTextFile(projectId, 'fonts/manifest.json', JSON.stringify(manifest, null, 2));
         }
-        onUploaded?.();
+        onUploaded?.(module);
+      } catch {
+        onError?.(module, 'upload-failed');
       } finally {
         setUploading(null);
       }
     },
-    [projectId, title, uploading, onUploaded],
+    [projectId, title, uploading, onUploaded, onError],
   );
 
   return { uploading, uploadModule };

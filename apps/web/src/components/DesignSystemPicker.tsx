@@ -26,6 +26,12 @@ import { BrandPreviewCard } from './BrandPreviewCard';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
 
+// Mirror DesignSystemsTab's user/official split so the picker's grouping lines
+// up exactly with the "你的体系 / 官方预设" tabs in the Design Systems tab.
+function isUserSystem(system: DesignSystemSummary): boolean {
+  return system.source === 'user' || system.isEditable === true;
+}
+
 interface PopoverAnchor {
   left: number;
   width: number;
@@ -211,6 +217,15 @@ export function DesignSystemPicker({
     });
   }, [query, designSystems, locale]);
 
+  // Split the filtered list into the same two groups the Design Systems tab
+  // uses, so the picker reads as "your systems" then "official presets".
+  const { userSystems, officialSystems } = useMemo(() => {
+    const mine: DesignSystemSummary[] = [];
+    const official: DesignSystemSummary[] = [];
+    for (const d of filtered) (isUserSystem(d) ? mine : official).push(d);
+    return { userSystems: mine, officialSystems: official };
+  }, [filtered]);
+
   const selectDesignSystem = (id: string | null) => {
     onChange(id);
     setOpen(false);
@@ -220,6 +235,45 @@ export function DesignSystemPicker({
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     selectDesignSystem(id);
+  };
+
+  const renderOption = (d: DesignSystemSummary) => {
+    const active = d.id === selectedId;
+    return (
+      <button
+        key={d.id}
+        type="button"
+        className={`project-ds-picker-option${active ? ' active' : ''}`}
+        role="option"
+        aria-selected={active}
+        onMouseEnter={() => {
+          setHovered(d);
+          setHoveredNone(false);
+        }}
+        onFocus={() => {
+          setHovered(d);
+          setHoveredNone(false);
+        }}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          selectDesignSystem(d.id);
+        }}
+        onKeyDown={(event) => selectDesignSystemOnKeyDown(event, d.id)}
+        data-testid={`project-ds-picker-option-${d.id}`}
+      >
+        <div className="project-ds-picker-option-head">
+          <span className="project-ds-picker-option-title">{d.title}</span>
+          {active ? (
+            <span
+              className="project-ds-picker-option-check"
+              data-testid={`project-ds-picker-option-${d.id}-check`}
+            >
+              <Icon name="check" size={13} strokeWidth={2} />
+            </span>
+          ) : null}
+        </div>
+      </button>
+    );
   };
 
   // Clear: reset the search query and deselect any chosen system (back to "No
@@ -326,44 +380,26 @@ export function DesignSystemPicker({
                     ) : null}
                   </div>
                 </button>
-                {filtered.map((d) => {
-                  const active = d.id === selectedId;
-                  return (
-                    <button
-                      key={d.id}
-                      type="button"
-                      className={`project-ds-picker-option${active ? ' active' : ''}`}
-                      role="option"
-                      aria-selected={active}
-                      onMouseEnter={() => {
-                        setHovered(d);
-                        setHoveredNone(false);
-                      }}
-                      onFocus={() => {
-                        setHovered(d);
-                        setHoveredNone(false);
-                      }}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        selectDesignSystem(d.id);
-                      }}
-                      onKeyDown={(event) => selectDesignSystemOnKeyDown(event, d.id)}
-                      data-testid={`project-ds-picker-option-${d.id}`}
-                    >
-                      <div className="project-ds-picker-option-head">
-                        <span className="project-ds-picker-option-title">{d.title}</span>
-                        {active ? (
-                          <span
-                            className="project-ds-picker-option-check"
-                            data-testid={`project-ds-picker-option-${d.id}-check`}
-                          >
-                            <Icon name="check" size={13} strokeWidth={2} />
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })}
+                {userSystems.length > 0 ? (
+                  <div
+                    className="project-ds-picker-group-label"
+                    role="presentation"
+                    data-testid="project-ds-picker-group-mine"
+                  >
+                    {t('dsManager.yourSystems')}
+                  </div>
+                ) : null}
+                {userSystems.map(renderOption)}
+                {officialSystems.length > 0 ? (
+                  <div
+                    className="project-ds-picker-group-label"
+                    role="presentation"
+                    data-testid="project-ds-picker-group-official"
+                  >
+                    {t('dsManager.officialPresets')}
+                  </div>
+                ) : null}
+                {officialSystems.map(renderOption)}
                 {filtered.length === 0 ? (
                   <div className="project-ds-picker-empty">{t('designSystemPicker.empty')}</div>
                 ) : null}

@@ -106,6 +106,8 @@ import {
   createPluginUseHandoff,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
+import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
+import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
@@ -1383,7 +1385,7 @@ function OnboardingView({
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
     t('settings.onboardingStepNewsletter'),
-    t('newBrand.extract'),
+    t('settings.onboardingStepDesignSystem'),
   ];
   const isLastStep = step === steps.length - 1;
 
@@ -2367,13 +2369,9 @@ function OnboardingView({
                 </div>
               </div>
               <ul className="onboarding-view__build-chips">
-                {t('onboarding.buildArtifacts')
-                  .split('·')
-                  .map((label) => label.trim())
-                  .filter(Boolean)
-                  .map((label) => (
-                    <li key={label}>{label}</li>
-                  ))}
+                {ONBOARDING_ARTIFACT_CHIP_IDS.map((chipId) => (
+                  <li key={chipId}>{homeHeroChipLabel(chipId, t)}</li>
+                ))}
               </ul>
               <div className="onboarding-view__build-actions">
                 <button

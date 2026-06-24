@@ -2630,12 +2630,12 @@ export function DesignSystemDetailView({
             <div className="ds-warning-card">
               <Icon name="help-circle" />
               <span>
-                <strong>Missing brand fonts</strong>
-                Open Design is rendering typography with substitute web fonts.
+                <strong>Brand font files missing</strong>
+                Typography previews are using substitute web fonts until brand font files are added.
               </span>
               <Button variant="ghost" className="compact">
                 <Icon name="upload" />
-                Upload fonts
+                Add brand font files
               </Button>
             </div>
             {statusLine ? <div className="ds-status-line">{statusLine}</div> : null}

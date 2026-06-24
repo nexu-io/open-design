@@ -534,6 +534,67 @@
 
   document.getElementById('root').innerHTML = html;
 
+  // Resilient images — never leak the browser's broken-image glyph.
+  // Extraction can hand us a logo/imagery URL that 404s, is cross-origin
+  // blocked, or is an SVG that fails to render. Rather than show a broken icon
+  // (and the alt text beside it), a failed logo advances to the next candidate
+  // and finally collapses to the "No logo found" empty state, while a failed
+  // gallery / hero / thumbnail removes its own tile so only loadable assets show.
+  (function wireImageResilience() {
+    // An image that already failed before this listener attached won't re-fire
+    // `error`; `complete && naturalWidth === 0` detects that broken state so we
+    // run the same recovery synchronously.
+    function onBroken(img, handler) {
+      img.addEventListener('error', handler);
+      if (img.complete && img.naturalWidth === 0) handler();
+    }
+    var logoImg = document.getElementById('logo-img');
+    var stage = document.getElementById('logo-stage');
+    if (logoImg && stage) {
+      var pool = Array.prototype.map.call(
+        document.querySelectorAll('.logo-thumb'),
+        function (b) { return b.getAttribute('data-src'); }
+      ).filter(Boolean);
+      if (!pool.length) pool = [logoImg.getAttribute('src')];
+      var logoIdx = 0;
+      var handledLogo = false;
+      onBroken(logoImg, function advance() {
+        if (handledLogo && logoIdx + 1 >= pool.length) return;
+        logoIdx += 1;
+        if (logoIdx < pool.length) {
+          logoImg.src = pool[logoIdx];
+          stage.setAttribute('data-light-src', pool[logoIdx]);
+        } else {
+          handledLogo = true;
+          var empty = document.createElement('div');
+          empty.className = 'logo-empty';
+          empty.textContent = 'No logo found';
+          if (stage.parentNode) stage.parentNode.replaceChild(empty, stage);
+          var th = document.querySelector('.logo-thumbs');
+          if (th && th.parentNode) th.parentNode.removeChild(th);
+        }
+      });
+    }
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.gallery img, .kit-hero img'),
+      function (im) {
+        onBroken(im, function () {
+          var tile = (im.closest && (im.closest('.shot') || im.closest('.kit-hero'))) || im;
+          if (tile && tile.parentNode) tile.parentNode.removeChild(tile);
+        });
+      }
+    );
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.logo-thumb img'),
+      function (im) {
+        onBroken(im, function () {
+          var btn = im.closest && im.closest('.logo-thumb');
+          if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
+        });
+      }
+    );
+  })();
+
   // Logo thumbnail switcher.
   var img = document.getElementById('logo-img');
   var logoStage = document.getElementById('logo-stage');
