@@ -1,0 +1,389 @@
+import { describe, expect, it } from 'vitest';
+import {
+  COMMAND_SPEC,
+  GLOBAL_FLAGS,
+  SUPPORTED_SHELLS,
+  computeCompletions,
+  generateCompletionScript,
+  isSupportedShell,
+  parseCompleteArgs,
+  topLevelCommands,
+} from '../src/completion.js';
+
+describe('isSupportedShell', () => {
+  it('accepts the three supported shells', () => {
+    expect(isSupportedShell('bash')).toBe(true);
+    expect(isSupportedShell('zsh')).toBe(true);
+    expect(isSupportedShell('fish')).toBe(true);
+  });
+
+  it('rejects anything else', () => {
+    expect(isSupportedShell('powershell')).toBe(false);
+    expect(isSupportedShell('')).toBe(false);
+    expect(isSupportedShell('BASH')).toBe(false);
+  });
+});
+
+describe('topLevelCommands', () => {
+  it('returns a sorted list of every command in the spec', () => {
+    const cmds = topLevelCommands();
+    expect(cmds).toEqual([...cmds].sort());
+    expect(new Set(cmds)).toEqual(new Set(Object.keys(COMMAND_SPEC)));
+  });
+
+  it('includes the core commands a user expects', () => {
+    const cmds = topLevelCommands();
+    for (const expected of ['config', 'plugin', 'run', 'doctor', 'completion', 'skills']) {
+      expect(cmds).toContain(expected);
+    }
+  });
+});
+
+describe('computeCompletions — top level', () => {
+  it('offers all commands when nothing is typed yet', () => {
+    expect(computeCompletions({ words: [], current: '' })).toEqual(topLevelCommands());
+  });
+
+  it('prefix-filters top-level commands', () => {
+    const out = computeCompletions({ words: [], current: 'co' });
+    expect(out).toContain('config');
+    expect(out).toContain('completion');
+    expect(out).toContain('conversation');
+    expect(out).not.toContain('plugin');
+    // every result actually starts with the prefix
+    expect(out.every((c) => c.startsWith('co'))).toBe(true);
+  });
+
+  it('returns an empty list when nothing matches the prefix', () => {
+    expect(computeCompletions({ words: [], current: 'zzzzz' })).toEqual([]);
+  });
+});
+
+describe('computeCompletions — subcommands', () => {
+  it('offers a command\'s subcommands plus global flags', () => {
+    const out = computeCompletions({ words: ['config'], current: '' });
+    for (const sub of ['get', 'set', 'list', 'unset']) {
+      expect(out).toContain(sub);
+    }
+    for (const flag of GLOBAL_FLAGS) {
+      expect(out).toContain(flag);
+    }
+  });
+
+  it('prefix-filters subcommands', () => {
+    const out = computeCompletions({ words: ['config'], current: 'g' });
+    expect(out).toEqual(['get']);
+  });
+
+  it('offers only global flags for a command with no subcommands', () => {
+    const out = computeCompletions({ words: ['doctor'], current: '' });
+    expect(out).toEqual([...GLOBAL_FLAGS].sort());
+  });
+
+  it('offers global flags for an unknown command', () => {
+    const out = computeCompletions({ words: ['definitely-not-a-command'], current: '' });
+    expect(out).toEqual([...GLOBAL_FLAGS].sort());
+  });
+
+  it('offers global flags only beyond the second level', () => {
+    const out = computeCompletions({ words: ['config', 'get'], current: '' });
+    expect(out).toEqual([...GLOBAL_FLAGS].sort());
+  });
+});
+
+describe('computeCompletions — flags', () => {
+  it('offers global flags when the current token starts with a dash', () => {
+    const out = computeCompletions({ words: ['config'], current: '-' });
+    expect(out).toEqual([...GLOBAL_FLAGS].sort());
+  });
+
+  it('prefix-filters flags', () => {
+    const out = computeCompletions({ words: [], current: '--j' });
+    expect(out).toEqual(['--json']);
+  });
+
+  it('ignores already-typed flags when completing the command path', () => {
+    // `od --json <TAB>` should still complete top-level commands.
+    const out = computeCompletions({ words: ['--json'], current: '' });
+    expect(out).toEqual(topLevelCommands());
+  });
+
+  it('does not treat a value-flag value as a command', () => {
+    // `od --daemon-url http://localhost:7456 <TAB>` -> the URL is the flag's
+    // value, not a command, so top-level commands should still be offered.
+    const out = computeCompletions({
+      words: ['--daemon-url', 'http://localhost:7456'],
+      current: '',
+    });
+    expect(out).toEqual(topLevelCommands());
+  });
+
+  it('does not treat a value-flag value as a subcommand', () => {
+    // `od config --daemon-url http://localhost:7456 <TAB>` should still offer
+    // config's subcommands, not collapse to global flags.
+    const out = computeCompletions({
+      words: ['config', '--daemon-url', 'http://localhost:7456'],
+      current: '',
+    });
+    expect(out).toContain('get');
+    expect(out).toContain('set');
+  });
+
+  it('handles the --daemon-url=<url> inline form', () => {
+    const out = computeCompletions({
+      words: ['--daemon-url=http://localhost:7456'],
+      current: '',
+    });
+    expect(out).toEqual(topLevelCommands());
+  });
+
+  it('still completes a subcommand prefix after a value flag', () => {
+    const out = computeCompletions({
+      words: ['config', '--daemon-url', 'http://localhost:7456'],
+      current: 'g',
+    });
+    expect(out).toEqual(['get']);
+  });
+});
+
+describe('computeCompletions — determinism', () => {
+  it('returns sorted, de-duplicated results', () => {
+    const out = computeCompletions({ words: ['plugin'], current: '' });
+    expect(out).toEqual([...out].sort());
+    expect(new Set(out).size).toBe(out.length);
+  });
+});
+
+describe('generateCompletionScript', () => {
+  for (const shell of SUPPORTED_SHELLS) {
+    it(`produces a non-empty ${shell} script that delegates to __complete`, () => {
+      const script = generateCompletionScript(shell);
+      expect(script.length).toBeGreaterThan(0);
+      // The whole point: the script defers to the live CLI rather than baking
+      // in a command list.
+      expect(script).toContain('od completion __complete');
+    });
+
+    it(`mentions an install hint for ${shell}`, () => {
+      expect(generateCompletionScript(shell).toLowerCase()).toContain(shell);
+    });
+  }
+
+  it('registers a completion function per shell', () => {
+    expect(generateCompletionScript('bash')).toContain('complete -F _od_complete od');
+    expect(generateCompletionScript('zsh')).toContain('compdef _od od');
+    expect(generateCompletionScript('fish')).toContain('complete -c od');
+  });
+
+  it('uses the current-token-excluding form in the fish script', () => {
+    const fish = generateCompletionScript('fish');
+    // -xpc excludes the in-progress token (resolver contract); -opc would pass
+    // the token both as a word and as --current and break `od co<TAB>`.
+    expect(fish).toContain('commandline -xpc');
+    expect(fish).not.toContain('commandline -opc');
+  });
+});
+
+describe('computeCompletions — shell driver contract', () => {
+  // The generated scripts pass the typed words WITHOUT the in-progress token,
+  // and the partial token as `current`. This is exactly what fish sends after
+  // the `-xpc` fix, so `od co<TAB>` must resolve as words=[] current='co'.
+  it('completes a partial top-level command (the fish `od co<TAB>` path)', () => {
+    const out = computeCompletions({ words: [], current: 'co' });
+    expect(out).toContain('completion');
+    expect(out).toContain('config');
+    expect(out).toContain('conversation');
+    expect(out.every((c) => c.startsWith('co'))).toBe(true);
+  });
+});
+
+describe('COMMAND_SPEC integrity', () => {
+  it('has no duplicate subcommands within a command', () => {
+    for (const [name, spec] of Object.entries(COMMAND_SPEC)) {
+      expect(new Set(spec.subcommands).size, `duplicates in ${name}`).toBe(
+        spec.subcommands.length,
+      );
+    }
+  });
+
+  it('uses kebab-case command and subcommand tokens', () => {
+    const token = /^[a-z][a-z0-9-]*$/;
+    for (const [name, spec] of Object.entries(COMMAND_SPEC)) {
+      expect(token.test(name), `bad command name: ${name}`).toBe(true);
+      for (const sub of spec.subcommands) {
+        expect(token.test(sub), `bad subcommand in ${name}: ${sub}`).toBe(true);
+      }
+    }
+  });
+
+  it('exposes the supported shells as completion subcommands', () => {
+    expect(new Set(COMMAND_SPEC.completion?.subcommands ?? [])).toEqual(
+      new Set(SUPPORTED_SHELLS),
+    );
+  });
+
+  it('restricts the completion command to the flags it actually accepts', () => {
+    // runCompletion only parses --help; --json/--daemon-url would error.
+    expect(COMMAND_SPEC.completion?.flags).toEqual(['--help']);
+  });
+});
+
+describe('computeCompletions — per-command flag overrides', () => {
+  it('offers only --help for `od completion --<TAB>`', () => {
+    const out = computeCompletions({ words: ['completion'], current: '--' });
+    expect(out).toEqual(['--help']);
+    // The globals that would error must not be suggested.
+    expect(out).not.toContain('--json');
+    expect(out).not.toContain('--daemon-url');
+  });
+
+  it('still offers shells alongside --help when no dash is typed', () => {
+    const out = computeCompletions({ words: ['completion'], current: '' });
+    for (const shell of SUPPORTED_SHELLS) expect(out).toContain(shell);
+    expect(out).toContain('--help');
+    expect(out).not.toContain('--json');
+    expect(out).not.toContain('--daemon-url');
+  });
+
+  it('keeps the full global flag set for commands without an override', () => {
+    const out = computeCompletions({ words: ['config'], current: '--' });
+    expect(out).toEqual(['--daemon-url', '--help', '--json']);
+  });
+
+  // `od research` (dispatches only `search`) and `od media` (generate/wait)
+  // parse flag sets in cli.ts that omit --json, so completion must not
+  // advertise it for them. Pins the COMMAND_SPEC override and the resolver.
+  for (const command of ['research', 'media'] as const) {
+    it(`does not suggest --json for \`od ${command} --<TAB>\``, () => {
+      expect(COMMAND_SPEC[command]?.flags).toEqual(['--help', '--daemon-url']);
+      const out = computeCompletions({ words: [command], current: '--' });
+      expect(out).not.toContain('--json');
+      expect(out).toContain('--help');
+      expect(out).toContain('--daemon-url');
+    });
+  }
+});
+
+// Fixture pinning the known second-level surface for command families that
+// dispatch subcommands in cli.ts. If a handler there gains a subcommand and
+// COMMAND_SPEC isn't updated, the relevant case fails — catching silent drift
+// between the completion table and the real CLI. Each list is a *subset* the
+// spec must contain (so adding a new subcommand to the spec doesn't break the
+// test), keyed to the handlers' switch/dispatch in cli.ts.
+const KNOWN_SUBCOMMANDS: Record<string, string[]> = {
+  config: ['get', 'set', 'list', 'unset'],
+  ui: ['list', 'show', 'respond', 'revoke', 'prefill'],
+  // Only top-level daemon verbs; vacuum/verify live under `daemon db`.
+  daemon: ['db', 'start', 'status', 'stop'],
+  atoms: ['info', 'list', 'show'],
+  chat: ['new'],
+  memory: ['tree'],
+  run: ['cancel', 'info', 'list', 'redesign', 'start', 'watch'],
+  files: ['delete', 'diff', 'list', 'read', 'upload', 'write'],
+  templates: ['delete', 'list', 'save'],
+  conversation: ['db', 'info', 'list', 'new', 'start', 'status', 'stop'],
+  project: [
+    'create', 'delete', 'editors', 'handoff', 'import', 'import-folder',
+    'info', 'list', 'open-in',
+  ],
+  automation: [
+    'create', 'crystallize-run', 'delete', 'get', 'ingest', 'list', 'pause',
+    'proposal', 'proposals', 'resume', 'run', 'runs', 'source', 'sources',
+    'template', 'templates', 'update',
+  ],
+  automations: [
+    'create', 'crystallize-run', 'delete', 'get', 'ingest', 'list', 'pause',
+    'proposal', 'proposals', 'resume', 'run', 'runs', 'source', 'sources',
+    'template', 'templates', 'update',
+  ],
+  skills: ['list', 'show'],
+  craft: ['list', 'show'],
+  diagnostics: ['export'],
+  'design-systems': [
+    'rename', 'import-local', 'import-github', 'import-shadcn',
+    'rebuild-token-contract', 'list', 'show',
+  ],
+};
+
+// Verbs that must NOT be advertised as top-level completions because they are
+// nested under another subcommand — suggesting them yields `od <verb>` calls
+// that would fail (e.g. `od daemon verify`, which is really `od daemon db verify`).
+const FORBIDDEN_TOP_LEVEL: Record<string, string[]> = {
+  daemon: ['vacuum', 'verify'],
+};
+
+describe('COMMAND_SPEC covers known cli.ts subcommands', () => {
+  for (const [command, expected] of Object.entries(KNOWN_SUBCOMMANDS)) {
+    it(`completes the known subcommands of \`od ${command}\``, () => {
+      const spec = COMMAND_SPEC[command];
+      expect(spec, `${command} missing from COMMAND_SPEC`).toBeDefined();
+      const have = new Set(spec?.subcommands ?? []);
+      const missing = expected.filter((sub) => !have.has(sub));
+      expect(missing, `od ${command} is missing completions for: ${missing.join(', ')}`).toEqual(
+        [],
+      );
+    });
+
+    it(`offers those subcommands through computeCompletions for \`od ${command}\``, () => {
+      const out = computeCompletions({ words: [command], current: '' });
+      for (const sub of expected) {
+        expect(out, `\`od ${command} <TAB>\` should offer ${sub}`).toContain(sub);
+      }
+    });
+  }
+});
+
+describe('COMMAND_SPEC does not advertise nested verbs as top-level', () => {
+  for (const [command, forbidden] of Object.entries(FORBIDDEN_TOP_LEVEL)) {
+    it(`does not offer nested verbs for \`od ${command}\``, () => {
+      const out = computeCompletions({ words: [command], current: '' });
+      const leaked = forbidden.filter((verb) => out.includes(verb));
+      expect(leaked, `od ${command} must not suggest nested verbs: ${leaked.join(', ')}`).toEqual(
+        [],
+      );
+    });
+  }
+});
+
+describe('parseCompleteArgs', () => {
+  it('splits --current and the words after the -- separator', () => {
+    expect(parseCompleteArgs(['--current', 'g', '--', 'config'])).toEqual({
+      current: 'g',
+      words: ['config'],
+    });
+  });
+
+  it('handles an empty current token', () => {
+    expect(parseCompleteArgs(['--current', '', '--', 'config'])).toEqual({
+      current: '',
+      words: ['config'],
+    });
+  });
+
+  // Regression: a literal `--` as the partial token must be taken as the
+  // --current value, not as the words separator (od completion --<TAB>).
+  it('treats a literal -- partial token as the current value', () => {
+    expect(parseCompleteArgs(['--current', '--', '--', 'completion'])).toEqual({
+      current: '--',
+      words: ['completion'],
+    });
+  });
+
+  it('returns empty words when no separator is present', () => {
+    expect(parseCompleteArgs(['--current', 'co'])).toEqual({
+      current: 'co',
+      words: [],
+    });
+  });
+
+  it('preserves value-flag pairs inside words', () => {
+    expect(
+      parseCompleteArgs(['--current', '', '--', 'config', '--daemon-url', 'http://x']),
+    ).toEqual({ current: '', words: ['config', '--daemon-url', 'http://x'] });
+  });
+
+  it('round-trips through computeCompletions for `od completion --<TAB>`', () => {
+    const req = parseCompleteArgs(['--current', '--', '--', 'completion']);
+    expect(computeCompletions(req)).toEqual(['--help']);
+  });
+});
