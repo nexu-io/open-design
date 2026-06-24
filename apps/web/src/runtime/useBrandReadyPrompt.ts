@@ -86,6 +86,8 @@ export interface BrandBrowserAssistState {
 }
 
 export interface UseBrandReadyPrompt {
+  /** Current ready state for the brand, even if the user dismissed the prompt. */
+  ready: BrandReadyPromptState | null;
   prompt: BrandReadyPromptState | null;
   dismiss: () => void;
   /** Set once when extraction is blocked by an anti-bot wall OR has stalled past
@@ -105,15 +107,16 @@ export function useBrandReadyPrompt(
 ): UseBrandReadyPrompt {
   const brandId =
     metadata?.importedFrom === 'brand-extraction' ? metadata?.brandId ?? null : null;
+  const [ready, setReady] = useState<BrandReadyPromptState | null>(null);
   const [prompt, setPrompt] = useState<BrandReadyPromptState | null>(null);
   const [browserAssist, setBrowserAssist] = useState<BrandBrowserAssistState | null>(null);
 
   useEffect(() => {
+    setReady(null);
     setPrompt(null);
     setBrowserAssist(null);
     if (!brandId) return undefined;
-    // The user already dismissed or acted on this ready state.
-    if (alreadyShown(brandId)) return undefined;
+    const suppressPrompt = alreadyShown(brandId);
 
     let cancelled = false;
     let timer: number | undefined;
@@ -128,7 +131,9 @@ export function useBrandReadyPrompt(
       const status = summary?.meta.status;
       const designSystemId = summary?.meta.designSystemId;
       if (status === 'ready' && designSystemId) {
-        setPrompt({ designSystemId, brandName: summary?.brand?.name ?? null });
+        const next = { designSystemId, brandName: summary?.brand?.name ?? null };
+        setReady(next);
+        if (!suppressPrompt) setPrompt(next);
         return; // terminal — stop polling
       }
       if (status === 'failed') return; // terminal — no prompt
@@ -166,6 +171,7 @@ export function useBrandReadyPrompt(
   const dismissBrowserAssist = useCallback(() => setBrowserAssist(null), []);
 
   return {
+    ready,
     prompt,
     dismiss,
     browserAssist,

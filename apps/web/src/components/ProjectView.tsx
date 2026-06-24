@@ -881,8 +881,12 @@ export function ProjectView({
   const analytics = useAnalytics();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const handleThemeChange = onThemeChange ?? (() => {});
-  const projectDesignSystemId = resolveProjectDesignSystemId(project);
-  const projectIsDesignSystemProject = isDesignSystemProject(project);
+  const projectDetail = useProjectDetail(project.id);
+  const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
+  const currentProject =
+    detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
+  const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
   // P0 page_view page_name=chat_panel — fire once per project mount.
   // ProjectView outlives conversation switches (ChatPane is keyed by
   // activeConversationId so it remounts when the user switches chats,
@@ -1059,7 +1063,6 @@ export function ProjectView({
   // ----- Continue in CLI / Finalize design package wiring (#451) -----
   // The toast surface is shared between Finalize errors and the
   // success/fallback toasts emitted from handleContinueInCli.
-  const projectDetail = useProjectDetail(project.id);
   const designMdState = useDesignMdState(project.id, designMdRefreshKey);
   const finalize = useFinalizeProject(project.id);
   const terminalLauncher = useTerminalLaunch();
@@ -1075,11 +1078,14 @@ export function ProjectView({
   // one-shot "ready — preview it" prompt so the user knows to open the Design
   // systems tab. A no-op for every non-brand-extraction project.
   const {
+    ready: brandReady,
     prompt: brandReadyPrompt,
     dismiss: dismissBrandReady,
     browserAssist: brandBrowserAssist,
     dismissBrowserAssist: dismissBrandBrowserAssist,
-  } = useBrandReadyPrompt(project.metadata);
+  } = useBrandReadyPrompt(currentProject.metadata);
+  const pendingBrandDesignSystemOpenRef = useRef<string | null>(null);
+  const handledBrandReadyDesignSystemRef = useRef<string | null>(null);
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
@@ -1850,6 +1856,37 @@ export function ProjectView({
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
   }, []);
+
+  useEffect(() => {
+    const designSystemId = brandReady?.designSystemId;
+    if (!designSystemId) return;
+    if (handledBrandReadyDesignSystemRef.current === designSystemId) return;
+    handledBrandReadyDesignSystemRef.current = designSystemId;
+    pendingBrandDesignSystemOpenRef.current = designSystemId;
+    void (async () => {
+      try {
+        await Promise.all([
+          projectDetail.refresh(),
+          Promise.resolve(onDesignSystemsRefresh?.()),
+          refreshWorkspaceItems(),
+        ]);
+        onProjectsRefresh();
+        if (activeConversationId) {
+          setMessageLoadRetryNonce((nonce) => nonce + 1);
+        }
+      } catch (err) {
+        handledBrandReadyDesignSystemRef.current = null;
+        console.warn('[brand] failed to refresh ready design system state', err);
+      }
+    })();
+  }, [
+    activeConversationId,
+    brandReady?.designSystemId,
+    onDesignSystemsRefresh,
+    onProjectsRefresh,
+    projectDetail.refresh,
+    refreshWorkspaceItems,
+  ]);
 
   const persistArtifact = useCallback(
     async (
@@ -5602,6 +5639,12 @@ export function ProjectView({
     if (!projectIsDesignSystemProject || !projectDesignSystemId) return null;
     return designSystems.find((d) => d.id === projectDesignSystemId) ?? null;
   }, [designSystems, projectDesignSystemId, projectIsDesignSystemProject]);
+  useEffect(() => {
+    const pending = pendingBrandDesignSystemOpenRef.current;
+    if (!pending || designSystemProject?.id !== pending) return;
+    pendingBrandDesignSystemOpenRef.current = null;
+    requestOpenFile(DESIGN_SYSTEM_TAB);
+  }, [designSystemProject?.id, requestOpenFile]);
   const designSystemActivityEvents = useMemo(
     () => designSystemProject ? latestDesignSystemActivityEvents(messages) : [],
     [designSystemProject, messages],
@@ -5907,7 +5950,7 @@ export function ProjectView({
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
   }
   const brandEnrichmentEligibleForProject =
-    isProgrammaticBrandExtractionProject(project.metadata) && !autoSendFirstMessageRef.current;
+    isProgrammaticBrandExtractionProject(currentProject.metadata) && !autoSendFirstMessageRef.current;
   const [initialDraft, setInitialDraft] = useState<
     { projectId: string; value: string } | undefined
   >(
@@ -5962,7 +6005,7 @@ export function ProjectView({
     setBrandEnrichmentStarting(true);
     void handleSend(
       buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache, {
-        metadata: project.metadata,
+        metadata: currentProject.metadata,
         designSystemId: system?.id,
         designSystemTitle: system?.title,
         projectFiles,
@@ -5978,7 +6021,7 @@ export function ProjectView({
     brandEnrichmentStarting,
     designSystemProject,
     handleSend,
-    project.metadata,
+    currentProject.metadata,
     projectFiles,
     skills,
   ]);
@@ -6313,7 +6356,7 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel)}
+              projectKindForTracking={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!projectDesignSystemId}
@@ -6403,7 +6446,7 @@ export function ProjectView({
               onChangeByokSpeechModel={setByokSpeechModelOverride}
               byokSpeechVoice={byokSpeechVoiceOverride}
               onChangeByokSpeechVoice={setByokSpeechVoiceOverride}
-              projectMetadata={project.metadata}
+              projectMetadata={currentProject.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
               }}
@@ -6485,10 +6528,9 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel) ?? 'prototype'}
+          projectKind={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel) ?? 'prototype'}
           rootDirName={(() => {
-            const baseDir =
-              projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;
+            const baseDir = currentProject.metadata?.baseDir;
             return typeof baseDir === 'string'
               ? baseDir.split(/[/\\]/).filter(Boolean).pop()
               : undefined;
@@ -6520,8 +6562,8 @@ export function ProjectView({
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
-          preferredPreviewFile={project.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
+          preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
+          autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
@@ -6530,7 +6572,7 @@ export function ProjectView({
           onDesignSystemsRefresh={onDesignSystemsRefresh}
           onDeleteDesignSystemProject={onDeleteProject}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
-          designSystemReview={project.metadata?.designSystemReview}
+          designSystemReview={currentProject.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
           onUseDesignSystem={onCreateProjectFromDesignSystem}
           designSystemEditRequest={designSystemEditRequest}
@@ -6647,7 +6689,7 @@ export function ProjectView({
               dismissBrandReady();
             }}
             // Programmatic extraction can miss details — nudge toward refining it.
-            showRefinement={isProgrammaticBrandExtractionProject(project.metadata)}
+            showRefinement={isProgrammaticBrandExtractionProject(currentProject.metadata)}
             onAiOptimize={() => {
               handleBrandEnrichment();
               dismissBrandReady();
