@@ -65,7 +65,9 @@ export type AnalyticsEventName =
   | 'design_system_create_result'
   | 'design_system_review_result'
   | 'design_system_status_result'
-  | 'design_system_apply_result';
+  | 'design_system_apply_result'
+  // AI optimize (deep enrichment) of a programmatically-extracted DS.
+  | 'design_system_enrich_result';
 
 // ---- Pages ---------------------------------------------------------------
 
@@ -706,6 +708,8 @@ export type TrackingDesignSystemsArea =
   // Preset-brand picker opened from the create form ("Start from a brand").
   // A brand here is one *source* for a design system, not a separate object.
   | 'preset_brand_picker'
+  // AI-optimize (deep enrichment) banner on a DS-as-project.
+  | 'design_system_enrich'
   | 'composer';
 
 export type TrackingDesignSystemsViewType =
@@ -1049,6 +1053,30 @@ export interface DesignSystemApplyResultProps {
   run_id?: string;
   error_code?: string;
   duration_ms: number;
+}
+
+// AI optimize (deep enrichment) of a programmatically-extracted design system.
+// `design_system_enrich` click = the user pressed "AI Optimize" on the banner;
+// `design_system_enrich_result` = the enrichment run settled. Together they
+// give the AI-conversion rate (clicked ÷ programmatic creates) and, with
+// ProjectMetadata.enrichmentStatus, the programmatic-vs-ai_refined comparison.
+export interface DesignSystemEnrichClickProps {
+  page_name: 'design_system_project';
+  area: 'design_system_enrich';
+  element: 'ai_optimize';
+  design_system_id?: string;
+  project_kind?: TrackingProjectKind | null;
+}
+
+export interface DesignSystemEnrichResultProps {
+  page_name: 'design_system_project';
+  area: 'design_system_enrich';
+  result: 'success' | 'failed' | 'cancelled';
+  design_system_id?: string;
+  project_id?: string;
+  run_id?: string;
+  error_code?: string;
+  duration_ms?: number;
 }
 
 // --- Generic page_view (existing surfaces) ---
@@ -2408,6 +2436,7 @@ export type UiClickProps =
   | DesignSystemsTemplatesModalSharePopoverClickProps
   | DesignSystemsCreateClickProps
   | DesignSystemsPresetBrandPickerClickProps
+  | DesignSystemEnrichClickProps
   | IntegrationsTabClickProps
   | IntegrationsMcpTabClickProps
   | IntegrationsConnectorsTabClickProps
@@ -3186,7 +3215,8 @@ export type AnalyticsEventPayload =
   | { event: 'design_system_create_result'; props: DesignSystemCreateResultProps }
   | { event: 'design_system_review_result'; props: DesignSystemReviewResultProps }
   | { event: 'design_system_status_result'; props: DesignSystemStatusResultProps }
-  | { event: 'design_system_apply_result'; props: DesignSystemApplyResultProps };
+  | { event: 'design_system_apply_result'; props: DesignSystemApplyResultProps }
+  | { event: 'design_system_enrich_result'; props: DesignSystemEnrichResultProps };
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 

@@ -53,6 +53,8 @@ import type {
   DesignSystemsCreateClickProps,
   DesignSystemsPresetBrandPickerClickProps,
   DesignSystemsPresetBrandPickerSurfaceViewProps,
+  DesignSystemEnrichClickProps,
+  DesignSystemEnrichResultProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -508,6 +510,20 @@ export function trackDesignSystemsPresetBrandPickerSurfaceView(
   props: DesignSystemsPresetBrandPickerSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
+}
+
+export function trackDesignSystemEnrichClick(
+  track: Track,
+  props: DesignSystemEnrichClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemEnrichResult(
+  track: Track,
+  props: DesignSystemEnrichResultProps,
+): void {
+  send(track, 'design_system_enrich_result', props);
 }
 
 export function trackIntegrationsTabClick(

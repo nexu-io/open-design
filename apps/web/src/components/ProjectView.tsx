@@ -77,6 +77,7 @@ import {
   trackArtifactHeaderClick,
   trackComposerBarClick,
   trackDesignSystemApplyResult,
+  trackDesignSystemEnrichClick,
   trackPageView,
   trackRunCreated,
   trackRunFinished,
@@ -6237,6 +6238,15 @@ export function ProjectView({
                 // design system but no agent run. This sends the hidden seeded
                 // enrichment prompt plus the default design-system skill bundle,
                 // refining the SAME registered design system in place.
+                // C13 (tracking spec §3.3): record the AI-optimize click here so
+                // the conversion rate (clicked ÷ programmatic creates) is visible.
+                trackDesignSystemEnrichClick(analytics.track, {
+                  page_name: 'design_system_project',
+                  area: 'design_system_enrich',
+                  element: 'ai_optimize',
+                  design_system_id: projectDesignSystemId ?? undefined,
+                  project_kind: 'design_system',
+                });
                 const skillIds = installedBrandEnrichmentSkillIds(skills);
                 void handleSend(
                   buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed),
