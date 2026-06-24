@@ -190,9 +190,7 @@ function mockBrandExtractProject(project: Project) {
           projectId: project.id,
           conversationId: `conv-${project.id}`,
           sourceUrl: 'designmd://source-material',
-          status: 'ready',
-          designSystemId,
-          brandName: project.name,
+          status: 'extracting',
         }),
       } as unknown as Response;
     }
@@ -318,8 +316,9 @@ describe('DesignSystemCreationFlow', () => {
   // The unified flow (commit a05e3a29d) replaces the legacy 5-step generation
   // pipeline (createDesignSystemDraft → ensureDesignSystemWorkspace → source
   // manifest → prepare) with a two-phase brand extraction: submitting a website
-  // POSTs /api/brands, which synchronously registers a usable user:<id> design
-  // system and stands up a backing project the brand-extract skill enriches.
+  // POSTs /api/brands, which creates the backing project + conversation
+  // immediately and lets the programmatic extraction register user:<id> in the
+  // background.
   // Source-material specs below exercise the current handoff by staging files
   // into the backing brand project after kickoff and before navigation.
   it('renders the new create surface copy with the active non-English locale', () => {
@@ -341,7 +340,7 @@ describe('DesignSystemCreationFlow', () => {
       id: 'brand-acme-com',
       name: 'acme.com',
       skillId: 'brand-extract',
-      designSystemId: 'user:acme-com',
+      designSystemId: null,
       createdAt: 1,
       updatedAt: 1,
       metadata: { kind: 'other' },
@@ -357,9 +356,7 @@ describe('DesignSystemCreationFlow', () => {
             projectId: project.id,
             conversationId: 'conv-acme',
             sourceUrl: 'https://acme.com',
-            status: 'ready',
-            designSystemId: 'user:acme-com',
-            brandName: 'Acme',
+            status: 'extracting',
           }),
         } as unknown as Response;
       }
@@ -383,7 +380,7 @@ describe('DesignSystemCreationFlow', () => {
     continueToGeneration();
     fireEvent.click(screen.getByRole('button', { name: /extract design system/i }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project, 'conv-acme'));
     expect(fetchMock).toHaveBeenCalledWith('/api/brands', expect.objectContaining({ method: 'POST' }));
     const requestInit = fetchMock.mock.calls.find(([url]) => url === '/api/brands')?.[1] as unknown as { body: string };
     expect(JSON.parse(requestInit.body)).toMatchObject({ url: 'https://acme.com' });
@@ -398,7 +395,7 @@ describe('DesignSystemCreationFlow', () => {
       id: 'brand-heritage',
       name: 'Heritage Design System',
       skillId: 'brand-extract',
-      designSystemId: 'user:heritage',
+      designSystemId: null,
       createdAt: 1,
       updatedAt: 1,
       metadata: { kind: 'brand', importedFrom: 'brand-extraction' },
@@ -414,9 +411,7 @@ describe('DesignSystemCreationFlow', () => {
             projectId: project.id,
             conversationId: 'conv-heritage',
             sourceUrl: 'designmd://heritage',
-            status: 'ready',
-            designSystemId: 'user:heritage',
-            brandName: 'Heritage',
+            status: 'extracting',
           }),
         } as unknown as Response;
       }
@@ -451,7 +446,7 @@ describe('DesignSystemCreationFlow', () => {
     continueToGeneration();
     fireEvent.click(screen.getByRole('button', { name: /extract design system/i }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project, 'conv-heritage'));
     const requestInit = fetchMock.mock.calls.find(([url]) => url === '/api/brands')?.[1] as unknown as { body: string };
     expect(JSON.parse(requestInit.body)).toMatchObject({
       description: 'A newsroom product with a precise editorial voice.',
@@ -552,7 +547,7 @@ describe('DesignSystemCreationFlow', () => {
       id: 'brand-description-only',
       name: 'Description Design System',
       skillId: 'brand-extract',
-      designSystemId: 'user:description-only',
+      designSystemId: null,
       createdAt: 1,
       updatedAt: 1,
       metadata: { kind: 'brand', importedFrom: 'brand-extraction' },
@@ -568,9 +563,7 @@ describe('DesignSystemCreationFlow', () => {
             projectId: project.id,
             conversationId: 'conv-description-only',
             sourceUrl: 'designmd://description-only',
-            status: 'ready',
-            designSystemId: 'user:description-only',
-            brandName: 'Description',
+            status: 'extracting',
           }),
         } as unknown as Response;
       }
@@ -590,7 +583,7 @@ describe('DesignSystemCreationFlow', () => {
     continueToGeneration();
     fireEvent.click(screen.getByRole('button', { name: /extract design system/i }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project, 'conv-description-only'));
     const requestInit = fetchMock.mock.calls.find(([url]) => url === '/api/brands')?.[1] as unknown as { body: string };
     const body = JSON.parse(requestInit.body) as { url?: string; description?: string; designMd?: string };
     expect(body).not.toHaveProperty('url');
@@ -689,7 +682,7 @@ describe('DesignSystemCreationFlow', () => {
     continueToGeneration();
 
     await waitFor(() => expect(screen.getByText('Opening project...')).toBeTruthy());
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project, `conv-${project.id}`));
     expect(screen.queryByText('Creating your design system...')).toBeNull();
     expect(screen.queryByText('Opening project chat...')).toBeNull();
     expect(screen.queryByText('Updated todos')).toBeNull();
@@ -768,7 +761,7 @@ describe('DesignSystemCreationFlow', () => {
     continueToGeneration();
     continueToGeneration();
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(project.id, project, `conv-${project.id}`));
 
     expect(mocks.createDesignSystemDraft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1213,7 +1206,7 @@ describe('DesignSystemCreationFlow', () => {
       expect.stringContaining('Placeholder component shells are not sufficient'),
     );
     expect(window.sessionStorage.getItem(`od:auto-send-first:${project.id}`)).toBe('1');
-    expect(onCreated).toHaveBeenCalledWith(project.id, project);
+    expect(onCreated).toHaveBeenCalledWith(project.id, project, `conv-${project.id}`);
     expect(onSystemsRefresh).toHaveBeenCalled();
   });
 
@@ -1370,7 +1363,11 @@ describe('DesignSystemCreationFlow', () => {
       expect.stringContaining('context/local-code/comfyui/src/tokens.css'),
     );
     expect(window.sessionStorage.getItem(`od:auto-send-first:${project.id}`)).toBe('1');
-    expect(onCreated).toHaveBeenCalledWith(project.id, expect.objectContaining({ id: project.id }));
+    expect(onCreated).toHaveBeenCalledWith(
+      project.id,
+      expect.objectContaining({ id: project.id }),
+      `conv-${project.id}`,
+    );
   });
 
   it('shows global loading as soon as a large file-picker selection returns', async () => {

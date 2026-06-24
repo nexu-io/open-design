@@ -144,7 +144,7 @@ export interface DesignSystemGenerateSnapshot {
 
 interface CreationProps {
   onBack: () => void;
-  onCreated: (projectId: string, project?: Project) => void;
+  onCreated: (projectId: string, project?: Project, conversationId?: string | null) => void;
   onProjectPrepared?: (project: Project) => void;
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
@@ -926,7 +926,7 @@ export function DesignSystemCreationFlow({
       } else {
         void onSystemsRefresh?.();
       }
-      onCreated(result.projectId, projectForCreated);
+      onCreated(result.projectId, projectForCreated, result.conversationId);
       emitCreateResult('success', result.designSystemId, undefined, result.projectId);
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {

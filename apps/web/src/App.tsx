@@ -2130,14 +2130,14 @@ function AppInner() {
       <DesignSystemCreationFlow
         onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
         designSystems={enabledDS}
-        onCreated={(projectId, project) => {
+        onCreated={(projectId, project, conversationId) => {
           if (project) {
             setProjects((curr) => [
               project,
               ...curr.filter((p) => p.id !== project.id),
             ]);
           }
-          navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+          navigate({ kind: 'project', projectId, conversationId: conversationId ?? null, fileName: null });
         }}
         onProjectPrepared={(project) => {
           setProjects((curr) => [
