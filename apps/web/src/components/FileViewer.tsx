@@ -7375,6 +7375,14 @@ function HtmlViewer({
       // Without this, the remounted iframe carries stale srcdoc content
       // until the fetch completes (issue #4650).
       setSource(null);
+      // Clear the annotation-freeze snapshot so previewSource is not pinned
+      // to the stale V1 content while annotationFreezeActive is true.  The
+      // annotation-freeze useEffect (deps: annotationFreezeActive,
+      // annotationFrozenSource, livePreviewSource) re-captures from
+      // livePreviewSource on the next render once the fresh `source` lands,
+      // so the frozen source updates to the new V2 content automatically
+      // (PR #4652 / issue #4650 mrcfps review).
+      setAnnotationFrozenSource(null);
       activatedSrcDocTransportHtmlRef.current = null;
       setSrcDocShellReady(false);
       setSrcDocTransportResetKey((key) => key + 1);
