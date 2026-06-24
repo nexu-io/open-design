@@ -98,15 +98,6 @@
   gap: 10px;
   min-width: 0;
 }
-.ds-setup-hero-toggle {
-  min-height: 34px;
-  color: var(--text-muted);
-}
-.ds-setup-hero-toggle:hover,
-.ds-setup-hero-toggle:focus-visible {
-  color: var(--text-strong);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-}
 .ds-setup-mark {
   display: inline-grid;
   place-items: center;
@@ -137,18 +128,6 @@
   top: 84px;
   align-self: start;
 }
-.ds-setup-shell.ds-setup-shell--hero-collapsed:not(.ds-setup-shell--embedded) .ds-setup-form {
-  width: auto;
-  max-width: none;
-  margin: 0 40px;
-  display: block;
-  grid-template-columns: none;
-  gap: 0;
-}
-.ds-setup-shell.ds-setup-shell--hero-collapsed:not(.ds-setup-shell--embedded) .ds-setup-form-col {
-  width: 100%;
-  max-width: none;
-}
 .ds-setup-form-col {
   min-width: 0;
 }
@@ -160,19 +139,10 @@
   .ds-setup-hero-col {
     position: static;
   }
-  .ds-setup-shell.ds-setup-shell--hero-collapsed:not(.ds-setup-shell--embedded) .ds-setup-form {
-    width: min(720px, calc(100vw - 40px));
-    margin: 0 auto;
-    display: block;
-    grid-template-columns: none;
-  }
   .ds-setup-topbar {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .ds-setup-mark {
-    display: none;
-  }
-  .ds-setup-hero-toggle span {
     display: none;
   }
 }

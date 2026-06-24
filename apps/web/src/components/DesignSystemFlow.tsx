@@ -360,7 +360,6 @@ export function DesignSystemCreationFlow({
   // disclosure that hides the lower-frequency source inputs.
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [heroCollapsed, setHeroCollapsed] = useState(false);
   // Two-phase brand/design-system extraction kickoff (POST /api/brands):
   // a fast programmatic pass registers a usable user:<id> design system
   // synchronously, then the brand-extract skill enriches it in the project.
@@ -969,7 +968,7 @@ export function DesignSystemCreationFlow({
 
   return (
     <div
-      className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}${!embedded && heroCollapsed ? ' ds-setup-shell--hero-collapsed' : ''}`}
+      className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}
     >
       {sourceProcessingCount > 0 ? (
         <div
@@ -996,24 +995,6 @@ export function DesignSystemCreationFlow({
             >
               <Icon name="arrow-left" />
               Back
-            </Button>
-            <Button
-              variant="ghost"
-              className="ds-setup-hero-toggle"
-              aria-label={
-                heroCollapsed
-                  ? t('dsCreate.heroShowGuideAria')
-                  : t('dsCreate.heroHideGuideAria')
-              }
-              title={
-                heroCollapsed
-                  ? t('dsCreate.heroShowGuideTitle')
-                  : t('dsCreate.heroHideGuideTitle')
-              }
-              onClick={() => setHeroCollapsed((collapsed) => !collapsed)}
-            >
-              <Icon name={heroCollapsed ? 'chevron-right' : 'chevron-left'} />
-              <span>{t('dsCreate.heroGuide')}</span>
             </Button>
           </div>
           <span className="ds-setup-mark">
@@ -1043,7 +1024,7 @@ export function DesignSystemCreationFlow({
             <h1>{t('dsCreate.embeddedTitle')}</h1>
             <p>{t('dsCreate.embeddedBody')}</p>
           </>
-        ) : heroCollapsed ? null : (
+        ) : (
           <aside className="ds-setup-hero-col">
             <DesignSystemCreateHero stacked />
           </aside>
