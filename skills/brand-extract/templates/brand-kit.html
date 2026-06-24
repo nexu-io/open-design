@@ -478,11 +478,10 @@
         '</div>';
     }
     var themes = arr(sys.themes).length ? arr(sys.themes).join(' · ') : 'default · dark · compact';
-    var openLink = sys.indexHref ? '<a class="btn" href="' + esc(sys.indexHref) + '" target="_blank" rel="noreferrer noopener">' + esc(txt('openFullSystem', 'Open full system')) + ' ↗</a>' : '';
     return '<section class="sec"><div class="ds-head"><div>' +
         '<h2 class="sec-title">' + esc(txt('designSystem', 'Design system')) + '</h2>' +
         '<p class="ds-sub">' + esc(txt('designSystemDescription', 'Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.')) + '</p>' +
-      '</div>' + openLink + '</div>' +
+      '</div></div>' +
       '<div class="ds-frame-wrap"><div class="ds-bar">' +
         '<div class="ds-tabs" id="ds-tabs">' +
           '<button class="ds-tab active" data-kit="' + esc(sys.kitHref) + '">' + esc(txt('light', 'Light')) + '</button>' +

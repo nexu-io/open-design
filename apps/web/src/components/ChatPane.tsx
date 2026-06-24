@@ -71,7 +71,6 @@ import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
-import { filterImplicitProducedFiles } from '../produced-files';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -784,19 +783,7 @@ export function ChatPane({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  const displayMessages = useMemo(
-    () =>
-      messages.length > 0
-        ? messages
-        : buildBrandExtractionFallbackMessages({
-            enabled: Boolean(brandEnrichmentEligible),
-            metadata: projectMetadata,
-            activeDesignSystem,
-            projectFiles,
-            t,
-          }),
-    [activeDesignSystem, brandEnrichmentEligible, messages, projectFiles, projectMetadata, t],
-  );
+  const displayMessages = messages;
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
@@ -3956,119 +3943,6 @@ function sortChatAttachmentsForDisplay(attachments: ChatAttachment[]): ChatAttac
       return a.index - b.index;
     })
     .map((entry) => entry.attachment);
-}
-
-function buildBrandExtractionFallbackMessages({
-  enabled,
-  metadata,
-  activeDesignSystem,
-  projectFiles,
-  t,
-}: {
-  enabled: boolean;
-  metadata: ProjectMetadata | undefined;
-  activeDesignSystem?: DesignSystemSummary | null;
-  projectFiles: ProjectFile[];
-  t: TranslateFn;
-}): ChatMessage[] {
-  if (!enabled || !activeDesignSystem || !isBrandExtractionNextStepProject(metadata)) return [];
-  const stableId = metadata?.brandId || metadata?.brandDesignSystemId || activeDesignSystem.id;
-  const sourceLabel = brandExtractionSourceLabel(metadata, activeDesignSystem, t);
-  const producedFiles = brandExtractionProducedFiles(metadata, projectFiles);
-  const timestamp = brandExtractionTimestamp(activeDesignSystem, producedFiles);
-  const assistantContent = [
-    t('brandExtractionTranscript.doneTitle', { name: activeDesignSystem.title }),
-    '',
-    t('brandExtractionTranscript.doneBody', {
-      designSystemId: activeDesignSystem.id,
-      source: sourceLabel,
-    }),
-    '',
-    t('brandExtractionTranscript.next'),
-  ].join('\n');
-  return [
-    {
-      id: `brand-extraction-user-${stableId}`,
-      role: 'user',
-      content: t('brandExtractionTranscript.user', { source: sourceLabel }),
-      createdAt: timestamp - 1,
-    },
-    {
-      id: `brand-extraction-assistant-${stableId}`,
-      role: 'assistant',
-      content: assistantContent,
-      agentId: 'open-design',
-      agentName: 'Open Design',
-      events: [{ kind: 'text', text: assistantContent }],
-      producedFiles,
-      runStatus: 'succeeded',
-      createdAt: timestamp,
-      startedAt: timestamp - 1,
-      endedAt: timestamp,
-    },
-  ] as ChatMessage[];
-}
-
-function brandExtractionSourceLabel(
-  metadata: ProjectMetadata | undefined,
-  activeDesignSystem: DesignSystemSummary,
-  t: TranslateFn,
-): string {
-  const sourceUrl = metadata?.brandSourceUrl?.trim();
-  if (sourceUrl) {
-    if (sourceUrl.startsWith('designmd://')) return t('brandExtractionTranscript.sourceDesignMd');
-    return sourceUrl;
-  }
-  return metadata?.sourceFileName?.trim() || activeDesignSystem.title;
-}
-
-function brandExtractionProducedFiles(
-  metadata: ProjectMetadata | undefined,
-  projectFiles: ProjectFile[],
-): ProjectFile[] {
-  const visibleProjectFiles = filterImplicitProducedFiles(
-    projectFiles.filter((candidate) => {
-      if (candidate.type === 'dir') return false;
-      const name = candidate.name || candidate.path || '';
-      if (!name || name.startsWith('.') || name.includes('/.')) return false;
-      return true;
-    }),
-  );
-  if (visibleProjectFiles.length > 0) return visibleProjectFiles;
-  return [brandExtractionFallbackProducedFile(metadata, projectFiles)];
-}
-
-function brandExtractionFallbackProducedFile(
-  metadata: ProjectMetadata | undefined,
-  projectFiles: ProjectFile[],
-): ProjectFile {
-  const preferred = metadata?.entryFile?.trim() || 'brand.html';
-  const file =
-    projectFiles.find((candidate) => candidate.name === preferred) ||
-    projectFiles.find((candidate) => candidate.name === 'brand.html') ||
-    projectFiles.find((candidate) => /\.html?$/i.test(candidate.name));
-  if (file) return file;
-  return {
-    name: preferred,
-    path: preferred,
-    size: 0,
-    mtime: 1,
-    kind: 'html',
-    mime: 'text/html',
-  };
-}
-
-function brandExtractionTimestamp(
-  activeDesignSystem: DesignSystemSummary,
-  producedFiles: ProjectFile[],
-): number {
-  const updatedAt = Date.parse(activeDesignSystem.updatedAt ?? '');
-  const createdAt = Date.parse(activeDesignSystem.createdAt ?? '');
-  const latestProduced = Math.max(0, ...producedFiles.map((file) => file.mtime || 0));
-  for (const value of [latestProduced, updatedAt, createdAt]) {
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  return 1;
 }
 
 function isDesignSystemNextStepProject(metadata: ProjectMetadata | undefined): boolean {

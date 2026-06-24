@@ -382,25 +382,30 @@ export async function startBrandExtraction(
     ]);
     if (!finishedInBudget) opts.onBackgroundExtraction?.(settled);
     if (!finishedInBudget) {
-      void settled.then(() =>
-        seedReadyProgrammaticExtractionTranscript({
-          db,
-          conversationId,
-          randomId,
-          sourceUrl: url,
-          sourceLabel: host,
-          brandsRoot,
-          projectsRoot,
-          projectId,
-          locale,
-          startedAt: programmaticStartedAt,
-          transcriptAgent: opts.transcriptAgent,
-          metadata: {
-            ...metadata,
-            entryFile: BRAND_KIT_FILE,
-          },
-        }),
-      );
+      void settled
+        .then(() =>
+          seedReadyProgrammaticExtractionTranscript({
+            db,
+            conversationId,
+            randomId,
+            sourceUrl: url,
+            sourceLabel: host,
+            brandsRoot,
+            projectsRoot,
+            projectId,
+            locale,
+            startedAt: programmaticStartedAt,
+            transcriptAgent: opts.transcriptAgent,
+            metadata: {
+              ...metadata,
+              entryFile: BRAND_KIT_FILE,
+            },
+          }),
+        )
+        .catch((err) => {
+          if (isClosedDatabaseError(err)) return;
+          console.warn(`[brand] failed to seed programmatic extraction transcript for ${id}`, err);
+        });
     }
   }
 
@@ -479,7 +484,6 @@ async function seedProgrammaticExtractionTranscript(input: {
   transcriptAgent?: StartBrandExtractionOptions['transcriptAgent'];
   metadata: ProjectMetadata;
 }): Promise<void> {
-  if (listMessages(input.db, input.conversationId).length > 0) return;
   const now = Date.now();
   const brandName = input.brandName.trim() || input.sourceLabel;
   const copy = brandExtractionTranscriptCopy(input.locale);
@@ -490,11 +494,16 @@ async function seedProgrammaticExtractionTranscript(input: {
   const body = copy.doneBody(input.designSystemId, sourceLine);
   const next = copy.next;
   const assistantContent = [title, '', body, '', next].join('\n');
+  const messages = listMessages(input.db, input.conversationId);
+  const alreadySeeded = messages.some((message) =>
+    message.role === 'assistant' && message.content === assistantContent
+  );
+  if (alreadySeeded) return;
   upsertMessage(input.db, input.conversationId, {
     id: input.randomId(),
     role: 'user',
     content: copy.user(sourceLine),
-    createdAt: now - 1,
+    createdAt: input.startedAt,
   });
   upsertMessage(input.db, input.conversationId, {
     id: input.randomId(),
@@ -557,6 +566,10 @@ function brandExtractionTranscriptCopy(locale?: string | null): BrandExtractionT
   }
 }
 
+function isClosedDatabaseError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('database connection is not open');
+}
+
 async function brandExtractionProducedFiles(
   projectsRoot: string,
   projectId: string,
@@ -581,14 +594,14 @@ async function brandExtractionProducedFiles(
     // The file is created just above; if a test stubs that path, keep the
     // transcript usable and let the live project file listing provide details.
   }
-  return {
+  return [{
     name: BRAND_KIT_FILE,
     path: BRAND_KIT_FILE,
     size,
     mtime,
     kind: 'html',
     mime: 'text/html',
-  };
+  }];
 }
 
 /** How long `startBrandExtraction` waits for the synchronous programmatic

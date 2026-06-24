@@ -39,7 +39,6 @@ interface BrandKitTokenSubset {
 }
 
 interface BrandKitSystem {
-  indexHref: string | null;
   kitHref: string;
   kitDarkHref: string | null;
   themes: string[];
@@ -117,7 +116,6 @@ function readTokenSubset(absPath: string): BrandKitTokenSubset | null {
 function readSystem(projectDir: string): BrandKitSystem | null {
   if (!fileExists(path.join(projectDir, 'system', 'kit.html'))) return null;
   return {
-    indexHref: fileExists(path.join(projectDir, 'system', 'index.html')) ? 'system/index.html' : null,
     kitHref: 'system/kit.html',
     kitDarkHref: fileExists(path.join(projectDir, 'system', 'kit.dark.html')) ? 'system/kit.dark.html' : null,
     themes: ['default', 'dark', 'compact'],

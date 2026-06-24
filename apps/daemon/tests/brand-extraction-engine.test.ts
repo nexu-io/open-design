@@ -234,6 +234,7 @@ describe('agent-driven brand extraction engine', () => {
 
   it('seeds a completed chat transcript when the programmatic pass returns ready', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    const startedBeforeRequest = Date.now();
 
     const result = await startOfflineBrandExtraction({
       designMd: DESIGN_MD_INPUT,
@@ -244,7 +245,9 @@ describe('agent-driven brand extraction engine', () => {
       db,
       programmaticSyncBudgetMs: 10_000,
       logoFallback: NO_LOGO_FALLBACK,
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
     });
+    const endedAfterRequest = Date.now();
 
     expect(result.status).toBe('ready');
     expect(result.designSystemId).toBeTruthy();
@@ -252,8 +255,21 @@ describe('agent-driven brand extraction engine', () => {
     expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(messages[0]?.content).toContain('pasted DESIGN.md');
     expect(messages[1]?.content).toContain('Programmatic extraction finished');
+    expect(messages[1]?.agentId).toBe('claude');
+    expect(messages[1]?.agentName).toBe('Claude');
     expect(messages[1]?.runStatus).toBe('succeeded');
-    expect(messages[1]?.producedFiles?.[0]?.name).toBe('brand.html');
+    expect(messages[1]?.startedAt).toBeGreaterThanOrEqual(startedBeforeRequest);
+    expect(messages[1]?.endedAt).toBeLessThanOrEqual(endedAfterRequest);
+    expect(messages[1]?.endedAt).toBeGreaterThanOrEqual(messages[1]?.startedAt ?? 0);
+    const producedFiles = (Array.isArray(messages[1]?.producedFiles)
+      ? messages[1].producedFiles
+      : []) as Array<{ name?: unknown }>;
+    const producedNames = producedFiles
+      .map((file) => file.name)
+      .filter((name): name is string => typeof name === 'string');
+    expect(producedNames).toContain('brand.html');
+    expect(producedNames.some((name: string) => name.startsWith('system/'))).toBe(true);
+    expect(producedNames.length).toBeGreaterThan(1);
   });
 
   it('rejects a non-http(s) URL', async () => {

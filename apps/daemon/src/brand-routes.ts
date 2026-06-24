@@ -65,6 +65,8 @@ export interface BrandRoutesDeps {
   };
   /** Optional id factory; defaults inside the brand engine when omitted. */
   randomId?: () => string;
+  /** Selected agent identity for programmatic transcript rows. */
+  resolveTranscriptAgent?: () => Promise<{ agentId?: string | null; agentName?: string | null } | null>;
 }
 
 const LOGO_EXT_PRIORITY = ['.svg', '.png', '.webp', '.jpg', '.jpeg', '.gif', '.ico'];
@@ -116,6 +118,8 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       if (designMd.trim()) startOptions.designMd = designMd;
       if (locale.trim()) startOptions.locale = locale;
       if (randomId) startOptions.randomId = randomId;
+      const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
+      if (transcriptAgent) startOptions.transcriptAgent = transcriptAgent;
       const result = await startBrandExtraction(startOptions);
       res.json(result);
     } catch (err) {

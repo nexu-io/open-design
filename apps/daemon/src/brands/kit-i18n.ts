@@ -32,7 +32,6 @@ export interface BrandKitCopy {
   treatment: string;
   designSystem: string;
   designSystemDescription: string;
-  openFullSystem: string;
   light: string;
   dark: string;
   componentKitTitle: string;
@@ -75,7 +74,6 @@ const EN: BrandKitCopy = {
   treatment: 'Treatment',
   designSystem: 'Design system',
   designSystemDescription: 'Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.',
-  openFullSystem: 'Open full system',
   light: 'Light',
   dark: 'Dark',
   componentKitTitle: 'Component kit',
@@ -119,7 +117,6 @@ const ZH_CN: BrandKitCopy = {
   treatment: '处理方式',
   designSystem: '设计体系',
   designSystemDescription: '由这套品牌种子生成的确定性浅色 / 深色 / 紧凑 tokens 与组件套件。',
-  openFullSystem: '打开完整体系',
   light: '浅色',
   dark: '深色',
   componentKitTitle: '组件套件',
@@ -161,7 +158,6 @@ const ZH_TW: BrandKitCopy = {
   treatment: '處理方式',
   designSystem: '設計系統',
   designSystemDescription: '由這套品牌種子生成的確定性淺色 / 深色 / 緊湊 tokens 與元件套件。',
-  openFullSystem: '開啟完整系統',
   light: '淺色',
   dark: '深色',
   componentKitTitle: '元件套件',
