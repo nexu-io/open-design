@@ -35,6 +35,7 @@ export function migrateBraze(db: SqliteDb): void {
       emphasis           TEXT,
       variant_count      INTEGER NOT NULL DEFAULT 1,
       plan_json          TEXT,
+      brief_path         TEXT,
       status             TEXT NOT NULL,
       created_at         INTEGER NOT NULL,
       updated_at         INTEGER NOT NULL,
@@ -60,6 +61,11 @@ export function migrateBraze(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_braze_variants_message
       ON braze_variants(message_id, position);
   `);
+  // 기존 DB에 brief_path 없으면 추가(CREATE TABLE IF NOT EXISTS는 기존 테이블 무변경).
+  const cols = db.prepare(`PRAGMA table_info(braze_messages)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'brief_path')) {
+    db.exec(`ALTER TABLE braze_messages ADD COLUMN brief_path TEXT`);
+  }
 }
 
 // --- row shapes (snake_case from SQLite) ---
@@ -80,6 +86,7 @@ interface RawMessageRow {
   emphasis: string | null;
   variant_count: number;
   plan_json: string | null;
+  brief_path: string | null;
   status: string;
   created_at: number;
   updated_at: number;
@@ -137,6 +144,7 @@ function mapMessage(row: RawMessageRow, variants: BrazeVariant[]): BrazeMessage 
     emphasis: row.emphasis,
     variantCount: row.variant_count,
     plan: parseJson<BrazePlan>(row.plan_json),
+    briefPath: row.brief_path,
     status: row.status as BrazeMessageStatus,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -193,6 +201,7 @@ export interface BrazeMessagePatch {
   emphasis?: string | null;
   variantCount?: number;
   plan?: BrazePlan | null;
+  briefPath?: string | null;
   status?: BrazeMessageStatus;
 }
 
@@ -218,6 +227,7 @@ export function updateBrazeMessage(
   if (patch.emphasis !== undefined) set('emphasis', 'emphasis', patch.emphasis);
   if (patch.variantCount !== undefined) set('variant_count', 'variantCount', patch.variantCount);
   if (patch.plan !== undefined) set('plan_json', 'plan', patch.plan === null ? null : JSON.stringify(patch.plan));
+  if (patch.briefPath !== undefined) set('brief_path', 'briefPath', patch.briefPath);
   if (patch.status !== undefined) set('status', 'status', patch.status);
   if (sets.length === 0) return;
   db.prepare(`UPDATE braze_messages SET ${sets.join(', ')}, updated_at = @now WHERE id = @id`).run(params);
