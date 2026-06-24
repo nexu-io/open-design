@@ -132,10 +132,11 @@ describe('DesignKitView iframe sandboxing', () => {
     expect(saved).not.toContain('`#123456`');
   });
 
-  it('opens the full system in a dismissible preview dialog', async () => {
+  it('keeps upload, full-system preview, and shortcut help out of the sticky more menu', () => {
     const baseKit = previewKit();
     const kit = {
       ...baseKit,
+      canUpload: true,
       system: {
         kitUrl: baseKit.system!.kitUrl,
         kitDarkUrl: baseKit.system?.kitDarkUrl,
@@ -146,20 +147,27 @@ describe('DesignKitView iframe sandboxing', () => {
 
     render(
       <I18nProvider initial="en">
-        <DesignKitView kit={kit} stickyHeader />
+        <DesignKitView
+          kit={kit}
+          stickyHeader
+          designMd={{
+            body: '# Preview Kit',
+            onSave: async () => {},
+            saving: false,
+          }}
+          onUploadModule={() => {}}
+          onRefresh={() => {}}
+        />
       </I18nProvider>,
     );
 
+    expect(screen.queryByTestId('design-kit-shortcuts-hint')).toBeNull();
+
     fireEvent.click(screen.getByTestId('design-kit-more-actions'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open full system' }));
 
-    expect(screen.getByRole('dialog', { name: 'Preview Kit full system' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Preview Kit full system' })).toBeNull();
-    });
+    expect(screen.getByRole('menuitem', { name: 'Edit DESIGN.md' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Copy DESIGN.md' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Upload MD' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Open full system' })).toBeNull();
   });
 });

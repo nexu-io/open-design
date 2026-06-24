@@ -805,9 +805,9 @@ function DesignKitViewInner({
     );
   }
 
-  // Sticky-header overflow menu: the kit's own DESIGN.md actions, then any
-  // consumer-supplied actions, then "Open full system" — each its own group so
-  // they read as separated clusters in the dropdown.
+  // Sticky-header overflow menu: DESIGN.md read/edit actions first, then any
+  // consumer-supplied actions. Upload/import and full-preview actions stay out
+  // of this compact menu so it only contains routine project operations.
   const designMdMenuActions: HeaderMenuAction[] = designMd
     ? [
         ...(canEditDesignMd
@@ -833,41 +833,13 @@ function DesignKitViewInner({
           onClick: () => void copyDesignMd(),
           disabled: !designMd.body,
         },
-        ...(canEditDesignMd
-          ? [{
-              id: 'design-md-upload',
-              label: t('ds.uploadMd'),
-              icon: 'upload' as IconName,
-              onClick: () => designMdInputRef.current?.click(),
-              disabled: Boolean(designMd.saving),
-            }]
-          : []),
       ]
     : [];
-  const openFullSystemMenuActions: HeaderMenuAction[] =
-    stickyHeader && fullSystemUrl
-      ? [{
-          id: 'open-full-system',
-          label: t('brandDetail.openFullSystem'),
-          icon: 'external-link' as IconName,
-          onClick: openFullSystemPreview,
-        }]
-      : [];
   const headerMenuGroups: HeaderMenuAction[][] = [
     designMdMenuActions,
     headerMenuActions ?? [],
-    openFullSystemMenuActions,
   ];
   const hasHeaderMenu = headerMenuGroups.some((group) => group.length > 0);
-
-  // "?" affordance surfacing the keyboard shortcuts (E edit · C copy · U upload
-  // · R refresh · ⌫ delete logo). Clicking it opens a small popover listing the
-  // shortcuts so the button responds to a click instead of being hover-only.
-  // Only on full (non-compact) views where the shortcuts apply.
-  const shortcutsHint =
-    !compact && (canEditDesignMd || canUpload || Boolean(onRefresh) || Boolean(designMd?.body)) ? (
-      <ShortcutsHintButton label={t('ds.shortcutsLabel')} hint={t('ds.shortcutsHint')} />
-    ) : null;
   const designMdDialogLabel = designMdTarget.kind === 'module'
     ? t('ds.designMdSectionLabel', { module: designMdTarget.module.label })
     : 'DESIGN.md';
@@ -1016,10 +988,9 @@ function DesignKitViewInner({
           </div>
         </div>
         {stickyHeader ? (
-          actionsSlot || hasHeaderMenu || shortcutsHint ? (
+          actionsSlot || hasHeaderMenu ? (
             <div className={styles.previewActions}>
               {actionsSlot}
-              {shortcutsHint}
               <HeaderActionsMenu groups={headerMenuGroups} label={t('designs.menuMore')} />
             </div>
           ) : null
@@ -1027,7 +998,6 @@ function DesignKitViewInner({
           <div className={styles.previewActions}>
             {!compact ? designMdActionButtons() : null}
             {actionsSlot}
-            {shortcutsHint}
           </div>
         ) : null}
       </header>
@@ -1809,69 +1779,6 @@ export function HeaderActionsMenu({
               ))}
             </Fragment>
           ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// "?" keyboard-shortcuts hint. Clicking it toggles a small popover listing the
-// shortcuts (the same text the old title tooltip showed), so the button is a
-// real, clickable affordance instead of hover-only. Mirrors HeaderActionsMenu's
-// dismissal: click-outside + Escape.
-function ShortcutsHintButton({ label, hint }: { label: string; hint: string }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function onPointerDown(event: globalThis.MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  // The hint is a "·"-separated list, optionally prefixed with a "Shortcuts:"
-  // label (ASCII or full-width colon across locales). Drop the prefix and split
-  // so each shortcut renders on its own line under the popover title.
-  const items = hint
-    .replace(/^[^:：]*[:：]\s*/, '')
-    .split('·')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return (
-    <div className={styles.shortcutsHintWrap} ref={wrapRef}>
-      <button
-        type="button"
-        className={styles.shortcutsHint}
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label={label}
-        title={label}
-        data-testid="design-kit-shortcuts-hint"
-      >
-        <Icon name="help-circle" size={14} />
-      </button>
-      {open ? (
-        <div className={styles.shortcutsHintPopover} role="dialog" aria-label={label}>
-          <span className={styles.shortcutsHintTitle}>{label}</span>
-          <ul className={styles.shortcutsHintList}>
-            {items.map((item, index) => (
-              <li key={index}>{item}</li>
-            ))}
-          </ul>
         </div>
       ) : null}
     </div>
