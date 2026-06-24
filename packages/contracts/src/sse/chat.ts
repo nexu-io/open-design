@@ -35,11 +35,10 @@ export interface LiveArtifactRefreshSsePayload {
 export interface PlainStreamArtifactSsePayload {
   type: 'artifact';
   source: 'plain-stream';
-  files: Array<{
-    name: string;
-    identifier: string;
-    artifactType: string;
-  }>;
+  name: string;
+  path?: string;
+  identifier?: string;
+  artifactType?: string;
 }
 
 /**

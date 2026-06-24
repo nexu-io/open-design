@@ -8,6 +8,7 @@ import {
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
+  findExistingNonHtmlArtifactProjectFile,
   hasRecoverableArtifactMessage,
   resolveRetryTarget,
   resolveSucceededRunStatus,
@@ -258,6 +259,22 @@ describe('terminal replay artifact recovery', () => {
     const cssFile = projectFile('theme.css', 'code', 1_000);
 
     expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+  });
+
+  it('does not reuse same-turn html files before checking recovered content', () => {
+    const htmlArtifact: Artifact = {
+      identifier: 'landing',
+      artifactType: 'text/html',
+      title: 'Landing',
+      html: '<!doctype html><html><body>final artifact</body></html>',
+    };
+    const sameNameHtmlFile = projectFile('landing.html', 'html', 1_000);
+
+    expect(findExistingArtifactProjectFile(htmlArtifact, [sameNameHtmlFile]))
+      .toBe(sameNameHtmlFile);
+    expect(findExistingNonHtmlArtifactProjectFile(htmlArtifact, [sameNameHtmlFile]))
+      .toBeNull();
   });
 
   it('treats standalone HTML terminal assistant messages as recoverable', () => {

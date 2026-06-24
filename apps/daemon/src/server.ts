@@ -8725,15 +8725,16 @@ export async function startServer({
               writeProjectFile,
             });
             if (persistedPlainArtifacts.length > 0) {
-              send('agent', {
-                type: 'artifact',
-                source: 'plain-stream',
-                files: persistedPlainArtifacts.map((artifact) => ({
+              for (const artifact of persistedPlainArtifacts) {
+                send('agent', {
+                  type: 'artifact',
+                  source: 'plain-stream',
                   name: artifact.name,
+                  path: artifact.name,
                   identifier: artifact.identifier,
                   artifactType: artifact.artifactType,
-                })),
-              });
+                });
+              }
               send('agent', {
                 type: 'diagnostic',
                 name: 'plain_stream_artifacts_persisted',

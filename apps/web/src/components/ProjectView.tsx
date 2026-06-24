@@ -5186,7 +5186,7 @@ export function ProjectView({
               if (artifactToPersist?.html) {
                 const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const sameTurnArtifactWrite =
-                  findExistingArtifactProjectFile(artifactToPersist, producedBeforeFallback);
+                  findExistingNonHtmlArtifactProjectFile(artifactToPersist, producedBeforeFallback);
                 const sameTurnHtmlWrite = sameTurnArtifactWrite
                   ? null
                   : await findSameTurnHtmlWriteForRecoveredArtifact({
@@ -8505,6 +8505,15 @@ export function findExistingArtifactProjectFile(
   }
 
   return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
+}
+
+export function findExistingNonHtmlArtifactProjectFile(
+  art: Artifact,
+  projectFiles: ProjectFile[],
+  options: { minMtime?: number } = {},
+): ProjectFile | null {
+  if (artifactExtensionFor(art) === '.html') return null;
+  return findExistingArtifactProjectFile(art, projectFiles, options);
 }
 
 function filterProjectFilesByMinMtime(
