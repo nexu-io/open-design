@@ -678,3 +678,87 @@ describe('bootstrap auth bypass regression (reverse-proxy trust)', () => {
     expect(postRes.status).toBe(401);
   });
 });
+
+describe('cookie Secure flag via proxy trust with empty OD_PUBLIC_BASE_URL', () => {
+  let proxyServer: http.Server;
+  let proxyBaseUrl: string;
+  let proxyShutdown: (() => Promise<void> | void) | undefined;
+  // Saved env vars — restored in afterAll so request-time reads
+  // (OD_PUBLIC_BASE_URL, OD_TRUST_PROXY) stay set during tests.
+  let savedApiToken: string | undefined;
+  let savedSubnet: string | undefined;
+  let savedBaseUrl: string | undefined;
+  let savedTrustProxy: string | undefined;
+
+  beforeAll(async () => {
+    savedApiToken = process.env.OD_API_TOKEN;
+    savedSubnet = process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET;
+    savedBaseUrl = process.env.OD_PUBLIC_BASE_URL;
+    savedTrustProxy = process.env.OD_TRUST_PROXY;
+    process.env.OD_API_TOKEN = 'proxy-regression-token';
+    process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET = '1';
+    process.env.OD_PUBLIC_BASE_URL = '';
+    process.env.OD_TRUST_PROXY = '1';
+    const started = (await startServer({ port: 0, returnServer: true })) as StartServerResult;
+    proxyBaseUrl = started.url;
+    proxyServer = started.server;
+    proxyShutdown = started.shutdown;
+  });
+
+  afterAll(async () => {
+    await Promise.resolve(proxyShutdown?.());
+    await new Promise<void>((resolve) => proxyServer.close(() => resolve()));
+    // Only restore vars read at request time after all tests complete.
+    if (savedApiToken !== undefined) process.env.OD_API_TOKEN = savedApiToken;
+    else delete process.env.OD_API_TOKEN;
+    if (savedSubnet !== undefined) process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET = savedSubnet;
+    else delete process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET;
+    if (savedBaseUrl !== undefined) process.env.OD_PUBLIC_BASE_URL = savedBaseUrl;
+    else delete process.env.OD_PUBLIC_BASE_URL;
+    if (savedTrustProxy !== undefined) process.env.OD_TRUST_PROXY = savedTrustProxy;
+    else delete process.env.OD_TRUST_PROXY;
+  });
+
+  it('sets Secure flag on od-api-token cookie when behind a trusted HTTPS proxy and OD_PUBLIC_BASE_URL is empty', async () => {
+    const tokenRes = await fetch(`${proxyBaseUrl}/api/auth/bootstrap-token`);
+    expect(tokenRes.status).toBe(200);
+    const { nonce } = await tokenRes.json() as { nonce: string };
+    expect(nonce).toBeTruthy();
+
+    // Send X-Forwarded-Proto: https so Express trust-proxy makes
+    // req.secure === true.  OD_PUBLIC_BASE_URL='' means the env-var
+    // override is absent, so the daemon should fall through to req.secure.
+    const exchangeRes = await fetch(`${proxyBaseUrl}/api/auth/bootstrap`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-Proto': 'https',
+      },
+      body: JSON.stringify({ nonce }),
+    });
+    expect(exchangeRes.status).toBe(200);
+
+    const setCookie = exchangeRes.headers.get('set-cookie');
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).toContain('Secure');
+  });
+
+  it('omits Secure flag on od-api-token cookie when request is plain HTTP and OD_PUBLIC_BASE_URL is empty', async () => {
+    const tokenRes = await fetch(`${proxyBaseUrl}/api/auth/bootstrap-token`);
+    expect(tokenRes.status).toBe(200);
+    const { nonce } = await tokenRes.json() as { nonce: string };
+    expect(nonce).toBeTruthy();
+
+    // Sending X-Forwarded-Proto: http (or omitting it) -> req.secure === false.
+    const exchangeRes = await fetch(`${proxyBaseUrl}/api/auth/bootstrap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nonce }),
+    });
+    expect(exchangeRes.status).toBe(200);
+
+    const setCookie = exchangeRes.headers.get('set-cookie');
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).not.toContain('Secure');
+  });
+});

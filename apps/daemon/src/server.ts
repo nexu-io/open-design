@@ -3748,7 +3748,8 @@ export async function startServer({
         });
       }
       bootstrapNonces.delete(nonce);
-      const cookieSecure = process.env.OD_PUBLIC_BASE_URL?.startsWith('https://') ?? (req.secure || false);
+      const publicBaseUrl = process.env.OD_PUBLIC_BASE_URL;
+      const cookieSecure = publicBaseUrl ? publicBaseUrl.startsWith('https://') : (req.secure || false);
       res.cookie('od-api-token', apiToken, {
         httpOnly: true,
         sameSite: 'strict',
@@ -3775,7 +3776,8 @@ export async function startServer({
     // static routes (/artifacts/*, /plugin-previews/*, /frames/*) would 401
     // because those loads carry no Authorization header.
     app.post('/api/auth/set-token-cookie', (req, res) => {
-      const cookieSecure = process.env.OD_PUBLIC_BASE_URL?.startsWith('https://') ?? (req.secure || false);
+      const publicBaseUrl = process.env.OD_PUBLIC_BASE_URL;
+      const cookieSecure = publicBaseUrl ? publicBaseUrl.startsWith('https://') : (req.secure || false);
       res.cookie('od-api-token', apiToken, {
         httpOnly: true,
         sameSite: 'strict',
