@@ -15,7 +15,7 @@
 // once per brand (a sessionStorage flag) so re-opening a finished project never
 // nags.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ProjectMetadata } from '@open-design/contracts';
 import { fetchBrands } from './brands';
 
@@ -160,10 +160,13 @@ export function useBrandReadyPrompt(
     };
   }, [brandId]);
 
+  const dismiss = useCallback(() => setPrompt(null), []);
+  const dismissBrowserAssist = useCallback(() => setBrowserAssist(null), []);
+
   return {
     prompt,
-    dismiss: () => setPrompt(null),
+    dismiss,
     browserAssist,
-    dismissBrowserAssist: () => setBrowserAssist(null),
+    dismissBrowserAssist,
   };
 }

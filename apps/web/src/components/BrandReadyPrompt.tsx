@@ -1,9 +1,8 @@
 // Shown in a brand-extraction project once the extraction finalizes: a gentle,
 // dismissible nudge that the design system is ready to preview in the Design
-// systems tab. It never auto-dismisses — extraction runs for minutes, so a
-// confirmation that vanishes on a timer would be missed exactly when the user
-// looks back. Clicking the CTA opens the Design systems tab (with the new system
-// preselected, wired by the caller); the × dismisses without navigating.
+// systems tab. Clicking the CTA opens the Design systems tab (with the new
+// system preselected, wired by the caller); the x dismisses without navigating.
+import { useEffect, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 
 import { Icon } from './Icon';
@@ -14,6 +13,10 @@ import styles from './BrandReadyPrompt.module.css';
 export interface BrandReadyPromptProps {
   /** Brand display name; null falls back to a generic title. */
   brandName: string | null;
+  /** Left offset for the workspace panel; keeps the prompt away from composer. */
+  workspaceOffsetPx?: number;
+  /** Auto-dismiss after a short confirmation window. */
+  ttlMs?: number;
   /** Focus the in-project brand-kit (design system) tab. */
   onPreview: () => void;
   /** Dismiss without navigating. */
@@ -26,8 +29,12 @@ export interface BrandReadyPromptProps {
   onEditManually?: () => void;
 }
 
+const DEFAULT_TTL_MS = 6000;
+
 export function BrandReadyPrompt({
   brandName,
+  workspaceOffsetPx = 0,
+  ttlMs = DEFAULT_TTL_MS,
   onPreview,
   onDismiss,
   showRefinement = false,
@@ -40,10 +47,20 @@ export function BrandReadyPrompt({
     : t('project.brandReadyTitleGeneric');
   const dismissLabel = t('project.brandReadyDismiss');
   const refine = showRefinement && (onAiOptimize || onEditManually);
+  const style = {
+    '--brand-ready-left-offset': `${Math.max(0, workspaceOffsetPx)}px`,
+  } as CSSProperties;
+
+  useEffect(() => {
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) return undefined;
+    const timer = window.setTimeout(onDismiss, ttlMs);
+    return () => window.clearTimeout(timer);
+  }, [onDismiss, ttlMs]);
 
   return (
     <motion.div
       className={styles.prompt}
+      style={style}
       role="status"
       aria-live="polite"
       variants={toastSlideUp}

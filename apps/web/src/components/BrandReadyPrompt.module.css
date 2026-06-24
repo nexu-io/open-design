@@ -1,15 +1,16 @@
 /* "Design system is ready" prompt shown in a brand-extraction project once the
    extraction finalizes. A light success surface (mirrors .od-toast.tone-success
-   tokens) so it reads as a confirmation, not an alert. Pinned bottom-right; the
-   motion y/scale transform stays unobstructed (no translateX). */
+   tokens) so it reads as a confirmation, not an alert. Center inside the
+   workspace panel, not the full viewport, so it never covers the chat composer. */
 .prompt {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  left: auto;
+  bottom: max(32px, env(safe-area-inset-bottom));
+  left: var(--brand-ready-left-offset, 0px);
+  right: 0;
+  margin: 0 auto;
   width: fit-content;
-  max-width: 380px;
-  z-index: 1100;
+  max-width: 440px;
+  z-index: 1400;
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -22,6 +23,15 @@
     0 6px 22px rgba(0, 0, 0, 0.12),
     0 0 0 1px color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
   pointer-events: auto;
+}
+
+@media (max-width: 900px) {
+  .prompt {
+    bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
 }
 
 .icon {

@@ -6582,6 +6582,7 @@ export function ProjectView({
           <BrandReadyPrompt
             key="brand-ready-prompt"
             brandName={brandReadyPrompt.brandName}
+            workspaceOffsetPx={workspaceFocused ? 0 : splitLeftPanelWidth + SPLIT_RESIZE_HANDLE_WIDTH}
             onPreview={() => {
               // Stay in the project: focus the in-project brand-kit tab (the
               // design-system preview) rather than jumping out to the global
