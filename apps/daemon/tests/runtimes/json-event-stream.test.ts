@@ -1108,7 +1108,7 @@ test('codex json stream emits status text and usage events', () => {
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'initializing', sessionId: 'thr-1' },
     { type: 'status', label: 'thinking' },
     { type: 'text_delta', delta: 'hello' },
     { type: 'usage', usage: { input_tokens: 12, output_tokens: 3, cached_read_tokens: 4 } },
@@ -1550,7 +1550,7 @@ test('codex json stream treats reconnect errors as status warnings not fatal (re
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'initializing', sessionId: 'thr-1' },
     { type: 'status', label: 'thinking' },
     { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
     { type: 'text_delta', delta: 'OK' },
@@ -1573,7 +1573,7 @@ test('codex json stream treats stream disconnect reconnect errors as status warn
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'initializing', sessionId: 'thr-1' },
     { type: 'status', label: 'thinking' },
     {
       type: 'status',
