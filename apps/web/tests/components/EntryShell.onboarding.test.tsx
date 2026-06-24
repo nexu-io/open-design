@@ -336,24 +336,11 @@ describe('EntryShell settings menu', () => {
 });
 
 describe('EntryShell new project rail', () => {
-  it('creates a blank project from the rail plus without opening the modal', async () => {
+  it('opens the new project modal from the rail plus', async () => {
     window.localStorage.setItem('od.entry.railOpen', 'false');
     const fetchMock = vi.fn(
-      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-        if (url.endsWith('/api/projects') && init?.method === 'POST') {
-          return jsonResponse({
-            project: {
-              id: 'project-1',
-              name: 'Untitled',
-              skillId: null,
-              designSystemId: null,
-              createdAt: 1,
-              updatedAt: 1,
-            },
-            conversationId: 'conversation-1',
-          });
-        }
         if (url.endsWith('/api/community/discord')) {
           return jsonResponse({
             inviteCode: 'mHAjSMV6gz',
@@ -381,20 +368,16 @@ describe('EntryShell new project rail', () => {
     fireEvent.click(screen.getByTestId('entry-nav-new-project'));
 
     await waitFor(() => {
-      expect(props.onOpenProject).toHaveBeenCalledWith('project-1');
+      expect(screen.getByTestId('new-project-modal')).toBeTruthy();
     });
-    expect(screen.queryByTestId('new-project-modal')).toBeNull();
-    expect(screen.queryByTestId('new-project-panel')).toBeNull();
-
-    const createCall = fetchMock.mock.calls.find(
-      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
-    );
-    expect(createCall).toBeTruthy();
-    const body = JSON.parse(String(createCall?.[1]?.body));
-    expect(body.name).toBe('Untitled');
-    expect(body.skillId).toBeNull();
-    expect(body.designSystemId).toBeNull();
-    expect(body.metadata).toBeUndefined();
+    expect(screen.getByTestId('new-project-panel')).toBeTruthy();
+    expect(props.onCreateProject).not.toHaveBeenCalled();
+    expect(props.onOpenProject).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.find(
+        ([input, init]) => input === '/api/projects' && init?.method === 'POST',
+      ),
+    ).toBeUndefined();
   });
 });
 

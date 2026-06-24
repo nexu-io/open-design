@@ -1,4 +1,4 @@
-import type { Brand } from '@open-design/contracts';
+import type { Brand, BrandColorRole } from '@open-design/contracts';
 import {
   deleteProjectFile,
   fetchProjectFileText,
@@ -29,12 +29,58 @@ export async function patchBrand(projectId: string, mutate: (brand: Brand) => vo
   return writeBrand(projectId, brand);
 }
 
+type EditableBrand = Brand & { seed?: Record<string, unknown> };
+
+function normalizeHex(raw: string): string | null {
+  const value = raw.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value.toUpperCase() : null;
+}
+
+function hueOf(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return 0;
+  let hue: number;
+  if (max === r) hue = ((g - b) / delta) % 6;
+  else if (max === g) hue = (b - r) / delta + 2;
+  else hue = (r - g) / delta + 4;
+  hue *= 60;
+  return hue < 0 ? hue + 360 : hue;
+}
+
+function isGreenish(hex: string): boolean {
+  const hue = hueOf(hex);
+  return hue >= 80 && hue <= 165;
+}
+
+function syncSeedForColor(brand: EditableBrand, role: BrandColorRole, hex: string): void {
+  const seed = { ...(brand.seed ?? {}) };
+  if (role === 'accent') {
+    seed.colorPrimary = hex;
+    seed.colorInfo = hex;
+  } else if (role === 'accent-secondary') {
+    seed.colorLink = hex;
+    if (isGreenish(hex)) seed.colorSuccess = hex;
+  } else if (role === 'foreground') {
+    seed.colorTextBase = hex;
+  } else if (role === 'background' || role === 'surface') {
+    seed.colorBgBase = hex;
+  }
+  brand.seed = seed;
+}
+
 export async function updateBrandColor(projectId: string, index: number, hex: string): Promise<boolean> {
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
+  const nextHex = normalizeHex(hex);
+  if (!nextHex) return false;
   const brand = await readBrand(projectId);
   const color = brand?.colors?.[index];
   if (!brand || !color) return false;
-  color.hex = hex.toUpperCase();
+  color.hex = nextHex;
+  syncSeedForColor(brand as EditableBrand, color.role, nextHex);
   return writeBrand(projectId, brand);
 }
 
