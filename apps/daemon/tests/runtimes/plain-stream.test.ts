@@ -150,4 +150,15 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts[0]?.fileName).toBe('real.html');
     expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
   });
+
+  it('ignores artifact tags inside inline markdown code spans', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      'Use `<artifact identifier="example" type="text/html">example</artifact>` to emit HTML.\n',
+      '<artifact identifier="real" type="text/html"><!doctype html><html><body>Real</body></html></artifact>',
+    ].join(''));
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.fileName).toBe('real.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
 });

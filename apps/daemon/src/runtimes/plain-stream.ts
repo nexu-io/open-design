@@ -68,7 +68,7 @@ export function plainStdoutFromRunEvents(events: readonly RunEventLike[]): strin
 
 export function extractPlainStreamArtifacts(stdout: string): PlainStreamArtifact[] {
   if (!stdout.includes(OPEN_TAG)) return [];
-  const skipRanges = computeMarkdownFenceRanges(stdout);
+  const skipRanges = computeMarkdownSkipRanges(stdout);
   const artifacts: PlainStreamArtifact[] = [];
   let from = 0;
 
@@ -210,6 +210,11 @@ function findOpenTagEnd(text: string, from: number): number {
   return -1;
 }
 
+function computeMarkdownSkipRanges(text: string): Array<[number, number]> {
+  const fenceRanges = computeMarkdownFenceRanges(text);
+  return [...fenceRanges, ...computeMarkdownInlineCodeRanges(text, fenceRanges)];
+}
+
 function computeMarkdownFenceRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   const fenceRe = /^ {0,3}(?:```|~~~).*$/gm;
@@ -228,6 +233,56 @@ function computeMarkdownFenceRanges(text: string): Array<[number, number]> {
   }
   if (open) ranges.push([open.start, text.length]);
   return ranges;
+}
+
+function computeMarkdownInlineCodeRanges(
+  text: string,
+  fenceRanges: ReadonlyArray<[number, number]>,
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let i = 0;
+  while (i < text.length) {
+    if (text.charAt(i) !== '`' || rangeContains(fenceRanges, i)) {
+      i += 1;
+      continue;
+    }
+    const tickCount = countBacktickRun(text, i);
+    const close = findMatchingBacktickRun(text, i + tickCount, tickCount, fenceRanges);
+    if (close === -1) {
+      i += tickCount;
+      continue;
+    }
+    ranges.push([i, close + tickCount]);
+    i = close + tickCount;
+  }
+  return ranges;
+}
+
+function countBacktickRun(text: string, from: number): number {
+  let count = 0;
+  while (text.charAt(from + count) === '`') count += 1;
+  return count;
+}
+
+function findMatchingBacktickRun(
+  text: string,
+  from: number,
+  tickCount: number,
+  fenceRanges: ReadonlyArray<[number, number]>,
+): number {
+  let i = from;
+  while (i < text.length) {
+    const idx = text.indexOf('`', i);
+    if (idx === -1) return -1;
+    if (rangeContains(fenceRanges, idx)) {
+      i = idx + 1;
+      continue;
+    }
+    const candidateCount = countBacktickRun(text, idx);
+    if (candidateCount === tickCount) return idx;
+    i = idx + candidateCount;
+  }
+  return -1;
 }
 
 function rangeContains(ranges: ReadonlyArray<[number, number]>, idx: number): boolean {
