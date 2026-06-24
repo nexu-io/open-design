@@ -3759,6 +3759,14 @@ export async function startServer({
       res.json({ ok: true });
     });
 
+    // GET /api/auth/verify — lightweight token-validity probe for the
+    // frontend ApiTokenPrompt.  The bearer-token / cookie middleware (above)
+    // runs before this handler, so reaching here means the request is
+    // authenticated.  This endpoint exists so token verification is not
+    // coupled to agent discovery, plugin DB health, or any other subsystem
+    // that could 500 despite valid auth.
+    app.get('/api/auth/verify', (_req, res) => { res.json({ ok: true }); });
+
     // POST /api/auth/set-token-cookie — called by the frontend ApiTokenPrompt
     // after the user enters a token manually.  The bearer middleware (above)
     // has already validated the Bearer token before reaching this handler,

@@ -485,7 +485,7 @@ describe('handleApiTokenSubmit probe verification', () => {
         return Promise.resolve({ ok: false, status: 401 } as Response);
       }
       // Token verification probe — 403 Forbidden
-      if (url.includes('/api/agents')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({ ok: false, status: 403 } as Response);
       }
       return Promise.resolve({
@@ -525,7 +525,7 @@ describe('handleApiTokenSubmit probe verification', () => {
         return Promise.resolve({ ok: false, status: 401 } as Response);
       }
       // Token verification probe — 500 Server Error
-      if (url.includes('/api/agents')) {
+      if (url.includes('/api/auth/verify')) {
         return Promise.resolve({ ok: false, status: 500 } as Response);
       }
       return Promise.resolve({
@@ -561,8 +561,8 @@ describe('handleApiTokenSubmit probe verification', () => {
         return Promise.resolve({ ok: false, status: 401 } as Response);
       }
       // Token verification probe — 200 OK (token accepted)
-      if (url.includes('/api/agents')) {
-        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) } as Response);
+      if (url.includes('/api/auth/verify')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) } as Response);
       }
       // set-token-cookie endpoint
       if (url.includes('/api/auth/set-token-cookie')) {

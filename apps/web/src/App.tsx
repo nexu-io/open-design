@@ -2098,7 +2098,7 @@ function AppInner() {
     setVerifyingToken(true);
     setApiTokenError(null);
     try {
-      const probe = await fetch('/api/agents', {
+      const probe = await fetch('/api/auth/verify', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!probe.ok) {
