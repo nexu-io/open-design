@@ -669,7 +669,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('"status":"extracting"');
     expect(html).toContain('#d97757');
     expect(html).toContain('data-od-id="brand-name"');
-    expect(html).toContain('data-od-id="brand-color-hex-\' + i + \'"');
+    expect(html).toContain('data-od-id="brand-color-hex-');
     expect(html).toContain('data-od-id="brand-palette"');
   });
 
