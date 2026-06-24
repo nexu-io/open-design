@@ -422,6 +422,36 @@
   }
 }
 
+/* Detail preview loading state — a framed box with a centered spinner, sized to
+   match the resting cover so the layout never jumps, and softly faded in so the
+   panel never flashes a blank white/grey rectangle before the kit resolves. */
+.detailLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 140% at 50% -10%, var(--bg-subtle) 0%, var(--bg) 70%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-strong) 4%, transparent);
+}
+
+.detailSpinner {
+  width: 30px;
+  height: 30px;
+  border: 2.5px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: designSystemDetailSpin 0.7s linear infinite;
+}
+
+@keyframes designSystemDetailSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Live showcase cover */
 .cover {
   position: relative;

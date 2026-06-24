@@ -913,7 +913,7 @@ function SystemRow({ system, active, isDefault, subtitle, statusLabel, onSelect 
           <span className={styles.itemName}>{system.title}</span>
           {isDefault ? <span className={styles.badgeDefault}>{t('dsManager.badgeDefault')}</span> : null}
         </span>
-        <span className={styles.itemSub}>{categoryLabel}</span>
+        <span className={styles.itemSub}>{subtitle}</span>
       </span>
       {isUser ? (
         <span
@@ -1116,7 +1116,17 @@ function DesignSystemDetail({
           dataTestId={`design-kit-view-${system.id}`}
         />
       ) : (
-        <div className={styles.cover} aria-hidden />
+        // Kit still resolving (brand.json / DESIGN.md fetch). Show a calm
+        // centered spinner inside the same framed box so the panel never flashes
+        // a blank white/grey rectangle before the content fades in.
+        <div
+          className={styles.detailLoading}
+          role="status"
+          aria-label={t('common.loading')}
+          data-testid={`design-system-detail-loading-${system.id}`}
+        >
+          <span className={styles.detailSpinner} aria-hidden />
+        </div>
       )}
     </div>
   );

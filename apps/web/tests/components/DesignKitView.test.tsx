@@ -105,7 +105,7 @@ describe('DesignKitView iframe sandboxing', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(screen.getByTitle('Edit Palette'));
+    fireEvent.click(screen.getByTitle('Edit Palette section'));
 
     const textarea = screen.getByRole('textbox', { name: 'Palette DESIGN.md section' }) as HTMLTextAreaElement;
     expect(textarea.value).toContain('## Color Palette');

@@ -1100,6 +1100,14 @@ a.ds-source-link-open:focus-visible {
   width: min(560px, calc(100vw - 40px));
   text-align: center;
 }
+/* Redirect/loading variant: stack the spinner above the title so the route that
+   hands off to the project workspace reads as a clean loading state. */
+.ds-setup-center-card--loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
 .ds-setup-actions {
   display: flex;
   justify-content: center;

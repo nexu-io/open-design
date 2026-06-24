@@ -2454,12 +2454,21 @@ export function DesignSystemDetailView({
     }
   }
 
-  if (!system) {
+  // This route's only job is to resolve the design system's backing project and
+  // hand off to the full project workspace (ProjectView, via onOpenProject). For
+  // the whole redirect window we render a loading animation instead of the
+  // legacy in-place review UI below, so opening a design-system project never
+  // flashes the old "Review draft design system" scaffold before the workspace
+  // mounts. Only when the workspace genuinely cannot be resolved
+  // (workspaceLoadError) do we fall through to that legacy UI as an escape hatch.
+  const redirectingToWorkspace = Boolean(onOpenProject) && !workspaceLoadError;
+  if (!system || redirectingToWorkspace) {
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
-        <div className="ds-setup-center-card">
-          <h1>Loading design system...</h1>
-          <p>Opening the review workspace.</p>
+        <div className="ds-setup-center-card ds-setup-center-card--loading" role="status" aria-live="polite">
+          <Spinner size={22} />
+          <h1>{system?.title ?? 'Loading design system...'}</h1>
+          <p>Opening the workspace...</p>
         </div>
       </div>
     );

@@ -2266,9 +2266,12 @@ export interface Dict {
   'brandEnrichment.body': string;
   'brandEnrichment.cta': string;
   'brandEnrichment.busy': string;
-  'chat.createDesignFromSystemTitle': string;
-  'chat.createDesignFromSystemBody': string;
   'chat.createDesignFromSystemCta': string;
+  'chat.dsExtractUser': string;
+  'chat.dsExtractRunning': string;
+  'chat.dsExtractDone': string;
+  'chat.dsNextStepsTitle': string;
+  'chat.dsMoreToggle': string;
   'chat.fillInputTitle': string;
   'chat.jumpToLatest': string;
   'chat.scrollToLatest': string;

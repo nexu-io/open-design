@@ -6187,6 +6187,15 @@ export function ProjectView({
                       )
                   : undefined
               }
+              designSystemIntro={
+                designSystemProject
+                  ? {
+                      sourceLabel: designSystemExtractionSource(project, designSystemProject.title),
+                      systemTitle: designSystemProject.title,
+                      extracting: currentConversationStreaming,
+                    }
+                  : null
+              }
               projectFileNames={projectFileNames}
               skills={skills}
               onEnsureProject={handleEnsureProject}

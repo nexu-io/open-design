@@ -106,6 +106,25 @@ describe('DesignSystemsTab', () => {
     expect(list().queryByText('Acme Design System')).toBeNull();
   });
 
+  it('shows the user system scenario (summary) as the row subtitle, not a generic placeholder', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onPreview={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    // The user row's subtitle now reads the scenario (summary) instead of the
+    // repeated "Design system" placeholder it used to show.
+    const row = within(screen.getByTestId('design-system-card-user:acme'));
+    expect(row.getByText('Internal product system.')).toBeTruthy();
+    expect(row.queryByText('Design system')).toBeNull();
+  });
+
   it('routes create and edit actions to the dedicated design-system flow', () => {
     const onCreate = vi.fn();
     const onOpenSystem = vi.fn();

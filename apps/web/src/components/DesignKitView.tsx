@@ -861,20 +861,12 @@ function DesignKitViewInner({
   const hasHeaderMenu = headerMenuGroups.some((group) => group.length > 0);
 
   // "?" affordance surfacing the keyboard shortcuts (E edit · C copy · U upload
-  // · R refresh · ⌫ delete logo). Only on full (non-compact) views where the
-  // shortcuts apply; tabIndex -1 keeps it out of the Tab order (info only).
+  // · R refresh · ⌫ delete logo). Clicking it opens a small popover listing the
+  // shortcuts so the button responds to a click instead of being hover-only.
+  // Only on full (non-compact) views where the shortcuts apply.
   const shortcutsHint =
     !compact && (canEditDesignMd || canUpload || Boolean(onRefresh) || Boolean(designMd?.body)) ? (
-      <button
-        type="button"
-        className={styles.shortcutsHint}
-        title={t('ds.shortcutsHint')}
-        aria-label={t('ds.shortcutsLabel')}
-        tabIndex={-1}
-        data-testid="design-kit-shortcuts-hint"
-      >
-        <Icon name="help-circle" size={14} />
-      </button>
+      <ShortcutsHintButton label={t('ds.shortcutsLabel')} hint={t('ds.shortcutsHint')} />
     ) : null;
 
   return (
@@ -1814,6 +1806,69 @@ export function HeaderActionsMenu({
               ))}
             </Fragment>
           ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// "?" keyboard-shortcuts hint. Clicking it toggles a small popover listing the
+// shortcuts (the same text the old title tooltip showed), so the button is a
+// real, clickable affordance instead of hover-only. Mirrors HeaderActionsMenu's
+// dismissal: click-outside + Escape.
+function ShortcutsHintButton({ label, hint }: { label: string; hint: string }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onPointerDown(event: globalThis.MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  // The hint is a "·"-separated list, optionally prefixed with a "Shortcuts:"
+  // label (ASCII or full-width colon across locales). Drop the prefix and split
+  // so each shortcut renders on its own line under the popover title.
+  const items = hint
+    .replace(/^[^:：]*[:：]\s*/, '')
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return (
+    <div className={styles.shortcutsHintWrap} ref={wrapRef}>
+      <button
+        type="button"
+        className={styles.shortcutsHint}
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        data-testid="design-kit-shortcuts-hint"
+      >
+        <Icon name="help-circle" size={14} />
+      </button>
+      {open ? (
+        <div className={styles.shortcutsHintPopover} role="dialog" aria-label={label}>
+          <span className={styles.shortcutsHintTitle}>{label}</span>
+          <ul className={styles.shortcutsHintList}>
+            {items.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </div>
