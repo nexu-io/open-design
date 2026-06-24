@@ -61,10 +61,10 @@ test('[P2] captures the design system detail preview surface', async ({ page }) 
   await page.getByTestId('entry-nav-design-systems').click();
   await page.getByRole('tab', { name: 'Official presets' }).click();
   await page.getByTestId('design-system-card-agentic').click();
-  await expect(page.getByTestId('design-system-detail-agentic')).toBeVisible();
-  await page.getByTestId('design-system-detail-agentic').getByTestId('design-kit-cover-preview').click();
-  await expect(page.getByRole('dialog', { name: /Agentic/i })).toBeVisible();
-  await expect(page.getByTestId('design-kit-cover-preview-frame')).toBeVisible();
+  const detail = page.getByTestId('design-system-detail-agentic');
+  await expect(detail).toBeVisible();
+  await expect(detail.getByTestId('design-kit-view-agentic')).toBeVisible();
+  await expect(detail.getByTestId('design-kit-logo-section')).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-design-system-detail');

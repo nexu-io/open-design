@@ -1153,7 +1153,7 @@ function DesignSystemDetail({
 
   return (
     <div className={styles.detail} data-testid={`design-system-detail-${system.id}`}>
-      {kit && detailResolved ? (
+      {kit ? (
         <DesignKitView
           kit={kit}
           badgeSlot={badgeSlot}

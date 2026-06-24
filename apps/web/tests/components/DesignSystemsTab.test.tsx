@@ -84,7 +84,7 @@ describe('DesignSystemsTab', () => {
     expect(container.querySelector('.loading-spinner')).toBeNull();
   });
 
-  it('renders a structured detail skeleton while the selected system resolves', async () => {
+  it('keeps the summary-derived kit visible while the selected system detail resolves', async () => {
     let resolveDetail!: (value: Awaited<ReturnType<typeof fetchDesignSystem>>) => void;
     vi.mocked(fetchDesignSystem).mockImplementationOnce(
       () => new Promise((resolve) => {
@@ -101,7 +101,8 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
-    expect(screen.getByTestId('design-system-detail-loading-user:acme')).toBeTruthy();
+    expect(screen.getByTestId('design-kit-view-user:acme')).toBeTruthy();
+    expect(screen.queryByTestId('design-system-detail-loading-user:acme')).toBeNull();
     expect(container.querySelector('.loading-spinner')).toBeNull();
 
     resolveDetail({
