@@ -82,14 +82,20 @@ export function shouldOmitNativeImageAttachmentMetadata(cfg: AppConfig): boolean
 
 function isKnownNativeImageModel(model: string): boolean {
   const normalized = model.trim().toLowerCase();
+  const providerModel = normalized.split('/').pop() ?? normalized;
+  return isKnownNativeImageModelId(normalized) || isKnownNativeImageModelId(providerModel);
+}
+
+function isKnownNativeImageModelId(model: string): boolean {
   return (
-    normalized === 'chat-gpt-latest' ||
-    normalized.startsWith('gpt-5') ||
-    normalized.startsWith('gpt-4o') ||
-    normalized.startsWith('gpt-4.1') ||
-    normalized.startsWith('gpt-4-turbo') ||
-    normalized.startsWith('o3') ||
-    normalized.startsWith('o4')
+    model === 'chat-gpt-latest' ||
+    model.startsWith('gpt-5') ||
+    model.startsWith('gpt-4o') ||
+    model.startsWith('gpt-4.1') ||
+    model.startsWith('gpt-4-turbo') ||
+    model.startsWith('o3') ||
+    model.startsWith('o4') ||
+    model.startsWith('gemini-2.5')
   );
 }
 

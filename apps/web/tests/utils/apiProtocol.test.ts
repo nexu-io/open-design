@@ -44,6 +44,35 @@ describe('api protocol labels', () => {
     expect(supportsNativeImageAttachmentSerialization({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-3.5-turbo' })).toBe(false);
     expect(supportsNativeImageAttachmentSerialization({
       ...baseConfig,
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openai/gpt-4o',
+    })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openai/o3-mini',
+    })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'google/gemini-2.5-flash',
+    })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openai/gpt-4o',
+    })).toBe(true);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'deepseek/deepseek-chat',
+    })).toBe(false);
+    expect(supportsNativeImageAttachmentSerialization({
+      ...baseConfig,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',
     })).toBe(true);
