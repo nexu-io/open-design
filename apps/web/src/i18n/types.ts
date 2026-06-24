@@ -304,6 +304,12 @@ export interface Dict {
   'settings.amrSignInToContinue': string;
   'settings.amrSignIn': string;
   'settings.amrSignedIn': string;
+  'settings.amrWalletBalance': string;
+  'settings.amrWalletUnavailable': string;
+  'settings.amrWalletUpdatedAt': string;
+  'settings.amrWalletCached': string;
+  'settings.amrWalletRefresh': string;
+  'settings.amrWalletRefreshTitle': string;
   'settings.amrNotSignedIn': string;
   'settings.amrSigningIn': string;
   'settings.amrActivationHint': string;
