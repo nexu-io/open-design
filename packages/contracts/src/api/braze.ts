@@ -43,6 +43,11 @@ export type BrazeVariantStatus = 'pending' | 'produced' | 'editing' | 'done';
 export interface BrazePlanVariant {
   label: string; // 'A' | 'B' | ...
   angle: string; // creative direction for this variant
+  // IAM 타이틀 영역에 들어가는 후킹 카피 — confirm 게이트에서 제작 전 검토하기 위해
+  // plan에 명시적으로 보유한다. A·B 공통이면 같은 값을 양쪽에 둔다.
+  heading: string;
+  // IAM 디스크립션/본문 영역 카피 — 헤딩 약속을 구체화하고 행동을 유도하는 문장.
+  body: string;
 }
 
 export interface BrazePlanTargeting {
