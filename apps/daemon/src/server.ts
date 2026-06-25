@@ -330,7 +330,7 @@ import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
-  projectKindToTracking,
+  projectKindFromMetadataToTracking,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -1474,10 +1474,12 @@ function resolveRunProjectKindForAnalytics({
 }) {
   if (typeof hintProjectKind === 'string') return hintProjectKind;
   if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  // Pass videoModel so a HyperFrames project (kind=video + videoModel=
-  // hyperframes-html) is reported as project_kind=hyperframes, not generic
-  // video. The web-supplied `hintProjectKind` already encodes this when set.
-  return projectKindToTracking(projectMetadata?.kind, projectMetadata?.videoModel);
+  // Derive straight from the persisted metadata: videoModel splits HyperFrames
+  // (kind=video) out of generic video, and the prototype/other subtype fields
+  // (fidelity / intent / platform) split wireframe/mobile/live_artifact/document
+  // out so the run's project_kind matches the Home card the user picked. The
+  // web-supplied `hintProjectKind` already encodes all of this when set.
+  return projectKindFromMetadataToTracking(projectMetadata);
 }
 
 export function __forTestResolveRunProjectKindForAnalytics(args) {

@@ -195,6 +195,10 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       projectKind: 'other',
       projectMetadata: {
         kind: 'other',
+        // Analytics-only tag: splits this card's projects out of generic
+        // `other` so `project_kind` reports `document` (matches the task_chip).
+        // No product behavior keys off `intent: 'document'`.
+        intent: 'document',
       },
     },
   },

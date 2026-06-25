@@ -64,7 +64,7 @@ import {
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
-  projectKindToTracking,
+  projectKindFromMetadataToTracking,
 } from '@open-design/contracts/analytics';
 import type {
   TrackingArtifactKind,
@@ -5680,7 +5680,7 @@ export function ProjectView({
       // surfaces. `target_project_kind` derives from
       // `project.metadata.kind`.
       const target =
-        (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
+        (projectKindFromMetadataToTracking(project.metadata) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
       const picked = nextId
         ? designSystems.find((d) => d.id === nextId)
         : null;
@@ -6485,7 +6485,7 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel)}
+              projectKindForTracking={projectKindFromMetadataToTracking(currentProject.metadata)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!projectDesignSystemId}
@@ -6657,7 +6657,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel) ?? 'prototype'}
+          projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
           rootDirName={(() => {
             const baseDir = currentProject.metadata?.baseDir;
             return typeof baseDir === 'string'
