@@ -5,7 +5,7 @@ ACTION="${1:-ensure}"
 SWAP_SIZE="${COLIMA_BUILD_SWAP_SIZE:-4G}"
 SWAP_FILE="${COLIMA_BUILD_SWAPFILE:-/swapfile-colima-build}"
 DEFAULT_SWAP_FILE="/swapfile-colima-build"
-LEGACY_SWAP_FILE="/swapfile-open-design-build"
+LEGACY_SWAP_FILE="/swapfile-marketing-ax-build"
 MEMORY_THRESHOLD_KIB="${COLIMA_BUILD_SWAP_MEMORY_THRESHOLD_KIB:-4194304}"
 CLEANUP_FORCE="${COLIMA_BUILD_SWAP_CLEANUP_FORCE:-0}"
 

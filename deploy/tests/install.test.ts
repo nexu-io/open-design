@@ -56,9 +56,9 @@ async function setupTestDir(port: number): Promise<TestContext> {
   const override = {
     name: projectName,
     services: {
-      'open-design': {
+      'marketing-ax': {
         container_name: containerName,
-        volumes: [`${volumeName}:/app/.od`],
+        volumes: [`${volumeName}:/app/.max`],
       },
     },
     volumes: {
