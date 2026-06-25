@@ -94,7 +94,7 @@ async function github<T>(path: string): Promise<T> {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
-      "User-Agent": "open-design-ci-gate",
+      "User-Agent": "marketing-ax-ci-gate",
       "X-GitHub-Api-Version": "2022-11-28",
     },
   });

@@ -86,12 +86,12 @@ jobs:
             echo "::warning title=Blog indexing monitor not fully configured::GSC auth is missing; URL Inspection, Search Analytics, status refresh, and escalation checks will be skipped."
           fi
           if [ "$bot" != "true" ]; then
-            echo "::warning title=Blog indexing monitor writes disabled::Open Design bot secrets are missing; issue and status PR writes will be skipped."
+            echo "::warning title=Blog indexing monitor writes disabled::Marketing AX bot secrets are missing; issue and status PR writes will be skipped."
           fi
           {
             echo "### Blog indexing monitor configuration"
             echo "- GSC auth configured: \`$gsc\`"
-            echo "- Open Design bot configured: \`$bot\`"
+            echo "- Marketing AX bot configured: \`$bot\`"
             if [ "$gsc" != "true" ]; then
               echo ""
               echo "URL Inspection, Search Analytics, and status refresh steps will be skipped."
@@ -132,7 +132,7 @@ jobs:
         id: window
         run: |
           mkdir -p .blog-indexing
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/scheduled-window.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/scheduled-window.ts \
             --out ../../.blog-indexing/window.json
           echo '--- window.json ---'
           cat .blog-indexing/window.json
@@ -148,7 +148,7 @@ jobs:
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
           node -e "const j=require('./.blog-indexing/window.json');require('fs').writeFileSync('./.blog-indexing/window-urls.json',JSON.stringify({urls:j.urls},null,2))"
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
             --urls ../../.blog-indexing/window-urls.json \
             --out ../../.blog-indexing/inspections.json
 
@@ -160,14 +160,14 @@ jobs:
           GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
             --urls ../../.blog-indexing/window-urls.json \
             --out ../../.blog-indexing/analytics.json
 
       - name: Render status report
         if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/render-status.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/render-status.ts \
             --inspections ../../.blog-indexing/inspections.json \
             --analytics ../../.blog-indexing/analytics.json
 
@@ -175,7 +175,7 @@ jobs:
         if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         id: stalls
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/escalate-stalls.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/escalate-stalls.ts \
             --out ../../.blog-indexing/stalls.json
           should=$(node -e "console.log(require('./.blog-indexing/stalls.json').shouldEscalate)")
           echo "should=$should" >> "$GITHUB_OUTPUT"
@@ -184,7 +184,7 @@ jobs:
         if: steps.stalls.outputs.should == 'true' && steps.config.outputs.gsc == 'true'
         run: |
           node -e "const j=require('./.blog-indexing/stalls.json');require('fs').writeFileSync('./.blog-indexing/stalled-urls.json',JSON.stringify({urls:j.stalled.map(s=>s.url)},null,2))"
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-indexnow.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/submit-indexnow.ts \
             --urls ../../.blog-indexing/stalled-urls.json \
             --out ../../.blog-indexing/stalled-indexnow.json
 
@@ -192,20 +192,20 @@ jobs:
         if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         id: lowtraffic
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/escalate-low-traffic.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/escalate-low-traffic.ts \
             --out ../../.blog-indexing/low-traffic.json
           should=$(node -e "console.log(require('./.blog-indexing/low-traffic.json').shouldEscalate)")
           echo "should=$should" >> "$GITHUB_OUTPUT"
 
-      - name: Generate Open Design bot token
+      - name: Generate Marketing AX bot token
         if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
-        id: open-design-bot-token
+        id: marketing-ax-bot-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
-          repositories: open-design
+          repositories: marketing-ax
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
@@ -213,7 +213,7 @@ jobs:
       - name: Open / refresh stall issue
         if: steps.stalls.outputs.should == 'true' && steps.config.outputs.bot == 'true'
         env:
-          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+          GH_TOKEN: ${{ steps.marketing-ax-bot-token.outputs.token }}
         run: |
           title=$(node -e "console.log(require('./.blog-indexing/stalls.json').issueTitle)")
           body_file=.blog-indexing/issue-body.md
@@ -231,7 +231,7 @@ jobs:
       - name: Open / refresh low-traffic issue
         if: steps.lowtraffic.outputs.should == 'true' && steps.config.outputs.bot == 'true'
         env:
-          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+          GH_TOKEN: ${{ steps.marketing-ax-bot-token.outputs.token }}
         run: |
           title=$(node -e "console.log(require('./.blog-indexing/low-traffic.json').issueTitle)")
           body_file=.blog-indexing/low-traffic-issue-body.md
@@ -247,7 +247,7 @@ jobs:
       - name: Close stall issue if all clear
         if: steps.stalls.outputs.should == 'false' && steps.window.outputs.count != '0' && steps.config.outputs.bot == 'true'
         env:
-          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+          GH_TOKEN: ${{ steps.marketing-ax-bot-token.outputs.token }}
         run: |
           existing=$(gh issue list --repo marketing-ax/marketing-ax --state open --search 'in:title "Blog indexing — URLs stalled in Search Console"' --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
@@ -260,7 +260,7 @@ jobs:
       - name: Close low-traffic issue if all clear
         if: steps.lowtraffic.outputs.should == 'false' && steps.window.outputs.count != '0' && steps.config.outputs.bot == 'true'
         env:
-          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+          GH_TOKEN: ${{ steps.marketing-ax-bot-token.outputs.token }}
         run: |
           existing=$(gh issue list --repo marketing-ax/marketing-ax --state open --search 'in:title "Blog traffic — indexed posts with zero impressions"' --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
@@ -274,7 +274,7 @@ jobs:
         if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ steps.open-design-bot-token.outputs.token }}
+          token: ${{ steps.marketing-ax-bot-token.outputs.token }}
           add-paths: |
             docs/blog-indexing-status.md
             docs/blog-indexing-status.json
@@ -282,8 +282,8 @@ jobs:
           branch: automation/blog-indexing-status
           delete-branch: true
           commit-message: 'docs(blog): refresh daily indexing status'
-          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
-          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          author: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
+          committer: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
           title: 'docs(blog): refresh daily indexing status'
           body: |
             Daily refresh of `docs/blog-indexing-status.md` with URL
@@ -305,7 +305,7 @@ jobs:
           if [ "${{ github.event.inputs.publish_crosspost }}" = "true" ]; then
             publish_flag="--publish"
           fi
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/crosspost.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/crosspost.ts \
             --url "${{ github.event.inputs.crosspost_url }}" \
             --platform "${{ github.event.inputs.crosspost_platform }}" \
             $publish_flag

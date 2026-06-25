@@ -557,12 +557,12 @@ jobs:
             const subject = run.head_commit?.message?.split('\n')[0] || run.display_title || 'unknown';
             const repoName = `${owner}/${repo}`;
             const title = isTest
-              ? '[TEST] Open Design Main CI alert'
+              ? '[TEST] Marketing AX Main CI alert'
               : run.name === 'ui-extended-main'
               ? (run.conclusion === 'cancelled'
-                  ? 'Open Design Main UI regression stopped after failures'
-                  : 'Open Design Main UI regression failed')
-              : 'Open Design Main CI failed';
+                  ? 'Marketing AX Main UI regression stopped after failures'
+                  : 'Marketing AX Main UI regression failed')
+              : 'Marketing AX Main CI failed';
 
             const body = {
               msg_type: 'interactive',

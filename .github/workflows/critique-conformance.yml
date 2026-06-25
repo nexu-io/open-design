@@ -48,7 +48,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build daemon
-        run: pnpm --filter @open-design/daemon build
+        run: pnpm --filter @marketing-ax/daemon build
 
       # The full adapter sweep lives in a follow-up that wires every
       # production agent CLI into the harness; here we drive the

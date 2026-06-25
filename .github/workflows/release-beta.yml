@@ -289,7 +289,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: open-design-release-beta
+  group: marketing-ax-release-beta
   cancel-in-progress: false
 
 env:
@@ -462,7 +462,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
           RELEASE_NAMESPACE: release-beta
-          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}.signed
+          RELEASE_NOTES: Marketing AX beta ${{ needs.metadata.outputs.beta_version }}.signed
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
@@ -496,7 +496,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-mac-arm64-publish-manifest
+          name: marketing-ax-beta-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
 
@@ -607,7 +607,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-mac-x64-publish-manifest
+          name: marketing-ax-beta-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
 
@@ -744,7 +744,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-win-x64-publish-manifest
+          name: marketing-ax-beta-win-x64-publish-manifest
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
 
@@ -857,7 +857,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-linux-x64-publish-manifest
+          name: marketing-ax-beta-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
           if-no-files-found: error
 
@@ -902,28 +902,28 @@ jobs:
         if: ${{ inputs.enable_mac_arm64 && needs.build_mac_arm64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-mac-arm64-publish-manifest
+          name: marketing-ax-beta-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download mac_x64 publish manifest
         if: ${{ inputs.enable_mac_x64 && needs.build_mac_x64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-mac-x64-publish-manifest
+          name: marketing-ax-beta-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download win_x64 publish manifest
         if: ${{ inputs.enable_win_x64 && needs.build_win_x64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-win-x64-publish-manifest
+          name: marketing-ax-beta-win-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download linux_x64 publish manifest
         if: ${{ inputs.enable_linux_x64 && needs.build_linux_x64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-linux-x64-publish-manifest
+          name: marketing-ax-beta-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Setup Node.js

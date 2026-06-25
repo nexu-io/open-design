@@ -82,6 +82,6 @@ jobs:
           curl --fail --silent --show-error \
             -X POST \
             -H "content-type: application/json" \
-            -H "x-open-design-signature: $(cat signature.txt)" \
+            -H "x-marketing-ax-signature: $(cat signature.txt)" \
             --data-binary @body.json \
             "$CONTRIBUTOR_CARD_WORKER_URL/api/github/events"

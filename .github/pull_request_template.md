@@ -65,6 +65,6 @@ Fixes #
 
 <!-- What you actually ran. Default minimum: `pnpm guard` + `pnpm typecheck`,
      plus the package-scoped tests/build for the files you changed
-     (e.g. `pnpm --filter @open-design/web test`). -->
+     (e.g. `pnpm --filter @marketing-ax/web test`). -->
 
 -

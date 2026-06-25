@@ -13,13 +13,13 @@ concurrency:
 jobs:
   owned:
     name: Owned CI
-    runs-on: [self-hosted, Linux, ARM64, nexu-spark, open-design-ci]
+    runs-on: [self-hosted, Linux, ARM64, nexu-spark, marketing-ax-ci]
     timeout-minutes: 120
     env:
       CI_GATE_PLAYWRIGHT_INSTALL_FLAGS: chromium
       CI_GATE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      COREPACK_HOME: /home/runner/.cache/open-design-ci/corepack
+      COREPACK_HOME: /home/runner/.cache/marketing-ax-ci/corepack
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2

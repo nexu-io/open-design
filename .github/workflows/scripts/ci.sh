@@ -9,7 +9,7 @@ if [ -z "$mode" ]; then
 fi
 
 ci_root="${GITHUB_WORKSPACE:-$(pwd)}"
-out_dir="$ci_root/.od/ci"
+out_dir="$ci_root/.max/ci"
 manifest="$out_dir/$mode-manifest.json"
 summary="${GITHUB_STEP_SUMMARY:-}"
 
@@ -386,40 +386,40 @@ if { [ "$mode" = "unit" ] || [ "$mode" = "core" ]; } && [ "$install_exit_code" =
   unit_status="ok"
   unit_start="$(date +%s)"
 
-  run_ci_command "@open-design/contracts test" pnpm --filter @open-design/contracts test
+  run_ci_command "@marketing-ax/contracts test" pnpm --filter @marketing-ax/contracts test
   contracts_test_exit_code="$last_command_exit_code"
   contracts_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/contracts" "$contracts_test_exit_code" "$contracts_test_seconds"
+  record_unit_result "@marketing-ax/contracts" "$contracts_test_exit_code" "$contracts_test_seconds"
 
-  run_ci_command "@open-design/host test" pnpm --filter @open-design/host test
+  run_ci_command "@marketing-ax/host test" pnpm --filter @marketing-ax/host test
   host_test_exit_code="$last_command_exit_code"
   host_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/host" "$host_test_exit_code" "$host_test_seconds"
+  record_unit_result "@marketing-ax/host" "$host_test_exit_code" "$host_test_seconds"
 
-  run_ci_command "@open-design/platform test" pnpm --filter @open-design/platform test
+  run_ci_command "@marketing-ax/platform test" pnpm --filter @marketing-ax/platform test
   platform_test_exit_code="$last_command_exit_code"
   platform_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/platform" "$platform_test_exit_code" "$platform_test_seconds"
+  record_unit_result "@marketing-ax/platform" "$platform_test_exit_code" "$platform_test_seconds"
 
-  run_ci_command "@open-design/sidecar test" pnpm --filter @open-design/sidecar test
+  run_ci_command "@marketing-ax/sidecar test" pnpm --filter @marketing-ax/sidecar test
   sidecar_test_exit_code="$last_command_exit_code"
   sidecar_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/sidecar" "$sidecar_test_exit_code" "$sidecar_test_seconds"
+  record_unit_result "@marketing-ax/sidecar" "$sidecar_test_exit_code" "$sidecar_test_seconds"
 
-  run_ci_command "@open-design/sidecar-proto test" pnpm --filter @open-design/sidecar-proto test
+  run_ci_command "@marketing-ax/sidecar-proto test" pnpm --filter @marketing-ax/sidecar-proto test
   sidecar_proto_test_exit_code="$last_command_exit_code"
   sidecar_proto_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/sidecar-proto" "$sidecar_proto_test_exit_code" "$sidecar_proto_test_seconds"
+  record_unit_result "@marketing-ax/sidecar-proto" "$sidecar_proto_test_exit_code" "$sidecar_proto_test_seconds"
 
-  run_ci_command "@open-design/tools-dev test" pnpm --filter @open-design/tools-dev test
+  run_ci_command "@marketing-ax/tools-dev test" pnpm --filter @marketing-ax/tools-dev test
   tools_dev_test_exit_code="$last_command_exit_code"
   tools_dev_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/tools-dev" "$tools_dev_test_exit_code" "$tools_dev_test_seconds"
+  record_unit_result "@marketing-ax/tools-dev" "$tools_dev_test_exit_code" "$tools_dev_test_seconds"
 
-  run_ci_command "@open-design/tools-pack test" pnpm --filter @open-design/tools-pack test
+  run_ci_command "@marketing-ax/tools-pack test" pnpm --filter @marketing-ax/tools-pack test
   tools_pack_test_exit_code="$last_command_exit_code"
   tools_pack_test_seconds="$last_command_seconds"
-  record_unit_result "@open-design/tools-pack" "$tools_pack_test_exit_code" "$tools_pack_test_seconds"
+  record_unit_result "@marketing-ax/tools-pack" "$tools_pack_test_exit_code" "$tools_pack_test_seconds"
 
   unit_seconds="$(( $(date +%s) - unit_start ))"
 fi
@@ -446,22 +446,22 @@ if [ "$mode" = "typecheck" ] && [ "$install_exit_code" = "0" ]; then
   typecheck_status="ok"
   typecheck_start="$(date +%s)"
 
-  run_ci_command "@open-design/daemon build" pnpm --filter @open-design/daemon build
+  run_ci_command "@marketing-ax/daemon build" pnpm --filter @marketing-ax/daemon build
   daemon_build_exit_code="$last_command_exit_code"
   daemon_build_seconds="$last_command_seconds"
-  record_typecheck_result "@open-design/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
+  record_typecheck_result "@marketing-ax/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
 
-  run_ci_command "@open-design/desktop build" pnpm --filter @open-design/desktop build
+  run_ci_command "@marketing-ax/desktop build" pnpm --filter @marketing-ax/desktop build
   desktop_build_exit_code="$last_command_exit_code"
   desktop_build_seconds="$last_command_seconds"
-  record_typecheck_result "@open-design/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
+  record_typecheck_result "@marketing-ax/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
 
-  run_ci_command "@open-design/web build:sidecar" pnpm --filter @open-design/web build:sidecar
+  run_ci_command "@marketing-ax/web build:sidecar" pnpm --filter @marketing-ax/web build:sidecar
   web_sidecar_build_exit_code="$last_command_exit_code"
   web_sidecar_build_seconds="$last_command_seconds"
-  record_typecheck_result "@open-design/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
+  record_typecheck_result "@marketing-ax/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
 
-  run_ci_command "workspace typecheck" pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+  run_ci_command "workspace typecheck" pnpm -r --filter '!marketing-ax' --filter '!@marketing-ax/landing-page' --workspace-concurrency=4 --if-present run typecheck
   workspace_typecheck_exit_code="$last_command_exit_code"
   workspace_typecheck_seconds="$last_command_seconds"
   record_typecheck_result "workspace typecheck" "$workspace_typecheck_exit_code" "$workspace_typecheck_seconds"
@@ -496,21 +496,21 @@ if { [ "$mode" = "daemon" ] || [ "$mode" = "daemon-shard" ] || [ "$mode" = "daem
   daemon_status="ok"
   daemon_start="$(date +%s)"
 
-  run_ci_command "@open-design/daemon build" pnpm --filter @open-design/daemon build
+  run_ci_command "@marketing-ax/daemon build" pnpm --filter @marketing-ax/daemon build
   daemon_build_exit_code="$last_command_exit_code"
   daemon_build_seconds="$last_command_seconds"
-  record_daemon_result "@open-design/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
+  record_daemon_result "@marketing-ax/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
 
   if [ "$mode" = "daemon-shard" ]; then
-    run_ci_command "@open-design/daemon test shard $daemon_shard" pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard "$daemon_shard"
+    run_ci_command "@marketing-ax/daemon test shard $daemon_shard" pnpm --filter @marketing-ax/daemon exec vitest run -c vitest.config.ts --shard "$daemon_shard"
   elif [ "$mode" = "daemon-parallel" ]; then
-    run_ci_command "@open-design/daemon test parallel workers ${daemon_max_workers:-4}" pnpm --filter @open-design/daemon exec vitest run -c vitest.parallel.config.ts
+    run_ci_command "@marketing-ax/daemon test parallel workers ${daemon_max_workers:-4}" pnpm --filter @marketing-ax/daemon exec vitest run -c vitest.parallel.config.ts
   else
-    run_ci_command "@open-design/daemon test" pnpm --filter @open-design/daemon test
+    run_ci_command "@marketing-ax/daemon test" pnpm --filter @marketing-ax/daemon test
   fi
   daemon_test_exit_code="$last_command_exit_code"
   daemon_test_seconds="$last_command_seconds"
-  record_daemon_result "@open-design/daemon test${daemon_shard:+ shard $daemon_shard}" "$daemon_test_exit_code" "$daemon_test_seconds"
+  record_daemon_result "@marketing-ax/daemon test${daemon_shard:+ shard $daemon_shard}" "$daemon_test_exit_code" "$daemon_test_seconds"
 
   daemon_seconds="$(( $(date +%s) - daemon_start ))"
 fi
@@ -537,15 +537,15 @@ if [ "$mode" = "web" ] && [ "$install_exit_code" = "0" ]; then
   web_status="ok"
   web_start="$(date +%s)"
 
-  run_ci_command "@open-design/web build:sidecar" pnpm --filter @open-design/web build:sidecar
+  run_ci_command "@marketing-ax/web build:sidecar" pnpm --filter @marketing-ax/web build:sidecar
   web_sidecar_build_exit_code="$last_command_exit_code"
   web_sidecar_build_seconds="$last_command_seconds"
-  record_web_result "@open-design/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
+  record_web_result "@marketing-ax/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
 
-  run_ci_command "@open-design/web test" pnpm --filter @open-design/web test
+  run_ci_command "@marketing-ax/web test" pnpm --filter @marketing-ax/web test
   web_test_exit_code="$last_command_exit_code"
   web_test_seconds="$last_command_seconds"
-  record_web_result "@open-design/web test" "$web_test_exit_code" "$web_test_seconds"
+  record_web_result "@marketing-ax/web test" "$web_test_exit_code" "$web_test_seconds"
 
   web_seconds="$(( $(date +%s) - web_start ))"
 fi
@@ -572,22 +572,22 @@ if [ "$mode" = "build" ] && [ "$install_exit_code" = "0" ]; then
   build_status="ok"
   build_start="$(date +%s)"
 
-  run_ci_command "@open-design/daemon build" pnpm --filter @open-design/daemon build
+  run_ci_command "@marketing-ax/daemon build" pnpm --filter @marketing-ax/daemon build
   daemon_build_exit_code="$last_command_exit_code"
   daemon_build_seconds="$last_command_seconds"
-  record_build_result "@open-design/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
+  record_build_result "@marketing-ax/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
 
-  run_ci_command "@open-design/desktop build" pnpm --filter @open-design/desktop build
+  run_ci_command "@marketing-ax/desktop build" pnpm --filter @marketing-ax/desktop build
   desktop_build_exit_code="$last_command_exit_code"
   desktop_build_seconds="$last_command_seconds"
-  record_build_result "@open-design/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
+  record_build_result "@marketing-ax/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
 
-  run_ci_command "@open-design/web build:sidecar" pnpm --filter @open-design/web build:sidecar
+  run_ci_command "@marketing-ax/web build:sidecar" pnpm --filter @marketing-ax/web build:sidecar
   web_sidecar_build_exit_code="$last_command_exit_code"
   web_sidecar_build_seconds="$last_command_seconds"
-  record_build_result "@open-design/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
+  record_build_result "@marketing-ax/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
 
-  run_ci_command "workspace build" pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
+  run_ci_command "workspace build" pnpm -r --filter '!@marketing-ax/landing-page' --workspace-concurrency=1 --if-present run build
   workspace_build_exit_code="$last_command_exit_code"
   workspace_build_seconds="$last_command_seconds"
   record_build_result "workspace build" "$workspace_build_exit_code" "$workspace_build_seconds"
@@ -625,22 +625,22 @@ if [ "$mode" = "browser" ] && [ "$install_exit_code" = "0" ]; then
   playwright_install_seconds="$last_command_seconds"
   record_browser_result "playwright install" "$playwright_install_exit_code" "$playwright_install_seconds"
 
-  run_ci_command "@open-design/daemon build" pnpm --filter @open-design/daemon build
+  run_ci_command "@marketing-ax/daemon build" pnpm --filter @marketing-ax/daemon build
   daemon_build_exit_code="$last_command_exit_code"
   daemon_build_seconds="$last_command_seconds"
-  record_browser_result "@open-design/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
+  record_browser_result "@marketing-ax/daemon build" "$daemon_build_exit_code" "$daemon_build_seconds"
 
-  run_ci_command "@open-design/desktop build" pnpm --filter @open-design/desktop build
+  run_ci_command "@marketing-ax/desktop build" pnpm --filter @marketing-ax/desktop build
   desktop_build_exit_code="$last_command_exit_code"
   desktop_build_seconds="$last_command_seconds"
-  record_browser_result "@open-design/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
+  record_browser_result "@marketing-ax/desktop build" "$desktop_build_exit_code" "$desktop_build_seconds"
 
-  run_ci_command "@open-design/web build:sidecar" pnpm --filter @open-design/web build:sidecar
+  run_ci_command "@marketing-ax/web build:sidecar" pnpm --filter @marketing-ax/web build:sidecar
   web_sidecar_build_exit_code="$last_command_exit_code"
   web_sidecar_build_seconds="$last_command_seconds"
-  record_browser_result "@open-design/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
+  record_browser_result "@marketing-ax/web build:sidecar" "$web_sidecar_build_exit_code" "$web_sidecar_build_seconds"
 
-  run_ci_command "e2e vitest" pnpm --filter @open-design/e2e test
+  run_ci_command "e2e vitest" pnpm --filter @marketing-ax/e2e test
   e2e_vitest_exit_code="$last_command_exit_code"
   e2e_vitest_seconds="$last_command_seconds"
   record_browser_result "e2e vitest" "$e2e_vitest_exit_code" "$e2e_vitest_seconds"

@@ -1,12 +1,12 @@
 name: 📺 Submit a tutorial
-description: Share an Open Design tutorial video to be featured on marketing-ax.example/tutorials.
+description: Share an Marketing AX tutorial video to be featured on marketing-ax.example/tutorials.
 title: "[Tutorial]: "
 labels: ["tutorials"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for sharing! Made or found a great Open Design tutorial on YouTube? Fill in the video link below — that's the only required field. A maintainer will review it and add it to the tutorials page. No pull request or markdown needed.
+        Thanks for sharing! Made or found a great Marketing AX tutorial on YouTube? Fill in the video link below — that's the only required field. A maintainer will review it and add it to the tutorials page. No pull request or markdown needed.
 
   - type: input
     id: video_url
@@ -46,7 +46,7 @@ body:
     attributes:
       label: What does it cover?
       description: One or two sentences on what the video shows (optional).
-      placeholder: A quick walkthrough of installing Open Design and shipping a first design.
+      placeholder: A quick walkthrough of installing Marketing AX and shipping a first design.
     validations:
       required: false
 
@@ -55,5 +55,5 @@ body:
     attributes:
       label: Before you submit
       options:
-        - label: This video is actually about Open Design (marketing-ax/marketing-ax), not a different product.
+        - label: This video is actually about Marketing AX (marketing-ax/marketing-ax), not a different product.
           required: true

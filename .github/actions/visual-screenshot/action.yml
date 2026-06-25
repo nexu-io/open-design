@@ -50,6 +50,6 @@ runs:
     - name: Prebuild workspace type declarations
       shell: bash
       run: |
-        pnpm --filter @open-design/daemon build
-        pnpm --filter @open-design/desktop build
-        pnpm --filter @open-design/web build:sidecar
+        pnpm --filter @marketing-ax/daemon build
+        pnpm --filter @marketing-ax/desktop build
+        pnpm --filter @marketing-ax/web build:sidecar

@@ -668,7 +668,7 @@ try {
   }
 
   Measure-Step "tools-pack build" {
-    Invoke-Node24 -Arguments @("pnpm.cmd", "--filter", "@open-design/tools-pack", "build")
+    Invoke-Node24 -Arguments @("pnpm.cmd", "--filter", "@marketing-ax/tools-pack", "build")
   }
 
   Measure-Step "electron dist repair" {
@@ -677,7 +677,7 @@ try {
 
   if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
     Measure-Step "resolve beta metadata" {
-      git fetch --force --depth=1 origin "+refs/tags/open-design-v*:refs/tags/open-design-v*"
+      git fetch --force --depth=1 origin "+refs/tags/marketing-ax-v*:refs/tags/marketing-ax-v*"
 
       $previousMetadataUrl = $env:MARKETING_AX_BETA_METADATA_URL
       $previousGitHubOutput = $env:GITHUB_OUTPUT

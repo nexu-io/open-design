@@ -64,9 +64,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -121,9 +121,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -165,9 +165,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean

@@ -124,7 +124,7 @@ prepare_mac_signing() {
   required APPLE_SIGNING_CERTIFICATE_BASE64
   required APPLE_SIGNING_CERTIFICATE_PASSWORD
 
-  local cert_path="$RELEASE_WORK_DIR/open-design-signing.p12"
+  local cert_path="$RELEASE_WORK_DIR/marketing-ax-signing.p12"
   if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
     printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
   fi
@@ -298,7 +298,7 @@ elif [ "$RELEASE_TARGET" = "linux_x64" ]; then
   mkdir -p "$RELEASE_REPORT_DIR/screenshots"
   MAX_PACKAGED_E2E_LINUX_APPIMAGE=1 \
   MAX_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
-  MAX_PACKAGED_E2E_SCREENSHOT_PATH="$RELEASE_REPORT_DIR/screenshots/open-design-linux-smoke.png" \
+  MAX_PACKAGED_E2E_SCREENSHOT_PATH="$RELEASE_REPORT_DIR/screenshots/marketing-ax-linux-smoke.png" \
   MAX_PACKAGED_E2E_TOOLS_PACK_DIR="$TOOLS_PACK_DIR" \
   pnpm --dir e2e test specs/linux.spec.ts 2>&1 | tee "$RELEASE_REPORT_DIR/vitest.log"
 else
