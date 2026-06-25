@@ -195,7 +195,7 @@ describe('telemetry worker', () => {
     fetchSpy.mockRestore();
   });
 
-  it('rejects requests without the Open Design client marker', async () => {
+  it('rejects requests without the Marketing AX client marker', async () => {
     const response = await worker.fetch(
       new Request('https://telemetry.marketing-ax.example/api/langfuse', {
         method: 'POST',

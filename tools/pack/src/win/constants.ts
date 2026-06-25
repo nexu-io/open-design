@@ -1,4 +1,4 @@
-export const PRODUCT_NAME = "Open Design";
+export const PRODUCT_NAME = "Marketing AX";
 export const DESKTOP_LOG_ECHO_ENV = "MAX_DESKTOP_LOG_ECHO";
 export const WEB_STANDALONE_HOOK_CONFIG_ENV = "MAX_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
 export const WEB_STANDALONE_RESOURCE_NAME = "open-design-web-standalone";

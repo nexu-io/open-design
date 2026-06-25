@@ -1188,7 +1188,7 @@ async function migrateLegacyDesignSystemPackage(
     return;
   }
   const title = normalizeTitle(metadata.title ?? firstHeading(body) ?? id);
-  const summary = summarize(body) || 'A reusable Open Design design system.';
+  const summary = summarize(body) || 'A reusable Marketing AX design system.';
   const palette = normalizeSwatches(body);
   const copyIfMissing = async (from: string, to: string): Promise<boolean> => {
     const fromPath = path.join(dir, ...from.split('/'));
@@ -1255,7 +1255,7 @@ async function migrateLegacyDesignSystemPackage(
     appKitExists
       ? writeIfMissing(
           'ui_kits/app/README.md',
-          `# ${title} UI Kit\n\nThis package was migrated from an earlier Open Design design-system workspace. Use \`index.html\` as the applied interface example and replace it with source-backed modular components when new repository evidence is available.\n`,
+          `# ${title} UI Kit\n\nThis package was migrated from an earlier Marketing AX design-system workspace. Use \`index.html\` as the applied interface example and replace it with source-backed modular components when new repository evidence is available.\n`,
         )
       : Promise.resolve(false),
     appKitExists
@@ -1451,7 +1451,7 @@ function generatedDesignSystemFileWrites(
   },
 ): AtomicTextFileWrite[] {
   const palette = normalizeSwatches(input.body);
-  const summary = input.summary || 'A user-created Open Design design system.';
+  const summary = input.summary || 'A user-created Marketing AX design system.';
   const sections = extractMarkdownSections(input.body);
   const provenance = input.provenance ?? normalizeProvenance(undefined, {
     ...(input.sourceNotes ? { sourceNotes: input.sourceNotes } : {}),
@@ -2325,7 +2325,7 @@ function upsertBlockquoteMeta(body: string, key: string, value: string): string 
 function buildDraftDesignSystemBody(input: UserDesignSystemInput & { title: string }): string {
   const category = cleanText(input.category) || 'Custom';
   const surface = input.surface ?? 'web';
-  const summary = cleanText(input.summary) || 'A user-authored design system for future Open Design projects.';
+  const summary = cleanText(input.summary) || 'A user-authored design system for future Marketing AX projects.';
   const sourceNotes = cleanText(input.sourceNotes);
   return `# ${input.title}
 
@@ -2428,7 +2428,7 @@ function renderReadme(input: {
     .join('\n');
   return `# ${input.title}
 
-A reusable Open Design package for ${input.title}.
+A reusable Marketing AX package for ${input.title}.
 
 ## Product Overview
 
@@ -2494,7 +2494,7 @@ function renderSkill(input: {
   const skillName = slugify(input.title);
   return `---
 name: ${skillName}
-description: Use this skill when generating Open Design artifacts that should follow ${input.title}.
+description: Use this skill when generating Marketing AX artifacts that should follow ${input.title}.
 user-invocable: true
 ---
 
@@ -2651,7 +2651,7 @@ function renderOverviewHtml(
   return renderHtmlDocument(
     title,
     `<main class="overview">
-      <p class="eyebrow">Open Design system</p>
+      <p class="eyebrow">Marketing AX system</p>
       <h1>${escapeHtml(title)}</h1>
       <p class="lead">${escapeHtml(summary)}</p>
       <div class="palette">

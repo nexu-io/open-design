@@ -26,7 +26,7 @@ export type WinLauncherPayloadManifest = {
   channel: string;
   entry: {
     cwd: "payload";
-    executable: "payload/Open Design.exe";
+    executable: "payload/Marketing AX.exe";
   };
   namespace: string;
   payloadRoot: "payload";
@@ -44,7 +44,7 @@ export function buildWinLauncherPayloadManifest(input: {
     channel: input.channel,
     entry: {
       cwd: "payload",
-      executable: "payload/Open Design.exe",
+      executable: "payload/Marketing AX.exe",
     },
     namespace: input.namespace,
     payloadRoot: "payload",

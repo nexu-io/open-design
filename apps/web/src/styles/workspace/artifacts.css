@@ -987,7 +987,7 @@
   overflow: hidden;
 }
 
-/* Failed-run AMR nudge: when the chat error card's "Try Open Design AMR" link
+/* Failed-run AMR nudge: when the chat error card's "Try Marketing AX AMR" link
    opens Settings, the AMR card scrolls into view and pulses a couple of times.
    The card's own box-shadow is not clipped by `overflow: hidden`, so the glow
    reads fully even though inner content is clipped. */

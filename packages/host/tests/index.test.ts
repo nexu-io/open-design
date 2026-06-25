@@ -245,7 +245,7 @@ describe("open-design host contract", () => {
       },
       channel: "beta" as const,
       currentVersion: "1.0.0-beta.0",
-      downloadPath: "/tmp/Open Design Beta.dmg",
+      downloadPath: "/tmp/Marketing AX Beta.dmg",
       enabled: true,
       mode: "package-launcher" as const,
       platform: "darwin",

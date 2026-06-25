@@ -304,7 +304,7 @@ if (latestPreview != null) {
 
 const previewVersion = `${packagedVersion}-preview.${previewNumber}`;
 const commit = process.env.GITHUB_SHA ?? "";
-const releaseName = `Open Design Preview ${previewVersion}`;
+const releaseName = `Marketing AX Preview ${previewVersion}`;
 
 console.log("[release-preview] channel: preview");
 console.log(`[release-preview] base version: ${packagedVersion}`);

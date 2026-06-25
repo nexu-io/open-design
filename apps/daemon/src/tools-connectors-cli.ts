@@ -45,7 +45,7 @@ const CONNECTORS_USAGE = `Usage:
 
 Environment:
   MAX_NODE_BIN     Node-compatible runtime for agent wrapper invocations
-  MAX_BIN          Open Design CLI script for agent wrapper invocations
+  MAX_BIN          Marketing AX CLI script for agent wrapper invocations
   MAX_DAEMON_URL   Daemon base URL injected into agent runs
   MAX_TOOL_TOKEN   Bearer token injected into agent runs
 
@@ -1761,7 +1761,7 @@ export async function auditDesignSystemPackage(
 
   if (options.referencePackage === true) {
     if (!fileSet.has('DESIGN.md')) {
-      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated Open Design packages must include it as the canonical rules file.', 'DESIGN.md');
+      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated Marketing AX packages must include it as the canonical rules file.', 'DESIGN.md');
     }
   } else {
     requireFile('DESIGN.md', 'Claude Design-style packages need DESIGN.md as the canonical system rules.');

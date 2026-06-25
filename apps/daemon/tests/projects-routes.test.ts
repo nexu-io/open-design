@@ -663,7 +663,7 @@ describe('project locations routes', () => {
     const loc0 = body.locations[0]!;
     expect(loc0.id).toBe('default');
     expect(loc0.builtIn).toBe(true);
-    expect(loc0.name).toBe('Open Design projects');
+    expect(loc0.name).toBe('Marketing AX projects');
   });
 
   it('PUT /api/project-locations creates external roots and GET returns them alongside default', async () => {

@@ -487,7 +487,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.3.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.3.unsigned/Marketing AX Beta.dmg",
           },
         },
         channel: "beta",
@@ -571,7 +571,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Marketing AX Beta.dmg",
           },
         },
         channel: "beta",
@@ -655,7 +655,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Marketing AX Beta.dmg",
           },
         },
         channel: "beta",
@@ -1086,8 +1086,8 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
       mac: {
         arch: "arm64",
         artifacts: {
-          dmg: artifact("Open Design.dmg"),
-          zip: artifact("Open Design-mac-arm64.zip"),
+          dmg: artifact("Marketing AX.dmg"),
+          zip: artifact("Marketing AX-mac-arm64.zip"),
         },
         enabled: true,
         signed: true,
@@ -1095,8 +1095,8 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
       macIntel: {
         arch: "x64",
         artifacts: {
-          dmg: artifact("Open Design Intel.dmg"),
-          zip: artifact("Open Design-mac-x64.zip"),
+          dmg: artifact("Marketing AX Intel.dmg"),
+          zip: artifact("Marketing AX-mac-x64.zip"),
         },
         enabled: true,
         signed: true,
@@ -1104,7 +1104,7 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
       win: {
         arch: "x64",
         artifacts: {
-          installer: artifact("Open Design Setup.exe"),
+          installer: artifact("Marketing AX Setup.exe"),
         },
         enabled: true,
       },

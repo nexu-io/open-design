@@ -6,7 +6,7 @@
 
 // AMR model-gateway console wallet (account, balance, recharge).
 // `source=open_design` tags the landing page_view so vela analytics can
-// attribute the visit to Open Design (per-product revenue/traffic attribution).
+// attribute the visit to Marketing AX (per-product revenue/traffic attribution).
 export const AMR_CONSOLE_URL =
   'https://marketing-ax.example/amr/wallet?source=open_design';
 export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;

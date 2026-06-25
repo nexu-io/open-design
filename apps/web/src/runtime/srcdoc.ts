@@ -596,7 +596,7 @@ function serializeHtmlDocument(doc: Document): string {
  * Auto-annotate structural HTML elements that lack `data-od-id` or
  * `data-screen-label` so that the selection bridge (Picker / Pods /
  * Tweaks) can target them. This fixes imported designs whose HTML was
- * generated outside of Open Design and therefore carries no OD-specific
+ * generated outside of Marketing AX and therefore carries no OD-specific
  * annotations.
  */
 function annotateMissingOdIds(doc: string): string {

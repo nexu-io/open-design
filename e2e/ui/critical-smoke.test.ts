@@ -48,7 +48,7 @@ test('[P0] @critical prototype project creation reaches the workspace shell', as
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Marketing AX' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -76,5 +76,5 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Marketing AX…').waitFor({ state: 'hidden', timeout: T.medium });
 }

@@ -24,7 +24,7 @@ installWebObservability();
 // shell HTML the daemon can serve as the SPA fallback.
 const App = dynamic(() => import('../../src/App').then((m) => m.App), {
   ssr: false,
-  loading: () => <div className="od-loading-shell">Loading Open Design…</div>,
+  loading: () => <div className="od-loading-shell">Loading Marketing AX…</div>,
 });
 
 export function ClientApp() {

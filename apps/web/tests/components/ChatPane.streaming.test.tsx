@@ -88,7 +88,7 @@ vi.mock('../../src/components/AssistantMessage', () => ({
           disabled={shareToOpenDesignBusy}
           onClick={onShareToOpenDesign}
         >
-          {shareToOpenDesignBusy ? 'Preparing package…' : 'Share to Open Design'}
+          {shareToOpenDesignBusy ? 'Preparing package…' : 'Share to Marketing AX'}
         </button>
       ) : null}
     </>
@@ -633,7 +633,7 @@ Expected output:
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
   });
 
-  it('keeps Share to Open Design busy on the assistant turn that started packaging', () => {
+  it('keeps Share to Marketing AX busy on the assistant turn that started packaging', () => {
     const onShareToOpenDesign = vi.fn();
     const completedAssistant: ChatMessage = {
       id: 'assistant-1',
@@ -681,7 +681,7 @@ Expected output:
         {...commonProps}
         messages={[
           ...initialMessages,
-          { id: 'user-2', role: 'user', content: 'Share to Open Design', createdAt: 4 },
+          { id: 'user-2', role: 'user', content: 'Share to Marketing AX', createdAt: 4 },
           {
             id: 'assistant-2',
             role: 'assistant',

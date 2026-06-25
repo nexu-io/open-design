@@ -666,7 +666,7 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
 });
 
 describe('POST /api/integrations/vela/analytics-entry', () => {
-  it('mirrors Open Design AMR entry clicks to the AMR analytics ingest shape', async () => {
+  it('mirrors Marketing AX AMR entry clicks to the AMR analytics ingest shape', async () => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';

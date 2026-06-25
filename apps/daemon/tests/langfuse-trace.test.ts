@@ -157,7 +157,7 @@ describe('readLangfuseConfig', () => {
 });
 
 describe('readTelemetrySinkConfig', () => {
-  it('prefers the Open Design telemetry relay when configured', () => {
+  it('prefers the Marketing AX telemetry relay when configured', () => {
     const cfg = readTelemetrySinkConfig({
       MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.marketing-ax.example/api/langfuse//',
       LANGFUSE_PUBLIC_KEY: 'pk',
@@ -1675,7 +1675,7 @@ describe('reportRunCompleted', () => {
     expect(JSON.stringify(batch)).not.toContain('sk-raw');
   });
 
-  it('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
+  it('POSTs serialized ingestion batches to the Marketing AX telemetry relay', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',

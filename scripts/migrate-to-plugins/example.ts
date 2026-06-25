@@ -99,7 +99,7 @@ export async function runExampleGenerator(opts: ExampleGeneratorOptions): Promis
       title,
       description: typeof fm.description === 'string' ? fm.description.trim() : '',
       license: 'MIT',
-      author: { name: 'Open Design', url: 'https://github.com/nexu-io' },
+      author: { name: 'Marketing AX', url: 'https://github.com/nexu-io' },
       homepage: `https://github.com/marketing-ax/marketing-ax/tree/main/plugins/_official/${TIER_EXAMPLES}/${id}`,
       tags: dedupeTags([
         'example',

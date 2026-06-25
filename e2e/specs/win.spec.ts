@@ -351,7 +351,7 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(basename(install.startMenuShortcutPath)).toBe(`${installIdentity.displayName}.lnk`);
       expect(install.registryEntries.length).toBeGreaterThan(0);
       expect(JSON.stringify(install.registryEntries)).toContain(installIdentity.displayName);
-      expect(JSON.stringify(install.registryEntries)).toContain(`Open Design-${installIdentity.namespaceToken}`);
+      expect(JSON.stringify(install.registryEntries)).toContain(`Marketing AX-${installIdentity.namespaceToken}`);
       expect(install.installPayload.fileCount).toBeGreaterThan(0);
       expect(install.installPayload.totalBytes).toBeGreaterThan(0);
       expect(install.installPayload.topLevel.length).toBeGreaterThan(0);
@@ -1121,7 +1121,7 @@ async function readInstalledAppName(installDir: string): Promise<string> {
   ) as InstalledAppPackage;
   if (typeof appPackage.productName === 'string' && appPackage.productName.length > 0) return appPackage.productName;
   if (typeof appPackage.name === 'string' && appPackage.name.length > 0) return appPackage.name;
-  return 'Open Design';
+  return 'Marketing AX';
 }
 
 async function resolveInstalledPackagedConfigPath(installDir: string): Promise<string> {

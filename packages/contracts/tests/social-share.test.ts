@@ -6,12 +6,12 @@ import {
 } from '../src/api/social-share';
 
 describe('social-share contract', () => {
-  it('builds Open Design repository share targets', () => {
+  it('builds Marketing AX repository share targets', () => {
     const payload = buildSocialSharePayload({
       kind: 'open-design-repo',
       locale: 'zh-CN',
-      title: 'Open Design GitHub',
-      text: '推荐 Open Design',
+      title: 'Marketing AX GitHub',
+      text: '推荐 Marketing AX',
     });
 
     expect(payload.url).toBe(MARKETING_AX_GITHUB_REPO_URL);
@@ -26,7 +26,7 @@ describe('social-share contract', () => {
       locale: 'en',
       url: 'https://example.com/open-design-demo',
       title: 'Demo',
-      text: `Built with Open Design. Repo: ${MARKETING_AX_GITHUB_REPO_URL}`,
+      text: `Built with Marketing AX. Repo: ${MARKETING_AX_GITHUB_REPO_URL}`,
       copyText: `Demo\nhttps://example.com/open-design-demo\n${MARKETING_AX_GITHUB_REPO_URL}`,
     });
 

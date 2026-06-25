@@ -33,19 +33,19 @@ LangString MAX_REMOVE_LOCAL_DATA_TITLE 1046 "Remover dados locais"
 LangString MAX_REMOVE_LOCAL_DATA_TITLE 1049 "Удалить локальные данные"
 LangString MAX_REMOVE_LOCAL_DATA_TITLE 1065 "حذف داده‌های محلی"
 
-LangString MAX_REMOVE_LOCAL_DATA_HINT 1033 "Choose whether the uninstaller should remove Open Design data stored on this computer."
-LangString MAX_REMOVE_LOCAL_DATA_HINT 2052 "请选择卸载程序是否删除此电脑上保存的 Open Design 数据。"
-LangString MAX_REMOVE_LOCAL_DATA_HINT 1028 "請選擇解除安裝程式是否刪除此電腦上儲存的 Open Design 資料。"
-LangString MAX_REMOVE_LOCAL_DATA_HINT 1046 "Escolha se o desinstalador deve remover os dados do Open Design armazenados neste computador."
-LangString MAX_REMOVE_LOCAL_DATA_HINT 1049 "Выберите, должен ли деинсталлятор удалить данные Open Design, сохраненные на этом компьютере."
-LangString MAX_REMOVE_LOCAL_DATA_HINT 1065 "انتخاب کنید که حذف‌کننده داده‌های Open Design ذخیره‌شده در این رایانه را حذف کند یا نه."
+LangString MAX_REMOVE_LOCAL_DATA_HINT 1033 "Choose whether the uninstaller should remove Marketing AX data stored on this computer."
+LangString MAX_REMOVE_LOCAL_DATA_HINT 2052 "请选择卸载程序是否删除此电脑上保存的 Marketing AX 数据。"
+LangString MAX_REMOVE_LOCAL_DATA_HINT 1028 "請選擇解除安裝程式是否刪除此電腦上儲存的 Marketing AX 資料。"
+LangString MAX_REMOVE_LOCAL_DATA_HINT 1046 "Escolha se o desinstalador deve remover os dados do Marketing AX armazenados neste computador."
+LangString MAX_REMOVE_LOCAL_DATA_HINT 1049 "Выберите, должен ли деинсталлятор удалить данные Marketing AX, сохраненные на этом компьютере."
+LangString MAX_REMOVE_LOCAL_DATA_HINT 1065 "انتخاب کنید که حذف‌کننده داده‌های Marketing AX ذخیره‌شده در این رایانه را حذف کند یا نه."
 
-LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1033 "Remove local Open Design data:"
-LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 2052 "删除本地 Open Design 数据："
-LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1028 "刪除本機 Open Design 資料："
-LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1046 "Remover dados locais do Open Design:"
-LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1049 "Удалить локальные данные Open Design:"
-LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1065 "حذف داده‌های محلی Open Design:"
+LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1033 "Remove local Marketing AX data:"
+LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 2052 "删除本地 Marketing AX 数据："
+LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1028 "刪除本機 Marketing AX 資料："
+LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1046 "Remover dados locais do Marketing AX:"
+LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1049 "Удалить локальные данные Marketing AX:"
+LangString MAX_REMOVE_LOCAL_DATA_CHECKBOX 1065 "حذف داده‌های محلی Marketing AX:"
 
 !macro customUnWelcomePage
   !insertmacro MUI_UNPAGE_WELCOME
@@ -83,7 +83,7 @@ FunctionEnd
     StrCpy $odLocalDataRoot "${localDataRoot}"
   \${EndIf}
   \${If} $odRemoveLocalData != "0"
-    DetailPrint "Removing local Open Design data: $odLocalDataRoot"
+    DetailPrint "Removing local Marketing AX data: $odLocalDataRoot"
     RMDir /r "$odLocalDataRoot"
   \${EndIf}
 !macroend

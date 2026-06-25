@@ -168,7 +168,7 @@ async function mirrorAmrEntryToAmrAnalytics(
       }),
     });
   } catch {
-    // AMR analytics mirroring must never block the primary Open Design action.
+    // AMR analytics mirroring must never block the primary Marketing AX action.
   }
 }
 

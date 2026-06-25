@@ -134,7 +134,7 @@ export async function exportDiagnosticsToFile(
   const defaultPath = join(downloadsDir, filename);
 
   const dialogOptions = {
-    title: "Export Open Design diagnostics",
+    title: "Export Marketing AX diagnostics",
     defaultPath,
     filters: [{ name: "Zip archive", extensions: ["zip"] }],
   };
@@ -191,11 +191,11 @@ export async function exportDiagnosticsToFile(
       sources,
       redaction: { username: safeUsername() },
       crashReports: {
-        // Restrict to Open Design's own process names. A generic "Electron"
+        // Restrict to Marketing AX's own process names. A generic "Electron"
         // substring would sweep up crash reports from any other Electron app
         // on the host (VS Code, Slack, …) and leak unrelated user data into
         // the support bundle.
-        matchSubstrings: ["Open Design", "open-design"],
+        matchSubstrings: ["Marketing AX", "open-design"],
         withinDays: 7,
         maxReports: 10,
         homeDir: homedir(),

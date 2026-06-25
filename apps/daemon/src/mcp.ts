@@ -1,6 +1,6 @@
 // `od mcp` - stdio MCP server that proxies project tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
-// (Claude Code, Cursor, Zed) pull files from a local Open Design
+// (Claude Code, Cursor, Zed) pull files from a local Marketing AX
 // project and create project-scoped artifacts without the
 // export-zip-import dance.
 //
@@ -83,20 +83,20 @@ const WRITE_ANNOTATIONS = {
 // shipped to the model on every session.
 const PROJECT_ARG = {
   type: 'string',
-  description: 'Project id (UUID) or name substring. Optional; defaults to the active project (expires after ~5 minutes of no Open Design activity).',
+  description: 'Project id (UUID) or name substring. Optional; defaults to the active project (expires after ~5 minutes of no Marketing AX activity).',
 } as const;
 
 const TOOL_DEFS = [
   {
     name: 'list_projects',
-    description: 'List every Open Design project on this daemon.',
+    description: 'List every Marketing AX project on this daemon.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design projects' },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Marketing AX projects' },
   },
   {
     name: 'get_active_context',
     description:
-      'Project + file the user has open in Open Design right now. Returns {active:false, hint:"..."} when no project is active so the agent can ask the user to interact with Open Design (the active context expires ~5 minutes after the last user interaction). Most tools default to this when project is omitted, so you rarely need to call this directly.',
+      'Project + file the user has open in Marketing AX right now. Returns {active:false, hint:"..."} when no project is active so the agent can ask the user to interact with Marketing AX (the active context expires ~5 minutes after the last user interaction). Most tools default to this when project is omitted, so you rarely need to call this directly.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
   },
@@ -111,7 +111,7 @@ const TOOL_DEFS = [
         entry: {
           type: 'string',
           description:
-            "Entry file path relative to project root. Defaults to the active file or project's metadata.entryFile. Active-file fallback expires after ~5 minutes of no Open Design activity.",
+            "Entry file path relative to project root. Defaults to the active file or project's metadata.entryFile. Active-file fallback expires after ~5 minutes of no Marketing AX activity.",
         },
         include: {
           type: 'string',
@@ -137,7 +137,7 @@ const TOOL_DEFS = [
       properties: { project: PROJECT_ARG },
       additionalProperties: false,
     },
-    annotations: { ...READ_ANNOTATIONS, title: 'Get Open Design project' },
+    annotations: { ...READ_ANNOTATIONS, title: 'Get Marketing AX project' },
   },
   {
     name: 'get_file',
@@ -150,7 +150,7 @@ const TOOL_DEFS = [
         path: {
           type: 'string',
           description:
-            'File path relative to project root, forward slashes. Optional; defaults to the active file when project is also omitted. Active-file fallback expires after ~5 minutes of no Open Design activity.',
+            'File path relative to project root, forward slashes. Optional; defaults to the active file when project is also omitted. Active-file fallback expires after ~5 minutes of no Marketing AX activity.',
         },
         offset: {
           type: 'number',
@@ -211,7 +211,7 @@ const TOOL_DEFS = [
   {
     name: 'create_artifact',
     description:
-      'Create one normal Open Design project artifact entry file. Writes name+content, rejects existing targets, and persists artifactManifest when supplied. HTML, Markdown, and SVG entries get a default manifest when omitted. Project optional; defaults to the active project.',
+      'Create one normal Marketing AX project artifact entry file. Writes name+content, rejects existing targets, and persists artifactManifest when supplied. HTML, Markdown, and SVG entries get a default manifest when omitted. Project optional; defaults to the active project.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -232,13 +232,13 @@ const TOOL_DEFS = [
         artifactManifest: {
           type: 'object',
           additionalProperties: true,
-          description: 'Optional ArtifactManifest sidecar. If omitted, Open Design infers one for HTML, Markdown, or SVG entry files.',
+          description: 'Optional ArtifactManifest sidecar. If omitted, Marketing AX infers one for HTML, Markdown, or SVG entry files.',
         },
       },
       required: ['name', 'content'],
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design artifact' },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Marketing AX artifact' },
   },
   {
     name: 'write_file',
@@ -265,7 +265,7 @@ const TOOL_DEFS = [
       required: ['path', 'content'],
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, title: 'Write Open Design project file' },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Write Marketing AX project file' },
   },
   {
     name: 'delete_file',
@@ -283,12 +283,12 @@ const TOOL_DEFS = [
       required: ['path'],
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Open Design project file' },
+    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Marketing AX project file' },
   },
   {
     name: 'delete_project',
     description:
-      'Permanently delete an Open Design project including its files and conversations. Requires both an explicit project id/name AND confirm:true — there is no active-project fallback because the operation is irreversible.',
+      'Permanently delete an Marketing AX project including its files and conversations. Requires both an explicit project id/name AND confirm:true — there is no active-project fallback because the operation is irreversible.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -304,12 +304,12 @@ const TOOL_DEFS = [
       required: ['project', 'confirm'],
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Open Design project' },
+    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Marketing AX project' },
   },
   {
     name: 'create_project',
     description:
-      'Create a new empty Open Design project to generate into, then call start_run against it. Returns the project (with its id) plus a conversationId. The id is derived from name unless you pass one explicitly.',
+      'Create a new empty Marketing AX project to generate into, then call start_run against it. Returns the project (with its id) plus a conversationId. The id is derived from name unless you pass one explicitly.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -327,10 +327,10 @@ const TOOL_DEFS = [
       required: ['name'],
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design project' },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Marketing AX project' },
   },
   // Discovery + generation. An external coding agent does NOT run a
-  // skill itself — it commissions Open Design to, via start_run. The
+  // skill itself — it commissions Marketing AX to, via start_run. The
   // daemon then spawns ITS OWN agent (Claude Code / API fallback /…)
   // to do the work. So list_skills / list_plugins exist purely so the
   // caller can discover what it can ask OD to generate; start_run
@@ -339,20 +339,20 @@ const TOOL_DEFS = [
   // reference material the caller opts into, not something to run.
   {
     name: 'list_skills',
-    description: 'List Open Design skills you can pass to start_run as a recipe. Discovery only — Open Design runs the skill, not you.',
+    description: 'List Marketing AX skills you can pass to start_run as a recipe. Discovery only — Marketing AX runs the skill, not you.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design skills' },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Marketing AX skills' },
   },
   {
     name: 'list_plugins',
-    description: 'List installed Open Design plugins (packaged design workflows) you can pass to start_run as plugin + inputs.',
+    description: 'List installed Marketing AX plugins (packaged design workflows) you can pass to start_run as plugin + inputs.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design plugins' },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Marketing AX plugins' },
   },
   {
     name: 'start_run',
     description:
-      'Commission Open Design to generate or refine a design. Open Design spawns its own agent to do the work and returns a runId immediately. Poll get_run(runId) until status is terminal, then get_artifact to pull the result. Project optional; defaults to the active project. Requires an existing project (create one first with create_project).',
+      'Commission Marketing AX to generate or refine a design. Marketing AX spawns its own agent to do the work and returns a runId immediately. Poll get_run(runId) until status is terminal, then get_artifact to pull the result. Project optional; defaults to the active project. Requires an existing project (create one first with create_project).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -376,7 +376,7 @@ const TOOL_DEFS = [
         },
         agent: {
           type: 'string',
-          description: "Which agent Open Design should run, e.g. 'claude' | 'codex' | 'gemini'. Optional; defaults to the user's configured agent.",
+          description: "Which agent Marketing AX should run, e.g. 'claude' | 'codex' | 'gemini'. Optional; defaults to the user's configured agent.",
         },
         model: {
           type: 'string',
@@ -385,7 +385,7 @@ const TOOL_DEFS = [
       },
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, title: 'Generate with Open Design' },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Generate with Marketing AX' },
   },
   {
     name: 'get_run',
@@ -399,7 +399,7 @@ const TOOL_DEFS = [
       required: ['runId'],
       additionalProperties: false,
     },
-    annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design run' },
+    annotations: { ...READ_ANNOTATIONS, title: 'Check Marketing AX run' },
   },
   {
     name: 'cancel_run',
@@ -412,12 +412,12 @@ const TOOL_DEFS = [
       required: ['runId'],
       additionalProperties: false,
     },
-    annotations: { ...WRITE_ANNOTATIONS, title: 'Cancel Open Design run' },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Cancel Marketing AX run' },
   },
   {
     name: 'list_agents',
     description:
-      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, and up to 10 sample models (modelsCount carries the real total).',
+      'List the agent CLIs Marketing AX can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, and up to 10 sample models (modelsCount carries the real total).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -428,7 +428,7 @@ const TOOL_DEFS = [
       },
       additionalProperties: false,
     },
-    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design agents' },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Marketing AX agents' },
   },
 ];
 
@@ -440,7 +440,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     {
       capabilities: { tools: {}, resources: {} },
       instructions: [
-        'Open Design (OD) is a local-first design workspace. The user typically',
+        'Marketing AX (OD) is a local-first design workspace. The user typically',
         'has OD running on their machine; each project contains a rendered',
         'artifact (HTML/JSX/CSS) plus its source files.',
         '',
@@ -478,7 +478,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         ' - get_active_context() if you want the active project/file',
         '    explicitly without making any other tool call.',
         '',
-        'To make Open Design GENERATE or refine a design (rather than just',
+        'To make Marketing AX GENERATE or refine a design (rather than just',
         'read/edit files), commission a run - you do not run skills yourself:',
         ' - list_skills / list_plugins to see what you can ask OD to make.',
         ' - list_agents when you need to pass start_run.agent — do not',
@@ -488,13 +488,13 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         '    generate into; start_run requires an existing project.',
         ' - start_run(prompt, [skill], [plugin], [inputs]) kicks off generation in',
         '    the active or named project and returns a runId immediately.',
-        '    Open Design spawns its own agent to do the work.',
+        '    Marketing AX spawns its own agent to do the work.',
         ' - get_run(runId) polls until status is succeeded/failed/canceled;',
         '    on success it returns a previewUrl you can open in a browser',
         '    and a hint to pull the files with get_artifact.',
         ' - cancel_run(runId) aborts an in-flight run.',
         '',
-        'Generation patience: Open Design runs typically take 5–30',
+        'Generation patience: Marketing AX runs typically take 5–30',
         'minutes. Polls returning status:running with unchanged file',
         'mtimes is the inner agent thinking, not a hang. Do NOT cancel',
         'and substitute write_file as a "faster" workaround — that',
@@ -506,9 +506,9 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         '',
         'Ambiguous-format requests: words like "PPT" / "deck" / "slides" /',
         '"presentation" / "document" / "PDF" / "doc" map to two different',
-        'deliverables — Open Design natively produces browser-viewable',
+        'deliverables — Marketing AX natively produces browser-viewable',
         'HTML/SVG (including HTML-rendered decks), but the user may want a',
-        'real binary file (.pptx / .docx / .pdf) which Open Design does NOT',
+        'real binary file (.pptx / .docx / .pdf) which Marketing AX does NOT',
         'produce and which you would have to export yourself from OD\'s',
         'output. When the user\'s request is ambiguous, ASK them which one',
         'they want before kicking off work; do not silently pick one and do',
@@ -526,7 +526,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         'available at od://skills/<id>/SKILL.md but are mostly relevant',
         'when the user asks about how a particular artifact was generated.',
         '',
-        'When extending an Open Design design in another codebase, pull',
+        'When extending an Marketing AX design in another codebase, pull',
         'the full bundle once with get_artifact and work from those files',
         'locally - do not fetch files one-by-one if you can avoid it.',
       ].join('\n'),
@@ -545,8 +545,8 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     const resources = [
       {
         uri: 'od://focus/active',
-        name: 'Active Open Design context',
-        description: 'The project/file the user has open in Open Design right now.',
+        name: 'Active Marketing AX context',
+        description: 'The project/file the user has open in Marketing AX right now.',
         mimeType: 'application/json',
       },
     ];
@@ -658,7 +658,7 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         if (!data || data.active === false) {
           return ok({
             active: false,
-            hint: 'Open Design has no active project right now. The active context expires about 5 minutes after the last user interaction with Open Design, so the user may need to click into a project (or switch tabs inside one) to wake it up. Alternatively, pass project="<id-or-name>" to other tools to bypass active context entirely.',
+            hint: 'Marketing AX has no active project right now. The active context expires about 5 minutes after the last user interaction with Marketing AX, so the user may need to click into a project (or switch tabs inside one) to wake it up. Alternatively, pass project="<id-or-name>" to other tools to bypass active context entirely.',
           });
         }
         return ok(data);
@@ -875,7 +875,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 
 // Create an empty project to generate into. start_run needs an existing
 // project; without this an external agent could only work on projects
-// the user had already created in Open Design.
+// the user had already created in Marketing AX.
 //
 // skipDiscoveryBrief defaults to true: the outer agent (Codex, Cursor,
 // …) IS the user-facing surface, so OD's own interactive discovery
@@ -997,7 +997,7 @@ async function startRun(baseUrl: string, args: McpArgs) {
       {
         ...created,
         ...(studioUrl ? { studioUrl } : {}),
-        hint: 'Run started. Open Design generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status the response carries previewUrl + agentMessage which together are the canonical deliverable. When studioUrl is present, ALWAYS show it to the user as a clickable markdown link: `[Open Open Design studio](STUDIO_URL)` — never as inline code or bare text, because Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable.',
+        hint: 'Run started. Marketing AX generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status the response carries previewUrl + agentMessage which together are the canonical deliverable. When studioUrl is present, ALWAYS show it to the user as a clickable markdown link: `[Open Marketing AX studio](STUDIO_URL)` — never as inline code or bare text, because Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable.',
       },
       active,
       resolved,
@@ -1031,7 +1031,7 @@ async function getRun(baseUrl: string, args: McpArgs) {
     if (typeof status.eventsLogPath === 'string' && status.eventsLogPath.length > 0) {
       enriched.hint = 'Run still in flight. Tail eventsLogPath in your own shell (e.g. `tail -n 50 -f "' + status.eventsLogPath + '"`) to see live text_delta / tool_use events from the inner agent — that is your in-flight progress signal. Keep polling get_run every 30–60s; do not cancel because file mtimes look static, that is the agent thinking between writes.';
       if (studioUrl) {
-        enriched.hint += ` Once you have something to show the user, give them a clickable markdown link to studioUrl — render it as \`[Watch progress in Open Design studio](${studioUrl})\`, NEVER as inline code or bare text, so clients like Codex / Cursor / Zed make it navigable in their built-in browser pane.`;
+        enriched.hint += ` Once you have something to show the user, give them a clickable markdown link to studioUrl — render it as \`[Watch progress in Marketing AX studio](${studioUrl})\`, NEVER as inline code or bare text, so clients like Codex / Cursor / Zed make it navigable in their built-in browser pane.`;
       }
     }
     return ok(enriched);
@@ -1053,8 +1053,8 @@ async function getRun(baseUrl: string, args: McpArgs) {
   if (agentMessage) enriched.agentMessage = agentMessage;
   if (studioUrl) enriched.studioUrl = studioUrl;
   enriched.hint = previewUrl
-    ? `Run finished. studioUrl (when present) is the BEST link to hand the user — it opens the OD studio page that shows the rendered design AND the chat history (your prompts and the inner agent's replies) side by side. ALWAYS render studioUrl as a clickable markdown link: \`[Open Open Design studio](STUDIO_URL)\` — never as inline code or bare text, because clients like Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable. previewUrl is the raw file URL if the user only wants the rendered output. agentMessage carries the inner agent's explanation; show it alongside the link. Call get_artifact({ project: "${status.projectId}" }) when you need the source files — always pass project explicitly; omitting it falls back to the active project, which may differ. eventsLogPath, when present, holds the full inner-agent event log for forensics.`
-    : 'Run finished but produced no files. The inner agent\'s output is in agentMessage — relay it to the user verbatim. Most often this is a clarifying question (e.g. a <question-form>) you should answer by calling start_run again with a more specific prompt or a chosen plugin. When studioUrl is present, show it as a clickable markdown link (`[Open Open Design studio](STUDIO_URL)`) so the user can navigate to the OD page that shows the chat history — never render it as inline code. eventsLogPath, when present, holds the full event log if you need to inspect what happened.';
+    ? `Run finished. studioUrl (when present) is the BEST link to hand the user — it opens the OD studio page that shows the rendered design AND the chat history (your prompts and the inner agent's replies) side by side. ALWAYS render studioUrl as a clickable markdown link: \`[Open Marketing AX studio](STUDIO_URL)\` — never as inline code or bare text, because clients like Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable. previewUrl is the raw file URL if the user only wants the rendered output. agentMessage carries the inner agent's explanation; show it alongside the link. Call get_artifact({ project: "${status.projectId}" }) when you need the source files — always pass project explicitly; omitting it falls back to the active project, which may differ. eventsLogPath, when present, holds the full inner-agent event log for forensics.`
+    : 'Run finished but produced no files. The inner agent\'s output is in agentMessage — relay it to the user verbatim. Most often this is a clarifying question (e.g. a <question-form>) you should answer by calling start_run again with a more specific prompt or a chosen plugin. When studioUrl is present, show it as a clickable markdown link (`[Open Marketing AX studio](STUDIO_URL)`) so the user can navigate to the OD page that shows the chat history — never render it as inline code. eventsLogPath, when present, holds the full event log if you need to inspect what happened.';
   return ok(enriched);
 }
 
@@ -1209,7 +1209,7 @@ async function resolveProjectEntry(baseUrl: string, projectId: string, declared:
 // serves it with the right Content-Type and resolves sibling
 // CSS/JS/img relative to the same dir, so this URL opens directly in a
 // browser (HTML entries render; bare JSX entries that rely on
-// host-injected React/Babel do not — those still need the Open Design
+// host-injected React/Babel do not — those still need the Marketing AX
 // UI). Returns null when there's no entry file. Pure: no I/O, so
 // get_project can call it from project data it already has.
 function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): string | null {
@@ -1279,7 +1279,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Short-lived cache for the project list. A typical agent session
 // makes several name-based lookups in quick succession; without this
 // each one re-fetches /api/projects. The TTL is short so a project
-// renamed in the Open Design UI shows up within a few seconds.
+// renamed in the Marketing AX UI shows up within a few seconds.
 const PROJECT_LIST_TTL_MS = 5000;
 let projectListCache: ProjectListCache | null = null;
 
@@ -1299,7 +1299,7 @@ async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
 }
 
 // When the agent omits `project`, fall back to whatever the user has
-// open in Open Design. Returns the resolved id plus, for echo-back to the
+// open in Marketing AX. Returns the resolved id plus, for echo-back to the
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
@@ -1318,7 +1318,7 @@ async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: s
   }
   if (!active || active.active === false || !active.projectId) {
     throw new Error(
-      'project arg omitted and Open Design has no active project. The active context expires about 5 minutes after the last user interaction with Open Design - the user may need to click into a project to wake it up. Otherwise pass project="<id-or-name>".',
+      'project arg omitted and Marketing AX has no active project. The active context expires about 5 minutes after the last user interaction with Marketing AX - the user may need to click into a project to wake it up. Otherwise pass project="<id-or-name>".',
     );
   }
   return { id: active.projectId, resolved: null, active };
@@ -1745,7 +1745,7 @@ function formatError(err: unknown, daemonUrl: string): string {
   const code = e && (e.cause?.code || e.code);
   const msg = errorMessage(err);
   if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
-    return `cannot reach the Open Design daemon at ${daemonUrl}. Is it running? Start it with \`pnpm tools-dev\`.`;
+    return `cannot reach the Marketing AX daemon at ${daemonUrl}. Is it running? Start it with \`pnpm tools-dev\`.`;
   }
   return msg;
 }

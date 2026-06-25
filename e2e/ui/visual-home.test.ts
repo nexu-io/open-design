@@ -46,7 +46,7 @@ const VISUAL_CLI_AGENTS = [
 
 const VISUAL_AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'Marketing AX AMR',
   bin: 'vela',
   available: true,
   version: '0.1.0',
@@ -71,7 +71,7 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /Welcome|欢迎/i })).toBeVisible();
-  await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
+  await expect(page.getByText(/Marketing AX AMR/i)).toBeVisible();
   await expect(
     page
       .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')

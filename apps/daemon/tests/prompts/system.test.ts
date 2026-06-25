@@ -434,7 +434,7 @@ describe('composeSystemPrompt', () => {
 
       expect(prompt).toContain('## External MCP servers — already authenticated');
       expect(prompt).toContain('`external-media`');
-      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('Marketing AX-owned media execution is **disabled for this run**');
       expect(prompt).not.toContain('## Media generation contract');
     });
   });

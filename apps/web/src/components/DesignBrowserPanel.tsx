@@ -627,7 +627,7 @@ export function browserUsePrompt(action: BrowserUseAction, context: BrowserUsePr
   return [
     '@agent-browser',
     '',
-    'Use the selected Open Design Browser tab as the bound target.',
+    'Use the selected Marketing AX Browser tab as the bound target.',
     'Browser tab context:',
     `- tab: ${tabLabel}`,
     `- title: ${title}`,
@@ -2673,7 +2673,7 @@ function DesignBrowserStart({
     <div className="db-start">
       <div className="db-start-hero">
         <div className="db-start-hero-copy">
-          <div className="db-kicker">Open Design browser</div>
+          <div className="db-kicker">Marketing AX browser</div>
           <h2>Reference Board</h2>
           <p className="db-start-sub">
             A curated set of references across inspiration, real product UI,

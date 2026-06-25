@@ -23,9 +23,9 @@
 //
 // Locations:
 //
-//   packaged (mac):    ~/Library/Application Support/Open Design Nightly/installation.json
-//   packaged (win):    %APPDATA%/Open Design Nightly/installation.json
-//   packaged (linux):  $XDG_CONFIG_HOME/Open Design Nightly/installation.json
+//   packaged (mac):    ~/Library/Application Support/Marketing AX Nightly/installation.json
+//   packaged (win):    %APPDATA%/Marketing AX Nightly/installation.json
+//   packaged (linux):  $XDG_CONFIG_HOME/Marketing AX Nightly/installation.json
 //   tools-dev / OSS:   <dataDir>/installation.json  (no namespace concept; fall back to dataDir)
 //
 // `MAX_INSTALLATION_DIR` is the env override. Packaged sidecars.ts sets it

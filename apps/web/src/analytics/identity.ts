@@ -53,7 +53,7 @@ export function getSessionId(): string {
   }
 }
 
-// Desktop packaged builds install the Open Design host bridge so the
+// Desktop packaged builds install the Marketing AX host bridge so the
 // same web bundle can distinguish desktop runs from browser visits.
 // Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {

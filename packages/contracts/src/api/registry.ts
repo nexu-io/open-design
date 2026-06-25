@@ -21,7 +21,7 @@ export type AgentFixIntent =
   /** Re-run agent detection (the Settings "Rescan" affordance). */
   | { kind: 'rescan' }
   /**
-   * Prompt the user to point Open Design at an explicit binary by writing
+   * Prompt the user to point Marketing AX at an explicit binary by writing
    * `envKey` (e.g. `CURSOR_AGENT_BIN`) into `agentCliEnv`. Used when the CLI
    * is installed somewhere PATH detection can't reach.
    */
@@ -91,7 +91,7 @@ export interface AgentInfo {
    */
   diagnostics?: AgentDiagnostic[];
   models?: AgentModelOption[];
-  /** Whether models came from the installed CLI or Open Design's static fallback. */
+  /** Whether models came from the installed CLI or Marketing AX's static fallback. */
   modelsSource?: 'live' | 'fallback';
   reasoningOptions?: AgentModelOption[];
   /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */

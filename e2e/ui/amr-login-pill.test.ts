@@ -22,13 +22,13 @@ const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 test.describe.configure({ timeout: 30_000 });
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading Marketing AX…')).toHaveCount(0, { timeout: 15_000 });
 }
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Marketing AX' });
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
@@ -141,7 +141,7 @@ test('[P1] AMR card authorizes through daemon login status and returns to author
 
   const amrCard = dialog
     .locator('.amr-agent-card, .agent-card-installed')
-    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .filter({ hasText: /Marketing AX AMR|AMR \(vela\)/i })
     .first();
   await expect(amrCard).toBeVisible();
 

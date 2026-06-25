@@ -2205,7 +2205,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // These keys come from the process environment, not Open Design
+          // These keys come from the process environment, not Marketing AX
           // BYOK/agentCliEnv. Preserve them so local CLI API-key auth works.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',

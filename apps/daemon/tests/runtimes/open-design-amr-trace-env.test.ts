@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { openDesignAmrTraceEnv } from '../../src/runtimes/env.js';
 
-test('openDesignAmrTraceEnv builds Open Design trace identity env for AMR only', () => {
+test('openDesignAmrTraceEnv builds Marketing AX trace identity env for AMR only', () => {
   const amrEnv = openDesignAmrTraceEnv({
     agentId: 'amr',
     runId: ' run_trace_123 ',

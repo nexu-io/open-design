@@ -7,49 +7,49 @@ import { resolveWinInstallIdentity } from "../src/win/identity.js";
 describe("resolveWinInstallIdentity", () => {
   it("keeps the default namespace on the canonical Windows display name", () => {
     expect(resolveWinInstallIdentity({ namespace: "default" })).toMatchObject({
-      displayName: "Open Design",
-      shortcutName: "Open Design.lnk",
-      uninstallerName: "Uninstall Open Design.exe",
+      displayName: "Marketing AX",
+      shortcutName: "Marketing AX.lnk",
+      uninstallerName: "Uninstall Marketing AX.exe",
     });
   });
 
   it("uses the canonical Windows display name for stable release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-stable-win" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design.exe",
-      displayName: "Open Design",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-stable-win",
-      shortcutName: "Open Design.lnk",
-      uninstallerName: "Uninstall Open Design.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX.exe",
+      displayName: "Marketing AX",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-stable-win",
+      shortcutName: "Marketing AX.lnk",
+      uninstallerName: "Uninstall Marketing AX.exe",
     });
   });
 
   it("uses first-class beta display identity for beta release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-beta-win" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Beta.exe",
-      displayName: "Open Design Beta",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-beta-win",
-      shortcutName: "Open Design Beta.lnk",
-      uninstallerName: "Uninstall Open Design Beta.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX Beta.exe",
+      displayName: "Marketing AX Beta",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-beta-win",
+      shortcutName: "Marketing AX Beta.lnk",
+      uninstallerName: "Uninstall Marketing AX Beta.exe",
     });
   });
 
   it("keeps non-release beta-like namespaces isolated from the real beta channel identity", () => {
     expect(resolveWinInstallIdentity({ namespace: "beta-local-flow" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design beta-local-flow.exe",
-      displayName: "Open Design beta-local-flow",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-beta-local-flow",
-      shortcutName: "Open Design beta-local-flow.lnk",
-      uninstallerName: "Uninstall Open Design beta-local-flow.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX beta-local-flow.exe",
+      displayName: "Marketing AX beta-local-flow",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-beta-local-flow",
+      shortcutName: "Marketing AX beta-local-flow.lnk",
+      uninstallerName: "Uninstall Marketing AX beta-local-flow.exe",
     });
   });
 
   it("uses first-class preview display identity for preview release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-preview-win" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Preview.exe",
-      displayName: "Open Design Preview",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-preview-win",
-      shortcutName: "Open Design Preview.lnk",
-      uninstallerName: "Uninstall Open Design Preview.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX Preview.exe",
+      displayName: "Marketing AX Preview",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-preview-win",
+      shortcutName: "Marketing AX Preview.lnk",
+      uninstallerName: "Uninstall Marketing AX Preview.exe",
     });
   });
 
@@ -58,15 +58,15 @@ describe("resolveWinInstallIdentity", () => {
       appVersion: "0.8.0.nightly.2",
       namespace: "release-stable-win",
     })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Nightly.exe",
-      displayName: "Open Design Nightly",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-stable-win",
-      shortcutName: "Open Design Nightly.lnk",
-      uninstallerName: "Uninstall Open Design Nightly.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX Nightly.exe",
+      displayName: "Marketing AX Nightly",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-stable-win",
+      shortcutName: "Marketing AX Nightly.lnk",
+      uninstallerName: "Uninstall Marketing AX Nightly.exe",
     });
     expect(resolveWinInstallIdentity({ namespace: "release-nightly-win" })).toMatchObject({
-      displayName: "Open Design Nightly",
-      shortcutName: "Open Design Nightly.lnk",
+      displayName: "Marketing AX Nightly",
+      shortcutName: "Marketing AX Nightly.lnk",
     });
   });
 

@@ -88,7 +88,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Marketing AX");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
@@ -114,7 +114,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Marketing AX");
       const bundledConfigPath = join(paths.installedAppPath, "Contents", "Resources", "open-design-config.json");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
@@ -153,7 +153,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root, { namespace: "release-preview" });
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design Preview");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Marketing AX Preview");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");

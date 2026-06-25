@@ -1923,7 +1923,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Open Design AMR\b/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Marketing AX AMR\b/ }));
 
     const modelPickers = screen.getAllByRole('combobox', {
       name: en['settings.modelPicker'],
@@ -2220,7 +2220,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Marketing AX AMR\b/ })).toBeTruthy();
     expect(screen.queryByText('1.0.0')).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/vela/i)).toBeNull();
@@ -2260,10 +2260,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
-    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Marketing AX AMR\b/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Open Design AMR\b/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Marketing AX AMR\b/ }));
 
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
   });
@@ -2299,7 +2299,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCardButton = screen.getByRole('button', { name: /^Open Design AMR\b/ });
+    const amrCardButton = screen.getByRole('button', { name: /^Marketing AX AMR\b/ });
     const amrCard = amrCardButton.closest('.agent-card') as HTMLElement;
     expect(amrCard).toBeTruthy();
     expect(await screen.findByText('Signing in…')).toBeTruthy();
@@ -2363,7 +2363,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Design AMR\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByRole('button', { name: /^Marketing AX AMR\b/ }).closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -2428,7 +2428,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Design AMR\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByRole('button', { name: /^Marketing AX AMR\b/ }).closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -2509,7 +2509,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Design AMR\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByRole('button', { name: /^Marketing AX AMR\b/ }).closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -2565,7 +2565,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Marketing AX AMR\b/ })).toBeTruthy();
     expect(screen.getByText('signed-in@example.com')).toBeTruthy();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/^vela$/i)).toBeNull();
@@ -2603,7 +2603,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Marketing AX AMR\b/ })).toBeTruthy();
     expect(screen.queryByText(/@/i)).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
   });
@@ -2700,12 +2700,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Marketing AX AMR\b/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Marketing AX AMR\b/ })).toBeTruthy();
     expect(
       onPersist.mock.calls.some(
         ([nextConfig]) =>
@@ -3123,9 +3123,9 @@ describe('SettingsDialog connectors interactions', () => {
 
 describe('SettingsDialog MCP server interactions', () => {
   const installInfo = {
-    command: '/Applications/Open Design.app/Contents/Resources/open-design/bin/node',
+    command: '/Applications/Marketing AX.app/Contents/Resources/open-design/bin/node',
     args: [
-      '/Applications/Open Design.app/Contents/Resources/app/node_modules/@open-design/daemon/dist/cli.js',
+      '/Applications/Marketing AX.app/Contents/Resources/app/node_modules/@open-design/daemon/dist/cli.js',
       'mcp',
       '--daemon-url',
       'http://127.0.0.1:51706',
@@ -3183,7 +3183,7 @@ describe('SettingsDialog MCP server interactions', () => {
       expect(screen.getByText(/claude mcp add-json --scope user open-design/i)).toBeTruthy();
     });
     expect(screen.getByText(/Restart your client to pick up the new server/i)).toBeTruthy();
-    expect(screen.getByText(/Open Design must be running for MCP tool calls to succeed/i)).toBeTruthy();
+    expect(screen.getByText(/Marketing AX must be running for MCP tool calls to succeed/i)).toBeTruthy();
   });
 
   it('switches client instructions and snippet content when a different MCP client is selected', async () => {

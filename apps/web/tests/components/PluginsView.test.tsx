@@ -230,7 +230,7 @@ describe('PluginsView', () => {
         url: 'https://marketing-ax.example/marketplace/open-design-marketplace.json',
         trust: 'official',
         manifest: {
-          name: 'Open Design Official',
+          name: 'Marketing AX Official',
           version: '1.0.0',
           plugins: [
             {
@@ -632,7 +632,7 @@ describe('PluginsView', () => {
         url: 'https://marketing-ax.example/marketplace/open-design-marketplace.json',
         trust: 'official',
         manifest: {
-          name: 'Open Design Official',
+          name: 'Marketing AX Official',
           version: '0.1.0',
           plugins: [{
             name: 'open-design/official-plugin',
@@ -722,14 +722,14 @@ describe('PluginsView', () => {
         'bundled',
         'bundled',
         'Publish Plugin to GitHub',
-        'Creates a public GitHub repository for a local Open Design plugin using the GitHub CLI.',
+        'Creates a public GitHub repository for a local Marketing AX plugin using the GitHub CLI.',
       ),
       makePlugin(
         'od-plugin-contribute-open-design',
         'bundled',
         'bundled',
-        'Contribute Plugin to Open Design',
-        'Opens a pull request that adds a local Open Design plugin to the Open Design community catalog.',
+        'Contribute Plugin to Marketing AX',
+        'Opens a pull request that adds a local Marketing AX plugin to the Marketing AX community catalog.',
       ),
     ]);
     const onCreatePluginShareProject = vi.fn(async (): Promise<PluginShareProjectOutcome> => ({

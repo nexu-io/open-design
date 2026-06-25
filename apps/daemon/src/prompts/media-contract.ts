@@ -49,7 +49,7 @@ export function renderMediaGenerationContract(
 
 ## Media generation policy (load-bearing — overrides softer wording above)
 
-Open Design-owned media execution is **disabled for this run**. Do not call
+Marketing AX-owned media execution is **disabled for this run**. Do not call
 \`"$MAX_NODE_BIN" "$MAX_BIN" media generate\`, Codex built-in imagegen, OD media
 provider APIs, local renderers, or ad-hoc scripts that create media bytes on
 OD's behalf.

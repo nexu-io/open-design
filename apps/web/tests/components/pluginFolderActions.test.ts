@@ -49,7 +49,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
         /Do NOT (call|route through) `?od plugin publish --to open-design`?/i,
       );
       expect(prompt).toMatch(
-        /registry[- ]submission|registry-submission flow|Open Design PR/i,
+        /registry[- ]submission|registry-submission flow|Marketing AX PR/i,
       );
     });
 
@@ -76,7 +76,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
   describe('contribute (PR-based flow)', () => {
     const prompt = buildPluginFolderAgentActionPrompt(FOLDER, 'contribute');
 
-    it('delegates Open Design PR creation to the deterministic plugin CLI helper', () => {
+    it('delegates Marketing AX PR creation to the deterministic plugin CLI helper', () => {
       expect(prompt).toContain('marketing-ax/marketing-ax');
       expect(prompt).toContain(`"$MAX_NODE_BIN" "$MAX_BIN" plugin open-design-pr ${FOLDER}`);
     });

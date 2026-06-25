@@ -137,7 +137,7 @@ describe('project design system route gates', () => {
     projectsToClean.push(projectId);
 
     const prompt =
-      'Create this project as a complete Open Design design system workspace.';
+      'Create this project as a complete Marketing AX design system workspace.';
     const patchResp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

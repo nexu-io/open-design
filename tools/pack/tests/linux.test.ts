@@ -546,7 +546,7 @@ describe("resolveProductionInstallCommand", () => {
 describe("renderDesktopTemplate", () => {
   const template = `[Desktop Entry]
 Type=Application
-Name=Open Design (@@NAMESPACE@@)
+Name=Marketing AX (@@NAMESPACE@@)
 Exec=env MAX_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
 Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
@@ -558,7 +558,7 @@ MimeType=x-scheme-handler/od;
       execPath: "/home/u/.local/bin/Open-Design.default.AppImage",
       iconName: "open-design-default",
     });
-    expect(out).toContain("Name=Open Design (default)");
+    expect(out).toContain("Name=Marketing AX (default)");
     expect(out).toContain(
       "Exec=env MAX_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
     );
@@ -663,7 +663,7 @@ describe("inspectPackedLinuxApp", () => {
     requestJsonIpcMock.mockReset();
     requestJsonIpcMock
       .mockResolvedValueOnce({ state: "running", url: "max://app/" })
-      .mockResolvedValueOnce({ ok: true, value: "Open Design" })
+      .mockResolvedValueOnce({ ok: true, value: "Marketing AX" })
       .mockResolvedValueOnce({ path: "/tmp/open-design-linux.png" });
 
     const result = await inspectPackedLinuxApp(makeConfig(), {
@@ -672,7 +672,7 @@ describe("inspectPackedLinuxApp", () => {
     });
 
     expect(result).toEqual({
-      eval: { ok: true, value: "Open Design" },
+      eval: { ok: true, value: "Marketing AX" },
       screenshot: { path: "/tmp/open-design-linux.png" },
       status: { state: "running", url: "max://app/" },
     });
@@ -727,7 +727,7 @@ describe("matchesAppImageProcess", () => {
     const ok = matchesAppImageProcess(
       {
         pid: 1234,
-        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        executable: "/tmp/appimage_extracted_fe548e54/Marketing AX",
         env: { APPIMAGE: installPath },
       },
       installPath,
@@ -739,7 +739,7 @@ describe("matchesAppImageProcess", () => {
     const ok = matchesAppImageProcess(
       {
         pid: 1234,
-        executable: "/tmp/appimage_extracted_fe548e54/Open Design",
+        executable: "/tmp/appimage_extracted_fe548e54/Marketing AX",
         env: { APPIMAGE: "/elsewhere/Other.AppImage" },
       },
       installPath,

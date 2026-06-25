@@ -176,7 +176,7 @@ async function seedProjectWithTodos(
 // question 1" so waiting for that text confirms the daemon responded with
 // the stored message list.
 async function waitForChatReady(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
+  const loading = page.getByText('Loading Marketing AX…');
   await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
   await expect(page.locator('.chat-log')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: 10_000 });

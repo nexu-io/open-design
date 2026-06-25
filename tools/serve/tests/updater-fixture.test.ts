@@ -75,7 +75,7 @@ describe("updater fixture server", () => {
 
   it("serves a local artifact file as the updater installer", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-updater-fixture-"));
-    const artifactPath = join(root, "Open Design-release-beta-win-setup.exe");
+    const artifactPath = join(root, "Marketing AX-release-beta-win-setup.exe");
     await writeFile(artifactPath, "real local installer bytes");
     const server = await startUpdaterFixtureServer({
       artifactPath,
@@ -90,7 +90,7 @@ describe("updater fixture server", () => {
         platforms?: { win?: { artifacts?: { installer?: { name?: string; sha256Url?: string; size?: number; url?: string } } } };
       };
       expect(server.info.artifactPath).toBe(artifactPath);
-      expect(metadata.platforms?.win?.artifacts?.installer?.name).toBe("Open Design-release-beta-win-setup.exe");
+      expect(metadata.platforms?.win?.artifacts?.installer?.name).toBe("Marketing AX-release-beta-win-setup.exe");
       expect(metadata.platforms?.win?.artifacts?.installer?.size).toBe(26);
       expect(metadata.platforms?.win?.artifacts?.installer?.url).toBe(server.info.artifactUrl);
       expect(metadata.platforms?.win?.artifacts?.installer?.sha256Url).toBe(server.info.checksumUrl);
@@ -142,7 +142,7 @@ describe("updater fixture server", () => {
 
   it("serves launcher payload bytes from a real archive path", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-tools-serve-payload-"));
-    const payloadPath = join(root, "Open Design-release-preview-payload.zip");
+    const payloadPath = join(root, "Marketing AX-release-preview-payload.zip");
     await writeFile(payloadPath, "real payload bytes", "utf8");
     const server = await startUpdaterFixtureServer({
       channel: "preview",
@@ -161,7 +161,7 @@ describe("updater fixture server", () => {
           };
         };
       };
-      expect(metadata.platforms?.mac?.artifacts?.payload?.name).toBe("Open Design-release-preview-payload.zip");
+      expect(metadata.platforms?.mac?.artifacts?.payload?.name).toBe("Marketing AX-release-preview-payload.zip");
       expect(metadata.platforms?.mac?.artifacts?.payload?.size).toBe("real payload bytes".length);
       expect(metadata.platforms?.mac?.artifacts?.payload?.url).toBe(server.info.payloadUrl);
       expect(metadata.platforms?.mac?.artifacts?.payload?.sha256Url).toBe(server.info.payloadChecksumUrl);
@@ -183,7 +183,7 @@ describe("updater fixture server", () => {
 
   it("serves a local launcher payload artifact file", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-updater-payload-fixture-"));
-    const payloadPath = join(root, "Open Design-release-beta-win-payload.7z");
+    const payloadPath = join(root, "Marketing AX-release-beta-win-payload.7z");
     await writeFile(payloadPath, "real local payload bytes");
     const server = await startUpdaterFixtureServer({
       artifactBody: "fixture installer",

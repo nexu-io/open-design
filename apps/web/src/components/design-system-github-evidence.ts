@@ -135,7 +135,7 @@ export function repoConnectCopy(githubConnected: boolean | undefined): RepoConne
     bannerTitle: 'Connect your repo to pull aspects of your design system',
     cardTitle: 'Connect your repo',
     bannerBody:
-      'Connect GitHub so Open Design can read your repository and pull colors, type, and components into this design system.',
+      'Connect GitHub so Marketing AX can read your repository and pull colors, type, and components into this design system.',
     cardBody: 'Pull colors, type, and components from your repository into this design system.',
     buttonLabel: 'Connect GitHub',
   };

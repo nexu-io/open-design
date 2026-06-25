@@ -6,7 +6,7 @@ export interface NativeFolderDialogCommand {
 const WINDOWS_FOLDER_DIALOG_SCRIPT = [
   'Add-Type -AssemblyName System.Windows.Forms;',
   '$owner = New-Object System.Windows.Forms.Form;',
-  "$owner.Text = 'Open Design';",
+  "$owner.Text = 'Marketing AX';",
   '$owner.TopMost = $true;',
   '$owner.ShowInTaskbar = $true;',
   "$owner.StartPosition = 'CenterScreen';",

@@ -67,7 +67,7 @@ export const SIDECAR_DEFAULTS = Object.freeze({
   windowsPipePrefix: "marketing-ax",
 } as const);
 
-export const MARKETING_AX_PRODUCT_NAME = "Open Design";
+export const MARKETING_AX_PRODUCT_NAME = "Marketing AX";
 
 export function resolveWindowsReleaseNamespaceToken(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");

@@ -1781,7 +1781,7 @@ export function createAgentRuntimeToolPrompt(
     '',
     `- Daemon URL: \`${daemonUrl}\` (also available as \`MAX_DAEMON_URL\`).`,
     '- `MAX_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
-    '- `MAX_BIN` is the absolute path to the Open Design CLI script. On POSIX shells run wrappers with `"$MAX_NODE_BIN" "$MAX_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
+    '- `MAX_BIN` is the absolute path to the Marketing AX CLI script. On POSIX shells run wrappers with `"$MAX_NODE_BIN" "$MAX_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
     '- On PowerShell use `& $env:MAX_NODE_BIN $env:MAX_BIN tools ...`; on cmd.exe use `"%MAX_NODE_BIN%" "%MAX_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `MAX_NODE_BIN` + `MAX_BIN` over raw HTTP. The wrappers read these environment values automatically.',
@@ -1978,7 +1978,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
     lines.push(
-      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+      'The user did not manually choose this context; Marketing AX selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
     );
     lines.push(formatWorkspaceContextList(context.workspaceItems));
     const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
@@ -2218,7 +2218,7 @@ function githubRepoNameFromPluginName(name) {
 
 const PLUGIN_SHARE_ACTION_LABELS = {
   'publish-github': 'Publish to GitHub',
-  'contribute-open-design': 'Contribute to Open Design',
+  'contribute-open-design': 'Contribute to Marketing AX',
 };
 
 const USER_PLUGIN_SOURCE_KINDS = new Set([
@@ -2265,10 +2265,10 @@ function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
   const title = sourcePlugin.title || sourcePlugin.id;
   if (action === 'publish-github') {
     return [
-      `Publish the local Open Design plugin "${title}" as a new public GitHub repository.`,
+      `Publish the local Marketing AX plugin "${title}" as a new public GitHub repository.`,
       '',
       `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-      'Use the local daemon share endpoint so the publish flow runs through Open Design\'s validated GitHub path:',
+      'Use the local daemon share endpoint so the publish flow runs through Marketing AX\'s validated GitHub path:',
       '',
       '```bash',
       `curl -sS -X POST "$MAX_DAEMON_URL/api/projects/$MAX_PROJECT_ID/plugins/publish-github" \\`,
@@ -2282,10 +2282,10 @@ function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
     ].join('\n');
   }
   return [
-    `Open a pull request to add the local Open Design plugin "${title}" to the Open Design repository.`,
+    `Open a pull request to add the local Marketing AX plugin "${title}" to the Marketing AX repository.`,
     '',
     `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-    'Use the local daemon share endpoint so the contribution flow runs through Open Design\'s validated GitHub path:',
+    'Use the local daemon share endpoint so the contribution flow runs through Marketing AX\'s validated GitHub path:',
     '',
     '```bash',
     `curl -sS -X POST "$MAX_DAEMON_URL/api/projects/$MAX_PROJECT_ID/plugins/contribute-open-design" \\`,
@@ -2498,7 +2498,7 @@ export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
   upsertMessage(db, run.conversationId, {
     id: messageId,
     role: 'assistant',
-    content: `Open Design found reusable skill material that can become a plugin: ${candidate.title}`,
+    content: `Marketing AX found reusable skill material that can become a plugin: ${candidate.title}`,
     agentId: run.agentId ?? undefined,
     events: [{
       kind: 'plugin_candidate',
@@ -3283,7 +3283,7 @@ function renderOAuthResultPage(opts) {
   const title = ok ? 'Connected' : 'Authorization failed';
   const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
   const body = ok
-    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to Open Design.`
+    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to Marketing AX.`
     : escapeHtml(opts.message ?? 'Authorization could not be completed.');
   const accent = ok ? '#1a7f37' : '#cf222e';
   const payload = ok
@@ -3293,7 +3293,7 @@ function renderOAuthResultPage(opts) {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>${escapeHtml(title)} — Open Design</title>
+<title>${escapeHtml(title)} — Marketing AX</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root { color-scheme: light dark; }
@@ -6681,7 +6681,7 @@ export async function startServer({
       try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
     },
     handleProjectPluginCli: async (req, res, action) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(MAX_NODE_BIN, [MAX_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(MAX_NODE_BIN, [MAX_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Marketing AX PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Marketing AX PR flow at ${payload.prUrl}.` : 'Opened Marketing AX PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
     },
     handleCandidateDraft: async (req, res) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
@@ -9042,7 +9042,7 @@ export async function startServer({
     });
 
     // External MCP servers configured by the user in Settings → External MCP.
-    // Open Design relays them to the agent so the model can call those tools.
+    // Marketing AX relays them to the agent so the model can call those tools.
     // Two delivery shapes today:
     //   - Claude Code: write a `.mcp.json` into the project cwd. Claude Code
     //     auto-loads that file at spawn (same format the CLI accepts via
@@ -11151,7 +11151,7 @@ export async function startServer({
       systemPrompt: [
         renderOrbitTemplateSystemPrompt(template),
         systemPrompt,
-        'You are Orbit, an autonomous activity-summary agent inside Open Design.',
+        'You are Orbit, an autonomous activity-summary agent inside Marketing AX.',
         'You must discover connectors and connector tools yourself through the OD CLI; the daemon has not chosen tools for you.',
         'You must create and register a Live Artifact as the final deliverable. Do not merely describe what you would do.',
         'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
@@ -12580,7 +12580,7 @@ function assembleExample(templateHtml, slidesHtml, title) {
     .replace('<!-- SLIDES_HERE -->', slidesHtml)
     .replace(
       /<title>.*?<\/title>/,
-      `<title>${title} | Open Design Example</title>`,
+      `<title>${title} | Marketing AX Example</title>`,
     );
 }
 

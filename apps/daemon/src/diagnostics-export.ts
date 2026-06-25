@@ -84,7 +84,7 @@ export interface DiagnosticsHandlerOptions {
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
   runsDir?: string | null;
-  /** Open Design data dir (MAX_DATA_DIR), used to locate the AMR OpenCode home. */
+  /** Marketing AX data dir (MAX_DATA_DIR), used to locate the AMR OpenCode home. */
   dataDir?: string | null;
 }
 
@@ -189,11 +189,11 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         sources,
         redaction: { username },
         crashReports: {
-          // Restrict to Open Design's own process names. A generic "Electron"
+          // Restrict to Marketing AX's own process names. A generic "Electron"
           // substring would sweep up crash reports from any other Electron
           // app on the host (VS Code, Slack, …) and leak unrelated user data
           // into the support bundle.
-          matchSubstrings: ['Open Design', 'open-design'],
+          matchSubstrings: ['Marketing AX', 'open-design'],
           withinDays: 7,
           maxReports: 10,
           homeDir: home,

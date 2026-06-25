@@ -119,7 +119,7 @@ export function buildDesignManifestContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'Marketing AX artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
@@ -210,7 +210,7 @@ export function buildDesignHandoffContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Design artifact';
+  const title = opts.title || 'Marketing AX artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const accentLikelyBrandLed =
@@ -233,7 +233,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of Marketing AX chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -264,7 +264,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or Marketing AX chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
