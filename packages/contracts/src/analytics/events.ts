@@ -1117,7 +1117,7 @@ export interface ExecutionSettingsPopoverClickProps {
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
 // interface-language select, the appearance (system/light/dark) radio row,
-// the "Share Open Design" social grid, the Discord / follow-on-X links and
+// the "Share Open Design" social grid, the Discord / social follow links and
 // the Settings → details entry. The same popover is mounted both on the home
 // header and the in-project artifact header, hence the two-value page_name.
 export interface SettingsPopoverClickProps {
@@ -1129,6 +1129,8 @@ export interface SettingsPopoverClickProps {
     | 'share_channel'
     | 'join_discord'
     | 'follow_x'
+    | 'follow_threads'
+    | 'open_youtube'
     | 'open_settings';
   // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
   // element=appearance → system | light | dark.

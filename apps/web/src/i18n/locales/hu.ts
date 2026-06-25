@@ -491,6 +491,8 @@ export const hu: Dict = {
   'entry.discordAriaWithOnline': 'Csatlakozás az Open Design Discordhoz - {online}',
   'entry.discordOnlineLabel': '{count} online',
   'entry.followXLabel': 'Kövesd a @OpenDesignHQ fiókot az X-en',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'Oldalsáv átméretezése',
   'entry.loadingWorkspace': 'Munkaterület betöltése…',
   'entry.useEverywhereTitle': 'Használat bárhol',

@@ -30,6 +30,8 @@ import { SocialShareGrid } from './SocialShareGrid';
 
 const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
 const X_URL = 'https://x.com/OpenDesignHQ';
+const THREADS_URL = 'https://www.threads.com/@opendesign.ai';
+const YOUTUBE_URL = 'https://www.youtube.com/@Open-Design-ai';
 
 export type EntrySettingsSection =
   | 'execution'
@@ -384,6 +386,54 @@ export function EntrySettingsMenu({
               X
             </span>
             <span>{t('entry.followXLabel')}</span>
+            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+          </a>
+          <a
+            className="entry-settings-menu__item"
+            href={THREADS_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            role="menuitem"
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'follow_threads',
+              });
+              setOpen(false);
+            }}
+          >
+            <span
+              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
+              aria-hidden
+            >
+              @
+            </span>
+            <span>{t('entry.followThreadsLabel')}</span>
+            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+          </a>
+          <a
+            className="entry-settings-menu__item"
+            href={YOUTUBE_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            role="menuitem"
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'open_youtube',
+              });
+              setOpen(false);
+            }}
+          >
+            <span
+              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
+              aria-hidden
+            >
+              YT
+            </span>
+            <span>{t('entry.youtubeLabel')}</span>
             <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
           </a>
 

@@ -491,6 +491,8 @@ export const ja: Dict = {
   'entry.discordAriaWithOnline': 'Open Design の Discord に参加 - {online}',
   'entry.discordOnlineLabel': '{count} 人がオンライン',
   'entry.followXLabel': 'X で @OpenDesignHQ をフォロー',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'サイドバーをリサイズ',
   'entry.loadingWorkspace': 'ワークスペースを読み込み中…',
   'entry.useEverywhereTitle': 'どこでも使う',
