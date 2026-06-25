@@ -488,7 +488,7 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 	plan := &scheduler.ExecutionPlan{}
 
 	for i, spec := range cfg.Team.Agents {
-		plan.Tasks = append(plan.Tasks, scheduler.Task{
+		task := scheduler.Task{
 			ID: fmt.Sprintf("task-%s", spec.ID),
 			Prompt: func() string {
 				if i == 0 {
@@ -498,7 +498,18 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 			}(),
 			AssignedTo: spec.ID,
 			Timeout:    600,
-		})
+		}
+
+		// 对于继承模式，建立线性依赖链（task-N 依赖 task-N-1）
+		// 子任务通过 Dependencies 在 InheritanceScheduler.buildTree() 中
+		// 被挂到父任务下，形成继承树，确保 artifact/skills/designs 传递。
+		if cfg.Team.Mode == "inheritance" || cfg.Team.Mode == "serial" {
+			if i > 0 {
+				task.Dependencies = []string{fmt.Sprintf("task-%s", cfg.Team.Agents[i-1].ID)}
+			}
+		}
+
+		plan.Tasks = append(plan.Tasks, task)
 	}
 
 	// 互补模式：专家链
