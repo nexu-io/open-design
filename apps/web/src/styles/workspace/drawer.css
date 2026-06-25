@@ -1396,6 +1396,9 @@
   top: 0;
   z-index: 4;
 }
+.ws-tabs-shell:has(.entry-settings-menu__popover) {
+  z-index: 1900;
+}
 .ws-tabs-bar {
   display: flex;
   align-items: center;

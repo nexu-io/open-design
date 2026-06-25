@@ -35,8 +35,7 @@ interface Props {
   // own static placeholder instead). The parent gates this on "empty composer,
   // nothing else bound".
   active: boolean;
-  // Fired whenever the displayed scenario changes (including on first show), so
-  // the parent always knows which scenario a Send would submit.
+  // Fired whenever the displayed scenario changes (including on first show).
   onScenarioChange: (scenario: PlaceholderScenario) => void;
 }
 

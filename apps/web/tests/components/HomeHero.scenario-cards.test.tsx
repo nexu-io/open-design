@@ -8,17 +8,44 @@
 //   - The finer-grained scenarios (wireframe / mobile / document) exist and
 //     route to a working scenario plugin.
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const placeholderCarouselMock = vi.hoisted(() => ({
+  reportScenario: false,
+  reportedScenarioId: null as string | null,
+}));
+
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
-  PlaceholderCarousel: () => null,
+  PlaceholderCarousel: ({
+    scenarios,
+    active,
+    onScenarioChange,
+  }: {
+    scenarios: Array<{ id: string; chipId?: string | null; text: string }>;
+    active: boolean;
+    onScenarioChange: (scenario: { id: string; chipId?: string | null; text: string }) => void;
+  }) => {
+    const scenario = scenarios[0];
+    if (
+      placeholderCarouselMock.reportScenario &&
+      active &&
+      scenario &&
+      placeholderCarouselMock.reportedScenarioId !== scenario.id
+    ) {
+      placeholderCarouselMock.reportedScenarioId = scenario.id;
+      queueMicrotask(() => onScenarioChange(scenario));
+    }
+    return null;
+  },
 }));
 
 import { HomeHero } from '../../src/components/HomeHero';
 import { findChip, orderedCreateChips } from '../../src/components/home-hero/chips';
 
 afterEach(() => {
+  placeholderCarouselMock.reportScenario = false;
+  placeholderCarouselMock.reportedScenarioId = null;
   cleanup();
 });
 
@@ -76,5 +103,23 @@ describe('HomeHero scenario cards', () => {
       pluginId: 'od-new-generation',
       projectKind: 'other',
     });
+  });
+
+  it('keeps empty carousel scenario submit disabled while plugins are loading', async () => {
+    placeholderCarouselMock.reportScenario = true;
+    const onSubmit = vi.fn();
+    const onSubmitScenario = vi.fn();
+    renderHero({
+      pluginsLoading: true,
+      onSubmit,
+      onSubmitScenario,
+    });
+
+    await waitFor(() => expect(placeholderCarouselMock.reportedScenarioId).not.toBeNull());
+    const submit = screen.getByTestId('home-hero-submit') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onSubmitScenario).not.toHaveBeenCalled();
   });
 });
