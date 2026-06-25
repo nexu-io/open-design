@@ -4364,6 +4364,19 @@ export function ProjectView({
                   genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
                   genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
                 } else {
+                  if (runMayFinalize) {
+                    if (latestRunStatus.status === 'canceled') setError(null);
+                    updateAssistant((prev) => ({
+                      ...prev,
+                      endedAt: prev.endedAt ?? endedAt,
+                      runStatus: latestRunStatus.status,
+                      ...(latestRunStatus.resumable !== undefined
+                        ? { resumable: latestRunStatus.resumable }
+                        : {}),
+                    }));
+                  }
+                  finalRunStatusAfterError = latestRunStatus.status;
+                  refreshConversationAfterError = true;
                   completedReattachRunsRef.current.add(runIdForGenericDisconnect);
                   genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
                   genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);

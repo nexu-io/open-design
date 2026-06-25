@@ -2066,6 +2066,94 @@ afterEach(() => {
     });
   });
 
+  it('patches live generic-disconnect terminal metadata from a failed daemon status', async () => {
+    const runCreatedAt = Date.now();
+    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
+    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE) as Error & {
+      resumable?: boolean;
+    };
+    genericDisconnect.resumable = false;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-live-terminal-failed',
+        status: 'failed',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: 1,
+        signal: null,
+        resumable: true,
+      })
+      .mockResolvedValue({
+        id: 'run-live-terminal-failed',
+        status: 'failed',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: 1,
+        signal: null,
+        resumable: true,
+      });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-live-terminal-failed');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-terminal-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal failed after disconnect', [], []);
+
+    await waitFor(() => {
+      const failedSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-live-terminal-failed' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-live-terminal-failed' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.resumable === true,
+      );
+      expect(failedSave).toBeTruthy();
+    });
+  });
+
   it('keeps reload artifact recovery retryable after a transient persistence miss', async () => {
     const runCreatedAt = Date.now();
     const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);
