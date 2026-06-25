@@ -9,7 +9,7 @@ const execFile = promisify(execFileCallback);
 
 const stableVersionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
 const stableReleaseBranchPattern = /^release\/v(\d+\.\d+\.\d+)$/;
-const stableTagPattern = /^open-design-v(\d+\.\d+\.\d+)$/;
+const stableTagPattern = /^marketing-ax-v(\d+\.\d+\.\d+)$/;
 const nightlyVersionPattern = /^(\d+\.\d+\.\d+)\.nightly\.(\d+)$/;
 
 type ReleaseChannel = "nightly" | "stable";
@@ -509,7 +509,7 @@ if (stableBaseVersion.value !== packagedVersion) {
 }
 
 const releases = await fetchReleases(repository);
-const versionTag = `open-design-v${packagedVersion}`;
+const versionTag = `marketing-ax-v${packagedVersion}`;
 
 let latestStable: ParsedStableVersion | null = null;
 for (const release of releases) {

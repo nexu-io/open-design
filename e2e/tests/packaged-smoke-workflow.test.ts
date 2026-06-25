@@ -292,7 +292,7 @@ describe("packaged smoke workflow", () => {
       expect(result.stdout).toContain("[release-stable] validated nightly: 0.10.0.nightly.12");
       expect(result.stdout).toContain("[release-stable] channel: stable");
       expect(result.stdout).toContain("[release-stable] dry run: true");
-      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.10.0");
+      expect(result.stdout).toContain("[release-stable] version tag: marketing-ax-v0.10.0");
     } finally {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });
