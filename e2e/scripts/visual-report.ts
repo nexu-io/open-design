@@ -15,6 +15,8 @@ const inlineCaseLimit = 20;
 const pixelThreshold = 0.1;
 const changedPixelFloor = 500;
 const changedPixelRatioFloor = 0.03;
+const comparisonImageWidth = 260;
+const singleImageWidth = 640;
 const diffBoxPadding = 6;
 const diffBoxMergeDistance = 12;
 const diffBoxStrokeWidth = 3;
@@ -654,23 +656,21 @@ function renderCaseList(cases: ComparedCase[], includeDiff = true): string[] {
     if (includeDiff) {
       lines.push(
         '',
-        `<strong>Main</strong><br>${imageCell(visualCase.mainUrl, 'main')}`,
-        '',
-        `<strong>PR</strong><br>${imageCell(visualCase.prUrl, 'pr')}`,
-        '',
-        `<strong>Diff</strong><br>${imageCell(visualCase.diffUrl, 'diff')}`,
+        '| Main | PR | Diff |',
+        '| --- | --- | --- |',
+        `| ${imageCell(visualCase.mainUrl, 'main', comparisonImageWidth)} | ${imageCell(visualCase.prUrl, 'pr', comparisonImageWidth)} | ${imageCell(visualCase.diffUrl, 'diff', comparisonImageWidth)} |`,
         '',
       );
     } else {
-      lines.push('', `<strong>PR</strong><br>${imageCell(visualCase.prUrl, 'pr')}`, '');
+      lines.push('', `<strong>PR</strong><br>${imageCell(visualCase.prUrl, 'pr', singleImageWidth)}`, '');
     }
   }
 
   return lines;
 }
 
-function imageCell(url: string | undefined, alt: string): string {
-  return url == null ? 'n/a' : `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="640">`;
+function imageCell(url: string | undefined, alt: string, width: number): string {
+  return url == null ? 'n/a' : `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="${width}">`;
 }
 
 function formatPercent(value: number): string {
