@@ -113,6 +113,11 @@ func (s *InheritanceScheduler) executeNode(ctx context.Context, node *treeNode, 
 		inheritCtx.ParentTask = parentResult.TaskID
 		inheritCtx.AgentID = parentResult.AgentID
 		inheritCtx.Artifacts = append(inheritCtx.Artifacts, parentResult.Artifacts...)
+		// 继承父 agent 的技能和设计系统
+		if parentRuntime, err := s.pool.GetRuntime(parentResult.AgentID); err == nil {
+			inheritCtx.Skills = append(inheritCtx.Skills, parentRuntime.Capability.Skills...)
+			inheritCtx.Designs = append(inheritCtx.Designs, parentRuntime.Capability.Designs...)
+		}
 		// 传递继承深度信息（安全访问，防止空 Artifacts 导致 panic）
 		inheritCtx.Memory["inheritance_depth"] = 1
 		if len(parentResult.Artifacts) > 0 {
