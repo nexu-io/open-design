@@ -1,4 +1,4 @@
-name = "open-design-telemetry-relay"
+name = "marketing-ax-telemetry-relay"
 account_id = "64ad4569ffd912432d6b86d5656484c4"
 main = "src/index.ts"
 compatibility_date = "2026-05-01"
@@ -15,7 +15,7 @@ TRACE_OBJECT_BATCH_MAX_BYTES = "20971520"
 
 [[r2_buckets]]
 binding = "TRACE_OBJECT_BUCKET"
-bucket_name = "open-design-observability"
+bucket_name = "marketing-ax-observability"
 
 [[ratelimits]]
 name = "TELEMETRY_CLIENT_RATE_LIMITER"
