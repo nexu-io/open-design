@@ -1413,6 +1413,82 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('restores the saved OpenAI draft when switching from deployment back to BYOK', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({ ok: true, kind: 'success', latencyMs: 10, models: [] });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({ ok: true, kind: 'success', latencyMs: 10 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'openai-key',
+        baseUrl: 'https://openai-proxy.example.com',
+        model: 'openai-model',
+        apiProviderBaseUrl: null,
+      }),
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Workspace provider',
+        kind: 'available',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Workspace provider/i }));
+    await waitFor(() => {
+      expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])
+        .toMatchObject({
+          apiCredentialSource: 'deployment',
+          model: 'gpt-routed',
+        });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('openai-key');
+    });
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'edited-openai-key' },
+    });
+
+    await waitFor(() => {
+      expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])
+        .toMatchObject({
+          apiProtocol: 'openai',
+          apiCredentialSource: 'user',
+          apiKey: 'edited-openai-key',
+          baseUrl: 'https://openai-proxy.example.com',
+          model: 'openai-model',
+          apiProtocolConfigs: {
+            openai: {
+              apiCredentialSource: 'user',
+              apiKey: 'edited-openai-key',
+              baseUrl: 'https://openai-proxy.example.com',
+              model: 'openai-model',
+              apiProviderBaseUrl: null,
+            },
+          },
+        });
+    });
+  });
+
   it('automatically fetches BYOK models and tests the selected model in onboarding', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);

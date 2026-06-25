@@ -1682,6 +1682,43 @@ function OnboardingView({
     };
   }
 
+  function restoredOpenAiUserDraftConfig(): AppConfig | null {
+    if (config.apiProtocol !== 'openai' || config.apiCredentialSource !== 'deployment') {
+      return null;
+    }
+    const openAiUserDraft = preservedOpenAiUserDraft();
+    if (!openAiUserDraft) return null;
+    return {
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: openAiUserDraft.apiKey,
+      baseUrl: openAiUserDraft.baseUrl,
+      model: openAiUserDraft.model,
+      apiVersion: openAiUserDraft.apiVersion ?? '',
+      apiProviderBaseUrl: openAiUserDraft.apiProviderBaseUrl ?? null,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        openai: {
+          ...openAiUserDraft,
+          apiCredentialSource: 'user',
+        },
+      },
+    };
+  }
+
+  function selectByokRuntime(): void {
+    const restoredConfig = restoredOpenAiUserDraftConfig();
+    setRuntime('byok');
+    onModeChange('api');
+    if (restoredConfig) {
+      onApiModelChange(restoredConfig.model);
+      persistOnboardingConfig(restoredConfig);
+    }
+    setConnectExpanded('byok');
+  }
+
   function selectDeploymentProvider(): void {
     if (!deploymentProviderAvailable) return;
     const model = deploymentProviderConfig?.defaultModel?.trim() ?? '';
@@ -2426,9 +2463,7 @@ function OnboardingView({
                 className="onboarding-cloud__secondary"
                 onClick={() => {
                   emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                  setRuntime('byok');
-                  onModeChange('api');
-                  setConnectExpanded('byok');
+                  selectByokRuntime();
                 }}
               >
                 {t('settings.onboardingByokTitle')}
