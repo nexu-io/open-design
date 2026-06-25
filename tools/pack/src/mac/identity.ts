@@ -46,17 +46,17 @@ function productNameForChannel(channel: ReleaseChannelIdentity): string {
 }
 
 function appIdForChannel(channel: ReleaseChannelIdentity): string {
-  if (channel === "beta") return "io.open-design.desktop.beta";
-  if (channel === "nightly") return "io.open-design.desktop.nightly";
-  if (channel === "preview") return "io.open-design.desktop.preview";
-  return "io.open-design.desktop";
+  if (channel === "beta") return "io.marketing-ax.desktop.beta";
+  if (channel === "nightly") return "io.marketing-ax.desktop.nightly";
+  if (channel === "preview") return "io.marketing-ax.desktop.preview";
+  return "io.marketing-ax.desktop";
 }
 
 export function resolveMacInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "appVersion">): MacInstallIdentity {
   const namespaceToken = sanitizeNamespace(config.namespace);
   const channel = channelFromVersion(config.appVersion) ?? channelFromNamespace(config.namespace);
   const channelIdentity = channel == null
-    ? { appId: "io.open-design.desktop", productName: PRODUCT_NAME }
+    ? { appId: "io.marketing-ax.desktop", productName: PRODUCT_NAME }
     : { appId: appIdForChannel(channel), productName: productNameForChannel(channel) };
   const publicAppBundleName = `${channelIdentity.productName}.app`;
   const systemAppBundleName = channel != null
