@@ -11,7 +11,7 @@
 //    `app_user_id`.
 
 import { describe, expect, it } from 'vitest';
-import { deriveConfigureGlobals } from '@open-design/contracts/analytics';
+import { deriveConfigureGlobals } from '@marketing-ax/contracts/analytics';
 import {
   readVelaLoginStatus,
   type VelaLoginStatus,

@@ -22,8 +22,8 @@ describe('host bridge boundary', () => {
       'electronAPI',
       '__odDesktop',
       '__OD_CLIENT_TYPE__',
-      '__od__',
-      'OPEN_DESIGN_HOST_GLOBAL',
+      '__max__',
+      'MARKETING_AX_HOST_GLOBAL',
     ];
     const candidates = [
       ...filesUnder(join(webRoot, 'src')),

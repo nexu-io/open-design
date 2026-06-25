@@ -8,7 +8,7 @@
 // returns the exact ApplyResult those hosts already hydrate from.
 
 import { useEffect, useState } from 'react';
-import type { ApplyResult, InstalledPluginRecord } from '@open-design/contracts';
+import type { ApplyResult, InstalledPluginRecord } from '@marketing-ax/contracts';
 import { applyPlugin } from '../state/projects';
 import { navigate } from '../router';
 import { useI18n } from '../i18n';

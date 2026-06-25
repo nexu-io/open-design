@@ -63,13 +63,13 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
   };
 }
 
-const envState = { odDataDir: process.env.OD_DATA_DIR };
+const envState = { odDataDir: process.env.MAX_DATA_DIR };
 
 afterEach(() => {
   if (envState.odDataDir == null) {
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_DATA_DIR;
   } else {
-    process.env.OD_DATA_DIR = envState.odDataDir;
+    process.env.MAX_DATA_DIR = envState.odDataDir;
   }
 });
 
@@ -77,13 +77,13 @@ describe("resolveSeededAppConfigPaths", () => {
   it("uses workspace .od by default", () => {
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
-      sourcePath: join("/work", ".od", "app-config.json"),
+      sourcePath: join("/work", ".max", "app-config.json"),
       targetPath: join("/work", ".tmp", "tools-pack", "runtime", "mac", "namespaces", "local-test", "data", "app-config.json"),
     });
   });
 
-  it("prefers OD_DATA_DIR when provided", () => {
-    process.env.OD_DATA_DIR = "/custom/data";
+  it("prefers MAX_DATA_DIR when provided", () => {
+    process.env.MAX_DATA_DIR = "/custom/data";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
       sourcePath: join("/custom/data", "app-config.json"),
@@ -91,17 +91,17 @@ describe("resolveSeededAppConfigPaths", () => {
     });
   });
 
-  it("resolves relative OD_DATA_DIR against the workspace root", () => {
-    process.env.OD_DATA_DIR = "e2e/ui/.od-data";
+  it("resolves relative MAX_DATA_DIR against the workspace root", () => {
+    process.env.MAX_DATA_DIR = "e2e/ui/.max-data";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
-      sourcePath: resolve("/work", "e2e", "ui", ".od-data", "app-config.json"),
+      sourcePath: resolve("/work", "e2e", "ui", ".max-data", "app-config.json"),
       targetPath: join("/work", ".tmp", "tools-pack", "runtime", "mac", "namespaces", "local-test", "data", "app-config.json"),
     });
   });
 
-  it("expands $HOME-style OD_DATA_DIR values", () => {
-    process.env.OD_DATA_DIR = "$HOME/.open-design";
+  it("expands $HOME-style MAX_DATA_DIR values", () => {
+    process.env.MAX_DATA_DIR = "$HOME/.open-design";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
       sourcePath: join(os.homedir(), ".open-design", "app-config.json"),
@@ -115,7 +115,7 @@ describe("seedPackagedAppConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const config = makeConfig(root);
-      const sourceDir = join(root, ".od");
+      const sourceDir = join(root, ".max");
       await mkdir(sourceDir, { recursive: true });
       await writeFile(
         join(sourceDir, "app-config.json"),
@@ -137,7 +137,7 @@ describe("seedPackagedAppConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const config = makeConfig(root, { portable: true });
-      const sourceDir = join(root, ".od");
+      const sourceDir = join(root, ".max");
       await mkdir(sourceDir, { recursive: true });
       await writeFile(join(sourceDir, "app-config.json"), "{\n  \"agentId\": \"codex\"\n}\n", "utf8");
 
@@ -339,7 +339,7 @@ describe("writeLaunchPackagedConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const config = makeConfig(root, { namespace: "release-beta", portable: true });
-      const appPath = join(root, "Open Design.app");
+      const appPath = join(root, "Marketing AX.app");
       const embeddedConfigPath = join(appPath, "Contents", "Resources", "open-design-config.json");
       await mkdir(dirname(embeddedConfigPath), { recursive: true });
       await writeFile(

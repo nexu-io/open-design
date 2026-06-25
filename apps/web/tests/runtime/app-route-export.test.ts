@@ -11,7 +11,7 @@ async function loadNextConfig() {
 }
 
 afterEach(() => {
-  delete process.env.OD_WEB_DIST_DIR;
+  delete process.env.MAX_WEB_DIST_DIR;
   vi.resetModules();
 });
 
@@ -26,7 +26,7 @@ describe('SPA shell export route', () => {
 
   it('keeps an explicit dist dir override even when static export is selected', async () => {
     const configuredDistDir = resolve(WEB_ROOT, '.tmp', 'vitest-next');
-    process.env.OD_WEB_DIST_DIR = configuredDistDir;
+    process.env.MAX_WEB_DIST_DIR = configuredDistDir;
 
     const nextConfig = await loadNextConfig();
 
@@ -35,7 +35,7 @@ describe('SPA shell export route', () => {
   });
 
   it('treats an empty dist dir override as unset for static export builds', async () => {
-    process.env.OD_WEB_DIST_DIR = '';
+    process.env.MAX_WEB_DIST_DIR = '';
 
     const nextConfig = await loadNextConfig();
 

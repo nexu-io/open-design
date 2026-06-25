@@ -204,7 +204,7 @@ test('[P0] onboarding AMR card lets the user pick a live runtime model before co
   await gotoOnboarding(page);
 
   const amrCard = page.locator('.onboarding-view__amr-cloud-card');
-  await expect(amrCard.getByRole('button', { name: /Open Design AMR/i })).toBeVisible();
+  await expect(amrCard.getByRole('button', { name: /Marketing AX AMR/i })).toBeVisible();
   const selectedModel = 'glm-5.1';
   await selectOnboardingOption(amrCard, 'Model', 'GLM 5.1');
   await expect(expectOnboardingTrigger(amrCard, 'Model')).toContainText('GLM 5.1');
@@ -245,7 +245,7 @@ test('[P0] @critical onboarding signed-in AMR path finishes setup with the selec
   await gotoOnboarding(page);
 
   const amrCard = page.locator('.onboarding-view__amr-cloud-card');
-  await expect(amrCard.getByRole('button', { name: /Open Design AMR/i })).toBeVisible();
+  await expect(amrCard.getByRole('button', { name: /Marketing AX AMR/i })).toBeVisible();
   await expect(amrCard).toContainText('Officially recommended');
   await expect(amrCard).toContainText('No deploy needed');
   await selectOnboardingOption(amrCard, 'Model', 'DeepSeek V4 Flash');

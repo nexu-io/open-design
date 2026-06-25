@@ -118,7 +118,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
+  it('reaches Contribute (share to Marketing AX) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
     render(
@@ -302,7 +302,7 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
               kind: 'status',
               label: 'error',
               detail:
-                'AMR Cloud reported insufficient balance. Recharge at https://open-design.ai/amr/wallet, then retry.',
+                'AMR Cloud reported insufficient balance. Recharge at https://marketing-ax.example/amr/wallet, then retry.',
             } as ChatMessage['events'][number],
           ],
         })}
@@ -312,8 +312,8 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
       />,
     );
 
-    const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/wallet' });
-    expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/wallet');
+    const link = screen.getByRole('link', { name: 'https://marketing-ax.example/amr/wallet' });
+    expect(link.getAttribute('href')).toBe('https://marketing-ax.example/amr/wallet');
     expect(link.classList.contains('md-link')).toBe(true);
   });
 });

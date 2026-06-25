@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
-import { SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@marketing-ax/sidecar-proto';
 
 import { createAgentRuntimeEnv, createAgentRuntimeToolPrompt } from '../src/server.js';
 import { applyAgentLaunchEnv } from '../src/runtimes/launch.js';
@@ -9,7 +9,7 @@ import { applyAgentLaunchEnv } from '../src/runtimes/launch.js';
 describe('agent runtime tool environment', () => {
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {
     const env = createAgentRuntimeEnv(
-      { PATH: '/bin', OD_TOOL_TOKEN: 'stale-token' },
+      { PATH: '/bin', MAX_TOOL_TOKEN: 'stale-token' },
       'http://127.0.0.1:7456',
       { token: 'fresh-token' },
       '/opt/open-design/bin/node',
@@ -17,9 +17,9 @@ describe('agent runtime tool environment', () => {
 
     expect(env).toMatchObject({
       PATH: `/opt/open-design/bin${path.delimiter}/bin`,
-      OD_DAEMON_URL: 'http://127.0.0.1:7456',
-      OD_NODE_BIN: '/opt/open-design/bin/node',
-      OD_TOOL_TOKEN: 'fresh-token',
+      MAX_DAEMON_URL: 'http://127.0.0.1:7456',
+      MAX_NODE_BIN: '/opt/open-design/bin/node',
+      MAX_TOOL_TOKEN: 'fresh-token',
     });
   });
 
@@ -65,15 +65,15 @@ describe('agent runtime tool environment', () => {
 
   it('does not leak stale inherited tool tokens when no run token was minted', () => {
     const env = createAgentRuntimeEnv(
-      { PATH: '/bin', OD_TOOL_TOKEN: 'stale-token' },
+      { PATH: '/bin', MAX_TOOL_TOKEN: 'stale-token' },
       'http://127.0.0.1:7456',
       null,
       '/opt/open-design/bin/node',
     );
 
-    expect(env.OD_DAEMON_URL).toBe('http://127.0.0.1:7456');
-    expect(env.OD_NODE_BIN).toBe('/opt/open-design/bin/node');
-    expect(env.OD_TOOL_TOKEN).toBeUndefined();
+    expect(env.MAX_DAEMON_URL).toBe('http://127.0.0.1:7456');
+    expect(env.MAX_NODE_BIN).toBe('/opt/open-design/bin/node');
+    expect(env.MAX_TOOL_TOKEN).toBeUndefined();
   });
 
   it('pins the daemon runtime data dir into agent sessions', () => {
@@ -84,7 +84,7 @@ describe('agent runtime tool environment', () => {
       '/opt/open-design/bin/node',
     );
 
-    expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
+    expect(env.MAX_DATA_DIR).toBe(process.env.MAX_DATA_DIR);
   });
 
   it('keeps non-sandbox NO_PROXY behavior unchanged', () => {
@@ -102,17 +102,17 @@ describe('agent runtime tool environment', () => {
 
   it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
     const env = createAgentRuntimeEnv(
-      { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },
+      { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/daemon.sock' },
       'http://127.0.0.1:7456',
       null,
       '/opt/open-design/bin/node',
     );
 
-    expect(env[SIDECAR_ENV.IPC_PATH]).toBe('/tmp/open-design/ipc/daemon.sock');
+    expect(env[SIDECAR_ENV.IPC_PATH]).toBe('/tmp/marketing-ax/ipc/daemon.sock');
   });
 
   it('does not pull the daemon sidecar IPC path from ambient process state', () => {
-    vi.stubEnv(SIDECAR_ENV.IPC_PATH, '/tmp/open-design/ipc/stale.sock');
+    vi.stubEnv(SIDECAR_ENV.IPC_PATH, '/tmp/marketing-ax/ipc/stale.sock');
     try {
       const env = createAgentRuntimeEnv(
         { PATH: '/bin' },
@@ -133,11 +133,11 @@ describe('agent runtime tool environment', () => {
     });
 
     expect(prompt).toContain('Daemon URL: `http://127.0.0.1:7456`');
-    expect(prompt).toContain('`OD_DAEMON_URL`');
-    expect(prompt).toContain('`OD_NODE_BIN`');
-    expect(prompt).toContain('`"$OD_NODE_BIN" "$OD_BIN" tools ...`');
-    expect(prompt).toContain('& $env:OD_NODE_BIN $env:OD_BIN tools ...');
-    expect(prompt).toContain('`OD_TOOL_TOKEN` is available');
+    expect(prompt).toContain('`MAX_DAEMON_URL`');
+    expect(prompt).toContain('`MAX_NODE_BIN`');
+    expect(prompt).toContain('`"$MAX_NODE_BIN" "$MAX_BIN" tools ...`');
+    expect(prompt).toContain('& $env:MAX_NODE_BIN $env:MAX_BIN tools ...');
+    expect(prompt).toContain('`MAX_TOOL_TOKEN` is available');
     expect(prompt).toContain('do not print, persist, or override it');
     expect(prompt).not.toContain('secret-run-token');
   });
@@ -146,7 +146,7 @@ describe('agent runtime tool environment', () => {
     const prompt = createAgentRuntimeToolPrompt('http://127.0.0.1:7456', null);
 
     expect(prompt).toContain('Daemon URL: `http://127.0.0.1:7456`');
-    expect(prompt).toContain('`OD_TOOL_TOKEN` is not available');
+    expect(prompt).toContain('`MAX_TOOL_TOKEN` is not available');
     expect(prompt).not.toContain('Bearer');
   });
 });

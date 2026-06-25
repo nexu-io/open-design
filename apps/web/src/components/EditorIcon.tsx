@@ -2,7 +2,7 @@
 // marks rather than generic pictograms; the menu is primarily a target picker,
 // so users should recognize the destination at a glance.
 
-import type { HostEditorId } from '@open-design/contracts';
+import type { HostEditorId } from '@marketing-ax/contracts';
 
 interface Props {
   editorId: HostEditorId | string;

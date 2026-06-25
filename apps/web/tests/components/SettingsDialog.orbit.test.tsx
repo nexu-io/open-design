@@ -3,7 +3,7 @@
 import { StrictMode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail } from '@marketing-ax/contracts';
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import { fetchConnectors, fetchDesignTemplates, fetchSkills } from '../../src/providers/registry';

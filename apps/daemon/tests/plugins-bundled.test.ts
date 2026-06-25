@@ -7,7 +7,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { listInstalledPlugins, upsertInstalledPlugin } from '../src/plugins/registry.js';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
 
 let db: Database.Database;
@@ -15,7 +15,7 @@ let tmpRoot: string;
 
 const SAMPLE_MANIFEST = (id: string) =>
   JSON.stringify({
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     title: id,
     version: '0.1.0',

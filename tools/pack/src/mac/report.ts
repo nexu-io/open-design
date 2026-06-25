@@ -84,9 +84,9 @@ export async function collectMacSizeReport(
       sourcemapBytes: await sizePathBytes(paths.appPath, { includeFile: (path) => path.endsWith(".map") }),
       tsbuildInfoBytes: await sizePathBytes(paths.appPath, { includeFile: (path) => path.endsWith(".tsbuildinfo") }),
       webCopiedStandaloneBytes: await sizePathBytes(join(appResourcesRoot, WEB_STANDALONE_RESOURCE_NAME)),
-      webNextCacheBytes: await sizePathBytes(join(appNodeModulesRoot, "@open-design", "web", ".next", "cache")),
-      webPackageBytes: await sizePathBytes(join(appNodeModulesRoot, "@open-design", "web")),
-      webPackageStandaloneBytes: await sizePathBytes(join(appNodeModulesRoot, "@open-design", "web", ".next", "standalone")),
+      webNextCacheBytes: await sizePathBytes(join(appNodeModulesRoot, "@marketing-ax", "web", ".next", "cache")),
+      webPackageBytes: await sizePathBytes(join(appNodeModulesRoot, "@marketing-ax", "web")),
+      webPackageStandaloneBytes: await sizePathBytes(join(appNodeModulesRoot, "@marketing-ax", "web", ".next", "standalone")),
     },
     zipBytes: artifacts.zipPath == null ? null : await sizeExistingFileBytes(artifacts.zipPath),
   };

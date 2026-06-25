@@ -1,9 +1,9 @@
-name: open-design
+name: marketing-ax
 
 services:
-  open-design:
-    container_name: open-design
-    image: ${OPEN_DESIGN_IMAGE:-docker.io/vanjayak/open-design:latest}
+  marketing-ax:
+    container_name: marketing-ax
+    image: ${MARKETING_AX_IMAGE:-docker.io/vanjayak/marketing-ax:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -11,22 +11,22 @@ services:
     environment:
       NODE_ENV: production
       NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=192}
-      OD_BIND_HOST: 0.0.0.0
-      OD_ALLOWED_ORIGINS: ${OPEN_DESIGN_ALLOWED_ORIGINS:-}
-      OD_PORT: 7456
-      OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
-      OD_API_TOKEN: ${OD_API_TOKEN:?Please run 'openssl rand -hex 32' to generate one, and set it in your .env file.}
-      OD_CODEX_SANDBOX: ${OD_CODEX_SANDBOX:-}
+      MAX_BIND_HOST: 0.0.0.0
+      MAX_ALLOWED_ORIGINS: ${MARKETING_AX_ALLOWED_ORIGINS:-}
+      MAX_PORT: 7456
+      MAX_WEB_PORT: ${MARKETING_AX_PORT:-7456}
+      MAX_API_TOKEN: ${MAX_API_TOKEN:?Please run 'openssl rand -hex 32' to generate one, and set it in your .env file.}
+      MAX_CODEX_SANDBOX: ${MAX_CODEX_SANDBOX:-}
     ports:
-      - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"
+      - "127.0.0.1:${MARKETING_AX_PORT:-7456}:7456"
     volumes:
-      - open_design_data:/app/.od
+      - open_design_data:/app/.max
     read_only: true
     tmpfs:
       - /tmp
     security_opt:
       - no-new-privileges:true
-    mem_limit: ${OPEN_DESIGN_MEM_LIMIT:-384m}
+    mem_limit: ${MARKETING_AX_MEM_LIMIT:-384m}
     pids_limit: 256
     healthcheck:
       test:

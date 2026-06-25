@@ -20,19 +20,19 @@ import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/deskt
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
-const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
-const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta';
-const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
-const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
+const toolsPackDir = resolveFromWorkspace(process.env.MAX_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
+const namespace = process.env.MAX_PACKAGED_E2E_NAMESPACE ?? 'release-beta';
+const releaseChannel = process.env.MAX_PACKAGED_E2E_RELEASE_CHANNEL;
+const releaseVersion = process.env.MAX_PACKAGED_E2E_RELEASE_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion });
 const toolsPackReleaseVersionArgs = releaseAppVersionArgs(releaseVersion);
-const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
+const pnpmCommand = process.env.MAX_E2E_PNPM_COMMAND ?? 'pnpm';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
-const smokeProfile = process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? 'core';
+const smokeProfile = process.env.MAX_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? 'core';
 const verifyCoreOnly = smokeProfile === 'core';
-const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
-const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
-const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
+const updateMetadataUrl = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
+const updateVersion = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_MAC_UPDATE_VERSION);
+const updateBuildJsonPath = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -205,9 +205,9 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
-const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
+const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.MAX_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
-const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
+const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.MAX_DESKTOP_SMOKE === '1';
 const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 
 macDescribe('packaged mac runtime smoke', () => {
@@ -1249,7 +1249,7 @@ async function resolveLocalPayloadUpdateFixture(): Promise<{ payloadPath: string
   const fallbackBuildJsonPath = resolveFallbackUpdateBuildJsonPath();
   if (fallbackBuildJsonPath == null) {
     throw new Error(
-      'full packaged mac payload smoke requires update payload metadata; set OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL or provide mac-tools-pack-update-build.json next to OD_PACKAGED_E2E_BUILD_JSON_PATH',
+      'full packaged mac payload smoke requires update payload metadata; set MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL or provide mac-tools-pack-update-build.json next to MAX_PACKAGED_E2E_BUILD_JSON_PATH',
     );
   }
   const updateBuild = JSON.parse(stripUtf8Bom(await readFile(fallbackBuildJsonPath, 'utf8'))) as {
@@ -1275,7 +1275,7 @@ async function resolveLocalPayloadUpdateFixture(): Promise<{ payloadPath: string
 
 function resolveFallbackUpdateBuildJsonPath(): string | null {
   if (updateBuildJsonPath != null && updateBuildJsonPath !== '') return resolveFromWorkspace(updateBuildJsonPath);
-  const mainBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
+  const mainBuildJsonPath = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_BUILD_JSON_PATH);
   if (mainBuildJsonPath == null || mainBuildJsonPath === '') return null;
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'mac-tools-pack-update-build.json');
 }
@@ -1292,11 +1292,11 @@ function stripUtf8Bom(value: string): string {
 }
 
 const UPDATE_ENV_KEYS = [
-  'OD_UPDATE_AUTO_CHECK',
-  'OD_UPDATE_ENABLED',
-  'OD_UPDATE_METADATA_URL',
-  'OD_UPDATE_CURRENT_VERSION',
-  'OD_UPDATE_OPEN_DRY_RUN',
+  'MAX_UPDATE_AUTO_CHECK',
+  'MAX_UPDATE_ENABLED',
+  'MAX_UPDATE_METADATA_URL',
+  'MAX_UPDATE_CURRENT_VERSION',
+  'MAX_UPDATE_OPEN_DRY_RUN',
 ] as const;
 
 function captureUpdateEnv(): Partial<Record<(typeof UPDATE_ENV_KEYS)[number], string>> {

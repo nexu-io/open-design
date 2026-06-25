@@ -14,7 +14,7 @@ test('AGENT_DEFS ids are unique', () => {
 test('local agent profiles inherit a base adapter and can pin the default model', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-'));
   try {
-    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+    await withEnvSnapshot(['MAX_AGENT_PROFILES_CONFIG'], async () => {
       const config = join(dir, 'agents.local.json');
       writeFileSync(
         config,
@@ -40,7 +40,7 @@ test('local agent profiles inherit a base adapter and can pin the default model'
           ],
         }),
       );
-      process.env.OD_AGENT_PROFILES_CONFIG = config;
+      process.env.MAX_AGENT_PROFILES_CONFIG = config;
 
       const profiles = readLocalAgentProfileDefs();
       assert.equal(profiles.length, 1);
@@ -77,7 +77,7 @@ test('local agent profiles inherit a base adapter and can pin the default model'
 test('local agent profiles skip explicit unknown baseAgent without falling back', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-invalid-'));
   try {
-    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+    await withEnvSnapshot(['MAX_AGENT_PROFILES_CONFIG'], async () => {
       const config = join(dir, 'agents.local.json');
       writeFileSync(
         config,
@@ -90,7 +90,7 @@ test('local agent profiles skip explicit unknown baseAgent without falling back'
           ],
         }),
       );
-      process.env.OD_AGENT_PROFILES_CONFIG = config;
+      process.env.MAX_AGENT_PROFILES_CONFIG = config;
 
       const profiles = readLocalAgentProfileDefs();
 
@@ -105,7 +105,7 @@ test('local agent profiles skip explicit unknown baseAgent without falling back'
 test('sandbox mode ignores implicit and host explicit local agent profiles', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-sandbox-'));
   try {
-    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG', 'OD_SANDBOX_MODE', 'OD_DATA_DIR'], async () => {
+    await withEnvSnapshot(['MAX_AGENT_PROFILES_CONFIG', 'MAX_SANDBOX_MODE', 'MAX_DATA_DIR'], async () => {
       const config = join(dir, 'agents.local.json');
       writeFileSync(
         config,
@@ -114,12 +114,12 @@ test('sandbox mode ignores implicit and host explicit local agent profiles', asy
         }),
       );
 
-      process.env.OD_SANDBOX_MODE = '1';
-      delete process.env.OD_DATA_DIR;
-      delete process.env.OD_AGENT_PROFILES_CONFIG;
+      process.env.MAX_SANDBOX_MODE = '1';
+      delete process.env.MAX_DATA_DIR;
+      delete process.env.MAX_AGENT_PROFILES_CONFIG;
       assert.deepEqual(readLocalAgentProfileDefs(), []);
 
-      process.env.OD_AGENT_PROFILES_CONFIG = config;
+      process.env.MAX_AGENT_PROFILES_CONFIG = config;
       assert.deepEqual(readLocalAgentProfileDefs(), []);
     });
   } finally {
@@ -127,10 +127,10 @@ test('sandbox mode ignores implicit and host explicit local agent profiles', asy
   }
 });
 
-test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
-    process.env.OD_CODEX_DISABLE_PLUGINS = '1';
-    delete process.env.OD_CODEX_SANDBOX;
+test('codex args disable plugins when MAX_CODEX_DISABLE_PLUGINS is 1', () => {
+  withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX'], () => {
+    process.env.MAX_CODEX_DISABLE_PLUGINS = '1';
+    delete process.env.MAX_CODEX_SANDBOX;
 
     withPlatform('darwin', () => {
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
@@ -153,9 +153,9 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
 });
 
 test('codex args use workspace-write sandbox on macOS and Linux', () => {
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
-    delete process.env.OD_CODEX_DISABLE_PLUGINS;
-    delete process.env.OD_CODEX_SANDBOX;
+  withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+    delete process.env.MAX_CODEX_DISABLE_PLUGINS;
+    delete process.env.MAX_CODEX_SANDBOX;
 
     for (const platform of ['darwin', 'linux'] as const) {
       withPlatform(platform, () => {
@@ -184,9 +184,9 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
 
 test('codex args use danger-full-access sandbox on WSL because workspace-write stays read-only', () => {
   withPlatform('linux', () => {
-    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
-      delete process.env.OD_CODEX_DISABLE_PLUGINS;
-      delete process.env.OD_CODEX_SANDBOX;
+    withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.MAX_CODEX_DISABLE_PLUGINS;
+      delete process.env.MAX_CODEX_SANDBOX;
       process.env.WSL_DISTRO_NAME = 'Ubuntu';
       assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), true);
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
@@ -202,11 +202,11 @@ test('codex args use danger-full-access sandbox on WSL because workspace-write s
   });
 });
 
-test('codex args allow OD_CODEX_SANDBOX danger-full-access override on Linux', () => {
+test('codex args allow MAX_CODEX_SANDBOX danger-full-access override on Linux', () => {
   withPlatform('linux', () => {
-    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
-      delete process.env.OD_CODEX_DISABLE_PLUGINS;
-      process.env.OD_CODEX_SANDBOX = 'danger-full-access';
+    withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.MAX_CODEX_DISABLE_PLUGINS;
+      process.env.MAX_CODEX_SANDBOX = 'danger-full-access';
       delete process.env.WSL_DISTRO_NAME;
 
       assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), true);
@@ -226,11 +226,11 @@ test('codex args allow OD_CODEX_SANDBOX danger-full-access override on Linux', (
   });
 });
 
-test('codex args ignore unknown OD_CODEX_SANDBOX values', () => {
+test('codex args ignore unknown MAX_CODEX_SANDBOX values', () => {
   withPlatform('linux', () => {
-    withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
-      delete process.env.OD_CODEX_DISABLE_PLUGINS;
-      process.env.OD_CODEX_SANDBOX = 'workspace-write';
+    withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
+      delete process.env.MAX_CODEX_DISABLE_PLUGINS;
+      process.env.MAX_CODEX_SANDBOX = 'workspace-write';
       delete process.env.WSL_DISTRO_NAME;
 
       assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), false);
@@ -253,9 +253,9 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
   // The agent cannot list files or run any shell-backed tool under that
   // policy. danger-full-access is Codex CLI's documented Windows-compatible
   // mode (issue #1721).
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
-    delete process.env.OD_CODEX_DISABLE_PLUGINS;
-    delete process.env.OD_CODEX_SANDBOX;
+  withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX'], () => {
+    delete process.env.MAX_CODEX_DISABLE_PLUGINS;
+    delete process.env.MAX_CODEX_SANDBOX;
 
     withPlatform('win32', () => {
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
@@ -279,10 +279,10 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
   });
 });
 
-test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', () => {
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
-    delete process.env.OD_CODEX_DISABLE_PLUGINS;
-    delete process.env.OD_CODEX_SANDBOX;
+test('codex args keep plugins enabled when MAX_CODEX_DISABLE_PLUGINS is unset', () => {
+  withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX'], () => {
+    delete process.env.MAX_CODEX_DISABLE_PLUGINS;
+    delete process.env.MAX_CODEX_SANDBOX;
 
     withPlatform('darwin', () => {
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
@@ -293,10 +293,10 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', (
   });
 });
 
-test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', () => {
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
-    process.env.OD_CODEX_DISABLE_PLUGINS = 'true';
-    delete process.env.OD_CODEX_SANDBOX;
+test('codex args keep plugins enabled when MAX_CODEX_DISABLE_PLUGINS is not 1', () => {
+  withEnvSnapshot(['MAX_CODEX_DISABLE_PLUGINS', 'MAX_CODEX_SANDBOX'], () => {
+    process.env.MAX_CODEX_DISABLE_PLUGINS = 'true';
+    delete process.env.MAX_CODEX_SANDBOX;
 
     withPlatform('darwin', () => {
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
@@ -347,14 +347,14 @@ test('codex model picker includes current OpenAI choices in priority order', asy
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+    await withEnvSnapshot(['PATH', 'MAX_AGENT_HOME', 'CODEX_BIN'], async () => {
       const codexBin = join(dir, 'codex');
       writeFileSync(
         codexBin,
         '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
       );
       chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
+      process.env.MAX_AGENT_HOME = dir;
       process.env.PATH = dir;
       delete process.env.CODEX_BIN;
 
@@ -403,7 +403,7 @@ test('codex parses live model catalog from debug models JSON', () => {
 test('codex detection surfaces live debug models separately from fallback models', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
   try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+    await withEnvSnapshot(['PATH', 'MAX_AGENT_HOME', 'CODEX_BIN'], async () => {
       const codexBin = join(dir, 'codex');
       writeFileSync(
         codexBin,
@@ -417,7 +417,7 @@ exit 2
 `,
       );
       chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
+      process.env.MAX_AGENT_HOME = dir;
       process.env.PATH = dir;
       delete process.env.CODEX_BIN;
 
@@ -486,7 +486,7 @@ test('grok-build filters login headers from live model discovery output', () => 
 // and exit code 2 before any prompt is read. We deliver the prompt via
 // stdin pipe alone (gated by `promptViaStdin: true`). Regression of #237.
 test('codex args do not include the literal `-` stdin sentinel (regression of #237)', () => {
-  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+  delete process.env.MAX_CODEX_DISABLE_PLUGINS;
 
   const baseArgs = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
   assert.equal(baseArgs.includes('-'), false);
@@ -509,7 +509,7 @@ test('codex args do not include the literal `-` stdin sentinel (regression of #2
   );
   assert.equal(withReasoning.includes('-'), false);
 
-  process.env.OD_CODEX_DISABLE_PLUGINS = '1';
+  process.env.MAX_CODEX_DISABLE_PLUGINS = '1';
   const withDisablePlugins = codex.buildArgs(
     '',
     [],
@@ -521,7 +521,7 @@ test('codex args do not include the literal `-` stdin sentinel (regression of #2
 });
 
 test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', () => {
-  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+  delete process.env.MAX_CODEX_DISABLE_PLUGINS;
 
   const args = codex.buildArgs(
     '',

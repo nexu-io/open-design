@@ -24,7 +24,7 @@ export function buildPluginFolderAgentActionPrompt(
   ].join('\n');
 }
 
-// `contribute` opens a draft PR against the `nexu-io/open-design` community
+// `contribute` opens a draft PR against the `marketing-ax/marketing-ax` community
 // catalog. The agent drives the whole git/gh sequence — fork, branch, copy
 // the plugin into `plugins/community/<name>/`, commit, push, then hand the
 // `gh pr create --web` URL back so the author reviews and clicks Create in
@@ -37,15 +37,15 @@ export function buildPluginFolderAgentActionPrompt(
 //     plugin-folder buttons to satisfy.
 function buildContributePrompt(folderPath: string): string {
   return [
-    'Open a draft Pull Request that adds this generated plugin to the Open Design community catalog at `nexu-io/open-design`.',
+    'Open a draft Pull Request that adds this generated plugin to the Marketing AX community catalog at `marketing-ax/marketing-ax`.',
     'The goal is to end this turn with a single PR URL the user can click in their browser to review the pre-filled form and press Create.',
     '',
     `Plugin folder: \`${folderPath}\``,
     `Manifest: \`${folderPath}/open-design.json\``,
     '',
-    'Run this deterministic Open Design CLI workflow from the current project workspace:',
+    'Run this deterministic Marketing AX CLI workflow from the current project workspace:',
     '',
-    `\`"$OD_NODE_BIN" "$OD_BIN" plugin open-design-pr ${folderPath}\``,
+    `\`"$MAX_NODE_BIN" "$MAX_BIN" plugin open-design-pr ${folderPath}\``,
     '',
     'The CLI owns the GitHub auth gate and owner resolution: `--owner` if supplied, otherwise local `gh auth status`, with `gh api user --jq .login` only as a last-resort fallback. It then runs fork/clone/copy/branch/push and `gh pr create --web`. It must open the GitHub PR-create form in the browser; the author reviews and clicks Create themselves.',
     'Report the exact command, any structured CLI error, and the final PR URL printed by the CLI. Stop on failure; do not recreate the git/gh workflow manually.',
@@ -62,7 +62,7 @@ function buildContributePrompt(folderPath: string): string {
 // `publish` pushes the generated plugin to the author's own public GitHub
 // repository named by manifest `plugin.repo`. It is NOT the registry
 // submission path — `od plugin publish --to open-design` produces an
-// Open Design issue URL and belongs to the "Open Design PR" button. Before
+// Marketing AX issue URL and belongs to the "Marketing AX PR" button. Before
 // this rewrite the prompt said "Use the supported `od plugin publish` or
 // repository-publish flow", which let the agent route through the legacy
 // registry-link builder and never actually create the author's repo (see
@@ -76,11 +76,11 @@ function buildPublishPrompt(folderPath: string): string {
     `Plugin folder: \`${folderPath}\``,
     `Manifest: \`${folderPath}/open-design.json\``,
     '',
-    'This is the **repository publish** action, NOT the registry-submission action — do NOT route through `od plugin publish --to open-design`. That command emits an Open Design issue URL and belongs to the "Open Design PR" button.',
+    'This is the **repository publish** action, NOT the registry-submission action — do NOT route through `od plugin publish --to open-design`. That command emits an Marketing AX issue URL and belongs to the "Marketing AX PR" button.',
     '',
-    'Run this deterministic Open Design CLI workflow from the current project workspace:',
+    'Run this deterministic Marketing AX CLI workflow from the current project workspace:',
     '',
-    `\`"$OD_NODE_BIN" "$OD_BIN" plugin publish-repo ${folderPath}\``,
+    `\`"$MAX_NODE_BIN" "$MAX_BIN" plugin publish-repo ${folderPath}\``,
     '',
     'The CLI owns the GitHub auth gate and owner resolution: `--owner` if supplied, otherwise a trusted non-placeholder `plugin.repo` owner or local `gh auth status`, with `gh api user --jq .login` only as a last-resort fallback. It then handles manifest repo normalization, repo existence check, git commit/tag, repo create/update, push, and final verification. It publishes to the author\'s own repo; the target is not hard-coded and placeholder owners are rejected.',
     'Report the exact command, any structured CLI error, and the final repo URL printed by the CLI. Stop on failure; do not recreate the git/gh workflow manually.',

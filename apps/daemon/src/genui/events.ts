@@ -10,7 +10,7 @@
 import type {
   GenUISurfaceEvent,
   PluginPipelineStageEvent,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type { SurfaceRow } from './store.js';
 
 export type GenUIEventSink = (event: GenUISurfaceEvent | PluginPipelineStageEvent) => void;

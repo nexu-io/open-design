@@ -3,7 +3,7 @@
  * step that fails when p99 of a full happy-fixture replay exceeds the
  * documented `2ms` budget over 10k iterations. We express it as a
  * vitest case so it lives in the same suite as the unit tests and
- * inherits the existing `pnpm --filter @open-design/web test`
+ * inherits the existing `pnpm --filter @marketing-ax/web test`
  * pipeline; no separate runner.
  *
  * What this measures:
@@ -52,7 +52,7 @@ import {
   reduce,
   type CritiqueAction,
 } from '../../../../src/components/Theater/state/reducer';
-import type { PanelistRole } from '@open-design/contracts/critique';
+import type { PanelistRole } from '@marketing-ax/contracts/critique';
 
 const ROLES: PanelistRole[] = ['designer', 'critic', 'brand', 'a11y', 'copy'];
 

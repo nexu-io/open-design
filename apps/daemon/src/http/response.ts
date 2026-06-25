@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { createApiErrorResponse, type ApiError, type ApiErrorCode } from '@open-design/contracts';
+import { createApiErrorResponse, type ApiError, type ApiErrorCode } from '@marketing-ax/contracts';
 
 export function sendJson(res: Response, status: number, body: unknown): void {
   res.status(status).json(body);

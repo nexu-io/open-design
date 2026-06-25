@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
-// Regression for nexu-io/open-design#1393. Some HTML files drive their
+// Regression for marketing-ax/marketing-ax#1393. Some HTML files drive their
 // colors through `:root { --token: <color> }` and `var(--token)` rather
 // than baking colors into element-level inline styles. The original
 // palette bridge only walked the DOM and read `getComputedStyle` for

@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 
 import { BrowserWindow, dialog } from "electron";
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@marketing-ax/sidecar-proto";
 
 type PageSize = { height: number; width: number };
 
@@ -329,7 +329,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
 }
 
 export async function waitForPrintReadyHandshake(webContents: Electron.WebContents, nonce: string): Promise<void> {
-  // The parent wrapper document caches 'OD_PRINT_READY' in
+  // The parent wrapper document caches 'MAX_PRINT_READY' in
   // window.__odPrintReady as soon as it arrives (injected by
   // injectParentPrintReadyCache in apps/web/src/runtime/exports.ts).
   // Check the cache first to avoid missing a message that fired before
@@ -342,7 +342,7 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
       if (window.__odPrintReady) return Promise.resolve(true);
       return new Promise(function(resolve) {
         window.addEventListener('message', function handler(event) {
-          if (event.data && event.data.type === 'OD_PRINT_READY' && event.data.nonce === '${nonce}') {
+          if (event.data && event.data.type === 'MAX_PRINT_READY' && event.data.nonce === '${nonce}') {
             window.__odPrintReady = true;
             window.removeEventListener('message', handler);
             resolve(true);

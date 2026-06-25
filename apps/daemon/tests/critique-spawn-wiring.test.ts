@@ -16,8 +16,8 @@ import Database from 'better-sqlite3';
 import { migrateCritique, getCritiqueRun } from '../src/critique/persistence.js';
 import { loadCritiqueConfigFromEnv } from '../src/critique/config.js';
 import { runOrchestrator, type CritiqueSseBus } from '../src/critique/orchestrator.js';
-import type { CritiqueSseEvent } from '@open-design/contracts/critique';
-import { defaultCritiqueConfig } from '@open-design/contracts/critique';
+import type { CritiqueSseEvent } from '@marketing-ax/contracts/critique';
+import { defaultCritiqueConfig } from '@marketing-ax/contracts/critique';
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:');
@@ -62,7 +62,7 @@ afterEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Config gate: OD_CRITIQUE_ENABLED=false (legacy path unchanged)
+// Config gate: MAX_CRITIQUE_ENABLED=false (legacy path unchanged)
 // ---------------------------------------------------------------------------
 
 describe('spawn wiring - cfg.enabled=false (M0 default)', () => {
@@ -71,8 +71,8 @@ describe('spawn wiring - cfg.enabled=false (M0 default)', () => {
     expect(cfg.enabled).toBe(false);
   });
 
-  it('loadCritiqueConfigFromEnv with OD_CRITIQUE_ENABLED=false returns enabled=false', () => {
-    const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: 'false' });
+  it('loadCritiqueConfigFromEnv with MAX_CRITIQUE_ENABLED=false returns enabled=false', () => {
+    const cfg = loadCritiqueConfigFromEnv({ MAX_CRITIQUE_ENABLED: 'false' });
     expect(cfg.enabled).toBe(false);
   });
 
@@ -86,12 +86,12 @@ describe('spawn wiring - cfg.enabled=false (M0 default)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Config gate: OD_CRITIQUE_ENABLED=true (orchestrator path)
+// Config gate: MAX_CRITIQUE_ENABLED=true (orchestrator path)
 // ---------------------------------------------------------------------------
 
 describe('spawn wiring - cfg.enabled=true (orchestrator path)', () => {
-  it('with OD_CRITIQUE_ENABLED=true, runOrchestrator is invoked with the spawn stdout', async () => {
-    const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
+  it('with MAX_CRITIQUE_ENABLED=true, runOrchestrator is invoked with the spawn stdout', async () => {
+    const cfg = loadCritiqueConfigFromEnv({ MAX_CRITIQUE_ENABLED: '1' });
     expect(cfg.enabled).toBe(true);
 
     const { bus, events } = makeBus();
@@ -145,7 +145,7 @@ describe('spawn wiring - cfg.enabled=true (orchestrator path)', () => {
   });
 
   it('errors thrown by the orchestrator surface to the caller', async () => {
-    const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
+    const cfg = loadCritiqueConfigFromEnv({ MAX_CRITIQUE_ENABLED: '1' });
 
     // Invalid cfg to force a RangeError before any side effect.
     const badCfg = { ...cfg, perRoundTimeoutMs: -1 };
@@ -190,7 +190,7 @@ describe('spawn wiring - stream format gating (Defect 1)', () => {
   for (const fmt of NON_PLAIN_FORMATS) {
     it(`format="${fmt}" skips the orchestrator (no run row inserted)`, async () => {
       // Simulate the server branch: if streamFormat !== 'plain', skip orchestrator.
-      const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
+      const cfg = loadCritiqueConfigFromEnv({ MAX_CRITIQUE_ENABLED: '1' });
       const adapterStreamFormat: string = fmt;
 
       if (cfg.enabled && adapterStreamFormat !== 'plain') {
@@ -206,7 +206,7 @@ describe('spawn wiring - stream format gating (Defect 1)', () => {
   }
 
   it('format="plain" routes through the orchestrator', async () => {
-    const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
+    const cfg = loadCritiqueConfigFromEnv({ MAX_CRITIQUE_ENABLED: '1' });
     const adapterStreamFormat = 'plain';
 
     // Simulate: only call orchestrator when format is plain.

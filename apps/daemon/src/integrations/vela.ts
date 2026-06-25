@@ -3,12 +3,12 @@ import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-import { createCommandInvocation } from '@open-design/platform';
+import { createCommandInvocation } from '@marketing-ax/platform';
 import type {
   AmrEntryAttribution,
   TrackingAmrEntrySource,
   TrackingPageName,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
@@ -61,7 +61,7 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
 };
 
 const AMR_ANALYTICS_EVENTS_URL =
-  'https://amr-api.open-design.ai/api/v1/analytics/events';
+  'https://amr-api.marketing-ax.example/api/v1/analytics/events';
 const AMR_ANALYTICS_TIMEOUT_MS = 1500;
 
 type AmrAnalyticsEnv = 'local' | 'test' | 'staging' | 'production';
@@ -606,10 +606,10 @@ function velaLoginAttributionEnv(
 ): Record<string, string> {
   if (!attribution) return {};
   return {
-    OPEN_DESIGN_AMR_ENTRY_ID: attribution.entryId,
-    OPEN_DESIGN_AMR_ENTRY_SOURCE: attribution.sourceDetail,
-    OPEN_DESIGN_AMR_ENTRY_AT: attribution.occurredAt,
-    OPEN_DESIGN_AMR_ORIGIN: attribution.sourceProduct,
+    MARKETING_AX_AMR_ENTRY_ID: attribution.entryId,
+    MARKETING_AX_AMR_ENTRY_SOURCE: attribution.sourceDetail,
+    MARKETING_AX_AMR_ENTRY_AT: attribution.occurredAt,
+    MARKETING_AX_AMR_ORIGIN: attribution.sourceProduct,
   };
 }
 
@@ -645,11 +645,11 @@ function buildAmrEntryAnalyticsCommon(
 }
 
 function resolveAmrAnalyticsEventsUrl(env: NodeJS.ProcessEnv): string {
-  return env.OPEN_DESIGN_AMR_ANALYTICS_URL?.trim() || AMR_ANALYTICS_EVENTS_URL;
+  return env.MARKETING_AX_AMR_ANALYTICS_URL?.trim() || AMR_ANALYTICS_EVENTS_URL;
 }
 
 function resolveAmrAnalyticsEnv(env: NodeJS.ProcessEnv): AmrAnalyticsEnv {
-  const raw = env.OPEN_DESIGN_AMR_ANALYTICS_ENV?.trim();
+  const raw = env.MARKETING_AX_AMR_ANALYTICS_ENV?.trim();
   if (raw && AMR_ANALYTICS_ENVS.has(raw as AmrAnalyticsEnv)) {
     return raw as AmrAnalyticsEnv;
   }

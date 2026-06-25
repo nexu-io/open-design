@@ -1,5 +1,5 @@
 name: 🐛 Bug report
-description: Something isn't working as expected in Open Design.
+description: Something isn't working as expected in Marketing AX.
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -9,7 +9,7 @@ body:
         Thanks for taking the time to report a bug! A clear, reproducible report helps us fix it faster.
 
         Before you submit:
-        - Check whether the issue is already reported in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue).
+        - Check whether the issue is already reported in [open issues](https://github.com/marketing-ax/marketing-ax/issues?q=is%3Aissue).
         - Replace example text with your actual bug details. Placeholder reports like `testing` or `0.0.0` are not actionable.
 
   - type: checkboxes
@@ -37,7 +37,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps that reliably reproduce the problem.
       placeholder: |
-        1. Open Open Design
+        1. Open Marketing AX
         2. Click ...
         3. See error
     validations:
@@ -54,7 +54,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Open Design version
+      label: Marketing AX version
       description: Find this in the app's About menu, or run `od --version`.
       placeholder: e.g. 0.8.0 or 0.8.0-preview.2
     validations:

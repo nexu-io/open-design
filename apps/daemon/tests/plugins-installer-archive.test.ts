@@ -130,7 +130,7 @@ describe('archive installer', () => {
     const fixtureFiles = await readdir(fixtureSrc);
     const urlsSeen: string[] = [];
     const apiUrl =
-      'https://api.github.com/repos/nexu-io/open-design/contents/plugins/community/registry-starter?ref=garnet-hemisphere';
+      'https://api.github.com/repos/marketing-ax/marketing-ax/contents/plugins/community/registry-starter?ref=garnet-hemisphere';
     const downloadBase = 'https://raw.example.test/plugins/community/registry-starter';
     const entries = fixtureFiles.map((name) => ({
       type: 'file',
@@ -151,7 +151,7 @@ describe('archive installer', () => {
     };
     let success = false;
     let error: string | undefined;
-    const source = 'github:nexu-io/open-design@garnet-hemisphere/plugins/community/registry-starter';
+    const source = 'github:marketing-ax/marketing-ax@garnet-hemisphere/plugins/community/registry-starter';
     for await (const ev of installPlugin(db, {
       source,
       roots: { userPluginsRoot: pluginsRoot },
@@ -164,7 +164,7 @@ describe('archive installer', () => {
       throw new Error(`install failed: ${error}`);
     }
     expect(urlsSeen).toContain(apiUrl);
-    expect(urlsSeen).not.toContain('https://codeload.github.com/nexu-io/open-design/tar.gz/garnet-hemisphere');
+    expect(urlsSeen).not.toContain('https://codeload.github.com/marketing-ax/marketing-ax/tar.gz/garnet-hemisphere');
     const row = db.prepare(`SELECT source_kind, source FROM installed_plugins WHERE id = 'sample-plugin'`).get();
     expect(row).toEqual({ source_kind: 'github', source });
   });
@@ -179,8 +179,8 @@ describe('archive installer', () => {
     });
     const urlsSeen: string[] = [];
     const contentsUrl =
-      'https://api.github.com/repos/nexu-io/open-design/contents/plugins/community/import-smoke-test?ref=main';
-    const tarballUrl = 'https://codeload.github.com/nexu-io/open-design/tar.gz/main';
+      'https://api.github.com/repos/marketing-ax/marketing-ax/contents/plugins/community/import-smoke-test?ref=main';
+    const tarballUrl = 'https://codeload.github.com/marketing-ax/marketing-ax/tar.gz/main';
     const fetcher: ArchiveFetcher = async (u) => {
       urlsSeen.push(u);
       if (u === contentsUrl) {
@@ -192,7 +192,7 @@ describe('archive installer', () => {
 
     let success = false;
     let error: string | undefined;
-    const source = 'github:nexu-io/open-design@main/plugins/community/import-smoke-test';
+    const source = 'github:marketing-ax/marketing-ax@main/plugins/community/import-smoke-test';
     for await (const ev of installPlugin(db, {
       source,
       roots: { userPluginsRoot: pluginsRoot },
@@ -213,8 +213,8 @@ describe('archive installer', () => {
   it('reports both GitHub contents and codeload URLs when subpath fallback fails', async () => {
     const urlsSeen: string[] = [];
     const contentsUrl =
-      'https://api.github.com/repos/nexu-io/open-design/contents/plugins/community/import-smoke-test?ref=main';
-    const tarballUrl = 'https://codeload.github.com/nexu-io/open-design/tar.gz/main';
+      'https://api.github.com/repos/marketing-ax/marketing-ax/contents/plugins/community/import-smoke-test?ref=main';
+    const tarballUrl = 'https://codeload.github.com/marketing-ax/marketing-ax/tar.gz/main';
     const fetcher: ArchiveFetcher = async (u) => {
       urlsSeen.push(u);
       if (u === contentsUrl) {
@@ -225,7 +225,7 @@ describe('archive installer', () => {
     };
 
     let error: string | undefined;
-    const source = 'github:nexu-io/open-design@main/plugins/community/import-smoke-test';
+    const source = 'github:marketing-ax/marketing-ax@main/plugins/community/import-smoke-test';
     for await (const ev of installPlugin(db, {
       source,
       roots: { userPluginsRoot: pluginsRoot },

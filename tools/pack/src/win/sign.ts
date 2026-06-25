@@ -61,16 +61,16 @@ export function resolveWinSigningCacheKey(config: ToolPackConfig): WinSigningCac
 }
 
 export function resolveWinSigningConfig(): WinSigningConfig {
-  const certificateSha1 = normalizeSha1(process.env.OD_WIN_SIGN_CERT_SHA1 ?? process.env.WIN_SIGN_CERT_SHA1);
+  const certificateSha1 = normalizeSha1(process.env.MAX_WIN_SIGN_CERT_SHA1 ?? process.env.WIN_SIGN_CERT_SHA1);
   if (certificateSha1 == null) {
-    throw new Error("signed Windows builds require OD_WIN_SIGN_CERT_SHA1");
+    throw new Error("signed Windows builds require MAX_WIN_SIGN_CERT_SHA1");
   }
   return {
     certificateSha1,
     digestAlgorithm: "sha256",
-    signtoolPath: process.env.OD_WIN_SIGNTOOL_PATH ?? process.env.WIN_SIGNTOOL_PATH ?? DEFAULT_SIGNTOOL_CANDIDATES[0],
+    signtoolPath: process.env.MAX_WIN_SIGNTOOL_PATH ?? process.env.WIN_SIGNTOOL_PATH ?? DEFAULT_SIGNTOOL_CANDIDATES[0],
     timestampAlgorithm: "sha256",
-    timestampUrl: process.env.OD_WIN_SIGN_TIMESTAMP_URL ?? process.env.WIN_SIGN_TIMESTAMP_URL ?? DEFAULT_TIMESTAMP_URL,
+    timestampUrl: process.env.MAX_WIN_SIGN_TIMESTAMP_URL ?? process.env.WIN_SIGN_TIMESTAMP_URL ?? DEFAULT_TIMESTAMP_URL,
   };
 }
 
@@ -146,7 +146,7 @@ function normalizeSha1(value: string | undefined): string | null {
   const normalized = value.replace(/\s/g, "").toUpperCase();
   if (normalized.length === 0) return null;
   if (!/^[0-9A-F]{40}$/.test(normalized)) {
-    throw new Error("OD_WIN_SIGN_CERT_SHA1 must be a 40-character SHA1 thumbprint");
+    throw new Error("MAX_WIN_SIGN_CERT_SHA1 must be a 40-character SHA1 thumbprint");
   }
   return normalized;
 }

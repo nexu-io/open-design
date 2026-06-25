@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
@@ -14,8 +14,8 @@ import {
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
-import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 import {
   collectProcessTreePids,
   createPackageManagerInvocation,
@@ -24,7 +24,7 @@ import {
   readLogTail,
   spawnBackgroundProcess,
   stopProcesses,
-} from "@open-design/platform";
+} from "@marketing-ax/platform";
 
 import type { ToolPackConfig } from "./config.js";
 import { copyBundledResourceTrees, linuxResources } from "./resources.js";
@@ -34,35 +34,35 @@ import { processWebSourcemaps } from "./web-sourcemaps.js";
 
 const execFileAsync = promisify(execFile);
 
-const PRODUCT_NAME = "Open Design";
-const APP_IMAGE_PRODUCT_NAME = "Open-Design";
-const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
+const PRODUCT_NAME = "Marketing AX";
+const APP_IMAGE_PRODUCT_NAME = "Marketing-AX";
+const DESKTOP_LOG_ECHO_ENV = "MAX_DESKTOP_LOG_ECHO";
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
 // `electronuserland/builder:base`, which strips npm/npx/corepack.
-const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
+const PRODUCTION_INSTALL_PNPM_BIN_ENV = "MAX_TOOLS_PACK_PNPM_BIN";
 const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
 const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
 
 export const INTERNAL_PACKAGES = [
-  { directory: "packages/components", name: "@open-design/components" },
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
-  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
-  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "apps/daemon", name: "@open-design/daemon" },
-  { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
+  { directory: "packages/components", name: "@marketing-ax/components" },
+  { directory: "packages/contracts", name: "@marketing-ax/contracts" },
+  { directory: "packages/registry-protocol", name: "@marketing-ax/registry-protocol" },
+  { directory: "packages/launcher-proto", name: "@marketing-ax/launcher-proto" },
+  { directory: "packages/sidecar-proto", name: "@marketing-ax/sidecar-proto" },
+  { directory: "packages/sidecar", name: "@marketing-ax/sidecar" },
+  { directory: "packages/platform", name: "@marketing-ax/platform" },
+  { directory: "packages/download", name: "@marketing-ax/download" },
+  { directory: "packages/host", name: "@marketing-ax/host" },
+  { directory: "packages/agui-adapter", name: "@marketing-ax/agui-adapter" },
+  { directory: "packages/plugin-runtime", name: "@marketing-ax/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@marketing-ax/diagnostics" },
+  { directory: "apps/daemon", name: "@marketing-ax/daemon" },
+  { directory: "apps/web", name: "@marketing-ax/web" },
+  { directory: "apps/desktop", name: "@marketing-ax/desktop" },
+  { directory: "apps/packaged", name: "@marketing-ax/packaged" },
 ] as const;
 
 export function sanitizeNamespace(value: string): string {
@@ -130,7 +130,7 @@ export function buildDockerArgs(
   //
   // Shell-interpolation safety for the inner `bash -lc` command:
   //   - config.namespace is sanitized at config-time by resolveNamespace() in
-  //     @open-design/sidecar-proto (restricted to namespace charset)
+  //     @marketing-ax/sidecar-proto (restricted to namespace charset)
   //   - config.to is enum-validated by resolveToolPackBuildOutput() in config.ts
   //     to one of "all" | "appimage" | "dir"
   //   - config.portable is a boolean
@@ -217,9 +217,9 @@ export function buildDockerArgs(
     `${PRODUCTION_INSTALL_PNPM_BIN_ENV}=${CONTAINER_PNPM_PATH}`,
   ];
   if (config.telemetryRelayUrl != null) {
-    dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
+    dockerArgs.push("-e", `MARKETING_AX_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
   }
-  const velaBinHost = process.env.OPEN_DESIGN_VELA_CLI_BIN?.trim();
+  const velaBinHost = process.env.MARKETING_AX_VELA_CLI_BIN?.trim();
   if (velaBinHost) {
     // The container only mounts /project, /tools-pack and cache/home dirs by
     // default, so a Vela CLI living outside those (a host path like
@@ -231,10 +231,10 @@ export function buildDockerArgs(
     const velaBinBase = basename(velaBinHost);
     const containerVelaDir = "/opt/vela-cli";
     dockerArgs.push("-v", `${hostVelaDir}:${containerVelaDir}:ro`);
-    dockerArgs.push("-e", `OPEN_DESIGN_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
+    dockerArgs.push("-e", `MARKETING_AX_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
   }
   if (config.amrProfile != null) {
-    dockerArgs.push("-e", `OPEN_DESIGN_AMR_PROFILE=${config.amrProfile}`);
+    dockerArgs.push("-e", `MARKETING_AX_AMR_PROFILE=${config.amrProfile}`);
   }
   dockerArgs.push(
     "-w",
@@ -359,7 +359,7 @@ export type ProductionInstallCommand = { command: string; args: string[] };
 // during writeAssembledApp. The default (`npm`) preserves host behavior for
 // developer-machine builds. When the build runs inside
 // `electronuserland/builder:base` (which strips npm, npx, and corepack),
-// buildDockerArgs sets OD_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
+// buildDockerArgs sets MAX_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
 // bootstrapped, and this resolver routes the install through that binary.
 // `--config.node-linker=hoisted` keeps the resulting layout flat so
 // electron-builder packs node_modules the same way it does for npm-installed
@@ -391,24 +391,24 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
-  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/contracts", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/registry-protocol", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/sidecar-proto", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/launcher-proto", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/sidecar", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/platform", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/host", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/download", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/agui-adapter", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/plugin-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/download", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/host", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/diagnostics", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/components", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/daemon", "build"]);
   try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
+    await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], { MAX_WEB_OUTPUT_MODE: "server" });
+    await runPnpm(config, ["--filter", "@marketing-ax/web", "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files before AppImage packaging. See
     // `tools/pack/src/web-sourcemaps.ts`.
@@ -420,8 +420,8 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
       await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
     }
   }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/desktop", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/packaged", "build"]);
 }
 
 // --- Step 3: Tarball + resource helpers ---
@@ -497,15 +497,15 @@ async function writeAssembledApp(
     main: "main.cjs",
     dependencies,
     description: "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
-    author: "Open Design Team",
+    author: "Marketing AX Team",
     repository: {
       type: "git",
-      url: "https://github.com/nexu-io/open-design.git"
+      url: "https://github.com/marketing-ax/marketing-ax.git"
     }
   };
   await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
-  const mainStub = `"use strict";\nrequire("@open-design/packaged");\n`;
+  const mainStub = `"use strict";\nrequire("@marketing-ax/packaged");\n`;
   await writeFile(paths.assembledMainEntryPath, mainStub, "utf8");
 
   await writeFile(
@@ -539,7 +539,7 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
 
   const builderConfig: Record<string, unknown> = {
-    appId: "io.open-design.desktop",
+    appId: "io.marketing-ax.desktop",
     artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
     asar: false,
     buildDependenciesFromSource: false,
@@ -571,8 +571,8 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       target,
       icon: linuxResources.icon,
       category: "Development",
-      synopsis: "Open Design",
-      maintainer: "Open Design Contributors",
+      synopsis: "Marketing AX",
+      maintainer: "Marketing AX Contributors",
     },
     nodeGypRebuild: false,
     npmRebuild: false,
@@ -918,7 +918,7 @@ async function validateDesktopAppImageMarker(
   // Validate the marker stamp (file content written by apps/packaged itself)
   // rather than the process command line. Menu launches via the .desktop
   // entry don't pass createProcessStampArgs to the AppImage -- they only set
-  // OD_PACKAGED_NAMESPACE -- so apps/packaged falls back to a SIDECAR_SOURCES.PACKAGED
+  // MAX_PACKAGED_NAMESPACE -- so apps/packaged falls back to a SIDECAR_SOURCES.PACKAGED
   // stamp. Validating the process command would reject those legitimate
   // launches as `unmanaged`, which on uninstall would also remove the
   // AppImage/desktop/icon files out from under the still-running app.
@@ -926,7 +926,7 @@ async function validateDesktopAppImageMarker(
   // the dual-source acceptance pattern in mac/lifecycle.ts.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace: config.namespace,
   });
   const stampOk =
@@ -973,7 +973,7 @@ function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
     app: APP_KEYS.DESKTOP,
     ipc: resolveAppIpcPath({
       app: APP_KEYS.DESKTOP,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace: config.namespace,
     }),
     mode: SIDECAR_MODES.RUNTIME,
@@ -994,7 +994,7 @@ async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boo
 async function fetchDesktopStatus(config: ToolPackConfig): Promise<DesktopStatusSnapshot | null> {
   try {
     const ipc = resolveAppIpcPath({
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace: config.namespace,
       app: APP_KEYS.DESKTOP,
     });
@@ -1031,7 +1031,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
   // --appimage-extract-and-run bypasses FUSE-mounted SquashFS, which is too slow
   // for daemon startup on first launch (smoke testing showed startup exceeded the
   // packaged sidecar's 35-second timeout when running from FUSE).
-  const args = ["--appimage-extract-and-run", ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)];
+  const args = ["--appimage-extract-and-run", ...createProcessStampArgs(stamp, MARKETING_AX_SIDECAR_CONTRACT)];
 
   const child = await spawnBackgroundProcess({
     args,
@@ -1039,7 +1039,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     cwd: dirname(appImagePath),
     env: createSidecarLaunchEnv({
       base: join(config.roots.runtime.namespaceRoot, "runtime"),
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       extraEnv: { ...process.env, [DESKTOP_LOG_ECHO_ENV]: "0" },
       stamp,
     }),
@@ -1333,12 +1333,12 @@ export type LinuxCleanupResult = {
 
 // Paths resolved relative to the assembled app written during `tools-pack linux build`.
 // The headless entry lives at:
-//   <assembledAppRoot>/node_modules/@open-design/packaged/dist/headless.mjs
+//   <assembledAppRoot>/node_modules/@marketing-ax/packaged/dist/headless.mjs
 // The bundled Node binary lives at:
 //   <namespaceRoot>/resources/open-design/bin/node  (populated by copyResourceTree)
 
 function resolveHeadlessEntryPath(paths: LinuxPaths): string {
-  return join(paths.assembledAppRoot, "node_modules", "@open-design", "packaged", "dist", "headless.mjs");
+  return join(paths.assembledAppRoot, "node_modules", "@marketing-ax", "packaged", "dist", "headless.mjs");
 }
 
 function resolveHeadlessBundledNodePath(paths: LinuxPaths): string {
@@ -1431,14 +1431,14 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
 
   // Write a self-contained launcher script. The namespace is baked in so the
   // launcher name and the runtime namespace always agree. namespace is
-  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. OD_DATA_DIR is baked
+  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. MAX_DATA_DIR is baked
   // so the headless process writes its runtime data under the same paths that
   // tools-pack stop/logs expect.
   const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
   const script = [
     "#!/bin/sh",
-    `# Open Design headless launcher — namespace: ${config.namespace}`,
-    `OD_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
+    `# Marketing AX headless launcher — namespace: ${config.namespace}`,
+    `MAX_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} MAX_DATA_DIR=${JSON.stringify(dataDir)} MAX_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 
   await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
@@ -1483,13 +1483,13 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
         ...process.env,
         // Bake in the packaged namespace so headless uses the same namespace
         // as the tools-pack config regardless of the caller's environment.
-        OD_PACKAGED_NAMESPACE: config.namespace,
+        MAX_PACKAGED_NAMESPACE: config.namespace,
         // Point the headless data root at the tools-pack runtime directory so
         // the identity marker is written to the path this function polls.
-        // headless.ts computes: join(OD_DATA_DIR, "namespaces") which must
+        // headless.ts computes: join(MAX_DATA_DIR, "namespaces") which must
         // equal config.roots.runtime.namespaceBaseRoot.
-        OD_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
-        OD_RESOURCE_ROOT: paths.resourceRoot,
+        MAX_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
+        MAX_RESOURCE_ROOT: paths.resourceRoot,
       },
       logFd: logHandle.fd,
     });
@@ -1553,7 +1553,7 @@ export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<L
   // the AppImage runtime.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace: config.namespace,
   });
   const stampOk =

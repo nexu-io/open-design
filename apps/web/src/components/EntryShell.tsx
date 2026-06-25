@@ -25,8 +25,8 @@ import {
   type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
-} from '@open-design/contracts';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+} from '@marketing-ax/contracts';
+import type { OpenDesignHostProjectImportSuccess } from '@marketing-ax/host';
 import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -56,8 +56,8 @@ import type {
   TrackingOnboardingCompletionResult,
   TrackingOnboardingCompletionType,
   TrackingCliProviderId,
-} from '@open-design/contracts/analytics';
-import { agentIdToTracking } from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
+import { agentIdToTracking } from '@marketing-ax/contracts/analytics';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -178,7 +178,7 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 // `display` based on `--compact-topbar` breakpoint (900px).
 
 // Default scenario plugin for each project kind/intent. The mapping
-// lives in `@open-design/contracts` so the daemon's `/api/projects`
+// lives in `@marketing-ax/contracts` so the daemon's `/api/projects`
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
@@ -187,7 +187,7 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 // client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
 // it at a local `wrangler pages dev` instance during development.
 const NEWSLETTER_SUBSCRIBE_URL =
-  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
+  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://marketing-ax.example/subscribe';
 const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
@@ -611,7 +611,7 @@ export function EntryShell({
       // awareness of a local folder (via `--add-dir`), it does NOT import
       // that folder into Design Files. So the picked path becomes the new
       // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
-      // Design Files stays the managed `.od/projects/<id>` artifact store,
+      // Design Files stays the managed `.max/projects/<id>` artifact store,
       // independent of the user's local files.
       ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
       ...(payload.examplePromptContext ? {

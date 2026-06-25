@@ -1,19 +1,19 @@
 /**
- * One-shot legacy `.od/` data migrator.
+ * One-shot legacy `.max/` data migrator.
  *
- * Open Design 0.3.x ran from the repo and wrote runtime state to
- * `<repo>/.od/` (SQLite at `app.sqlite`, agent CWDs under `projects/`,
+ * Marketing AX 0.3.x ran from the repo and wrote runtime state to
+ * `<repo>/.max/` (SQLite at `app.sqlite`, agent CWDs under `projects/`,
  * saved renders under `artifacts/`, credentials at `media-config.json`).
  * The 0.4.x packaged Desktop app moved the data root to a per-namespace
  * directory under the OS user-data location (Electron's `userData`).
  *
  * Users upgrading from 0.3.x to the packaged 0.4.x app pointed the new
  * binary at a fresh, empty data root and watched their chats and designs
- * disappear. The data was never lost (the 0.3.x `.od/` folder is still
+ * disappear. The data was never lost (the 0.3.x `.max/` folder is still
  * on disk wherever they used to run from), but the new daemon had no
- * way to know about it. See https://github.com/nexu-io/open-design/issues/710.
+ * way to know about it. See https://github.com/marketing-ax/marketing-ax/issues/710.
  *
- * This module gives operators a recovery path. When `OD_LEGACY_DATA_DIR`
+ * This module gives operators a recovery path. When `MAX_LEGACY_DATA_DIR`
  * is set on daemon boot, the migrator:
  *
  *   1. Refuses if the legacy dir doesn't have `app.sqlite` (typo / wrong
@@ -37,13 +37,13 @@
  * and either silently lose the migration or corrupt the new file.
  *
  * @see specs/current/spec.md (storage section)
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 export interface MigrateLegacyDataDirOptions {
-  /** Path to the legacy `.od/` directory (typically OD_LEGACY_DATA_DIR). */
+  /** Path to the legacy `.max/` directory (typically MAX_LEGACY_DATA_DIR). */
   legacyDir: string | undefined;
   /** Resolved current data root (RUNTIME_DATA_DIR). */
   dataDir: string;
@@ -72,7 +72,7 @@ export interface MigrateLegacyDataDirResult {
 }
 
 /**
- * Daemon startup throws this when OD_LEGACY_DATA_DIR is explicitly set
+ * Daemon startup throws this when MAX_LEGACY_DATA_DIR is explicitly set
  * but the path is not a usable legacy data dir, or the new dataDir is
  * already populated and would be merged into. Failing loud here is the
  * point: silent skips trained users to assume migration ran when it
@@ -136,7 +136,7 @@ export function dataDirIsEmptyOrFresh(dataDir: string): boolean {
 /**
  * Returns true when `legacyDir` contains a payload worth migrating. The
  * presence of `app.sqlite` is treated as proof: every 0.3.x install that
- * shipped chat history wrote one, and a stray empty `.od/` folder won't
+ * shipped chat history wrote one, and a stray empty `.max/` folder won't
  * have it.
  */
 export function legacyDirHasPayload(legacyDir: string): boolean {
@@ -309,19 +309,19 @@ export function migrateLegacyDataDirSync(
 
   const raw = options.legacyDir;
   if (raw === undefined || raw.length === 0) {
-    return { status: 'noop', reason: 'OD_LEGACY_DATA_DIR not set' };
+    return { status: 'noop', reason: 'MAX_LEGACY_DATA_DIR not set' };
   }
   const legacyDir = path.resolve(raw);
   const dataDir = path.resolve(options.dataDir);
 
   if (legacyDir === dataDir) {
-    return { status: 'noop', reason: 'OD_LEGACY_DATA_DIR equals OD_DATA_DIR' };
+    return { status: 'noop', reason: 'MAX_LEGACY_DATA_DIR equals MAX_DATA_DIR' };
   }
 
   // Marker check runs before legacyDirHasPayload on purpose: once a
   // migration has succeeded, the marker is the canonical "do not
-  // touch" signal. The user may leave OD_LEGACY_DATA_DIR set and then
-  // delete or move the old repo `.od/` later; without this ordering
+  // touch" signal. The user may leave MAX_LEGACY_DATA_DIR set and then
+  // delete or move the old repo `.max/` later; without this ordering
   // the next boot would re-validate a source that is no longer needed
   // and throw legacy_dir_invalid, breaking the marker contract that
   // says "after success, future boots no-op."
@@ -337,7 +337,7 @@ export function migrateLegacyDataDirSync(
     // migration ran when it hadn't (this is the original #710 footgun).
     throw new LegacyMigrationError(
       'legacy_dir_invalid',
-      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Design, fix the path, and relaunch.`,
+      `MAX_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Marketing AX, fix the path, and relaunch.`,
     );
   }
 
@@ -348,7 +348,7 @@ export function migrateLegacyDataDirSync(
   if (existing.length > 0) {
     throw new LegacyMigrationError(
       'data_dir_not_empty',
-      `OD_DATA_DIR="${dataDir}" already contains payload entries (${existing.join(', ')}); refusing to merge legacy data on top. Move the existing data aside or pick a fresh data root before re-running with OD_LEGACY_DATA_DIR.`,
+      `MAX_DATA_DIR="${dataDir}" already contains payload entries (${existing.join(', ')}); refusing to merge legacy data on top. Move the existing data aside or pick a fresh data root before re-running with MAX_LEGACY_DATA_DIR.`,
     );
   }
 

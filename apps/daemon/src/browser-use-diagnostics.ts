@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { BrowserUseDiscoveryFacts, BrowserUseRunState } from '@open-design/contracts';
+import type { BrowserUseDiscoveryFacts, BrowserUseRunState } from '@marketing-ax/contracts';
 
 const BROWSER_USE_REGISTRY_BASENAME = 'codex-browser-use';
 const DEFAULT_STALE_THRESHOLD_MS = 10 * 60 * 1000;
@@ -17,7 +17,7 @@ export function isBrowserUseRequested(...values: unknown[]): boolean {
     (
       /(^|\s)@agent-browser(\s|$)/.test(value) ||
       value.includes('Browser tab context:') ||
-      value.includes('Use the selected Open Design Browser tab as the bound target.')
+      value.includes('Use the selected Marketing AX Browser tab as the bound target.')
     )
   ));
 }
@@ -110,7 +110,7 @@ export function renderBrowserUseUnavailablePrompt(state: BrowserUseRunState | nu
   return [
     '## Browser automation availability',
     '',
-    `Browser automation was requested, but Open Design has not confirmed a matching in-app browser backend for this run. Reason: \`${state.reason}\`.`,
+    `Browser automation was requested, but Marketing AX has not confirmed a matching in-app browser backend for this run. Reason: \`${state.reason}\`.`,
     'Treat browser-use / in-app-browser automation as unavailable for this turn.',
     'Do not use raw Google Chrome headless or ad-hoc Chrome fallback from the packaged desktop sandbox.',
     'If the task requires browser evidence, report the unavailable reason and use only the provided browser tab URL, title, and saved project context until a backend is attached.',

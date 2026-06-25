@@ -19,7 +19,7 @@ import type {
   ChatCommentAttachment,
   ChatMessage,
 } from '../../types';
-import type { ChatSessionMode } from '@open-design/contracts';
+import type { ChatSessionMode } from '@marketing-ax/contracts';
 
 // ---------------------------------------------------------------------------
 // useConversationChat — drives a secondary ChatPane bound to a single

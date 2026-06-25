@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { PanelEvent, PanelistRole } from '@open-design/contracts/critique';
+import type { PanelEvent, PanelistRole } from '@marketing-ax/contracts/critique';
 
 import {
   initialState,

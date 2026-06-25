@@ -11,18 +11,18 @@ import {
   DIAGNOSTICS_FILENAME_PREFIX,
   diagnosticsFileName,
   type LogSource,
-} from '@open-design/diagnostics';
+} from '@marketing-ax/diagnostics';
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   type SidecarStamp,
-} from '@open-design/sidecar-proto';
+} from '@marketing-ax/sidecar-proto';
 import {
   resolveLogFilePath,
   resolveRuntimeNamespaceRoot,
   type SidecarRuntimeContext,
-} from '@open-design/sidecar';
+} from '@marketing-ax/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
@@ -55,7 +55,7 @@ async function resolveAgentHomes(dataDir: string | null | undefined): Promise<Re
     const envFor = (agentId: string) =>
       spawnEnvForAgent(
         agentId,
-        { ...process.env, OD_DATA_DIR: dataDir },
+        { ...process.env, MAX_DATA_DIR: dataDir },
         agentCliEnvForAgent(appConfig.agentCliEnv, agentId),
       );
     const clean = (value: string | undefined): string | null => {
@@ -84,7 +84,7 @@ export interface DiagnosticsHandlerOptions {
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
   runsDir?: string | null;
-  /** Open Design data dir (OD_DATA_DIR), used to locate the AMR OpenCode home. */
+  /** Marketing AX data dir (MAX_DATA_DIR), used to locate the AMR OpenCode home. */
   dataDir?: string | null;
 }
 
@@ -111,7 +111,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
   // accounts for that (a plain `resolveNamespaceRoot` here resolved every
   // daemon/web log to an ENOENT phantom path and captured none of them).
   const namespaceRoot = resolveRuntimeNamespaceRoot({
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     runtime,
     runtimeMode: SIDECAR_MODES.RUNTIME,
   });
@@ -120,7 +120,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
   for (const app of apps) {
     const absolutePath = resolveLogFilePath({
       app,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       runtimeRoot: namespaceRoot,
     });
     sources.push({
@@ -189,11 +189,11 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         sources,
         redaction: { username },
         crashReports: {
-          // Restrict to Open Design's own process names. A generic "Electron"
+          // Restrict to Marketing AX's own process names. A generic "Electron"
           // substring would sweep up crash reports from any other Electron
           // app on the host (VS Code, Slack, …) and leak unrelated user data
           // into the support bundle.
-          matchSubstrings: ['Open Design', 'open-design'],
+          matchSubstrings: ['Marketing AX', 'open-design'],
           withinDays: 7,
           maxReports: 10,
           homeDir: home,

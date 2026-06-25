@@ -11,7 +11,7 @@
  * filter to "every EINVAL" (which would silently swallow real bugs)
  * trips a test.
  *
- * @see https://github.com/nexu-io/open-design/issues/895
+ * @see https://github.com/marketing-ax/marketing-ax/issues/895
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -160,8 +160,8 @@ describe('createPackagedDesktopLogger log-write failures', () => {
 
   it('does not let desktop log append failures escape through the logger', () => {
     const root = mkdtempSync(join(tmpdir(), 'od-packaged-log-'));
-    const previousEcho = process.env.OD_DESKTOP_LOG_ECHO;
-    process.env.OD_DESKTOP_LOG_ECHO = '0';
+    const previousEcho = process.env.MAX_DESKTOP_LOG_ECHO;
+    process.env.MAX_DESKTOP_LOG_ECHO = '0';
     try {
       const logger = createPackagedDesktopLogger(makePaths(root, root));
 
@@ -169,9 +169,9 @@ describe('createPackagedDesktopLogger log-write failures', () => {
       expect(() => console.error('renderer fetch failed')).not.toThrow();
     } finally {
       if (previousEcho == null) {
-        delete process.env.OD_DESKTOP_LOG_ECHO;
+        delete process.env.MAX_DESKTOP_LOG_ECHO;
       } else {
-        process.env.OD_DESKTOP_LOG_ECHO = previousEcho;
+        process.env.MAX_DESKTOP_LOG_ECHO = previousEcho;
       }
       rmSync(root, { recursive: true, force: true });
     }

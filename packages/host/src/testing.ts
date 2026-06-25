@@ -1,6 +1,6 @@
 import {
-  OPEN_DESIGN_HOST_GLOBAL,
-  OPEN_DESIGN_HOST_VERSION,
+  MARKETING_AX_HOST_GLOBAL,
+  MARKETING_AX_HOST_VERSION,
   type OpenDesignHostBridge,
   type OpenDesignHostGlobalScope,
   type OpenDesignHostUpdaterStatusSnapshot,
@@ -40,7 +40,7 @@ function defaultHost(): OpenDesignHostBridge {
     supported: true,
   };
   return {
-    version: OPEN_DESIGN_HOST_VERSION,
+    version: MARKETING_AX_HOST_VERSION,
     browser: {
       clearData: async () => ({ ok: true }),
     },
@@ -112,13 +112,13 @@ export function installMockOpenDesignHost(options: MockOpenDesignHostOptions = {
       : []),
   ];
   const previous = targets.map((target) => ({
-    had: Object.prototype.hasOwnProperty.call(target, OPEN_DESIGN_HOST_GLOBAL),
+    had: Object.prototype.hasOwnProperty.call(target, MARKETING_AX_HOST_GLOBAL),
     target,
-    value: target[OPEN_DESIGN_HOST_GLOBAL],
+    value: target[MARKETING_AX_HOST_GLOBAL],
   }));
 
   for (const target of targets) {
-    Object.defineProperty(target, OPEN_DESIGN_HOST_GLOBAL, {
+    Object.defineProperty(target, MARKETING_AX_HOST_GLOBAL, {
       configurable: true,
       value: host,
       writable: true,
@@ -128,13 +128,13 @@ export function installMockOpenDesignHost(options: MockOpenDesignHostOptions = {
   return () => {
     for (const entry of previous) {
       if (entry.had) {
-        Object.defineProperty(entry.target, OPEN_DESIGN_HOST_GLOBAL, {
+        Object.defineProperty(entry.target, MARKETING_AX_HOST_GLOBAL, {
           configurable: true,
           value: entry.value,
           writable: true,
         });
       } else {
-        delete entry.target[OPEN_DESIGN_HOST_GLOBAL];
+        delete entry.target[MARKETING_AX_HOST_GLOBAL];
       }
     }
   };

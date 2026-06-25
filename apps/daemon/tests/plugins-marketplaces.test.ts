@@ -141,7 +141,7 @@ describe('marketplaces', () => {
   it('normalizes public marketplace urls to the canonical raw registry', async () => {
     const seenUrls: string[] = [];
     const result = await addMarketplace(db, {
-      url: 'https://open-design.ai/marketplace/community/open-design-marketplace.json',
+      url: 'https://marketing-ax.example/marketplace/community/open-design-marketplace.json',
       fetcher: async (url) => {
         seenUrls.push(url);
         return {
@@ -160,13 +160,13 @@ describe('marketplaces', () => {
 
   it('normalizes legacy branch raw urls to the canonical raw registry', () => {
     expect(resolveMarketplaceFetchUrl(
-      'https://raw.githubusercontent.com/nexu-io/open-design/garnet-hemisphere/plugins/registry/community/open-design-marketplace.json',
+      'https://raw.githubusercontent.com/marketing-ax/marketing-ax/garnet-hemisphere/plugins/registry/community/open-design-marketplace.json',
     )).toBe(marketplaceManifestUrlForRegistry('community'));
   });
 
   it('requires a raw open-design-marketplace.json document, not a GitHub tree page', async () => {
     const result = await addMarketplace(db, {
-      url: 'https://github.com/nexu-io/open-design/tree/garnet-hemisphere/plugins/registry/community',
+      url: 'https://github.com/marketing-ax/marketing-ax/tree/garnet-hemisphere/plugins/registry/community',
       fetcher: fixtureFetcher('<!doctype html><html><body>GitHub tree page</body></html>'),
     });
 
@@ -204,7 +204,7 @@ describe('marketplaces', () => {
   it('refresh normalizes legacy public urls before fetching', async () => {
     const seeded = ensureMarketplaceManifest(db, {
       id: 'community',
-      url: 'https://open-design.ai/marketplace/community/open-design-marketplace.json',
+      url: 'https://marketing-ax.example/marketplace/community/open-design-marketplace.json',
       trust: 'restricted',
       manifestText: VALID_MANIFEST,
     });
@@ -248,7 +248,7 @@ describe('marketplaces', () => {
   it('upserts a fixed built-in marketplace manifest', () => {
     const result = ensureMarketplaceManifest(db, {
       id: 'official',
-      url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
+      url: 'https://marketing-ax.example/marketplace/open-design-marketplace.json',
       trust: 'official',
       manifestText: VALID_MANIFEST,
       now: 123,
@@ -265,7 +265,7 @@ describe('marketplaces', () => {
     });
     const updated = ensureMarketplaceManifest(db, {
       id: 'official',
-      url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
+      url: 'https://marketing-ax.example/marketplace/open-design-marketplace.json',
       trust: 'official',
       manifestText: updatedManifest,
       now: 456,
@@ -285,7 +285,7 @@ describe('marketplaces', () => {
 
     const seeded = ensureMarketplaceManifest(db, {
       id: 'community',
-      url: 'https://open-design.ai/marketplace/community/open-design-marketplace.json',
+      url: 'https://marketing-ax.example/marketplace/community/open-design-marketplace.json',
       trust: 'restricted',
       manifestText: communityManifest,
       now: 123,
@@ -324,7 +324,7 @@ describe('marketplaces', () => {
 
     const seeded = ensureMarketplaceManifest(db, {
       id: 'official',
-      url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
+      url: 'https://marketing-ax.example/marketplace/open-design-marketplace.json',
       trust: 'official',
       manifestText: officialManifestText,
       now: 123,
@@ -356,7 +356,7 @@ describe('marketplaces', () => {
     expect(JSON.parse(sourceManifest)).toMatchObject({
       name: 'community-registry-starter',
       plugin: {
-        repo: expect.stringContaining('github.com/nexu-io/open-design'),
+        repo: expect.stringContaining('github.com/marketing-ax/marketing-ax'),
       },
     });
   });

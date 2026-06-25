@@ -30,7 +30,7 @@ import type {
   McpServerSpec,
   PluginConnectorRef,
   PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../../runtime/plugin-source';

@@ -13,24 +13,24 @@ import {
 } from '../src/projects.js';
 
 function withSandboxMode<T>(run: () => T): T {
-  const previous = process.env.OD_SANDBOX_MODE;
-  process.env.OD_SANDBOX_MODE = '1';
+  const previous = process.env.MAX_SANDBOX_MODE;
+  process.env.MAX_SANDBOX_MODE = '1';
   try {
     return run();
   } finally {
-    if (previous == null) delete process.env.OD_SANDBOX_MODE;
-    else process.env.OD_SANDBOX_MODE = previous;
+    if (previous == null) delete process.env.MAX_SANDBOX_MODE;
+    else process.env.MAX_SANDBOX_MODE = previous;
   }
 }
 
 function withSandboxImportAllowedRoots<T>(roots: string[], run: () => T): T {
-  const previous = process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS;
-  process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS = roots.join(path.delimiter);
+  const previous = process.env.MAX_SANDBOX_IMPORT_ALLOWED_ROOTS;
+  process.env.MAX_SANDBOX_IMPORT_ALLOWED_ROOTS = roots.join(path.delimiter);
   try {
     return run();
   } finally {
-    if (previous == null) delete process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS;
-    else process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS = previous;
+    if (previous == null) delete process.env.MAX_SANDBOX_IMPORT_ALLOWED_ROOTS;
+    else process.env.MAX_SANDBOX_IMPORT_ALLOWED_ROOTS = previous;
   }
 }
 
@@ -115,7 +115,7 @@ describe('resolveProjectDir', () => {
       withSandboxImportAllowedRoots(['tmp'], () => {
         expect(() =>
           assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
-        ).toThrowError(/OD_SANDBOX_IMPORT_ALLOWED_ROOTS.*absolute/i);
+        ).toThrowError(/MAX_SANDBOX_IMPORT_ALLOWED_ROOTS.*absolute/i);
       });
     });
   });

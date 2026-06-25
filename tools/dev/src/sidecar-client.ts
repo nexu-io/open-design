@@ -1,12 +1,12 @@
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   type DaemonStatusSnapshot,
   type DesktopStatusSnapshot,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
-import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 
 export type AppRuntimeLookup = {
   base: string;
@@ -14,15 +14,15 @@ export type AppRuntimeLookup = {
 };
 
 export function resolveDaemonIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.DAEMON, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+  return resolveAppIpcPath({ app: APP_KEYS.DAEMON, contract: MARKETING_AX_SIDECAR_CONTRACT, namespace: runtime.namespace });
 }
 
 export function resolveWebIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.WEB, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+  return resolveAppIpcPath({ app: APP_KEYS.WEB, contract: MARKETING_AX_SIDECAR_CONTRACT, namespace: runtime.namespace });
 }
 
 export function resolveDesktopIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+  return resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: MARKETING_AX_SIDECAR_CONTRACT, namespace: runtime.namespace });
 }
 
 export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DaemonStatusSnapshot | null> {

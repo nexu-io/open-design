@@ -23,7 +23,7 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
 } from '../media-models.js';
-import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import type { MediaExecutionPolicy, MediaSurface } from '@marketing-ax/contracts';
 
 function fmtList(ids: string[]): string {
   return ids.map((id) => `\`${id}\``).join(', ');
@@ -49,8 +49,8 @@ export function renderMediaGenerationContract(
 
 ## Media generation policy (load-bearing — overrides softer wording above)
 
-Open Design-owned media execution is **disabled for this run**. Do not call
-\`"$OD_NODE_BIN" "$OD_BIN" media generate\`, Codex built-in imagegen, OD media
+Marketing AX-owned media execution is **disabled for this run**. Do not call
+\`"$MAX_NODE_BIN" "$MAX_BIN" media generate\`, Codex built-in imagegen, OD media
 provider APIs, local renderers, or ad-hoc scripts that create media bytes on
 OD's behalf.
 
@@ -103,7 +103,7 @@ export const MEDIA_GENERATION_CONTRACT = `
 
 This project is a **non-web** surface (image / video / audio). The unifying
 contract is: skill workflow + project metadata tell you WHAT to make; one
-shell command through \`OD_NODE_BIN\` + \`OD_BIN\` is HOW you actually produce bytes.
+shell command through \`MAX_NODE_BIN\` + \`MAX_BIN\` is HOW you actually produce bytes.
 Do not try to embed binary content inside \`<artifact>\` tags, and do not
 write image/video/audio bytes by hand. Always call out to the dispatcher.
 
@@ -121,11 +121,11 @@ prompt and the narration.
 
 The daemon spawns you with these env vars set (verify with \`echo\`):
 
-- \`OD_NODE_BIN\`    — absolute path to the Node-compatible runtime that started the daemon. Packaged desktop installs provide this even when the user has no system \`node\` on PATH.
-- \`OD_BIN\`         — absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" …\`.
-- \`OD_PROJECT_ID\`  — the active project's id. Pass it as \`--project "$OD_PROJECT_ID"\`.
-- \`OD_PROJECT_DIR\` — the project's files folder (your cwd). Generated files land here.
-- \`OD_DAEMON_URL\`  — base URL of the local daemon, e.g. \`http://127.0.0.1:7456\`.
+- \`MAX_NODE_BIN\`    — absolute path to the Node-compatible runtime that started the daemon. Packaged desktop installs provide this even when the user has no system \`node\` on PATH.
+- \`MAX_BIN\`         — absolute path to the OD CLI script. On POSIX shells run with \`"$MAX_NODE_BIN" "$MAX_BIN" …\`.
+- \`MAX_PROJECT_ID\`  — the active project's id. Pass it as \`--project "$MAX_PROJECT_ID"\`.
+- \`MAX_PROJECT_DIR\` — the project's files folder (your cwd). Generated files land here.
+- \`MAX_DAEMON_URL\`  — base URL of the local daemon, e.g. \`http://127.0.0.1:7456\`.
 
 If any of these are unset, the user is running you outside the OD daemon —
 ask them to relaunch from the OD app (or pass the values explicitly).
@@ -138,8 +138,8 @@ directly in the project dir doesn't have to relaunch.
 Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
 
 \`\`\`bash
-"$OD_NODE_BIN" "$OD_BIN" media generate \\
-  --project "$OD_PROJECT_ID" \\
+"$MAX_NODE_BIN" "$MAX_BIN" media generate \\
+  --project "$MAX_PROJECT_ID" \\
   --surface <image|video|audio> \\
   --model <model-id> \\
   --output <filename> \\
@@ -169,14 +169,14 @@ Save the \`file.name\` and reference it in your reply ("I generated
 
 ### Allowed execution paths
 
-For media projects, \`"$OD_NODE_BIN" "$OD_BIN" media generate …\` is the **only**
+For media projects, \`"$MAX_NODE_BIN" "$MAX_BIN" media generate …\` is the **only**
 approved execution path **except for the \`hyperframes-html\` video
 model** — see the carve-out below. Do not replace the dispatcher with
 ad-hoc \`curl\` requests, direct imports of daemon modules, home-grown
 wrappers, or "equivalent" scripts. Do not probe the daemon with
 \`curl\`, \`lsof\`, \`netstat\`, or speculative environment debugging
-before the first generate attempt. Treat \`OD_NODE_BIN\`, \`OD_BIN\`,
-\`OD_PROJECT_ID\`, and \`OD_DAEMON_URL\` as the source of truth and try the dispatcher
+before the first generate attempt. Treat \`MAX_NODE_BIN\`, \`MAX_BIN\`,
+\`MAX_PROJECT_ID\`, and \`MAX_DAEMON_URL\` as the source of truth and try the dispatcher
 first.
 
 #### Carve-out: \`hyperframes-html\` is agent-authored, daemon-rendered
@@ -198,7 +198,7 @@ actually changes.
 
 \`\`\`bash
 COMP_REL=".hyperframes-cache/$(date +%s)-$(openssl rand -hex 2)"
-COMP="$OD_PROJECT_DIR/$COMP_REL"
+COMP="$MAX_PROJECT_DIR/$COMP_REL"
 
 # Pure file copy, no Chrome — works in any agent shell.
 npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
@@ -211,8 +211,8 @@ npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
 # dark canvas, one warm + one cool accent, restrained motion unless
 # the user explicitly asked for something else.
 
-"$OD_NODE_BIN" "$OD_BIN" media generate \\
-  --project "$OD_PROJECT_ID" \\
+"$MAX_NODE_BIN" "$MAX_BIN" media generate \\
+  --project "$MAX_PROJECT_ID" \\
   --surface video \\
   --model hyperframes-html \\
   --output "<descriptive-name>.mp4" \\
@@ -252,7 +252,7 @@ multi-minute pipeline** — will not complete within the initial \`media generat
 \`media generate\` dispatches the task daemon-side and polls for up to ~25s. It
 always exits 0 — either with \`{"file":{...}}\` if the render finished within that
 window, or with \`{"taskId":"..."}\` as a handoff signal. You then drive the render
-to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\`
+to completion by calling \`media wait <taskId>\` through \`MAX_NODE_BIN\` + \`MAX_BIN\`
 in a loop — each call long-polls the daemon for up to 120s. The wait subcommand
 exits with a distinct code per outcome:
 
@@ -260,7 +260,7 @@ exits with a distinct code per outcome:
 - \`exit 5\` — terminal **failed**. Stderr carries the upstream error.
 - \`exit 2\` — still **running**. Final stdout line is
   \`{"taskId":"…","status":"running","nextSince":<n>}\`. Re-run
-  \`"$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <n>\` to continue from where you left
+  \`"$MAX_NODE_BIN" "$MAX_BIN" media wait <taskId> --since <n>\` to continue from where you left
   off (\`--since\` skips already-seen progress lines so you don't see the
   same chatter twice).
 
@@ -268,7 +268,7 @@ The pattern in your shell tool (uses python3 to parse JSON — do NOT use jq, it
 may not be installed):
 
 \`\`\`bash
-out=\$("$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model flux-pro-ultra --prompt "…")
+out=\$("$MAX_NODE_BIN" "$MAX_BIN" media generate --surface image --model flux-pro-ultra --prompt "…")
 ec=\$?
 if [ "\$ec" -ne 0 ]; then
   echo "\$out" >&2; exit "\$ec"
@@ -278,7 +278,7 @@ task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sy
 since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
 since="\${since:-0}"
 while [ -n "\$task_id" ]; do
-  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  out=\$("$MAX_NODE_BIN" "$MAX_BIN" media wait "\$task_id" --since "\$since")
   ec=\$?
   last=\$(printf '%s\\n' "\$out" | tail -1)
   since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
@@ -322,7 +322,7 @@ showed it crashed).
   (\`doubao-seedance-2-0-260128\`, \`doubao-seedance-2-0-fast-260128\`,
   \`doubao-seedance-1-0-pro-250528\`, \`doubao-seedance-1-0-lite-i2v-250428\`)
   accepts a reference image as the first frame. Pass it via
-  \`--image <project-relative-path>\` to \`"$OD_NODE_BIN" "$OD_BIN" media generate\`. The
+  \`--image <project-relative-path>\` to \`"$MAX_NODE_BIN" "$MAX_BIN" media generate\`. The
   daemon reads the file from the project, base64-encodes it, and
   forwards it as the model's \`image_url\` input. Path traversal
   outside the project is rejected.
@@ -339,7 +339,7 @@ fall back.
 Exception — **fal-ai/\* custom paths**: any model ID that begins with
 \`fal-ai/\` (e.g. \`fal-ai/flux/dev\`, \`fal-ai/stable-diffusion-xl\`) is a
 valid passthrough for the image or video surface. Pass it to
-\`"$OD_NODE_BIN" "$OD_BIN" media generate\` as-is via \`--model <id>\`;
+\`"$MAX_NODE_BIN" "$MAX_BIN" media generate\` as-is via \`--model <id>\`;
 the daemon routes it directly to the fal queue without a catalog entry.
 Do **not** warn the user or substitute the default when a \`fal-ai/\`
 path is given.
@@ -398,12 +398,12 @@ path is given.
    you start authoring. Once the user answers, create the composition
    with \`npx hyperframes init\` under \`.hyperframes-cache/\`, edit the
    generated \`index.html\`, and dispatch through
-   \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>\`.
+   \`"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>\`.
    Do not run \`npx hyperframes render\` yourself; Chrome-bound rendering
    must happen in the daemon process. Do not add a second "plan" or
    "environment check" message first.
 3. **Generate by shell, reply in one short message.** When you invoke
-   \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call.
+   \`"$MAX_NODE_BIN" "$MAX_BIN" media generate\`, do it inside a clearly-labelled tool call.
    After the command completes, reply with **one brief message** (2–3 sentences max):
    the filename, the model used, and a single follow-up offer ("Want a different
    aspect ratio?" / "Try again with more fog?"). Do not write long descriptions,
@@ -411,7 +411,7 @@ path is given.
    If it fails, quote the real stderr / exit code and stop there.
    Never say "I dispatched the render" / "the generation has started"
    unless the shell command has already been executed.
-4. **Iterate by re-running.** To revise, call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` again
+4. **Iterate by re-running.** To revise, call \`"$MAX_NODE_BIN" "$MAX_BIN" media generate\` again
    with a new \`--output\` filename (or omit \`--output\` to auto-name).
    Don't try to "edit" generated bytes by hand — re-generate and let the
    user pick which version to keep.
@@ -439,12 +439,12 @@ do **not** narrate a stub as if it were the final result.
 1. **HTTP status.** When stubs are disabled (the default release-build
    posture), the dispatcher returns \`503 provider not configured\` for
    models without a real renderer, and the CLI prints the daemon's
-   error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
+   error message. Set \`MAX_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` exits \`0\` for
+2. **Exit code.** \`"$MAX_NODE_BIN" "$MAX_BIN" media generate\` exits \`0\` for
    both immediate completion and successful queued/running handoff; inspect
-   the final stdout JSON for either \`file\` or \`taskId\`. \`"$OD_NODE_BIN"
-   "$OD_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
+   the final stdout JSON for either \`file\` or \`taskId\`. \`"$MAX_NODE_BIN"
+   "$MAX_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
    task is still **running** and needs another \`wait\` call (see
    "Long-running renders" above), \`5\` when the daemon accepted the request
    but the provider call failed (key missing / 4xx / network blip), and

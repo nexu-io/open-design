@@ -4,7 +4,7 @@
 // has to be different: xAI's PoC client_id locks the redirect_uri to
 // http://127.0.0.1:56121/callback (Hermes-issued), so we run a one-shot
 // loopback listener (xai-oauth-server.ts) for the redirect instead of
-// piggybacking on the daemon's main HTTP port. Once Open Design owns
+// piggybacking on the daemon's main HTTP port. Once Marketing AX owns
 // its own xAI client_id, this file shrinks back to the daemon-port
 // shape that mcp-routes.ts uses.
 //
@@ -262,7 +262,7 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
 
     // Reuse media-config's credential chain so the search endpoint sees
     // the same OAuth-first cascade Grok image / video already gets:
-    // OD-native xai-tokens → Hermes auth.json borrow → OD_GROK_API_KEY
+    // OD-native xai-tokens → Hermes auth.json borrow → MAX_GROK_API_KEY
     // → XAI_API_KEY. Anything that lights up the Grok image button
     // automatically lights up X search too.
     const provider = await resolveProviderConfig(PROJECT_ROOT, 'grok');

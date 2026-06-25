@@ -1,4 +1,4 @@
-import type { InputFieldSpec } from '@open-design/contracts';
+import type { InputFieldSpec } from '@marketing-ax/contracts';
 import type { Locale } from './types';
 
 const ZH_INPUT_LABELS: Record<string, string> = {

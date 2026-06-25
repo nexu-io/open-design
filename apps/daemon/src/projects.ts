@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Project files registry. Each project is a folder under
-// <projectRoot>/.od/projects/<projectId>/. The frontend's project list
+// <projectRoot>/.max/projects/<projectId>/. The frontend's project list
 // (localStorage) carries metadata; this module is the single owner of the
 // on-disk content (HTML artifacts, sketches, uploaded images, pasted text).
 //
@@ -537,7 +537,7 @@ function buildDesignManifest(entries, projectLabel) {
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
     schema: 'open-design.design-manifest.v1',
-    title: projectLabel || 'Open Design project',
+    title: projectLabel || 'Marketing AX project',
     entryFile,
     sourceFiles: {
       all: files,
@@ -626,7 +626,7 @@ function buildDesignHandoff(entries, projectLabel) {
     files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
   const list = (items) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
 
-  return `# ${projectLabel || 'Open Design project'} implementation handoff
+  return `# ${projectLabel || 'Marketing AX project'} implementation handoff
 
 This archive is the source of truth for turning the design into production code. Start from \`${entryFile}\`, then preserve the visual system, responsive behavior, and interactions found in the exported files.
 
@@ -634,7 +634,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Design chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of Marketing AX chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -665,7 +665,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Design chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or Marketing AX chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
@@ -1435,14 +1435,14 @@ function toProjectPath(raw) {
 }
 
 // Validates an id string for use as a path segment under a daemon-managed
-// directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
+// directory (`.max/projects/<id>`, `design-systems/<id>`, etc.). The character
 // class allows dots so ids like `my-project.v2` work, but pure-dot ids
 // (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
 // resolve to the parent directory when fed into `path.join`. Without the
 // pure-dot guard, an attacker could create a project row with id `..` (or
 // reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
 // which Express decodes before the route handler sees it) and steer
-// finalize / write operations outside `.od/projects/`.
+// finalize / write operations outside `.max/projects/`.
 export function isSafeId(id) {
   if (typeof id !== 'string') return false;
   if (id.length === 0 || id.length > 128) return false;

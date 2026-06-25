@@ -1,5 +1,5 @@
 {
-  "name": "@open-design/tools-pack",
+  "name": "@marketing-ax/tools-pack",
   "version": "0.10.0",
   "private": true,
   "type": "module",
@@ -15,10 +15,10 @@
   "dependencies": {
     "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
-    "@open-design/launcher-proto": "workspace:*",
-    "@open-design/platform": "workspace:*",
-    "@open-design/sidecar": "workspace:*",
-    "@open-design/sidecar-proto": "workspace:*",
+    "@marketing-ax/launcher-proto": "workspace:*",
+    "@marketing-ax/platform": "workspace:*",
+    "@marketing-ax/sidecar": "workspace:*",
+    "@marketing-ax/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
     "electron-builder": "26.8.1",
     "resedit": "1.7.2"

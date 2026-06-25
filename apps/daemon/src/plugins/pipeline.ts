@@ -4,7 +4,7 @@
 // stage, asks the caller-supplied `runStage()` to actually do the work,
 // then evaluates each stage's `until` against returned signals to decide
 // whether to advance or loop. The devloop ceiling
-// (`OD_MAX_DEVLOOP_ITERATIONS`, default 10) is enforced here so a buggy
+// (`MAX_MAX_DEVLOOP_ITERATIONS`, default 10) is enforced here so a buggy
 // plugin cannot burn provider quota in an infinite loop.
 //
 // Side effects:
@@ -27,7 +27,7 @@ import type {
   PluginPipeline,
   PluginPipelineStageEvent,
   PipelineStage,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   buildPipelineStageCompletedEvent,
   buildPipelineStageStartedEvent,
@@ -37,7 +37,7 @@ import { evaluateUntil, parseUntil, type UntilSignals } from './until.js';
 type SqliteDb = Database.Database;
 
 export interface PipelineEnv {
-  maxIterations: number; // OD_MAX_DEVLOOP_ITERATIONS
+  maxIterations: number; // MAX_MAX_DEVLOOP_ITERATIONS
 }
 
 export interface StageRunOutcome {

@@ -40,7 +40,7 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import { createPackageManagerInvocation } from "@open-design/platform";
+import { createPackageManagerInvocation } from "@marketing-ax/platform";
 
 import type { ToolPackConfig } from "./config.js";
 import { execFileAsync } from "./mac/commands.js";
@@ -129,7 +129,7 @@ async function runPnpm(
 ): Promise<void> {
   // `createPackageManagerInvocation` is the same primitive every platform's
   // local `runPnpm` helper goes through, so the linux containerized build
-  // (which sets `OD_TOOLS_PACK_PNPM_BIN` to the standalone pnpm binary it
+  // (which sets `MAX_TOOLS_PACK_PNPM_BIN` to the standalone pnpm binary it
   // bootstrapped) picks up the right command here too.
   const invocation = createPackageManagerInvocation(args, process.env);
   await execFileAsync(invocation.command, invocation.args, {

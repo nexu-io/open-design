@@ -15,7 +15,7 @@
   gnumake,
   pkg-config,
 }:
-# Builds the @open-design/daemon workspace package — produces $out/bin/od.
+# Builds the @marketing-ax/daemon workspace package — produces $out/bin/od.
 #
 # Implementation note on dream2nix:
 #   The flake takes `dream2nix` as an input (per the project's Nix
@@ -42,7 +42,7 @@
 # before the daemon itself; tsc emits each package's dist/, which is what
 # the daemon resolves at runtime via pnpm's symlinked node_modules.
 let
-  pname = "open-design-daemon";
+  pname = "marketing-ax-daemon";
   version = (lib.importJSON ../package.json).version;
 
   pnpmDepsHash = (import ./pnpm-deps.nix).daemonHash;
@@ -149,12 +149,12 @@ in
 
     installPhase = ''
       runHook preInstall
-      mkdir -p $out/lib/open-design $out/bin
+      mkdir -p $out/lib/marketing-ax $out/bin
 
       # Copy the whole workspace tree — pnpm's symlinks under node_modules
       # resolve sibling packages by relative paths, so we cannot prune to
       # just apps/daemon.
-      cp -r . $out/lib/open-design/
+      cp -r . $out/lib/marketing-ax/
 
       # Root devDependencies expose non-daemon workspaces via pnpm symlinks,
       # but the daemon derivation intentionally filters those sources out
@@ -162,18 +162,18 @@ in
       # the copied node_modules tree so Nix fixup does not fail on broken
       # links.
       rm -f \
-        $out/lib/open-design/node_modules/@open-design/components \
-        $out/lib/open-design/node_modules/@open-design/tools-dev \
-        $out/lib/open-design/node_modules/@open-design/tools-pack \
-        $out/lib/open-design/node_modules/@open-design/tools-serve \
-        $out/lib/open-design/node_modules/.bin/tools-dev \
-        $out/lib/open-design/node_modules/.bin/tools-pack \
-        $out/lib/open-design/node_modules/.bin/tools-serve
+        $out/lib/marketing-ax/node_modules/@marketing-ax/components \
+        $out/lib/marketing-ax/node_modules/@marketing-ax/tools-dev \
+        $out/lib/marketing-ax/node_modules/@marketing-ax/tools-pack \
+        $out/lib/marketing-ax/node_modules/@marketing-ax/tools-serve \
+        $out/lib/marketing-ax/node_modules/.bin/tools-dev \
+        $out/lib/marketing-ax/node_modules/.bin/tools-pack \
+        $out/lib/marketing-ax/node_modules/.bin/tools-serve
 
-      chmod +x $out/lib/open-design/apps/daemon/dist/cli.js
+      chmod +x $out/lib/marketing-ax/apps/daemon/dist/cli.js
 
       makeWrapper ${nodejs}/bin/node $out/bin/od \
-        --add-flags $out/lib/open-design/apps/daemon/dist/cli.js \
+        --add-flags $out/lib/marketing-ax/apps/daemon/dist/cli.js \
         --set NODE_ENV production
       runHook postInstall
     '';
@@ -184,8 +184,8 @@ in
     };
 
     meta = with lib; {
-      description = "Open Design daemon — local agent orchestrator + API (`od` CLI)";
-      homepage = "https://github.com/nexu-io/open-design";
+      description = "Marketing AX daemon — local agent orchestrator + API (`od` CLI)";
+      homepage = "https://github.com/marketing-ax/marketing-ax";
       license = licenses.asl20;
       mainProgram = "od";
       platforms = platforms.linux ++ platforms.darwin;

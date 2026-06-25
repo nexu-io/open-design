@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import type { DesktopExportPdfInput } from '@open-design/sidecar-proto';
+import type { DesktopExportPdfInput } from '@marketing-ax/sidecar-proto';
 
 import { readProjectFile } from './projects.js';
 

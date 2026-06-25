@@ -6,7 +6,7 @@ import { cac } from "cac";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
@@ -18,8 +18,8 @@ import {
   type DesktopStatusSnapshot,
   type DesktopUpdateResult,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
-import { createSidecarLaunchEnv, requestJsonIpc } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { createSidecarLaunchEnv, requestJsonIpc } from "@marketing-ax/sidecar";
 import {
   collectProcessTreePids,
   createPackageManagerInvocation,
@@ -30,7 +30,7 @@ import {
   spawnBackgroundProcess,
   stopProcesses,
   type StopProcessesResult,
-} from "@open-design/platform";
+} from "@marketing-ax/platform";
 
 import {
   ALL_APPS,
@@ -270,7 +270,7 @@ function printRunForegroundResult(started: Partial<Record<ToolDevAppName, unknow
   const daemonUrl = stringField(daemonStatus ?? {}, "url");
 
   if (webUrl != null || daemonUrl != null) {
-    process.stdout.write("\n  Open Design dev server ready\n\n");
+    process.stdout.write("\n  Marketing AX dev server ready\n\n");
     if (webUrl != null) process.stdout.write(`  ➜  Web:    ${colorizeLink(normalizeDisplayUrl(webUrl))}\n`);
     if (daemonUrl != null) process.stdout.write(`  ➜  Daemon: ${colorizeLink(normalizeDisplayUrl(daemonUrl))}\n`);
     process.stdout.write("\n  Press Ctrl+C to stop\n\n");
@@ -349,10 +349,10 @@ function createAppStamp(config: ToolDevConfig, appName: ToolDevAppName) {
   };
 
   return {
-    args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+    args: createProcessStampArgs(stamp, MARKETING_AX_SIDECAR_CONTRACT),
     env: createSidecarLaunchEnv({
       base: config.toolsDevRoot,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       stamp,
     }),
     stamp,
@@ -368,7 +368,7 @@ async function findAppProcessTree(config: ToolDevConfig, appName: ToolDevAppName
         mode: "dev",
         namespace: config.namespace,
         source: SIDECAR_SOURCES.TOOLS_DEV,
-      }, OPEN_DESIGN_SIDECAR_CONTRACT),
+      }, MARKETING_AX_SIDECAR_CONTRACT),
     )
     .map((processInfo) => processInfo.pid);
   const pids = collectProcessTreePids(processes, rootPids);
@@ -446,7 +446,7 @@ async function spawnDaemonRuntime(
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-        ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+        ...(spawnOptions.requireDesktopAuth ? { MAX_REQUIRE_DESKTOP_AUTH: "1" } : {}),
       },
       logHandle,
     });
@@ -483,7 +483,7 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
         PORT: String(webPort ?? 0),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(options.prod === true
-          ? { NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "server", OD_WEB_PROD: "1" }
+          ? { NODE_ENV: "production", MAX_WEB_OUTPUT_MODE: "server", MAX_WEB_PROD: "1" }
           : {}),
       },
       logHandle,
@@ -494,8 +494,8 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
 }
 
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
+  await logHandle.write(`\n[tools-dev] building @marketing-ax/desktop at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@marketing-ax/desktop", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -532,8 +532,8 @@ async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle
   if (distMtime > 0 && distMtime >= sourceMtime) return;
 
   const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
-  await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
+  await logHandle.write(`\n[tools-dev] building @marketing-ax/daemon because ${reason} at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@marketing-ax/daemon", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -1057,7 +1057,7 @@ async function runForeground(config: ToolDevConfig, appName: string | undefined,
       if (shuttingDown) return;
       shuttingDown = true;
       clearInterval(keepAlive);
-      process.stderr.write("\nStopping Open Design dev server...\n");
+      process.stderr.write("\nStopping Marketing AX dev server...\n");
       void runSequential(stopOrderFor(targets), (target) => stopApp(config, target)).finally(() => {
         for (const sig of ["SIGINT", "SIGTERM"] as const) {
           process.off(sig, shutdown);
@@ -1085,7 +1085,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
-    .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
+    .option("--prod", "use production build (requires pnpm --filter @marketing-ax/web build first)");
 }
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(

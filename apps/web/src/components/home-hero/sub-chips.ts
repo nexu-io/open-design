@@ -11,7 +11,7 @@
 // Picking a sub-type filters the example-prompt cards below the rail to that
 // scene; it does NOT bind a plugin or stamp an active badge.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import type { IconName } from '../Icon';
 import {
   buildSubcategoryCatalog,

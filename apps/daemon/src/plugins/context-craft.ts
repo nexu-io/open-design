@@ -1,4 +1,4 @@
-import type { AppliedPluginSnapshot, InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, InstalledPluginRecord, PluginManifest } from '@marketing-ax/contracts';
 
 export function getPluginContextCraft(plugin: InstalledPluginRecord): string[] {
   return getManifestContextCraft(plugin.manifest);

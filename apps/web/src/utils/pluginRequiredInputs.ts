@@ -1,4 +1,4 @@
-import type { InputFieldSpec } from '@open-design/contracts';
+import type { InputFieldSpec } from '@marketing-ax/contracts';
 
 // The Home composer dropped its inline plugin-inputs form, so most fields are
 // satisfied by their `default` or hydrated from the prompt body. Required

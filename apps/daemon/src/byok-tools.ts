@@ -404,7 +404,7 @@ export interface BYOKToolContext {
   /** Daemon project root — used to look up media-config when the chat
    *  session key is missing. */
   projectRoot: string;
-  /** Daemon's PROJECTS_DIR (the `<projectRoot>/.od/projects/` folder
+  /** Daemon's PROJECTS_DIR (the `<projectRoot>/.max/projects/` folder
    *  that holds per-project file trees). Generated images land in
    *  `<projectsRoot>/<projectId>/byok-<id>.png` so the project's
    *  FileViewer / DesignFilesPanel discover them automatically and
@@ -623,7 +623,7 @@ export async function executeGenerateImage(
 
   // Prefer the BYOK session's key (what the user is actively using).
   // Fall back to media-config (env var > stored) so a user who set
-  // OD_SENSEAUDIO_API_KEY but forgot to fill the chat panel still
+  // MAX_SENSEAUDIO_API_KEY but forgot to fill the chat panel still
   // gets a working tool call.
   let apiKey = ctx.upstreamApiKey;
   let baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;

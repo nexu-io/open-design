@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 
 import { Icon } from './Icon';
 
@@ -66,7 +66,7 @@ export function MissingBrandFontsBanner({
       <Icon name="help-circle" size={16} />
       <span>
         <strong>Missing brand fonts</strong>
-        <small>Open Design is rendering typography with substitute web fonts.</small>
+        <small>Marketing AX is rendering typography with substitute web fonts.</small>
       </span>
       <div className="ds-warning-card-actions">
         {onUploadAssets ? (

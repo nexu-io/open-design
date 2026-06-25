@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { ArtifactManifest, ArtifactExportTarget } from '@open-design/contracts';
+import type { ArtifactManifest, ArtifactExportTarget } from '@marketing-ax/contracts';
 import { runHandoffAtom } from '../src/plugins/atoms/handoff.js';
 
 let cwd: string;

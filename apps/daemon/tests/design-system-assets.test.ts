@@ -468,32 +468,32 @@ describe('Design System Project manifest runtime consumption', () => {
 // pin the predicate that wraps the gate so the default-on flip itself
 // is locked into the test suite.
 describe('isDesignTokenChannelEnabled (PR-D env gate)', () => {
-  it('is true when OD_DESIGN_TOKEN_CHANNEL is unset (PR-D default-on)', () => {
+  it('is true when MAX_DESIGN_TOKEN_CHANNEL is unset (PR-D default-on)', () => {
     expect(isDesignTokenChannelEnabled({})).toBe(true);
   });
 
   it('is true for the legacy explicit opt-in `1`', () => {
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: '1' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: '1' })).toBe(true);
   });
 
   it('is true for any non-`0` truthy-looking value (forward compatibility)', () => {
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: 'true' })).toBe(true);
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: 'on' })).toBe(true);
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: '2' })).toBe(true);
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: 'yes' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: 'true' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: 'on' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: '2' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: 'yes' })).toBe(true);
   });
 
   it('is true for an empty string (operator typed `=` and forgot the value — fail open, not closed)', () => {
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: '' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: '' })).toBe(true);
   });
 
   it('is false ONLY for the literal kill-switch value `0`', () => {
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: '0' })).toBe(false);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: '0' })).toBe(false);
   });
 
   it('is true for whitespace-padded `0` — strict literal match prevents accidental kill-switch tripping', () => {
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: ' 0' })).toBe(true);
-    expect(isDesignTokenChannelEnabled({ OD_DESIGN_TOKEN_CHANNEL: '0 ' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: ' 0' })).toBe(true);
+    expect(isDesignTokenChannelEnabled({ MAX_DESIGN_TOKEN_CHANNEL: '0 ' })).toBe(true);
   });
 });
 
@@ -524,7 +524,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     expect(assets.componentsManifest).toContain('Buttons and calls to action');
   });
 
-  it('returns empty (kill switch) when OD_DESIGN_TOKEN_CHANNEL is `0`, even if files are on disk', async () => {
+  it('returns empty (kill switch) when MAX_DESIGN_TOKEN_CHANNEL is `0`, even if files are on disk', async () => {
     const builtInRoot = fresh();
     const userRoot = fresh();
     const dir = brandDir(builtInRoot, 'sample');
@@ -532,14 +532,14 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     writeFileSync(path.join(dir, 'components.html'), '<button>btn</button>');
 
     const assets = await resolveDesignSystemAssets('sample', builtInRoot, userRoot, {
-      OD_DESIGN_TOKEN_CHANNEL: '0',
+      MAX_DESIGN_TOKEN_CHANNEL: '0',
     });
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
     expect(assets.componentsManifest).toBeUndefined();
   });
 
-  it('still returns the assets under the legacy explicit opt-in `OD_DESIGN_TOKEN_CHANNEL=1`', async () => {
+  it('still returns the assets under the legacy explicit opt-in `MAX_DESIGN_TOKEN_CHANNEL=1`', async () => {
     const builtInRoot = fresh();
     const userRoot = fresh();
     const dir = brandDir(builtInRoot, 'sample');
@@ -547,7 +547,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     writeFileSync(path.join(dir, 'components.html'), '<button>btn</button>');
 
     const assets = await resolveDesignSystemAssets('sample', builtInRoot, userRoot, {
-      OD_DESIGN_TOKEN_CHANNEL: '1',
+      MAX_DESIGN_TOKEN_CHANNEL: '1',
     });
     expect(assets.tokensCss).toContain('--bg: #fff');
     expect(assets.fixtureHtml).toContain('<button>');

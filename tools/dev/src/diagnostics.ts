@@ -39,12 +39,12 @@ export function isSupportedNodeRuntime(nodeVersion = process.version): boolean {
 
 export function formatUnsupportedNodeRuntimeMessage(runtime: NodeRuntimeDiagnosticInput = currentNodeRuntime()): string {
   return [
-    `tools-dev must run with ${SUPPORTED_NODE_RANGE} before starting Open Design.`,
+    `tools-dev must run with ${SUPPORTED_NODE_RANGE} before starting Marketing AX.`,
     `Current runtime: Node ${runtime.nodeVersion} (NODE_MODULE_VERSION ${runtime.nodeModuleVersion}).`,
     "Switch to Node 24 first, then refresh native dependencies if this worktree was installed under another Node:",
     "  nvm use 24",
     "  corepack pnpm install --frozen-lockfile",
-    "  corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
+    "  corepack pnpm --filter @marketing-ax/daemon rebuild better-sqlite3 --pending",
   ].join("\n");
 }
 
@@ -54,7 +54,7 @@ export function createUnsupportedNodeRuntimeError(runtime?: NodeRuntimeDiagnosti
 
 function formatNativeAddonAbiMismatchRecommendation(runtime: NodeRuntimeDiagnosticInput): string {
   const base = [
-    "Open Design's dev stack must run with Node ~24.",
+    "Marketing AX's dev stack must run with Node ~24.",
     `Current tools-dev runtime: Node ${runtime.nodeVersion} (NODE_MODULE_VERSION ${runtime.nodeModuleVersion}).`,
   ];
 
@@ -64,14 +64,14 @@ function formatNativeAddonAbiMismatchRecommendation(runtime: NodeRuntimeDiagnost
       "Switch to Node 24 first, then refresh native daemon dependencies:",
       "  nvm use 24",
       "  corepack pnpm install --frozen-lockfile",
-      "  corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
+      "  corepack pnpm --filter @marketing-ax/daemon rebuild better-sqlite3 --pending",
     ].join("\n");
   }
 
   return [
     ...base,
     "Refresh native daemon dependencies for the active Node 24 runtime:",
-    "  corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
+    "  corepack pnpm --filter @marketing-ax/daemon rebuild better-sqlite3 --pending",
     "or refresh the workspace install:",
     "  corepack pnpm install --frozen-lockfile",
   ].join("\n");

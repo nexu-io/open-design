@@ -10,7 +10,7 @@ import type {
   PluginSourceKind,
   SkillSummary,
   TrustTier,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { HomeHero } from '../../src/components/HomeHero';
 import { I18nProvider } from '../../src/i18n';
 import {

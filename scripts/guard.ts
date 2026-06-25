@@ -47,8 +47,8 @@ const residualSkippedDirectories = new Set([
   ".codex",
   ".cursor",
   ".git",
-  ".od",
-  ".od-e2e",
+  ".max",
+  ".max-e2e",
   ".opencode",
   ".task",
   ".tmp",
@@ -125,7 +125,7 @@ const residualAllowedPathPrefixes = [
   "e2e/reports/html/",
   "e2e/reports/playwright-html-report/",
   "e2e/reports/test-results/",
-  "e2e/ui/.od-data/",
+  "e2e/ui/.max-data/",
   "e2e/ui/reports/playwright-html-report/",
   "e2e/ui/reports/test-results/",
   "e2e/ui/test-results/",
@@ -416,7 +416,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
 }
 
 const testLayoutScopedDirectories = ["apps", "packages", "tools"];
-const testLayoutSkippedDirectories = new Set([".next", ".od-data", "dist", "node_modules", "out", "reports", "test-results"]);
+const testLayoutSkippedDirectories = new Set([".next", ".max-data", "dist", "node_modules", "out", "reports", "test-results"]);
 
 function isTestFile(fileName: string): boolean {
   return /\.test\.tsx?$/.test(fileName);
@@ -486,7 +486,7 @@ async function checkTestLayout(): Promise<boolean> {
 }
 
 const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
-const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
+const e2eSkippedDirectories = new Set([".max-data", "node_modules", "reports", "test-results"]);
 const e2eAllowedScripts = [
   "test",
   "test:p0",
@@ -522,7 +522,7 @@ async function collectRepositoryFiles(directory: string, skippedDirectoryNames =
 
 const productNeutralitySkippedDirectories = new Set([
   ".git",
-  ".od",
+  ".max",
   ".tmp",
   "dist",
   "node_modules",
@@ -532,7 +532,7 @@ const productNeutralitySkippedDirectories = new Set([
 // Public contracts, help/prompt strings, docs, and shipped content should
 // describe the integration role, not name a private deployment. The default
 // check blocks named "orchestrator such as ..." examples; private forks can
-// add stricter local terms through OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
+// add stricter local terms through MAX_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
 const productNeutralityCheckedPathPrefixes = [
   "apps/daemon/src/",
   "apps/web/app/",
@@ -568,7 +568,7 @@ function isProductNeutralityTextFile(repositoryPath: string): boolean {
 }
 
 function productNeutralityForbiddenTerms(): string[] {
-  return String(process.env.OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS ?? "")
+  return String(process.env.MAX_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS ?? "")
     .split(",")
     .map((term) => term.trim())
     .filter((term) => term.length > 0);
@@ -716,7 +716,7 @@ async function checkE2eLayout(): Promise<boolean> {
   return true;
 }
 
-const webTestSkippedDirectories = new Set([".od-data", "reports", "test-results"]);
+const webTestSkippedDirectories = new Set([".max-data", "reports", "test-results"]);
 
 async function checkWebTestLayout(): Promise<boolean> {
   const violations: string[] = [];
@@ -754,9 +754,9 @@ const webImportIsolationSkippedDirectories = new Set([
   "test-results",
 ]);
 const webImportIsolationForbiddenPackages = [
-  "@open-design/platform",
-  "@open-design/sidecar",
-  "@open-design/sidecar-proto",
+  "@marketing-ax/platform",
+  "@marketing-ax/sidecar",
+  "@marketing-ax/sidecar-proto",
 ];
 const webImportIsolationForbiddenDaemonRoots = [
   "apps/daemon/src",
@@ -860,7 +860,7 @@ function webImportIsolationViolationReason(fromRepositoryPath: string, specifier
   if (!resolvedPath) return null;
 
   if (webImportIsolationForbiddenDaemonRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
-    return "apps/web must use daemon HTTP APIs or @open-design/contracts instead of daemon private source";
+    return "apps/web must use daemon HTTP APIs or @marketing-ax/contracts instead of daemon private source";
   }
 
   if (webImportIsolationForbiddenPackageRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
@@ -968,7 +968,7 @@ async function checkToolsLayout(): Promise<boolean> {
 
 const stylePolicySkippedDirectories = new Set([
   ".next",
-  ".od-data",
+  ".max-data",
   "dist",
   "node_modules",
   "out",
@@ -1130,7 +1130,7 @@ function collectStylePolicyViolationsFromSource(repositoryPath: string, source: 
         filePath: repositoryPath,
         lineNumber: lineNumberForIndex(source, match.index ?? 0),
         match: match[0],
-        reason: "default Tailwind palette classes must use Open Design token utilities instead",
+        reason: "default Tailwind palette classes must use Marketing AX token utilities instead",
       });
     }
   }
@@ -1147,7 +1147,7 @@ function collectStylePolicyViolationsFromSource(repositoryPath: string, source: 
           source,
           match.index,
           value,
-          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+          "unregistered hardcoded UI colors must use Marketing AX tokens or an explicit allowlist entry",
         );
       }
     } else {
@@ -1162,7 +1162,7 @@ function collectStylePolicyViolationsFromSource(repositoryPath: string, source: 
           source,
           match.index ?? 0,
           value,
-          "unregistered hardcoded UI colors must use Open Design tokens or an explicit allowlist entry",
+          "unregistered hardcoded UI colors must use Marketing AX tokens or an explicit allowlist entry",
         );
       }
     }
@@ -1223,7 +1223,7 @@ async function checkStylePolicy(): Promise<boolean> {
     for (const violation of violations) {
       console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.match}\` -> ${violation.reason}`);
     }
-    console.error("Use Open Design token utilities/CSS variables or add a narrow allowlist entry with a reason.");
+    console.error("Use Marketing AX token utilities/CSS variables or add a narrow allowlist entry with a reason.");
     return false;
   }
 

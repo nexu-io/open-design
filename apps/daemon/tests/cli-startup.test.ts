@@ -59,8 +59,8 @@ describe('CLI startup boundaries', () => {
         cwd: daemonRoot,
         env: {
           ...process.env,
-          OD_BIND_HOST: '127.0.0.1',
-          OD_DATA_DIR: dataDir,
+          MAX_BIND_HOST: '127.0.0.1',
+          MAX_DATA_DIR: dataDir,
         },
       },
     );
@@ -118,7 +118,7 @@ describe('CLI startup boundaries', () => {
           cwd: daemonRoot,
           env: {
             ...process.env,
-            OD_DATA_DIR: dataDir,
+            MAX_DATA_DIR: dataDir,
           },
         },
       );
@@ -128,7 +128,7 @@ describe('CLI startup boundaries', () => {
       const stderr = failed.stderr ?? '';
       expect(failed.code).toBe(3);
       expect(stderr).toContain('failed to reach daemon');
-      expect(stderr).not.toContain('OD_DATA_DIR');
+      expect(stderr).not.toContain('MAX_DATA_DIR');
     } finally {
       await chmod(dataDir, 0o700).catch(() => undefined);
       await rm(root, { recursive: true, force: true });
@@ -185,7 +185,7 @@ describe('CLI startup boundaries', () => {
           cwd: daemonRoot,
           env: {
             ...process.env,
-            OD_TOOL_TOKEN: 'run-token',
+            MAX_TOOL_TOKEN: 'run-token',
           },
         },
       );

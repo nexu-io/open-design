@@ -12,7 +12,7 @@ on:
       # Landing page sources
       - apps/landing-page/**
       # Design template source of truth for the homepage.
-      - design-templates/open-design-landing/**
+      - design-templates/marketing-ax-landing/**
       # Content sources globbed by Astro content collections — without
       # these the deploy can be silently skipped when only Markdown
       # content is touched.
@@ -46,7 +46,7 @@ on:
       - .github/workflows/blog-indexing-on-deploy.yml
       - .github/workflows/blog-indexing-monitor.yml
       - apps/landing-page/**
-      - design-templates/open-design-landing/**
+      - design-templates/marketing-ax-landing/**
       - skills/**
       - design-systems/**
       - craft/**
@@ -99,10 +99,10 @@ jobs:
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: apps/landing-page/package.json
-          install-command: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+          install-command: pnpm --filter @marketing-ax/landing-page exec playwright install --with-deps chromium
 
       - name: Typecheck landing page
-        run: pnpm --filter @open-design/landing-page typecheck
+        run: pnpm --filter @marketing-ax/landing-page typecheck
 
       # Generate the per-skill / per-template thumbnail PNGs *before*
       # the build so they ship in `out/previews/` automatically. The
@@ -116,16 +116,16 @@ jobs:
         # hit keeps cache-hit false, so we still regenerate — no stale-thumbnail
         # drift.
         if: steps.previews-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @open-design/landing-page previews
+        run: pnpm --filter @marketing-ax/landing-page previews
 
       # No PUBLIC_GA_MEASUREMENT_ID for PR/CI builds: the per-PR preview must
       # not report into the production GA property. OD_LANDING_NOINDEX=1 keeps
-      # the PR preview (pr-<n>.open-design-landing-staging.pages.dev) out of
+      # the PR preview (pr-<n>.marketing-ax-landing-staging.pages.dev) out of
       # search engines. Only `landing-page-production` builds without these.
       - name: Build landing page
         env:
           OD_LANDING_NOINDEX: '1'
-        run: pnpm --filter @open-design/landing-page build:static
+        run: pnpm --filter @marketing-ax/landing-page build:static
 
       - name: Lint changed blog SEO
         # The build above sets OD_LANDING_NOINDEX=1, so every rendered page in
@@ -142,7 +142,7 @@ jobs:
             # blog-indexing scripts' assertSafeGitRef rejects (no "^" allowed).
             BASE="$(git rev-parse HEAD^)"
           fi
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/lint-blog-seo.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/lint-blog-seo.ts \
             --base "$BASE" \
             --head HEAD \
             --rendered-out apps/landing-page/out
@@ -156,7 +156,7 @@ jobs:
             # blog-indexing scripts' assertSafeGitRef rejects (no "^" allowed).
             BASE="$(git rev-parse HEAD^)"
           fi
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/check-blog-url-changes.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/check-blog-url-changes.ts \
             --base "$BASE" \
             --head HEAD
 
@@ -232,7 +232,7 @@ jobs:
           packageManager: npm
           command: >
             pages deploy out
-            --project-name=open-design-landing-staging
+            --project-name=marketing-ax-landing-staging
             --branch=pr-${{ github.event.pull_request.number }}
 
       - name: Comment preview URL on PR
@@ -247,7 +247,7 @@ jobs:
             const deploy = process.env.DEPLOY_URL || '';
             const alias =
               process.env.ALIAS_URL ||
-              `https://pr-${context.issue.number}.open-design-landing-staging.pages.dev`;
+              `https://pr-${context.issue.number}.marketing-ax-landing-staging.pages.dev`;
             const sha = context.payload.pull_request.head.sha.slice(0, 7);
             const body = [
               marker,

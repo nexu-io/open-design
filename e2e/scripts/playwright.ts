@@ -26,7 +26,7 @@ if (command == null) {
 
 async function cleanArtifacts(): Promise<void> {
   const targets = [
-    path.join(uiDir, '.od-data'),
+    path.join(uiDir, '.max-data'),
     path.join(uiDir, 'test-results'),
     path.join(uiDir, 'reports', 'test-results'),
     path.join(uiDir, 'reports', 'visual-test-results'),
@@ -42,7 +42,7 @@ async function cleanArtifacts(): Promise<void> {
 
   await Promise.all(targets.map((target) => rm(target, { recursive: true, force: true })));
   await mkdir(path.join(uiDir, 'reports', 'test-results'), { recursive: true });
-  await mkdir(path.join(uiDir, '.od-data'), { recursive: true });
+  await mkdir(path.join(uiDir, '.max-data'), { recursive: true });
 
   console.log('Cleaned e2e UI Playwright artifacts.');
 }

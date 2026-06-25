@@ -19,7 +19,7 @@ import {
   type ConnectorCatalogEntry,
   type ConnectorProbe,
 } from '../src/plugins/connector-gate.js';
-import type { PluginManifest } from '@open-design/contracts';
+import type { PluginManifest } from '@marketing-ax/contracts';
 
 const buildProbe = (entries: ConnectorCatalogEntry[]): ConnectorProbe => ({
   get(id) { return entries.find((e) => e.id === id); },

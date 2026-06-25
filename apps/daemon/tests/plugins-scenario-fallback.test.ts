@@ -9,11 +9,11 @@ import path from 'node:path';
 import type {
   InstalledPluginRecord,
   PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { applyPlugin } from '../src/plugins/apply.js';
 import { openDatabase } from '../src/db.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
-import { resolveAppliedPipeline, type ScenarioRegistryEntry } from '@open-design/plugin-runtime';
+import { resolveAppliedPipeline, type ScenarioRegistryEntry } from '@marketing-ax/plugin-runtime';
 
 let tmpRoot: string;
 
@@ -62,7 +62,7 @@ const baseRegistry = (
 
 const consumerPlugin = (od: NonNullable<PluginManifest['od']>): InstalledPluginRecord => {
   const manifest: PluginManifest = {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: 'fixture-consumer',
     title: 'Fixture consumer',
     version: '0.1.0',
@@ -205,7 +205,7 @@ describe('daemon scenarios collector (registry view source)', () => {
       installedAt: Date.now(),
       updatedAt: Date.now(),
       manifest: {
-        $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+        $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
         name: 'od-code-migration',
         version: '0.0.1',
         od: {

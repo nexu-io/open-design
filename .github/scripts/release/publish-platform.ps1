@@ -49,8 +49,8 @@ $assetSuffix = if ($signed) { ".signed" } else { ".unsigned" }
 $publicOrigin = Get-PublicOrigin
 $versionPrefix = "$channel/versions/$releaseVersion$assetSuffix"
 $latestPrefix = "$channel/latest"
-$installerName = "open-design-$releaseVersion$assetSuffix-win-x64-setup.exe"
-$portableZipName = "open-design-$releaseVersion$assetSuffix-win-x64-portable.zip"
+$installerName = "marketing-ax-$releaseVersion$assetSuffix-win-x64-setup.exe"
+$portableZipName = "marketing-ax-$releaseVersion$assetSuffix-win-x64-portable.zip"
 $installer = Copy-Artifact ([string]$index.artifacts.installerPath) $installerName $releaseDir
 $portableZip = $null
 if (-not [string]::IsNullOrWhiteSpace([string]$index.artifacts.portableZipPath)) {
@@ -69,7 +69,7 @@ Write-Utf8File -Path (Join-Path $releaseDir "latest.yml") -Content @(
   "path: `"$publicOrigin/$versionPrefix/$installerName`""
   "sha512: `"$installerSha512`""
   "releaseDate: `"$releaseDate`""
-  "releaseNotes: `"Open Design beta $releaseVersion$assetSuffix`""
+  "releaseNotes: `"Marketing AX beta $releaseVersion$assetSuffix`""
 )
 
 $artifacts = [ordered]@{

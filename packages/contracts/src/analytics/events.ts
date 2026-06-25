@@ -1082,7 +1082,7 @@ export interface ExecutionSettingsPopoverClickProps {
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
 // interface-language select, the appearance (system/light/dark) radio row,
-// the "Share Open Design" social grid, the Discord / follow-on-X links and
+// the "Share Marketing AX" social grid, the Discord / follow-on-X links and
 // the Settings → details entry. The same popover is mounted both on the home
 // header and the in-project artifact header, hence the two-value page_name.
 export interface SettingsPopoverClickProps {
@@ -1742,7 +1742,7 @@ export interface QuestionsFormClickProps {
 }
 
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
-// `go_amr` is the link that opens https://open-design.ai/amr.
+// `go_amr` is the link that opens https://marketing-ax.example/amr.
 export interface RunFailedToastClickProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -2015,7 +2015,7 @@ export interface HandoffClickProps {
     | 'open_editor'
     // Copy the hand-off prompt for a specific CLI agent.
     | 'copy_cli_prompt'
-    // Open the Open Design AMR website link.
+    // Open the Marketing AX AMR website link.
     | 'amr_website';
   // Bounded enum id of the editor / CLI target, present for `open_editor`,
   // `copy_cli_prompt`, and for `trigger` when it directly launches the

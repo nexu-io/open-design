@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { PluginManifest } from '@open-design/contracts';
+import type { PluginManifest } from '@marketing-ax/contracts';
 
 // Frozen `manifestSourceDigest` algorithm (plan F1). The input shape is
 // stable forever: bumping it must come with a CI fixture update so historic

@@ -1,6 +1,6 @@
 import { isAbsolute, join, resolve, sep } from "node:path";
 
-import { normalizeNamespace } from "@open-design/sidecar-proto";
+import { normalizeNamespace } from "@marketing-ax/sidecar-proto";
 
 export const LAUNCHER_SCHEMA_VERSION = 1 as const;
 export const LAUNCHER_AFTER_QUIT_FLAG = "--od-launcher-after-quit" as const;

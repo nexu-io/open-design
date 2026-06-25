@@ -18,7 +18,7 @@
 // clicks make the row visually noisy and obscure how the overall
 // catalog is shaped.
 
-import { resolveLocalizedText, type InstalledPluginRecord } from '@open-design/contracts';
+import { resolveLocalizedText, type InstalledPluginRecord } from '@marketing-ax/contracts';
 import { CURATED_LIVE_ARTIFACT_PLUGIN_IDS } from './curatedPriority';
 import { localizedText } from './localization';
 
@@ -142,43 +142,43 @@ const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
   {
     slug: 'prototype',
     label: 'Prototype',
-    starterPrompt: 'Create an Open Design plugin that generates an interactive prototype from a product brief.',
+    starterPrompt: 'Create an Marketing AX plugin that generates an interactive prototype from a product brief.',
     test: (record) => byMode('prototype')(record) && !isLiveArtifactPlugin(record),
   },
   {
     slug: 'live-artifact',
     label: 'Live Artifact',
-    starterPrompt: 'Create an Open Design plugin that generates a live artifact with refreshable, data-aware UI.',
+    starterPrompt: 'Create an Marketing AX plugin that generates a live artifact with refreshable, data-aware UI.',
     test: isLiveArtifactPlugin,
   },
   {
     slug: 'deck',
     label: 'Slides',
-    starterPrompt: 'Create an Open Design plugin that generates a polished slide deck from a narrative brief.',
+    starterPrompt: 'Create an Marketing AX plugin that generates a polished slide deck from a narrative brief.',
     test: byMode('deck'),
   },
   {
     slug: 'image',
     label: 'Image',
-    starterPrompt: 'Create an Open Design plugin that generates image assets from structured creative direction.',
+    starterPrompt: 'Create an Marketing AX plugin that generates image assets from structured creative direction.',
     test: byMode('image'),
   },
   {
     slug: 'video',
     label: 'Video',
-    starterPrompt: 'Create an Open Design plugin that generates video prompts, storyboards, or render-ready motion artifacts.',
+    starterPrompt: 'Create an Marketing AX plugin that generates video prompts, storyboards, or render-ready motion artifacts.',
     test: isVideoPlugin,
   },
   {
     slug: 'hyperframes',
     label: 'HyperFrames',
-    starterPrompt: 'Create an Open Design plugin that generates a HyperFrames-ready motion composition.',
+    starterPrompt: 'Create an Marketing AX plugin that generates a HyperFrames-ready motion composition.',
     test: isHyperFramesPlugin,
   },
   {
     slug: 'audio',
     label: 'Audio',
-    starterPrompt: 'Create an Open Design plugin that generates audio, voice, or sound-design assets from a brief.',
+    starterPrompt: 'Create an Marketing AX plugin that generates audio, voice, or sound-design assets from a brief.',
     test: byMode('audio'),
   },
 ];
@@ -238,7 +238,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'business-dashboards',
     label: 'Dashboards',
-    starterPrompt: 'Create an Open Design prototype plugin for business systems, admin panels, or analytics dashboards.',
+    starterPrompt: 'Create an Marketing AX prototype plugin for business systems, admin panels, or analytics dashboards.',
     test: byAnySlug(
       'dashboard',
       'admin-panel',
@@ -258,7 +258,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'app-prototypes',
     label: 'Apps',
-    starterPrompt: 'Create an Open Design prototype plugin for multi-screen apps, onboarding, or task-productivity flows.',
+    starterPrompt: 'Create an Marketing AX prototype plugin for multi-screen apps, onboarding, or task-productivity flows.',
     test: byAnySlug(
       'mobile',
       'app',
@@ -280,7 +280,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'landing-marketing',
     label: 'Landing / marketing',
-    starterPrompt: 'Create an Open Design prototype plugin for landing pages, marketing sites, pricing pages, or campaign pages.',
+    starterPrompt: 'Create an Marketing AX prototype plugin for landing pages, marketing sites, pricing pages, or campaign pages.',
     test: byAnySlug(
       'landing',
       'landing-page',
@@ -303,7 +303,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'developer-tools',
     label: 'Developer tools',
-    starterPrompt: 'Create an Open Design prototype plugin for developer tools, engineering workflows, docs, or code collaboration.',
+    starterPrompt: 'Create an Marketing AX prototype plugin for developer tools, engineering workflows, docs, or code collaboration.',
     test: byAnySlug(
       'engineering',
       'docs',
@@ -321,7 +321,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'docs-reports',
     label: 'Docs / reports',
-    starterPrompt: 'Create an Open Design prototype plugin for reports, documents, case studies, specs, invoices, or resumes.',
+    starterPrompt: 'Create an Marketing AX prototype plugin for reports, documents, case studies, specs, invoices, or resumes.',
     test: byAnySlug(
       'report',
       'financial-report',
@@ -343,7 +343,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'prototype',
     slug: 'brand-design',
     label: 'Brand / design',
-    starterPrompt: 'Create an Open Design prototype plugin for brand pages, visual exploration, design reviews, or mockups.',
+    starterPrompt: 'Create an Marketing AX prototype plugin for brand pages, visual exploration, design reviews, or mockups.',
     test: byAnySlug(
       'design',
       'design-review',
@@ -359,7 +359,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'deck',
     slug: 'pitch-business',
     label: 'Pitch / business',
-    starterPrompt: 'Create an Open Design deck plugin for fundraising, business plans, investor decks, or strategic narratives.',
+    starterPrompt: 'Create an Marketing AX deck plugin for fundraising, business plans, investor decks, or strategic narratives.',
     test: byAnySlug(
       'pitch-deck',
       'pitch',
@@ -376,7 +376,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'deck',
     slug: 'course-training',
     label: 'Course / training',
-    starterPrompt: 'Create an Open Design deck plugin for courses, training materials, workshops, or classroom slides.',
+    starterPrompt: 'Create an Marketing AX deck plugin for courses, training materials, workshops, or classroom slides.',
     test: byAnySlug(
       'course-module',
       'course-slides',
@@ -391,7 +391,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'deck',
     slug: 'reports-briefings',
     label: 'Reports / briefings',
-    starterPrompt: 'Create an Open Design deck plugin for weekly reports, management briefings, white papers, or business reviews.',
+    starterPrompt: 'Create an Marketing AX deck plugin for weekly reports, management briefings, white papers, or business reviews.',
     test: byAnySlug(
       'weekly-report',
       'status-update',
@@ -408,7 +408,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'deck',
     slug: 'product-sales',
     label: 'Product / sales',
-    starterPrompt: 'Create an Open Design deck plugin for product launches, sales enablement, feature reveals, or customer pitches.',
+    starterPrompt: 'Create an Marketing AX deck plugin for product launches, sales enablement, feature reveals, or customer pitches.',
     test: byAnySlug(
       'product-launch',
       'launch-deck',
@@ -423,7 +423,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'deck',
     slug: 'engineering-talks',
     label: 'Engineering talks',
-    starterPrompt: 'Create an Open Design deck plugin for technical presentations, architecture walkthroughs, or dev workflow talks.',
+    starterPrompt: 'Create an Marketing AX deck plugin for technical presentations, architecture walkthroughs, or dev workflow talks.',
     test: byAnySlug(
       'engineering',
       'tech-sharing',
@@ -442,7 +442,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'deck',
     slug: 'creative-decks',
     label: 'Creative decks',
-    starterPrompt: 'Create an Open Design deck plugin for creative, editorial, brand, social, or visual storytelling decks.',
+    starterPrompt: 'Create an Marketing AX deck plugin for creative, editorial, brand, social, or visual storytelling decks.',
     test: byAnySlug(
       'marketing',
       'editorial',
@@ -459,7 +459,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'image',
     slug: 'ui-product-mockups',
     label: 'UI / product mockups',
-    starterPrompt: 'Create an Open Design image plugin for product UI mockups, game UI, product cards, or interface showcases.',
+    starterPrompt: 'Create an Marketing AX image plugin for product UI mockups, game UI, product cards, or interface showcases.',
     test: byAnySlug(
       'app-web-design',
       'game-ui',
@@ -475,35 +475,35 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'image',
     slug: 'brand-visuals',
     label: 'Brand / logo',
-    starterPrompt: 'Create an Open Design image plugin for logos, brand visuals, typography-led posters, or visual systems.',
+    starterPrompt: 'Create an Marketing AX image plugin for logos, brand visuals, typography-led posters, or visual systems.',
     test: byAnySlug('logo', 'brand', 'typography', 'poster', 'key-art', 'cover-art'),
   },
   {
     parent: 'image',
     slug: 'storyboards-motion-refs',
     label: 'Storyboards',
-    starterPrompt: 'Create an Open Design image plugin for storyboards, choreography breakdowns, pose references, or motion planning sheets.',
+    starterPrompt: 'Create an Marketing AX image plugin for storyboards, choreography breakdowns, pose references, or motion planning sheets.',
     test: byAnySlug('storyboard', 'dance', 'choreography', 'pose-reference', 'video-reference', 'sequence'),
   },
   {
     parent: 'image',
     slug: 'social-content',
     label: 'Social / content',
-    starterPrompt: 'Create an Open Design image plugin for social posts, infographics, explainers, or content graphics.',
+    starterPrompt: 'Create an Marketing AX image plugin for social posts, infographics, explainers, or content graphics.',
     test: byAnySlug('social-media-post', 'infographic', 'explainer', 'social', 'collage'),
   },
   {
     parent: 'image',
     slug: 'avatar-portrait',
     label: 'Avatar / portrait',
-    starterPrompt: 'Create an Open Design image plugin for avatars, portraits, identity photos, or character headshots.',
+    starterPrompt: 'Create an Marketing AX image plugin for avatars, portraits, identity photos, or character headshots.',
     test: byAnySlug('profile-avatar', 'portrait', 'selfie', 'identity'),
   },
   {
     parent: 'image',
     slug: 'illustration-style',
     label: 'Illustration / style',
-    starterPrompt: 'Create an Open Design image plugin for illustrations, anime, fantasy scenes, 3D renders, or style-transfer prompts.',
+    starterPrompt: 'Create an Marketing AX image plugin for illustrations, anime, fantasy scenes, 3D renders, or style-transfer prompts.',
     test: byAnySlug(
       'illustration',
       'anime',
@@ -519,7 +519,7 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'video',
     slug: 'motion-effects',
     label: 'Motion / effects',
-    starterPrompt: 'Create an Open Design video plugin for motion graphics, VFX, title frames, animation, or logo/outro sequences.',
+    starterPrompt: 'Create an Marketing AX video plugin for motion graphics, VFX, title frames, animation, or logo/outro sequences.',
     test: byAnySlug(
       'motion-graphics',
       'vfx',
@@ -536,28 +536,28 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
     parent: 'video',
     slug: 'social-short-form',
     label: 'Social / short form',
-    starterPrompt: 'Create an Open Design video plugin for short-form social clips, vertical video, TikTok-style captions, or dance trends.',
+    starterPrompt: 'Create an Marketing AX video plugin for short-form social clips, vertical video, TikTok-style captions, or dance trends.',
     test: byAnySlug('short-form', 'vertical', 'tiktok', 'social-meme', 'dance', 'k-pop', 'karaoke', 'captions'),
   },
   {
     parent: 'video',
     slug: 'marketing-product',
     label: 'Marketing / product',
-    starterPrompt: 'Create an Open Design video plugin for product promos, advertising, brand sizzle reels, or marketing cuts.',
+    starterPrompt: 'Create an Marketing AX video plugin for product promos, advertising, brand sizzle reels, or marketing cuts.',
     test: byAnySlug('marketing', 'product', 'advertising', 'product-promo', 'saas', 'website-to-video', 'brand'),
   },
   {
     parent: 'video',
     slug: 'data-explainers',
     label: 'Data / explainers',
-    starterPrompt: 'Create an Open Design video plugin for data explainers, animated charts, maps, diagrams, or flow walkthroughs.',
+    starterPrompt: 'Create an Marketing AX video plugin for data explainers, animated charts, maps, diagrams, or flow walkthroughs.',
     test: byAnySlug('data', 'chart', 'flowchart', 'diagram', 'map', 'route', 'infographic'),
   },
   {
     parent: 'video',
     slug: 'cinematic-story',
     label: 'Cinematic / story',
-    starterPrompt: 'Create an Open Design video plugin for cinematic scenes, story sequences, anime/action shots, or fantasy clips.',
+    starterPrompt: 'Create an Marketing AX video plugin for cinematic scenes, story sequences, anime/action shots, or fantasy clips.',
     test: byAnySlug(
       'cinematic',
       'fantasy',

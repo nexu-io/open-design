@@ -226,17 +226,17 @@ describe('resolveProjectStorage', () => {
     expect(storage).toBeInstanceOf(LocalProjectStorage);
   });
 
-  it('returns S3ProjectStorage when OD_PROJECT_STORAGE=s3', () => {
+  it('returns S3ProjectStorage when MAX_PROJECT_STORAGE=s3', () => {
     const storage = resolveProjectStorage({
       projectsRoot: tmp,
       env: {
-        OD_PROJECT_STORAGE:        's3',
-        OD_S3_BUCKET:              'my-bucket',
-        OD_S3_REGION:              'us-east-1',
-        OD_S3_PREFIX:              'tenant',
-        OD_S3_ENDPOINT:            'https://oss.aliyuncs.com',
-        OD_S3_ACCESS_KEY_ID:       'AKIA-FIXTURE',
-        OD_S3_SECRET_ACCESS_KEY:   'shhh',
+        MAX_PROJECT_STORAGE:        's3',
+        MAX_S3_BUCKET:              'my-bucket',
+        MAX_S3_REGION:              'us-east-1',
+        MAX_S3_PREFIX:              'tenant',
+        MAX_S3_ENDPOINT:            'https://oss.aliyuncs.com',
+        MAX_S3_ACCESS_KEY_ID:       'AKIA-FIXTURE',
+        MAX_S3_SECRET_ACCESS_KEY:   'shhh',
       },
     });
     expect(storage).toBeInstanceOf(S3ProjectStorage);
@@ -248,12 +248,12 @@ describe('resolveProjectStorage', () => {
     });
   });
 
-  it('falls back to AWS_ACCESS_KEY_ID / AWS_REGION when the OD_-specific knobs are unset', () => {
+  it('falls back to AWS_ACCESS_KEY_ID / AWS_REGION when the MAX_-specific knobs are unset', () => {
     const storage = resolveProjectStorage({
       projectsRoot: tmp,
       env: {
-        OD_PROJECT_STORAGE:    's3',
-        OD_S3_BUCKET:          'my-bucket',
+        MAX_PROJECT_STORAGE:    's3',
+        MAX_S3_BUCKET:          'my-bucket',
         AWS_REGION:            'us-east-2',
         AWS_ACCESS_KEY_ID:     'AKIA-AWS',
         AWS_SECRET_ACCESS_KEY: 'aws-secret',
@@ -272,14 +272,14 @@ describe('resolveDaemonDbConfig', () => {
     expect(resolveDaemonDbConfig({})).toEqual({ kind: 'sqlite' });
   });
 
-  it('parses postgres env vars when OD_DAEMON_DB=postgres', () => {
+  it('parses postgres env vars when MAX_DAEMON_DB=postgres', () => {
     const cfg = resolveDaemonDbConfig({
-      OD_DAEMON_DB: 'postgres',
-      OD_PG_HOST:   'pg.local',
-      OD_PG_PORT:   '6543',
-      OD_PG_DATABASE: 'open_design',
-      OD_PG_USER:   'od',
-      OD_PG_SSL_MODE: 'disable',
+      MAX_DAEMON_DB: 'postgres',
+      MAX_PG_HOST:   'pg.local',
+      MAX_PG_PORT:   '6543',
+      MAX_PG_DATABASE: 'open_design',
+      MAX_PG_USER:   'od',
+      MAX_PG_SSL_MODE: 'disable',
     });
     expect(cfg.kind).toBe('postgres');
     expect(cfg.postgres).toEqual({
@@ -293,11 +293,11 @@ describe('resolveDaemonDbConfig', () => {
 
   it('throws when postgres env vars are incomplete', () => {
     expect(() =>
-      resolveDaemonDbConfig({ OD_DAEMON_DB: 'postgres', OD_PG_HOST: 'pg.local' }),
+      resolveDaemonDbConfig({ MAX_DAEMON_DB: 'postgres', MAX_PG_HOST: 'pg.local' }),
     ).toThrow(DaemonDbConfigError);
   });
 
-  it('throws on an unknown OD_DAEMON_DB value', () => {
-    expect(() => resolveDaemonDbConfig({ OD_DAEMON_DB: 'mongo' })).toThrow(DaemonDbConfigError);
+  it('throws on an unknown MAX_DAEMON_DB value', () => {
+    expect(() => resolveDaemonDbConfig({ MAX_DAEMON_DB: 'mongo' })).toThrow(DaemonDbConfigError);
   });
 });

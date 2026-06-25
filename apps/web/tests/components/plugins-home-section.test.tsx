@@ -12,7 +12,7 @@
 
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import type { ComponentProps } from 'react';
 import { PluginsHomeSection } from '../../src/components/PluginsHomeSection';
 import { I18nProvider } from '../../src/i18n';

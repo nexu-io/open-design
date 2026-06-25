@@ -35,7 +35,7 @@ import type {
   MarketplaceTrust,
   PluginSourceKind,
   TrustTier,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type Database from 'better-sqlite3';
 import { recordPluginEvent } from './events.js';
 import { upsertPluginLockfileEntry } from './lockfile.js';
@@ -89,7 +89,7 @@ export interface InstallOptions {
   manifestDigest?: string;
   archiveIntegrity?: string;
   // Optional runtime-data lockfile path. Daemon routes pass
-  // `<OD_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
+  // `<MAX_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
   lockfilePath?: string;
 }
 

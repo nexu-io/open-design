@@ -15,7 +15,7 @@
  * Why this file isn't a direct import from `apps/packaged`: AGENTS.md
  * forbids one app package from importing another app's private `src/`.
  * The honest fix is to promote the helper to a shared workspace package
- * (e.g. `@open-design/platform`); doing that as part of this bug-fix
+ * (e.g. `@marketing-ax/platform`); doing that as part of this bug-fix
  * sprint would balloon the PR. Until that promotion lands, this module
  * is the source of truth for the desktop entry's filter and the two
  * copies should stay in sync. Any change to the matching rules here

@@ -1,7 +1,7 @@
 /**
  * Shared shorthand-expander for env-supplied directory paths. Both
- * resolveDataDir (server.ts, drives OD_DATA_DIR) and resolveOverrideDir
- * (media-config.ts, drives OD_MEDIA_CONFIG_DIR + the OD_DATA_DIR fallback)
+ * resolveDataDir (server.ts, drives MAX_DATA_DIR) and resolveOverrideDir
+ * (media-config.ts, drives MAX_MEDIA_CONFIG_DIR + the MAX_DATA_DIR fallback)
  * use this so the two resolvers cannot split state — a launcher passing
  * $HOME/.open-design lands every daemon write at the same expanded path.
  *

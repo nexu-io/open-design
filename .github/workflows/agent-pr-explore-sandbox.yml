@@ -152,12 +152,12 @@ jobs:
           HEAD_REPO: ${{ steps.pr.outputs.head_repo }}
           BASE_REPO: ${{ github.repository }}
           BASE_SHA: ${{ steps.pr.outputs.base_sha }}
-          OD_SANDBOX_CPUS: "4"
-          OD_SANDBOX_MEMORY: "8g"
-          OD_SANDBOX_READY_TIMEOUT_SECONDS: "900"
-          OD_EXPECT_TIMEOUT_SECONDS: "1200"
-          OD_EXPECT_CONTEXT_MAX_BYTES: "120000"
-          OD_TRACE_R2_UPLOAD: "1"
+          MAX_SANDBOX_CPUS: "4"
+          MAX_SANDBOX_MEMORY: "8g"
+          MAX_SANDBOX_READY_TIMEOUT_SECONDS: "900"
+          MAX_EXPECT_TIMEOUT_SECONDS: "1200"
+          MAX_EXPECT_CONTEXT_MAX_BYTES: "120000"
+          MAX_TRACE_R2_UPLOAD: "1"
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CLOUDFLARE_R2_RELEASES_AK }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CLOUDFLARE_R2_RELEASES_SK }}

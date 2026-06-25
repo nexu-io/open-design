@@ -17,7 +17,7 @@ describe('media task route recovery', () => {
   });
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
+    const dataDir = process.env.MAX_DATA_DIR;
     const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
     const projectId = `project_${randomUUID()}`;
     const taskId = `task_${randomUUID()}`;
@@ -67,7 +67,7 @@ describe('media task route recovery', () => {
   });
 
   it('marks the media task failed when proxy setup throws before generation starts', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
+    const dataDir = process.env.MAX_DATA_DIR;
     const originalHttpProxy = process.env.HTTP_PROXY;
     const originalHttpsProxy = process.env.HTTPS_PROXY;
     const originalAllProxy = process.env.ALL_PROXY;

@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   approve:
-    if: github.repository == 'nexu-io/open-design' && (github.event_name != 'pull_request_target' || github.event.action != 'edited' || github.event.changes.base != null)
+    if: github.repository == 'marketing-ax/marketing-ax' && (github.event_name != 'pull_request_target' || github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

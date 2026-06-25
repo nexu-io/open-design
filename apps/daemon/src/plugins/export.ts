@@ -20,7 +20,7 @@
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import type Database from 'better-sqlite3';
-import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import type { AppliedPluginSnapshot } from '@marketing-ax/contracts';
 import { getInstalledPlugin } from './registry.js';
 import { getSnapshot } from './snapshots.js';
 
@@ -176,7 +176,7 @@ async function readSkillBody(
 
 function buildPortableManifest(snapshot: AppliedPluginSnapshot): Record<string, unknown> {
   return {
-    $schema:     'https://open-design.ai/schemas/plugin.v1.json',
+    $schema:     'https://marketing-ax.example/schemas/plugin.v1.json',
     specVersion: snapshot.pluginSpecVersion ?? '1.0.0',
     name:        snapshot.pluginId,
     title:       snapshot.pluginTitle ?? snapshot.pluginId,

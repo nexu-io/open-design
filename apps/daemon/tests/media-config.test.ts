@@ -15,7 +15,7 @@ import {
 const TEST_NANOBANANA_BASE_URL = 'https://nano-banana-gateway.example.test';
 
 const OPENAI_ENV_KEYS = [
-  'OD_OPENAI_API_KEY',
+  'MAX_OPENAI_API_KEY',
   'OPENAI_API_KEY',
   'AZURE_API_KEY',
   'AZURE_OPENAI_API_KEY',
@@ -28,9 +28,9 @@ describe('media-config OpenAI auth-file fallback', () => {
   const originalEnv = Object.fromEntries(
     OPENAI_ENV_KEYS.map((key) => [key, process.env[key]]),
   );
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
-  const originalSandboxMode = process.env.OD_SANDBOX_MODE;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
+  const originalSandboxMode = process.env.MAX_SANDBOX_MODE;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
@@ -41,9 +41,9 @@ describe('media-config OpenAI auth-file fallback', () => {
     for (const key of OPENAI_ENV_KEYS) {
       delete process.env[key];
     }
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    delete process.env.OD_SANDBOX_MODE;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    delete process.env.MAX_SANDBOX_MODE;
   });
 
   afterEach(async () => {
@@ -60,19 +60,19 @@ describe('media-config OpenAI auth-file fallback', () => {
       }
     }
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     if (originalSandboxMode == null) {
-      delete process.env.OD_SANDBOX_MODE;
+      delete process.env.MAX_SANDBOX_MODE;
     } else {
-      process.env.OD_SANDBOX_MODE = originalSandboxMode;
+      process.env.MAX_SANDBOX_MODE = originalSandboxMode;
     }
     homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });
@@ -86,7 +86,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   }
 
   async function writeStoredMediaConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -132,7 +132,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   });
 
   it('does not read host OpenAI auth files in sandbox mode', async () => {
-    process.env.OD_SANDBOX_MODE = '1';
+    process.env.MAX_SANDBOX_MODE = '1';
     await writeHomeJson('.hermes/auth.json', {
       providers: {
         'openai-codex': {
@@ -205,7 +205,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   });
 
   it('resolves Nano Banana env and stored model overrides', async () => {
-    process.env.OD_NANOBANANA_API_KEY = 'env-nano-key';
+    process.env.MAX_NANOBANANA_API_KEY = 'env-nano-key';
     await writeStoredMediaConfig({
       providers: {
         nanobanana: {
@@ -233,7 +233,7 @@ describe('media-config OpenAI auth-file fallback', () => {
       model: 'gemini-3.1-flash-image-preview-custom',
     });
 
-    delete process.env.OD_NANOBANANA_API_KEY;
+    delete process.env.MAX_NANOBANANA_API_KEY;
   });
 
   it('preserves a stored apiKey when writeConfig updates only non-secret fields', async () => {
@@ -262,29 +262,29 @@ describe('media-config OpenAI auth-file fallback', () => {
     });
   });
 
-  describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {
+  describe('MAX_MEDIA_CONFIG_DIR / MAX_DATA_DIR storage routing', () => {
     let overrideRoot: string;
     let originalMediaConfigDir: string | undefined;
     let originalDataDir: string | undefined;
 
     beforeEach(async () => {
       overrideRoot = await mkdtemp(path.join(tmpdir(), 'od-media-override-'));
-      originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-      originalDataDir = process.env.OD_DATA_DIR;
-      delete process.env.OD_MEDIA_CONFIG_DIR;
-      delete process.env.OD_DATA_DIR;
+      originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+      originalDataDir = process.env.MAX_DATA_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_DATA_DIR;
     });
 
     afterEach(async () => {
       if (originalMediaConfigDir == null) {
-        delete process.env.OD_MEDIA_CONFIG_DIR;
+        delete process.env.MAX_MEDIA_CONFIG_DIR;
       } else {
-        process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+        process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
       }
       if (originalDataDir == null) {
-        delete process.env.OD_DATA_DIR;
+        delete process.env.MAX_DATA_DIR;
       } else {
-        process.env.OD_DATA_DIR = originalDataDir;
+        process.env.MAX_DATA_DIR = originalDataDir;
       }
       await rm(overrideRoot, { recursive: true, force: true });
     });
@@ -298,8 +298,8 @@ describe('media-config OpenAI auth-file fallback', () => {
       );
     }
 
-    it('reads media-config.json from an absolute OD_MEDIA_CONFIG_DIR', async () => {
-      process.env.OD_MEDIA_CONFIG_DIR = overrideRoot;
+    it('reads media-config.json from an absolute MAX_MEDIA_CONFIG_DIR', async () => {
+      process.env.MAX_MEDIA_CONFIG_DIR = overrideRoot;
       await writeProvidersAt(overrideRoot, {
         providers: {
           openai: {
@@ -320,7 +320,7 @@ describe('media-config OpenAI auth-file fallback', () => {
       // Per-test HOME points at a tmpdir (set by outer beforeEach), so the
       // expansion lands somewhere safe to write.
       const subdir = '.od-test';
-      process.env.OD_MEDIA_CONFIG_DIR = `~/${subdir}`;
+      process.env.MAX_MEDIA_CONFIG_DIR = `~/${subdir}`;
       const expandedDir = path.join(homeDir, subdir);
       await writeProvidersAt(expandedDir, {
         providers: {
@@ -342,9 +342,9 @@ describe('media-config OpenAI auth-file fallback', () => {
       // process.cwd() during tests is typically the workspace root, which
       // is unrelated to the per-test projectRoot. A relative override must
       // land inside projectRoot, mirroring how resolveDataDir() in
-      // server.ts anchors OD_DATA_DIR.
+      // server.ts anchors MAX_DATA_DIR.
       const relative = 'config/media';
-      process.env.OD_MEDIA_CONFIG_DIR = relative;
+      process.env.MAX_MEDIA_CONFIG_DIR = relative;
       const anchoredDir = path.join(projectRoot, relative);
       await writeProvidersAt(anchoredDir, {
         providers: {
@@ -362,12 +362,12 @@ describe('media-config OpenAI auth-file fallback', () => {
       });
     });
 
-    it('falls back to OD_DATA_DIR when OD_MEDIA_CONFIG_DIR is unset', async () => {
+    it('falls back to MAX_DATA_DIR when MAX_MEDIA_CONFIG_DIR is unset', async () => {
       // Packaged daemon (apps/packaged/src/sidecars.ts) and the
-      // Home Manager / NixOS modules already set OD_DATA_DIR for the
+      // Home Manager / NixOS modules already set MAX_DATA_DIR for the
       // rest of the daemon's runtime state. media-config should
       // co-locate there without needing a second env var.
-      process.env.OD_DATA_DIR = overrideRoot;
+      process.env.MAX_DATA_DIR = overrideRoot;
       await writeProvidersAt(overrideRoot, {
         providers: {
           openai: {
@@ -384,12 +384,12 @@ describe('media-config OpenAI auth-file fallback', () => {
       });
     });
 
-    it('OD_MEDIA_CONFIG_DIR takes precedence over OD_DATA_DIR', async () => {
+    it('MAX_MEDIA_CONFIG_DIR takes precedence over MAX_DATA_DIR', async () => {
       const dataDir = await mkdtemp(path.join(tmpdir(), 'od-media-data-'));
       try {
-        process.env.OD_DATA_DIR = dataDir;
-        process.env.OD_MEDIA_CONFIG_DIR = overrideRoot;
-        // Two competing files; only the OD_MEDIA_CONFIG_DIR one should
+        process.env.MAX_DATA_DIR = dataDir;
+        process.env.MAX_MEDIA_CONFIG_DIR = overrideRoot;
+        // Two competing files; only the MAX_MEDIA_CONFIG_DIR one should
         // be read.
         await writeProvidersAt(dataDir, {
           providers: {
@@ -419,7 +419,7 @@ describe('media-config OpenAI auth-file fallback', () => {
       // Without recursive mkdir + a writable override, this would
       // surface as ENOENT/EROFS to PUT /api/media/config.
       const target = path.join(overrideRoot, 'nested', 'inner');
-      process.env.OD_MEDIA_CONFIG_DIR = target;
+      process.env.MAX_MEDIA_CONFIG_DIR = target;
 
       await writeConfig(projectRoot, {
         providers: {
@@ -454,14 +454,14 @@ describe('media-config OpenAI auth-file fallback', () => {
 
     // Round 3 review feedback on PR #530.
     // resolveOverrideDir shares expandHomePrefix with resolveDataDir, so
-    // OD_DATA_DIR=$HOME/.open-design (and ${HOME}/.open-design) routes
+    // MAX_DATA_DIR=$HOME/.open-design (and ${HOME}/.open-design) routes
     // both daemon runtime data AND media credentials to the same expanded
     // path. Without this, media-config.json was written under
     // <projectRoot>/$HOME/.open-design and stored provider keys appeared
     // missing on the next read.
-    it('expands $HOME/... in OD_DATA_DIR fallback so media-config co-locates with daemon data', async () => {
+    it('expands $HOME/... in MAX_DATA_DIR fallback so media-config co-locates with daemon data', async () => {
       const subdir = '.od-test-home';
-      process.env.OD_DATA_DIR = `$HOME/${subdir}`;
+      process.env.MAX_DATA_DIR = `$HOME/${subdir}`;
       const expandedDir = path.join(homeDir, subdir);
       await writeProvidersAt(expandedDir, {
         providers: {
@@ -479,9 +479,9 @@ describe('media-config OpenAI auth-file fallback', () => {
       });
     });
 
-    it('expands ${HOME}/... in OD_DATA_DIR fallback', async () => {
+    it('expands ${HOME}/... in MAX_DATA_DIR fallback', async () => {
       const subdir = '.od-test-braced';
-      process.env.OD_DATA_DIR = `\${HOME}/${subdir}`;
+      process.env.MAX_DATA_DIR = `\${HOME}/${subdir}`;
       const expandedDir = path.join(homeDir, subdir);
       await writeProvidersAt(expandedDir, {
         providers: {
@@ -499,9 +499,9 @@ describe('media-config OpenAI auth-file fallback', () => {
       });
     });
 
-    it('expands $HOME/... in OD_MEDIA_CONFIG_DIR (explicit override path)', async () => {
+    it('expands $HOME/... in MAX_MEDIA_CONFIG_DIR (explicit override path)', async () => {
       const subdir = '.od-media-home';
-      process.env.OD_MEDIA_CONFIG_DIR = `$HOME/${subdir}`;
+      process.env.MAX_MEDIA_CONFIG_DIR = `$HOME/${subdir}`;
       const expandedDir = path.join(homeDir, subdir);
       await writeProvidersAt(expandedDir, {
         providers: {
@@ -521,7 +521,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   });
 });
 
-const GROK_ENV_KEYS = ['OD_GROK_API_KEY', 'XAI_API_KEY'];
+const GROK_ENV_KEYS = ['MAX_GROK_API_KEY', 'XAI_API_KEY'];
 
 describe('media-config Grok / xAI OAuth fallback', () => {
   let homeDir: string;
@@ -530,8 +530,8 @@ describe('media-config Grok / xAI OAuth fallback', () => {
   const originalEnv = Object.fromEntries(
     GROK_ENV_KEYS.map((key) => [key, process.env[key]]),
   );
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
@@ -542,8 +542,8 @@ describe('media-config Grok / xAI OAuth fallback', () => {
     for (const key of GROK_ENV_KEYS) {
       delete process.env[key];
     }
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
   });
 
   afterEach(async () => {
@@ -560,14 +560,14 @@ describe('media-config Grok / xAI OAuth fallback', () => {
       }
     }
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });
@@ -585,7 +585,7 @@ describe('media-config Grok / xAI OAuth fallback', () => {
     refreshToken?: string;
     expiresAt?: number;
   }) {
-    const file = path.join(projectRoot, '.od', 'xai-tokens.json');
+    const file = path.join(projectRoot, '.max', 'xai-tokens.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(
       file,
@@ -605,7 +605,7 @@ describe('media-config Grok / xAI OAuth fallback', () => {
   }
 
   async function writeStoredMediaConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -726,38 +726,38 @@ describe('media-config Grok / xAI OAuth fallback', () => {
 
 describe('media-config model alias resolution (issue #1277)', () => {
   let projectRoot: string;
-  const originalEnvAliases = process.env.OD_MEDIA_MODEL_ALIASES;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalEnvAliases = process.env.MAX_MEDIA_MODEL_ALIASES;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-alias-'));
-    delete process.env.OD_MEDIA_MODEL_ALIASES;
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_MEDIA_MODEL_ALIASES;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
   });
 
   afterEach(async () => {
     if (originalEnvAliases == null) {
-      delete process.env.OD_MEDIA_MODEL_ALIASES;
+      delete process.env.MAX_MEDIA_MODEL_ALIASES;
     } else {
-      process.env.OD_MEDIA_MODEL_ALIASES = originalEnvAliases;
+      process.env.MAX_MEDIA_MODEL_ALIASES = originalEnvAliases;
     }
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     await rm(projectRoot, { recursive: true, force: true });
   });
 
   async function writeStoredMediaConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -780,8 +780,8 @@ describe('media-config model alias resolution (issue #1277)', () => {
     ).toBe('doubao-seedream-5-0');
   });
 
-  it('redirects via the OD_MEDIA_MODEL_ALIASES env var', async () => {
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+  it('redirects via the MAX_MEDIA_MODEL_ALIASES env var', async () => {
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
     });
     expect(
@@ -794,7 +794,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
       providers: {},
       aliases: { 'doubao-seedream-3-0-t2i-250415': 'on-disk-alias' },
     });
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'doubao-seedream-3-0-t2i-250415': 'env-alias',
     });
     expect(
@@ -803,10 +803,10 @@ describe('media-config model alias resolution (issue #1277)', () => {
   });
 
   it('tolerates malformed env JSON and falls through to the stored map', async () => {
-    // A user with a half-typed env var (`OD_MEDIA_MODEL_ALIASES='{'`)
+    // A user with a half-typed env var (`MAX_MEDIA_MODEL_ALIASES='{'`)
     // should still get their on-disk aliases, not a hard error mid-
     // generation.
-    process.env.OD_MEDIA_MODEL_ALIASES = '{not valid json';
+    process.env.MAX_MEDIA_MODEL_ALIASES = '{not valid json';
     await writeStoredMediaConfig({
       providers: {},
       aliases: { 'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0' },
@@ -821,7 +821,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
     // object) and against accidental empty-string entries from a
     // Settings UI form. The coercion must never feed garbage into a
     // dispatcher's request body.
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'good-key': 'good-value',
       'empty-key': '',
       'null-key': null,
@@ -839,7 +839,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
       providers: {},
       aliases: { 'stored-only': 'a', 'overridden': 'stored-value' },
     });
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'env-only': 'b',
       'overridden': 'env-value',
     });
@@ -864,7 +864,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
       providers: {},
       aliases: { 'dall-e-3': 'azure-dalle3' },
     });
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'gpt-4o-mini-tts': 'custom-tts',
     });
 
@@ -904,7 +904,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
     });
     const onDisk = JSON.parse(
       await readFile(
-        path.join(projectRoot, '.od', 'media-config.json'),
+        path.join(projectRoot, '.max', 'media-config.json'),
         'utf8',
       ),
     );
@@ -920,20 +920,20 @@ describe('media-config model alias resolution (issue #1277)', () => {
 
 describe('seedProviderIfMissing', () => {
   let projectRoot: string;
-  const SENSEAUDIO_ENV_KEYS = ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'];
+  const SENSEAUDIO_ENV_KEYS = ['MAX_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'];
   const originalEnv = Object.fromEntries(
     SENSEAUDIO_ENV_KEYS.map((key) => [key, process.env[key]]),
   );
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-seed-'));
     for (const key of SENSEAUDIO_ENV_KEYS) {
       delete process.env[key];
     }
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
   });
 
   afterEach(async () => {
@@ -945,26 +945,26 @@ describe('seedProviderIfMissing', () => {
       }
     }
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     await rm(projectRoot, { recursive: true, force: true });
   });
 
   async function writeStored(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
 
   async function readStoredJson(): Promise<unknown> {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     const raw = await readFile(file, 'utf8');
     return JSON.parse(raw);
   }
@@ -1035,7 +1035,7 @@ describe('seedProviderIfMissing', () => {
   });
 
   it('no-ops when an env var resolves a key for the provider', async () => {
-    process.env.OD_SENSEAUDIO_API_KEY = 'env-key';
+    process.env.MAX_SENSEAUDIO_API_KEY = 'env-key';
     const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
       apiKey: 'sa-byok-key',
       baseUrl: 'https://api.senseaudio.cn',

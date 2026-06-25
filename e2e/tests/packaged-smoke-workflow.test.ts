@@ -53,9 +53,9 @@ async function runReleaseStableForFailure(env: Record<string, string>): Promise<
       cwd: workspaceRoot,
       env: {
         ...process.env,
-        GITHUB_REPOSITORY: "nexu-io/open-design",
+        GITHUB_REPOSITORY: "marketing-ax/marketing-ax",
         GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_RELEASE_CHANNEL: "stable",
+        MARKETING_AX_RELEASE_CHANNEL: "stable",
         ...env,
       },
     });
@@ -95,7 +95,7 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("Smoke PR mac packaged runtime");
     expect(workflow).not.toContain("Smoke PR windows packaged runtime");
     expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
-    expect(workflow).not.toContain("OD_PACKAGED_E2E_");
+    expect(workflow).not.toContain("MAX_PACKAGED_E2E_");
     expect(workflow).not.toContain("actions/cache/save");
   });
 
@@ -106,7 +106,7 @@ describe("packaged smoke workflow", () => {
 
     expect(job).toContain("runs-on: windows-latest");
     expect(job).toContain("needs.change_scopes.outputs.tools_pack_tests_required == 'true'");
-    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
+    expect(job).toContain("pnpm --filter @marketing-ax/tools-pack exec vitest run tests/launcher-payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 
@@ -175,13 +175,13 @@ describe("packaged smoke workflow", () => {
     expect(releaseStableWorkflow).toContain("win_namespace: ${{ steps.stable.outputs.win_namespace }}");
     expect(releaseStableWorkflow).toContain("linux_namespace: ${{ steps.stable.outputs.linux_namespace }}");
     expect(releaseStableWorkflow).toContain('--namespace "${{ needs.metadata.outputs.namespace }}"');
-    expect(releaseStableWorkflow).toContain("OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}");
+    expect(releaseStableWorkflow).toContain("MAX_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}");
     expect(releaseStableWorkflow).toContain('"--namespace", "${{ needs.metadata.outputs.win_namespace }}",');
-    expect(releaseStableWorkflow).toContain('OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}');
+    expect(releaseStableWorkflow).toContain('MAX_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}');
     expect(releaseStableWorkflow).toContain('--namespace "${{ needs.metadata.outputs.linux_namespace }}"');
     expect(releaseStableWorkflow).toContain('"namespace": "${{ needs.metadata.outputs.linux_namespace }}",');
     expect(releaseStableWorkflow).not.toMatch(/--namespace release-stable(?:-intel|-win|-linux)?\b/);
-    expect(releaseStableWorkflow).not.toMatch(/OD_PACKAGED_E2E_NAMESPACE: release-stable(?:-win|-linux)?\b/);
+    expect(releaseStableWorkflow).not.toMatch(/MAX_PACKAGED_E2E_NAMESPACE: release-stable(?:-win|-linux)?\b/);
     expect(releaseStableWorkflow).not.toMatch(/namespaces\/release-stable(?:-intel|-win|-linux)?\b/);
 
     expectChannelWorkflowNamespaces(releasePreviewWorkflow, "preview", { hasLinuxSmoke: false });
@@ -194,8 +194,8 @@ describe("packaged smoke workflow", () => {
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: linux_x64");
     const betaBuildScript = await readFile(releaseBetaPosixBuildScriptPath, "utf8");
-    expect(betaBuildScript).toContain("OD_PACKAGED_E2E_RELEASE_CHANNEL=beta");
-    expect(betaBuildScript).toContain('OD_PACKAGED_E2E_RELEASE_VERSION="$RELEASE_VERSION"');
+    expect(betaBuildScript).toContain("MAX_PACKAGED_E2E_RELEASE_CHANNEL=beta");
+    expect(betaBuildScript).toContain('MAX_PACKAGED_E2E_RELEASE_VERSION="$RELEASE_VERSION"');
   });
 
   it("[P2] lets stable release dispatch use an explicit version when ref is not a release branch", async () => {
@@ -206,12 +206,12 @@ describe("packaged smoke workflow", () => {
 
     expect(workflow).toContain("release_version:");
     expect(workflow).toContain("Required when ref is not release/vX.Y.Z");
-    expect(workflow).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
+    expect(workflow).toContain("MARKETING_AX_STABLE_VERSION: ${{ inputs.release_version }}");
 
     expect(script).toContain("const stableReleaseBranchPattern = /^release\\/v(\\d+\\.\\d+\\.\\d+)$/;");
     expect(script).toContain("function resolveStableBaseVersion");
-    expect(script).toContain("release-stable requires either a release/vX.Y.Z branch or OPEN_DESIGN_STABLE_VERSION");
-    expect(script).toContain("OPEN_DESIGN_STABLE_VERSION ${inputVersion.value} must match release branch version");
+    expect(script).toContain("release-stable requires either a release/vX.Y.Z branch or MARKETING_AX_STABLE_VERSION");
+    expect(script).toContain("MARKETING_AX_STABLE_VERSION ${inputVersion.value} must match release branch version");
     expect(script).toContain(
       '${stableBaseVersion.source ?? "release base"} version ${stableBaseVersion.value} must match apps/packaged/package.json version',
     );
@@ -221,19 +221,19 @@ describe("packaged smoke workflow", () => {
   it("[P2] rejects stable release runs without a release branch or explicit version", async () => {
     const output = await runReleaseStableForFailure({
       GITHUB_REF_NAME: "main",
-      OPEN_DESIGN_STABLE_VERSION: "",
+      MARKETING_AX_STABLE_VERSION: "",
     });
 
-    expect(output).toContain("release-stable requires either a release/vX.Y.Z branch or OPEN_DESIGN_STABLE_VERSION");
+    expect(output).toContain("release-stable requires either a release/vX.Y.Z branch or MARKETING_AX_STABLE_VERSION");
   });
 
   it("[P2] rejects conflicting stable release branch and explicit version inputs", async () => {
     const output = await runReleaseStableForFailure({
       GITHUB_REF_NAME: "release/v0.10.0",
-      OPEN_DESIGN_STABLE_VERSION: "0.10.1",
+      MARKETING_AX_STABLE_VERSION: "0.10.1",
     });
 
-    expect(output).toContain("OPEN_DESIGN_STABLE_VERSION 0.10.1 must match release branch version 0.10.0");
+    expect(output).toContain("MARKETING_AX_STABLE_VERSION 0.10.1 must match release branch version 0.10.0");
   });
 
   it("[P2] supports release dry-run preflight without build or publish side effects", async () => {
@@ -247,14 +247,14 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain(
       "group: open-design-release-stable-${{ inputs.channel }}-${{ inputs.dry_run && 'dry-run' || 'publish' }}",
     );
-    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}");
+    expect(workflow).toContain("MARKETING_AX_RELEASE_DRY_RUN: ${{ inputs.dry_run }}");
     expect(workflow).toContain("dry_run: ${{ steps.stable.outputs.dry_run }}");
     expect(workflow).toContain("if: ${{ steps.stable.outputs.dry_run != 'true' }}");
     expect(workflow).toContain("if: ${{ needs.metadata.outputs.dry_run != 'true' }}");
     expect(workflow).toContain("needs.metadata.outputs.dry_run != 'true' &&");
 
     expect(script).toContain("function parseBooleanInput");
-    expect(script).toContain('parseBooleanInput(process.env.OPEN_DESIGN_RELEASE_DRY_RUN, "OPEN_DESIGN_RELEASE_DRY_RUN")');
+    expect(script).toContain('parseBooleanInput(process.env.MARKETING_AX_RELEASE_DRY_RUN, "MARKETING_AX_RELEASE_DRY_RUN")');
     expect(script).toContain('setOutput("dry_run", dryRun ? "true" : "false");');
   });
 
@@ -277,14 +277,14 @@ describe("packaged smoke workflow", () => {
         env: {
           ...process.env,
           GITHUB_REF_NAME: "main",
-          GITHUB_REPOSITORY: "nexu-io/open-design",
+          GITHUB_REPOSITORY: "marketing-ax/marketing-ax",
           GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
           NODE_TLS_REJECT_UNAUTHORIZED: "0",
-          OPEN_DESIGN_RELEASE_CHANNEL: "stable",
-          OPEN_DESIGN_RELEASE_DRY_RUN: "true",
-          OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: fixture.origin,
-          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: "0.10.0.nightly.12",
-          OPEN_DESIGN_STABLE_VERSION: "0.10.0",
+          MARKETING_AX_RELEASE_CHANNEL: "stable",
+          MARKETING_AX_RELEASE_DRY_RUN: "true",
+          MARKETING_AX_RELEASES_PUBLIC_ORIGIN: fixture.origin,
+          MARKETING_AX_STABLE_NIGHTLY_VERSION: "0.10.0.nightly.12",
+          MARKETING_AX_STABLE_VERSION: "0.10.0",
           PATH: `${join(runnerTemp, "bin")}:${process.env.PATH ?? ""}`,
         },
       });
@@ -292,7 +292,7 @@ describe("packaged smoke workflow", () => {
       expect(result.stdout).toContain("[release-stable] validated nightly: 0.10.0.nightly.12");
       expect(result.stdout).toContain("[release-stable] channel: stable");
       expect(result.stdout).toContain("[release-stable] dry run: true");
-      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.10.0");
+      expect(result.stdout).toContain("[release-stable] version tag: marketing-ax-v0.10.0");
     } finally {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });
@@ -302,11 +302,11 @@ describe("packaged smoke workflow", () => {
   it("[P2] rejects invalid release dry-run values before remote checks", async () => {
     const output = await runReleaseStableForFailure({
       GITHUB_REF_NAME: "release/v0.10.0",
-      OPEN_DESIGN_RELEASE_DRY_RUN: "maybe",
-      OPEN_DESIGN_STABLE_VERSION: "",
+      MARKETING_AX_RELEASE_DRY_RUN: "maybe",
+      MARKETING_AX_STABLE_VERSION: "",
     });
 
-    expect(output).toContain("OPEN_DESIGN_RELEASE_DRY_RUN must be true or false; got maybe");
+    expect(output).toContain("MARKETING_AX_RELEASE_DRY_RUN must be true or false; got maybe");
   });
 
   it("keeps both beta release lanes on the shared payload-aware metadata surface", async () => {
@@ -379,8 +379,8 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toMatch(/^      update_metadata_url:/m);
     expect(workflow).not.toMatch(/^      update_target_version:/m);
     expect(workflow).toContain("name: Prepare beta metadata");
-    expect(workflow).toContain("OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json");
-    expect(workflow).toContain("OPEN_DESIGN_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json");
+    expect(workflow).toContain("MARKETING_AX_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json");
+    expect(workflow).toContain("MARKETING_AX_STABLE_METADATA_URL: https://releases.marketing-ax.example/stable/latest/metadata.json");
     expect(workflow).toContain('repo_dir="$PWD/_release-metadata"');
     expect(workflow).toContain("--filter=blob:none --depth=1");
     expect(workflow).toContain("for attempt in 1 2 3");
@@ -398,11 +398,11 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("needs: metadata");
     expect(workflow).toContain('-ReleaseTarget win_x64');
     expect(workflow).toContain('-ReleaseVersion "${{ needs.metadata.outputs.beta_version }}"');
-    expect(workflow).toContain('OD_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}');
-    expect(workflow).toContain('OD_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}');
-    expect(workflow).toContain('OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}');
-    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
-    expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}");
+    expect(workflow).toContain('MAX_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}');
+    expect(workflow).toContain('MAX_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}');
+    expect(workflow).toContain('MAX_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}');
+    expect(workflow).toContain("MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
+    expect(workflow).toContain("MAX_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}");
     expect(windowsBuildScript).toContain('"pnpm.cmd", "exec", "tools-pack", "win", "build"');
     expect(windowsBuildScript).toContain('if ($SmokeMode -eq "full" -and -not $hasExternalUpdateMetadata -and -not $hasExternalUpdateArtifactPair)');
     expect(windowsBuildScript).not.toContain("fnm");
@@ -412,14 +412,14 @@ describe("packaged smoke workflow", () => {
     expect(posixBuildScript).toContain("RELEASE_TARGET");
     expect(posixBuildScript).toContain("REQUIRE_VELA_CLI");
     expect(posixBuildScript).toContain('--cache-dir "$TOOLS_PACK_CACHE_DIR"');
-    expect(posixBuildScript).not.toContain("OPEN_DESIGN_RELEASE_PROFILE");
+    expect(posixBuildScript).not.toContain("MARKETING_AX_RELEASE_PROFILE");
     expect(posixBuildScript).not.toContain("corepack prepare");
     expect(posixBuildScript).not.toContain("RUNNER_TEMP");
     expect(workflow).toContain("Publish win_x64 platform");
     expect(workflow).toContain(".github\\workflow\\scripts\\release\\storage\\publish-platform.ts");
     expect(workflow).toContain("Write win_x64 release report");
     expect(workflow).toContain("RELEASE_REPORT_DIR: C:\\.tmp\\runner\\od-beta\\win_x64\\release-report\\win_x64");
-    expect(posixBuildScript).toContain('OD_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE"');
+    expect(posixBuildScript).toContain('MAX_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE"');
     expect(workflow).toContain("runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]");
     expect(workflow).toContain("path: _release-build");
     expect(workflow).toContain("working-directory: _release-build");
@@ -487,7 +487,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.3.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.3.unsigned/Marketing AX Beta.dmg",
           },
         },
         channel: "beta",
@@ -530,7 +530,7 @@ describe("packaged smoke workflow", () => {
             RELEASE_MANIFEST_DIR: platformManifestRoot,
             RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
             RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-            RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+            RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
             RELEASE_SIGNED: "false",
             RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
             RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -571,7 +571,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Marketing AX Beta.dmg",
           },
         },
         channel: "beta",
@@ -614,7 +614,7 @@ describe("packaged smoke workflow", () => {
             RELEASE_MANIFEST_DIR: platformManifestRoot,
             RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
             RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-            RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+            RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
             RELEASE_SIGNED: "false",
             RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
             RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -655,7 +655,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Marketing AX Beta.dmg",
           },
         },
         channel: "beta",
@@ -695,7 +695,7 @@ describe("packaged smoke workflow", () => {
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
           RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -734,7 +734,7 @@ describe("packaged smoke workflow", () => {
           {
             artifacts: {
               installer: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
               },
             },
             channel: "beta",
@@ -746,7 +746,7 @@ describe("packaged smoke workflow", () => {
             legacyPlatformKey: "win",
             feed: {
               name: "latest.yml",
-              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+              url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
             },
             platform: "win",
             platformKey: "win_x64",
@@ -780,7 +780,7 @@ describe("packaged smoke workflow", () => {
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
           RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -826,11 +826,11 @@ describe("packaged smoke workflow", () => {
           {
             artifacts: {
               dmg: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
               },
               payload: {
-                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
+                sha256Url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
               },
             },
             channel: "beta",
@@ -860,17 +860,17 @@ describe("packaged smoke workflow", () => {
           {
             artifacts: {
               installer: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
               },
               payload: {
-                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
+                sha256Url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
               },
             },
             channel: "beta",
             feed: {
               name: "latest.yml",
-              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+              url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
             },
             github: {
               commit: "current-sha",
@@ -910,7 +910,7 @@ describe("packaged smoke workflow", () => {
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
           RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -969,7 +969,7 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain('& "C:\\Users\\runner\\.cargo\\bin\\fnm.exe" exec --using=24 -- pwsh -NoProfile -File .\\.github\\workflow\\scripts\\release\\build-platform.ps1');
     expect(workflow).toContain("corepack prepare pnpm@10.33.2 --activate");
     expect(workflow).toContain('pnpm.cmd install --frozen-lockfile --prefer-offline');
-    expect(workflow).toContain("sudo -n \"$OPEN_DESIGN_MAC_SIGNING_HELPER\" \"$cert_path\" \"$password_path\"");
+    expect(workflow).toContain("sudo -n \"$MARKETING_AX_MAC_SIGNING_HELPER\" \"$cert_path\" \"$password_path\"");
     expect(workflow).not.toContain("PATH: /usr/local/libexec/open-design/wrappers:${{ env.PATH }}");
     expect(posixBuildScript).not.toContain("fnm");
     expect(posixBuildScript).not.toContain("corepack");
@@ -987,14 +987,14 @@ function expectChannelWorkflowNamespaces(
 ): void {
   const namespace = `release-${channel}`;
   expect(workflow).toContain(`--namespace ${namespace}`);
-  expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}`);
+  expect(workflow).toContain(`MAX_PACKAGED_E2E_NAMESPACE: ${namespace}`);
   expect(workflow).toContain(`--namespace ${namespace}-intel`);
   expect(workflow).toContain(`"--namespace", "${namespace}-win",`);
-  expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}-win`);
+  expect(workflow).toContain(`MAX_PACKAGED_E2E_NAMESPACE: ${namespace}-win`);
   expect(workflow).toContain(`--namespace ${namespace}-linux`);
 
   if (options.hasLinuxSmoke) {
-    expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}-linux`);
+    expect(workflow).toContain(`MAX_PACKAGED_E2E_NAMESPACE: ${namespace}-linux`);
   }
 }
 
@@ -1077,7 +1077,7 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
     github: {
       branch: `release/v${baseVersion}`,
       commit: "0123456789abcdef0123456789abcdef01234567",
-      repository: "nexu-io/open-design",
+      repository: "marketing-ax/marketing-ax",
       workflow: "release-stable",
     },
     nightlyNumber: 12,
@@ -1086,8 +1086,8 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
       mac: {
         arch: "arm64",
         artifacts: {
-          dmg: artifact("Open Design.dmg"),
-          zip: artifact("Open Design-mac-arm64.zip"),
+          dmg: artifact("Marketing AX.dmg"),
+          zip: artifact("Marketing AX-mac-arm64.zip"),
         },
         enabled: true,
         signed: true,
@@ -1095,8 +1095,8 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
       macIntel: {
         arch: "x64",
         artifacts: {
-          dmg: artifact("Open Design Intel.dmg"),
-          zip: artifact("Open Design-mac-x64.zip"),
+          dmg: artifact("Marketing AX Intel.dmg"),
+          zip: artifact("Marketing AX-mac-x64.zip"),
         },
         enabled: true,
         signed: true,
@@ -1104,7 +1104,7 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
       win: {
         arch: "x64",
         artifacts: {
-          installer: artifact("Open Design Setup.exe"),
+          installer: artifact("Marketing AX Setup.exe"),
         },
         enabled: true,
       },

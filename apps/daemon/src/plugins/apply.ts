@@ -18,7 +18,7 @@ import {
   resolveAppliedPipeline,
   resolveContext,
   type RegistryView,
-} from '@open-design/plugin-runtime';
+} from '@marketing-ax/plugin-runtime';
 import {
   renderPluginBlock,
   resolveLocalizedText,
@@ -32,7 +32,7 @@ import {
   type PluginManifest,
   type PluginProjectMetadataPatch,
   type TrustTier,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { resolveCapabilitiesGranted, requiredCapabilities } from './trust.js';
 import {
   deriveAutoOAuthPrompts,

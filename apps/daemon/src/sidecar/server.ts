@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
@@ -11,14 +11,14 @@ import {
   type DesktopExportPdfResult,
   type MintImportTokenResult,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 import {
   createJsonIpcServer,
   requestJsonIpc,
   resolveAppIpcPath,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
-} from "@open-design/sidecar";
+} from "@marketing-ax/sidecar";
 
 import { startDaemonRuntime, type StartedDaemonRuntime } from "../daemon-startup.js";
 import {
@@ -120,7 +120,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
     desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
       const desktopIpc = resolveAppIpcPath({
         app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        contract: MARKETING_AX_SIDECAR_CONTRACT,
         namespace: runtime.namespace,
       });
       return await requestJsonIpc<DesktopExportPdfResult>(

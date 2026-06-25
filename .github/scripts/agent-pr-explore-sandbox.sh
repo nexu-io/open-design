@@ -46,8 +46,8 @@ artifacts="$root/artifacts"
 # per job) so dependencies are reused across runs instead of being fully
 # re-downloaded every time -- the self-hosted runner's network to the npm
 # registry is as unreliable as its docker.io access. Content-addressed, so
-# sharing across PRs is safe; override with OD_SANDBOX_PNPM_STORE if needed.
-pnpm_store="${OD_SANDBOX_PNPM_STORE:-$HOME/.cache/agent-pr-explore/pnpm-store}"
+# sharing across PRs is safe; override with MAX_SANDBOX_PNPM_STORE if needed.
+pnpm_store="${MAX_SANDBOX_PNPM_STORE:-$HOME/.cache/agent-pr-explore/pnpm-store}"
 context_file="$artifacts/pr-context.md"
 trimmed_context_file="$artifacts/pr-context-trimmed.md"
 changed_files_file="$artifacts/changed-files.txt"
@@ -58,25 +58,25 @@ rm -rf "$root"
 mkdir -p "$artifacts" "$pnpm_store" "$playwright_video_dir"
 
 container_name="od-agent-pr-${PR_NUMBER}-${HEAD_SHA:0:12}"
-image="${OD_SANDBOX_IMAGE:-node:24-bookworm}"
+image="${MAX_SANDBOX_IMAGE:-node:24-bookworm}"
 container_web_port=17573
 container_daemon_port=17456
 container_proxy_port=17574
-host_web_port="${OD_SANDBOX_WEB_PORT:-$((20000 + (PR_NUMBER % 20000)))}"
+host_web_port="${MAX_SANDBOX_WEB_PORT:-$((20000 + (PR_NUMBER % 20000)))}"
 base_url="http://127.0.0.1:${host_web_port}"
-cpus="${OD_SANDBOX_CPUS:-4}"
-memory="${OD_SANDBOX_MEMORY:-8g}"
-expect_timeout_seconds="${OD_EXPECT_TIMEOUT_SECONDS:-1200}"
-expect_cli_version="${OD_EXPECT_CLI_VERSION:-0.1.3}"
+cpus="${MAX_SANDBOX_CPUS:-4}"
+memory="${MAX_SANDBOX_MEMORY:-8g}"
+expect_timeout_seconds="${MAX_EXPECT_TIMEOUT_SECONDS:-1200}"
+expect_cli_version="${MAX_EXPECT_CLI_VERSION:-0.1.3}"
 # ACP agent backend expect-cli drives. expect-cli defaults to Claude Code, which
 # is not installed on this runner; we use Codex (authenticated via the runner's
-# CODEX_HOME). Set OD_EXPECT_AGENT="" to fall back to expect-cli's default.
-expect_agent="${OD_EXPECT_AGENT-codex}"
+# CODEX_HOME). Set MAX_EXPECT_AGENT="" to fall back to expect-cli's default.
+expect_agent="${MAX_EXPECT_AGENT-codex}"
 expect_agent_args=""
 [ -n "$expect_agent" ] && expect_agent_args="-a $expect_agent"
-context_max_bytes="${OD_EXPECT_CONTEXT_MAX_BYTES:-120000}"
-file_patch_max_chars="${OD_EXPECT_FILE_PATCH_MAX_CHARS:-8000}"
-ready_timeout_seconds="${OD_SANDBOX_READY_TIMEOUT_SECONDS:-900}"
+context_max_bytes="${MAX_EXPECT_CONTEXT_MAX_BYTES:-120000}"
+file_patch_max_chars="${MAX_EXPECT_FILE_PATCH_MAX_CHARS:-8000}"
+ready_timeout_seconds="${MAX_SANDBOX_READY_TIMEOUT_SECONDS:-900}"
 ready_attempts=$((ready_timeout_seconds / 2))
 if [ "$ready_attempts" -lt 1 ]; then
   ready_attempts=1
@@ -111,7 +111,7 @@ is_browser_exploration_path() {
 }
 
 select_deterministic_verifier() {
-  local requested="${OD_DETERMINISTIC_VERIFIER:-auto}"
+  local requested="${MAX_DETERMINISTIC_VERIFIER:-auto}"
   if [ "$requested" != "auto" ]; then
     echo "$requested"
     return
@@ -134,7 +134,7 @@ select_deterministic_verifier() {
 }
 
 select_agent_fixture() {
-  local requested="${OD_AGENT_FIXTURE:-auto}"
+  local requested="${MAX_AGENT_FIXTURE:-auto}"
   if [ "$requested" != "auto" ]; then
     echo "$requested"
     return
@@ -211,7 +211,7 @@ Start URL: $url
 EOF
       ;;
     *)
-      echo "::error::Unknown OD_AGENT_FIXTURE: $fixture"
+      echo "::error::Unknown MAX_AGENT_FIXTURE: $fixture"
       exit 1
       ;;
   esac
@@ -272,8 +272,8 @@ async function uploadFile(name, content) {
   const conversationId = created.conversationId;
   if (!conversationId) throw new Error("project create response did not include conversationId");
 
-  await uploadFile("generated-plugin/open-design.json", JSON.stringify({
-    "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  await uploadFile("generated-plugin/marketing-ax.json", JSON.stringify({
+    "$schema": "https://marketing-ax.example/schemas/plugin.v1.json",
     specVersion: "1.0.0",
     name: `agent-fixture-plugin-${prNumber}`,
     title: "Agent Fixture Plugin",
@@ -305,7 +305,7 @@ async function uploadFile(name, content) {
     `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/u-fixture`,
     {
       role: "user",
-      content: "Create a small Open Design plugin.",
+      content: "Create a small Marketing AX plugin.",
       createdAt: now - 2000,
     },
   );
@@ -314,12 +314,12 @@ async function uploadFile(name, content) {
     `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/a-fixture`,
     {
       role: "assistant",
-      content: "The plugin is ready to add to My plugins: generated-plugin/open-design.json",
+      content: "The plugin is ready to add to My plugins: generated-plugin/marketing-ax.json",
       runStatus: "succeeded",
       producedFiles: [
         {
-          name: "generated-plugin/open-design.json",
-          path: "generated-plugin/open-design.json",
+          name: "generated-plugin/marketing-ax.json",
+          path: "generated-plugin/marketing-ax.json",
           size: 100,
           mtime: now - 1000,
           kind: "code",
@@ -335,7 +335,7 @@ async function uploadFile(name, content) {
         },
       ],
       events: [
-        { kind: "tool_use", id: "write-manifest", name: "Write", input: { path: "generated-plugin/open-design.json" } },
+        { kind: "tool_use", id: "write-manifest", name: "Write", input: { path: "generated-plugin/marketing-ax.json" } },
         { kind: "tool_result", toolUseId: "write-manifest", content: "ok", isError: false },
       ],
       createdAt: now - 1000,
@@ -388,7 +388,7 @@ JSON
 }
 
 record_playwright_artifacts() {
-  if [ "${OD_RECORD_PLAYWRIGHT_ARTIFACTS:-1}" = "0" ]; then
+  if [ "${MAX_RECORD_PLAYWRIGHT_ARTIFACTS:-1}" = "0" ]; then
     echo "Playwright artifact recording disabled"
     return 0
   fi
@@ -398,8 +398,8 @@ record_playwright_artifacts() {
   VIDEO_DIR="$playwright_video_dir" \
   AGENT_FIXTURE="$agent_fixture" \
   DETERMINISTIC_VERIFIER="$deterministic_verifier" \
-  TRACE_PUBLIC_BASE_URL="${OD_TRACE_PUBLIC_BASE_URL:-}" \
-  TRACE_PUBLIC_TRACE_URL="${OD_TRACE_PUBLIC_TRACE_URL:-}" \
+  TRACE_PUBLIC_BASE_URL="${MAX_TRACE_PUBLIC_BASE_URL:-}" \
+  TRACE_PUBLIC_TRACE_URL="${MAX_TRACE_PUBLIC_TRACE_URL:-}" \
   node <<'NODE'
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
@@ -455,7 +455,7 @@ function resolvePlaywrightCliPath() {
 }
 
 function ensurePlaywrightBrowserCache() {
-  if (process.env.OD_INSTALL_PLAYWRIGHT_BROWSERS === "0") return;
+  if (process.env.MAX_INSTALL_PLAYWRIGHT_BROWSERS === "0") return;
   const cliPath = resolvePlaywrightCliPath();
   if (!cliPath) return;
   childProcess.execFileSync(process.execPath, [cliPath, "install", "chromium"], {
@@ -647,7 +647,7 @@ function writeTraceViewerFiles(viewerUrl) {
         localCommand,
         "```",
         "",
-        "To generate a one-click trace link in future runs, upload `playwright-smoke-trace.zip` somewhere browser-readable and set `OD_TRACE_PUBLIC_BASE_URL` to that artifact directory, or set `OD_TRACE_PUBLIC_TRACE_URL` to the zip URL.",
+        "To generate a one-click trace link in future runs, upload `playwright-smoke-trace.zip` somewhere browser-readable and set `MAX_TRACE_PUBLIC_BASE_URL` to that artifact directory, or set `MAX_TRACE_PUBLIC_TRACE_URL` to the zip URL.",
         "",
       ].join("\n");
   fs.writeFileSync(path.join(artifacts, "playwright-trace-viewer.md"), markdown);
@@ -705,14 +705,14 @@ NODE
 }
 
 publish_trace_artifacts_to_r2() {
-  if [ "${OD_TRACE_R2_UPLOAD:-0}" != "1" ]; then
+  if [ "${MAX_TRACE_R2_UPLOAD:-0}" != "1" ]; then
     return 0
   fi
 
   ARTIFACTS="$artifacts" \
   PR_NUMBER="$PR_NUMBER" \
   HEAD_SHA="$HEAD_SHA" \
-  R2_PREFIX="${OD_TRACE_R2_PREFIX:-}" \
+  R2_PREFIX="${MAX_TRACE_R2_PREFIX:-}" \
   R2_BUCKET="${R2_BUCKET:-${CLOUDFLARE_R2_RELEASES_BUCKET:-}}" \
   R2_PUBLIC_ORIGIN="${R2_PUBLIC_ORIGIN:-${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN:-}}" \
   R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:-${CLOUDFLARE_R2_RELEASES_AK:-}}" \
@@ -1020,8 +1020,8 @@ fi
 # PR head is taken from the BASE repo's refs/pull/<n>/head so fork PRs work too,
 # and the read-only deploy key stays on the trusted host -- it is never exposed to
 # the untrusted PR code, which only ever sees the checked-out files inside Docker.
-mirror="${OD_SANDBOX_REPO_MIRROR:-$HOME/.cache/agent-pr-explore/open-design.git}"
-git_ssh_key="${OD_SANDBOX_GIT_SSH_KEY:-$HOME/.ssh/od_agent_deploy}"
+mirror="${MAX_SANDBOX_REPO_MIRROR:-$HOME/.cache/agent-pr-explore/marketing-ax.git}"
+git_ssh_key="${MAX_SANDBOX_GIT_SSH_KEY:-$HOME/.ssh/od_agent_deploy}"
 pr_src="$root/pr-src"
 export GIT_SSH_COMMAND="ssh -i $git_ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 
@@ -1073,8 +1073,8 @@ docker run -d \
   --env "HEAD_REPO=$HEAD_REPO" \
   --env "BASE_REPO=$BASE_REPO" \
   --env "BASE_SHA=$BASE_SHA" \
-  --env "OD_ALLOWED_ORIGINS=$base_url" \
-  --env "OD_DETERMINISTIC_VERIFIER=$deterministic_verifier" \
+  --env "MAX_ALLOWED_ORIGINS=$base_url" \
+  --env "MAX_DETERMINISTIC_VERIFIER=$deterministic_verifier" \
   --env "CI=true" \
   --env "PLAYWRIGHT_HTML_OPEN=never" \
   "$image" \
@@ -1113,16 +1113,16 @@ docker run -d \
       pnpm install --frozen-lockfile
 
       echo "== prebuild =="
-      pnpm --filter @open-design/daemon build
-      pnpm --filter @open-design/tools-dev build
+      pnpm --filter @marketing-ax/daemon build
+      pnpm --filter @marketing-ax/tools-dev build
 
-      if [ "${OD_DETERMINISTIC_VERIFIER}" = "web-static-export" ]; then
+      if [ "${MAX_DETERMINISTIC_VERIFIER}" = "web-static-export" ]; then
         echo "== deterministic verifier: web-static-export =="
         set +e
         (
           set -euo pipefail
           rm -rf apps/web/out apps/web/.next
-          OD_WEB_OUTPUT_MODE=server sh -lc '"'"'OD_WEB_OUTPUT_MODE= pnpm --filter @open-design/web build && test -d apps/web/out'"'"'
+          MAX_WEB_OUTPUT_MODE=server sh -lc '"'"'MAX_WEB_OUTPUT_MODE= pnpm --filter @marketing-ax/web build && test -d apps/web/out'"'"'
           test -f apps/web/out/index.html
         ) > /artifacts/deterministic-verifier.log 2>&1
         verifier_status=$?
@@ -1204,7 +1204,7 @@ This PR changes the web deployment/static-export path rather than an interactive
 ### 🧪 What Was Verified
 
 - Ran the static export verifier inside an isolated Docker checkout of PR #${PR_NUMBER}.
-- Reproduced the relevant inherited environment condition for this change: \`OD_WEB_OUTPUT_MODE=server\` is present, then the web build explicitly clears it for static export.
+- Reproduced the relevant inherited environment condition for this change: \`MAX_WEB_OUTPUT_MODE=server\` is present, then the web build explicitly clears it for static export.
 - Confirmed the web app still boots after the verifier and is reachable through the sandbox proxy.
 - Captured Playwright trace/video artifacts for reviewer inspection.
 
@@ -1212,7 +1212,7 @@ This PR changes the web deployment/static-export path rather than an interactive
 
 \`\`\`bash
 rm -rf apps/web/out apps/web/.next
-OD_WEB_OUTPUT_MODE=server sh -c 'OD_WEB_OUTPUT_MODE= pnpm --filter @open-design/web build && test -d apps/web/out'
+MAX_WEB_OUTPUT_MODE=server sh -c 'MAX_WEB_OUTPUT_MODE= pnpm --filter @marketing-ax/web build && test -d apps/web/out'
 test -f apps/web/out/index.html
 \`\`\`
 
@@ -1287,7 +1287,7 @@ REPORT
 fi
 
 expect_prompt="$(cat <<PROMPT
-You are reviewing nexu-io/open-design PR #${PR_NUMBER}, against the live app at ${base_url}.
+You are reviewing marketing-ax/marketing-ax PR #${PR_NUMBER}, against the live app at ${base_url}.
 
 ## MINDSET -- this is a precious, expensive validation opportunity
 
@@ -1468,10 +1468,10 @@ PROMPT
 
 if command -v expect-cli >/dev/null 2>&1; then
   expect_command=(expect-cli tui --ci $expect_agent_args --timeout "$((expect_timeout_seconds * 1000))" -u "$expect_url")
-elif [ "${OD_ALLOW_NPX_EXPECT_CLI:-0}" = "1" ] && command -v npx >/dev/null 2>&1; then
+elif [ "${MAX_ALLOW_NPX_EXPECT_CLI:-0}" = "1" ] && command -v npx >/dev/null 2>&1; then
   expect_command=(npx -y "expect-cli@${expect_cli_version}" tui --ci $expect_agent_args --timeout "$((expect_timeout_seconds * 1000))" -u "$expect_url")
 else
-  echo "::error::expect-cli is required on the agent-pr-explore runner. Install expect-cli@${expect_cli_version}, or set OD_ALLOW_NPX_EXPECT_CLI=1 to use the pinned npx fallback."
+  echo "::error::expect-cli is required on the agent-pr-explore runner. Install expect-cli@${expect_cli_version}, or set MAX_ALLOW_NPX_EXPECT_CLI=1 to use the pinned npx fallback."
   exit 1
 fi
 
@@ -1501,7 +1501,7 @@ docker logs "$container_name" > "$artifacts/docker.log" 2>&1 || true
 # Persist the report + trace pointer to a stable host dir so dry/validation runs
 # (skip_comment) can be inspected without downloading the slow, large workflow
 # artifact. Overwrites per PR; the big trace zip stays on R2 only.
-report_persist_dir="${OD_SANDBOX_REPORT_DIR:-$HOME/.cache/agent-pr-explore/reports}/pr-${PR_NUMBER}"
+report_persist_dir="${MAX_SANDBOX_REPORT_DIR:-$HOME/.cache/agent-pr-explore/reports}/pr-${PR_NUMBER}"
 mkdir -p "$report_persist_dir" 2>/dev/null || true
 cp -f "$artifacts/agent-pr-exploration-report.md" "$report_persist_dir/report.md" 2>/dev/null || true
 cp -f "$artifacts/agent-report.md" "$report_persist_dir/agent-report.md" 2>/dev/null || true

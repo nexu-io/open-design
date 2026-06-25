@@ -30,9 +30,9 @@ describe('app version helpers', () => {
   it('prefers packaged app version metadata from the environment', () => {
     expect(resolveAppVersionInfo({
       packageMetadata: { version: '0.3.0' },
-      env: { OD_APP_VERSION: '0.3.1-beta.1' },
-      resourcesPath: '/Applications/Open Design.app/Contents/Resources',
-      execPath: '/Applications/Open Design.app/Contents/Resources/open-design/bin/node',
+      env: { MAX_APP_VERSION: '0.3.1-beta.1' },
+      resourcesPath: '/Applications/Marketing AX.app/Contents/Resources',
+      execPath: '/Applications/Marketing AX.app/Contents/Resources/open-design/bin/node',
       platform: 'darwin',
       arch: 'arm64',
     })).toEqual({
@@ -45,17 +45,17 @@ describe('app version helpers', () => {
   });
 
   it('detects packaged runtimes without sidecar protocol knowledge', () => {
-    expect(isPackagedRuntime({ resourcesPath: '/Applications/Open Design.app/Contents/Resources' })).toBe(true);
+    expect(isPackagedRuntime({ resourcesPath: '/Applications/Marketing AX.app/Contents/Resources' })).toBe(true);
     expect(isPackagedRuntime({
-      execPath: '/Applications/Open Design.app/Contents/Resources/open-design/bin/node',
+      execPath: '/Applications/Marketing AX.app/Contents/Resources/open-design/bin/node',
       platform: 'darwin',
     })).toBe(true);
     expect(isPackagedRuntime({
-      execPath: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.exe',
+      execPath: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Marketing AX\\resources\\open-design\\bin\\node.exe',
       platform: 'win32',
     })).toBe(true);
     expect(isPackagedRuntime({
-      execPath: '/opt/Open Design/resources/open-design/bin/node',
+      execPath: '/opt/Marketing AX/resources/open-design/bin/node',
       platform: 'linux',
     })).toBe(true);
     expect(isPackagedRuntime({ execPath: '/usr/local/bin/node', platform: 'linux' })).toBe(false);
@@ -64,7 +64,7 @@ describe('app version helpers', () => {
   it('honors an explicit release channel', () => {
     expect(resolveAppVersionInfo({
       packageMetadata: { version: '1.2.3' },
-      env: { OD_RELEASE_CHANNEL: 'beta' },
+      env: { MAX_RELEASE_CHANNEL: 'beta' },
     }).channel).toBe('beta');
   });
 

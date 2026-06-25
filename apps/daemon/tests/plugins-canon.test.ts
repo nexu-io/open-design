@@ -7,7 +7,7 @@
 // asserts the canonical block shape stays byte-deterministic.
 
 import { describe, expect, it } from 'vitest';
-import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import type { AppliedPluginSnapshot } from '@marketing-ax/contracts';
 import { pluginPromptBlock } from '../src/plugins/index.js';
 
 const snapshot = (over: Partial<AppliedPluginSnapshot> = {}): AppliedPluginSnapshot => ({

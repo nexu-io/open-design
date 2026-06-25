@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { TOKEN_SCHEMA } from '@open-design/contracts/design-systems/token-schema';
+import { TOKEN_SCHEMA } from '@marketing-ax/contracts/design-systems/token-schema';
 
 import { startServer } from '../src/server.js';
 

@@ -35,11 +35,11 @@ type CapturedOpenCodeRun = {
 const CAPTURE_ENV_KEYS = [
   'CODEX_HOME',
   'HOME',
-  'OD_AGENT_HOME',
-  'OD_DATA_DIR',
-  'OD_PROJECT_DIR',
-  'OD_PROJECT_ID',
-  'OD_SANDBOX_MODE',
+  'MAX_AGENT_HOME',
+  'MAX_DATA_DIR',
+  'MAX_PROJECT_DIR',
+  'MAX_PROJECT_ID',
+  'MAX_SANDBOX_MODE',
   'OPENCODE_CONFIG_CONTENT',
   'OPENCODE_TEST_HOME',
   'TEMP',
@@ -53,7 +53,7 @@ const CAPTURE_ENV_KEYS = [
 ];
 
 describe('tools-dev sandbox mode smoke', () => {
-  test('launches web/daemon with OD_SANDBOX_MODE=1 and a sandboxed agent spawn', async () => {
+  test('launches web/daemon with MAX_SANDBOX_MODE=1 and a sandboxed agent spawn', async () => {
     const suite = await createSmokeSuite('tools-dev-sandbox-mode');
     const capturePath = join(suite.scratchDir, 'captures', 'opencode-run.json');
     const opencodeBin = await writeFakeOpenCodeBin(
@@ -153,10 +153,10 @@ describe('tools-dev sandbox mode smoke', () => {
         expect(capture.cwd.startsWith(`${suite.dataDir}/projects/`)).toBe(true);
         expect(capture.hasToolToken).toBe(true);
         expect(capture.promptLength).toBeGreaterThan(0);
-        expect(capture.env.OD_SANDBOX_MODE).toBe('1');
-        expect(capture.env.OD_DATA_DIR).toBe(suite.dataDir);
-        expect(capture.env.OD_PROJECT_ID).toBe(project.project.id);
-        expectPathUnder(capture.env.OD_AGENT_HOME, roots.agentHomeDir, 'OD_AGENT_HOME');
+        expect(capture.env.MAX_SANDBOX_MODE).toBe('1');
+        expect(capture.env.MAX_DATA_DIR).toBe(suite.dataDir);
+        expect(capture.env.MAX_PROJECT_ID).toBe(project.project.id);
+        expectPathUnder(capture.env.MAX_AGENT_HOME, roots.agentHomeDir, 'MAX_AGENT_HOME');
         expectPathUnder(capture.env.HOME, roots.agentHomeDir, 'HOME');
         expectPathUnder(capture.env.USERPROFILE, roots.agentHomeDir, 'USERPROFILE');
         expectPathUnder(capture.env.CODEX_HOME, roots.agentHomeDir, 'CODEX_HOME');
@@ -186,8 +186,8 @@ describe('tools-dev sandbox mode smoke', () => {
       },
       {
         env: {
-          OD_E2E_SANDBOX_CAPTURE_PATH: capturePath,
-          OD_SANDBOX_MODE: '1',
+          MAX_E2E_SANDBOX_CAPTURE_PATH: capturePath,
+          MAX_SANDBOX_MODE: '1',
         },
       },
     );
@@ -240,8 +240,8 @@ setTimeout(() => emitRun(prompt), 500);
 function emitRun(promptText) {
   if (emitted) return;
   emitted = true;
-  const capturePath = process.env.OD_E2E_SANDBOX_CAPTURE_PATH;
-  if (capturePath && process.env.OD_TOOL_TOKEN) {
+  const capturePath = process.env.MAX_E2E_SANDBOX_CAPTURE_PATH;
+  if (capturePath && process.env.MAX_TOOL_TOKEN) {
     const env = {};
     for (const key of captureEnvKeys) {
       env[key] = typeof process.env[key] === 'string' ? process.env[key] : null;
@@ -253,7 +253,7 @@ function emitRun(promptText) {
         argv: args,
         cwd: process.cwd(),
         env,
-        hasToolToken: Boolean(process.env.OD_TOOL_TOKEN),
+        hasToolToken: Boolean(process.env.MAX_TOOL_TOKEN),
         promptLength: promptText.length,
       }, null, 2) + '\\n',
       'utf8',

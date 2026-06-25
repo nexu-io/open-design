@@ -225,13 +225,13 @@ export async function findPriorArtifactSiblings(
 }
 
 export function readArtifactStubGuardConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ArtifactStubGuardConfig {
-  const rawMode = (env.OD_ARTIFACT_STUB_GUARD ?? '').toLowerCase();
+  const rawMode = (env.MAX_ARTIFACT_STUB_GUARD ?? '').toLowerCase();
   const mode: ArtifactStubGuardMode =
     rawMode === 'reject' || rawMode === 'warn' || rawMode === 'off'
       ? rawMode
       : DEFAULT_ARTIFACT_STUB_GUARD_CONFIG.mode;
 
-  const ratioRaw = Number(env.OD_ARTIFACT_STUB_GUARD_MIN_RATIO);
+  const ratioRaw = Number(env.MAX_ARTIFACT_STUB_GUARD_MIN_RATIO);
   // Accept (0, 1] so users can set 1 to reject any shrinkage. Values <=0
   // or >1 fall back to default.
   const minRetainedRatio =
@@ -239,7 +239,7 @@ export function readArtifactStubGuardConfigFromEnv(env: NodeJS.ProcessEnv = proc
       ? ratioRaw
       : DEFAULT_ARTIFACT_STUB_GUARD_CONFIG.minRetainedRatio;
 
-  const minPriorBytesRaw = Number(env.OD_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES);
+  const minPriorBytesRaw = Number(env.MAX_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES);
   const minPriorBytes =
     Number.isInteger(minPriorBytesRaw) && minPriorBytesRaw > 0
       ? minPriorBytesRaw
@@ -259,7 +259,7 @@ function buildWarning(
       `New artifact body for identifier "${identifier}" is ${newSize} bytes, ` +
       `but the largest prior sibling "${prior.name}" is ${prior.size} bytes. ` +
       'This pattern usually means the agent emitted a placeholder instead of the full document. ' +
-      'Set OD_ARTIFACT_STUB_GUARD=warn to record the warning without rejecting, or =off to disable the guard entirely.',
+      'Set MAX_ARTIFACT_STUB_GUARD=warn to record the warning without rejecting, or =off to disable the guard entirely.',
     identifier,
     newSize,
     priorSize: prior.size,

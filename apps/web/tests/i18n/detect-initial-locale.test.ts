@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignHost } from '@marketing-ax/host/testing';
 import { detectInitialLocale } from '../../src/i18n';
 
 const LS_KEY = 'open-design:locale';

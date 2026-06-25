@@ -19,8 +19,8 @@
 //   - `action` — discriminated union the HomeView dispatcher matches
 //     on. The rail component itself stays presentational.
 
-import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
-import type { DefaultScenarioPluginId } from '@open-design/contracts';
+import type { ProjectKind, ProjectMetadata } from '@marketing-ax/contracts';
+import type { DefaultScenarioPluginId } from '@marketing-ax/contracts';
 import type { IconName } from '../Icon';
 
 // Plugin ids the chip rail can dispatch to. Most chips route to a
@@ -212,7 +212,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     label: 'Create plugin',
     icon: 'edit',
     group: 'migrate',
-    hint: 'Author a reusable Open Design plugin and add it to My plugins.',
+    hint: 'Author a reusable Marketing AX plugin and add it to My plugins.',
     action: { kind: 'create-plugin' },
   },
   {

@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PreviewModal } from '../../src/components/PreviewModal';
 
-// Regression coverage for nexu-io/open-design#897: skills declared with a
+// Regression coverage for marketing-ax/marketing-ax#897: skills declared with a
 // non-html `od.preview.type` (image, markdown, …) ship no fetchable
 // example artifact. The modal must render a calm "no shipped preview"
 // placeholder distinct from both the loading state (which would never
@@ -142,16 +142,16 @@ describe('PreviewModal unavailable state', () => {
       'url=https%3A%2F%2Fexample.test%2Fmarketplace%2Flanding',
     );
     expect(new URL(xShare.getAttribute('href') ?? '').searchParams.get('text')).toBe(
-      'Open Design template: Landing Template',
+      'Marketing AX template: Landing Template',
     );
     expect(new URL(redditShare.getAttribute('href') ?? '').searchParams.get('title')).toBe(
-      'Open Design template: Landing Template',
+      'Marketing AX template: Landing Template',
     );
     expect(
       new URL(
         screen.getByRole('menuitem', { name: /Facebook/i }).getAttribute('href') ?? '',
       ).searchParams.get('quote'),
-    ).toBe('Open Design template: Landing Template');
+    ).toBe('Marketing AX template: Landing Template');
     expect(screen.getByRole('menuitem', { name: /Instagram/i }).getAttribute('href')).toBe(
       'https://www.instagram.com/',
     );
@@ -202,7 +202,7 @@ describe('PreviewModal unavailable state', () => {
 
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith(
-          'Open Design template: Landing Template\nhttps://example.test/marketplace/landing',
+          'Marketing AX template: Landing Template\nhttps://example.test/marketplace/landing',
         );
         expect(openedWindow.location.href).toBe('https://www.instagram.com/');
       });
@@ -293,7 +293,7 @@ describe('PreviewModal unavailable state', () => {
 
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith(
-          'Open Design template: Landing Template\nhttps://example.test/marketplace/landing',
+          'Marketing AX template: Landing Template\nhttps://example.test/marketplace/landing',
         );
       });
     } finally {
@@ -314,7 +314,7 @@ describe('PreviewModal unavailable state', () => {
         ]}
         shareTarget={{
           title: 'Media Template',
-          url: 'https://open-design.ai/plugins/media-template',
+          url: 'https://marketing-ax.example/plugins/media-template',
         }}
         onView={() => {}}
         onClose={() => {}}

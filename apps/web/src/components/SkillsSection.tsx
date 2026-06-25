@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 import { useI18n, useT } from '../i18n';
 import {
   localizeSkillDescription,
@@ -8,7 +8,7 @@ import {
 } from '../i18n/content';
 import { Icon } from './Icon';
 import type { AppConfig } from '../types';
-import type { SkillSummary } from '@open-design/contracts';
+import type { SkillSummary } from '@marketing-ax/contracts';
 import {
   deleteSkill,
   fetchSkill,

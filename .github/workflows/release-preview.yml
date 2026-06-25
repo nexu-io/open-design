@@ -8,11 +8,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: open-design-release-preview
+  group: marketing-ax-release-preview
   cancel-in-progress: false
 
 env:
-  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  MARKETING_AX_TELEMETRY_RELAY_URL: ${{ vars.MARKETING_AX_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
   # without these run the daemon in no-op analytics mode (events never
@@ -32,7 +32,7 @@ jobs:
     name: Prepare preview metadata
     runs-on: ubuntu-latest
     env:
-      OPEN_DESIGN_PREVIEW_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/preview/latest/metadata.json
+      MARKETING_AX_PREVIEW_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/preview/latest/metadata.json
     outputs:
       base_version: ${{ steps.preview.outputs.base_version }}
       branch: ${{ steps.preview.outputs.branch }}
@@ -98,8 +98,8 @@ jobs:
 
       - name: Build daemon and desktop (typecheck dependencies)
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
 
       - name: Typecheck workspaces
         run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
@@ -161,7 +161,7 @@ jobs:
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
-          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          cert_path="$RUNNER_TEMP/marketing-ax-signing.p12"
           if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
             printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
           fi
@@ -209,7 +209,7 @@ jobs:
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
           source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-preview/builder/mac-arm64/Open Design Preview.app/Contents/Frameworks/Electron Framework.framework"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-preview/builder/mac-arm64/Marketing AX Preview.app/Contents/Frameworks/Electron Framework.framework"
 
           dump_framework() {
             local label="$1"
@@ -269,7 +269,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-mac-build-diagnostics
+          name: marketing-ax-preview-mac-build-diagnostics
           path: |
             ${{ runner.temp }}/mac-tools-pack-build.log
             ${{ runner.temp }}/mac-tools-pack-build.json
@@ -279,14 +279,14 @@ jobs:
       - name: Smoke preview mac packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-preview
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: preview
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          MAX_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          MAX_PACKAGED_E2E_MAC: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: release-preview
+          MAX_PACKAGED_E2E_RELEASE_CHANNEL: preview
+          MAX_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          MAX_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           set -euo pipefail
           pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
@@ -295,7 +295,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-mac-e2e-report
+          name: marketing-ax-preview-mac-e2e-report
           path: ${{ runner.temp }}/release-report/mac
           if-no-files-found: warn
 
@@ -306,7 +306,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: preview
           RELEASE_NAMESPACE: release-preview
-          RELEASE_NOTES: Open Design Preview ${{ needs.metadata.outputs.release_version }}
+          RELEASE_NOTES: Marketing AX Preview ${{ needs.metadata.outputs.release_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
@@ -337,7 +337,7 @@ jobs:
       - name: Upload mac preview publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-mac-arm64-publish-manifest
+          name: marketing-ax-preview-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
           retention-days: 1
@@ -373,7 +373,7 @@ jobs:
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
-          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          cert_path="$RUNNER_TEMP/marketing-ax-signing.p12"
           if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
             printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
           fi
@@ -434,7 +434,7 @@ jobs:
       - name: Upload mac intel preview publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-mac-x64-publish-manifest
+          name: marketing-ax-preview-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
           retention-days: 1
@@ -557,13 +557,13 @@ jobs:
       - name: Smoke preview windows packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
-          OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-preview-win
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: preview
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
+          MAX_PACKAGED_E2E_WIN: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: release-preview-win
+          MAX_PACKAGED_E2E_RELEASE_CHANNEL: preview
+          MAX_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          MAX_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           $ErrorActionPreference = "Stop"
           pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
@@ -575,7 +575,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-win-e2e-report
+          name: marketing-ax-preview-win-e2e-report
           path: ${{ runner.temp }}/release-report/win
           if-no-files-found: warn
 
@@ -620,7 +620,7 @@ jobs:
             -ReleaseAssetSuffix "" `
             -ReleaseChannel preview `
             -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-            -ReleaseNotes "Open Design Preview ${{ needs.metadata.outputs.release_version }}" `
+            -ReleaseNotes "Marketing AX Preview ${{ needs.metadata.outputs.release_version }}" `
             -IncludeZip $true
 
       - name: Publish windows preview platform
@@ -646,7 +646,7 @@ jobs:
       - name: Upload windows preview publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-win-x64-publish-manifest
+          name: marketing-ax-preview-win-x64-publish-manifest
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
           retention-days: 1
@@ -722,7 +722,7 @@ jobs:
       - name: Upload linux preview publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-preview-linux-x64-publish-manifest
+          name: marketing-ax-preview-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
           if-no-files-found: error
           retention-days: 1
@@ -785,26 +785,26 @@ jobs:
       - name: Download mac preview publish manifest
         uses: actions/download-artifact@v8
         with:
-          name: open-design-preview-mac-arm64-publish-manifest
+          name: marketing-ax-preview-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download mac intel preview publish manifest
         uses: actions/download-artifact@v8
         with:
-          name: open-design-preview-mac-x64-publish-manifest
+          name: marketing-ax-preview-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download windows preview publish manifest
         uses: actions/download-artifact@v8
         with:
-          name: open-design-preview-win-x64-publish-manifest
+          name: marketing-ax-preview-win-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download linux preview publish manifest
         if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-preview-linux-x64-publish-manifest
+          name: marketing-ax-preview-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Publish preview metadata

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HandoffButton } from '../../src/components/HandoffButton';
 import { I18nProvider } from '../../src/i18n';
-import type { AgentInfo, HostEditorsResponse } from '@open-design/contracts';
+import type { AgentInfo, HostEditorsResponse } from '@marketing-ax/contracts';
 
 const fetchHostEditors = vi.fn<() => Promise<HostEditorsResponse>>();
 const openProjectInEditor = vi.fn();
@@ -117,8 +117,8 @@ describe('HandoffButton zero-editors fallback', () => {
     fireEvent.click(await screen.findByTestId('handoff-caret'));
     fireEvent.click(await screen.findByRole('tab', { name: '复制给 CLI' }));
     expect(screen.getByRole('link', { name: /打开 AMR 官网/ }).getAttribute('href'))
-      .toBe('https://open-design.ai/amr');
-    expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('Open Design AMR');
+      .toBe('https://marketing-ax.example/amr');
+    expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('Marketing AX AMR');
     expect(screen.getByTestId('handoff-cli-item-amr').textContent).not.toContain('未安装');
     expect(
       screen.getByTestId('handoff-cli-item-amr').compareDocumentPosition(

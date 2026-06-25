@@ -27,7 +27,7 @@ jobs:
   remind:
     name: Summarize E2E coverage follow-up
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'nexu-io/open-design' }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' }}
     steps:
       - name: Send 24h E2E coverage reminder
         uses: actions/github-script@v7
@@ -231,7 +231,7 @@ jobs:
                   template: 'blue',
                   title: {
                     tag: 'plain_text',
-                    content: 'Open Design E2E Coverage 24h Reminder',
+                    content: 'Marketing AX E2E Coverage 24h Reminder',
                   },
                 },
                 elements: [

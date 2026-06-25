@@ -19,7 +19,7 @@ interface StartedServer {
   server: http.Server;
 }
 
-const dataDir = process.env.OD_DATA_DIR as string;
+const dataDir = process.env.MAX_DATA_DIR as string;
 
 let baseUrl: string;
 let server: http.Server;

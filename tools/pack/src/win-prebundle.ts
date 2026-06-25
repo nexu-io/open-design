@@ -19,13 +19,13 @@ export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
 } as const;
 
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
-  "@open-design/daemon",
-  "@open-design/desktop",
-  "@open-design/launcher-proto",
-  "@open-design/packaged",
-  "@open-design/sidecar",
-  "@open-design/sidecar-proto",
-  "@open-design/web",
+  "@marketing-ax/daemon",
+  "@marketing-ax/desktop",
+  "@marketing-ax/launcher-proto",
+  "@marketing-ax/packaged",
+  "@marketing-ax/sidecar",
+  "@marketing-ax/sidecar-proto",
+  "@marketing-ax/web",
 ] as const;
 
 export const WIN_PREBUNDLE_POLICIES = {
@@ -33,7 +33,7 @@ export const WIN_PREBUNDLE_POLICIES = {
     externals: ["electron"],
     forbiddenInputs: [
       "/apps/web/",
-      "/node_modules/@open-design/web/",
+      "/node_modules/@marketing-ax/web/",
       "/node_modules/next/",
       "/node_modules/openai/",
       "/node_modules/react/",
@@ -44,7 +44,7 @@ export const WIN_PREBUNDLE_POLICIES = {
   daemonCli: {
     externals: ["better-sqlite3", "blake3-wasm"],
     forbiddenInputs: [
-      "/node_modules/@open-design/daemon/",
+      "/node_modules/@marketing-ax/daemon/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
@@ -58,7 +58,7 @@ export const WIN_PREBUNDLE_POLICIES = {
   daemonSidecar: {
     externals: ["better-sqlite3", "blake3-wasm"],
     forbiddenInputs: [
-      "/node_modules/@open-design/daemon/",
+      "/node_modules/@marketing-ax/daemon/",
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
@@ -128,5 +128,5 @@ export async function assertWinPrebundleMetafile(options: {
 export function renderWinPackagedMainEntry(usePrebundle: boolean): string {
   return usePrebundle
     ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
+    : 'import("@marketing-ax/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
 }

@@ -10,7 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SkillSummary } from '../../src/types';
 
-// Regression coverage for nexu-io/open-design#897 — the Examples gallery
+// Regression coverage for marketing-ax/marketing-ax#897 — the Examples gallery
 // dispatches on `od.preview.type` so skills that ship no HTML artifact
 // (image / markdown / …) render a calm "no shipped preview" placeholder
 // instead of bouncing through a doomed `/api/skills/:id/example` fetch

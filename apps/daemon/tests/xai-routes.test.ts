@@ -97,7 +97,7 @@ async function startTestApp(projectRoot: string): Promise<TestApp> {
     BUNDLED_PETS_DIR: '',
     DESIGN_SYSTEMS_DIR: '',
     DESIGN_TEMPLATES_DIR: '',
-    OD_BIN: '',
+    MAX_BIN: '',
     PROJECT_ROOT: projectRoot,
     PROJECTS_DIR: '',
     PROMPT_TEMPLATES_DIR: '',
@@ -133,13 +133,13 @@ describe('xai-routes', () => {
   let projectRoot: string;
   let app: TestApp;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-xai-routes-'));
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
     onCallbackHolder.current = null;
     startMock.mockClear();
     stopMock.mockClear();
@@ -151,10 +151,10 @@ describe('xai-routes', () => {
   afterEach(async () => {
     await app.close();
     globalThis.fetch = realFetch;
-    if (originalMediaConfigDir == null) delete process.env.OD_MEDIA_CONFIG_DIR;
-    else process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
-    if (originalDataDir == null) delete process.env.OD_DATA_DIR;
-    else process.env.OD_DATA_DIR = originalDataDir;
+    if (originalMediaConfigDir == null) delete process.env.MAX_MEDIA_CONFIG_DIR;
+    else process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    if (originalDataDir == null) delete process.env.MAX_DATA_DIR;
+    else process.env.MAX_DATA_DIR = originalDataDir;
     await rm(projectRoot, { recursive: true, force: true });
   });
 
@@ -357,7 +357,7 @@ describe('xai-routes', () => {
     // Pre-stage a stored xAI key the way Settings → Grok would.
     const { mkdir, writeFile } = await import('node:fs/promises');
     const { default: pathMod } = await import('node:path');
-    const cfgPath = pathMod.join(projectRoot, '.od', 'media-config.json');
+    const cfgPath = pathMod.join(projectRoot, '.max', 'media-config.json');
     await mkdir(pathMod.dirname(cfgPath), { recursive: true });
     await writeFile(
       cfgPath,
@@ -456,7 +456,7 @@ describe('xai-routes', () => {
   it('POST /api/xai/search surfaces upstream errors as 502', async () => {
     const { mkdir, writeFile } = await import('node:fs/promises');
     const { default: pathMod } = await import('node:path');
-    const cfgPath = pathMod.join(projectRoot, '.od', 'media-config.json');
+    const cfgPath = pathMod.join(projectRoot, '.max', 'media-config.json');
     await mkdir(pathMod.dirname(cfgPath), { recursive: true });
     await writeFile(
       cfgPath,

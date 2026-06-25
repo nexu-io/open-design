@@ -416,7 +416,7 @@ describe('inlineRelativeAssets', () => {
   });
 
   it('does not re-replace a tag literal that appears inside an already-inlined asset body', async () => {
-    // Regression for nexu-io/open-design#1312 review feedback (Siri-Ray
+    // Regression for marketing-ax/marketing-ax#1312 review feedback (Siri-Ray
     // looper + codex bot): the previous reduce/split-join approach
     // re-scanned the progressively mutated HTML, so a tag literal that
     // happened to appear inside an inlined asset body got the inner
@@ -462,7 +462,7 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
   const projectId = 'proj-export-inline-test';
 
   const cssBody = 'body{color:#0a0}';
-  const jsBody = 'window.OD_EXPORT_OK = 42;';
+  const jsBody = 'window.MAX_EXPORT_OK = 42;';
   const nestedJsBody = 'export const N = 7;';
 
   beforeAll(async () => {
@@ -473,7 +473,7 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     baseUrl = started.url;
     server = started.server;
 
-    projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
+    projectsRoot = path.join(process.env.MAX_DATA_DIR!, 'projects');
     const dir = path.join(projectsRoot, projectId);
     const pages = path.join(dir, 'pages');
     const shared = path.join(dir, 'shared');

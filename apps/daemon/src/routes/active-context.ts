@@ -1,12 +1,12 @@
 import type { Express } from 'express';
-import { createApiError } from '@open-design/contracts';
+import { createApiError } from '@marketing-ax/contracts';
 import { ACTIVE_CONTEXT_TTL_MS } from '../constants.js';
 import type { RouteDeps } from '../server-context.js';
 import { defineJsonRoute, err, mountJsonRoute, ok, type Result } from '../http/index.js';
 
 export interface RegisterActiveContextRoutesDeps extends RouteDeps<'db' | 'http' | 'projectStore'> {}
 
-// Soft "what is the user looking at right now in Open Design?" channel. The
+// Soft "what is the user looking at right now in Marketing AX?" channel. The
 // web UI POSTs the current project + file on every route change; the MCP
 // surface reads it so a coding agent in another repo can resolve "the design
 // I have open" without the user typing the project id. In-memory only —

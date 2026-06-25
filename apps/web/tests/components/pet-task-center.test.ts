@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatRunStatusResponse } from '@open-design/contracts';
+import type { ChatRunStatusResponse } from '@marketing-ax/contracts';
 
 import { buildPetTaskCenter } from '../../src/components/pet/taskCenter';
 import type { Project } from '../../src/types';

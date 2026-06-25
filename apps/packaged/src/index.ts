@@ -1,18 +1,18 @@
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
-import { parseLauncherAfterQuitArgs } from "@open-design/launcher-proto";
+} from "@marketing-ax/sidecar-proto";
+import { parseLauncherAfterQuitArgs } from "@marketing-ax/launcher-proto";
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,
   resolveAppIpcPath,
-} from "@open-design/sidecar";
-import { applyOsLocaleSwitch, createSplashWindow } from "@open-design/desktop/main";
-import { readProcessStamp } from "@open-design/platform";
+} from "@marketing-ax/sidecar";
+import { applyOsLocaleSwitch, createSplashWindow } from "@marketing-ax/desktop/main";
+import { readProcessStamp } from "@marketing-ax/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
 
@@ -45,7 +45,7 @@ function createPackagedDesktopStamp(namespace: string): SidecarStamp {
     app: APP_KEYS.DESKTOP,
     ipc: resolveAppIpcPath({
       app: APP_KEYS.DESKTOP,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace,
     }),
     mode: SIDECAR_MODES.RUNTIME,
@@ -57,7 +57,7 @@ function createPackagedDesktopStamp(namespace: string): SidecarStamp {
 function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
   const env = createSidecarLaunchEnv({
     base,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     stamp,
   });
 
@@ -68,8 +68,8 @@ function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
 
 function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
-  if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
-  process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
+  if (process.env.MAX_UPDATE_METADATA_URL != null && process.env.MAX_UPDATE_METADATA_URL.length > 0) return;
+  process.env.MAX_UPDATE_METADATA_URL = updateMetadataUrl;
 }
 
 async function main(): Promise<void> {
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
 
   const config = await readPackagedConfig();
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
-  const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
+  const argvStamp = readProcessStamp(process.argv.slice(1), MARKETING_AX_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
   });
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
   });
   registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
 
-  const { runDesktopMain } = await import("@open-design/desktop/main");
+  const { runDesktopMain } = await import("@marketing-ax/desktop/main");
   await runDesktopMain(runtime, {
     splashWindow: splash.window,
     splashStartedAt: splash.startedAt,
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
     },
     // Round-7 (lefarcen P2 @ runtime.ts:336): packaged main-process
     // fetch targets the daemon sidecar's real http URL — never the
-    // od://app/ renderer URL, which Node/undici cannot resolve through
+    // max://app/ renderer URL, which Node/undici cannot resolve through
     // Electron's protocol handler.
     async discoverDaemonUrl() {
       return sidecars.daemon.url;

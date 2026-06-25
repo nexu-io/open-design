@@ -10,7 +10,7 @@
  * Runtime defs can now advertise a recommended `inactivityTimeoutMs`,
  * and the resolver merges it under the env override:
  *
- *   OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS   highest priority (operator override)
+ *   MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS   highest priority (operator override)
  *   def.inactivityTimeoutMs             next (agent-specific recommendation)
  *   DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS (10 min)   global default
  */
@@ -22,7 +22,7 @@ import {
 } from '../src/server.js';
 import { copilotAgentDef } from '../src/runtimes/defs/copilot.js';
 
-const ENV_KEY = 'OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS';
+const ENV_KEY = 'MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS';
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -121,7 +121,7 @@ describe('resolveChatRunInactivityTimeoutMs', () => {
     // Reviewer-correctness fix: an earlier ordering placed the env
     // early-return before the def validation, so a bad runtime def
     // could sit unnoticed in source whenever an operator had set
-    // OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS. The fast-fail now runs first
+    // MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS. The fast-fail now runs first
     // and catches the typo regardless of which branch eventually
     // wins.
     process.env[ENV_KEY] = '15000';

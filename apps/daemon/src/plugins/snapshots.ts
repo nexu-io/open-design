@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { readPluginEnvKnobs } from '../app-config.js';
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MARKETING_AX_PLUGIN_SPEC_VERSION,
   type AppliedPluginSnapshot,
   type GenUISurfaceSpec,
   type McpServerSpec,
@@ -25,7 +25,7 @@ import {
   type PluginConnectorRef,
   type PluginPipeline,
   type ResolvedContext,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, unknown>;
@@ -95,7 +95,7 @@ export function createSnapshot(db: SqliteDb, input: CreateSnapshotInput): Applie
     input.conversationId ?? null,
     input.runId ?? null,
     input.pluginId,
-    input.pluginSpecVersion ?? OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    input.pluginSpecVersion ?? MARKETING_AX_PLUGIN_SPEC_VERSION,
     input.pluginVersion,
     input.manifestSourceDigest,
     input.sourceMarketplaceId ?? null,
@@ -341,7 +341,7 @@ function buildSnapshot(args: {
   const snapshot: AppliedPluginSnapshot = {
     snapshotId:           id,
     pluginId:             input.pluginId,
-    pluginSpecVersion:    input.pluginSpecVersion ?? OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    pluginSpecVersion:    input.pluginSpecVersion ?? MARKETING_AX_PLUGIN_SPEC_VERSION,
     pluginVersion:        input.pluginVersion,
     manifestSourceDigest: input.manifestSourceDigest,
     sourceMarketplaceId:  input.sourceMarketplaceId ?? undefined,

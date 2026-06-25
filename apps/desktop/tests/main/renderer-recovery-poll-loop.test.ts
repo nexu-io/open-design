@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 // `BrowserWindow`s and so cannot be instantiated under vitest. Following the
 // pattern in `window-chrome.test.ts`, these tests assert on the runtime source
 // to pin the timer-ownership invariant: a single poll loop, even when a load
-// fails mid-tick. See nexu-io/open-design#4179 review.
+// fails mid-tick. See marketing-ax/marketing-ax#4179 review.
 const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.meta.url), "utf8");
 
 const markRendererFailedBlock =

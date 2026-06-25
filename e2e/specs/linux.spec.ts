@@ -19,18 +19,18 @@ import {
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
-const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
-const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'ci-pr-linux';
+const toolsPackDir = resolveFromWorkspace(process.env.MAX_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
+const namespace = process.env.MAX_PACKAGED_E2E_NAMESPACE ?? 'ci-pr-linux';
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const screenshotPath = resolveFromWorkspace(
-  process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
+  process.env.MAX_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
 );
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
 const shouldRunLinuxHeadlessSmoke =
-  process.platform === 'linux' && process.env.OD_PACKAGED_E2E_LINUX_HEADLESS === '1';
+  process.platform === 'linux' && process.env.MAX_PACKAGED_E2E_LINUX_HEADLESS === '1';
 const linuxHeadlessDescribe = shouldRunLinuxHeadlessSmoke ? describe : describe.skip;
 const shouldRunLinuxAppImageSmoke =
-  process.platform === 'linux' && process.env.OD_PACKAGED_E2E_LINUX_APPIMAGE === '1';
+  process.platform === 'linux' && process.env.MAX_PACKAGED_E2E_LINUX_APPIMAGE === '1';
 const linuxAppImageDescribe = shouldRunLinuxAppImageSmoke ? describe : describe.skip;
 
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'linux', 'namespaces', namespace);
@@ -166,7 +166,7 @@ linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
         throw new Error('expected desktop log entry');
       }
       expectPathInside(desktopLog.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
-      expect(desktopLog.lines.join('\n')).toContain('Open Design is running');
+      expect(desktopLog.lines.join('\n')).toContain('Marketing AX is running');
 
       const stop = await runToolsPackJson<LinuxStopResult>('stop', ['--headless']);
       started = false;

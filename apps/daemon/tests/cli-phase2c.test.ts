@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { createJsonIpcServer } from '@open-design/sidecar';
-import { SIDECAR_ENV, SIDECAR_MESSAGES, normalizeDaemonSidecarMessage } from '@open-design/sidecar-proto';
+import { createJsonIpcServer } from '@marketing-ax/sidecar';
+import { SIDECAR_ENV, SIDECAR_MESSAGES, normalizeDaemonSidecarMessage } from '@marketing-ax/sidecar-proto';
 
 import { createAgentRuntimeEnv, startServer } from '../src/server.js';
 import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/desktop-auth.js';
@@ -64,7 +64,7 @@ describe('Phase 2C CLI wrappers', () => {
   ): Promise<{ stdout: string; stderr: string }> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      OD_DAEMON_URL: baseUrl,
+      MAX_DAEMON_URL: baseUrl,
       ...options.env,
     };
     delete env.NODE_OPTIONS;
@@ -112,7 +112,7 @@ describe('Phase 2C CLI wrappers', () => {
   ): Promise<{ code: number | null; stdout: string; stderr: string }> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      OD_DAEMON_URL: baseUrl,
+      MAX_DAEMON_URL: baseUrl,
       ...options.env,
     };
     delete env.NODE_OPTIONS;

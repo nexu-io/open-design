@@ -6,7 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
@@ -14,13 +14,13 @@ import {
   type DaemonStatusSnapshot,
   type SidecarStamp,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 import {
   createSidecarLaunchEnv,
   requestJsonIpc,
   resolveAppIpcPath,
   type SidecarRuntimeContext,
-} from "@open-design/sidecar";
+} from "@marketing-ax/sidecar";
 import {
   createProcessStampArgs,
   mergeProxyAwareEnv,
@@ -28,7 +28,7 @@ import {
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
-} from "@open-design/platform";
+} from "@marketing-ax/platform";
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -77,8 +77,8 @@ type ManagedSidecarChild = {
 };
 
 type PackagedDaemonManagedPathEnv = {
-  OD_DATA_DIR: string;
-  OD_RESOURCE_ROOT: string;
+  MAX_DATA_DIR: string;
+  MAX_RESOURCE_ROOT: string;
   /**
    * Channel-root path. Lives one level above the namespaces directory so
    * the daemon can persist installationId (and any future fields that
@@ -89,7 +89,7 @@ type PackagedDaemonManagedPathEnv = {
    * channel even when the baked namespace token changes or per-namespace
    * data is cleared. See `apps/daemon/src/installation.ts`.
    */
-  OD_INSTALLATION_DIR: string;
+  MAX_INSTALLATION_DIR: string;
 };
 
 function resolveSidecarEntry(packageName: string, exportName: string): string {
@@ -147,19 +147,19 @@ const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Daemon status wait budget. The default 35s is fine for normal cold
- * boots, but the OD_LEGACY_DATA_DIR one-shot recovery flow can synch-
- * copy a multi-GB legacy `.od/` payload before SQLite even opens, and
+ * boots, but the MAX_LEGACY_DATA_DIR one-shot recovery flow can synch-
+ * copy a multi-GB legacy `.max/` payload before SQLite even opens, and
  * killing the child mid-migration can leave dataDir half-promoted.
  * When the env var is set, use a 30-minute budget so the parent will
  * not tear the daemon down before the migration can complete.
  *
  * @see apps/daemon/src/legacy-data-migrator.ts
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 export function resolveDaemonStatusTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  const raw = env.OD_LEGACY_DATA_DIR;
+  const raw = env.MAX_LEGACY_DATA_DIR;
   if (raw != null && raw.length > 0) return DAEMON_MIGRATION_STATUS_TIMEOUT_MS;
   return DAEMON_STATUS_TIMEOUT_MS;
 }
@@ -169,7 +169,7 @@ export function resolveDaemonStatusTimeoutMs(
  *
  * When `watch` is provided, the polling loop also races the spawned
  * child's `exit` event so a daemon that throws at startup (e.g. the
- * #710 migrator's LegacyMigrationError on invalid OD_LEGACY_DATA_DIR,
+ * #710 migrator's LegacyMigrationError on invalid MAX_LEGACY_DATA_DIR,
  * existing target payload, symlink in payload, or marker write
  * failure) surfaces immediately instead of leaving the packaged app
  * waiting the full DAEMON_MIGRATION_STATUS_TIMEOUT_MS for a process
@@ -237,7 +237,7 @@ function extractPort(url: string): string {
 // reach even when the inherited PATH from launchd / a desktop launcher is
 // stripped down to nothing. The user-toolchain portion of the search list
 // (Homebrew, npm globals, nvm/fnm/mise, cargo, ...) lives in
-// @open-design/platform's wellKnownUserToolchainBins so the daemon
+// @marketing-ax/platform's wellKnownUserToolchainBins so the daemon
 // resolver and this PATH builder cannot drift again. See issue #442.
 const PACKAGED_POSIX_SYSTEM_BINS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
@@ -271,9 +271,9 @@ function createPackagedDaemonManagedPathEnv(
   paths: PackagedNamespacePaths,
 ): PackagedDaemonManagedPathEnv {
   return {
-    OD_DATA_DIR: paths.dataRoot,
-    OD_RESOURCE_ROOT: paths.resourceRoot,
-    OD_INSTALLATION_DIR: paths.installationRoot,
+    MAX_DATA_DIR: paths.dataRoot,
+    MAX_RESOURCE_ROOT: paths.resourceRoot,
+    MAX_INSTALLATION_DIR: paths.installationRoot,
   };
 }
 
@@ -317,7 +317,7 @@ export function buildPackagedDaemonSpawnEnv(
     // bypass that a runtime-only handshake left open. Headless skips
     // it because there is no privileged shell.openPath surface and
     // no client to register a secret.
-    ...(options.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+    ...(options.requireDesktopAuth ? { MAX_REQUIRE_DESKTOP_AUTH: "1" } : {}),
     // Packaged daemon managed paths are deliberately delivered through
     // the sidecar launch environment. The daemon may keep its own default
     // fallback, but packaged runtime must not rely on path inference from
@@ -325,12 +325,12 @@ export function buildPackagedDaemonSpawnEnv(
     ...createPackagedDaemonManagedPathEnv(paths),
     ...(options.amrProfile == null || options.amrProfile.length === 0
       ? {}
-      : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
-    ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+      : { MARKETING_AX_AMR_PROFILE: options.amrProfile }),
+    ...(options.appVersion == null ? {} : { MAX_APP_VERSION: options.appVersion }),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
-      : { OPEN_DESIGN_TELEMETRY_RELAY_URL: options.telemetryRelayUrl }),
-    // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
+      : { MARKETING_AX_TELEMETRY_RELAY_URL: options.telemetryRelayUrl }),
+    // MAX_LEGACY_DATA_DIR is the one-shot recovery handle for users
     // upgrading from 0.3.x .od/ layouts. The daemon's startup
     // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
     // for packaged children would otherwise drop it. Forward only
@@ -338,7 +338,7 @@ export function buildPackagedDaemonSpawnEnv(
     // daemon's "env set but path invalid" error path.
     ...(options.legacyDataDir == null || options.legacyDataDir.length === 0
       ? {}
-      : { OD_LEGACY_DATA_DIR: options.legacyDataDir }),
+      : { MAX_LEGACY_DATA_DIR: options.legacyDataDir }),
     // PostHog analytics ingest key, baked into the bundle at packaging time
     // by tools/pack. Daemon reads this as POSTHOG_KEY at startup. Absent
     // for fork builds without the CI secret — the daemon's analytics
@@ -363,7 +363,7 @@ async function spawnSidecarChild(options: {
 }): Promise<ManagedSidecarChild> {
   const ipcPath = resolveAppIpcPath({
     app: options.app,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace: options.runtime.namespace,
   });
   const stamp = {
@@ -377,7 +377,7 @@ async function spawnSidecarChild(options: {
   const logHandle = await openLog(logPath);
   const childEnv = createSidecarLaunchEnv({
     base: options.paths.runtimeRoot,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     extraEnv: {
       ...resolvePackagedChildBaseEnv(
         process.env,
@@ -395,7 +395,7 @@ async function spawnSidecarChild(options: {
   const command = options.nodeCommand ?? (await resolvePackagedElectronNodeCommand());
   const child = spawn(
     command,
-    [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
+    [options.entryPath, ...createProcessStampArgs(stamp, MARKETING_AX_SIDECAR_CONTRACT)],
     {
       cwd: process.cwd(),
       env: childEnv,
@@ -474,12 +474,12 @@ export async function startPackagedSidecars(
   try {
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@marketing-ax/daemon", "sidecar"),
       env: buildPackagedDaemonSpawnEnv(paths, {
         appVersion: options.appVersion,
         amrProfile: options.amrProfile,
         daemonCliEntry: options.daemonCliEntry,
-        legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+        legacyDataDir: process.env.MAX_LEGACY_DATA_DIR ?? null,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
         posthogKey: options.posthogKey,
@@ -496,7 +496,7 @@ export async function startPackagedSidecars(
       resolveDaemonStatusTimeoutMs(),
       // Race the IPC polling against the daemon child's exit. Without
       // this, a daemon that throws at startup (LegacyMigrationError on
-      // invalid OD_LEGACY_DATA_DIR, existing target payload, symlink,
+      // invalid MAX_LEGACY_DATA_DIR, existing target payload, symlink,
       // marker write failure) leaves the packaged app waiting the full
       // 30-minute migration budget for a process that already died.
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
@@ -505,12 +505,12 @@ export async function startPackagedSidecars(
 
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@marketing-ax/web", "sidecar"),
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",
-        ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
-        OD_WEB_OUTPUT_MODE: options.webOutputMode,
+        ...(options.webStandaloneRoot == null ? {} : { MAX_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
+        MAX_WEB_OUTPUT_MODE: options.webOutputMode,
         PORT: "0",
       },
       nodeCommand: options.nodeCommand,

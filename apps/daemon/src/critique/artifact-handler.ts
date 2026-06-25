@@ -12,7 +12,7 @@ const HTTP_OK = 200;
 
 /**
  * Default response size cap when the caller doesn't pass one. Used as the
- * floor: an instance with `OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES` raised above
+ * floor: an instance with `MAX_CRITIQUE_PARSER_MAX_BLOCK_BYTES` raised above
  * this value gets the larger cap so every artifact the orchestrator + writer
  * accepted is retrievable. Codex P2 on PR #1085: hard-coding 4 MiB here
  * while the writer accepted up to `cfg.parserMaxBlockBytes` made accepted
@@ -46,7 +46,7 @@ export function handleCritiqueArtifact(
   // Honor the configured cap as-is when it's a positive finite number.
   // The earlier `Math.max(DEFAULT, configured)` shape made the read-time
   // size guard diverge from the writer's policy: a deployment that lowered
-  // OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES below 4 MiB would still stream
+  // MAX_CRITIQUE_PARSER_MAX_BLOCK_BYTES below 4 MiB would still stream
   // tampered files up to 4 MiB even though writeShipArtifact would have
   // refused them. Mirror the writer's policy exactly so what the writer
   // accepts is what the endpoint serves, and only fall back to the

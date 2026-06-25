@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
-import { SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
+import { SIDECAR_MESSAGES } from "@marketing-ax/sidecar-proto";
 
 import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "../src/launcher-after-quit.js";
 import type { PackagedNamespacePaths } from "../src/paths.js";
@@ -78,7 +78,7 @@ describe("inspectExistingDesktopForLauncher", () => {
             return { pid: 1234, state: "running", updatedAt: new Date().toISOString() };
           }
           return { accepted: true };
-        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        }) as typeof import("@marketing-ax/sidecar").requestJsonIpc,
       });
 
       expect(result).toEqual({ action: "exit", reason: "existing-focused" });
@@ -102,7 +102,7 @@ describe("inspectExistingDesktopForLauncher", () => {
         paths,
         requestIpc: (async () => {
           throw new Error("pipe closed");
-        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        }) as typeof import("@marketing-ax/sidecar").requestJsonIpc,
       });
 
       expect(result).toEqual({ action: "continue", reason: "inspect-failed" });
@@ -127,7 +127,7 @@ describe("inspectExistingDesktopForLauncher", () => {
             return { pid: 1234, state: "running", updatedAt: new Date().toISOString() };
           }
           throw new Error("show rejected");
-        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        }) as typeof import("@marketing-ax/sidecar").requestJsonIpc,
       });
 
       expect(result).toEqual({ action: "exit", reason: "existing-focus-failed" });

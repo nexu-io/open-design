@@ -5,7 +5,7 @@
 // the upstream request fails.
 
 import { useEffect, useState } from 'react';
-import type { OpenDesignDiscordPresenceResponse } from '@open-design/contracts';
+import type { OpenDesignDiscordPresenceResponse } from '@marketing-ax/contracts';
 
 const API = '/api/community/discord';
 const LS_KEY = 'open-design:discord-presence';

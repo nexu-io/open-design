@@ -335,7 +335,7 @@ describe('streamViaDaemon', () => {
     ]);
 
     expect(transcript).toContain('## user');
-    expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
+    expect(transcript).toContain('[Marketing AX truncated 1000 chars from this prior message');
     expect(transcript).not.toContain('x'.repeat(13_000));
     expect(transcript).toContain('small answer');
   });
@@ -885,7 +885,7 @@ describe('streamViaDaemon', () => {
           sseResponse(
             [
               'event: error',
-              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/wallet"}}}',
+              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://marketing-ax.example/amr/wallet"}}}',
               '',
               '',
             ].join('\n'),
@@ -908,7 +908,7 @@ describe('streamViaDaemon', () => {
         details: {
           kind: 'amr_account',
           action: 'recharge',
-          actionUrl: 'https://open-design.ai/amr/wallet',
+          actionUrl: 'https://marketing-ax.example/amr/wallet',
         },
       }),
     );
@@ -1062,7 +1062,7 @@ describe('streamViaDaemon', () => {
                     message: 'Provider returned error',
                     statusCode: 503,
                     retryable: true,
-                    url: 'https://amr-link.open-design.ai/v1/chat/completions',
+                    url: 'https://amr-link.marketing-ax.example/v1/chat/completions',
                     suggestion: 'Retry later or switch to another model.',
                     responseBodyPreview,
                   },
@@ -1100,7 +1100,7 @@ describe('streamViaDaemon', () => {
     expect(message).not.toContain('opencode event stream');
     expect(message).not.toContain('opencode session error');
     expect(message).not.toContain('json-rpc id 4');
-    expect(message).not.toContain('https://amr-link.open-design.ai');
+    expect(message).not.toContain('https://amr-link.marketing-ax.example');
   });
 
   it('treats an explicit succeeded status with a SIGTERM exit as a successful run', async () => {

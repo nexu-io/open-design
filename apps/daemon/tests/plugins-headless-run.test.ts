@@ -98,7 +98,7 @@ async function runCli(
 ): Promise<{ stdout: string; stderr: string }> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    OD_DAEMON_URL: baseUrl,
+    MAX_DAEMON_URL: baseUrl,
   };
   delete env.NODE_OPTIONS;
   return await execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
@@ -248,8 +248,8 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(shareBody.sourcePluginId).toBe('sample-plugin');
     expect(shareBody.appliedPluginSnapshotId).toBeTruthy();
     expect(shareBody.stagedPath).toBe('plugin-source/sample-plugin');
-    expect(shareBody.prompt).toContain('Publish the local Open Design plugin');
-    expect(shareBody.prompt).toContain('/api/projects/$OD_PROJECT_ID/plugins/publish-github');
+    expect(shareBody.prompt).toContain('Publish the local Marketing AX plugin');
+    expect(shareBody.prompt).toContain('/api/projects/$MAX_PROJECT_ID/plugins/publish-github');
     expect(shareBody.prompt).toContain('plugin-source/sample-plugin');
     expect(shareBody.project.pendingPrompt).toBe(shareBody.prompt);
 
@@ -296,7 +296,7 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(contributeBody.sourcePluginId).toBe('sample-plugin');
     expect(contributeBody.appliedPluginSnapshotId).toBeTruthy();
     expect(contributeBody.stagedPath).toBe('plugin-source/sample-plugin');
-    expect(contributeBody.prompt).toContain('/api/projects/$OD_PROJECT_ID/plugins/contribute-open-design');
+    expect(contributeBody.prompt).toContain('/api/projects/$MAX_PROJECT_ID/plugins/contribute-open-design');
 
     const locator = process.platform === 'win32' ? 'where' : 'which';
     const realGit = ((await execFileP(locator, ['git'])).stdout as string)
@@ -304,15 +304,15 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
       .find(Boolean)
       ?.trim();
     expect(realGit).toBeTruthy();
-    const previousRealGit = process.env.OD_REAL_GIT;
+    const previousRealGit = process.env.MAX_REAL_GIT;
     const previousGitAuthorName = process.env.GIT_AUTHOR_NAME;
     const previousGitAuthorEmail = process.env.GIT_AUTHOR_EMAIL;
     const previousGitCommitterName = process.env.GIT_COMMITTER_NAME;
     const previousGitCommitterEmail = process.env.GIT_COMMITTER_EMAIL;
-    process.env.OD_REAL_GIT = realGit;
-    process.env.GIT_AUTHOR_NAME = 'Open Design Test';
+    process.env.MAX_REAL_GIT = realGit;
+    process.env.GIT_AUTHOR_NAME = 'Marketing AX Test';
     process.env.GIT_AUTHOR_EMAIL = 'open-design-test@example.com';
-    process.env.GIT_COMMITTER_NAME = 'Open Design Test';
+    process.env.GIT_COMMITTER_NAME = 'Marketing AX Test';
     process.env.GIT_COMMITTER_EMAIL = 'open-design-test@example.com';
     try {
       await withFakeAgent(
@@ -342,14 +342,14 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }
   ok('https://github.com/test-user/' + path.basename(process.cwd()));
 }
-if (args[0] === 'repo' && args[1] === 'fork') ok('forked nexu-io/open-design');
+if (args[0] === 'repo' && args[1] === 'fork') ok('forked marketing-ax/marketing-ax');
 if (args[0] === 'repo' && args[1] === 'clone') {
   const dest = args[3] || path.basename(args[2]);
   fs.mkdirSync(dest, { recursive: true });
-  const init = spawnSync(process.env.OD_REAL_GIT, ['init'], { cwd: dest, stdio: 'inherit' });
+  const init = spawnSync(process.env.MAX_REAL_GIT, ['init'], { cwd: dest, stdio: 'inherit' });
   process.exit(init.status ?? 0);
 }
-if (args[0] === 'pr' && args[1] === 'create') ok('https://github.com/nexu-io/open-design/pull/123');
+if (args[0] === 'pr' && args[1] === 'create') ok('https://github.com/marketing-ax/marketing-ax/pull/123');
 console.error('unexpected gh command: ' + args.join(' '));
 process.exit(1);
 `,
@@ -368,20 +368,20 @@ if (args[0] === 'push') {
 if (args[0] === 'clone') {
   const dest = args[args.length - 1];
   fs.mkdirSync(dest, { recursive: true });
-  const init = spawnSync(process.env.OD_REAL_GIT, ['init', '-b', 'main'], { cwd: dest, encoding: 'utf8' });
+  const init = spawnSync(process.env.MAX_REAL_GIT, ['init', '-b', 'main'], { cwd: dest, encoding: 'utf8' });
   if (init.status !== 0) {
     if (init.stderr) process.stderr.write(init.stderr);
     process.exit(init.status ?? 1);
   }
   const remote = args.find((arg) => String(arg).startsWith('https://')) || 'https://github.com/test-user/open-design.git';
-  const remoteAdd = spawnSync(process.env.OD_REAL_GIT, ['remote', 'add', 'origin', remote], { cwd: dest, encoding: 'utf8' });
+  const remoteAdd = spawnSync(process.env.MAX_REAL_GIT, ['remote', 'add', 'origin', remote], { cwd: dest, encoding: 'utf8' });
   if (remoteAdd.status !== 0) {
     if (remoteAdd.stderr) process.stderr.write(remoteAdd.stderr);
     process.exit(remoteAdd.status ?? 1);
   }
   process.exit(0);
 }
-const result = spawnSync(process.env.OD_REAL_GIT, args, {
+const result = spawnSync(process.env.MAX_REAL_GIT, args, {
   cwd: process.cwd(),
   env: process.env,
   encoding: 'utf8',
@@ -421,16 +421,16 @@ process.exit(result.status ?? 0);
                 url?: string;
               };
               expect(contributeEndpointBody.ok).toBe(true);
-              expect(contributeEndpointBody.url).toBe('https://github.com/nexu-io/open-design/pull/123');
+              expect(contributeEndpointBody.url).toBe('https://github.com/marketing-ax/marketing-ax/pull/123');
             },
           );
         },
       );
     } finally {
       if (previousRealGit === undefined) {
-        delete process.env.OD_REAL_GIT;
+        delete process.env.MAX_REAL_GIT;
       } else {
-        process.env.OD_REAL_GIT = previousRealGit;
+        process.env.MAX_REAL_GIT = previousRealGit;
       }
       if (previousGitAuthorName === undefined) {
         delete process.env.GIT_AUTHOR_NAME;
@@ -463,7 +463,7 @@ process.exit(result.status ?? 0);
     await writeFile(
       path.join(fixture, 'open-design.json'),
       JSON.stringify({
-        $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+        $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
         name: pluginId,
         title: 'Headless CLI Plugin',
         version: '1.0.0',
@@ -522,8 +522,8 @@ process.exit(result.status ?? 0);
 
       const captureRoot = await mkdtemp(path.join(tmpdir(), 'od-headless-cli-capture-'));
       const capturePath = path.join(captureRoot, 'prompt.txt');
-      const previousCapture = process.env.OD_PROMPT_CAPTURE;
-      process.env.OD_PROMPT_CAPTURE = capturePath;
+      const previousCapture = process.env.MAX_PROMPT_CAPTURE;
+      process.env.MAX_PROMPT_CAPTURE = capturePath;
       try {
         await withFakeAgent(
           'opencode',
@@ -533,7 +533,7 @@ let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
-  const capturePath = process.env.OD_PROMPT_CAPTURE;
+  const capturePath = process.env.MAX_PROMPT_CAPTURE;
   fs.appendFileSync(capturePath + '.all', '--- prompt ---\\n' + input + '\\n');
   if (input.includes('# Headless Local Skill') || input.includes('## Active plugin')) {
     fs.writeFileSync(capturePath, input);
@@ -572,9 +572,9 @@ process.stdin.on('end', () => {
         expect(prompt).toContain(`# User request\n\nGenerate a ${topic} brief for general.`);
       } finally {
         if (previousCapture === undefined) {
-          delete process.env.OD_PROMPT_CAPTURE;
+          delete process.env.MAX_PROMPT_CAPTURE;
         } else {
-          process.env.OD_PROMPT_CAPTURE = previousCapture;
+          process.env.MAX_PROMPT_CAPTURE = previousCapture;
         }
         await rm(captureRoot, { recursive: true, force: true });
       }
@@ -600,7 +600,7 @@ process.stdin.on('end', () => {
     await fs.writeFile(
       path.join(fixture, 'open-design.json'),
       JSON.stringify({
-        $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+        $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
         name: 'pipeline-plugin',
         title: 'Pipeline Plugin',
         version: '1.0.0',

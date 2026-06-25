@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-// Regression for nexu-io/open-design#3216: after #2840 wired plugin and
+// Regression for marketing-ax/marketing-ax#3216: after #2840 wired plugin and
 // design-template 404s into the same "no shipped preview" placeholder the
 // skills tab uses, the placeholder copy still hard-coded "skill" — so a user
 // opening a Community/Plugins card whose manifest declares a preview entry
@@ -14,7 +14,7 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 
 import { PluginExampleDetail } from '../../src/components/plugin-details/PluginExampleDetail';
 

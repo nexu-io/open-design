@@ -31,7 +31,7 @@
 // should be able to bubble up if their preview is great. Trust is
 // surfaced as a chip in the card chrome instead.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { curatedPluginPriority } from './curatedPriority';
 
 interface PreviewBlock {

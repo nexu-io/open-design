@@ -92,8 +92,8 @@ async function buildPrebundledStandaloneRuntime(
     [
       'import { fileURLToPath } from "node:url";',
       "const selfPath = fileURLToPath(import.meta.url);",
-      "process.env.OD_BIN ??= selfPath;",
-      "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
+      "process.env.MAX_BIN ??= selfPath;",
+      "process.env.MAX_DAEMON_CLI_PATH ??= selfPath;",
       `await import(${JSON.stringify(
         toRelativeImportSpecifier(
           dirname(paths.daemonCliPrebundleEntrypointPath),
@@ -306,7 +306,7 @@ export async function writeAssembledApp(
     `${JSON.stringify(
       {
         dependencies,
-        description: "Open Design packaged runtime",
+        description: "Marketing AX packaged runtime",
         main: "./main.cjs",
         name: "open-design-packaged-app",
         private: true,

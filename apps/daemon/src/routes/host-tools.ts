@@ -22,7 +22,7 @@ import type {
   HostEditorId,
   HostEditorsResponse,
   OpenProjectInEditorResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterHostToolsRoutesDeps
@@ -90,7 +90,7 @@ function pathDirs(): string[] {
   // /opt/homebrew/bin), so add the common locations the user's shell
   // would have on first login. Without this, Cursor / Zed / VS Code
   // shims installed via "Install '...' command" are invisible to the
-  // daemon launched by `open Open Design.app`.
+  // daemon launched by `open Marketing AX.app`.
   const extras = process.platform === 'darwin'
     ? ['/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin', `${process.env.HOME ?? ''}/.local/bin`]
     : process.platform === 'linux'

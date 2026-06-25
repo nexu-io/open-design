@@ -1,6 +1,6 @@
 // External MCP servers panel.
 //
-// Open Design connects to the configured servers as a CLIENT and surfaces
+// Marketing AX connects to the configured servers as a CLIENT and surfaces
 // their tools to the underlying agent (Claude Code, Hermes, Kimi for v1).
 // This panel is the user-facing form; persistence flows through
 // `state/mcp.ts` -> daemon `/api/mcp/servers`.
@@ -13,13 +13,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackIntegrationsMcpTabClick,
   trackSettingsExternalMcpClick,
 } from '../analytics/events';
-import type { TrackingExternalMcpElement } from '@open-design/contracts/analytics';
+import type { TrackingExternalMcpElement } from '@marketing-ax/contracts/analytics';
 import {
   disconnectMcpOAuth,
   fetchMcpOAuthStatus,
@@ -220,7 +220,7 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 
 // Picker grouping. Mirrors `McpTemplateCategory` in `packages/contracts`.
 // The order here is the *display* order in the picker — keep it intentional
-// so the most useful categories for Open Design (visual generation, then
+// so the most useful categories for Marketing AX (visual generation, then
 // editing, then publishing surfaces) sit at the top.
 const CATEGORY_ORDER: ReadonlyArray<{
   id: NonNullable<McpTemplate['category']>;
@@ -886,7 +886,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
               <McpOAuthControl serverId={row.id} />
             ) : (
               <div className="mcp-oauth-hint hint">
-                <strong>No managed OAuth.</strong> Open Design will use this
+                <strong>No managed OAuth.</strong> Marketing AX will use this
                 server as configured. Add headers below if the server needs a
                 token.
               </div>
@@ -894,13 +894,13 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : null}
           {isHttpLike && row._isNew && usesManagedOAuth ? (
             <div className="mcp-oauth-hint hint">
-              Save first, then click <strong>Connect</strong> to grant Open Design
+              Save first, then click <strong>Connect</strong> to grant Marketing AX
               access via the provider's OAuth flow.
             </div>
           ) : null}
           {isHttpLike && row._isNew && !usesManagedOAuth ? (
             <div className="mcp-oauth-hint hint">
-              <strong>No managed OAuth.</strong> Save this server and Open Design
+              <strong>No managed OAuth.</strong> Save this server and Marketing AX
               will use it directly.
             </div>
           ) : null}
@@ -1315,7 +1315,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
             <span>
               <strong>Not connected.</strong>{' '}
               <span className="hint">
-                Click Connect to grant Open Design access via the provider's OAuth flow.
+                Click Connect to grant Marketing AX access via the provider's OAuth flow.
               </span>
             </span>
           </>

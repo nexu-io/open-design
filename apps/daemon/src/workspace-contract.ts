@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { OrchestratorWorkspace } from '@open-design/contracts';
+import type { OrchestratorWorkspace } from '@marketing-ax/contracts';
 
 const ORCHESTRATOR_WORKSPACE_KIND = 'scratch';
 const ORCHESTRATOR_WRITEBACK = 'external';

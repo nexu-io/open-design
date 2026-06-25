@@ -256,7 +256,7 @@ describe('EntryShell settings menu', () => {
       }
       if (url.endsWith('/api/github/open-design')) {
         return jsonResponse({
-          repo: 'nexu-io/open-design',
+          repo: 'marketing-ax/marketing-ax',
           stargazers_count: 56100,
           fetchedAt: Date.now(),
           stale: false,
@@ -286,8 +286,8 @@ describe('EntryShell settings menu', () => {
   });
 });
 
-describe('EntryShell onboarding Open Design AMR runtime', () => {
-  it('does not auto-select Open Design AMR when the AMR runtime is unavailable', async () => {
+describe('EntryShell onboarding Marketing AX AMR runtime', () => {
+  it('does not auto-select Marketing AX AMR when the AMR runtime is unavailable', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     ) as typeof fetch;
@@ -296,7 +296,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Marketing AX AMR/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
 
     await waitFor(() => {
@@ -306,13 +306,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.queryByText('Sign in to continue')).toBeNull();
   });
 
-  it('shows Open Design AMR as the recommended default when AMR is available', async () => {
+  it('shows Marketing AX AMR as the recommended default when AMR is available', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     ) as typeof fetch;
     const props = renderOnboarding();
 
-    const amrCloud = screen.getByRole('button', { name: /Open Design AMR/i });
+    const amrCloud = screen.getByRole('button', { name: /Marketing AX AMR/i });
     expect(amrCloud.getAttribute('aria-pressed')).toBe('true');
     expect(amrCloud.textContent).toContain('Officially recommended');
     expect(amrCloud.textContent).toContain('No deploy needed');
@@ -578,7 +578,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
-  it('continues normally when Open Design AMR is signed in', async () => {
+  it('continues normally when Marketing AX AMR is signed in', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
         loggedIn: true,
@@ -928,12 +928,12 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(skeleton).toBeTruthy();
     // The brand identity is known up-front and rendered solid; only the
     // probe-dependent details shimmer.
-    expect(skeleton?.textContent).toContain('Open Design AMR');
+    expect(skeleton?.textContent).toContain('Marketing AX AMR');
     expect(skeleton?.getAttribute('aria-busy')).toBe('true');
     expect(skeleton?.querySelectorAll('.onboarding-view__skeleton-line--benefit').length).toBe(4);
     expect(skeleton?.querySelector('.onboarding-view__skeleton-model-bar')).toBeTruthy();
     // The real, selectable AMR card is not present while detecting.
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Marketing AX AMR/i })).toBeNull();
     // Alternatives remain available throughout detection.
     expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
   });
@@ -944,7 +944,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding({ agentsLoading: false });
 
-    expect(screen.getByRole('button', { name: /Open Design AMR/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Marketing AX AMR/i })).toBeTruthy();
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
   });
 

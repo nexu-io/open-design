@@ -10,7 +10,7 @@ import {
   normalizeDesktopSidecarMessage,
   normalizeNamespace,
   normalizeSidecarStamp,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
   SIDECAR_STAMP_FIELDS,
@@ -24,7 +24,7 @@ import {
 
 const validStamp = {
   app: APP_KEYS.WEB,
-  ipc: "/tmp/open-design/ipc/contract-check/web.sock",
+  ipc: "/tmp/marketing-ax/ipc/contract-check/web.sock",
   mode: "dev" as const,
   namespace: "contract-check",
   source: SIDECAR_SOURCES.TOOLS_DEV,
@@ -33,18 +33,18 @@ const validStamp = {
 describe("open-design sidecar contract", () => {
   it("exports the canonical five-field stamp descriptor", () => {
     expect(SIDECAR_STAMP_FIELDS).toEqual(["app", "mode", "namespace", "ipc", "source"]);
-    expect(OPEN_DESIGN_SIDECAR_CONTRACT.stampFlags).toEqual({
+    expect(MARKETING_AX_SIDECAR_CONTRACT.stampFlags).toEqual({
       app: STAMP_APP_FLAG,
       ipc: STAMP_IPC_FLAG,
       mode: STAMP_MODE_FLAG,
       namespace: STAMP_NAMESPACE_FLAG,
       source: STAMP_SOURCE_FLAG,
     });
-    expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateActions).toBe(DESKTOP_UPDATE_ACTIONS);
-    expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateChannels).toBe(DESKTOP_UPDATE_CHANNELS);
+    expect(MARKETING_AX_SIDECAR_CONTRACT.updateActions).toBe(DESKTOP_UPDATE_ACTIONS);
+    expect(MARKETING_AX_SIDECAR_CONTRACT.updateChannels).toBe(DESKTOP_UPDATE_CHANNELS);
     expect(Object.values(DESKTOP_UPDATE_CHANNELS)).toEqual(["beta", "nightly", "preview", "stable"]);
-    expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateModes).toBe(DESKTOP_UPDATE_MODES);
-    expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateStates).toBe(DESKTOP_UPDATE_STATES);
+    expect(MARKETING_AX_SIDECAR_CONTRACT.updateModes).toBe(DESKTOP_UPDATE_MODES);
+    expect(MARKETING_AX_SIDECAR_CONTRACT.updateStates).toBe(DESKTOP_UPDATE_STATES);
   });
 
   it("accepts the explicit namespace contract", () => {

@@ -12,7 +12,7 @@
 #
 # Operator workflow: a follow-up workflow consumes
 # /api/critique/conformance and either auto-flips
-# OD_CRITIQUE_ROLLOUT_PHASE or alerts a human. That step is deploy-
+# MAX_CRITIQUE_ROLLOUT_PHASE or alerts a human. That step is deploy-
 # pipeline-specific and intentionally not built here.
 
 name: critique-conformance
@@ -48,7 +48,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build daemon
-        run: pnpm --filter @open-design/daemon build
+        run: pnpm --filter @marketing-ax/daemon build
 
       # The full adapter sweep lives in a follow-up that wires every
       # production agent CLI into the harness; here we drive the

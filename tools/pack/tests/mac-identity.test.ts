@@ -46,11 +46,11 @@ function makeConfig(root: string, namespace: string): ToolPackConfig {
 describe("resolveMacInstallIdentity", () => {
   it("keeps stable builds on the canonical mac identity", () => {
     expect(resolveMacInstallIdentity(makeConfig("/work", "release-stable"))).toMatchObject({
-      appId: "io.open-design.desktop",
-      installerTitle: "Open Design",
-      productName: "Open Design",
-      publicAppBundleName: "Open Design.app",
-      systemAppBundleName: "Open Design.app",
+      appId: "io.marketing-ax.desktop",
+      installerTitle: "Marketing AX",
+      productName: "Marketing AX",
+      publicAppBundleName: "Marketing AX.app",
+      systemAppBundleName: "Marketing AX.app",
     });
   });
 
@@ -58,28 +58,28 @@ describe("resolveMacInstallIdentity", () => {
     const config = makeConfig("/work", "release-beta");
 
     expect(resolveMacInstallIdentity(config)).toEqual({
-      appId: "io.open-design.desktop.beta",
-      executableName: "Open Design Beta",
-      installerTitle: "Open Design Beta",
-      productName: "Open Design Beta",
-      publicAppBundleName: "Open Design Beta.app",
-      systemAppBundleName: "Open Design Beta.app",
+      appId: "io.marketing-ax.desktop.beta",
+      executableName: "Marketing AX Beta",
+      installerTitle: "Marketing AX Beta",
+      productName: "Marketing AX Beta",
+      publicAppBundleName: "Marketing AX Beta.app",
+      systemAppBundleName: "Marketing AX Beta.app",
     });
-    expect(resolveMacPaths(config).appPath).toMatch(/Open Design Beta\.app$/);
+    expect(resolveMacPaths(config).appPath).toMatch(/Marketing AX Beta\.app$/);
   });
 
   it("uses first-class preview app identity for preview release namespaces", () => {
     const config = makeConfig("/work", "release-preview");
 
     expect(resolveMacInstallIdentity(config)).toEqual({
-      appId: "io.open-design.desktop.preview",
-      executableName: "Open Design Preview",
-      installerTitle: "Open Design Preview",
-      productName: "Open Design Preview",
-      publicAppBundleName: "Open Design Preview.app",
-      systemAppBundleName: "Open Design Preview.app",
+      appId: "io.marketing-ax.desktop.preview",
+      executableName: "Marketing AX Preview",
+      installerTitle: "Marketing AX Preview",
+      productName: "Marketing AX Preview",
+      publicAppBundleName: "Marketing AX Preview.app",
+      systemAppBundleName: "Marketing AX Preview.app",
     });
-    expect(resolveMacPaths(config).appPath).toMatch(/Open Design Preview\.app$/);
+    expect(resolveMacPaths(config).appPath).toMatch(/Marketing AX Preview\.app$/);
   });
 
   it("uses first-class nightly app identity for nightly release versions and namespaces", () => {
@@ -90,17 +90,17 @@ describe("resolveMacInstallIdentity", () => {
     const nightlyNamespaceConfig = makeConfig("/work", "release-nightly");
 
     expect(resolveMacInstallIdentity(nightlyVersionConfig)).toEqual({
-      appId: "io.open-design.desktop.nightly",
-      executableName: "Open Design Nightly",
-      installerTitle: "Open Design Nightly",
-      productName: "Open Design Nightly",
-      publicAppBundleName: "Open Design Nightly.app",
-      systemAppBundleName: "Open Design Nightly.app",
+      appId: "io.marketing-ax.desktop.nightly",
+      executableName: "Marketing AX Nightly",
+      installerTitle: "Marketing AX Nightly",
+      productName: "Marketing AX Nightly",
+      publicAppBundleName: "Marketing AX Nightly.app",
+      systemAppBundleName: "Marketing AX Nightly.app",
     });
-    expect(resolveMacPaths(nightlyVersionConfig).appPath).toMatch(/Open Design Nightly\.app$/);
+    expect(resolveMacPaths(nightlyVersionConfig).appPath).toMatch(/Marketing AX Nightly\.app$/);
     expect(resolveMacInstallIdentity(nightlyNamespaceConfig)).toMatchObject({
-      productName: "Open Design Nightly",
-      publicAppBundleName: "Open Design Nightly.app",
+      productName: "Marketing AX Nightly",
+      publicAppBundleName: "Marketing AX Nightly.app",
     });
   });
 });

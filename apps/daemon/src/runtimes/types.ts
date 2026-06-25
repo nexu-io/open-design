@@ -1,7 +1,7 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic } from '@open-design/contracts';
+import type { AgentDiagnostic } from '@marketing-ax/contracts';
 
-export type { AgentDiagnostic } from '@open-design/contracts';
+export type { AgentDiagnostic } from '@marketing-ax/contracts';
 
 export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 
@@ -132,7 +132,7 @@ export type RuntimeAgentDef = {
   supportsImagePaths?: boolean;
   maxPromptArgBytes?: number;
   mcpDiscovery?: string;
-  // How the daemon forwards the user's `.od/mcp-config.json` external MCP
+  // How the daemon forwards the user's `.max/mcp-config.json` external MCP
   // servers to this runtime at spawn time. The shape of the injection
   // is one of three strategies, each of which the server.ts spawn
   // pipeline knows how to apply:
@@ -190,7 +190,7 @@ export type RuntimeAgentDef = {
   // during legitimate work (e.g. Copilot's deck-generation thinking
   // phase from #2467) need a longer ceiling than the 10-minute global
   // default. Operators can still override per-process via
-  // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
+  // `MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
   inactivityTimeoutMs?: number;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined

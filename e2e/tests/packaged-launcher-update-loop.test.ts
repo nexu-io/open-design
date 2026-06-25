@@ -203,7 +203,7 @@ async function writeExtractedWindowsPayload(destinationRoot: string, namespace: 
   await mkdir(join(destinationRoot, "payload", "resources", "open-design", "bin"), { recursive: true });
   await mkdir(join(destinationRoot, "payload", "resources", "prebundled", "daemon"), { recursive: true });
   await mkdir(join(destinationRoot, "payload", "resources", "prebundled", "web"), { recursive: true });
-  await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+  await writeFile(join(destinationRoot, "payload", "Marketing AX.exe"), "");
   await writeFile(join(destinationRoot, "payload", "resources", "open-design", "bin", "node.exe"), "");
   await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "daemon", "daemon-sidecar.mjs"), "");
   await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "web", "web-sidecar.mjs"), "");
@@ -221,7 +221,7 @@ async function writeExtractedWindowsPayload(destinationRoot: string, namespace: 
     join(destinationRoot, "manifest.json"),
     `${JSON.stringify({
       channel: "beta",
-      entry: { cwd: "payload", executable: "payload/Open Design.exe" },
+      entry: { cwd: "payload", executable: "payload/Marketing AX.exe" },
       namespace,
       payloadRoot: "payload",
       platform: "win32",
@@ -232,12 +232,12 @@ async function writeExtractedWindowsPayload(destinationRoot: string, namespace: 
 }
 
 async function writeExtractedMacPayload(destinationRoot: string, namespace: string): Promise<void> {
-  const resourcesRoot = join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "Resources");
+  const resourcesRoot = join(destinationRoot, "payload", "Marketing AX Beta.app", "Contents", "Resources");
   await mkdir(join(resourcesRoot, "open-design", "bin"), { recursive: true });
   await mkdir(join(resourcesRoot, "prebundled", "daemon"), { recursive: true });
   await mkdir(join(resourcesRoot, "prebundled", "web"), { recursive: true });
-  await mkdir(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "MacOS"), { recursive: true });
-  await writeFile(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "MacOS", "Open Design Beta"), "");
+  await mkdir(join(destinationRoot, "payload", "Marketing AX Beta.app", "Contents", "MacOS"), { recursive: true });
+  await writeFile(join(destinationRoot, "payload", "Marketing AX Beta.app", "Contents", "MacOS", "Marketing AX Beta"), "");
   await writeFile(join(resourcesRoot, "open-design", "bin", "node"), "");
   await writeFile(join(resourcesRoot, "prebundled", "daemon", "daemon-sidecar.mjs"), "");
   await writeFile(join(resourcesRoot, "prebundled", "web", "web-sidecar.mjs"), "");
@@ -256,8 +256,8 @@ async function writeExtractedMacPayload(destinationRoot: string, namespace: stri
     `${JSON.stringify({
       channel: "beta",
       entry: {
-        cwd: "payload/Open Design Beta.app",
-        executable: "payload/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+        cwd: "payload/Marketing AX Beta.app",
+        executable: "payload/Marketing AX Beta.app/Contents/MacOS/Marketing AX Beta",
       },
       namespace,
       payloadRoot: "payload",
@@ -286,7 +286,7 @@ const platformCases: PlatformCase[] = [
     arch: "arm64",
     currentVersion: "1.2.3-beta.4",
     expectedResourceRoot: (root, namespace) =>
-      join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design Beta.app", "Contents", "Resources", "open-design"),
+      join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Marketing AX Beta.app", "Contents", "Resources", "open-design"),
     fixturePlatformKey: "mac",
     namespace: "release-beta",
     payloadArchiveName: "open-design-1.2.3-beta.5-mac-arm64-payload.zip",

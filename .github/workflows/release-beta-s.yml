@@ -301,7 +301,7 @@ permissions:
   actions: read
 
 env:
-  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  MARKETING_AX_TELEMETRY_RELAY_URL: ${{ vars.MARKETING_AX_TELEMETRY_RELAY_URL }}
   POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
   POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
   POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
@@ -311,7 +311,7 @@ env:
   RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
   RELEASE_RUN_ID: ${{ github.run_id }}
   RELEASE_WORKFLOW: ${{ github.workflow }}
-  OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+  MARKETING_AX_RELEASE_PROFILE: /Users/runner/.profile
 
 jobs:
   metadata:
@@ -319,8 +319,8 @@ jobs:
     if: ${{ inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 || inputs.enable_linux_x64 }}
     runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
     env:
-      OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
-      OPEN_DESIGN_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json
+      MARKETING_AX_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
+      MARKETING_AX_STABLE_METADATA_URL: https://releases.marketing-ax.example/stable/latest/metadata.json
     outputs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
@@ -450,8 +450,8 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
-          prev="$(curl -fsSL "$OPEN_DESIGN_BETA_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
+          source "$MARKETING_AX_RELEASE_PROFILE"
+          prev="$(curl -fsSL "$MARKETING_AX_BETA_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
           echo "previous beta commit: ${prev:-<none>}"
           echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
 
@@ -467,7 +467,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types ./scripts/release-beta.ts
 
       - name: Reserve beta version
@@ -494,7 +494,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/reserve-beta-version.ts
 
   unsupported_mac_x64:
@@ -543,7 +543,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- corepack prepare pnpm@10.33.2 --activate
           fnm exec --using=24 -- pnpm install --frozen-lockfile
 
@@ -551,16 +551,16 @@ jobs:
         working-directory: _release-build
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_NOTARY_KEYCHAIN_PROFILE: open-design-release-notary
+          APPLE_NOTARY_KEYCHAIN_PROFILE: marketing-ax-release-notary
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
-          CSC_KEYCHAIN: /Library/Keychains/open-design-release-signing.keychain
-          OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
-          OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
-          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
+          CSC_KEYCHAIN: /Library/Keychains/marketing-ax-release-signing.keychain
+          MAX_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
+          MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
+          MAX_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
           RELEASE_BUILD_TARGET: ${{ inputs.mac_arm64_target }}
           RELEASE_DELIVERY_MODE: ${{ inputs.mac_arm64_delivery_mode }}
           RELEASE_NAMESPACE: release-beta
@@ -580,19 +580,19 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
-          export PATH="/usr/local/libexec/open-design/wrappers:$PATH"
-          if [ "${{ inputs.mac_arm64_delivery_mode == 'internal-updater' && 'sign-only' || inputs.mac_arm64_sign_mode }}" != "no" ] && [ -n "${OPEN_DESIGN_MAC_SIGNING_HELPER:-}" ]; then
-            cert_path="${{ runner.temp }}/open-design-signing.p12"
-            password_path="${{ runner.temp }}/open-design-signing.p12.password"
+          source "$MARKETING_AX_RELEASE_PROFILE"
+          export PATH="/usr/local/libexec/marketing-ax/wrappers:$PATH"
+          if [ "${{ inputs.mac_arm64_delivery_mode == 'internal-updater' && 'sign-only' || inputs.mac_arm64_sign_mode }}" != "no" ] && [ -n "${MARKETING_AX_MAC_SIGNING_HELPER:-}" ]; then
+            cert_path="${{ runner.temp }}/marketing-ax-signing.p12"
+            password_path="${{ runner.temp }}/marketing-ax-signing.p12.password"
             if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
               printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
             fi
             printf '%s' "$APPLE_SIGNING_CERTIFICATE_PASSWORD" > "$password_path"
             chmod 600 "$password_path"
-            sudo -n "$OPEN_DESIGN_MAC_SIGNING_HELPER" "$cert_path" "$password_path"
+            sudo -n "$MARKETING_AX_MAC_SIGNING_HELPER" "$cert_path" "$password_path"
             rm -f "$password_path"
-            export CSC_KEYCHAIN="${OPEN_DESIGN_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
+            export CSC_KEYCHAIN="${MARKETING_AX_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/marketing-ax-release-signing.keychain}"
             security list-keychains -d user -s "$CSC_KEYCHAIN" /Library/Keychains/System.keychain
           fi
           fnm exec --using=24 -- bash .github/workflow/scripts/release/build-platform.sh
@@ -620,7 +620,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/report/write-report.ts
 
       - name: Publish mac_arm64 report summary
@@ -636,7 +636,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
           RELEASE_NAMESPACE: release-beta
-          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
+          RELEASE_NOTES: Marketing AX beta ${{ needs.metadata.outputs.beta_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
@@ -672,7 +672,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/publish-platform.ts
 
   build_win_x64:
@@ -705,17 +705,17 @@ jobs:
       - name: Build beta win_x64
         shell: pwsh
         env:
-          OD_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND: ${{ steps.sign_probe.outputs.certificate_found }}
-          OD_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}
-          OD_BETA_WINDOWS_SIGNING_MODE: ${{ steps.sign_probe.outputs.mode }}
-          OD_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}
-          OD_BETA_WINDOWS_SIGNING_REASON: ${{ steps.sign_probe.outputs.reason }}
-          OD_BETA_WINDOWS_SIGNING_REQUESTED: ${{ steps.sign_probe.outputs.requested }}
-          OD_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
-          OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
-          OD_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
-          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
-          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+          MAX_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND: ${{ steps.sign_probe.outputs.certificate_found }}
+          MAX_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}
+          MAX_BETA_WINDOWS_SIGNING_MODE: ${{ steps.sign_probe.outputs.mode }}
+          MAX_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}
+          MAX_BETA_WINDOWS_SIGNING_REASON: ${{ steps.sign_probe.outputs.reason }}
+          MAX_BETA_WINDOWS_SIGNING_REQUESTED: ${{ steps.sign_probe.outputs.requested }}
+          MAX_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
+          MAX_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
+          MAX_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
+          MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          MAX_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
         run: |
           & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pwsh -NoProfile -File .\.github\workflow\scripts\release\build-platform.ps1 `
             -ReleaseTarget win_x64 `
@@ -852,7 +852,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           mkdir -p "$RELEASE_MANIFEST_DIR"
           manifest_url="${RELEASE_PUBLIC_ORIGIN%/}/beta/versions/${RELEASE_VERSION}${RELEASE_ASSET_SUFFIX}/platforms/${RELEASE_TARGET}.json"
           for attempt in 1 2 3; do
@@ -880,7 +880,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           mkdir -p "$RELEASE_MANIFEST_DIR"
           manifest_url="${RELEASE_PUBLIC_ORIGIN%/}/beta/versions/${RELEASE_VERSION}${RELEASE_ASSET_SUFFIX}/platforms/${RELEASE_TARGET}.json"
           for attempt in 1 2 3; do
@@ -929,7 +929,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/publish-metadata.ts
 
       - name: Read metadata outputs
@@ -959,7 +959,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/verify-metadata.ts
 
       - name: Write beta metadata summary
@@ -974,7 +974,7 @@ jobs:
             rehash() { hash -r; }
           fi
           # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          source "$MARKETING_AX_RELEASE_PROFILE"
           fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/summary-metadata.ts
 
       - name: Publish summary

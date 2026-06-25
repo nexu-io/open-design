@@ -13,7 +13,7 @@
 // that rides along as plugin context (SKILL.md + example.html) once the plugin
 // is applied, so the output still faithfully recreates the reference.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import type { Locale } from '../../i18n';
 import { localizePluginDescription } from './localization';
 

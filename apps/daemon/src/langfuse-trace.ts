@@ -2,8 +2,8 @@
 //
 // This module is intentionally dependency-free (no `langfuse` SDK). It builds
 // Langfuse ingestion batches for completed runs and sends them either to the
-// official Open Design telemetry relay or, for local smoke tests, directly to
-// Langfuse. Without OPEN_DESIGN_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
+// official Marketing AX telemetry relay or, for local smoke tests, directly to
+// Langfuse. Without MARKETING_AX_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
 // LANGFUSE_SECRET_KEY in the env, every entry point becomes a no-op so that
 // dev runs and forks of this open-source repo do not accidentally report.
 //
@@ -241,7 +241,7 @@ export interface RuntimeInfo {
   osRelease?: string;
   /** CPU architecture (`os.arch()`, e.g. 'arm64' | 'x64'). */
   arch?: string;
-  /** Open Design app version reported by the daemon. */
+  /** Marketing AX app version reported by the daemon. */
   appVersion?: string;
   /** Build channel (development / nightly / beta / stable). */
   appChannel?: string;
@@ -347,17 +347,17 @@ export function readLangfuseConfig(
 export function readTelemetrySinkConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): TelemetrySinkConfig | null {
-  const relayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
+  const relayUrl = env.MARKETING_AX_TELEMETRY_RELAY_URL?.trim();
   if (relayUrl) {
     return {
       kind: 'relay',
       relayUrl: relayUrl.replace(/\/+$/, ''),
       timeoutMs: parsePositiveInt(
-        env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS ?? env.LANGFUSE_TIMEOUT_MS,
+        env.MARKETING_AX_TELEMETRY_TIMEOUT_MS ?? env.LANGFUSE_TIMEOUT_MS,
         DEFAULT_FETCH_TIMEOUT_MS,
       ),
       retries: parseNonNegativeInt(
-        env.OPEN_DESIGN_TELEMETRY_RETRIES ?? env.LANGFUSE_RETRIES,
+        env.MARKETING_AX_TELEMETRY_RETRIES ?? env.LANGFUSE_RETRIES,
         DEFAULT_FETCH_RETRIES,
       ),
     };
@@ -1650,7 +1650,7 @@ async function postRelayBatch(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'langfuse-ingestion-v1',
         },
         signal: AbortSignal.timeout(config.timeoutMs),
         body,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { manifestSourceDigest } from '../src/digest';
-import type { PluginManifest } from '@open-design/contracts';
+import type { PluginManifest } from '@marketing-ax/contracts';
 
 const baseManifest: PluginManifest = {
   name: 'sample-plugin',

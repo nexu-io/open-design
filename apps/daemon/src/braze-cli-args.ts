@@ -3,9 +3,9 @@
 //       cli.ts top-level side effects (process.argv dispatch, daemon startup, etc.).
 // Key Features: Interview request body construction, emphasis comma-split,
 //               custom_event → customEventName resolution, variantCount parsing
-// Dependencies: @open-design/contracts (type imports only)
+// Dependencies: @marketing-ax/contracts (type imports only)
 
-import type { BrazeIamFormat, BrazeDeliveryModel, BrazeTriggerEvent, BrazeInterviewRequest } from '@open-design/contracts';
+import type { BrazeIamFormat, BrazeDeliveryModel, BrazeTriggerEvent, BrazeInterviewRequest } from '@marketing-ax/contracts';
 
 // Flags accepted by `od braze interview` (a strict subset of ParsedBrazeFlags).
 export interface BrazeInterviewFlags {

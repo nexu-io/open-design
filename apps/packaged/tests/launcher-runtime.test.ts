@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { LAUNCHER_SCHEMA_VERSION, resolveLauncherVersionPaths } from "@open-design/launcher-proto";
+import { LAUNCHER_SCHEMA_VERSION, resolveLauncherVersionPaths } from "@marketing-ax/launcher-proto";
 import { describe, expect, it } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";
@@ -73,7 +73,7 @@ describe("resolvePackagedLauncherRuntime", () => {
         root,
         version: "1.2.3-beta.5",
       });
-      const resourcesPath = join(versionPaths.payloadRoot, "Open Design Beta.app", "Contents", "Resources");
+      const resourcesPath = join(versionPaths.payloadRoot, "Marketing AX Beta.app", "Contents", "Resources");
       await mkdir(join(resourcesPath, "open-design", "bin"), { recursive: true });
       await mkdir(join(resourcesPath, "prebundled", "daemon"), { recursive: true });
       await mkdir(join(resourcesPath, "prebundled", "web"), { recursive: true });
@@ -95,8 +95,8 @@ describe("resolvePackagedLauncherRuntime", () => {
         `${JSON.stringify({
           channel: "beta",
           entry: {
-            cwd: "payload/Open Design Beta.app",
-            executable: "payload/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+            cwd: "payload/Marketing AX Beta.app",
+            executable: "payload/Marketing AX Beta.app/Contents/MacOS/Marketing AX Beta",
           },
           namespace: config.namespace,
           payloadRoot: "payload",
@@ -120,7 +120,7 @@ describe("resolvePackagedLauncherRuntime", () => {
         join(paths.installationRoot, "launcher", "channels", "beta", "namespaces", config.namespace, "install.json"),
         `${JSON.stringify({
           channel: "beta",
-          launchPath: "/Applications/Open Design Beta.app",
+          launchPath: "/Applications/Marketing AX Beta.app",
           namespace: config.namespace,
           schemaVersion: LAUNCHER_SCHEMA_VERSION,
         })}\n`,
@@ -129,7 +129,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       const runtime = await resolvePackagedLauncherRuntime(config, paths);
 
       expect(runtime.source).toBe("payload");
-      expect(runtime.installedLaunchPath).toBe("/Applications/Open Design Beta.app");
+      expect(runtime.installedLaunchPath).toBe("/Applications/Marketing AX Beta.app");
       expect(runtime.targetVersion).toBe("1.2.3-beta.5");
       expect(runtime.config.appVersion).toBe("1.2.3-beta.5");
       expect(runtime.config.resourceRoot).toBe(join(resourcesPath, "open-design"));

@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDesignGithubRepoResponse } from '@open-design/contracts';
+import type { OpenDesignGithubRepoResponse } from '@marketing-ax/contracts';
 
 const originalFetch = globalThis.fetch;
 
@@ -100,7 +100,7 @@ describe('GithubStarBadge', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        repo: 'nexu-io/open-design',
+        repo: 'marketing-ax/marketing-ax',
         stargazers_count: 42137,
         fetchedAt: Date.parse('2026-05-22T00:00:00.000Z'),
         stale: false,

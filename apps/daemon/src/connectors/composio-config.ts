@@ -11,7 +11,7 @@ export interface PublicComposioConfig {
   apiKeyTail: string;
 }
 
-let configFilePath = path.join(process.cwd(), '.od', 'connectors', 'composio-config.json');
+let configFilePath = path.join(process.cwd(), '.max', 'connectors', 'composio-config.json');
 
 export function configureComposioConfigStore(dataDir: string): void {
   configFilePath = path.join(dataDir, 'connectors', 'composio-config.json');

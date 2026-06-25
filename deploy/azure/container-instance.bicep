@@ -1,19 +1,19 @@
 targetScope = 'resourceGroup'
 
-@description('Azure region for the Open Design container group and storage account.')
+@description('Azure region for the Marketing AX container group and storage account.')
 param location string = resourceGroup().location
 
 @description('Container group name.')
-param containerGroupName string = 'open-design'
+param containerGroupName string = 'marketing-ax'
 
 @description('DNS label for the Azure Container Instances upstream endpoint. Must be unique in the selected region.')
-param dnsNameLabel string = toLower('open-design-${uniqueString(resourceGroup().id, location)}')
+param dnsNameLabel string = toLower('marketing-ax-${uniqueString(resourceGroup().id, location)}')
 
-@description('Open Design container image.')
-param image string = 'docker.io/vanjayak/open-design:latest'
+@description('Marketing AX container image.')
+param image string = 'docker.io/vanjayak/marketing-ax:latest'
 
 @secure()
-@description('Required Open Design API token. Generate with: openssl rand -hex 32')
+@description('Required Marketing AX API token. Generate with: openssl rand -hex 32')
 param odApiToken string
 
 @description('Comma-separated browser-visible origins allowed by the daemon. Set this to the authenticated reverse proxy origin, for example https://od.example.com.')
@@ -30,7 +30,7 @@ param cpuCores int = 1
 @minValue(1)
 param memoryInGB int = 1
 
-@description('Azure Files share quota in GiB for persistent Open Design data.')
+@description('Azure Files share quota in GiB for persistent Marketing AX data.')
 @minValue(1)
 @maxValue(5120)
 param fileShareQuotaGB int = 10
@@ -86,7 +86,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
     }
     containers: [
       {
-        name: 'open-design'
+        name: 'marketing-ax'
         properties: {
           image: image
           ports: [
@@ -105,27 +105,27 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: nodeOptions
             }
             {
-              name: 'OD_BIND_HOST'
+              name: 'MAX_BIND_HOST'
               value: '0.0.0.0'
             }
             {
-              name: 'OD_PORT'
+              name: 'MAX_PORT'
               value: string(appPort)
             }
             {
-              name: 'OD_WEB_PORT'
+              name: 'MAX_WEB_PORT'
               value: string(appPort)
             }
             {
-              name: 'OD_DATA_DIR'
-              value: '/app/.od'
+              name: 'MAX_DATA_DIR'
+              value: '/app/.max'
             }
             {
-              name: 'OD_ALLOWED_ORIGINS'
+              name: 'MAX_ALLOWED_ORIGINS'
               value: allowedOrigins
             }
             {
-              name: 'OD_API_TOKEN'
+              name: 'MAX_API_TOKEN'
               secureValue: odApiToken
             }
           ]
@@ -137,8 +137,8 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
           }
           volumeMounts: [
             {
-              name: 'open-design-data'
-              mountPath: '/app/.od'
+              name: 'marketing-ax-data'
+              mountPath: '/app/.max'
               readOnly: false
             }
           ]
@@ -158,7 +158,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
     ]
     volumes: [
       {
-        name: 'open-design-data'
+        name: 'marketing-ax-data'
         azureFile: {
           shareName: dataShare.name
           storageAccountName: storageAccount.name

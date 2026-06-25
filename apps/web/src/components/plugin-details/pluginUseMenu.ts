@@ -8,7 +8,7 @@
 // Plugins without a usable query keep the plain single-action button, so the
 // menu is `undefined` in that case.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import type { PluginUseAction } from '../plugins-home/useActions';
 import type { PreviewPrimaryActionMenuItem } from '../PreviewModal';
 

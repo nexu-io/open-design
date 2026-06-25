@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { setHostPetVisible } from '@open-design/host';
+import { setHostPetVisible } from '@marketing-ax/host';
 import { RUNS_CHANGED_EVENT, listProjectRuns } from '../../providers/daemon';
 import { loadConfig } from '../../state/config';
 import { listProjects } from '../../state/projects';

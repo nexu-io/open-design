@@ -1,4 +1,4 @@
-import type { InputFieldSpec, ProjectKind } from '@open-design/contracts';
+import type { InputFieldSpec, ProjectKind } from '@marketing-ax/contracts';
 import type { AudioKind, ProjectMetadata, PromptTemplateSummary } from '../../types';
 import {
   AUDIO_DURATIONS_SEC,

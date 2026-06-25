@@ -16,7 +16,7 @@
 // this helper is for the local installed roster only and never
 // pretends to be a search engine.
 
-import type { InstalledPluginRecord, PluginManifest, TrustTier } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginManifest, TrustTier } from '@marketing-ax/contracts';
 
 export interface SearchInstalledPluginsInput {
   plugins: ReadonlyArray<InstalledPluginRecord>;

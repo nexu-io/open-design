@@ -6,7 +6,7 @@ import { BrowserWindow, Menu, app, dialog, globalShortcut, shell, type MenuItemC
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
@@ -19,7 +19,7 @@ import {
   type RegisterDesktopAuthResult,
   type SidecarStamp,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 import { dirname, join } from "node:path";
 
 import {
@@ -31,8 +31,8 @@ import {
   resolveRuntimeNamespaceRoot,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
-} from "@open-design/sidecar";
-import { readProcessStamp } from "@open-design/platform";
+} from "@marketing-ax/sidecar";
+import { readProcessStamp } from "@marketing-ax/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
@@ -75,7 +75,7 @@ export {
 } from "./runtime.js";
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
-const AMR_PROFILE_ENV_KEY = "OPEN_DESIGN_AMR_PROFILE";
+const AMR_PROFILE_ENV_KEY = "MARKETING_AX_AMR_PROFILE";
 const AMR_PROFILE_AGENT_ID = "amr";
 const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "local"] as const;
 const APP_CONFIG_CHANGED_IPC_CHANNEL = "od:app-config-changed";
@@ -87,7 +87,7 @@ type DesktopAppConfigPrefs = {
 };
 
 // Argv prefix the preload uses to recover the OS locale main process
-// read at startup. The renderer wires `__od__.client.osLocale` from it.
+// read at startup. The renderer wires `__max__.client.osLocale` from it.
 export const OS_LOCALE_PRELOAD_ARG_PREFIX = "--od-os-locale=";
 
 /**
@@ -117,7 +117,7 @@ export type DesktopMainOptions = {
   discoverWebUrl?: () => Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
-   * renderer URL (`od://app/`) over `discoverWebUrl`, but Node-side
+   * renderer URL (`max://app/`) over `discoverWebUrl`, but Node-side
    * fetch can't resolve a custom Electron protocol. Optional. When
    * provided, runtime API calls (`/api/import/folder`,
    * `/api/projects/:id`) target this URL instead. tools-dev callers
@@ -184,7 +184,7 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   return async () => {
     const webIpc = resolveAppIpcPath({
       app: APP_KEYS.WEB,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace: runtime.namespace,
     });
     const web = await requestJsonIpc<WebStatusSnapshot>(webIpc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 600 }).catch(() => null);
@@ -434,7 +434,7 @@ function installDesktopMenu(
           {
             label: "Documentation",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design#readme");
+              void shell.openExternal("https://github.com/marketing-ax/marketing-ax#readme");
             },
           },
           { type: "separator" },
@@ -447,7 +447,7 @@ function installDesktopMenu(
           {
             label: "Report Issue",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
+              void shell.openExternal("https://github.com/marketing-ax/marketing-ax/issues/new");
             },
           },
           {
@@ -512,7 +512,7 @@ async function registerDesktopAuthWithDaemon(
 ): Promise<boolean> {
   const daemonIpc = resolveAppIpcPath({
     app: APP_KEYS.DAEMON,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace: runtime.namespace,
   });
   const message = {
@@ -612,13 +612,13 @@ export async function runDesktopMain(
   // reader never looks in. Keeping both sides on `resolveRuntimeNamespaceRoot`
   // co-locates renderer.log with the desktop log dir AND keeps it captured.
   const namespaceRoot = resolveRuntimeNamespaceRoot({
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     runtime,
     runtimeMode: SIDECAR_MODES.RUNTIME,
   });
   const desktopLogPath = resolveLogFilePath({
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     runtimeRoot: namespaceRoot,
   });
   const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
@@ -742,12 +742,12 @@ export async function runDesktopMain(
 }
 
 if (isDirectEntry()) {
-  const stamp = readProcessStamp(process.argv.slice(2), OPEN_DESIGN_SIDECAR_CONTRACT);
+  const stamp = readProcessStamp(process.argv.slice(2), MARKETING_AX_SIDECAR_CONTRACT);
   if (stamp == null) throw new Error("sidecar stamp is required");
 
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
   });
 
   void runDesktopMain(runtime).catch((error: unknown) => {

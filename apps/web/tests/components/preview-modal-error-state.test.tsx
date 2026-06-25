@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PreviewModal } from '../../src/components/PreviewModal';
 
-// Regression coverage for nexu-io/open-design#860: when the example HTML
+// Regression coverage for marketing-ax/marketing-ax#860: when the example HTML
 // fetch fails, the modal must render an explicit error/retry affordance
 // instead of staying stuck at "Loading…" with the share menu disabled
 // and no recovery path.

@@ -10,8 +10,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { ConnectorDetail } from '@open-design/contracts';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { ConnectorDetail } from '@marketing-ax/contracts';
+import type { OpenDesignHostProjectImportSuccess } from '@marketing-ax/host';
 import { modalOverlay, modalContent } from '../motion';
 import type {
   DesignSystemSummary,

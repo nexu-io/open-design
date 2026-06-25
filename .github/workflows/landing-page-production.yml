@@ -1,15 +1,15 @@
 name: landing-page-production
 
-# Promotes the current landing page to PRODUCTION: the `open-design-landing`
-# Cloudflare Pages project, served at open-design.ai. This is the ONLY
+# Promotes the current landing page to PRODUCTION: the `marketing-ax-landing`
+# Cloudflare Pages project, served at marketing-ax.example. This is the ONLY
 # workflow that names the production project, and it is manual-only
 # (workflow_dispatch) — a merge to `main` can never reach production on its
-# own; it only updates the staging project (staging.open-design.ai) via
+# own; it only updates the staging project (staging.marketing-ax.example) via
 # `landing-page-staging`. Gate this further by configuring required reviewers
 # on the GitHub `production` environment (Settings → Environments).
 #
 # The build is identical to staging/CI, so what you reviewed on
-# staging.open-design.ai is what ships.
+# staging.marketing-ax.example is what ships.
 
 on:
   workflow_dispatch:
@@ -35,12 +35,12 @@ jobs:
     # the main ref so a dispatch from a feature branch/tag is skipped outright
     # (no deploy) instead of recording a non-main production run — which would
     # also dodge blog-indexing's `workflow_run` `branches: [main]` filter.
-    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    if: github.repository == 'marketing-ax/marketing-ax' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: production
-      url: https://open-design.ai
+      url: https://marketing-ax.example
 
     steps:
       - name: Checkout
@@ -88,10 +88,10 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+        run: pnpm --filter @marketing-ax/landing-page exec playwright install --with-deps chromium
 
       - name: Typecheck landing page
-        run: pnpm --filter @open-design/landing-page typecheck
+        run: pnpm --filter @marketing-ax/landing-page typecheck
 
       # Generate previews before build so they end up in `out/previews/`.
       # Soft vs. hard failure is enforced inside the script itself:
@@ -105,12 +105,12 @@ jobs:
         # hit keeps cache-hit false, so we still regenerate — no stale-thumbnail
         # drift.
         if: steps.previews-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @open-design/landing-page previews
+        run: pnpm --filter @marketing-ax/landing-page previews
 
       - name: Build landing page
         env:
           PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
-        run: pnpm --filter @open-design/landing-page build:static
+        run: pnpm --filter @marketing-ax/landing-page build:static
 
       - name: Verify zero external JavaScript
         run: |
@@ -167,7 +167,7 @@ jobs:
           fi
 
       # `--branch=main` IS the Cloudflare Pages production branch, so this
-      # publishes to the production domain (open-design.ai).
+      # publishes to the production domain (marketing-ax.example).
       - name: Deploy to Cloudflare Pages (production)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -177,5 +177,5 @@ jobs:
           packageManager: npm
           command: >
             pages deploy out
-            --project-name=open-design-landing
+            --project-name=marketing-ax-landing
             --branch=main

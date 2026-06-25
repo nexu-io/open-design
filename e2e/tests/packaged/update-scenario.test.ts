@@ -44,7 +44,7 @@ describe('packaged updater release scenario', () => {
 
   test('does not override current version for release-channel smoke', () => {
     const env: NodeJS.ProcessEnv = {
-      OD_UPDATE_CURRENT_VERSION: '99.0.0-beta.0',
+      MAX_UPDATE_CURRENT_VERSION: '99.0.0-beta.0',
     };
 
     applyPackagedUpdateEnv(
@@ -56,10 +56,10 @@ describe('packaged updater release scenario', () => {
       'http://127.0.0.1:1234/nightly/latest/metadata.json',
     );
 
-    expect(env.OD_UPDATE_CURRENT_VERSION).toBeUndefined();
-    expect(env.OD_UPDATE_METADATA_URL).toBe('http://127.0.0.1:1234/nightly/latest/metadata.json');
-    expect(env.OD_UPDATE_AUTO_CHECK).toBe('1');
-    expect(env.OD_UPDATE_OPEN_DRY_RUN).toBe('1');
+    expect(env.MAX_UPDATE_CURRENT_VERSION).toBeUndefined();
+    expect(env.MAX_UPDATE_METADATA_URL).toBe('http://127.0.0.1:1234/nightly/latest/metadata.json');
+    expect(env.MAX_UPDATE_AUTO_CHECK).toBe('1');
+    expect(env.MAX_UPDATE_OPEN_DRY_RUN).toBe('1');
   });
 
   test('can disable open dry-run for full payload relaunch smoke', () => {
@@ -75,6 +75,6 @@ describe('packaged updater release scenario', () => {
       { openDryRun: false },
     );
 
-    expect(env.OD_UPDATE_OPEN_DRY_RUN).toBe('0');
+    expect(env.MAX_UPDATE_OPEN_DRY_RUN).toBe('0');
   });
 });

@@ -26,7 +26,7 @@ concurrency:
 jobs:
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -64,9 +64,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -92,7 +92,7 @@ jobs:
 
   ui_extended:
     name: UI P1 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1' }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' && github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -121,9 +121,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -146,7 +146,7 @@ jobs:
 
   ui_full:
     name: Full UI regression
-    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'full')) }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'full')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -165,9 +165,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean

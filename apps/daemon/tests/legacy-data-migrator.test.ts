@@ -1,15 +1,15 @@
 /**
- * Unit tests for the OD_LEGACY_DATA_DIR one-shot migrator. Hermetic:
+ * Unit tests for the MAX_LEGACY_DATA_DIR one-shot migrator. Hermetic:
  * each test runs against a fresh pair of mkdtemp() directories so no
  * test ever touches a real OD install.
  *
- * The migrator's contract is "loud or correct": when OD_LEGACY_DATA_DIR
+ * The migrator's contract is "loud or correct": when MAX_LEGACY_DATA_DIR
  * is set, either the daemon migrates cleanly or it throws a
  * LegacyMigrationError the launcher can surface. Silently launching
  * empty was the original #710 footgun.
  *
  * @see apps/daemon/src/legacy-data-migrator.ts
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 import * as fs from 'node:fs';
 import { mkdtempSync } from 'node:fs';
@@ -86,7 +86,7 @@ describe('migrateLegacyDataDirSync', () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  it('returns noop when OD_LEGACY_DATA_DIR is not set', () => {
+  it('returns noop when MAX_LEGACY_DATA_DIR is not set', () => {
     const log = makeLogger();
     expect(
       migrateLegacyDataDirSync({ legacyDir: undefined, dataDir, logger: log }),
@@ -94,7 +94,7 @@ describe('migrateLegacyDataDirSync', () => {
     expect(log.entries).toHaveLength(0);
   });
 
-  it('returns noop when OD_LEGACY_DATA_DIR is the empty string', () => {
+  it('returns noop when MAX_LEGACY_DATA_DIR is the empty string', () => {
     expect(
       migrateLegacyDataDirSync({ legacyDir: '', dataDir, logger: makeLogger() }),
     ).toMatchObject({ status: 'noop' });
@@ -220,8 +220,8 @@ describe('migrateLegacyDataDirSync', () => {
   it('marker beats a missing legacyDir on the next boot', async () => {
     // mrcfps round-6: the marker is the canonical "do not touch"
     // signal once a migration has succeeded. If the user leaves
-    // OD_LEGACY_DATA_DIR set after success and then deletes or moves
-    // the old `.od/` (which is the documented launchctl setenv path),
+    // MAX_LEGACY_DATA_DIR set after success and then deletes or moves
+    // the old `.max/` (which is the documented launchctl setenv path),
     // the next boot must still no-op via the marker rather than
     // throwing legacy_dir_invalid for re-validating a source the
     // marker contract says is no longer needed.
@@ -233,8 +233,8 @@ describe('migrateLegacyDataDirSync', () => {
     });
     expect(first.status).toBe('migrated');
 
-    // Simulate the user removing the old repo `.od/` after the
-    // successful migration but leaving OD_LEGACY_DATA_DIR set.
+    // Simulate the user removing the old repo `.max/` after the
+    // successful migration but leaving MAX_LEGACY_DATA_DIR set.
     await rm(legacyDir, { recursive: true, force: true });
 
     const second = migrateLegacyDataDirSync({

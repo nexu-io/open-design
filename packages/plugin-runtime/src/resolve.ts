@@ -3,7 +3,7 @@ import type {
   PluginManifest,
   PluginPipeline,
   ResolvedContext,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 // Pure context resolver. Given a parsed PluginManifest and a registry view
 // (skills/design-systems/craft already discovered by the daemon), turn

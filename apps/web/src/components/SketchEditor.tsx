@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
-} from '@open-design/components';
+} from '@marketing-ax/components';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import { readDefaultSketchToolColor } from './sketch-colors';

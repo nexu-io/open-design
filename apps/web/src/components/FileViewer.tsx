@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { Button, Input, Select } from '@open-design/components';
+import { Button, Input, Select } from '@marketing-ax/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   buildSocialSharePayload,
-  OPEN_DESIGN_GITHUB_REPO_URL,
+  MARKETING_AX_GITHUB_REPO_URL,
   type SocialShareRequest,
   type SocialShareResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
   type TrackingProjectKind,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackIframeLoad } from '../observability/iframe-error';
 import {
@@ -122,7 +122,7 @@ import {
 import { applyPodMemberRemoval } from '../lib/pod-members';
 import { AnnotationHoverPopover, BoardComposerPopover } from './BoardComposerPopover';
 import {
-  OD_PREVIEW_KEEP_ALIVE,
+  MAX_PREVIEW_KEEP_ALIVE,
   PooledIframe,
   previewIframeKeepAliveKey,
 } from './IframeKeepAlivePool';
@@ -1261,7 +1261,7 @@ export function LiveArtifactViewer({
   const previewScale = zoom / 100;
 
   // Instrument the live-artifact iframe so failed loads — usually a
-  // missing artifact file or a stuck `od://` resolver — surface in
+  // missing artifact file or a stuck `max://` resolver — surface in
   // PostHog. iframe load errors don't propagate to window.error, so
   // observability/install.ts cannot catch them globally.
   useEffect(() => {
@@ -7593,7 +7593,7 @@ function HtmlViewer({
     const title = t('socialShare.projectTitle', { title: exportTitle });
     const text = t('socialShare.projectText', {
       title: exportTitle,
-      repo: OPEN_DESIGN_GITHUB_REPO_URL,
+      repo: MARKETING_AX_GITHUB_REPO_URL,
     });
     return {
       kind: 'project-html',
@@ -7604,7 +7604,7 @@ function HtmlViewer({
       copyText: t('socialShare.projectCopyText', {
         title: exportTitle,
         url: socialShareDisplayUrl,
-        repo: OPEN_DESIGN_GITHUB_REPO_URL,
+        repo: MARKETING_AX_GITHUB_REPO_URL,
       }),
     };
   }, [exportTitle, locale, socialShareDisplayUrl, t]);
@@ -8541,7 +8541,7 @@ function HtmlViewer({
                     onToolbarClick={fireDrawToolbarClick}
                   >
                     <div className="artifact-preview-transport-stack">
-                      {OD_PREVIEW_KEEP_ALIVE ? (
+                      {MAX_PREVIEW_KEEP_ALIVE ? (
                         <PooledIframe
                           ref={urlPreviewIframeRef}
                           cacheKey={urlPreviewKeepAliveKey}

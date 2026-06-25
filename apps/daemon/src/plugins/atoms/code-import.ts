@@ -7,7 +7,7 @@
 // don't have to re-walk on every turn.
 //
 // The walk respects:
-//   - a budget (`OD_CODE_IMPORT_BUDGET_MS`, default 60s) so monorepos
+//   - a budget (`MAX_CODE_IMPORT_BUDGET_MS`, default 60s) so monorepos
 //     don't burn an entire run on import;
 //   - the standard skip-list (node_modules, .git, .next, dist, build,
 //     out, .turbo, .pnpm-store) — recorded under

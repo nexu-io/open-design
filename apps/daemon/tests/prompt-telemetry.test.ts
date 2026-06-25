@@ -250,14 +250,14 @@ describe('prompt telemetry builder', () => {
           kind: 'runtimeToolPrompt',
           content: [
             '## Runtime tool environment',
-            '- `OD_TOOL_TOKEN` is available in your environment for this run.',
+            '- `MAX_TOOL_TOKEN` is available in your environment for this run.',
             '- Daemon URL: `http://127.0.0.1:1234`.',
           ].join('\n'),
         },
       ],
     });
 
-    expect(telemetry.sections[0]!.redactedContent).not.toContain('OD_TOOL_TOKEN');
+    expect(telemetry.sections[0]!.redactedContent).not.toContain('MAX_TOOL_TOKEN');
     expect(telemetry.sections[0]!.redactedContent).toContain('Daemon URL');
   });
 

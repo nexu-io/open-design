@@ -6,17 +6,17 @@ import type { ToolPackConfig } from "../config.js";
 import { pathExists } from "./fs.js";
 import type { SeededAppConfigPaths } from "./types.js";
 
-export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+export const PACKAGED_CONFIG_PATH_ENV = "MAX_PACKAGED_CONFIG_PATH";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value != null && !Array.isArray(value);
 }
 
 export function resolveSeededAppConfigPaths(config: ToolPackConfig): SeededAppConfigPaths {
-  const configuredDataDir = process.env.OD_DATA_DIR?.trim();
+  const configuredDataDir = process.env.MAX_DATA_DIR?.trim();
   const sourceDataDir = configuredDataDir
     ? resolveProjectRelativePath(configuredDataDir, config.workspaceRoot)
-    : join(config.workspaceRoot, ".od");
+    : join(config.workspaceRoot, ".max");
   return {
     sourcePath: join(sourceDataDir, "app-config.json"),
     targetPath: join(config.roots.runtime.namespaceRoot, "data", "app-config.json"),

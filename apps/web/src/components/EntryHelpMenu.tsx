@@ -22,7 +22,7 @@ import {
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
-const REPO = 'https://github.com/nexu-io/open-design';
+const REPO = 'https://github.com/marketing-ax/marketing-ax';
 const ISSUES_URL = `${REPO}/issues/new`;
 const PRS_URL = `${REPO}/pulls`;
 const RELEASES_URL = `${REPO}/releases`;

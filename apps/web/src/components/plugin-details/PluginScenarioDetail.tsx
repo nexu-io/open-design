@@ -8,11 +8,11 @@
 // (backdrop, header, byline, hero, footer with Use plugin CTA).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog } from '@open-design/components';
+import { Dialog } from '@marketing-ax/components';
 import type {
   InstalledPluginRecord,
   PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { useI18n } from '../../i18n';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';

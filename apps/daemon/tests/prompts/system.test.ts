@@ -222,9 +222,9 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('`references/artifact-schema.md`');
     expect(prompt).toContain('`references/connector-policy.md`');
     expect(prompt).toContain('`references/refresh-contract.md`');
-    expect(prompt).toContain('The wrapper reads injected `OD_NODE_BIN`, `OD_BIN`, `OD_DAEMON_URL`, and `OD_TOOL_TOKEN`');
+    expect(prompt).toContain('The wrapper reads injected `MAX_NODE_BIN`, `MAX_BIN`, `MAX_DAEMON_URL`, and `MAX_TOOL_TOKEN`');
     expect(prompt).toContain('Do not include or invent `projectId`; the daemon derives project/run scope from the token.');
-    expect(prompt).toContain('"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts create --input artifact.json');
+    expect(prompt).toContain('"$MAX_NODE_BIN" "$MAX_BIN" tools live-artifacts create --input artifact.json');
     expect(prompt).toContain('if the user names a connector/source (for example Notion)');
     expect(prompt).toContain('list connectors before asking where the data comes from');
     expect(prompt).toContain('a connected `notion` connector plus a user brief that names Notion is enough to start with `notion.notion_search`');
@@ -434,7 +434,7 @@ describe('composeSystemPrompt', () => {
 
       expect(prompt).toContain('## External MCP servers — already authenticated');
       expect(prompt).toContain('`external-media`');
-      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('Marketing AX-owned media execution is **disabled for this run**');
       expect(prompt).not.toContain('## Media generation contract');
     });
   });
@@ -445,7 +445,7 @@ describe('composeSystemPrompt', () => {
   // optional inputs (`designSystemTokensCss`, `designSystemFixtureHtml`)
   // that the daemon populates by default for every brand that ships
   // those files (PR-D flipped the env gate to default-on, with
-  // `OD_DESIGN_TOKEN_CHANNEL=0` as the kill switch). These tests pin
+  // `MAX_DESIGN_TOKEN_CHANNEL=0` as the kill switch). These tests pin
   // the injection shape so the prompt structure cannot drift silently.
   describe('design-system token + fixture injection (#PR-C)', () => {
     const sampleTokensCss = ':root {\n  --bg: #ffffff;\n  --fg: #111111;\n  --accent: #0050d8;\n}';

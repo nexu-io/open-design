@@ -216,14 +216,14 @@ describe('AvatarMenu', () => {
         agentId: 'amr',
         agentCliEnv: {
           amr: {
-            OPEN_DESIGN_AMR_PROFILE: 'test',
+            MARKETING_AX_AMR_PROFILE: 'test',
           },
         },
       },
       agents: [
         {
           id: 'amr',
-          name: 'Open Design AMR',
+          name: 'Marketing AX AMR',
           bin: 'vela',
           available: true,
           models: [{ id: 'default', label: 'Default (CLI config)' }],

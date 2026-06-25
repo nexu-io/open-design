@@ -9,7 +9,7 @@
 // preview + a generic "value-json" textarea.
 
 import { useEffect, useRef, useState } from 'react';
-import type { GenUISurfaceSpec } from '@open-design/contracts';
+import type { GenUISurfaceSpec } from '@marketing-ax/contracts';
 
 export interface PendingSurface {
   // The surface descriptor as declared in `od.genui.surfaces[]`.

@@ -12,7 +12,7 @@ import type {
   ConnectorDetail,
   InstalledPluginRecord,
   McpServerConfig,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { useI18n, useT } from '../i18n';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { localizePluginTitle } from './plugins-home/localization';

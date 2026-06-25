@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Seed Open Design with pre-baked test projects so the UI has real slide
+// Seed Marketing AX with pre-baked test projects so the UI has real slide
 // decks and web prototypes to work with without waiting for an LLM run.
 // Pulls each project's content straight from a skill or plugin
 // `example.html`, drops it in as `index.html`, and adds a couple of fake
@@ -10,11 +10,11 @@
 //   pnpm seed:test-projects --decks 2 --webs 2 # cap counts
 //   pnpm seed:test-projects --daemon http://127.0.0.1:17456
 //   pnpm seed:test-projects --namespace work-a     # discover tools-dev namespace
-//   pnpm seed:test-projects --offline          # ingest into ./.od before boot
+//   pnpm seed:test-projects --offline          # ingest into ./.max before boot
 //   pnpm seed:test-projects --clear            # remove previously seeded projects
 //
-// The daemon URL is resolved in this order: --daemon flag > $OD_DAEMON_URL >
-// http://127.0.0.1:$OD_PORT > whatever `pnpm tools-dev status --json` reports
+// The daemon URL is resolved in this order: --daemon flag > $MAX_DAEMON_URL >
+// http://127.0.0.1:$MAX_PORT > whatever `pnpm tools-dev status --json` reports
 // for the daemon app. --namespace is only passed to that tools-dev discovery
 // step; it is not forwarded to the od CLI or stored in daemon data. The
 // discovery step is what makes the two-shell flow
@@ -311,7 +311,7 @@ function parseArgs(argv: string[]): Args {
 function printHelp() {
   console.log(`Usage: pnpm seed:test-projects [opts]
 
-Seeds Open Design with pre-baked, real HTML artifacts from:
+Seeds Marketing AX with pre-baked, real HTML artifacts from:
   - Skills examples
   - Bundled default plugin examples
   - Community plugin examples
@@ -322,16 +322,16 @@ ingest fixtures before starting pnpm tools-dev.
 
 Options:
   --daemon <url>     Daemon base URL. When omitted, the script reads
-                     \$OD_DAEMON_URL, then \$OD_PORT, and finally falls back
+                     \$MAX_DAEMON_URL, then \$MAX_PORT, and finally falls back
                      to discovering the URL from \`pnpm tools-dev status --json\`.
   --mode <mode>      auto | online | offline (default: auto). Auto uses the
                      daemon when one is discoverable; otherwise offline ingest.
   --online           Alias for --mode online.
   --offline          Alias for --mode offline.
-  --data-dir <dir>   Offline target data dir (default: \$OD_DATA_DIR or ./.od).
+  --data-dir <dir>   Offline target data dir (default: \$MAX_DATA_DIR or ./.max).
   --namespace <name> Tools-dev namespace for online auto-discovery. This does
                      not affect od CLI behavior. Offline mode requires
-                     --data-dir or OD_DATA_DIR when --namespace is set.
+                     --data-dir or MAX_DATA_DIR when --namespace is set.
   --decks <n>        Number of slide decks to seed (default: ${DECKS.length}, max: ${DECKS.length})
   --webs <n>         Number of web prototypes to seed (default: ${WEBS.length}, max: ${WEBS.length})
   --default-plugins <n>
@@ -345,8 +345,8 @@ Options:
 
 Online daemon URL resolution (first match wins):
   1. \`--daemon <url>\` on the command line.
-  2. \`OD_DAEMON_URL\` env var.
-  3. \`http://127.0.0.1:\$OD_PORT\` when \`OD_PORT\` is set to a real port.
+  2. \`MAX_DAEMON_URL\` env var.
+  3. \`http://127.0.0.1:\$MAX_PORT\` when \`MAX_PORT\` is set to a real port.
   4. Auto-discovered from \`pnpm tools-dev status --json\`. \`tools-dev\` defaults
      to an ephemeral daemon port, so a typical two-shell flow works without
      extra flags:
@@ -356,14 +356,14 @@ Online daemon URL resolution (first match wins):
      status lookup reads that namespace.
 
 Offline ingest before boot:
-  pnpm seed:test-projects --offline --data-dir ./.od
+  pnpm seed:test-projects --offline --data-dir ./.max
   pnpm tools-dev
 `);
 }
 
 function isDiscoverablePort(value: string | undefined): value is string {
   if (value == null || value.length === 0) return false;
-  // tools-dev sets OD_PORT=0 to mean "ephemeral, look at runtime status",
+  // tools-dev sets MAX_PORT=0 to mean "ephemeral, look at runtime status",
   // which is unusable as a target. Treat it the same as unset so we fall
   // through to the discovery path.
   const n = Number(value);
@@ -425,16 +425,16 @@ function extractDaemonUrlFromStatusOutput(stdout: string): string | null {
 
 async function resolveDaemonUrl(args: Args, { required }: { required: boolean }): Promise<string | null> {
   if (args.daemonUrl) return args.daemonUrl;
-  if (process.env.OD_DAEMON_URL) return process.env.OD_DAEMON_URL;
-  if (isDiscoverablePort(process.env.OD_PORT)) {
-    return `http://127.0.0.1:${process.env.OD_PORT}`;
+  if (process.env.MAX_DAEMON_URL) return process.env.MAX_DAEMON_URL;
+  if (isDiscoverablePort(process.env.MAX_PORT)) {
+    return `http://127.0.0.1:${process.env.MAX_PORT}`;
   }
   const discovered = await discoverDaemonUrlFromToolsDev(args.namespace);
   if (discovered) return discovered;
   if (!required) return null;
   throw new Error(
-    'cannot determine daemon URL: no --daemon flag, no OD_DAEMON_URL, ' +
-      'no usable OD_PORT, and `pnpm tools-dev status --json` did not report a ' +
+    'cannot determine daemon URL: no --daemon flag, no MAX_DAEMON_URL, ' +
+      'no usable MAX_PORT, and `pnpm tools-dev status --json` did not report a ' +
       'running daemon. Start the daemon (e.g. `pnpm tools-dev`), pass ' +
       '`--daemon http://127.0.0.1:<port>`, or use `--offline` to ingest ' +
       'fixtures before startup.',
@@ -590,16 +590,16 @@ function expandHomePrefix(raw: string): string {
 }
 
 function resolveDataDir(raw: string | null): string {
-  const value = raw ?? process.env.OD_DATA_DIR ?? path.join(REPO_ROOT, '.od');
+  const value = raw ?? process.env.MAX_DATA_DIR ?? path.join(REPO_ROOT, '.max');
   const expanded = expandHomePrefix(value);
   return path.isAbsolute(expanded) ? expanded : path.resolve(REPO_ROOT, expanded);
 }
 
 function assertOfflineDataDirIsExplicit(args: Args): void {
-  if (args.namespace && !args.dataDir && !process.env.OD_DATA_DIR) {
+  if (args.namespace && !args.dataDir && !process.env.MAX_DATA_DIR) {
     throw new Error(
       '--namespace is only a tools-dev discovery selector. Offline mode with ' +
-        '--namespace requires --data-dir or OD_DATA_DIR so the script does not ' +
+        '--namespace requires --data-dir or MAX_DATA_DIR so the script does not ' +
         'guess a namespace-scoped daemon data directory.',
     );
   }

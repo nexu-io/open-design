@@ -1,7 +1,7 @@
 name: tutorials-youtube-sync
 
 on:
-  # Daily sweep for new community YouTube tutorials about Open Design. New
+  # Daily sweep for new community YouTube tutorials about Marketing AX. New
   # candidates are posted to Feishu for a maintainer to review — this workflow
   # does NOT generate entries or open PRs. A maintainer replies with which
   # candidates to publish, and the selected videos are turned into entries via
@@ -34,7 +34,7 @@ concurrency:
 jobs:
   notify:
     name: Post tutorial candidates to Feishu
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
 
     steps:

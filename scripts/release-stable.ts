@@ -9,7 +9,7 @@ const execFile = promisify(execFileCallback);
 
 const stableVersionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
 const stableReleaseBranchPattern = /^release\/v(\d+\.\d+\.\d+)$/;
-const stableTagPattern = /^open-design-v(\d+\.\d+\.\d+)$/;
+const stableTagPattern = /^marketing-ax-v(\d+\.\d+\.\d+)$/;
 const nightlyVersionPattern = /^(\d+\.\d+\.\d+)\.nightly\.(\d+)$/;
 
 type ReleaseChannel = "nightly" | "stable";
@@ -57,7 +57,7 @@ function fail(message: string): never {
 function parseChannel(value: string | undefined): ReleaseChannel {
   if (value == null || value.length === 0 || value === "stable") return "stable";
   if (value === "nightly") return "nightly";
-  fail(`OPEN_DESIGN_RELEASE_CHANNEL must be stable or nightly; got ${value}`);
+  fail(`MARKETING_AX_RELEASE_CHANNEL must be stable or nightly; got ${value}`);
 }
 
 function parseBooleanInput(value: string | undefined, name: string): boolean {
@@ -95,12 +95,12 @@ function resolveStableBaseVersion(branch: string, inputValue: string | undefined
           source: "GITHUB_REF_NAME",
           value: branchMatch[1],
         } satisfies ParsedStableVersion);
-  const inputVersion = parseStableVersionInput(inputValue, "OPEN_DESIGN_STABLE_VERSION");
+  const inputVersion = parseStableVersionInput(inputValue, "MARKETING_AX_STABLE_VERSION");
 
   if (branchVersion != null) {
     if (inputVersion != null && inputVersion.value !== branchVersion.value) {
       fail(
-        `OPEN_DESIGN_STABLE_VERSION ${inputVersion.value} must match release branch version ${branchVersion.value} when both are provided`,
+        `MARKETING_AX_STABLE_VERSION ${inputVersion.value} must match release branch version ${branchVersion.value} when both are provided`,
       );
     }
     return branchVersion;
@@ -108,7 +108,7 @@ function resolveStableBaseVersion(branch: string, inputValue: string | undefined
 
   if (inputVersion != null) return inputVersion;
 
-  fail("release-stable requires either a release/vX.Y.Z branch or OPEN_DESIGN_STABLE_VERSION");
+  fail("release-stable requires either a release/vX.Y.Z branch or MARKETING_AX_STABLE_VERSION");
 }
 
 function compareVersions(left: [number, number, number], right: [number, number, number]): number {
@@ -300,10 +300,10 @@ async function validateStableNightlyMetadata(options: {
 
   const nightlyVersionInput = options.nightlyVersionInput?.trim() ?? "";
   if (nightlyVersionInput.length === 0) {
-    fail("OPEN_DESIGN_STABLE_NIGHTLY_VERSION is required when channel=stable; pass the exact validated nightly version");
+    fail("MARKETING_AX_STABLE_NIGHTLY_VERSION is required when channel=stable; pass the exact validated nightly version");
   }
 
-  const nightly = parseNightlyVersion(nightlyVersionInput, "OPEN_DESIGN_STABLE_NIGHTLY_VERSION");
+  const nightly = parseNightlyVersion(nightlyVersionInput, "MARKETING_AX_STABLE_NIGHTLY_VERSION");
   if (nightly.baseVersion !== options.packagedVersion) {
     fail(
       `stable channel nightly gate requires base version ${options.packagedVersion}; got ${nightly.nightlyVersion}`,
@@ -311,9 +311,9 @@ async function validateStableNightlyMetadata(options: {
   }
 
   const publicOrigin = trimTrailingSlash(
-    options.publicOrigin ?? fail("OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN is required when channel=stable"),
+    options.publicOrigin ?? fail("MARKETING_AX_RELEASES_PUBLIC_ORIGIN is required when channel=stable"),
   );
-  validateHttpsUrl(publicOrigin, "OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN");
+  validateHttpsUrl(publicOrigin, "MARKETING_AX_RELEASES_PUBLIC_ORIGIN");
 
   const expectedVersionPrefix = `nightly/versions/${nightly.nightlyVersion}`;
   const expectedVersionUrl = `${publicOrigin}/${expectedVersionPrefix}`;
@@ -494,13 +494,13 @@ function setOutput(name: string, value: string): void {
 }
 
 const repository = process.env.GITHUB_REPOSITORY ?? fail("GITHUB_REPOSITORY is required");
-const channel = parseChannel(process.env.OPEN_DESIGN_RELEASE_CHANNEL);
-const dryRun = parseBooleanInput(process.env.OPEN_DESIGN_RELEASE_DRY_RUN, "OPEN_DESIGN_RELEASE_DRY_RUN");
+const channel = parseChannel(process.env.MARKETING_AX_RELEASE_CHANNEL);
+const dryRun = parseBooleanInput(process.env.MARKETING_AX_RELEASE_DRY_RUN, "MARKETING_AX_RELEASE_DRY_RUN");
 const namespaces = releaseNamespaces(channel);
 const packagedVersion = await readPackagedVersion();
 const commit = process.env.GITHUB_SHA ?? "";
 const branch = process.env.GITHUB_REF_NAME ?? "";
-const stableBaseVersion = resolveStableBaseVersion(branch, process.env.OPEN_DESIGN_STABLE_VERSION);
+const stableBaseVersion = resolveStableBaseVersion(branch, process.env.MARKETING_AX_STABLE_VERSION);
 const packagedParsed = stableBaseVersion.parsed;
 if (stableBaseVersion.value !== packagedVersion) {
   fail(
@@ -509,7 +509,7 @@ if (stableBaseVersion.value !== packagedVersion) {
 }
 
 const releases = await fetchReleases(repository);
-const versionTag = `open-design-v${packagedVersion}`;
+const versionTag = `marketing-ax-v${packagedVersion}`;
 
 let latestStable: ParsedStableVersion | null = null;
 for (const release of releases) {
@@ -532,16 +532,16 @@ if (latestStable != null && compareVersions(packagedParsed, latestStable.parsed)
 }
 
 let releaseVersion = packagedVersion;
-let releaseName = `Open Design ${packagedVersion}`;
+let releaseName = `Marketing AX ${packagedVersion}`;
 let nightlyNumber = "";
 let stateSource = channel === "nightly" ? "R2 metadata.json" : "GitHub Releases";
 
 if (channel === "nightly") {
-  const metadataUrl = process.env.OPEN_DESIGN_NIGHTLY_METADATA_URL;
+  const metadataUrl = process.env.MARKETING_AX_NIGHTLY_METADATA_URL;
   if (metadataUrl == null || metadataUrl.length === 0) {
-    fail("OPEN_DESIGN_NIGHTLY_METADATA_URL is required for nightly channel");
+    fail("MARKETING_AX_NIGHTLY_METADATA_URL is required for nightly channel");
   }
-  validateHttpsUrl(metadataUrl, "OPEN_DESIGN_NIGHTLY_METADATA_URL");
+  validateHttpsUrl(metadataUrl, "MARKETING_AX_NIGHTLY_METADATA_URL");
 
   let nextNightlyNumber = 1;
   let latestNightly: ParsedNightlyVersion | null = null;
@@ -574,16 +574,16 @@ if (channel === "nightly") {
 
   nightlyNumber = String(nextNightlyNumber);
   releaseVersion = `${packagedVersion}.nightly.${nightlyNumber}`;
-  releaseName = `Open Design Nightly ${releaseVersion}`;
+  releaseName = `Marketing AX Nightly ${releaseVersion}`;
   console.log(`[release-stable] latest nightly: ${latestNightly.nightlyVersion}`);
-} else if (process.env.OPEN_DESIGN_SKIP_STABLE_NIGHTLY_GATE === "true") {
+} else if (process.env.MARKETING_AX_SKIP_STABLE_NIGHTLY_GATE === "true") {
   // Escape hatch (skip_nightly_gate input). The stable-promotion gate validates
   // a long list of fields on the candidate nightly's metadata; when a publisher
   // gap leaves one missing (e.g. r2.reportZipUrl is hard-coded null), the gate
   // blocks an otherwise-good release. This bypasses that validation for the run.
   // The stable build still produces freshly built + signed artifacts and still
   // runs publish-metadata.ts's own per-platform manifest consistency checks.
-  const skippedNightly = (process.env.OPEN_DESIGN_STABLE_NIGHTLY_VERSION ?? "").trim();
+  const skippedNightly = (process.env.MARKETING_AX_STABLE_NIGHTLY_VERSION ?? "").trim();
   stateSource = skippedNightly.length > 0
     ? `R2 nightly metadata ${skippedNightly} (gate skipped)`
     : "stable build (nightly gate skipped)";
@@ -595,9 +595,9 @@ if (channel === "nightly") {
   const stableNightly = await validateStableNightlyMetadata({
     branch: stableReleaseBranch,
     commit,
-    nightlyVersionInput: process.env.OPEN_DESIGN_STABLE_NIGHTLY_VERSION,
+    nightlyVersionInput: process.env.MARKETING_AX_STABLE_NIGHTLY_VERSION,
     packagedVersion,
-    publicOrigin: process.env.OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN,
+    publicOrigin: process.env.MARKETING_AX_RELEASES_PUBLIC_ORIGIN,
     repository,
   });
   stateSource = `R2 nightly metadata ${stableNightly.nightlyVersion}`;

@@ -44,7 +44,7 @@ jobs:
   index:
     name: Index newly deployed blog posts
     if: >-
-      github.repository == 'nexu-io/open-design'
+      github.repository == 'marketing-ax/marketing-ax'
       && (
         github.event_name == 'workflow_dispatch'
         || github.event.workflow_run.conclusion == 'success'
@@ -104,12 +104,12 @@ jobs:
             echo "::warning title=Blog indexing not fully configured::GSC auth is missing; sitemap submission, URL Inspection, Search Analytics, and status rendering will be skipped."
           fi
           if [ "$bot" != "true" ]; then
-            echo "::warning title=Blog indexing status PR disabled::Open Design bot secrets are missing; status PR creation will be skipped."
+            echo "::warning title=Blog indexing status PR disabled::Marketing AX bot secrets are missing; status PR creation will be skipped."
           fi
           {
             echo "### Blog indexing configuration"
             echo "- GSC auth configured: \`$gsc\`"
-            echo "- Open Design bot configured: \`$bot\`"
+            echo "- Marketing AX bot configured: \`$bot\`"
             if [ "$gsc" != "true" ]; then
               echo ""
               echo "GSC-dependent sitemap submission and URL Inspection steps will be skipped."
@@ -167,7 +167,7 @@ jobs:
             fi
           fi
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/detect-changed-urls.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/detect-changed-urls.ts \
             --base "$BASE" \
             --head HEAD \
             --out ../../.blog-indexing/changed-urls.json
@@ -179,7 +179,7 @@ jobs:
       - name: Verify readiness
         if: steps.detect.outputs.count != '0'
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/verify-readiness.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/verify-readiness.ts \
             --urls ../../.blog-indexing/changed-urls.json \
             --out ../../.blog-indexing/readiness.json \
             --timeout-ms 240000
@@ -187,7 +187,7 @@ jobs:
       - name: Submit URLs to IndexNow
         if: steps.detect.outputs.count != '0'
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-indexnow.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/submit-indexnow.ts \
             --urls ../../.blog-indexing/changed-urls.json \
             --out ../../.blog-indexing/indexnow.json
 
@@ -199,7 +199,7 @@ jobs:
           GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-sitemap.ts
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/submit-sitemap.ts
 
       - name: Inspect new URLs (baseline)
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
@@ -209,7 +209,7 @@ jobs:
           GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
             --urls ../../.blog-indexing/changed-urls.json \
             --out ../../.blog-indexing/inspections.json
           echo '--- inspections.json ---'
@@ -223,14 +223,14 @@ jobs:
           GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
             --urls ../../.blog-indexing/changed-urls.json \
             --out ../../.blog-indexing/analytics.json
 
       - name: Render status report
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true'
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/render-status.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/render-status.ts \
             --inspections ../../.blog-indexing/inspections.json \
             --analytics ../../.blog-indexing/analytics.json
 
@@ -248,15 +248,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Generate Open Design bot token
+      - name: Generate Marketing AX bot token
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
-        id: open-design-bot-token
+        id: marketing-ax-bot-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
-          repositories: open-design
+          repositories: marketing-ax
           permission-contents: write
           permission-pull-requests: write
 
@@ -264,7 +264,7 @@ jobs:
         if: steps.detect.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ steps.open-design-bot-token.outputs.token }}
+          token: ${{ steps.marketing-ax-bot-token.outputs.token }}
           add-paths: |
             docs/blog-indexing-status.md
             docs/blog-indexing-status.json
@@ -272,8 +272,8 @@ jobs:
           branch: automation/blog-indexing-status
           delete-branch: true
           commit-message: 'docs(blog): refresh indexing status after deploy'
-          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
-          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          author: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
+          committer: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
           title: 'docs(blog): refresh indexing status after deploy'
           body: |
             Refreshes `docs/blog-indexing-status.md` with the URL Inspection

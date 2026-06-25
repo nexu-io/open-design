@@ -646,14 +646,14 @@ const CATALOGUE: CuratedSkill[] = [
   {
     id: 'ui-ux-pro-max',
     description:
-      'Catalog-only UI/UX Pro Max entry. The full upstream templates, data, and search workflow are not bundled in Open Design.',
+      'Catalog-only UI/UX Pro Max entry. The full upstream templates, data, and search workflow are not bundled in Marketing AX.',
     triggers: ['ui ux patterns', 'design patterns', 'ux heuristics', 'usability'],
     mode: 'design-system',
     category: 'design-systems',
     upstream: 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill',
     attribution: 'Curated from @nextlevelbuilder.',
     catalogueOnlyNote:
-      'Open Design ships this entry as discovery metadata only. The upstream UI/UX Pro Max data CSVs, scripts/search.py helper, templates, references, and related skill instructions are not bundled here; if those files are absent, disclose the limitation before falling back to Open Design defaults.',
+      'Marketing AX ships this entry as discovery metadata only. The upstream UI/UX Pro Max data CSVs, scripts/search.py helper, templates, references, and related skill instructions are not bundled here; if those files are absent, disclose the limitation before falling back to Marketing AX defaults.',
   },
   {
     id: 'taste-skill',
@@ -1072,7 +1072,7 @@ function buildBody(s: CuratedSkill): string {
   lines.push(s.description);
   lines.push('');
   if (s.catalogueOnlyNote) {
-    lines.push('## Current Open Design scope');
+    lines.push('## Current Marketing AX scope');
     lines.push('');
     lines.push(s.catalogueOnlyNote);
     lines.push('');
@@ -1085,7 +1085,7 @@ function buildBody(s: CuratedSkill): string {
   lines.push('## How to use');
   lines.push('');
   lines.push(
-    'This catalogue entry advertises the skill in Open Design so the agent',
+    'This catalogue entry advertises the skill in Marketing AX so the agent',
   );
   lines.push(
     'discovers it during planning. To run the full upstream workflow with',

@@ -7,7 +7,7 @@
  * refactor before they reach review.
  *
  * Lives as a vitest case so the existing
- * `pnpm --filter @open-design/web test` pipeline picks it up; no new
+ * `pnpm --filter @marketing-ax/web test` pipeline picks it up; no new
  * CI script entry to maintain. The plan calls for a separate
  * `pnpm check:critique-coverage` walker, but the vitest equivalent
  * runs in the same gate without the extra glue.
@@ -18,7 +18,7 @@ import path from 'node:path';
 import url from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { CRITIQUE_SSE_EVENT_NAMES, PANELIST_ROLES } from '@open-design/contracts/critique';
+import { CRITIQUE_SSE_EVENT_NAMES, PANELIST_ROLES } from '@marketing-ax/contracts/critique';
 
 const __filename = url.fileURLToPath(import.meta.url);
 // dirname is apps/web/tests/components/Theater. Up 5 segments lands

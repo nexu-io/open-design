@@ -2,7 +2,7 @@ import type {
   AmrEntryAttribution,
   TrackingAmrEntrySource,
   TrackingPageName,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { readOnboardingProfile } from '../state/onboarding-profile';
 import { trackAmrEntryClick } from './events';
 
@@ -168,7 +168,7 @@ async function mirrorAmrEntryToAmrAnalytics(
       }),
     });
   } catch {
-    // AMR analytics mirroring must never block the primary Open Design action.
+    // AMR analytics mirroring must never block the primary Marketing AX action.
   }
 }
 

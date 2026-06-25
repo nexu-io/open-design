@@ -59,15 +59,15 @@ describe('buildPublishLink', () => {
     expect(link.prBody).toContain('npx skills add open-design/sample-plugin');
   });
 
-  it('builds an Open Design registry submission URL', () => {
+  it('builds an Marketing AX registry submission URL', () => {
     // The dedicated `open-design/plugin-registry` repo per
     // docs/plans/plugin-registry.md §1.2 is the long-term target; until that
-    // operational launch step happens, submissions land in `nexu-io/open-design`
+    // operational launch step happens, submissions land in `marketing-ax/marketing-ax`
     // (plugins/community/<plugin-name>/), keeping contribution where stars and
     // PR traffic already are.
     const link = buildPublishLink({ catalog: 'open-design', meta: META });
-    expect(link.catalogLabel).toBe('nexu-io/open-design');
-    expect(link.url).toMatch(/^https:\/\/github\.com\/nexu-io\/open-design\/issues\/new\?/);
+    expect(link.catalogLabel).toBe('marketing-ax/marketing-ax');
+    expect(link.url).toMatch(/^https:\/\/github\.com\/marketing-ax\/marketing-ax\/issues\/new\?/);
     expect(link.prBody).toContain('plugins/community/<plugin-name>/open-design.json');
     expect(link.prBody).toContain('plugins/registry/community/open-design-marketplace.json');
   });

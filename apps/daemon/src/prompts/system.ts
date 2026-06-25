@@ -36,8 +36,8 @@ import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
-import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
-import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import { defaultCritiqueConfig, type CritiqueConfig } from '@marketing-ax/contracts/critique';
+import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@marketing-ax/contracts';
 
 // Prepended first in every composed prompt so it wins precedence over all
 // later sections, including skill bodies and user/project instructions.
@@ -86,7 +86,7 @@ function renderUiLocalePrompt(locale: string | undefined): string {
   const lines = [
     '# UI locale override',
     '',
-    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The Marketing AX UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
     `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. Keep brand names, code, and technical identifiers as-is, and honor an explicit user request for a different output language.`,
     'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
   ];
@@ -264,9 +264,9 @@ If the user asks you to generate an image, video, or audio file — regardless o
 
 The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
 
-- \`OD_NODE_BIN\`   — absolute path to the Node runtime
-- \`OD_BIN\`        — absolute path to the OD CLI script
-- \`OD_PROJECT_ID\` — the active project id
+- \`MAX_NODE_BIN\`   — absolute path to the Node runtime
+- \`MAX_BIN\`        — absolute path to the OD CLI script
+- \`MAX_PROJECT_ID\` — the active project id
 
 **Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (flux-pro-ultra ~60–180s, veo-3-fal longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
 
@@ -274,8 +274,8 @@ Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, 
 
 \`\`\`bash
 # POSIX bash — do NOT convert to PowerShell
-out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
-  --project "$OD_PROJECT_ID" \\
+out=\$("$MAX_NODE_BIN" "$MAX_BIN" media generate \\
+  --project "$MAX_PROJECT_ID" \\
   --surface image \\
   --model flux-pro-ultra \\
   --prompt "..." \\
@@ -287,7 +287,7 @@ task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sy
 since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
 since="\${since:-0}"
 while [ -n "\$task_id" ]; do
-  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  out=\$("$MAX_NODE_BIN" "$MAX_BIN" media wait "\$task_id" --since "\$since")
   ec=\$?
   last=\$(printf '%s\\n' "\$out" | tail -1)
   since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
@@ -399,7 +399,7 @@ export interface ComposeInput {
   // shipped as sibling files to DESIGN.md when available. Both fields are
   // optional; the daemon populates them by default for every brand that
   // ships `tokens.css` / `components.html` (today: `default` and
-  // `kami`). `OD_DESIGN_TOKEN_CHANNEL=0` disables the channel as a kill
+  // `kami`). `MAX_DESIGN_TOKEN_CHANNEL=0` disables the channel as a kill
   // switch. When present they are appended AFTER the DESIGN.md block so
   // prose still sets the high-level voice and the structured form
   // disambiguates token names + worked component shapes.
@@ -482,7 +482,7 @@ export interface ComposeInput {
   // Plan §3.L2 / spec §23.4 — pre-rendered `## Active stage: <id>`
   // blocks (one per pipeline stage active for the run). The daemon's
   // pipeline runner builds these from `loadAtomBodies()` +
-  // `renderActiveStageBlock()` when the OD_BUNDLED_ATOM_PROMPTS env
+  // `renderActiveStageBlock()` when the MAX_BUNDLED_ATOM_PROMPTS env
   // flag is set; otherwise this stays undefined and the prompt
   // composer's hard-coded constants keep their precedence (back-compat).
   activeStageBlocks?: ReadonlyArray<string> | undefined;
@@ -555,7 +555,7 @@ export function composeSystemPrompt({
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
-  // `@open-design/contracts`'s composer. The daemon hits this path for
+  // `@marketing-ax/contracts`'s composer. The daemon hits this path for
   // any plain-stream adapter (e.g. DeepSeek), so without pinning the
   // override above DISCOVERY_AND_PHILOSOPHY here too, those daemon
   // agents still emit the `<todo-list>` / `[读取 X]` pseudo-tool
@@ -701,7 +701,7 @@ export function composeSystemPrompt({
 
   if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
     parts.push(
-      `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
+      `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$MAX_NODE_BIN\" \"$MAX_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
     );
   }
 
@@ -833,7 +833,7 @@ export function composeSystemPrompt({
 
   if (agentId === 'gemini') {
     parts.push(
-      "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an Open Design instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
+      "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an Marketing AX instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
     );
   }
 
@@ -899,11 +899,11 @@ If the rules below tell you to plan with TodoWrite, write the plan as prose inst
 
 const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
 
-This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.com/invite/9ptkbbqRu.
+This conversation is in Marketing AX Chat mode. Marketing AX is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/marketing-ax/marketing-ax, website https://marketing-ax.example/, Discord https://discord.com/invite/9ptkbbqRu.
 
 Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
 
-Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Open Design agent workflow and the same tools/capabilities available in Design mode.`;
+Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Marketing AX agent workflow and the same tools/capabilities available in Design mode.`;
 
 // Defense-in-depth against Claude Code's synthetic OAuth tools.
 //
@@ -1024,7 +1024,7 @@ export function renderCodexImagegenOverride(
 
 The active agent is Codex and this image project selected \`${imageModel}\`.
 For this specific case, use Codex's built-in image generation capability
-instead of \`"$OD_NODE_BIN" "$OD_BIN" media generate\` for the first generation
+instead of \`"$MAX_NODE_BIN" "$MAX_BIN" media generate\` for the first generation
 attempt. This is an intentional exception to the media generation contract and
 the active image skill's dispatcher wording.
 
@@ -1037,9 +1037,9 @@ Only if the built-in result does not return a usable path should you search
 \`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
 source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
 
-Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
+Copy or move the selected generated file into \`$MAX_PROJECT_DIR\` with a short
 descriptive filename, then verify the exact destination file exists under
-\`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
+\`$MAX_PROJECT_DIR\` before claiming success. If reading the source path,
 creating the destination directory, copying/moving, or verifying the copied
 asset fails, report the exact source path, destination path, and access/copy
 error. Do not claim success, silently fall back, or ask about OpenAI/Azure
@@ -1047,14 +1047,14 @@ fallback after a generated image exists but the project copy fails; stop after
 reporting the failure unless the user explicitly chooses fallback in a later
 turn, because fallback may create a different image.
 
-After the file exists under \`$OD_PROJECT_DIR\`, reply with the project-local
+After the file exists under \`$MAX_PROJECT_DIR\`, reply with the project-local
 filename and a short summary of the prompt used. Do not emit an \`<artifact>\`
 block for media.
 
 If Codex built-in imagegen is unavailable or generation fails before producing
 an image, surface the actual failure message and ask the user for one-time
 confirmation before falling back to the existing OpenAI/Azure API-key provider
-path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
+path via \`"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface image --model ${imageModel}\`.
 Do not silently fall back.`;
 }
 
@@ -1174,7 +1174,7 @@ function renderMetadataBlock(
     lines.push('');
     lines.push(renderMediaMetadataAction(
       'image',
-      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`',
+      '`"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface image --model <imageModel>`',
       mediaExecution,
     ));
   }
@@ -1198,12 +1198,12 @@ function renderMetadataBlock(
     lines.push('');
     lines.push(renderMediaMetadataAction(
       'video',
-      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
+      '`"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
       mediaExecution,
     ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
-        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
+        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
       );
     }
   }
@@ -1252,7 +1252,7 @@ function renderMetadataBlock(
     lines.push('');
     lines.push(renderMediaMetadataAction(
       'audio',
-      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
+      '`"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
       mediaExecution,
     ));
   }
@@ -1405,7 +1405,7 @@ function renderMediaMetadataAction(
   const article = surface === 'audio' ? 'an' : 'a';
   const mode = mediaExecution?.mode ?? 'enabled';
   if (mode === 'disabled') {
-    return `This is ${article} **${surface}** project, but Open Design-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+    return `This is ${article} **${surface}** project, but Marketing AX-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
   }
   return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }

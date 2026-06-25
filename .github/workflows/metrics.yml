@@ -11,17 +11,17 @@ permissions:
 jobs:
   metrics:
     name: Generate issue and PR activity SVG
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     steps:
-      - name: Generate Open Design bot token
-        id: open-design-bot-token
+      - name: Generate Marketing AX bot token
+        id: marketing-ax-bot-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
-          repositories: open-design
+          repositories: marketing-ax
           permission-administration: read
           permission-contents: read
           permission-issues: read
@@ -35,10 +35,10 @@ jobs:
           # the git history.
           filename: github-metrics.svg
 
-          # Auth: use the Open Design GitHub App for follow-up metrics
+          # Auth: use the Marketing AX GitHub App for follow-up metrics
           # that need private repository API access, but do not grant write
           # permissions because this workflow publishes to R2 instead of git.
-          token: ${{ steps.open-design-bot-token.outputs.token }}
+          token: ${{ steps.marketing-ax-bot-token.outputs.token }}
           output_action: none
 
           # Use the repository template (per-repo metrics, not user metrics).
@@ -47,7 +47,7 @@ jobs:
           template: repository
           base: ''
           user: nexu-io
-          repo: open-design
+          repo: marketing-ax
 
           # Keep this README image focused on the maintenance signal that is not
           # covered elsewhere: issue and PR follow-up status. Contributors and

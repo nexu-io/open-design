@@ -1,4 +1,4 @@
-export const OPEN_DESIGN_GITHUB_REPO_URL = 'https://github.com/nexu-io/open-design';
+export const MARKETING_AX_GITHUB_REPO_URL = 'https://github.com/marketing-ax/marketing-ax';
 
 export type SocialShareTargetKind = 'open-design-repo' | 'project-html';
 
@@ -158,12 +158,12 @@ function buildPlatformUrl(
 export function buildSocialSharePayload(input: SocialShareRequest): SocialShareResponse {
   const kind = input.kind === 'project-html' ? 'project-html' : 'open-design-repo';
   const url = normalizeSocialShareUrl(input.url)
-    ?? (kind === 'open-design-repo' ? OPEN_DESIGN_GITHUB_REPO_URL : '');
-  const fallbackTitle = kind === 'project-html' ? 'Open Design project' : 'Open Design';
+    ?? (kind === 'open-design-repo' ? MARKETING_AX_GITHUB_REPO_URL : '');
+  const fallbackTitle = kind === 'project-html' ? 'Marketing AX project' : 'Marketing AX';
   const title = cleanText(input.title, fallbackTitle);
   const fallbackText = kind === 'project-html'
-    ? `Built with Open Design: ${title}. Open Design repo: ${OPEN_DESIGN_GITHUB_REPO_URL}`
-    : 'Open Design is an open-source workspace for creating, editing, deploying, and handing off design artifacts.';
+    ? `Built with Marketing AX: ${title}. Marketing AX repo: ${MARKETING_AX_GITHUB_REPO_URL}`
+    : 'Marketing AX is an open-source workspace for creating, editing, deploying, and handing off design artifacts.';
   const text = cleanText(input.text, fallbackText);
   const copyText = cleanText(input.copyText, `${text}\n${url}`);
   const platforms = PLATFORM_DESCRIPTORS.map((descriptor) => ({
@@ -189,7 +189,7 @@ export function buildSocialSharePayload(input: SocialShareRequest): SocialShareR
     title,
     text,
     copyText,
-    githubRepoUrl: OPEN_DESIGN_GITHUB_REPO_URL,
+    githubRepoUrl: MARKETING_AX_GITHUB_REPO_URL,
     platforms,
   };
 }

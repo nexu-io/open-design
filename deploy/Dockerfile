@@ -33,9 +33,9 @@ RUN corepack enable && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps
-RUN pnpm --filter @open-design/daemon build && \
-    pnpm --filter @open-design/web build && \
-    pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
+RUN pnpm --filter @marketing-ax/daemon build && \
+    pnpm --filter @marketing-ax/web build && \
+    pnpm --filter @marketing-ax/daemon deploy --legacy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
       /root/.cache \
@@ -81,35 +81,35 @@ COPY plugins/_official ./plugins/_official
 FROM ${RUNTIME_IMAGE}
 
 RUN apk add --no-cache tini poppler-utils && \
-    addgroup -S -g 1001 open-design && \
-    adduser -S -D -H -u 1001 -G open-design open-design
+    addgroup -S -g 1001 marketing-ax && \
+    adduser -S -D -H -u 1001 -G marketing-ax marketing-ax
 
 WORKDIR /app
-COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daemon
-COPY --from=build --chown=open-design:open-design /app/apps/web/out ./apps/web/out
-COPY --from=build --chown=open-design:open-design /app/skills ./skills
-COPY --from=build --chown=open-design:open-design /app/design-systems ./design-systems
-COPY --from=build --chown=open-design:open-design /app/craft ./craft
-COPY --from=build --chown=open-design:open-design /app/prompt-templates ./prompt-templates
-COPY --from=build --chown=open-design:open-design /app/assets/frames ./assets/frames
-COPY --from=build --chown=open-design:open-design /app/assets/community-pets ./assets/community-pets
+COPY --from=build --chown=marketing-ax:marketing-ax /app/deploy/daemon ./apps/daemon
+COPY --from=build --chown=marketing-ax:marketing-ax /app/apps/web/out ./apps/web/out
+COPY --from=build --chown=marketing-ax:marketing-ax /app/skills ./skills
+COPY --from=build --chown=marketing-ax:marketing-ax /app/design-systems ./design-systems
+COPY --from=build --chown=marketing-ax:marketing-ax /app/craft ./craft
+COPY --from=build --chown=marketing-ax:marketing-ax /app/prompt-templates ./prompt-templates
+COPY --from=build --chown=marketing-ax:marketing-ax /app/assets/frames ./assets/frames
+COPY --from=build --chown=marketing-ax:marketing-ax /app/assets/community-pets ./assets/community-pets
 # Plan §3.J4 / spec §23.3.5 — bundled atom plugins registered on
 # daemon boot. The directory contains `plugins/_official/atoms/<atom>/`
-# pairs (SKILL.md + open-design.json); registerBundledPlugins() walks
+# pairs (SKILL.md + marketing-ax.json); registerBundledPlugins() walks
 # it on startup so the container ships with first-party atoms reachable
 # via the same registry path third-party plugins use.
-COPY --from=build --chown=open-design:open-design /app/plugins/_official ./plugins/_official
+COPY --from=build --chown=marketing-ax:marketing-ax /app/plugins/_official ./plugins/_official
 
-RUN mkdir -p /app/.od && \
-    chown -R open-design:open-design /app
+RUN mkdir -p /app/.max && \
+    chown -R marketing-ax:marketing-ax /app
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
-ENV OD_BIND_HOST=0.0.0.0
-ENV OD_PORT=7456
+ENV MAX_BIND_HOST=0.0.0.0
+ENV MAX_PORT=7456
 
 EXPOSE 7456
 
-USER open-design
+USER marketing-ax
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "apps/daemon/dist/cli.js", "--no-open"]

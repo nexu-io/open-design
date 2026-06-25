@@ -1,9 +1,9 @@
 {
-  "name": "@open-design/agui-adapter",
+  "name": "@marketing-ax/agui-adapter",
   "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "Pure-TS bidirectional adapter between Open Design's PersistedAgentEvent / GenUIEvent / PluginPipelineStageEvent union and the AG-UI canonical event protocol (see https://github.com/CopilotKit/CopilotKit). No node:fs imports — daemon emits, web/CopilotKit consumes.",
+  "description": "Pure-TS bidirectional adapter between Marketing AX's PersistedAgentEvent / GenUIEvent / PluginPipelineStageEvent union and the AG-UI canonical event protocol (see https://github.com/CopilotKit/CopilotKit). No node:fs imports — daemon emits, web/CopilotKit consumes.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/contracts": "workspace:*"
+    "@marketing-ax/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "20.19.39",

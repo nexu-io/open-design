@@ -25,7 +25,7 @@ import type Database from 'better-sqlite3';
 import type {
   AppliedPluginSnapshot,
   PipelineStage,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type { UntilSignals } from '../until.js';
 
 type SqliteDb = Database.Database;

@@ -12,13 +12,13 @@ asset_suffix="${LINUX_ASSET_SUFFIX:-}"
 release_dir="$RUNNER_TEMP/release-assets"
 mkdir -p "$release_dir"
 
-source_appimage="$RUNNER_TEMP/tools-pack/out/linux/namespaces/$TOOLS_PACK_NAMESPACE/builder/Open Design-$TOOLS_PACK_NAMESPACE.AppImage"
+source_appimage="$RUNNER_TEMP/tools-pack/out/linux/namespaces/$TOOLS_PACK_NAMESPACE/builder/Marketing AX-$TOOLS_PACK_NAMESPACE.AppImage"
 if [ ! -f "$source_appimage" ]; then
   echo "expected AppImage not found at $source_appimage" >&2
   exit 1
 fi
 
-versioned_appimage="open-design-${RELEASE_VERSION}${asset_suffix}-linux-x64.AppImage"
+versioned_appimage="marketing-ax-${RELEASE_VERSION}${asset_suffix}-linux-x64.AppImage"
 checksum_file="$versioned_appimage.sha256"
 
 cp "$source_appimage" "$release_dir/$versioned_appimage"

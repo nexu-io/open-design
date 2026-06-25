@@ -510,13 +510,13 @@ describe('ProjectView daemon reattach restore', () => {
 
     reattachDaemonRun.mockImplementation(async (options: any) => {
       const error = new Error(
-        'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://open-design.ai/amr/wallet, then retry this run.',
+        'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://marketing-ax.example/amr/wallet, then retry this run.',
       ) as Error & { code: string; details: unknown };
       error.code = 'AMR_INSUFFICIENT_BALANCE';
       error.details = {
         kind: 'amr_account',
         action: 'recharge',
-        actionUrl: 'https://open-design.ai/amr/wallet',
+        actionUrl: 'https://marketing-ax.example/amr/wallet',
       };
       options.handlers.onError(error);
     });

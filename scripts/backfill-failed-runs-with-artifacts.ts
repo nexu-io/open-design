@@ -18,8 +18,8 @@
 //
 // Usage:
 //   node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts --dry-run
-//   node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts --data-dir /path/to/.od --dry-run
-//   node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts --data-dir /path/to/.od
+//   node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts --data-dir /path/to/.max --dry-run
+//   node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts --data-dir /path/to/.max
 //
 // STOP THE DAEMON FIRST so the WAL is flushed and this does not race a write.
 // --dry-run prints the rows it would flip without writing. Re-running is
@@ -50,7 +50,7 @@ function loadBetterSqlite(): new (filename: string) => BackfillDatabase {
 }
 
 function parseArgs(argv: string[]): { dataDir: string; dryRun: boolean } {
-  let dataDir = process.env.OD_DATA_DIR?.trim() || './.od';
+  let dataDir = process.env.MAX_DATA_DIR?.trim() || './.max';
   let dryRun = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];

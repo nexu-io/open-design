@@ -6,9 +6,9 @@
 // silently misses the sidecar transport endpoint.
 //
 // Side effects (the fs.existsSync probes, process.execPath, the
-// ELECTRON_RUN_AS_NODE env read, OD_DATA_DIR resolution, sidecar IPC
+// ELECTRON_RUN_AS_NODE env read, MAX_DATA_DIR resolution, sidecar IPC
 // detection) all stay in the caller. This module is intentionally pure
-// and free of @open-design/sidecar-proto so it can be unit-tested
+// and free of @marketing-ax/sidecar-proto so it can be unit-tested
 // without booting the daemon.
 
 export interface BuildMcpInstallPayloadInputs {
@@ -28,7 +28,7 @@ export interface BuildMcpInstallPayloadInputs {
    *  caller wants propagated into the snippet. The caller decides
    *  what's worth propagating; this builder just merges. */
   sidecarEnv: Record<string, string>;
-  /** Browser-facing Open Design studio base URL (e.g.
+  /** Browser-facing Marketing AX studio base URL (e.g.
    *  `http://127.0.0.1:65321`). Used by MCP clients to build deep
    *  links to `/projects/.../conversations/.../files/...` so the
    *  outer agent can suggest a URL that shows both the file preview
@@ -58,22 +58,22 @@ export function buildMcpInstallPayload(
   const hints: string[] = [];
   if (!inputs.cliExists) {
     hints.push(
-      `Open Design CLI entry is missing at ${inputs.cliPath}. Rebuild the daemon or packaged app and refresh.`,
+      `Marketing AX CLI entry is missing at ${inputs.cliPath}. Rebuild the daemon or packaged app and refresh.`,
     );
   }
   if (!inputs.nodeExists) {
     hints.push(
-      `Node-compatible runtime at ${inputs.execPath} no longer exists. Reinstall Open Design or Node and restart the daemon.`,
+      `Node-compatible runtime at ${inputs.execPath} no longer exists. Reinstall Marketing AX or Node and restart the daemon.`,
     );
   }
-  // Pin OD_DATA_DIR to the daemon's resolved data root so the spawned
+  // Pin MAX_DATA_DIR to the daemon's resolved data root so the spawned
   // MCP process writes to the same directory the daemon already uses
   // even when the IDE that launched it (Antigravity, VS Code, etc.)
   // does not inherit the packaged app's environment. Without this,
-  // `od mcp` falls back to `<cwd>/.od/...` which is the read-only
+  // `od mcp` falls back to `<cwd>/.max/...` which is the read-only
   // macOS app bundle for packaged installs and trips EPERM. Issue #848.
   const env: Record<string, string> = {
-    OD_DATA_DIR: inputs.dataDir,
+    MAX_DATA_DIR: inputs.dataDir,
     ...inputs.sidecarEnv,
   };
   if (inputs.electronAsNode) {

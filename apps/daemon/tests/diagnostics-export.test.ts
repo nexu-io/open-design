@@ -11,8 +11,8 @@ import {
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
-} from '@open-design/sidecar-proto';
-import type { SidecarRuntimeContext } from '@open-design/sidecar';
+} from '@marketing-ax/sidecar-proto';
+import type { SidecarRuntimeContext } from '@marketing-ax/sidecar';
 
 import {
   STANDALONE_LAUNCH_WARNING,

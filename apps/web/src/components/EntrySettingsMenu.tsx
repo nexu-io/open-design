@@ -6,10 +6,10 @@ import {
 } from 'react';
 import {
   buildSocialSharePayload,
-  OPEN_DESIGN_GITHUB_REPO_URL,
+  MARKETING_AX_GITHUB_REPO_URL,
   type SocialShareRequest,
   type SocialShareResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   LOCALE_LABEL,
   LOCALES,
@@ -104,7 +104,7 @@ export function EntrySettingsMenu({
       text,
       copyText: t('socialShare.openDesignCopyText', {
         text,
-        url: OPEN_DESIGN_GITHUB_REPO_URL,
+        url: MARKETING_AX_GITHUB_REPO_URL,
       }),
     };
   }, [locale, t]);

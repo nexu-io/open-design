@@ -40,7 +40,7 @@ concurrency:
 jobs:
   report:
     name: Daily 3-day traffic digest
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -95,7 +95,7 @@ jobs:
           {
             echo "### Blog 3-day report configuration"
             echo "- GSC auth configured: \`$gsc\`"
-            echo "- Open Design bot configured: \`$bot\`"
+            echo "- Marketing AX bot configured: \`$bot\`"
             echo "- Feishu digest webhook configured: \`$feishu\`"
             if [ "$gsc" != "true" ]; then
               echo ""
@@ -131,7 +131,7 @@ jobs:
           if [ "${{ github.event.inputs.skip_inspect }}" = "true" ]; then
             flags+=(--no-inspect)
           fi
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/report-3day.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/report-3day.ts \
             --summary-out ../../.blog-indexing/blog-traffic-digest-summary.json \
             "${flags[@]}"
           # Surface the latest section in the run summary for quick review.
@@ -146,7 +146,7 @@ jobs:
         env:
           FEISHU_BLOG_DIGEST_WEBHOOK: ${{ secrets.FEISHU_BLOG_DIGEST_WEBHOOK }}
         run: |
-          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/post-feishu-digest.ts \
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/blog-indexing/post-feishu-digest.ts \
             --summary ../../.blog-indexing/blog-traffic-digest-summary.json
 
       - name: Upload digest as artefact
@@ -159,15 +159,15 @@ jobs:
             .blog-indexing/blog-traffic-digest-summary.json
           retention-days: 30
 
-      - name: Generate Open Design bot token
+      - name: Generate Marketing AX bot token
         if: steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
-        id: open-design-bot-token
+        id: marketing-ax-bot-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
-          repositories: open-design
+          repositories: marketing-ax
           permission-contents: write
           permission-pull-requests: write
 
@@ -175,14 +175,14 @@ jobs:
         if: steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ steps.open-design-bot-token.outputs.token }}
+          token: ${{ steps.marketing-ax-bot-token.outputs.token }}
           add-paths: |
             docs/blog-traffic-digest.md
           branch: automation/blog-traffic-digest
           delete-branch: true
           commit-message: 'docs(blog): refresh 3-day traffic digest'
-          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
-          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          author: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
+          committer: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
           title: 'docs(blog): refresh 3-day traffic digest'
           body: |
             Daily refresh of `docs/blog-traffic-digest.md`:

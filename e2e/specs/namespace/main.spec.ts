@@ -52,25 +52,25 @@ describe('namespace isolation spec', () => {
       expect(daemonStatus).not.toHaveProperty('namespace');
 
       const installInfo = await requestJson<McpInstallInfoResponse>(webUrl, '/api/mcp/install-info');
-      const ipcPath = installInfo.env.OD_SIDECAR_IPC_PATH;
+      const ipcPath = installInfo.env.MAX_SIDECAR_IPC_PATH;
       if (typeof ipcPath !== 'string' || ipcPath.length === 0) {
-        throw new Error('MCP install-info did not include OD_SIDECAR_IPC_PATH');
+        throw new Error('MCP install-info did not include MAX_SIDECAR_IPC_PATH');
       }
       expect(ipcPath).toEqual(expect.any(String));
       expect(installInfo.args).not.toContain('--daemon-url');
-      expect(installInfo.env.OD_DATA_DIR).toBe(suite.dataDir);
-      expect(installInfo.env).not.toHaveProperty('OD_NAMESPACE');
-      expect(installInfo.env).not.toHaveProperty('OD_SIDECAR_NAMESPACE');
-      expect(installInfo.env).not.toHaveProperty('OD_SIDECAR_IPC_BASE');
+      expect(installInfo.env.MAX_DATA_DIR).toBe(suite.dataDir);
+      expect(installInfo.env).not.toHaveProperty('MAX_NAMESPACE');
+      expect(installInfo.env).not.toHaveProperty('MAX_SIDECAR_NAMESPACE');
+      expect(installInfo.env).not.toHaveProperty('MAX_SIDECAR_IPC_BASE');
 
       const cliStatus = await runDaemonCliJson<DaemonStatusResponse>(
         ['daemon', 'status', '--json'],
         {
-          OD_DATA_DIR: suite.dataDir,
-          OD_NAMESPACE: 'wrong-daemon-namespace',
-          OD_SIDECAR_IPC_BASE: path.join(suite.scratchDir, 'wrong-ipc-base'),
-          OD_SIDECAR_IPC_PATH: ipcPath,
-          OD_SIDECAR_NAMESPACE: 'wrong-sidecar-namespace',
+          MAX_DATA_DIR: suite.dataDir,
+          MAX_NAMESPACE: 'wrong-daemon-namespace',
+          MAX_SIDECAR_IPC_BASE: path.join(suite.scratchDir, 'wrong-ipc-base'),
+          MAX_SIDECAR_IPC_PATH: ipcPath,
+          MAX_SIDECAR_NAMESPACE: 'wrong-sidecar-namespace',
         },
       );
       expect(cliStatus.port).toBe(runtime.daemonPort);
@@ -79,7 +79,7 @@ describe('namespace isolation spec', () => {
 
       const rejected = await runDaemonCliExpectFailure(
         ['daemon', 'status', '--json', '--namespace', 'should-not-parse'],
-        { OD_SIDECAR_IPC_PATH: ipcPath },
+        { MAX_SIDECAR_IPC_PATH: ipcPath },
       );
       expect(`${rejected.stdout}\n${rejected.stderr}`).toContain('unknown flag: --namespace');
 
@@ -182,8 +182,8 @@ async function runDaemonCli(
     ...process.env,
     ...env,
   };
-  delete mergedEnv.OD_DAEMON_URL;
-  delete mergedEnv.OD_PORT;
+  delete mergedEnv.MAX_DAEMON_URL;
+  delete mergedEnv.MAX_PORT;
 
   const { stderr, stdout } = await execFileAsync(
     process.execPath,

@@ -3,7 +3,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail } from '@marketing-ax/contracts';
 
 import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import { EntryView } from '../../src/components/EntryView';

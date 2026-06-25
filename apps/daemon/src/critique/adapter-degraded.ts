@@ -14,7 +14,7 @@
  * (the same call sites keep working when the storage layer swaps).
  */
 
-import type { DegradedReason } from '@open-design/contracts/critique';
+import type { DegradedReason } from '@marketing-ax/contracts/critique';
 
 import { critiqueDegradedTotal } from '../metrics/index.js';
 

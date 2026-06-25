@@ -7,7 +7,7 @@
  * no vitest setup yet — same reasoning as the existing
  * `desktop-url-allowlist.test.ts` next to this file.
  *
- * @see https://github.com/nexu-io/open-design/pull/974
+ * @see https://github.com/marketing-ax/marketing-ax/pull/974
  *      lefarcen + mrcfps round-3 reviews on runtime.ts: path-allowlist
  *      gate must be daemon-controlled, `.app` bundles must be rejected,
  *      and `openPath(projectId)` must only forward projects whose
@@ -24,7 +24,7 @@ import {
   fetchResolvedProjectDir,
   isOpenPathAllowedForProject,
   signDesktopImportToken,
-} from "@open-design/desktop/main";
+} from "@marketing-ax/desktop/main";
 
 let tempRoot = "";
 

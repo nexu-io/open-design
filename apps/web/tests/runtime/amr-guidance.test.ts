@@ -4,7 +4,7 @@ import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../../src/runtime
 describe('amrRechargeUrlForProfile', () => {
   it('matches the selected AMR profile wallet origin', () => {
     expect(amrRechargeUrlForProfile('prod')).toBe(
-      'https://open-design.ai/amr/wallet?source=open_design',
+      'https://marketing-ax.example/amr/wallet?source=open_design',
     );
     expect(amrRechargeUrlForProfile('test')).toBe(
       'https://vela.powerformer.net/wallet?source=open_design',
@@ -13,7 +13,7 @@ describe('amrRechargeUrlForProfile', () => {
       'http://localhost:5173/wallet?source=open_design',
     );
     expect(amrRechargeUrlForProfile(' unknown ')).toBe(
-      'https://open-design.ai/amr/wallet?source=open_design',
+      'https://marketing-ax.example/amr/wallet?source=open_design',
     );
   });
 });

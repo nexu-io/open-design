@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import {
   filterPluginsBySubChip,
   isSubChipParent,

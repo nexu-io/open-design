@@ -5,7 +5,7 @@ import { z } from 'zod';
 // outputs (synthesized PluginManifest from SKILL.md frontmatter or claude
 // plugin.json) parse cleanly without losing forward-compatible fields.
 
-export const OPEN_DESIGN_PLUGIN_SPEC_VERSION = '1.0.0';
+export const MARKETING_AX_PLUGIN_SPEC_VERSION = '1.0.0';
 
 export const OpenDesignSpecVersionSchema = z.string().min(1);
 

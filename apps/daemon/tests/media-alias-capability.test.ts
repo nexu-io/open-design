@@ -1,7 +1,7 @@
 /**
  * Regression coverage for the lefarcen + codex P2 on PR #1309: when a
  * user aliases a registered catalog id to a custom wire-name via
- * `OD_MEDIA_MODEL_ALIASES` or media-config.json's `aliases` map, the
+ * `MAX_MEDIA_MODEL_ALIASES` or media-config.json's `aliases` map, the
  * dispatcher must still apply the model-FAMILY behaviour the catalog
  * id implies (DALL-E response_format, dall-e-3 hd quality,
  * gpt-4o-mini-tts instructions, etc.) and only swap the value that
@@ -29,19 +29,19 @@ describe('media alias preserves catalog-keyed capability branching (#1309 review
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalEnvAliases = process.env.OD_MEDIA_MODEL_ALIASES;
+  const originalEnvAliases = process.env.MAX_MEDIA_MODEL_ALIASES;
   const originalOpenAIKey = process.env.OPENAI_API_KEY;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-media-alias-cap-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_MODEL_ALIASES;
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_MEDIA_MODEL_ALIASES;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
     process.env.OPENAI_API_KEY = 'sk-test-key';
   });
 
@@ -49,9 +49,9 @@ describe('media alias preserves catalog-keyed capability branching (#1309 review
     globalThis.fetch = realFetch;
     vi.unstubAllGlobals();
     if (originalEnvAliases == null) {
-      delete process.env.OD_MEDIA_MODEL_ALIASES;
+      delete process.env.MAX_MEDIA_MODEL_ALIASES;
     } else {
-      process.env.OD_MEDIA_MODEL_ALIASES = originalEnvAliases;
+      process.env.MAX_MEDIA_MODEL_ALIASES = originalEnvAliases;
     }
     if (originalOpenAIKey == null) {
       delete process.env.OPENAI_API_KEY;
@@ -59,20 +59,20 @@ describe('media alias preserves catalog-keyed capability branching (#1309 review
       process.env.OPENAI_API_KEY = originalOpenAIKey;
     }
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     await rm(root, { recursive: true, force: true });
   });
 
   async function writeStoredConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -118,7 +118,7 @@ describe('media alias preserves catalog-keyed capability branching (#1309 review
   });
 
   it('alias gpt-4o-mini-tts -> custom-deployment still attaches style instructions', async () => {
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'gpt-4o-mini-tts': 'custom-tts-deployment',
     });
 

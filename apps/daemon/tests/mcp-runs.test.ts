@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildProjectRawFileUrl } from '@open-design/contracts';
+import { buildProjectRawFileUrl } from '@marketing-ax/contracts';
 
 import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
 
@@ -324,14 +324,14 @@ describe('public MCP discovery + generation tools', () => {
       id: 'run-99',
       status: 'running',
       projectId: 'project-1',
-      eventsLogPath: '/Users/x/.od/runs/run-99/events.jsonl',
+      eventsLogPath: '/Users/x/.max/runs/run-99/events.jsonl',
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-99' });
     const parsed = JSON.parse(firstText(result));
     expect(parsed.status).toBe('running');
-    expect(parsed.eventsLogPath).toBe('/Users/x/.od/runs/run-99/events.jsonl');
+    expect(parsed.eventsLogPath).toBe('/Users/x/.max/runs/run-99/events.jsonl');
     expect(parsed.hint).toMatch(/tail/i);
     expect(parsed.hint).toContain('events.jsonl');
   });
@@ -493,7 +493,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.previewUrl).toBeUndefined();
   });
 
-  // Discovery-stage / clarifying-question fallback: when Open Design's
+  // Discovery-stage / clarifying-question fallback: when Marketing AX's
   // inner agent does NOT write files (e.g. it asks back with a discovery
   // form), the run still terminates "succeeded" but the only output
   // lives in the SSE event stream as text_delta chunks. get_run must
@@ -614,7 +614,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.hint).not.toMatch(/project defaults to this run/i);
   });
 
-  // #2: MCP-driven projects skip Open Design's interactive discovery
+  // #2: MCP-driven projects skip Marketing AX's interactive discovery
   // stage. The outer agent (Codex, Cursor, …) IS the user-facing surface;
   // having OD ask a discovery form back through MCP creates a confusing
   // nested-clarification loop where the form ends up dropped because no

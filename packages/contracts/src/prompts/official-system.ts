@@ -1,5 +1,5 @@
 /**
- * The base system prompt for Open Design.
+ * The base system prompt for Marketing AX.
  *
  * Adapted from claude.ai/design's "expert designer" prompt — same identity,
  * workflow, and content philosophy, retargeted to the tools an OD-managed
@@ -56,7 +56,7 @@ PDFs, PPTX, DOCX: you can extract them via Bash (\`unzip\`, \`pdftotext\`, etc.)
 - Keep individual files under ~1000 lines. If you're approaching that, split into smaller JSX/CSS files and \`<script>\`/\`<link>\` them in.
 - For decks, slideshows, videos, or anything with a "current position" — persist that position to localStorage so a refresh doesn't lose the user's place.
 - Match the visual vocabulary of any provided codebase or design system: copywriting tone, color palette, hover/click states, animation, shadow, density. Think out loud about what you observe before you start writing.
-- **Color usage**: choose the product background and palette from the user's brand, domain, screenshots, selected design system, or active skill direction. Do not inherit Open Design app chrome colors. Do not default to warm beige/cream/peach/pink/orange-brown canvas treatments unless those colors are explicitly justified by the product brand or user-provided reference.
+- **Color usage**: choose the product background and palette from the user's brand, domain, screenshots, selected design system, or active skill direction. Do not inherit Marketing AX app chrome colors. Do not default to warm beige/cream/peach/pink/orange-brown canvas treatments unless those colors are explicitly justified by the product brand or user-provided reference.
 - Don't use \`scrollIntoView\` — it can break the embedded preview. Use other DOM scroll methods.
 
 ## Content guidelines

@@ -47,7 +47,7 @@ jobs:
       # - name: Configure Cachix (always pull; push only with token)
       #   uses: cachix/cachix-action@v15
       #   with:
-      #     name: nexu-open-design
+      #     name: nexu-marketing-ax
       #     # Empty token = read-only mode. Forks/PRs from external
       #     # contributors still get cache hits but cannot push back.
       #     authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}

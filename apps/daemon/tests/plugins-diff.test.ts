@@ -1,7 +1,7 @@
 // Plan §3.AA1 — diffPlugins() pure helper.
 
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginManifest } from '@marketing-ax/contracts';
 import { diffPlugins } from '../src/plugins/diff.js';
 
 const make = (
@@ -20,7 +20,7 @@ const make = (
   installedAt: 1,
   updatedAt: 1,
   manifest: {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     version: '0.1.0',
     title: `Title for ${id}`,

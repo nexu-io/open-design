@@ -49,7 +49,7 @@ describe('decideAutoOpenAfterWrite', () => {
     // file lives at "prototype/App.jsx". The decision must still resolve
     // unambiguously, returning the project-relative file name.
     const result = decideAutoOpenAfterWrite(
-      '/home/bryan/projects/open-design/.od/projects/abc/prototype/App.jsx',
+      '/home/bryan/projects/open-design/.max/projects/abc/prototype/App.jsx',
       [
         { name: 'index.html', path: 'index.html' },
         { name: 'prototype/App.jsx', path: 'prototype/App.jsx' },

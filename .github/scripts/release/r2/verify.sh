@@ -115,7 +115,7 @@ if [ "$ENABLE_MAC" = "true" ]; then
     curl -fsSI "$R2_MAC_ZIP_URL" >/dev/null
   fi
   require_report_file "mac/manifest.json"
-  require_report_file "mac/screenshots/open-design-mac-smoke.png"
+  require_report_file "mac/screenshots/marketing-ax-mac-smoke.png"
   require_report_file "mac/suite-result.json"
   require_report_file "mac/tools-pack.json"
   require_report_file "mac/tools-pack.log"
@@ -138,7 +138,7 @@ if [ "$ENABLE_WIN" = "true" ]; then
     curl -fsSI "$R2_WIN_PORTABLE_ZIP_URL" >/dev/null
   fi
   require_report_file "win/manifest.json"
-  require_report_file "win/screenshots/open-design-win-smoke.png"
+  require_report_file "win/screenshots/marketing-ax-win-smoke.png"
   require_report_file "win/suite-result.json"
   require_report_file "win/tools-pack.json"
   require_report_file "win/vitest.log"

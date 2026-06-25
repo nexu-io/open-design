@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
-import { Button, VisuallyHidden } from '@open-design/components';
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import { Button, VisuallyHidden } from '@marketing-ax/components';
+import { validateBaseUrl } from '@marketing-ax/contracts/api/connectionTest';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
   executionModeToTracking,
   settingsSectionToTracking,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { recordAmrEntry } from '../analytics/amr-attribution';
 import {
@@ -611,7 +611,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+  return agent.id === 'amr' ? 'Marketing AX AMR' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -869,7 +869,7 @@ export function updateAgentCliEnvValue(
 }
 
 const AMR_PROFILE_AGENT_ID = 'amr';
-const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+const AMR_PROFILE_ENV_KEY = 'MARKETING_AX_AMR_PROFILE';
 
 function sameAgentModelChoice(
   left: AgentModelChoice | undefined,
@@ -1367,7 +1367,7 @@ export function SettingsDialog({
     } finally {
       setVersionChecking(false);
     }
-    window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/marketing-ax/marketing-ax/releases', '_blank', 'noopener,noreferrer');
   }, [versionChecking, appVersionInfo, t]);
 
   // Imperative handle for the External MCP section. The dialog footer Save
@@ -6447,7 +6447,7 @@ function MediaProvidersSection({
 // Important: every snippet uses absolute paths to the daemon's current
 // Node-compatible runtime and built cli.js, fetched at runtime. macOS
 // and Linux ship a system /usr/bin/od (octal-dump) that shadows any
-// `od` we might add to PATH, and most Open Design users run from
+// `od` we might add to PATH, and most Marketing AX users run from
 // source where `od` is not installed globally. The installer panel
 // must NOT reference bare `od`.
 type McpClientId =

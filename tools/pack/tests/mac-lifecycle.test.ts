@@ -10,7 +10,7 @@ import type { ToolPackConfig } from "../src/config.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 
 const requestJsonIpc = vi.fn(async () => ({ state: "running" }));
-const resolveAppIpcPath = vi.fn(() => "/tmp/open-design/ipc/test/desktop.sock");
+const resolveAppIpcPath = vi.fn(() => "/tmp/marketing-ax/ipc/test/desktop.sock");
 const createSidecarLaunchEnv = vi.fn(({ extraEnv }: { extraEnv: NodeJS.ProcessEnv }) => extraEnv);
 const spawnLoggedProcess = vi.fn(async ({ env }: { env: NodeJS.ProcessEnv }) => {
   return Object.assign(new EventEmitter(), {
@@ -20,13 +20,13 @@ const spawnLoggedProcess = vi.fn(async ({ env }: { env: NodeJS.ProcessEnv }) => 
   }) as unknown as ChildProcess & { env: NodeJS.ProcessEnv };
 });
 
-vi.mock("@open-design/sidecar", () => ({
+vi.mock("@marketing-ax/sidecar", () => ({
   createSidecarLaunchEnv,
   requestJsonIpc,
   resolveAppIpcPath,
 }));
 
-vi.mock("@open-design/platform", () => ({
+vi.mock("@marketing-ax/platform", () => ({
   collectProcessTreePids: vi.fn(),
   createProcessStampArgs: vi.fn(() => []),
   isProcessAlive: vi.fn(() => true),
@@ -88,7 +88,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Marketing AX");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
@@ -100,7 +100,7 @@ describe("startPackedMacApp", () => {
 
       expect(result.source).toBe("installed");
       expect(result.status?.state).toBe("running");
-      expect(launchEnv?.OD_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
+      expect(launchEnv?.MAX_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain(
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );
@@ -114,7 +114,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Marketing AX");
       const bundledConfigPath = join(paths.installedAppPath, "Contents", "Resources", "open-design-config.json");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
@@ -138,7 +138,7 @@ describe("startPackedMacApp", () => {
 
       expect(result.source).toBe("installed");
       expect(result.status?.state).toBe("running");
-      expect(launchEnv?.OD_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
+      expect(launchEnv?.MAX_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain(
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );
@@ -153,7 +153,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root, { namespace: "release-preview" });
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design Preview");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Marketing AX Preview");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");

@@ -172,7 +172,7 @@ const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip15' },
   { key: 'designFiles.usefulInfoTip5' },
   { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/mHAjSMV6gz' },
-  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
+  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/marketing-ax/marketing-ax' },
   { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/nexudotio' },
 ];
 const TIP_TYPE_MS = 32; // per-character typing speed
@@ -258,7 +258,7 @@ function RotatingTip() {
 }
 
 /**
- * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
+ * Full-panel browser for a project's `.max/projects/<id>/` folder. Mirrors
  * Claude Design's "Design Files" surface: a single-line toolbar (up / refresh
  * / breadcrumbs + actions), semantic sections (Folders, Stylesheets, Scripts,
  * Documents, Images …), hover-revealed row checkbox + menu, a right-side
@@ -1078,7 +1078,7 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'contribute')
                             }
                           >
-                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'Open Design PR'}
+                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'Marketing AX PR'}
                           </button>
                         </div>
                       ) : null}

@@ -1,4 +1,4 @@
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import { validateBaseUrl } from '@marketing-ax/contracts/api/connectionTest';
 import type { ApiProtocol, ProviderModelOption } from '../../types';
 
 export type ByokDraftField = 'api_key' | 'base_url' | 'model';

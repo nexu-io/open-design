@@ -8,7 +8,7 @@ for name in BRANCH_NAME CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN GITHUB_OUTPUT GITHU
   fi
 done
 
-notes_file="$RUNNER_TEMP/open-design-stable-notes.md"
+notes_file="$RUNNER_TEMP/marketing-ax-stable-notes.md"
 public_origin="${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN%/}"
 cat > "$notes_file" <<EOF
 ## Summary

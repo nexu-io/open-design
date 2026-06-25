@@ -14,8 +14,8 @@ import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { buildBrazeInterviewBody } from './braze-cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
-import { requestJsonIpc } from '@open-design/sidecar';
-import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import { requestJsonIpc } from '@marketing-ax/sidecar';
+import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@marketing-ax/sidecar-proto';
 import {
   AGENT_SLUGS,
   isAgentSlug,
@@ -197,7 +197,7 @@ const TEMPLATES_STRING_FLAGS = new Set([
 const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
-// external agents (hermes-agent, openclaw, etc.) can drive Open Design
+// external agents (hermes-agent, openclaw, etc.) can drive Marketing AX
 // automations headlessly without going through the web UI.
 const AUTOMATION_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'prompt', 'prompt-file', 'schedule', 'target',
@@ -377,7 +377,7 @@ function printRootHelp() {
   od plugin publish-repo <folder>
       Create/update the author's GitHub repo for a local plugin folder.
   od plugin open-design-pr <folder>
-      Push a community-catalog branch and open the Open Design PR form.
+      Push a community-catalog branch and open the Marketing AX PR form.
 
   od automation <list|get|create|update|run|runs|pause|resume|delete> [args]
       Drive the Automations surface headlessly. Same store as the UI's
@@ -389,7 +389,7 @@ function printRootHelp() {
       Inspect and edit the memory tree that is injected into agent prompts.
 
   od share <open-design|url> [options]
-      Build localized social-share targets for the Open Design repo or a
+      Build localized social-share targets for the Marketing AX repo or a
       deployed project URL. Use --json for scripted integrations.
 
   od ui <list|show|respond|revoke|prefill> [args]
@@ -405,24 +405,24 @@ function printRootHelp() {
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
-  "$OD_NODE_BIN" "$OD_BIN" tools ...
+  "$MAX_NODE_BIN" "$MAX_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.
 
   od media generate --surface <image|video|audio> --model <id> [opts]
       Generate a media artifact and write it into the active project.
-      Designed to be invoked by a code agent - picks up OD_DAEMON_URL
-      and OD_PROJECT_ID from the env that the daemon injected on spawn.
+      Designed to be invoked by a code agent - picks up MAX_DAEMON_URL
+      and MAX_PROJECT_ID from the env that the daemon injected on spawn.
 
   od mcp [--daemon-url <url>]
       Run a stdio MCP server that proxies project tool calls to a
-      running Open Design daemon. Wire it into a coding agent
+      running Marketing AX daemon. Wire it into a coding agent
       (Claude Code, Cursor, VS Code, Zed, Windsurf) in another repo
-      to pull files from a local Open Design project and create
+      to pull files from a local Marketing AX project and create
       project-scoped artifacts without exporting a zip.
 
 Options:
-  --port <n>       Port to listen on (default: 7456, env: OD_PORT).
-  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: OD_BIND_HOST).
+  --port <n>       Port to listen on (default: 7456, env: MAX_PORT).
+  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: MAX_BIND_HOST).
                    Set to a specific IP (e.g. a Tailscale address) to restrict access
                    to that interface only.
   --no-open        Do not open the browser after start.
@@ -505,14 +505,14 @@ function printResearchHelp() {
   console.log(`Usage:
   od research search --query <text> [--max-sources 5] [--daemon-url <url>]
 
-Runs Tavily-backed shallow research through the local Open Design daemon.
+Runs Tavily-backed shallow research through the local Marketing AX daemon.
 Output is JSON only on stdout:
   { "query": "...", "summary": "...", "sources": [...], "provider": "tavily", "depth": "shallow", "fetchedAt": 0 }
 
 Flags:
   --query        Required search query.
   --max-sources  Optional source cap. Defaults to 5, clamped to Tavily's max.
-  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
+  --daemon-url   Local daemon URL. Defaults to MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,11 +551,11 @@ async function runMediaGenerate(rawArgs) {
   }
 
   const daemonUrl = await cliDaemonUrl(flags);
-  const projectId = flags.project || process.env.OD_PROJECT_ID;
-  const token = process.env.OD_TOOL_TOKEN;
+  const projectId = flags.project || process.env.MAX_PROJECT_ID;
+  const token = process.env.MAX_TOOL_TOKEN;
   if (!projectId && !token) {
     console.error(
-      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+      'project id required. Pass --project <id> or set MAX_PROJECT_ID. The daemon injects this when it spawns the code agent.',
     );
     process.exit(2);
   }
@@ -748,7 +748,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       : `exit code ${stillRunningExitCode} = still running.`;
   process.stderr.write(
     `task ${taskId} still running after ${handoff.elapsed}s. ` +
-      `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
+      `Run \`"$MAX_NODE_BIN" "$MAX_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
       `(${stillRunningHint}).\n`,
   );
   process.exit(stillRunningExitCode);
@@ -772,7 +772,7 @@ function surfaceFetchError(err, daemonUrl) {
     console.error(
       'hint: outbound connect was denied by a sandbox. If you launched ' +
         'this command from a code agent, check the agent\'s sandbox / ' +
-        'network policy. The Open Design daemon itself is unaffected - it can be ' +
+        'network policy. The Marketing AX daemon itself is unaffected - it can be ' +
         'reached from a regular shell.',
     );
   }
@@ -855,12 +855,12 @@ async function cliDaemonBaseUrl(flags) {
 
 function printMediaHelp() {
   console.log(`Usage: od media generate --surface <image|video|audio> --model <id> [opts]
-       "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
+       "$MAX_NODE_BIN" "$MAX_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 
 Required:
   --surface  image | video | audio
   --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
-  --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
+  --project  Project id. Auto-resolved from MAX_PROJECT_ID when invoked by the daemon.
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
@@ -925,14 +925,14 @@ function printMcpHelp() {
   console.log(`Usage: od mcp [--daemon-url <url>]
 
 Run a stdio MCP (Model Context Protocol) server that proxies project
-tool calls to a running Open Design daemon. Wire it into a coding agent
-in another repo so the agent can pull files from a local Open Design
+tool calls to a running Marketing AX daemon. Wire it into a coding agent
+in another repo so the agent can pull files from a local Marketing AX
 project and create project-scoped artifacts without exporting a zip
 every iteration.
 
 Options:
-  --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
-                       order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
+  --daemon-url <url>   Marketing AX daemon HTTP base URL. Resolution
+                       order: this flag, MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH,
                        then http://127.0.0.1:7456. Each new MCP spawn
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
@@ -942,7 +942,7 @@ Options:
                        new port.
 
 Tools exposed:
-  list_projects                  list every Open Design project
+  list_projects                  list every Marketing AX project
   get_active_context             what project/file the user has open right now
   get_artifact([project, entry]) bundle: entry file + every referenced sibling
   get_project([project])         single project metadata
@@ -953,13 +953,13 @@ Tools exposed:
 
 When project is omitted, get_artifact / get_project / get_file /
 search_files / list_files / create_artifact default to the project the
-user has open in Open Design; get_artifact and get_file additionally
+user has open in Marketing AX; get_artifact and get_file additionally
 default to the active file. The response stamps usedActiveContext so
 callers can see which project/file got resolved.
 
 For the copy-paste, per-client snippet (with absolute paths resolved
 for your machine, plus a one-click deeplink for Cursor), open Settings
-→ MCP server in the Open Design app. The daemon must be running locally
+→ MCP server in the Marketing AX app. The daemon must be running locally
 for tool calls to succeed.
 
 To register this server into a coding agent's own config automatically:
@@ -1192,13 +1192,13 @@ async function runMcpInstall(args) {
 function printMcpInstallHelp() {
   console.log(`Usage: od mcp install <agent> [options]
 
-Register Open Design's stdio MCP server into a coding agent's own config.
+Register Marketing AX's stdio MCP server into a coding agent's own config.
 
 Agents:
   ${AGENT_SLUGS.join(' ')}
 
 Options:
-  --uninstall, --remove   Remove the Open Design MCP server instead.
+  --uninstall, --remove   Remove the Marketing AX MCP server instead.
   --print, --dry-run      Show what would change; write nothing.
   --json                  Machine-readable result.
   --name <name>           MCP server name in the agent config (default: open-design).
@@ -1559,7 +1559,7 @@ async function runPluginLogin(rest) {
     console.log(`Usage:
   od plugin login [--host github.com]
 
-Wraps GitHub CLI auth for Open Design registry publishing. The token stays in gh.`);
+Wraps GitHub CLI auth for Marketing AX registry publishing. The token stays in gh.`);
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
@@ -1581,7 +1581,7 @@ async function runPluginWhoami(rest) {
     console.log(`Usage:
   od plugin whoami [--host github.com] [--json]
 
-Shows the GitHub account gh will use for Open Design registry publishing.`);
+Shows the GitHub account gh will use for Marketing AX registry publishing.`);
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
@@ -1767,7 +1767,7 @@ async function runMarketplace(args) {
                                                               Update the marketplace trust tier.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   Marketing AX daemon HTTP base (default MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts).`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -1914,7 +1914,7 @@ Common options:
         console.error('[marketplace login] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
         process.exit(1);
       }
-      console.log(`[marketplace login] authenticating gh for ${host}. Tokens stay in gh, not Open Design.`);
+      console.log(`[marketplace login] authenticating gh for ${host}. Tokens stay in gh, not Marketing AX.`);
       const result = await spawnPassthrough('gh', ['auth', 'login', '--hostname', host, '--web']);
       process.exit(result.code ?? 0);
     }
@@ -3774,7 +3774,7 @@ async function runPluginOpenDesignPr(rest) {
   od plugin open-design-pr <folder> [--host github.com] [--owner github-login-or-fork-owner] [--dry-run] [--json]
 
 Copies a local plugin folder into plugins/community/<name>/ on the author's
-fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`);
+fork of marketing-ax/marketing-ax, pushes a branch, and opens the PR form with --web.`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
   const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
@@ -3829,7 +3829,7 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
     return result;
   };
 
-  await run('fork', 'gh', ['repo', 'fork', 'nexu-io/open-design'], {
+  await run('fork', 'gh', ['repo', 'fork', 'marketing-ax/marketing-ax'], {
     tolerate: (r) => /already exists|existing fork/i.test(`${r.stdout}\n${r.stderr}`),
   });
   await run('clone fork', 'git', [
@@ -3861,7 +3861,7 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
   ].filter(Boolean).join('\n');
   const pr = await run('open PR form', 'gh', [
     'pr', 'create',
-    '--repo', 'nexu-io/open-design',
+    '--repo', 'marketing-ax/marketing-ax',
     '--head', `${target.owner}:${branch}`,
     '--base', 'main',
     '--title', `Add ${title} plugin`,
@@ -4173,7 +4173,7 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
     name: parsed.name,
     version: parsed.range,
     reason,
-    url: `https://github.com/nexu-io/open-design/issues/new?${params.toString()}`,
+    url: `https://github.com/marketing-ax/marketing-ax/issues/new?${params.toString()}`,
     body,
   };
   if (flags.json) {
@@ -4575,7 +4575,7 @@ function printUiHelp() {
                                                      Pre-answer a surface so the run never broadcasts it.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   Marketing AX daemon HTTP base (default MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.`);
 }
 
@@ -4617,14 +4617,14 @@ function printPluginHelp() {
   od plugin publish-repo <folder>         Create/update the author's public
                                           GitHub repo for a plugin folder.
   od plugin open-design-pr <folder>       Push a community-catalog branch and
-                                          open the nexu-io/open-design PR form.
+                                          open the marketing-ax/marketing-ax PR form.
   od plugin publish <folder> --to open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
                                           Prepare a registry submission link.
   od plugin login [--host github.com]      Authenticate registry publishing via gh.
   od plugin whoami [--host github.com]     Show the gh account used for publishing.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   Marketing AX daemon HTTP base (default MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.
 
 Installs support local folders, github:owner/repo refs, HTTPS .tgz archives,
@@ -4637,7 +4637,7 @@ and bare marketplace names resolved through configured registry sources.`);
 // Plan §6 Phase 1 follow-up + Phase 2C: thin CLI wrappers over the
 // existing daemon HTTP endpoints (POST /api/projects, POST /api/runs,
 // GET /api/projects/:id/files, …). The §12.5 walkthrough relies on
-// these so a code agent can drive Open Design end-to-end without
+// these so a code agent can drive Marketing AX end-to-end without
 // hitting `/api/*` directly. Spec §11.7 invariant: every UI feature is
 // reachable via the CLI; we wrap rather than duplicate.
 // ---------------------------------------------------------------------------
@@ -4656,7 +4656,7 @@ Platforms:
   x, linkedin, facebook, reddit, telegram, whatsapp, weibo, line, instagram, xiaohongshu
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
 }
 
@@ -4858,7 +4858,7 @@ async function runProject(args) {
                     Synthesize a resume-conversation handoff prompt.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -5072,7 +5072,7 @@ async function runRun(args) {
   od run info   <runId>                     One run's status.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -5295,7 +5295,7 @@ async function runShell(args) {
                                   working directory and attach to it.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Print the created terminal session as JSON and exit
                        (does not attach).`);
     process.exit(args.length === 0 ? 2 : 0);
@@ -5417,7 +5417,7 @@ async function runFiles(args) {
                                                Print a unified diff.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -5707,7 +5707,7 @@ async function runTemplates(args) {
   od templates delete <id>                          Delete a saved template by id.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -5865,7 +5865,7 @@ async function runConversation(args) {
   od conversation info <conversationId>      Print one conversation.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -5958,7 +5958,7 @@ async function runChat(args) {
                                            message.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6044,7 +6044,7 @@ async function runDaemon(args) {
   od daemon db     vacuum                 Run SQLite VACUUM to reclaim space after deletes.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --headless           No browser auto-open; aliased --no-open.
   --serve-web          Serve the web UI over the existing port (no electron).
   --json               Emit raw JSON.`);
@@ -6076,7 +6076,7 @@ async function runDaemonDb(rest, flags) {
 
 status:
   Prints a structured inventory of the daemon's SQLite backend:
-    - file path (under .od/ by default; OD_DATA_DIR overrides)
+    - file path (under .od/ by default; MAX_DATA_DIR overrides)
     - size on disk (primary + WAL + SHM)
     - schema version (user_version PRAGMA)
     - per-table row counts (system tables excluded)
@@ -6173,8 +6173,8 @@ function formatBytes(n) {
 }
 
 async function runDaemonStart(flags) {
-  const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
-  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
+  const port = Number(flags.port ?? process.env.MAX_PORT ?? 7456);
+  const host = String(flags.host ?? process.env.MAX_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
   const runtime = await startDaemonRuntime({
     host,
@@ -6255,7 +6255,7 @@ async function runAtoms(args) {
   od atoms info <id>        Print metadata + the bundled SKILL.md body.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6397,7 +6397,7 @@ async function runDesignSystemImportLocal(args) {
   od design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
   od design-systems import-local --path <path> [--name <name>] [--json]
 
-Imports a local project directory as an editable Open Design design system.
+Imports a local project directory as an editable Marketing AX design system.
 
   <path>                 Local project directory to scan.
   --path <path>          Path alternative for scripts that prefer named flags.
@@ -6428,7 +6428,7 @@ async function runDesignSystemImportGithub(args) {
   od design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
   od design-systems import-github --url <url> [--branch <branch>] [--json]
 
-Imports a public GitHub repository as an editable Open Design design system.
+Imports a public GitHub repository as an editable Marketing AX design system.
 
   <url>                  Repository root URL, e.g. https://github.com/acme/design-kit.
   --url <url>            URL alternative for scripts that prefer named flags.
@@ -6539,7 +6539,7 @@ async function runDesignSystemImportShadcn(args) {
     console.log(`Usage:
   od design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
 
-Imports a shadcn registry item as an Open Design design system.
+Imports a shadcn registry item as an Marketing AX design system.
 
   <reference>            "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc)
                          or an https URL to a registry-item JSON document.
@@ -6642,7 +6642,7 @@ diagnostics produces.
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
 
   const { DIAGNOSTICS_EXPORT_PATH, DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } =
-    await import('@open-design/diagnostics');
+    await import('@marketing-ax/diagnostics');
   const fs = await import('node:fs/promises');
   const path = await import('node:path');
 
@@ -6831,7 +6831,7 @@ async function runConfig(args) {
   od config unset <key>               Remove a top-level key.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   Marketing AX daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6958,7 +6958,7 @@ function printMemoryHelp() {
       Move an entry node to a different memory bucket while preserving its id.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.`);
+  --daemon-url <url>   Marketing AX daemon HTTP base.`);
 }
 
 function memoryPositionals(values) {
@@ -7376,7 +7376,7 @@ Output:
   can drive the full automation lifecycle headlessly.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.`);
+  --daemon-url <url>   Marketing AX daemon HTTP base.`);
 }
 
 async function runAutomation(args) {
@@ -7997,7 +7997,7 @@ Output:
   can drive the full Braze IAM authoring lifecycle headlessly.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.`);
+  --daemon-url <url>   Marketing AX daemon HTTP base.`);
 }
 
 async function runBraze(args) {

@@ -11,11 +11,11 @@ const env: Env = {
 const objectUploadSecret = 'object-upload-secret';
 
 function makeRequest(body: unknown): Request {
-  return new Request('https://telemetry.open-design.ai/api/langfuse', {
+  return new Request('https://telemetry.marketing-ax.example/api/langfuse', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
+      'X-Marketing-AX-Telemetry': 'langfuse-ingestion-v1',
     },
     body: JSON.stringify(body),
   });
@@ -40,7 +40,7 @@ function makeScopeKv(seed: Record<string, string> = {}) {
 function objectRelayHeaders(): Record<string, string> {
   return {
     'Content-Type': 'application/json',
-    'X-Open-Design-Telemetry': 'object-ingestion-v1',
+    'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
   };
 }
 
@@ -98,7 +98,7 @@ function makeObjectRequest(body: unknown): Request {
     };
   }
   const bodyText = JSON.stringify(requestBody);
-  return new Request('https://telemetry.open-design.ai/api/objects/batch', {
+  return new Request('https://telemetry.marketing-ax.example/api/objects/batch', {
     method: 'POST',
     headers: objectRelayHeaders(),
     body: bodyText,
@@ -106,11 +106,11 @@ function makeObjectRequest(body: unknown): Request {
 }
 
 function makeUnsignedObjectRequest(body: unknown): Request {
-  return new Request('https://telemetry.open-design.ai/api/objects/batch', {
+  return new Request('https://telemetry.marketing-ax.example/api/objects/batch', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Open-Design-Telemetry': 'object-ingestion-v1',
+      'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
     },
     body: JSON.stringify(body),
   });
@@ -123,7 +123,7 @@ function base64(value: string): string {
 describe('telemetry worker', () => {
   it('returns a health response for browser checks', async () => {
     const response = await worker.fetch(
-      new Request('https://telemetry.open-design.ai/api/langfuse'),
+      new Request('https://telemetry.marketing-ax.example/api/langfuse'),
       env,
     );
 
@@ -138,7 +138,7 @@ describe('telemetry worker', () => {
   });
 
   it('reports unconfigured health without exposing secrets', async () => {
-    const response = await worker.fetch(new Request('https://telemetry.open-design.ai/health'), {});
+    const response = await worker.fetch(new Request('https://telemetry.marketing-ax.example/health'), {});
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -151,7 +151,7 @@ describe('telemetry worker', () => {
   });
 
   it('reports object relay unconfigured when the bucket exists without an upload secret', async () => {
-    const response = await worker.fetch(new Request('https://telemetry.open-design.ai/health'), {
+    const response = await worker.fetch(new Request('https://telemetry.marketing-ax.example/health'), {
       TRACE_OBJECT_BUCKET: { put: vi.fn(async () => ({})) },
     });
 
@@ -195,9 +195,9 @@ describe('telemetry worker', () => {
     fetchSpy.mockRestore();
   });
 
-  it('rejects requests without the Open Design client marker', async () => {
+  it('rejects requests without the Marketing AX client marker', async () => {
     const response = await worker.fetch(
-      new Request('https://telemetry.open-design.ai/api/langfuse', {
+      new Request('https://telemetry.marketing-ax.example/api/langfuse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch: [] }),
@@ -301,11 +301,11 @@ describe('telemetry worker', () => {
     const content = 'hello object';
     const scopeKv = makeScopeKv();
     const response = await worker.fetch(
-      new Request('https://telemetry.open-design.ai/api/objects/authorize', {
+      new Request('https://telemetry.marketing-ax.example/api/objects/authorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'object-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
           'CF-Connecting-IP': '203.0.113.10',
         },
         body: JSON.stringify({
@@ -379,11 +379,11 @@ describe('telemetry worker', () => {
     expect(scopeKv.put).toHaveBeenCalledTimes(1);
 
     const response = await worker.fetch(
-      new Request('https://telemetry.open-design.ai/api/objects/authorize', {
+      new Request('https://telemetry.marketing-ax.example/api/objects/authorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'object-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
           'CF-Connecting-IP': '203.0.113.10',
         },
         body: JSON.stringify({
@@ -520,7 +520,7 @@ describe('telemetry worker', () => {
 
   it('rejects object batches without the object marker', async () => {
     const response = await worker.fetch(
-      new Request('https://telemetry.open-design.ai/api/objects/batch', {
+      new Request('https://telemetry.marketing-ax.example/api/objects/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ objects: [] }),
@@ -570,12 +570,12 @@ describe('telemetry worker', () => {
       },
     });
     const response = await worker.fetch(
-      new Request('https://telemetry.open-design.ai/api/objects/batch', {
+      new Request('https://telemetry.marketing-ax.example/api/objects/batch', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'CF-Connecting-IP': '203.0.113.10',
-          'X-Open-Design-Telemetry': 'object-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
         },
         body: unreadableBody,
         duplex: 'half',
@@ -624,10 +624,10 @@ describe('telemetry worker', () => {
 
   it('rejects object batches without upload authority before reading the body', async () => {
     const put = vi.fn(async () => ({}));
-    const request = new Request('https://telemetry.open-design.ai/api/objects/batch', {
+    const request = new Request('https://telemetry.marketing-ax.example/api/objects/batch', {
       method: 'POST',
       headers: {
-        'X-Open-Design-Telemetry': 'object-ingestion-v1',
+        'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
       },
       body: 'object body should not be read',
     });

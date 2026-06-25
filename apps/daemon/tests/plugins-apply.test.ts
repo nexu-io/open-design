@@ -10,7 +10,7 @@ import path from 'node:path';
 import { applyPlugin, MissingInputError } from '../src/plugins/apply.js';
 import { defaultRegistryRoots } from '../src/plugins/registry.js';
 import { TRUSTED_DEFAULT_CAPABILITIES } from '../src/plugins/trust.js';
-import type { ContextItem, InstalledPluginRecord } from '@open-design/contracts';
+import type { ContextItem, InstalledPluginRecord } from '@marketing-ax/contracts';
 
 function pluginFixture(extra: Partial<InstalledPluginRecord> = {}): InstalledPluginRecord {
   return {
@@ -120,7 +120,7 @@ describe('applyPlugin', () => {
   it('does not require a registry roots argument (no FS access at apply time)', () => {
     // Sanity: the function must not reach for the on-disk plugin folder.
     const roots = defaultRegistryRoots();
-    const expectedDataDir = path.resolve(process.env.OD_DATA_DIR ?? path.join(process.cwd(), '.od'));
+    const expectedDataDir = path.resolve(process.env.MAX_DATA_DIR ?? path.join(process.cwd(), '.max'));
     expect(roots.userPluginsRoot).toBe(path.join(expectedDataDir, 'plugins'));
     const result = applyPlugin({ plugin: pluginFixture(), inputs: { topic: 'design' }, registry: REGISTRY });
     expect(result.result.appliedPlugin.pluginId).toBe('sample-plugin');

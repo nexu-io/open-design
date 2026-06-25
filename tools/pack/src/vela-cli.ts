@@ -1,7 +1,7 @@
 import { chmod, cp, mkdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-export const VELA_CLI_BIN_ENV = "OPEN_DESIGN_VELA_CLI_BIN";
+export const VELA_CLI_BIN_ENV = "MARKETING_AX_VELA_CLI_BIN";
 const OPEN_CODE_COMPANION_RELATIVE_PATH = ["libexec", "opencode"] as const;
 
 type VelaCliPlatform = "linux" | "mac" | "win";

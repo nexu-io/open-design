@@ -12,7 +12,7 @@ describe("Windows packaged lifecycle", () => {
       namespace: "release-beta-win",
     })).toEqual([
       "query",
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-beta-win",
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-beta-win",
     ]);
 
     expect(windowsUninstallDisplayVersionRegistryArgs({
@@ -20,7 +20,7 @@ describe("Windows packaged lifecycle", () => {
       version: "1.2.3-beta.4",
     })).toEqual([
       "add",
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-beta-win",
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-beta-win",
       "/v",
       "DisplayVersion",
       "/t",

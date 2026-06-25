@@ -323,7 +323,7 @@ describe('app-config', () => {
           amr: {
             VELA_BIN: '~/bin/vela',
             VELA_API_URL: '  https://custom-amr.example  ',
-            OPEN_DESIGN_AMR_PROFILE: '  local  ',
+            MARKETING_AX_AMR_PROFILE: '  local  ',
             OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
             HOME: 'should-not-persist',
           },
@@ -347,7 +347,7 @@ describe('app-config', () => {
         amr: {
           VELA_BIN: '~/bin/vela',
           VELA_API_URL: 'https://custom-amr.example',
-          OPEN_DESIGN_AMR_PROFILE: 'local',
+          MARKETING_AX_AMR_PROFILE: 'local',
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
@@ -1050,14 +1050,14 @@ describe('app-config origin guard', () => {
   });
 
   it('rejects no-Origin requests that only match configured deployment hosts', async () => {
-    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    process.env.MAX_ALLOWED_ORIGINS = 'https://od.example.com';
     try {
       const res = await httpRequest(`${baseUrl}/api/app-config`, {
         headers: { Host: 'od.example.com' },
       });
       expect(res.status).toBe(403);
     } finally {
-      delete process.env.OD_ALLOWED_ORIGINS;
+      delete process.env.MAX_ALLOWED_ORIGINS;
     }
   });
 

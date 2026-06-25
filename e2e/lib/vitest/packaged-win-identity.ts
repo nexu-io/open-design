@@ -33,10 +33,10 @@ function channelFromNamespace(namespace: string): ReleaseChannelIdentity | null 
 }
 
 function displayNameForChannel(channel: ReleaseChannelIdentity): string {
-  if (channel === "beta") return "Open Design Beta";
-  if (channel === "nightly") return "Open Design Nightly";
-  if (channel === "preview") return "Open Design Preview";
-  return "Open Design";
+  if (channel === "beta") return "Marketing AX Beta";
+  if (channel === "nightly") return "Marketing AX Nightly";
+  if (channel === "preview") return "Marketing AX Preview";
+  return "Marketing AX";
 }
 
 export function resolvePackagedWinInstallIdentity(options: {
@@ -45,6 +45,6 @@ export function resolvePackagedWinInstallIdentity(options: {
 }): PackagedWinInstallIdentity {
   const namespaceToken = sanitizeNamespace(options.namespace);
   const channel = channelFromVersion(options.releaseVersion) ?? channelFromNamespace(options.namespace);
-  const displayName = channel == null ? `Open Design ${namespaceToken}` : displayNameForChannel(channel);
+  const displayName = channel == null ? `Marketing AX ${namespaceToken}` : displayNameForChannel(channel);
   return { displayName, namespaceToken };
 }

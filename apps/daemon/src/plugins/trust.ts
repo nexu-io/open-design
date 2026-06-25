@@ -10,7 +10,7 @@
 //     adds explicit grants (e.g. `mcp:<name>`, `connector:<id>`) onto the
 //     snapshot; we never widen the registry-stored cache here.
 
-import type { InstalledPluginRecord, PluginManifest, TrustTier } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginManifest, TrustTier } from '@marketing-ax/contracts';
 
 export const TRUSTED_DEFAULT_CAPABILITIES: ReadonlyArray<string> = [
   'prompt:inject',

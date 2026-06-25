@@ -377,21 +377,21 @@ describe('readArtifactStubGuardConfigFromEnv', () => {
   });
 
   it('parses recognised mode values', () => {
-    expect(readArtifactStubGuardConfigFromEnv({ OD_ARTIFACT_STUB_GUARD: 'reject' }).mode).toBe('reject');
-    expect(readArtifactStubGuardConfigFromEnv({ OD_ARTIFACT_STUB_GUARD: 'WARN' }).mode).toBe('warn');
-    expect(readArtifactStubGuardConfigFromEnv({ OD_ARTIFACT_STUB_GUARD: 'off' }).mode).toBe('off');
+    expect(readArtifactStubGuardConfigFromEnv({ MAX_ARTIFACT_STUB_GUARD: 'reject' }).mode).toBe('reject');
+    expect(readArtifactStubGuardConfigFromEnv({ MAX_ARTIFACT_STUB_GUARD: 'WARN' }).mode).toBe('warn');
+    expect(readArtifactStubGuardConfigFromEnv({ MAX_ARTIFACT_STUB_GUARD: 'off' }).mode).toBe('off');
   });
 
   it('falls back to default when mode is unrecognised', () => {
-    expect(readArtifactStubGuardConfigFromEnv({ OD_ARTIFACT_STUB_GUARD: 'maybe' }).mode).toBe(
+    expect(readArtifactStubGuardConfigFromEnv({ MAX_ARTIFACT_STUB_GUARD: 'maybe' }).mode).toBe(
       DEFAULT_ARTIFACT_STUB_GUARD_CONFIG.mode,
     );
   });
 
   it('honours numeric overrides within range', () => {
     const config = readArtifactStubGuardConfigFromEnv({
-      OD_ARTIFACT_STUB_GUARD_MIN_RATIO: '0.35',
-      OD_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES: '8192',
+      MAX_ARTIFACT_STUB_GUARD_MIN_RATIO: '0.35',
+      MAX_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES: '8192',
     });
     expect(config.minRetainedRatio).toBeCloseTo(0.35);
     expect(config.minPriorBytes).toBe(8_192);
@@ -399,15 +399,15 @@ describe('readArtifactStubGuardConfigFromEnv', () => {
 
   it('accepts ratio = 1 to reject any shrinkage', () => {
     const config = readArtifactStubGuardConfigFromEnv({
-      OD_ARTIFACT_STUB_GUARD_MIN_RATIO: '1',
+      MAX_ARTIFACT_STUB_GUARD_MIN_RATIO: '1',
     });
     expect(config.minRetainedRatio).toBe(1);
   });
 
   it('rejects out-of-range numeric overrides', () => {
     const config = readArtifactStubGuardConfigFromEnv({
-      OD_ARTIFACT_STUB_GUARD_MIN_RATIO: '5',
-      OD_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES: '-12',
+      MAX_ARTIFACT_STUB_GUARD_MIN_RATIO: '5',
+      MAX_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES: '-12',
     });
     expect(config.minRetainedRatio).toBe(DEFAULT_ARTIFACT_STUB_GUARD_CONFIG.minRetainedRatio);
     expect(config.minPriorBytes).toBe(DEFAULT_ARTIFACT_STUB_GUARD_CONFIG.minPriorBytes);

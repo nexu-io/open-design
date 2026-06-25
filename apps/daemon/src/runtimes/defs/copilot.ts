@@ -75,6 +75,6 @@ export const copilotAgentDef = {
     // (issue #2467: "GitHub Copilot agent getting stuck after 10 mins
     // and few seconds"). 30 minutes gives the heavy turns room to land
     // while still bounding genuine hangs; operators can override via
-    // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` if they want it tighter.
+    // `MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS` if they want it tighter.
     inactivityTimeoutMs: 30 * 60 * 1000,
 } satisfies RuntimeAgentDef;

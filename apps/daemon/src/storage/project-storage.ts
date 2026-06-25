@@ -20,7 +20,7 @@
 //     can lock the interface contract.
 //
 // The daemon's existing project routes don't yet route through this
-// adapter — that's an opt-in flag away (`OD_PROJECT_STORAGE=s3`).
+// adapter — that's an opt-in flag away (`MAX_PROJECT_STORAGE=s3`).
 // The substrate slice keeps the call sites unchanged so a wrong
 // adapter never silently corrupts user data on roll-out.
 
@@ -66,7 +66,7 @@ export class StorageError extends Error {
 }
 
 /**
- * v1 default — backed by the daemon's existing `<dataDir>/.od/projects/`
+ * v1 default — backed by the daemon's existing `<dataDir>/.max/projects/`
  * filesystem layout. Pure pass-through to fs/promises with the
  * traversal guard the legacy `projects.ts` helpers already enforce.
  */
@@ -188,8 +188,8 @@ export interface S3ProjectStorageOptions {
   // S3-compatible endpoint URL (Aliyun OSS, Tencent COS, Huawei OBS,
   // MinIO). Omit for AWS S3.
   endpoint?: string;
-  // AWS access credentials. Read from OD_S3_ACCESS_KEY_ID /
-  // OD_S3_SECRET_ACCESS_KEY by resolveProjectStorage(); the test
+  // AWS access credentials. Read from MAX_S3_ACCESS_KEY_ID /
+  // MAX_S3_SECRET_ACCESS_KEY by resolveProjectStorage(); the test
   // harness can pass them directly.
   credentials: SigV4Credentials;
   // Pluggable fetch for tests. Defaults to globalThis.fetch.
@@ -398,7 +398,7 @@ async function safeText(res: Response): Promise<string> {
 
 /**
  * Resolve the daemon-wide project storage adapter from environment.
- * Default is local-disk; setting OD_PROJECT_STORAGE=s3 pulls the
+ * Default is local-disk; setting MAX_PROJECT_STORAGE=s3 pulls the
  * stub above (and will pull the real impl once it lands).
  */
 export function resolveProjectStorage(opts: {
@@ -406,22 +406,22 @@ export function resolveProjectStorage(opts: {
   env?: Record<string, string | undefined>;
 }): ProjectStorage {
   const env = opts.env ?? process.env;
-  const kind = (env.OD_PROJECT_STORAGE ?? 'local').trim().toLowerCase();
+  const kind = (env.MAX_PROJECT_STORAGE ?? 'local').trim().toLowerCase();
   if (kind === 's3') {
     // Read AWS creds from the OD-specific knobs first, then fall
     // back to the standard AWS_* env vars so existing AWS toolchain
     // setups (`aws configure` exporters, IAM-role pods) drop in
     // without renaming.
-    const accessKeyId     = env.OD_S3_ACCESS_KEY_ID     ?? env.AWS_ACCESS_KEY_ID     ?? '';
-    const secretAccessKey = env.OD_S3_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY ?? '';
-    const sessionToken    = env.OD_S3_SESSION_TOKEN     ?? env.AWS_SESSION_TOKEN;
+    const accessKeyId     = env.MAX_S3_ACCESS_KEY_ID     ?? env.AWS_ACCESS_KEY_ID     ?? '';
+    const secretAccessKey = env.MAX_S3_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY ?? '';
+    const sessionToken    = env.MAX_S3_SESSION_TOKEN     ?? env.AWS_SESSION_TOKEN;
     const credentials: SigV4Credentials = { accessKeyId, secretAccessKey };
     if (sessionToken) credentials.sessionToken = sessionToken;
     return new S3ProjectStorage({
-      bucket:   env.OD_S3_BUCKET ?? '',
-      region:   env.OD_S3_REGION ?? env.AWS_REGION ?? '',
-      ...(env.OD_S3_PREFIX   ? { prefix:   env.OD_S3_PREFIX }   : {}),
-      ...(env.OD_S3_ENDPOINT ? { endpoint: env.OD_S3_ENDPOINT } : {}),
+      bucket:   env.MAX_S3_BUCKET ?? '',
+      region:   env.MAX_S3_REGION ?? env.AWS_REGION ?? '',
+      ...(env.MAX_S3_PREFIX   ? { prefix:   env.MAX_S3_PREFIX }   : {}),
+      ...(env.MAX_S3_ENDPOINT ? { endpoint: env.MAX_S3_ENDPOINT } : {}),
       credentials,
     });
   }

@@ -691,7 +691,7 @@ test('cursor stream emits partial text once and usage events', () => {
     '\n' +
     JSON.stringify({
       type: 'assistant',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'OD_OK' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'MAX_OK' }] },
     }) +
     '\n' +
     JSON.stringify({

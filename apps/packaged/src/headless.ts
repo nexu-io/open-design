@@ -5,15 +5,15 @@ import { fileURLToPath } from "node:url";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   normalizeDesktopSidecarMessage,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@marketing-ax/sidecar";
 
 import { PACKAGED_NAMESPACE_ENV, type PackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
@@ -24,7 +24,7 @@ import { startPackagedSidecars } from "./sidecars.js";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 function resolveHeadlessNamespaceBaseRoot(): string {
-  const odDataDir = process.env.OD_DATA_DIR;
+  const odDataDir = process.env.MAX_DATA_DIR;
   if (odDataDir != null && odDataDir.length > 0) {
     return join(resolve(odDataDir.replace(/^~/, homedir())), "namespaces");
   }
@@ -37,7 +37,7 @@ function resolveHeadlessNamespaceBaseRoot(): string {
 }
 
 function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
-  const value = process.env.OPEN_DESIGN_AMR_PROFILE?.trim();
+  const value = process.env.MARKETING_AX_AMR_PROFILE?.trim();
   if (value == null || value.length === 0) return null;
   if (value === "prod" || value === "test" || value === "local") return value;
   throw new Error(`unsupported packaged AMR profile: ${value}`);
@@ -45,17 +45,17 @@ function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
 
 function resolveHeadlessConfig(): PackagedConfig {
   const namespace =
-    OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
+    MARKETING_AX_SIDECAR_CONTRACT.normalizeNamespace(
       process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
     );
 
   const namespaceBaseRoot = resolveHeadlessNamespaceBaseRoot();
 
-  // OD_RESOURCE_ROOT may be set by a launcher script; otherwise default to a
+  // MAX_RESOURCE_ROOT may be set by a launcher script; otherwise default to a
   // sibling open-design/ directory relative to the node_modules that contain
   // this file — the layout written by tools-pack linux headless-install.
   const resourceRoot =
-    process.env.OD_RESOURCE_ROOT ??
+    process.env.MAX_RESOURCE_ROOT ??
     join(__dirname, "..", "..", "..", "open-design");
 
   return {
@@ -67,8 +67,8 @@ function resolveHeadlessConfig(): PackagedConfig {
     namespaceBaseRoot,
     nodeCommand: null,
     resourceRoot,
-    telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
-    updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
+    telemetryRelayUrl: process.env.MARKETING_AX_TELEMETRY_RELAY_URL?.trim() || null,
+    updateMetadataUrl: process.env.MAX_UPDATE_METADATA_URL?.trim() || null,
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
     webSidecarEntry: null,
@@ -82,7 +82,7 @@ function createHeadlessStamp(namespace: string): SidecarStamp {
     app: APP_KEYS.DESKTOP,
     ipc: resolveAppIpcPath({
       app: APP_KEYS.DESKTOP,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace,
     }),
     mode: SIDECAR_MODES.RUNTIME,
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
   });
 
   // Write a headless-specific identity marker so `tools-pack linux stop --headless`
@@ -132,7 +132,7 @@ async function main(): Promise<void> {
     posthogHost: activeConfig.posthogHost,
     // PR #974 round-5 (lefarcen P2): headless packaged mode runs daemon
     // + web only, no Electron, no privileged shell.openPath surface.
-    // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
+    // Pinning MAX_REQUIRE_DESKTOP_AUTH here would arm a gate no client
     // can ever satisfy (no desktop main process to register a secret),
     // so folder import would permanently return DESKTOP_AUTH_PENDING.
     // The Electron entry counterpart in `apps/packaged/src/index.ts`
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
   }
 
   const shutdown = async (): Promise<void> => {
-    process.stdout.write("\n Shutting down Open Design...\n");
+    process.stdout.write("\n Shutting down Marketing AX...\n");
     await ipcServer.close().catch(() => undefined);
     await sidecars.close().catch(() => undefined);
     await identity.close().catch(() => undefined);
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
   });
   await confirmPackagedLauncherRuntime(launcherRuntime);
 
-  process.stdout.write(`\n Open Design is running\n\n`);
+  process.stdout.write(`\n Marketing AX is running\n\n`);
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
   process.stdout.write(` Press Ctrl+C to stop\n\n`);
 

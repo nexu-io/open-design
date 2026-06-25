@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const packageCssImports = new Map([
-  ['@open-design/components/styles.css', join(process.cwd(), '../../packages/components/src/styles.css')],
+  ['@marketing-ax/components/styles.css', join(process.cwd(), '../../packages/components/src/styles.css')],
 ]);
 
 function expandCssFile(filePath: string, seen = new Set<string>()): string {

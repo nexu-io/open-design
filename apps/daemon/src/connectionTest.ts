@@ -33,7 +33,7 @@ import {
   createCommandInvocation,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
-} from '@open-design/platform';
+} from '@marketing-ax/platform';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
@@ -71,11 +71,11 @@ import {
   type ConnectionTestResponse,
   type ParsedBaseUrl,
   type ProviderTestRequest,
-} from '@open-design/contracts/api/connectionTest';
+} from '@marketing-ax/contracts/api/connectionTest';
 import { googleGenerateContentUrl } from './google-models.js';
 import { resolveAmrProfile } from './integrations/vela.js';
 
-export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+export { validateBaseUrl } from '@marketing-ax/contracts/api/connectionTest';
 
 // DNS-aware companion to `validateBaseUrl`. The contracts-side check only
 // inspects the literal hostname string, so a public DNS name pointing at
@@ -196,26 +196,26 @@ export async function assertAndFetchExternalAsset(
 }
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
-// Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
+// Override with MAX_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
 // or distant providers; invalid values fall back to the default.
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
 // CLI boot time is dominated by adapter auth/session restore; the heavy
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
 // run, so 45 s leaves headroom without making a hung child invisible.
-// Override with OD_CONNECTION_TEST_AGENT_TIMEOUT_MS.
+// Override with MAX_CONNECTION_TEST_AGENT_TIMEOUT_MS.
 const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
 const AGENT_STDOUT_DRAIN_MS = 25;
 // Node's `setTimeout` silently clamps any delay above this to ~1 ms
 // (with a TimeoutOverflowWarning), so an override meant to *extend*
-// the budget — e.g. `OD_CONNECTION_TEST_AGENT_TIMEOUT_MS=3000000000` —
+// the budget — e.g. `MAX_CONNECTION_TEST_AGENT_TIMEOUT_MS=3000000000` —
 // would actually make every connection test fail almost immediately.
 // Reject above the cap so the safety timeout cannot be accidentally
 // disarmed by an oversized env value.
 const MAX_CONNECTION_TEST_TIMEOUT_MS = 2_147_483_647;
 
 export function resolveConnectionTestTimeoutMs(
-  key: 'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+  key: 'MAX_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'MAX_CONNECTION_TEST_AGENT_TIMEOUT_MS',
   fallback: number,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
@@ -233,14 +233,14 @@ export function resolveConnectionTestTimeoutMs(
 
 function providerTimeoutMs(): number {
   return resolveConnectionTestTimeoutMs(
-    'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS',
+    'MAX_CONNECTION_TEST_PROVIDER_TIMEOUT_MS',
     DEFAULT_PROVIDER_TIMEOUT_MS,
   );
 }
 
 function agentTimeoutMs(): number {
   return resolveConnectionTestTimeoutMs(
-    'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+    'MAX_CONNECTION_TEST_AGENT_TIMEOUT_MS',
     DEFAULT_AGENT_TIMEOUT_MS,
   );
 }
@@ -615,7 +615,7 @@ function codexExecutableGuidance(
   ) {
     return '';
   }
-  return ` Configured Codex path failed: ${configuredOverridePath}. Open Design also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+  return ` Configured Codex path failed: ${configuredOverridePath}. Marketing AX also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
 }
 
 function codexExecutableFallbackSuccessDetail(
@@ -1103,7 +1103,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
           authorization: `Bearer ${apiKey}`,
           ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
             'HTTP-Referer': 'https://opendesign.dev',
-            'X-Title': 'Open Design',
+            'X-Title': 'Marketing AX',
           } : {}),
         },
         body: {
@@ -1810,7 +1810,7 @@ function runQuietCommand(command: string, args: string[], cwd: string): Promise<
 async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> {
   await fsp.writeFile(
     path.join(tempDir, 'README.md'),
-    'Open Design OpenCode connection test.\n',
+    'Marketing AX OpenCode connection test.\n',
     'utf8',
   );
   try {

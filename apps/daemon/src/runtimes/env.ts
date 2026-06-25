@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@marketing-ax/platform';
 import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
@@ -29,7 +29,7 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 //
 // Auth/config precedence for Local CLI launches:
 //
-// 1. Provider BYOK is separate. It is used by Open Design's direct provider
+// 1. Provider BYOK is separate. It is used by Marketing AX's direct provider
 //    API calls and is not automatically mapped into Local CLI launches.
 // 2. The inherited launch env represents the user's local CLI setup
 //    (OAuth/login files, CLI homes, or user-owned API-key env). Preserve it
@@ -51,7 +51,7 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 function amrAnalyticsIdentityEnv(
   env: NodeJS.ProcessEnv,
 ): Record<string, string> {
-  const dataDir = env.OD_DATA_DIR?.trim();
+  const dataDir = env.MAX_DATA_DIR?.trim();
   if (!dataDir) return {};
   let cfg: { telemetry?: { metrics?: boolean }; installationId?: string | null };
   try {
@@ -65,7 +65,7 @@ function amrAnalyticsIdentityEnv(
   if (typeof installationId !== 'string' || installationId.length === 0) {
     return {};
   }
-  return { OD_INSTALLATION_ID: installationId };
+  return { MAX_INSTALLATION_ID: installationId };
 }
 
 export function spawnEnvForAgent(
@@ -99,16 +99,16 @@ export function spawnEnvForAgent(
       const home = os.homedir();
       if (home) env.HOME = home;
     }
-    // Identify Open Design as the host so the vela CLI tags its command +
+    // Identify Marketing AX as the host so the vela CLI tags its command +
     // model_request analytics with source=open_design (revenue attribution).
     // Not PII (unlike the installation id above), so set it regardless of the
     // telemetry-consent gate that amrAnalyticsIdentityEnv applies.
     if (!env.AMR_CLIENT_SOURCE?.trim()) {
       env.AMR_CLIENT_SOURCE = 'open_design';
     }
-    if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
+    if (!env.OPENCODE_TEST_HOME?.trim() && env.MAX_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
-        env.OD_DATA_DIR.trim(),
+        env.MAX_DATA_DIR.trim(),
         'amr',
         'opencode-home',
       );
@@ -158,17 +158,17 @@ export function openDesignAmrTraceEnv(input: {
 
   const runId = input.runId.trim();
   if (!runId) {
-    throw new Error('OPEN_DESIGN_RUN_ID requires a non-empty run id for AMR runs');
+    throw new Error('MARKETING_AX_RUN_ID requires a non-empty run id for AMR runs');
   }
   if (!Number.isFinite(input.runAttempt) || input.runAttempt < 0) {
-    throw new Error('OPEN_DESIGN_RUN_ATTEMPT requires a non-negative finite attempt index');
+    throw new Error('MARKETING_AX_RUN_ATTEMPT requires a non-negative finite attempt index');
   }
 
   const conversationId = input.conversationId?.trim();
   return {
-    OPEN_DESIGN_RUN_ID: runId,
-    OPEN_DESIGN_RUN_ATTEMPT: String(Math.floor(input.runAttempt)),
-    ...(conversationId ? { OPEN_DESIGN_SESSION_ID: conversationId } : {}),
+    MARKETING_AX_RUN_ID: runId,
+    MARKETING_AX_RUN_ATTEMPT: String(Math.floor(input.runAttempt)),
+    ...(conversationId ? { MARKETING_AX_SESSION_ID: conversationId } : {}),
   };
 }
 
@@ -176,7 +176,7 @@ function sandboxRuntimeConfigForBaseEnv(
   baseEnv: RuntimeEnvMap,
 ): SandboxRuntimeConfig | null {
   if (!isSandboxModeEnabled(baseEnv)) return null;
-  const dataDir = baseEnv.OD_DATA_DIR?.trim();
+  const dataDir = baseEnv.MAX_DATA_DIR?.trim();
   if (!dataDir) return null;
   const resolvedDataDir = resolveProjectRelativePath(
     dataDir,

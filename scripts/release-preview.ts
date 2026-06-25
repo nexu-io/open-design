@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 const execFile = promisify(execFileCallback);
 
 const stableVersionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
-const stableTagPattern = /^open-design-v(\d+\.\d+\.\d+)$/;
+const stableTagPattern = /^marketing-ax-v(\d+\.\d+\.\d+)$/;
 const previewReleaseBranchPattern = /^preview\/v(\d+\.\d+\.\d+)$/;
 const previewVersionPattern = /^(\d+\.\d+\.\d+)-preview\.(\d+)$/;
 
@@ -247,7 +247,7 @@ if (branchVersion !== packagedVersion) {
   fail(`preview branch version ${branchVersion} must match apps/packaged/package.json version ${packagedVersion}`);
 }
 
-const tags = await fetchGitTags("open-design-v*");
+const tags = await fetchGitTags("marketing-ax-v*");
 let latestStable: ParsedStableVersion | null = null;
 for (const tag of tags) {
   const stableVersion = extractStableVersionFromTag(tag);
@@ -262,11 +262,11 @@ if (latestStable != null && compareVersions(packagedParsed, latestStable.parsed)
   fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
 }
 
-const metadataUrl = process.env.OPEN_DESIGN_PREVIEW_METADATA_URL;
+const metadataUrl = process.env.MARKETING_AX_PREVIEW_METADATA_URL;
 if (metadataUrl == null || metadataUrl.length === 0) {
-  fail("OPEN_DESIGN_PREVIEW_METADATA_URL is required");
+  fail("MARKETING_AX_PREVIEW_METADATA_URL is required");
 }
-validateHttpsUrl(metadataUrl, "OPEN_DESIGN_PREVIEW_METADATA_URL");
+validateHttpsUrl(metadataUrl, "MARKETING_AX_PREVIEW_METADATA_URL");
 
 let previewNumber = 1;
 let latestPreview: ParsedPreviewVersion | null = null;
@@ -304,7 +304,7 @@ if (latestPreview != null) {
 
 const previewVersion = `${packagedVersion}-preview.${previewNumber}`;
 const commit = process.env.GITHUB_SHA ?? "";
-const releaseName = `Open Design Preview ${previewVersion}`;
+const releaseName = `Marketing AX Preview ${previewVersion}`;
 
 console.log("[release-preview] channel: preview");
 console.log(`[release-preview] base version: ${packagedVersion}`);

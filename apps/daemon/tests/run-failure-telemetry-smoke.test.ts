@@ -80,9 +80,9 @@ describe('run failure telemetry smoke', () => {
     process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
     process.env.LANGFUSE_SECRET_KEY = 'sk-test';
     process.env.LANGFUSE_BASE_URL = ingestion.url;
-    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
     delete process.env.POSTHOG_KEY;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     await putConfig(started.url, {
@@ -197,7 +197,7 @@ describe('run failure telemetry smoke', () => {
     process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
     process.env.LANGFUSE_SECRET_KEY = 'sk-test';
     process.env.LANGFUSE_BASE_URL = ingestion.url;
-    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
     delete process.env.POSTHOG_KEY;
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
@@ -228,7 +228,7 @@ describe('run failure telemetry smoke', () => {
     process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
     process.env.LANGFUSE_SECRET_KEY = 'sk-test';
     process.env.LANGFUSE_BASE_URL = ingestion.url;
-    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
     delete process.env.POSTHOG_KEY;
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
@@ -261,9 +261,9 @@ function snapshotEnv(): Record<string, string | undefined> {
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
-    OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
+    MARKETING_AX_TELEMETRY_RELAY_URL: process.env.MARKETING_AX_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
-    OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
+    MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
   };
 }
 

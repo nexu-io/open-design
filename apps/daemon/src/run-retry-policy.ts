@@ -5,7 +5,7 @@ import type {
   TrackingRunRetryStrategy,
   TrackingRunRetrySuppressedReason,
   TrackingRunResult,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 
 // Counts automatic same-run retry attempts, not the initial run. Issue #3543
 // scopes the first implementation to at most one automatic same-run retry, so

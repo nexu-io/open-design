@@ -7,7 +7,7 @@ describe('userFacingAgentLabel', () => {
     expect(
       userFacingAgentLabel(
         'claude',
-        '/Applications/Open Design Beta.app/Contents/Resources/open-design/bin/claude',
+        '/Applications/Marketing AX Beta.app/Contents/Resources/open-design/bin/claude',
       ),
     ).toBe('claude');
   });
@@ -16,7 +16,7 @@ describe('userFacingAgentLabel', () => {
     expect(
       userFacingAgentLabel(
         null,
-        '/Applications/Open Design Beta.app/Contents/Resources/open-design/bin/vela',
+        '/Applications/Marketing AX Beta.app/Contents/Resources/open-design/bin/vela',
       ),
     ).toBe('vela');
   });
@@ -25,7 +25,7 @@ describe('userFacingAgentLabel', () => {
     expect(
       userFacingAgentLabel(
         '',
-        'C:\\Program Files\\Open Design\\resources\\open-design\\bin\\unknown.exe',
+        'C:\\Program Files\\Marketing AX\\resources\\open-design\\bin\\unknown.exe',
       ),
     ).toBe('unknown');
   });

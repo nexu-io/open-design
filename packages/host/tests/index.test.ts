@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  OPEN_DESIGN_HOST_GLOBAL,
-  OPEN_DESIGN_HOST_VERSION,
+  MARKETING_AX_HOST_GLOBAL,
+  MARKETING_AX_HOST_VERSION,
   clearHostBrowserData,
   checkHostUpdater,
   detectOpenDesignHostClientType,
@@ -50,10 +50,10 @@ describe("open-design host contract", () => {
       ...pkg.devDependencies,
       ...pkg.optionalDependencies,
       ...pkg.peerDependencies,
-    }).not.toHaveProperty("@open-design/contracts");
+    }).not.toHaveProperty("@marketing-ax/contracts");
 
     const offenders = filesUnder(join(hostRoot, "src")).filter((path) =>
-      readFileSync(path, "utf8").includes("@open-design/contracts"),
+      readFileSync(path, "utf8").includes("@marketing-ax/contracts"),
     );
     expect(offenders).toEqual([]);
   });
@@ -61,11 +61,11 @@ describe("open-design host contract", () => {
   it("recognizes the canonical bridge shape", () => {
     const host = createMockOpenDesignHost();
     expect(isOpenDesignHostBridge(host)).toBe(true);
-    expect(host.version).toBe(OPEN_DESIGN_HOST_VERSION);
+    expect(host.version).toBe(MARKETING_AX_HOST_VERSION);
   });
 
   it("rejects legacy or incomplete bridge shapes", () => {
-    expect(isOpenDesignHostBridge({ version: OPEN_DESIGN_HOST_VERSION })).toBe(false);
+    expect(isOpenDesignHostBridge({ version: MARKETING_AX_HOST_VERSION })).toBe(false);
     expect(isOpenDesignHostBridge({ ...createMockOpenDesignHost(), version: 1 })).toBe(false);
     expect(isOpenDesignHostBridge({
       ...createMockOpenDesignHost(),
@@ -87,7 +87,7 @@ describe("open-design host contract", () => {
 
   it("reads the bridge through the package-owned global accessor", () => {
     const scope: Record<string, unknown> = {};
-    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost();
+    scope[MARKETING_AX_HOST_GLOBAL] = createMockOpenDesignHost();
     expect(getOpenDesignHost(scope)?.client.type).toBe("desktop");
     expect(isOpenDesignHostAvailable(scope)).toBe(true);
     expect(detectOpenDesignHostClientType(scope)).toBe("desktop");
@@ -101,7 +101,7 @@ describe("open-design host contract", () => {
 
   it("wraps host action throws into structured failures", async () => {
     const scope: Record<string, unknown> = {};
-    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+    scope[MARKETING_AX_HOST_GLOBAL] = createMockOpenDesignHost({
       shell: {
         openPath: vi.fn(async () => {
           throw new Error("failed");
@@ -207,7 +207,7 @@ describe("open-design host contract", () => {
     const print = vi.fn(async () => ({ ok: true as const }));
     const setVisible = vi.fn();
     const scope: Record<string, unknown> = {};
-    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+    scope[MARKETING_AX_HOST_GLOBAL] = createMockOpenDesignHost({
       browser: { clearData },
       shell: { openExternal, openPath },
       project: { pickAndImport },
@@ -245,7 +245,7 @@ describe("open-design host contract", () => {
       },
       channel: "beta" as const,
       currentVersion: "1.0.0-beta.0",
-      downloadPath: "/tmp/Open Design Beta.dmg",
+      downloadPath: "/tmp/Marketing AX Beta.dmg",
       enabled: true,
       mode: "package-launcher" as const,
       platform: "darwin",
@@ -259,7 +259,7 @@ describe("open-design host contract", () => {
     const unsubscribe = vi.fn();
     const subscribe = vi.fn(() => unsubscribe);
     const scope: Record<string, unknown> = {};
-    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+    scope[MARKETING_AX_HOST_GLOBAL] = createMockOpenDesignHost({
       updater: { check, install, quit, status: statusFn, subscribe },
     });
 
@@ -290,7 +290,7 @@ describe("open-design host contract", () => {
 
   it("wraps updater action throws into structured failures", async () => {
     const scope: Record<string, unknown> = {};
-    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+    scope[MARKETING_AX_HOST_GLOBAL] = createMockOpenDesignHost({
       updater: {
         check: vi.fn(async () => {
           throw new Error("updater failed");

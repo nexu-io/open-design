@@ -27,7 +27,7 @@ daemon/client.
 
 Local development can bypass the relay by setting direct `LANGFUSE_PUBLIC_KEY`
 and `LANGFUSE_SECRET_KEY` environment variables for the daemon. Packaged
-release config should use only `OPEN_DESIGN_TELEMETRY_RELAY_URL`.
+release config should use only `MARKETING_AX_TELEMETRY_RELAY_URL`.
 
 ## Abuse controls
 
@@ -85,7 +85,7 @@ TRACE_OBJECT_BATCH_MAX_BYTES = "20971520"
 pnpm --filter @open-design/telemetry-worker deploy
 ```
 
-After deploy, set the repository variable `OPEN_DESIGN_TELEMETRY_RELAY_URL` to
+After deploy, set the repository variable `MARKETING_AX_TELEMETRY_RELAY_URL` to
 the Worker route, for example:
 
 ```text

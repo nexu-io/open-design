@@ -20,7 +20,7 @@ concurrency:
 jobs:
   refresh:
     name: Refresh contributors wall cache bust
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
 
     steps:
@@ -38,29 +38,29 @@ jobs:
           fi
           perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" "${README_FILES[@]}"
 
-      - name: Generate Open Design bot token
-        id: open-design-bot-token
+      - name: Generate Marketing AX bot token
+        id: marketing-ax-bot-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
-          repositories: open-design
+          repositories: marketing-ax
           permission-contents: write
           permission-pull-requests: write
 
       - name: Create refresh pull request
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ steps.open-design-bot-token.outputs.token }}
+          token: ${{ steps.marketing-ax-bot-token.outputs.token }}
           add-paths: |
             README.md
             docs/i18n/README.*.md
           branch: automation/refresh-contributors-wall
           delete-branch: true
           commit-message: 'docs(readme): refresh contributors wall'
-          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
-          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          author: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
+          committer: 'marketing-ax-bot[bot] <282769551+marketing-ax-bot[bot]@users.noreply.github.com>'
           title: 'docs(readme): refresh contributors wall'
           body: |
             Refreshes the contributors wall cache bust date in README files.

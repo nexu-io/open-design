@@ -16,7 +16,7 @@ type StartedServer = {
 describe('POST /api/runs headless fallbacks', () => {
   let started: StartedServer | null = null;
   const oldPath = process.env.PATH;
-  const oldAgentHome = process.env.OD_AGENT_HOME;
+  const oldAgentHome = process.env.MAX_AGENT_HOME;
 
   afterEach(async () => {
     await Promise.resolve(started?.shutdown?.());
@@ -26,8 +26,8 @@ describe('POST /api/runs headless fallbacks', () => {
     started = null;
     if (oldPath === undefined) delete process.env.PATH;
     else process.env.PATH = oldPath;
-    if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
-    else process.env.OD_AGENT_HOME = oldAgentHome;
+    if (oldAgentHome === undefined) delete process.env.MAX_AGENT_HOME;
+    else process.env.MAX_AGENT_HOME = oldAgentHome;
   });
 
   it('binds omitted conversationId to the seeded project conversation', async () => {
@@ -70,7 +70,7 @@ describe('POST /api/runs headless fallbacks', () => {
     try {
       const opencodeBin = await writeFakeOpencode(binDir);
       process.env.PATH = '';
-      process.env.OD_AGENT_HOME = emptyAgentHome;
+      process.env.MAX_AGENT_HOME = emptyAgentHome;
 
       const configResponse = await fetch(`${started.url}/api/app-config`, {
         method: 'PUT',

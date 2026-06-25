@@ -1,6 +1,6 @@
 // Plugin doctor. Surfaces pre-apply lint diagnostics:
 //
-//   - Validates the manifest using @open-design/plugin-runtime's validateSafe.
+//   - Validates the manifest using @marketing-ax/plugin-runtime's validateSafe.
 //   - Cross-checks atom ids against the FIRST_PARTY_ATOMS catalog (warns on
 //     planned atoms, errors on unknown atoms).
 //   - Re-resolves context against the live registry and reports any refs that
@@ -14,8 +14,8 @@
 // a richer report (severity / kind enum) which we'll layer in once Phase 4
 // adds the diagnostics endpoint.
 
-import { manifestSourceDigest, resolveContext, validateSafe, type RegistryView } from '@open-design/plugin-runtime';
-import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
+import { manifestSourceDigest, resolveContext, validateSafe, type RegistryView } from '@marketing-ax/plugin-runtime';
+import type { InstalledPluginRecord, PluginManifest } from '@marketing-ax/contracts';
 import type Database from 'better-sqlite3';
 import { findAtom, isImplementedAtom, isKnownAtom } from './atoms.js';
 import { validateConnectorRefs, type ConnectorProbe } from './connector-gate.js';

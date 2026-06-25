@@ -12,8 +12,8 @@ import {
   deriveConfigureGlobals,
   projectKindToTracking,
   fidelityToTracking,
-} from '@open-design/contracts/analytics';
-import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
+} from '@marketing-ax/contracts/analytics';
+import type { AmrModelsResponse, ChatSessionMode } from '@marketing-ax/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
@@ -97,7 +97,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from './state/projects';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@marketing-ax/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -118,7 +118,7 @@ import type {
 
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const AMR_AGENT_ID = 'amr';
-const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+const AMR_PROFILE_ENV_KEY = 'MARKETING_AX_AMR_PROFILE';
 
 export function shouldSyncMediaProvidersOnSave(
   mediaProviders: AppConfig['mediaProviders'],
@@ -339,7 +339,7 @@ function AppInner() {
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
-  // Loading Open Design…</div>`) is itself >MIN_VISIBLE_TEXT and would
+  // Loading Marketing AX…</div>`) is itself >MIN_VISIBLE_TEXT and would
   // otherwise be mistaken for a real mount. Survives subsequent render
   // crashes — once App has mounted at least once, it's no longer a white
   // screen (subsequent failures show up as `$exception`).
@@ -1378,7 +1378,7 @@ function AppInner() {
       // uploading staged Home attachments. `replaceProjectWorkingDir` changes
       // `metadata.baseDir`, so the project starts reading from the external
       // folder. If we uploaded first, the staged files would land in the
-      // temporary managed `.od/projects/<id>` root and then silently vanish
+      // temporary managed `.max/projects/<id>` root and then silently vanish
       // from Design Files and the first auto-send context once the working
       // dir flips. Doing the handoff first means the initial upload lands in
       // the final tree.
@@ -1397,7 +1397,7 @@ function AppInner() {
           // handoff fails AFTER the project already exists. Do NOT swallow
           // this and do NOT proceed: uploading staged attachments or
           // auto-sending the first message would target the managed
-          // `.od/projects/<id>` root the user did not choose. Mark the
+          // `.max/projects/<id>` root the user did not choose. Mark the
           // handoff as failed so the upload + auto-send branches below are
           // skipped, then surface a create-time error so the user can
           // re-pick the working directory from inside the project.

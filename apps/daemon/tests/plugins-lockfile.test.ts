@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import {
   lockEntryFromInstalled,
   readPluginLockfile,
@@ -14,12 +14,12 @@ const plugin: InstalledPluginRecord = {
   title: 'Registry starter',
   version: '0.1.0',
   sourceKind: 'github',
-  source: 'github:nexu-io/open-design@main/plugins/community/registry-starter',
+  source: 'github:marketing-ax/marketing-ax@main/plugins/community/registry-starter',
   sourceMarketplaceId: 'community',
   sourceMarketplaceEntryName: 'community/registry-starter',
   sourceMarketplaceEntryVersion: '0.1.0',
   marketplaceTrust: 'restricted',
-  resolvedSource: 'github:nexu-io/open-design@main/plugins/community/registry-starter',
+  resolvedSource: 'github:marketing-ax/marketing-ax@main/plugins/community/registry-starter',
   resolvedRef: 'main',
   manifestDigest: 'sha256:manifest',
   archiveIntegrity: 'sha256:archive',
@@ -52,7 +52,7 @@ describe('plugin lockfile', () => {
   it('writes stable .od/od-plugin-lock.json content', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-lock-'));
     try {
-      const filePath = path.join(dir, '.od', 'od-plugin-lock.json');
+      const filePath = path.join(dir, '.max', 'od-plugin-lock.json');
       await upsertPluginLockfileEntry(filePath, plugin, 123);
       expect(await readPluginLockfile(filePath)).toMatchObject({
         schemaVersion: 1,

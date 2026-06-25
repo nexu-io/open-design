@@ -178,8 +178,8 @@ Required input:
   --config <path>              JSON config file. CLI flags override config values.
 
 Run/project options:
-  --daemon <url>               Daemon base URL. Falls back to OD_DAEMON_URL,
-                               OD_PORT, then tools-dev status discovery.
+  --daemon <url>               Daemon base URL. Falls back to MAX_DAEMON_URL,
+                               MAX_PORT, then tools-dev status discovery.
   --agent <id>                 Agent id for /api/runs. Default: daemon's saved
                                app config agentId, then ${FALLBACK_AGENT_ID}.
   --skill <id|null>            Skill/design-template id to bind to each project.
@@ -416,8 +416,8 @@ function extractDaemonUrlFromStatusOutput(stdout: string): string | null {
 
 async function resolveDaemonUrl(config: BatchConfig): Promise<string> {
   if (config.daemonUrl) return config.daemonUrl;
-  if (process.env.OD_DAEMON_URL) return process.env.OD_DAEMON_URL;
-  if (isDiscoverablePort(process.env.OD_PORT)) return `http://127.0.0.1:${process.env.OD_PORT}`;
+  if (process.env.MAX_DAEMON_URL) return process.env.MAX_DAEMON_URL;
+  if (isDiscoverablePort(process.env.MAX_PORT)) return `http://127.0.0.1:${process.env.MAX_PORT}`;
   const discovered = await discoverDaemonUrlFromToolsDev();
   if (discovered) return discovered;
   throw new Error('cannot determine daemon URL; start `pnpm tools-dev` or pass --daemon <url>');
@@ -710,8 +710,8 @@ async function main(): Promise<void> {
     const designSystems = resolveDryRunDesignSystems(config);
     const daemonUrl =
       config.daemonUrl ??
-      process.env.OD_DAEMON_URL ??
-      (isDiscoverablePort(process.env.OD_PORT) ? `http://127.0.0.1:${process.env.OD_PORT}` : '(not resolved in dry-run)');
+      process.env.MAX_DAEMON_URL ??
+      (isDiscoverablePort(process.env.MAX_PORT) ? `http://127.0.0.1:${process.env.MAX_PORT}` : '(not resolved in dry-run)');
 
     console.log(`design-system batch → ${daemonUrl}`);
     console.log(`prompt: ${prompt.slice(0, 120)}${prompt.length > 120 ? '…' : ''}`);

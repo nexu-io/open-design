@@ -1992,7 +1992,7 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function dismissPrivacyDialog(page: Page) {
-  const privacyRegion = page.getByRole('region', { name: /Help us improve Open Design/i });
+  const privacyRegion = page.getByRole('region', { name: /Help us improve Marketing AX/i });
   if (await privacyRegion.isVisible().catch(() => false)) {
     await privacyRegion.getByRole('button', { name: /I get it|not now|got it/i }).click();
     await expect(privacyRegion).toBeHidden();

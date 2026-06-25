@@ -3,7 +3,7 @@
 // The substrate slice for lifting `composeSystemPrompt`'s prompt
 // constants into the bundled atom plugins. The daemon-side helper
 // reads `<bundled-fsPath>/SKILL.md` and strips frontmatter; the
-// pure renderer in @open-design/contracts then assembles the stage
+// pure renderer in @marketing-ax/contracts then assembles the stage
 // prompt block. This test pins both halves of the contract so a
 // future PR that lifts system.ts has zero scaffolding to build.
 
@@ -15,11 +15,11 @@ import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
 import { loadAtomBodies } from '../src/plugins/atom-bodies.js';
-import { renderActiveStageBlock } from '@open-design/contracts';
+import { renderActiveStageBlock } from '@marketing-ax/contracts';
 
 const SAMPLE_MANIFEST = (id: string) =>
   JSON.stringify({
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     title: id,
     version: '0.1.0',

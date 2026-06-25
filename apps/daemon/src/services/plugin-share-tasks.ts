@@ -25,8 +25,8 @@ export interface CreatePluginShareTaskInfo {
 export interface CreatePluginShareTaskStoreDeps {
   randomUUID: typeof randomUUID;
   execCommandViaLoginShell: (command: string, args: string[], opts?: Record<string, unknown>) => Promise<ExecCommandResult>;
-  OD_NODE_BIN: string;
-  OD_BIN: string;
+  MAX_NODE_BIN: string;
+  MAX_BIN: string;
 }
 
 interface ExecCommandResult {
@@ -75,9 +75,9 @@ function pluginShareActionToCli(action: PluginShareAction) {
   }
   return {
     argv: ['plugin', 'open-design-pr'],
-    title: 'Open Design PR',
+    title: 'Marketing AX PR',
     command: 'od plugin open-design-pr',
-    successMessage: 'Opened Open Design PR flow.',
+    successMessage: 'Opened Marketing AX PR flow.',
     failureCode: 'open-design-pr-failed',
   };
 }
@@ -92,7 +92,7 @@ function pluginShareProgressPlan(action: PluginShareAction) {
     ];
   }
   return [
-    'Ensure the Open Design fork exists',
+    'Ensure the Marketing AX fork exists',
     'Clone the fork and prepare a branch',
     'Copy the plugin into plugins/community',
     'Push the branch and open the PR form',
@@ -167,8 +167,8 @@ export function createPluginShareTaskStore(deps: CreatePluginShareTaskStoreDeps)
     appendProgress(task, `$ ${share.command} ${task.path}`);
     for (const step of pluginShareProgressPlan(action)) appendProgress(task, `- ${step}`);
     const result = await deps.execCommandViaLoginShell(
-      deps.OD_NODE_BIN,
-      [deps.OD_BIN, ...share.argv, folder, '--json'],
+      deps.MAX_NODE_BIN,
+      [deps.MAX_BIN, ...share.argv, folder, '--json'],
       { timeout: action === 'publish-github' ? 240_000 : 300_000 },
     );
     let payload: PluginShareCliPayload | null = null;
@@ -194,7 +194,7 @@ export function createPluginShareTaskStore(deps: CreatePluginShareTaskStoreDeps)
     task.status = 'done';
     task.result = {
       message: url
-        ? (action === 'publish-github' ? `Published plugin to ${url}.` : `Opened Open Design PR flow at ${url}.`)
+        ? (action === 'publish-github' ? `Published plugin to ${url}.` : `Opened Marketing AX PR flow at ${url}.`)
         : share.successMessage,
       ...(url ? { url } : {}),
       log: stepLog,

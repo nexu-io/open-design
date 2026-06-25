@@ -513,13 +513,13 @@ describe('ChatComposer /search command', () => {
       'Before answering, your first tool action must be the OD research command for your shell.',
     );
     expect(prompt).toContain(
-      'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
+      'POSIX: "$MAX_NODE_BIN" "$MAX_BIN" research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain(
-      'PowerShell: & $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 5',
+      'PowerShell: & $env:MAX_NODE_BIN $env:MAX_BIN research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain(
-      'cmd.exe: "%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 5',
+      'cmd.exe: "%MAX_NODE_BIN%" "%MAX_BIN%" research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain('Canonical query:');
     expect(prompt).toContain('EV market 2025 trends');
@@ -562,7 +562,7 @@ describe('ChatComposer /search command', () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, , , meta] = onSend.mock.calls[0]!;
     expect(prompt).toContain(
-      'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
+      'POSIX: "$MAX_NODE_BIN" "$MAX_BIN" research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain('Canonical query:');
     expect(prompt).toContain(query);
@@ -699,7 +699,7 @@ describe('ChatComposer /search command', () => {
     expect(activeFileStrip.textContent).toContain('site/index.html');
     expect(screen.getByTestId('chat-composer').className).toContain('composer-active-file-mode');
 
-    expect(screen.getAllByText('Ask Open Design to change index.html...').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ask Marketing AX to change index.html...').length).toBeGreaterThan(0);
     await typeAndSettle('Make the hero clearer');
     fireEvent.click(screen.getByTestId('chat-send'));
 

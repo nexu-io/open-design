@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseManifest } from '@open-design/plugin-runtime';
+import { parseManifest } from '@marketing-ax/plugin-runtime';
 
 // The pitch-deck example's prompt instructs the agent to "confirm three
 // things first" — name + one-line pitch, key traction numbers, ask + use

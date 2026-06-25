@@ -43,7 +43,7 @@ type ProjectResponse = {
   project: { id: string; metadata?: { kind?: string }; name: string };
 };
 
-// Inline fake `vela` binary. Handles the two argv shapes Open Design's
+// Inline fake `vela` binary. Handles the two argv shapes Marketing AX's
 // daemon ever spawns:
 //
 //   `vela models`                       — legacy catalog probe compatibility.

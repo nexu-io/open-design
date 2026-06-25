@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { LAUNCHER_SCHEMA_VERSION } from "@open-design/launcher-proto";
+import { LAUNCHER_SCHEMA_VERSION } from "@marketing-ax/launcher-proto";
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig, ToolPackPlatform } from "../src/config.js";
@@ -105,7 +105,7 @@ function createWinPaths(root: string, namespace: string): WinPaths {
     assembledMainEntryPath: join(namespaceRoot, "assembled", "app", "main.cjs"),
     assembledPackageJsonPath: join(namespaceRoot, "assembled", "app", "package.json"),
     assembledPrebundledRoot: join(namespaceRoot, "assembled", "app", "prebundled"),
-    blockmapPath: join(namespaceRoot, "builder", "Open Design-release-beta-win-setup.exe.blockmap"),
+    blockmapPath: join(namespaceRoot, "builder", "Marketing AX-release-beta-win-setup.exe.blockmap"),
     builtManifestPath: join(namespaceRoot, "built-app.json"),
     daemonCliPrebundleEntrypointPath: join(namespaceRoot, "prebundle-entrypoints", "daemon-cli.js"),
     daemonCliPrebundlePath: join(namespaceRoot, "assembled", "app", "prebundled", "daemon", "daemon-cli.mjs"),
@@ -113,13 +113,13 @@ function createWinPaths(root: string, namespace: string): WinPaths {
     daemonPrebundleRoot: join(namespaceRoot, "assembled", "app", "prebundled", "daemon"),
     daemonSidecarPrebundleEntrypointPath: join(namespaceRoot, "prebundle-entrypoints", "daemon-sidecar.js"),
     daemonSidecarPrebundlePath: join(namespaceRoot, "assembled", "app", "prebundled", "daemon", "daemon-sidecar.mjs"),
-    exePath: join(namespaceRoot, "builder", "Open Design-release-beta-win.exe"),
-    installDir: join(namespaceRoot, "runtime", "install", "Open Design Beta"),
-    installedExePath: join(namespaceRoot, "runtime", "install", "Open Design Beta", "Open Design.exe"),
+    exePath: join(namespaceRoot, "builder", "Marketing AX-release-beta-win.exe"),
+    installDir: join(namespaceRoot, "runtime", "install", "Marketing AX Beta"),
+    installedExePath: join(namespaceRoot, "runtime", "install", "Marketing AX Beta", "Marketing AX.exe"),
     installerBasePayloadPath: join(namespaceRoot, "installer", "payload-base.7z"),
     installerOverlayPayloadPath: join(namespaceRoot, "installer", "payload-overlay.7z"),
     installerScriptPath: join(namespaceRoot, "installer", "installer.nsi"),
-    launcherPayloadPath: join(namespaceRoot, "payload", "Open Design-release-beta-win-payload.7z"),
+    launcherPayloadPath: join(namespaceRoot, "payload", "Marketing AX-release-beta-win-payload.7z"),
     publicDesktopShortcutPath: join(namespaceRoot, "desktop", "public.lnk"),
     latestYmlPath: join(namespaceRoot, "builder", "latest.yml"),
     installMarkerPath: join(namespaceRoot, "logs", "install.marker.json"),
@@ -130,20 +130,20 @@ function createWinPaths(root: string, namespace: string): WinPaths {
     packagedMainPrebundleMetaPath: join(namespaceRoot, "prebundle-meta", "packaged-main.meta.json"),
     packagedMainPrebundlePath: join(namespaceRoot, "assembled", "app", "prebundled", "packaged-main.mjs"),
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
-    setupPath: join(namespaceRoot, "builder", "Open Design-release-beta-win-setup.exe"),
-    setupZipPath: join(namespaceRoot, "builder", "Open Design-release-beta-win-portable.zip"),
+    setupPath: join(namespaceRoot, "builder", "Marketing AX-release-beta-win-setup.exe"),
+    setupZipPath: join(namespaceRoot, "builder", "Marketing AX-release-beta-win-portable.zip"),
     startMenuShortcutPath: join(namespaceRoot, "start-menu.lnk"),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userDesktopShortcutPath: join(namespaceRoot, "desktop", "user.lnk"),
     uninstallMarkerPath: join(namespaceRoot, "logs", "uninstall.marker.json"),
     uninstallTimingPath: join(namespaceRoot, "logs", "uninstall.timing.json"),
-    uninstallerPath: join(namespaceRoot, "runtime", "install", "Open Design Beta", "Uninstall.exe"),
+    uninstallerPath: join(namespaceRoot, "runtime", "install", "Marketing AX Beta", "Uninstall.exe"),
     webStandaloneHookAuditPath: join(namespaceRoot, "web-standalone-after-pack-audit.json"),
     webStandaloneHookConfigPath: join(namespaceRoot, "web-standalone-after-pack-config.json"),
     webSidecarPrebundleMetaPath: join(namespaceRoot, "prebundle-meta", "web-sidecar.meta.json"),
     webSidecarPrebundlePath: join(namespaceRoot, "assembled", "app", "prebundled", "web-sidecar.mjs"),
     winIconPath: join(namespaceRoot, "resources", "win", "icon.ico"),
-    unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", "Open Design.exe"),
+    unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", "Marketing AX.exe"),
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),
   };
 }
@@ -154,7 +154,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
 }> {
   const paths = createWinPaths(root, namespace);
   await mkdir(join(paths.unpackedRoot, "resources"), { recursive: true });
-  await writeFile(join(paths.unpackedRoot, "Open Design.exe"), "fake executable\n", "utf8");
+  await writeFile(join(paths.unpackedRoot, "Marketing AX.exe"), "fake executable\n", "utf8");
   await writeFile(
     join(paths.unpackedRoot, "resources", "open-design-config.json"),
     `${JSON.stringify({
@@ -191,7 +191,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
       appBuilderOutputRoot: paths.appBuilderOutputRoot,
       cacheEntryPath: null,
       configPath: paths.packagedConfigPath,
-      executablePath: join(paths.unpackedRoot, "Open Design.exe"),
+      executablePath: join(paths.unpackedRoot, "Marketing AX.exe"),
       source: "namespace",
       unpackedRoot: paths.unpackedRoot,
       version: 1,
@@ -212,11 +212,11 @@ describe("tools-pack launcher payload archives", () => {
       publicAppBundleName: macIdentity.publicAppBundleName,
       version: "0.9.0-beta.2",
     })).toEqual({
-      appBundleName: "Open Design Beta.app",
+      appBundleName: "Marketing AX Beta.app",
       channel: "beta",
       entry: {
-        cwd: "payload/Open Design Beta.app",
-        executable: "payload/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+        cwd: "payload/Marketing AX Beta.app",
+        executable: "payload/Marketing AX Beta.app/Contents/MacOS/Marketing AX Beta",
       },
       namespace: "release-beta",
       payloadRoot: "payload",
@@ -233,7 +233,7 @@ describe("tools-pack launcher payload archives", () => {
       channel: "beta",
       entry: {
         cwd: "payload",
-        executable: "payload/Open Design.exe",
+        executable: "payload/Marketing AX.exe",
       },
       namespace: "release-beta-win",
       payloadRoot: "payload",
@@ -258,14 +258,14 @@ describe("tools-pack launcher payload archives", () => {
         entry: { executable: string };
         version: string;
       };
-      expect(manifest.appBundleName).toBe("Open Design Beta.app");
-      expect(manifest.entry.executable).toBe("payload/Open Design Beta.app/Contents/MacOS/Open Design Beta");
+      expect(manifest.appBundleName).toBe("Marketing AX Beta.app");
+      expect(manifest.entry.executable).toBe("payload/Marketing AX Beta.app/Contents/MacOS/Marketing AX Beta");
       expect(manifest.version).toBe("0.9.0-beta.2");
       await expectPathExists(join(extractRoot, manifest.entry.executable));
       await expectPathExists(join(
         extractRoot,
         "payload",
-        "Open Design Beta.app",
+        "Marketing AX Beta.app",
         "Contents",
         "Resources",
         "open-design-config.json",
@@ -296,9 +296,9 @@ describe("tools-pack launcher payload archives", () => {
       };
       expect(manifest.namespace).toBe(namespace);
       expect(manifest.platform).toBe("win32");
-      expect(manifest.entry.executable).toBe("payload/Open Design.exe");
+      expect(manifest.entry.executable).toBe("payload/Marketing AX.exe");
       expect(manifest.version).toBe(version);
-      await expectPathExists(join(extractRoot, "payload", "Open Design.exe"));
+      await expectPathExists(join(extractRoot, "payload", "Marketing AX.exe"));
       await expectPathExists(join(extractRoot, "payload", "resources", "open-design-config.json"));
     } finally {
       await rm(root, { force: true, recursive: true });

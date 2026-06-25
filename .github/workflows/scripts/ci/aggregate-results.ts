@@ -94,7 +94,7 @@ async function github<T>(path: string): Promise<T> {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
-      "User-Agent": "open-design-ci-gate",
+      "User-Agent": "marketing-ax-ci-gate",
       "X-GitHub-Api-Version": "2022-11-28",
     },
   });
@@ -186,7 +186,7 @@ async function downloadResultFromLog(runId: number): Promise<WorkflowResult> {
     env: { ...process.env, GH_TOKEN: token },
     maxBuffer: 1024 * 1024 * 32,
   });
-  const marker = "OD_CI_RESULTS_JSON ";
+  const marker = "MAX_CI_RESULTS_JSON ";
   const payload = stdout
     .split("\n")
     .map((line) => {
@@ -196,7 +196,7 @@ async function downloadResultFromLog(runId: number): Promise<WorkflowResult> {
     .filter((line) => line.length > 0)
     .at(-1);
   if (!payload) {
-    throw new Error(`OD_CI_RESULTS_JSON marker not found in run ${runId} logs`);
+    throw new Error(`MAX_CI_RESULTS_JSON marker not found in run ${runId} logs`);
   }
   const raw = Buffer.from(payload, "base64").toString("utf8");
   return parseWorkflowResult(JSON.parse(raw));

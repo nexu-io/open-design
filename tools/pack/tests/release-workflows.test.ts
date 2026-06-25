@@ -52,8 +52,8 @@ describe("release workflows", () => {
     expect(buildMac).toContain("build_args+=(--require-vela-cli)");
     expect(buildMac).toContain('--cache-dir "$TOOLS_PACK_CACHE_DIR"');
     expect(buildMac).toContain('tools-pack mac build update fixture');
-    expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path"');
-    expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
+    expect(buildMac).toContain('MAX_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path"');
+    expect(buildMac).toContain('MAX_PACKAGED_E2E_MAC_UPDATE_VERSION="${MAX_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
     expect(buildMac).not.toContain("::warning::Expected Electron framework symlink");
     expect(macX64).not.toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(win).not.toContain("--require-vela-cli");
@@ -63,8 +63,8 @@ describe("release workflows", () => {
     expect(betaSelfHosted).toContain("release-beta-s publish requires win_x64_target=nsis or all");
     expect(beta).toContain("mac_arm64_update_metadata_url:");
     expect(beta).toContain("win_x64_update_metadata_url:");
-    expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
-    expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
+    expect(beta).toContain("MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
+    expect(beta).toContain("MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
     expect(beta).not.toContain("publish-beta-metadata.ts");
     expect(beta).not.toContain("verify-beta-metadata.ts");
     expect(beta).not.toContain("summary-beta.ts");
@@ -77,10 +77,10 @@ describe("release workflows", () => {
     expect(betaSelfHosted).toContain("public-notarized");
     expect(selfHostedMac).toContain("RELEASE_DELIVERY_MODE: ${{ inputs.mac_arm64_delivery_mode }}");
     expect(selfHostedMac).toContain("RELEASE_SIGN_MODE: ${{ inputs.mac_arm64_delivery_mode == 'internal-updater' && 'sign-only' || inputs.mac_arm64_sign_mode }}");
-    expect(selfHostedMac).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json");
+    expect(selfHostedMac).toContain("MAX_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json");
     expect(betaSelfHosted).toContain("public-notarized mac_arm64_delivery_mode requires mac_arm64_sign_mode=notarize");
     expect(betaSelfHosted).toContain("RELEASE_SIGNED: ${{ inputs.enable_mac_arm64 && (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && 'true' || 'false' }}");
-    expect(selfHostedMac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
+    expect(selfHostedMac).toContain("MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
     expect(selfHostedMac).toContain("RELEASE_ARTIFACT_MODE: dmg-and-payload");
     expect(macBuild).toContain('runPhase("xattr-scrub"');
     expect(macBuild).toContain("scrubMacExtendedAttributes(paths.appPath)");
@@ -114,11 +114,11 @@ describe("release workflows", () => {
     expect(winLifecycle).toContain("removedLauncherNamespaceRoot");
     expect(buildWin).toContain('Measure-Step "validate launcher payload artifact"');
     expect(buildWin).toContain('Measure-Step "validate launcher payload update fixture"');
-    expect(buildWin).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/Open Design.exe"');
+    expect(buildWin).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/Marketing AX.exe"');
     for (const workspaceBuild of [winApp, macWorkspace, linuxPack]) {
-      const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
-      const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';
-      const sidecarBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar", "build"])';
+      const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@marketing-ax/sidecar-proto", "build"])';
+      const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@marketing-ax/launcher-proto", "build"])';
+      const sidecarBuild = 'await runPnpm(config, ["--filter", "@marketing-ax/sidecar", "build"])';
       expect(workspaceBuild).toContain(launcherProtoBuild);
       expect(workspaceBuild.indexOf(sidecarProtoBuild)).toBeLessThan(workspaceBuild.indexOf(launcherProtoBuild));
       expect(workspaceBuild.indexOf(launcherProtoBuild)).toBeLessThan(workspaceBuild.indexOf(sidecarBuild));

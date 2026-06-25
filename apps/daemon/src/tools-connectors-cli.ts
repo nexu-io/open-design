@@ -44,13 +44,13 @@ const CONNECTORS_USAGE = `Usage:
   od tools connectors design-system-package-audit --path /path/to/project [--reference-package] [--fail-on-warnings]
 
 Environment:
-  OD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
-  OD_BIN          Open Design CLI script for agent wrapper invocations
-  OD_DAEMON_URL   Daemon base URL injected into agent runs
-  OD_TOOL_TOKEN   Bearer token injected into agent runs
+  MAX_NODE_BIN     Node-compatible runtime for agent wrapper invocations
+  MAX_BIN          Marketing AX CLI script for agent wrapper invocations
+  MAX_DAEMON_URL   Daemon base URL injected into agent runs
+  MAX_TOOL_TOKEN   Bearer token injected into agent runs
 
 Agent runtime invocation:
-  "$OD_NODE_BIN" "$OD_BIN" tools connectors list --use-case personal_daily_digest --format compact
+  "$MAX_NODE_BIN" "$MAX_BIN" tools connectors list --use-case personal_daily_digest --format compact
 `;
 
 const GITHUB_CONNECTOR_ID = 'github';
@@ -249,8 +249,8 @@ function parseOptions(args: string[]): ParsedOptions | { error: string } {
 }
 
 function daemonUrl(): URL | { error: string } {
-  const rawUrl = process.env.OD_DAEMON_URL;
-  if (!rawUrl) return { error: 'OD_DAEMON_URL is required' };
+  const rawUrl = process.env.MAX_DAEMON_URL;
+  if (!rawUrl) return { error: 'MAX_DAEMON_URL is required' };
   try {
     const url = new URL(rawUrl);
     url.pathname = url.pathname.replace(/\/+$/u, '');
@@ -258,13 +258,13 @@ function daemonUrl(): URL | { error: string } {
     url.hash = '';
     return url;
   } catch {
-    return { error: 'OD_DAEMON_URL must be a valid URL' };
+    return { error: 'MAX_DAEMON_URL must be a valid URL' };
   }
 }
 
 function toolToken(): string | { error: string } {
-  const token = process.env.OD_TOOL_TOKEN;
-  if (!token) return { error: 'OD_TOOL_TOKEN is required' };
+  const token = process.env.MAX_TOOL_TOKEN;
+  if (!token) return { error: 'MAX_TOOL_TOKEN is required' };
   return token;
 }
 
@@ -1665,7 +1665,7 @@ async function runGithubDesignContext(options: ParsedOptions): Promise<ToolCliRe
       const connectorReason = 'error' in baseUrl
         ? baseUrl.error
         : typeof token === 'string'
-          ? 'OD_TOOL_TOKEN is not available'
+          ? 'MAX_TOOL_TOKEN is not available'
           : token.error;
       if (options.requireConnector) {
         return fail('Required GitHub repository intake could not read the repository through git, GitHub CLI, or connector', {
@@ -1761,7 +1761,7 @@ export async function auditDesignSystemPackage(
 
   if (options.referencePackage === true) {
     if (!fileSet.has('DESIGN.md')) {
-      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated Open Design packages must include it as the canonical rules file.', 'DESIGN.md');
+      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated Marketing AX packages must include it as the canonical rules file.', 'DESIGN.md');
     }
   } else {
     requireFile('DESIGN.md', 'Claude Design-style packages need DESIGN.md as the canonical system rules.');

@@ -186,8 +186,8 @@ const manifestRoot = optional("PLATFORM_MANIFEST_ROOT", join(runnerTemp, "releas
 let config;
 if (platform === "mac") {
   const suffix = assetVersionSuffix;
-  const dmg = `open-design-${releaseVersion}${suffix}-mac-arm64.dmg`;
-  const zip = `open-design-${releaseVersion}${suffix}-mac-arm64.zip`;
+  const dmg = `marketing-ax-${releaseVersion}${suffix}-mac-arm64.dmg`;
+  const zip = `marketing-ax-${releaseVersion}${suffix}-mac-arm64.zip`;
   const artifactMode = optional("MAC_ARTIFACT_MODE", "dmg-and-zip");
   const artifacts: Record<string, AssetEntry> = { dmg: fileEntry(dmg, contentType(dmg)) };
   const assetNames = [dmg, `${dmg}.sha256`];
@@ -214,8 +214,8 @@ if (platform === "mac") {
   };
 } else if (platform === "win") {
   const suffix = optional("WIN_ASSET_SUFFIX", assetVersionSuffix);
-  const installer = `open-design-${releaseVersion}${suffix}-win-x64-setup.exe`;
-  const portableZip = `open-design-${releaseVersion}${suffix}-win-x64-portable.zip`;
+  const installer = `marketing-ax-${releaseVersion}${suffix}-win-x64-setup.exe`;
+  const portableZip = `marketing-ax-${releaseVersion}${suffix}-win-x64-portable.zip`;
   const includeZip = optional("WIN_INCLUDE_ZIP", "true") !== "false";
   const artifacts: Record<string, AssetEntry> = { installer: fileEntry(installer, contentType(installer)) };
   const assetNames = [installer, `${installer}.sha256`, "latest.yml"];
@@ -239,7 +239,7 @@ if (platform === "mac") {
   };
 } else if (platform === "linux") {
   const suffix = optional("LINUX_ASSET_SUFFIX", assetVersionSuffix);
-  const appImage = `open-design-${releaseVersion}${suffix}-linux-x64.AppImage`;
+  const appImage = `marketing-ax-${releaseVersion}${suffix}-linux-x64.AppImage`;
   config = {
     arch: "x64",
     artifacts: { appImage: fileEntry(appImage, contentType(appImage)) },
@@ -252,8 +252,8 @@ if (platform === "mac") {
   };
 } else if (platform === "mac-intel") {
   const suffix = optional("MAC_INTEL_ASSET_SUFFIX", assetVersionSuffix);
-  const dmg = `open-design-${releaseVersion}${suffix}-mac-x64.dmg`;
-  const zip = `open-design-${releaseVersion}${suffix}-mac-x64.zip`;
+  const dmg = `marketing-ax-${releaseVersion}${suffix}-mac-x64.dmg`;
+  const zip = `marketing-ax-${releaseVersion}${suffix}-mac-x64.zip`;
   config = {
     arch: "x64",
     artifacts: {

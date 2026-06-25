@@ -24,14 +24,14 @@ import {
   downloadCopyAndClear,
   type ManagedDownloadChecksum,
   type ManagedDownloadProgress,
-} from "@open-design/download";
+} from "@marketing-ax/download";
 import {
   LAUNCHER_SCHEMA_VERSION,
   buildLauncherAfterQuitArgs,
   resolveLauncherVersionPaths,
   validateLauncherRuntimeDescriptor,
   type LauncherRuntimeDescriptor,
-} from "@open-design/launcher-proto";
+} from "@marketing-ax/launcher-proto";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -50,7 +50,7 @@ import {
   type DesktopUpdateStatusSnapshot,
   type DesktopUpdateState,
   type SidecarSource,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 
 import {
   markInstallerObservationOpenFailed,
@@ -60,25 +60,25 @@ import {
 } from "./installer-observations.js";
 
 export const DESKTOP_UPDATE_ENV = Object.freeze({
-  ARCH: "OD_UPDATE_ARCH",
-  AUTO_CHECK: "OD_UPDATE_AUTO_CHECK",
-  AUTO_DOWNLOAD: "OD_UPDATE_AUTO_DOWNLOAD",
-  AUTO_OPEN: "OD_UPDATE_AUTO_OPEN",
-  CHECK_BACKOFF_INITIAL_MS: "OD_UPDATE_CHECK_BACKOFF_INITIAL_MS",
-  CHECK_BACKOFF_MAX_MS: "OD_UPDATE_CHECK_BACKOFF_MAX_MS",
-  CHECK_INITIAL_DELAY_MS: "OD_UPDATE_CHECK_INITIAL_DELAY_MS",
-  CHECK_INTERVAL_MS: "OD_UPDATE_CHECK_INTERVAL_MS",
-  CHANNEL: "OD_UPDATE_CHANNEL",
-  CURRENT_VERSION: "OD_UPDATE_CURRENT_VERSION",
-  DOWNLOAD_ROOT: "OD_UPDATE_DOWNLOAD_ROOT",
-  ENABLED: "OD_UPDATE_ENABLED",
-  METADATA_URL: "OD_UPDATE_METADATA_URL",
-  MODE: "OD_UPDATE_MODE",
-  OPEN_DRY_RUN: "OD_UPDATE_OPEN_DRY_RUN",
-  PLATFORM: "OD_UPDATE_PLATFORM",
+  ARCH: "MAX_UPDATE_ARCH",
+  AUTO_CHECK: "MAX_UPDATE_AUTO_CHECK",
+  AUTO_DOWNLOAD: "MAX_UPDATE_AUTO_DOWNLOAD",
+  AUTO_OPEN: "MAX_UPDATE_AUTO_OPEN",
+  CHECK_BACKOFF_INITIAL_MS: "MAX_UPDATE_CHECK_BACKOFF_INITIAL_MS",
+  CHECK_BACKOFF_MAX_MS: "MAX_UPDATE_CHECK_BACKOFF_MAX_MS",
+  CHECK_INITIAL_DELAY_MS: "MAX_UPDATE_CHECK_INITIAL_DELAY_MS",
+  CHECK_INTERVAL_MS: "MAX_UPDATE_CHECK_INTERVAL_MS",
+  CHANNEL: "MAX_UPDATE_CHANNEL",
+  CURRENT_VERSION: "MAX_UPDATE_CURRENT_VERSION",
+  DOWNLOAD_ROOT: "MAX_UPDATE_DOWNLOAD_ROOT",
+  ENABLED: "MAX_UPDATE_ENABLED",
+  METADATA_URL: "MAX_UPDATE_METADATA_URL",
+  MODE: "MAX_UPDATE_MODE",
+  OPEN_DRY_RUN: "MAX_UPDATE_OPEN_DRY_RUN",
+  PLATFORM: "MAX_UPDATE_PLATFORM",
 } as const);
 
-const DEFAULT_RELEASE_ORIGIN = "https://releases.open-design.ai";
+const DEFAULT_RELEASE_ORIGIN = "https://releases.marketing-ax.example";
 const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
 const RELEASES_DIR = "releases";
@@ -726,7 +726,7 @@ async function ensureOwnedUpdateRoot(
           ok: false,
           error: createError(
             "update-root-not-owned",
-            `update root is not empty and has no Open Design updater ownership marker: ${realRoot}`,
+            `update root is not empty and has no Marketing AX updater ownership marker: ${realRoot}`,
           ),
         };
       }

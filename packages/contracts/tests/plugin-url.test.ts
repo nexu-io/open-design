@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  OPEN_DESIGN_SITE_ORIGIN,
+  MARKETING_AX_SITE_ORIGIN,
   pluginSlug,
   pluginSlugSegment,
   pluginDetailSlug,
@@ -53,10 +53,10 @@ describe('pluginDetailPath / pluginPreviewPath', () => {
 });
 
 describe('pluginShareUrl', () => {
-  it('defaults to the public open-design.ai origin, single-segment path', () => {
-    expect(OPEN_DESIGN_SITE_ORIGIN).toBe('https://open-design.ai');
+  it('defaults to the public marketing-ax.example origin, single-segment path', () => {
+    expect(MARKETING_AX_SITE_ORIGIN).toBe('https://marketing-ax.example');
     expect(pluginShareUrl('open-design/live-dashboard')).toBe(
-      'https://open-design.ai/plugins/live-dashboard/',
+      'https://marketing-ax.example/plugins/live-dashboard/',
     );
   });
   it('honours an explicit origin and trims a trailing slash on it', () => {

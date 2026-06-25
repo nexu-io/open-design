@@ -13,7 +13,7 @@ import type {
   BrazeIamFormat,
   BrazeDeliveryModel,
   BrazePlan,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 type SqliteDb = Database.Database;
 

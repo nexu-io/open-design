@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { questionsFormTrackingId } from '@open-design/contracts/analytics';
+import { questionsFormTrackingId } from '@marketing-ax/contracts/analytics';
 import { useT } from '../i18n';
 import { useAnalytics } from '../analytics/provider';
 import { trackQuestionsFormClick, trackQuestionsFormSurfaceView } from '../analytics/events';

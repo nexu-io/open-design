@@ -103,7 +103,7 @@ export async function listElevenLabsVoiceOptions(
   const credentials = await resolveProviderConfig(projectRoot, 'elevenlabs');
   if (!credentials.apiKey) {
     throw new Error(
-      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+      'no ElevenLabs API key - configure it in Settings or set MAX_ELEVENLABS_API_KEY',
     );
   }
 

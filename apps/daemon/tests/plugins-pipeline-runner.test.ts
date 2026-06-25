@@ -21,7 +21,7 @@ import type {
   GenUISurfaceEvent,
   GenUISurfaceSpec,
   PluginPipelineStageEvent,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { createSnapshot } from '../src/plugins/snapshots.js';
 import { runPipelineForRun } from '../src/plugins/pipeline-runner.js';

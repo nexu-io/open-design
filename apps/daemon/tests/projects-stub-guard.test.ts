@@ -30,9 +30,9 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    vi.stubEnv('OD_ARTIFACT_STUB_GUARD', 'reject');
-    vi.stubEnv('OD_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES', '1024');
-    vi.stubEnv('OD_ARTIFACT_STUB_GUARD_MIN_RATIO', '0.2');
+    vi.stubEnv('MAX_ARTIFACT_STUB_GUARD', 'reject');
+    vi.stubEnv('MAX_ARTIFACT_STUB_GUARD_MIN_PRIOR_BYTES', '1024');
+    vi.stubEnv('MAX_ARTIFACT_STUB_GUARD_MIN_RATIO', '0.2');
     const started = (await startServer({ port: 0, returnServer: true })) as {
       url: string;
       server: http.Server;
@@ -48,7 +48,7 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
 
   afterEach(() => {
     // Each test resets the mode it changed; default back to reject.
-    vi.stubEnv('OD_ARTIFACT_STUB_GUARD', 'reject');
+    vi.stubEnv('MAX_ARTIFACT_STUB_GUARD', 'reject');
   });
 
   async function createProject(prefix: string) {
@@ -140,7 +140,7 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
   });
 
   it('warns instead of rejecting when guard mode is warn', async () => {
-    vi.stubEnv('OD_ARTIFACT_STUB_GUARD', 'warn');
+    vi.stubEnv('MAX_ARTIFACT_STUB_GUARD', 'warn');
     const projectId = await createProject('warn');
 
     const firstResp = await postFile(projectId, {
@@ -166,7 +166,7 @@ describe('artifact stub guard via /api/projects/:id/files', () => {
   });
 
   it('skips the guard entirely when mode is off', async () => {
-    vi.stubEnv('OD_ARTIFACT_STUB_GUARD', 'off');
+    vi.stubEnv('MAX_ARTIFACT_STUB_GUARD', 'off');
     const projectId = await createProject('off');
 
     const firstResp = await postFile(projectId, {

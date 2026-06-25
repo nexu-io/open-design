@@ -72,7 +72,7 @@ function authorizationArgs(credentials) {
 }
 
 async function submitNotarization(filePath, credentials) {
-  const useS3Acceleration = process.env.OPEN_DESIGN_NOTARIZE_S3_ACCELERATION === "true";
+  const useS3Acceleration = process.env.MARKETING_AX_NOTARIZE_S3_ACCELERATION === "true";
   const result = await run("xcrun", [
     "notarytool",
     "submit",
@@ -164,8 +164,8 @@ module.exports = async function notarize(context) {
 
   const productFilename = context.packager.appInfo.productFilename;
   const appPath = path.join(context.appOutDir, `${productFilename}.app`);
-  const attempts = parsePositiveInteger(process.env.OPEN_DESIGN_NOTARIZE_ATTEMPTS, DEFAULT_ATTEMPTS);
-  const retryDelayMs = parsePositiveInteger(process.env.OPEN_DESIGN_NOTARIZE_RETRY_DELAY_MS, DEFAULT_RETRY_DELAY_MS);
+  const attempts = parsePositiveInteger(process.env.MARKETING_AX_NOTARIZE_ATTEMPTS, DEFAULT_ATTEMPTS);
+  const retryDelayMs = parsePositiveInteger(process.env.MARKETING_AX_NOTARIZE_RETRY_DELAY_MS, DEFAULT_RETRY_DELAY_MS);
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {

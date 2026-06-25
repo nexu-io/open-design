@@ -12,7 +12,7 @@
  *                                         device-authorization flow's
  *                                         on-disk side-effect without the
  *                                         interactive browser approval —
- *                                         tests for Open Design's daemon
+ *                                         tests for Marketing AX's daemon
  *                                         login route only care that the
  *                                         config file appears.
  *
@@ -21,7 +21,7 @@
  *
  *   `vela agent run --runtime opencode` → ACP stdio runtime. Speaks just
  *                                         enough of the protocol to drive
- *                                         Open Design's `detectAcpModels`
+ *                                         Marketing AX's `detectAcpModels`
  *                                         and `attachAcpSession` through a
  *                                         complete turn:
  *
@@ -280,7 +280,7 @@ stdin.on('end', () => {
 // `vela login`: the daemon's /api/integrations/vela/login route spawns this
 // without expecting any ACP traffic. Real vela goes through a device-auth
 // loop and writes ~/.amr/config.json on success; the stub skips the loop
-// and just writes the file so Open Design's status reader and AmrLoginPill
+// and just writes the file so Marketing AX's status reader and AmrLoginPill
 // poller see the same on-disk projection production produces. The stdin EOF
 // handler above ignores login mode so delayed login tests can keep this
 // process alive without opening the ACP stdio bridge.

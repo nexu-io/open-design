@@ -56,9 +56,9 @@ async function setupTestDir(port: number): Promise<TestContext> {
   const override = {
     name: projectName,
     services: {
-      'open-design': {
+      'marketing-ax': {
         container_name: containerName,
-        volumes: [`${volumeName}:/app/.od`],
+        volumes: [`${volumeName}:/app/.max`],
       },
     },
     volumes: {
@@ -144,7 +144,7 @@ test('install.sh --non-interactive creates .env and starts container', { skip: !
 
     // .env should contain the port
     const envContent = await readFile(join(ctx.tmpDir, '.env'), 'utf8');
-    assert.match(envContent, new RegExp(`OPEN_DESIGN_PORT=${ctx.port}`));
+    assert.match(envContent, new RegExp(`MARKETING_AX_PORT=${ctx.port}`));
 
     // Container should be healthy
     const healthy = await waitForHealth(ctx.port, 60_000);

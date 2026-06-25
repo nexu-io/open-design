@@ -188,13 +188,13 @@ function Validate-WinLauncherPayloadArchive([string]$PayloadPath, [string]$Expec
     Test-JsonString $manifest.platform "platform" "win32"
     Test-JsonString $manifest.payloadRoot "payloadRoot" "payload"
     Test-JsonString $manifest.entry.cwd "entry.cwd" "payload"
-    Test-JsonString $manifest.entry.executable "entry.executable" "payload/Open Design.exe"
+    Test-JsonString $manifest.entry.executable "entry.executable" "payload/Marketing AX.exe"
 
-    $entryPath = Join-Path $extractRoot (Convert-ArchiveRelativePath "payload/Open Design.exe")
+    $entryPath = Join-Path $extractRoot (Convert-ArchiveRelativePath "payload/Marketing AX.exe")
     if (-not (Test-Path -LiteralPath $entryPath)) {
       throw "launcher payload entry executable not found after extraction: $entryPath"
     }
-    $configPath = Join-Path $extractRoot (Convert-ArchiveRelativePath "payload/resources/open-design-config.json")
+    $configPath = Join-Path $extractRoot (Convert-ArchiveRelativePath "payload/resources/marketing-ax-config.json")
     if (-not (Test-Path -LiteralPath $configPath)) {
       throw "launcher payload packaged config not found after extraction: $configPath"
     }
@@ -247,9 +247,9 @@ try {
 
   $localUpdateArtifactPath = $null
   $localUpdateVersion = $null
-  $externalUpdateMetadataUrl = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL
-  $externalUpdateArtifactPath = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
-  $externalUpdateVersion = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION
+  $externalUpdateMetadataUrl = [string]$env:MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL
+  $externalUpdateArtifactPath = [string]$env:MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
+  $externalUpdateVersion = [string]$env:MAX_PACKAGED_E2E_WIN_UPDATE_VERSION
   $hasExternalUpdateMetadata = -not [string]::IsNullOrWhiteSpace($externalUpdateMetadataUrl)
   $hasExternalUpdateArtifactPair = -not [string]::IsNullOrWhiteSpace($externalUpdateArtifactPath) -and -not [string]::IsNullOrWhiteSpace($externalUpdateVersion)
 
@@ -295,31 +295,31 @@ try {
     Write-Host "Skipping Windows packaged runtime smoke: smoke mode skip"
   } else {
     $previous = @{
-      OD_PACKAGED_E2E_BUILD_JSON_PATH = $env:OD_PACKAGED_E2E_BUILD_JSON_PATH
-      OD_PACKAGED_E2E_WIN = $env:OD_PACKAGED_E2E_WIN
-      OD_PACKAGED_E2E_WIN_SMOKE_PROFILE = $env:OD_PACKAGED_E2E_WIN_SMOKE_PROFILE
-      OD_PACKAGED_E2E_NAMESPACE = $env:OD_PACKAGED_E2E_NAMESPACE
-      OD_PACKAGED_E2E_RELEASE_CHANNEL = $env:OD_PACKAGED_E2E_RELEASE_CHANNEL
-      OD_PACKAGED_E2E_RELEASE_VERSION = $env:OD_PACKAGED_E2E_RELEASE_VERSION
-      OD_PACKAGED_E2E_REPORT_DIR = $env:OD_PACKAGED_E2E_REPORT_DIR
-      OD_PACKAGED_E2E_TOOLS_PACK_DIR = $env:OD_PACKAGED_E2E_TOOLS_PACK_DIR
-      OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
-      OD_PACKAGED_E2E_WIN_UPDATE_VERSION = $env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION
-      OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = $env:OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH
+      MAX_PACKAGED_E2E_BUILD_JSON_PATH = $env:MAX_PACKAGED_E2E_BUILD_JSON_PATH
+      MAX_PACKAGED_E2E_WIN = $env:MAX_PACKAGED_E2E_WIN
+      MAX_PACKAGED_E2E_WIN_SMOKE_PROFILE = $env:MAX_PACKAGED_E2E_WIN_SMOKE_PROFILE
+      MAX_PACKAGED_E2E_NAMESPACE = $env:MAX_PACKAGED_E2E_NAMESPACE
+      MAX_PACKAGED_E2E_RELEASE_CHANNEL = $env:MAX_PACKAGED_E2E_RELEASE_CHANNEL
+      MAX_PACKAGED_E2E_RELEASE_VERSION = $env:MAX_PACKAGED_E2E_RELEASE_VERSION
+      MAX_PACKAGED_E2E_REPORT_DIR = $env:MAX_PACKAGED_E2E_REPORT_DIR
+      MAX_PACKAGED_E2E_TOOLS_PACK_DIR = $env:MAX_PACKAGED_E2E_TOOLS_PACK_DIR
+      MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $env:MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
+      MAX_PACKAGED_E2E_WIN_UPDATE_VERSION = $env:MAX_PACKAGED_E2E_WIN_UPDATE_VERSION
+      MAX_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = $env:MAX_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH
     }
     try {
-      $env:OD_PACKAGED_E2E_BUILD_JSON_PATH = $BuildJsonPath
-      $env:OD_PACKAGED_E2E_WIN = "1"
-      $env:OD_PACKAGED_E2E_WIN_SMOKE_PROFILE = $SmokeMode
-      $env:OD_PACKAGED_E2E_NAMESPACE = $ReleaseNamespace
-      $env:OD_PACKAGED_E2E_RELEASE_CHANNEL = "beta"
-      $env:OD_PACKAGED_E2E_RELEASE_VERSION = $ReleaseVersion
-      $env:OD_PACKAGED_E2E_REPORT_DIR = $ReportRoot
-      $env:OD_PACKAGED_E2E_TOOLS_PACK_DIR = $ToolsPackDir
+      $env:MAX_PACKAGED_E2E_BUILD_JSON_PATH = $BuildJsonPath
+      $env:MAX_PACKAGED_E2E_WIN = "1"
+      $env:MAX_PACKAGED_E2E_WIN_SMOKE_PROFILE = $SmokeMode
+      $env:MAX_PACKAGED_E2E_NAMESPACE = $ReleaseNamespace
+      $env:MAX_PACKAGED_E2E_RELEASE_CHANNEL = "beta"
+      $env:MAX_PACKAGED_E2E_RELEASE_VERSION = $ReleaseVersion
+      $env:MAX_PACKAGED_E2E_REPORT_DIR = $ReportRoot
+      $env:MAX_PACKAGED_E2E_TOOLS_PACK_DIR = $ToolsPackDir
       if (-not [string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
-        $env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $localUpdateArtifactPath
-        $env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION = $localUpdateVersion
-        $env:OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = Join-Path $WorkRoot "windows-tools-pack-update-build.json"
+        $env:MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $localUpdateArtifactPath
+        $env:MAX_PACKAGED_E2E_WIN_UPDATE_VERSION = $localUpdateVersion
+        $env:MAX_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = Join-Path $WorkRoot "windows-tools-pack-update-build.json"
       }
       Measure-Step "release smoke win" {
         Remove-Item -LiteralPath $ReportRoot -Recurse -Force -ErrorAction SilentlyContinue

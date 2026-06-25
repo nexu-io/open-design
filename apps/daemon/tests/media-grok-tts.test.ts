@@ -20,30 +20,30 @@ describe('xAI Grok TTS media generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
-  const originalGrokKey = process.env.OD_GROK_API_KEY;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
+  const originalGrokKey = process.env.MAX_GROK_API_KEY;
   const originalXaiKey = process.env.XAI_API_KEY;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-xai-tts-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    delete process.env.OD_GROK_API_KEY;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    delete process.env.MAX_GROK_API_KEY;
     delete process.env.XAI_API_KEY;
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
-    if (originalMediaConfigDir == null) delete process.env.OD_MEDIA_CONFIG_DIR;
-    else process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
-    if (originalDataDir == null) delete process.env.OD_DATA_DIR;
-    else process.env.OD_DATA_DIR = originalDataDir;
-    if (originalGrokKey == null) delete process.env.OD_GROK_API_KEY;
-    else process.env.OD_GROK_API_KEY = originalGrokKey;
+    if (originalMediaConfigDir == null) delete process.env.MAX_MEDIA_CONFIG_DIR;
+    else process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    if (originalDataDir == null) delete process.env.MAX_DATA_DIR;
+    else process.env.MAX_DATA_DIR = originalDataDir;
+    if (originalGrokKey == null) delete process.env.MAX_GROK_API_KEY;
+    else process.env.MAX_GROK_API_KEY = originalGrokKey;
     if (originalXaiKey == null) delete process.env.XAI_API_KEY;
     else process.env.XAI_API_KEY = originalXaiKey;
     vi.unstubAllGlobals();
@@ -51,7 +51,7 @@ describe('xAI Grok TTS media generation', () => {
   });
 
   async function writeConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }

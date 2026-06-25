@@ -15,7 +15,7 @@ import {
   listExtractions,
 } from '../src/memory-extractions.js';
 
-const dataDir = path.join(process.env.OD_DATA_DIR ?? process.cwd(), 'memory-connectors-test');
+const dataDir = path.join(process.env.MAX_DATA_DIR ?? process.cwd(), 'memory-connectors-test');
 const originalFetch = globalThis.fetch;
 
 const notionDefinition: ConnectorCatalogDefinition = {
@@ -947,7 +947,7 @@ describe('connector memory extraction', () => {
     const binPath = path.join(tempDir, 'codex');
     const capturePath = path.join(tempDir, 'capture.json');
     const previousPath = process.env.PATH;
-    const previousCapture = process.env.OD_MEMORY_CODEX_ARGS_OUT;
+    const previousCapture = process.env.MAX_MEMORY_CODEX_ARGS_OUT;
 
     await fsp.writeFile(
       binPath,
@@ -955,7 +955,7 @@ describe('connector memory extraction', () => {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 const stdin = fs.readFileSync(0, 'utf8');
-fs.writeFileSync(process.env.OD_MEMORY_CODEX_ARGS_OUT, JSON.stringify({ args, stdin }));
+fs.writeFileSync(process.env.MAX_MEMORY_CODEX_ARGS_OUT, JSON.stringify({ args, stdin }));
 process.stdout.write(JSON.stringify({
   type: 'item.completed',
   item: {
@@ -977,7 +977,7 @@ process.stdout.write(JSON.stringify({
 
     try {
       process.env.PATH = `${tempDir}${path.delimiter}${previousPath ?? ''}`;
-      process.env.OD_MEMORY_CODEX_ARGS_OUT = capturePath;
+      process.env.MAX_MEMORY_CODEX_ARGS_OUT = capturePath;
 
       const result = await suggestMemoryFromConnectors(dataDir, {
         projectsRoot: process.cwd(),
@@ -1015,9 +1015,9 @@ process.stdout.write(JSON.stringify({
         process.env.PATH = previousPath;
       }
       if (previousCapture == null) {
-        delete process.env.OD_MEMORY_CODEX_ARGS_OUT;
+        delete process.env.MAX_MEMORY_CODEX_ARGS_OUT;
       } else {
-        process.env.OD_MEMORY_CODEX_ARGS_OUT = previousCapture;
+        process.env.MAX_MEMORY_CODEX_ARGS_OUT = previousCapture;
       }
       await fsp.rm(tempDir, { recursive: true, force: true });
     }
@@ -1029,7 +1029,7 @@ process.stdout.write(JSON.stringify({
     const binPath = path.join(tempDir, 'opencode-cli');
     const capturePath = path.join(tempDir, 'capture.json');
     const previousPath = process.env.PATH;
-    const previousCapture = process.env.OD_MEMORY_OPENCODE_ARGS_OUT;
+    const previousCapture = process.env.MAX_MEMORY_OPENCODE_ARGS_OUT;
 
     // Model the real `opencode run` arg parser: `-f, --file` is a yargs
     // *array* option, so it greedily swallows every following non-flag
@@ -1051,7 +1051,7 @@ if (fileFlag >= 0) {
     files.push(args[i]);
   }
 }
-fs.writeFileSync(process.env.OD_MEMORY_OPENCODE_ARGS_OUT, JSON.stringify({ args, stdin, files }));
+fs.writeFileSync(process.env.MAX_MEMORY_OPENCODE_ARGS_OUT, JSON.stringify({ args, stdin, files }));
 for (const f of files) {
   if (!fs.existsSync(f)) {
     process.stderr.write('Error: File not found: ' + f + '\\n');
@@ -1079,7 +1079,7 @@ process.stdout.write(JSON.stringify({
 
     try {
       process.env.PATH = `${tempDir}${path.delimiter}${previousPath ?? ''}`;
-      process.env.OD_MEMORY_OPENCODE_ARGS_OUT = capturePath;
+      process.env.MAX_MEMORY_OPENCODE_ARGS_OUT = capturePath;
 
       const result = await suggestMemoryFromConnectors(dataDir, {
         projectsRoot: process.cwd(),
@@ -1119,9 +1119,9 @@ process.stdout.write(JSON.stringify({
         process.env.PATH = previousPath;
       }
       if (previousCapture == null) {
-        delete process.env.OD_MEMORY_OPENCODE_ARGS_OUT;
+        delete process.env.MAX_MEMORY_OPENCODE_ARGS_OUT;
       } else {
-        process.env.OD_MEMORY_OPENCODE_ARGS_OUT = previousCapture;
+        process.env.MAX_MEMORY_OPENCODE_ARGS_OUT = previousCapture;
       }
       await fsp.rm(tempDir, { recursive: true, force: true });
     }

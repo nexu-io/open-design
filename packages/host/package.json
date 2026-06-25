@@ -1,9 +1,9 @@
 {
-  "name": "@open-design/host",
+  "name": "@marketing-ax/host",
   "version": "0.10.0",
   "private": true,
   "type": "module",
-  "description": "Open Design renderer host bridge protocol.",
+  "description": "Marketing AX renderer host bridge protocol.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

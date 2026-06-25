@@ -15,7 +15,7 @@ import {
   validateLauncherRuntimeDescriptor,
   type LauncherAttemptDescriptor,
   type LauncherTargetSelection,
-} from "@open-design/launcher-proto";
+} from "@marketing-ax/launcher-proto";
 
 import type { PackagedConfig, PackagedWebOutputMode, RawPackagedConfig } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";

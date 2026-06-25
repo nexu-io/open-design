@@ -13,13 +13,13 @@ Required on the host:
   docker, gh, jq, node/npm, expect-cli@0.1.3
 
 Optional environment:
-  BASE_REPO=nexu-io/open-design
+  BASE_REPO=marketing-ax/marketing-ax
   RUNNER_TEMP=/tmp/od-agent-pr-explore-local
-  OD_EXPECT_TIMEOUT_SECONDS=1200
-  OD_SANDBOX_CPUS=4
-  OD_SANDBOX_MEMORY=8g
-  OD_ALLOW_NPX_EXPECT_CLI=1
-  OD_TRACE_R2_UPLOAD=1
+  MAX_EXPECT_TIMEOUT_SECONDS=1200
+  MAX_SANDBOX_CPUS=4
+  MAX_SANDBOX_MEMORY=8g
+  MAX_ALLOW_NPX_EXPECT_CLI=1
+  MAX_TRACE_R2_UPLOAD=1
   R2_ACCOUNT_ID=...
   R2_ACCESS_KEY_ID=...
   R2_SECRET_ACCESS_KEY=...
@@ -39,7 +39,7 @@ if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-base_repo="${BASE_REPO:-nexu-io/open-design}"
+base_repo="${BASE_REPO:-marketing-ax/marketing-ax}"
 runner_temp="${RUNNER_TEMP:-/tmp/od-agent-pr-explore-local}"
 
 for command_name in docker gh jq node; do
@@ -57,9 +57,9 @@ if [ -z "${GH_TOKEN:-}" ]; then
   export GH_TOKEN
 fi
 
-if ! command -v expect-cli >/dev/null 2>&1 && [ "${OD_ALLOW_NPX_EXPECT_CLI:-0}" != "1" ]; then
-  echo "::error::expect-cli is not installed. Install it on the mini with: npm install -g expect-cli@${OD_EXPECT_CLI_VERSION:-0.1.3}" >&2
-  echo "        For a one-off smoke run, set OD_ALLOW_NPX_EXPECT_CLI=1 to use the pinned npx fallback." >&2
+if ! command -v expect-cli >/dev/null 2>&1 && [ "${MAX_ALLOW_NPX_EXPECT_CLI:-0}" != "1" ]; then
+  echo "::error::expect-cli is not installed. Install it on the mini with: npm install -g expect-cli@${MAX_EXPECT_CLI_VERSION:-0.1.3}" >&2
+  echo "        For a one-off smoke run, set MAX_ALLOW_NPX_EXPECT_CLI=1 to use the pinned npx fallback." >&2
   exit 1
 fi
 

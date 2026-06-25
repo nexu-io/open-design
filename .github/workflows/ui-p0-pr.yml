@@ -42,7 +42,7 @@ concurrency:
 jobs:
   ui_smoke:
     name: UI P0 smoke
-    if: ${{ github.repository == 'nexu-io/open-design' }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -61,9 +61,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -86,7 +86,7 @@ jobs:
 
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -119,9 +119,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean

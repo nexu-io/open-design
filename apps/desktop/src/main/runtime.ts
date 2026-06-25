@@ -14,8 +14,8 @@ import {
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
   type DesktopUpdateStatusSnapshot,
-} from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+} from "@marketing-ax/sidecar-proto";
+import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@marketing-ax/host";
 
 import { openValidatedDirectory } from "./open-path.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
@@ -230,7 +230,7 @@ const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
 // `data-od-app-mounted="1"` on first paint of the real UI), so the user never
-// sees the web's own "Loading Open Design…" shell flash between the splash and
+// sees the web's own "Loading Marketing AX…" shell flash between the splash and
 // the app. Poll cadence + a hard ceiling so a missing mount signal can never
 // strand the user on the splash forever.
 const WEB_MOUNT_POLL_MS = 80;
@@ -242,7 +242,7 @@ const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
-const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
+const DESIGN_BROWSER_PARTITION = "persist:marketing-ax-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
@@ -330,7 +330,7 @@ export type DesktopRuntimeOptions = {
   discoverUrl(): Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged desktop loads the
-   * renderer from `od://app/`, which only resolves through Electron's
+   * renderer from `max://app/`, which only resolves through Electron's
    * registered protocol handler in the renderer context. Main-process
    * `globalThis.fetch` (Node/undici) ignores that handler, so any
    * `fetch(webUrl + '/api/...')` from main fails in packaged builds.
@@ -344,7 +344,7 @@ export type DesktopRuntimeOptions = {
   /**
    * BCP-47 locale string read from the OS by main process, forwarded
    * to the preload via `webPreferences.additionalArguments` so the
-   * renderer can mirror it onto `__od__.client.osLocale`. Optional;
+   * renderer can mirror it onto `__max__.client.osLocale`. Optional;
    * when omitted the renderer falls back to navigator/localStorage.
    */
   osLocale?: string;
@@ -418,7 +418,7 @@ export type PickAndImportFolderDeps = {
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): the helper now POSTs to the
    * sidecar daemon's real `http://127.0.0.1:<port>` URL rather than the
-   * renderer-only `od://app/` webUrl. Renamed from `webUrl` to make the
+   * renderer-only `max://app/` webUrl. Renamed from `webUrl` to make the
    * boundary explicit — main-process Node fetch must hit a real http
    * URL, never a custom Electron protocol scheme. tools-dev callers
    * pass the same value they used to pass for `webUrl` (its web URL is
@@ -800,7 +800,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>Marketing AX</title>
     <style>
       html,
       body {
@@ -880,7 +880,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Open Design",
+    title: "Marketing AX",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -947,7 +947,7 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     // `od:` is the packaged Electron entry's privileged scheme
     // registered by `apps/packaged/src/protocol.ts` and proxied to the
     // local web sidecar. Without this branch, any in-app
-    // `<a target="_blank" href="/api/...">` resolves to `od://app/...`
+    // `<a target="_blank" href="/api/...">` resolves to `max://app/...`
     // in packaged builds, falls through `setWindowOpenHandler` to
     // `{ action: "deny" }`, and the click is silently dropped — that
     // was the Orbit "Open artifact" no-op reported in #911. Allowing
@@ -963,7 +963,7 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     // and the user sees a "Popup blocked" alert.
     return (
       parsed.protocol === "blob:" ||
-      parsed.protocol === "od:" ||
+      parsed.protocol === "max:" ||
       (parsed.protocol === "about:" && parsed.pathname === "blank")
     );
   } catch {
@@ -1266,7 +1266,7 @@ async function reportRendererCrash(
     // discoverDaemonUrl returns the real http://127.0.0.1:<port> URL the
     // sidecar daemon listens on. In tools-dev callers omit it and fall back
     // to discoverUrl (which is also http in dev). In packaged builds it's
-    // mandatory because the renderer-only `od://app/` scheme isn't
+    // mandatory because the renderer-only `max://app/` scheme isn't
     // reachable from main-process Node fetch.
     const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
     if (!baseUrl) return;
@@ -1365,7 +1365,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         return { ok: false, reason: "desktop auth secret not registered" };
       }
       // Round-7 (lefarcen P2): packaged builds report the renderer URL
-      // (`od://app/`) over `discoverUrl`, but Node-side fetch can't
+      // (`max://app/`) over `discoverUrl`, but Node-side fetch can't
       // resolve a custom Electron protocol scheme. Prefer the daemon
       // sidecar's real http URL when packaged exposes it; tools-dev
       // omits `discoverDaemonUrl` and we fall back to the web URL
@@ -1481,7 +1481,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // openPath(projectId) for projects whose resolvedDir came from that
   // trusted flow."
   ipcMain.handle("shell:open-path", async (_event, projectId: string) => {
-    // Round-7 (lefarcen P2): same packaged od:// → daemon URL pivot as
+    // Round-7 (lefarcen P2): same packaged max:// → daemon URL pivot as
     // the dialog:pick-and-import handler above.
     const apiBaseUrl =
       (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
@@ -1523,9 +1523,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // Starts hidden: the splash window is what the user sees while the real web
     // app loads in here. We reveal this window only once the app has actually
     // mounted (see `revealWhenReady` below), so there is never a flash of the
-    // web's own "Loading Open Design…" shell.
+    // web's own "Loading Marketing AX…" shell.
     show: false,
-    title: "Open Design",
+    title: "Marketing AX",
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
@@ -1575,7 +1575,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Open Design window");
+      throw new Error("host IPC is only available to the main Marketing AX window");
     }
   };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
@@ -1872,7 +1872,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
   // sets `data-od-app-mounted="1"` on first paint of the real UI — so we never
-  // reveal the web's own dark "Loading Open Design…" shell, and (b) the splash
+  // reveal the web's own dark "Loading Marketing AX…" shell, and (b) the splash
   // has been up at least MIN_SPLASH_MS so the brand clip plays through. A hard
   // ceiling guarantees the user is never stranded on the splash if the mount
   // signal never arrives.

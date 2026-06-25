@@ -21,7 +21,7 @@
 // their own daemon (which would dirty the registry table).
 
 import path from 'node:path';
-import type { RegistryView } from '@open-design/plugin-runtime';
+import type { RegistryView } from '@marketing-ax/plugin-runtime';
 import { doctorPlugin, type DoctorReport, type Diagnostic } from './doctor.js';
 import { resolvePluginFolder } from './registry.js';
 import type { ConnectorProbe } from './connector-gate.js';

@@ -104,13 +104,13 @@ upload_report_zip() {
   echo "uploaded release report zip: $zip_path"
 }
 
-mac_dmg="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.dmg"
-mac_zip="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.zip"
-mac_intel_dmg="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.dmg"
-mac_intel_zip="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.zip"
-win_installer="open-design-$RELEASE_VERSION$win_asset_suffix-win-x64-setup.exe"
-win_portable_zip="open-design-$RELEASE_VERSION$win_asset_suffix-win-x64-portable.zip"
-linux_appimage="open-design-$RELEASE_VERSION$linux_asset_suffix-linux-x64.AppImage"
+mac_dmg="marketing-ax-$RELEASE_VERSION$asset_version_suffix-mac-arm64.dmg"
+mac_zip="marketing-ax-$RELEASE_VERSION$asset_version_suffix-mac-arm64.zip"
+mac_intel_dmg="marketing-ax-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.dmg"
+mac_intel_zip="marketing-ax-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.zip"
+win_installer="marketing-ax-$RELEASE_VERSION$win_asset_suffix-win-x64-setup.exe"
+win_portable_zip="marketing-ax-$RELEASE_VERSION$win_asset_suffix-win-x64-portable.zip"
+linux_appimage="marketing-ax-$RELEASE_VERSION$linux_asset_suffix-linux-x64.AppImage"
 metadata_path="$release_root/metadata.json"
 win_include_zip="${WIN_INCLUDE_ZIP:-true}"
 case "$win_include_zip" in

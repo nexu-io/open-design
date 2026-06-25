@@ -5,7 +5,7 @@ import {
   trackRunFailedToastGoAmrClick,
   trackRunFailedToastSurfaceView,
 } from '../analytics/events';
-import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import type { TrackingProjectKind } from '@marketing-ax/contracts/analytics';
 import { recordAmrEntry, type TrackingAmrEntrySource } from '../analytics/amr-attribution';
 
 export interface AmrGuidanceProps {
@@ -23,7 +23,7 @@ export interface AmrGuidanceProps {
 
 // Theme-color promotion card under a failed run's gray error card, shown when a
 // non-AMR agent hits a model/auth/quota wall. Offers a one-click switch to
-// Open Design's hosted AMR with auto-retry. Fires `surface_view`
+// Marketing AX's hosted AMR with auto-retry. Fires `surface_view`
 // (element=run_failed_toast) once on mount and `ui_click` (element=go_amr) on
 // the action. `useAnalytics()` returns a no-op stub outside the provider, so
 // this is safe in isolated tests.

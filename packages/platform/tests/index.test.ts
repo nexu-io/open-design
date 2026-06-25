@@ -657,11 +657,11 @@ describe("createPackageManagerInvocation", () => {
 
   it("executes native npm_execpath directly instead of loading it through Node", () => {
     setPlatform("linux");
-    const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], {
+    const invocation = createPackageManagerInvocation(["--filter", "@marketing-ax/desktop", "build"], {
       npm_execpath: "/home/u/.local/share/pnpm/.tools/@pnpm+linux-x64/10.33.2/node_modules/@pnpm/linux-x64/pnpm",
     } as NodeJS.ProcessEnv);
     expect(invocation).toEqual({
-      args: ["--filter", "@open-design/desktop", "build"],
+      args: ["--filter", "@marketing-ax/desktop", "build"],
       command: "/home/u/.local/share/pnpm/.tools/@pnpm+linux-x64/10.33.2/node_modules/@pnpm/linux-x64/pnpm",
     });
   });
@@ -701,7 +701,7 @@ describe("createPackageManagerInvocation", () => {
 
   it("wraps pnpm through cmd.exe with verbatim arguments on Windows", () => {
     setPlatform("win32");
-    const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], {
+    const invocation = createPackageManagerInvocation(["--filter", "@marketing-ax/desktop", "build"], {
       ComSpec: "cmd.exe",
     } as NodeJS.ProcessEnv);
     expect(invocation.command).toBe("cmd.exe");
@@ -710,7 +710,7 @@ describe("createPackageManagerInvocation", () => {
       "/d",
       "/s",
       "/c",
-      '"pnpm --filter @open-design/desktop build"',
+      '"pnpm --filter @marketing-ax/desktop build"',
     ]);
   });
 });

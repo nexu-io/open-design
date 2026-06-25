@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Open Design ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
+Description: 'Marketing AX ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
 
 Parameters:
   CustomDomainName:
@@ -13,7 +13,7 @@ Parameters:
   DockerImage:
     Type: String
     MinLength: 1
-    Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
+    Description: 'REQUIRED: The full repository URI and tag for the Marketing AX Docker image (e.g., your-registry/marketing-ax:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
     AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'
@@ -29,12 +29,12 @@ Parameters:
   AppStoragePath:
     Type: String
     Description: 'Container path where the .od SQLite directory is stored.'
-    Default: '/app/.od'
+    Default: '/app/.max'
   ApiToken:
     Type: String
     NoEcho: true
     MinLength: 1
-    Description: 'REQUIRED: The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager.'
+    Description: 'REQUIRED: The secure API token used to authenticate requests to the Marketing AX backend. It is stored securely in AWS Secrets Manager.'
   VpcCidr:
     Type: String
     Default: '10.42.0.0/16'
@@ -59,7 +59,7 @@ Parameters:
     Type: String
     Default: small
     AllowedValues: [small, medium, large]
-    Description: 'The compute size for the Open Design application.'
+    Description: 'The compute size for the Marketing AX application.'
   TaskCpuArchitecture:
     Type: String
     Default: X86_64
@@ -420,17 +420,17 @@ Resources:
         - Name: app
           Image: !Ref DockerImage
           Environment:
-            - Name: OD_ALLOWED_ORIGINS
+            - Name: MAX_ALLOWED_ORIGINS
               Value: !If
                 - UseCustomDomain
                 - !Sub 'https://${CustomDomainName}'
                 - !Sub 'http://${LoadBalancer.DNSName}'
-            - Name: OD_BIND_HOST
+            - Name: MAX_BIND_HOST
               Value: "127.0.0.1"
-            - Name: OD_PORT
+            - Name: MAX_PORT
               Value: "7456"
           Secrets:
-            - Name: OD_API_TOKEN
+            - Name: MAX_API_TOKEN
               ValueFrom: !Ref ApiTokenSecret
           MountPoints:
             - SourceVolume: efs-storage
@@ -448,9 +448,9 @@ Resources:
           Environment:
             - Name: PROXY_PORT
               Value: !Ref ProxyPort
-            - Name: OD_BIND_HOST
+            - Name: MAX_BIND_HOST
               Value: "127.0.0.1"
-            - Name: OD_WEB_PORT
+            - Name: MAX_WEB_PORT
               Value: "7456"
           Secrets:
             - Name: PROXY_API_TOKEN
@@ -465,7 +465,7 @@ Resources:
                   listen ${PROXY_PORT};
 
                   location / {
-                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+                      proxy_pass http://${MAX_BIND_HOST}:${MAX_WEB_PORT};
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -474,7 +474,7 @@ Resources:
                   }
 
                   location /api/ {
-                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+                      proxy_pass http://${MAX_BIND_HOST}:${MAX_WEB_PORT};
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -491,7 +491,7 @@ Resources:
                   }
               }
               EOF
-              envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
+              envsubst '$PROXY_PORT $MAX_BIND_HOST $MAX_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
               exec nginx -g "daemon off;"
           LogConfiguration:
             LogDriver: awslogs
@@ -531,7 +531,7 @@ Resources:
   ApiTokenSecret:
       Type: AWS::SecretsManager::Secret
       Properties:
-        Description: "API Token for Open Design"
+        Description: "API Token for Marketing AX"
         SecretString: !Ref ApiToken
 
 Outputs:

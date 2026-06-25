@@ -23,12 +23,12 @@
 //
 // Locations:
 //
-//   packaged (mac):    ~/Library/Application Support/Open Design Nightly/installation.json
-//   packaged (win):    %APPDATA%/Open Design Nightly/installation.json
-//   packaged (linux):  $XDG_CONFIG_HOME/Open Design Nightly/installation.json
+//   packaged (mac):    ~/Library/Application Support/Marketing AX Nightly/installation.json
+//   packaged (win):    %APPDATA%/Marketing AX Nightly/installation.json
+//   packaged (linux):  $XDG_CONFIG_HOME/Marketing AX Nightly/installation.json
 //   tools-dev / OSS:   <dataDir>/installation.json  (no namespace concept; fall back to dataDir)
 //
-// `OD_INSTALLATION_DIR` is the env override. Packaged sidecars.ts sets it
+// `MAX_INSTALLATION_DIR` is the env override. Packaged sidecars.ts sets it
 // to the channel root explicitly; everything else falls back to dataDir
 // (where it sits next to app-config.json and behaves like the legacy
 // path — fine for dev because dev doesn't have namespace churn).
@@ -50,7 +50,7 @@ export interface InstallationFile {
 }
 
 export function resolveInstallationDir(dataDir: string): string {
-  const env = process.env.OD_INSTALLATION_DIR;
+  const env = process.env.MAX_INSTALLATION_DIR;
   if (env && env.length > 0) return env;
   return dataDir;
 }

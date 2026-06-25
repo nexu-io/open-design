@@ -289,11 +289,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: open-design-release-beta
+  group: marketing-ax-release-beta
   cancel-in-progress: false
 
 env:
-  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  MARKETING_AX_TELEMETRY_RELAY_URL: ${{ vars.MARKETING_AX_TELEMETRY_RELAY_URL }}
   POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
   POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
   POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
@@ -307,11 +307,11 @@ env:
 jobs:
   metadata:
     name: Prepare beta metadata
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     env:
       RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
+      MARKETING_AX_BETA_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
     outputs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
@@ -340,7 +340,7 @@ jobs:
         id: prev
         run: |
           set -euo pipefail
-          prev="$(curl -fsSL "$OPEN_DESIGN_BETA_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
+          prev="$(curl -fsSL "$MARKETING_AX_BETA_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
           echo "previous beta commit: ${prev:-<none>}"
           echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
 
@@ -417,8 +417,8 @@ jobs:
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
           MAC_COMPRESSION: normal
-          OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
-          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
+          MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
+          MAX_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
           RELEASE_BUILD_TARGET: ${{ inputs.mac_arm64_target }}
           RELEASE_NAMESPACE: release-beta
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-build/mac_arm64/outputs.json
@@ -462,7 +462,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
           RELEASE_NAMESPACE: release-beta
-          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}.signed
+          RELEASE_NOTES: Marketing AX beta ${{ needs.metadata.outputs.beta_version }}.signed
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
@@ -496,7 +496,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-mac-arm64-publish-manifest
+          name: marketing-ax-beta-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
 
@@ -607,7 +607,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-mac-x64-publish-manifest
+          name: marketing-ax-beta-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
 
@@ -655,17 +655,17 @@ jobs:
       - name: Build beta win_x64
         shell: pwsh
         env:
-          OD_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND: ${{ steps.sign_probe.outputs.certificate_found }}
-          OD_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}
-          OD_BETA_WINDOWS_SIGNING_MODE: ${{ steps.sign_probe.outputs.mode }}
-          OD_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}
-          OD_BETA_WINDOWS_SIGNING_REASON: ${{ steps.sign_probe.outputs.reason }}
-          OD_BETA_WINDOWS_SIGNING_REQUESTED: ${{ steps.sign_probe.outputs.requested }}
-          OD_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
-          OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
-          OD_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
-          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
-          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+          MAX_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND: ${{ steps.sign_probe.outputs.certificate_found }}
+          MAX_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}
+          MAX_BETA_WINDOWS_SIGNING_MODE: ${{ steps.sign_probe.outputs.mode }}
+          MAX_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}
+          MAX_BETA_WINDOWS_SIGNING_REASON: ${{ steps.sign_probe.outputs.reason }}
+          MAX_BETA_WINDOWS_SIGNING_REQUESTED: ${{ steps.sign_probe.outputs.requested }}
+          MAX_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
+          MAX_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
+          MAX_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
+          MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          MAX_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
         run: |
           .\.github\workflow\scripts\release\build-platform.ps1 `
             -ReleaseTarget win_x64 `
@@ -744,7 +744,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-win-x64-publish-manifest
+          name: marketing-ax-beta-win-x64-publish-manifest
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
 
@@ -857,7 +857,7 @@ jobs:
         if: ${{ inputs.publish }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-linux-x64-publish-manifest
+          name: marketing-ax-beta-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
           if-no-files-found: error
 
@@ -902,28 +902,28 @@ jobs:
         if: ${{ inputs.enable_mac_arm64 && needs.build_mac_arm64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-mac-arm64-publish-manifest
+          name: marketing-ax-beta-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download mac_x64 publish manifest
         if: ${{ inputs.enable_mac_x64 && needs.build_mac_x64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-mac-x64-publish-manifest
+          name: marketing-ax-beta-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download win_x64 publish manifest
         if: ${{ inputs.enable_win_x64 && needs.build_win_x64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-win-x64-publish-manifest
+          name: marketing-ax-beta-win-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download linux_x64 publish manifest
         if: ${{ inputs.enable_linux_x64 && needs.build_linux_x64.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-linux-x64-publish-manifest
+          name: marketing-ax-beta-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Setup Node.js

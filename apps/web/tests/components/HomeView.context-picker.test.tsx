@@ -8,7 +8,7 @@ import {
   type ConnectorDetail,
   type McpServerConfig,
   type SkillSummary,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { HomeView } from '../../src/components/HomeView';
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 

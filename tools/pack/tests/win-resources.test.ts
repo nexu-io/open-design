@@ -166,14 +166,14 @@ describe("prepareResourceTree", () => {
     const cache = new ToolPackCache(join(root, "cache"));
     const config = { workspaceRoot } as ToolPackConfig;
     const paths = { resourceRoot } as WinPaths;
-    const originalVelaBin = process.env.OPEN_DESIGN_VELA_CLI_BIN;
+    const originalVelaBin = process.env.MARKETING_AX_VELA_CLI_BIN;
 
     try {
       await createWorkspaceFixture(workspaceRoot);
       await mkdir(join(root, "source"), { recursive: true });
       await writeFile(source, "fake vela exe\n", "utf8");
       await writeFakeOpenCodeCompanion(source, "fake opencode\n");
-      process.env.OPEN_DESIGN_VELA_CLI_BIN = source;
+      process.env.MARKETING_AX_VELA_CLI_BIN = source;
 
       await prepareResourceTree(config, paths, cache, { materialize: true });
 
@@ -184,8 +184,8 @@ describe("prepareResourceTree", () => {
         readFile(join(resourceRoot, "bin", "libexec", "opencode", "opencode"), "utf8"),
       ).resolves.toBe("fake opencode\n");
     } finally {
-      if (originalVelaBin == null) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
-      else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
+      if (originalVelaBin == null) delete process.env.MARKETING_AX_VELA_CLI_BIN;
+      else process.env.MARKETING_AX_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -200,17 +200,17 @@ describe("prepareResourceTree", () => {
       requireVelaCli: true,
     } as ToolPackConfig;
     const paths = { resourceRoot } as WinPaths;
-    const originalVelaBin = process.env.OPEN_DESIGN_VELA_CLI_BIN;
+    const originalVelaBin = process.env.MARKETING_AX_VELA_CLI_BIN;
 
     try {
       await createWorkspaceFixture(workspaceRoot);
-      process.env.OPEN_DESIGN_VELA_CLI_BIN = join(root, "missing", "vela.exe");
+      process.env.MARKETING_AX_VELA_CLI_BIN = join(root, "missing", "vela.exe");
       await expect(
         prepareResourceTree(config, paths, cache, { materialize: true }),
       ).rejects.toThrow();
     } finally {
-      if (originalVelaBin == null) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
-      else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
+      if (originalVelaBin == null) delete process.env.MARKETING_AX_VELA_CLI_BIN;
+      else process.env.MARKETING_AX_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -223,7 +223,7 @@ describe("prepareResourceTree", () => {
     const cache = new ToolPackCache(join(root, "cache"));
     const config = { workspaceRoot } as ToolPackConfig;
     const paths = { resourceRoot } as WinPaths;
-    const originalVelaBin = process.env.OPEN_DESIGN_VELA_CLI_BIN;
+    const originalVelaBin = process.env.MARKETING_AX_VELA_CLI_BIN;
     const materializedCompanion = join(
       resourceRoot,
       "bin",
@@ -237,7 +237,7 @@ describe("prepareResourceTree", () => {
       await mkdir(join(root, "source"), { recursive: true });
       await writeFile(source, "fake vela exe\n", "utf8");
       const sourceCompanion = await writeFakeOpenCodeCompanion(source, "companion one\n");
-      process.env.OPEN_DESIGN_VELA_CLI_BIN = source;
+      process.env.MARKETING_AX_VELA_CLI_BIN = source;
 
       await prepareResourceTree(config, paths, cache, { materialize: true });
       await expect(readFile(materializedCompanion, "utf8")).resolves.toBe(
@@ -256,8 +256,8 @@ describe("prepareResourceTree", () => {
         "miss",
       ]);
     } finally {
-      if (originalVelaBin == null) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
-      else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
+      if (originalVelaBin == null) delete process.env.MARKETING_AX_VELA_CLI_BIN;
+      else process.env.MARKETING_AX_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
   });

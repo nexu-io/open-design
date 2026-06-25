@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-// Local mirror of the @open-design/contracts routine types. Kept here so
+// Local mirror of the @marketing-ax/contracts routine types. Kept here so
 // this service typechecks under NodeNext (the contracts dist re-exports are
 // extension-less, which only works under bundler-mode resolution). The
 // shapes must stay aligned with packages/contracts/src/api/routines.ts.

@@ -2,7 +2,7 @@ import { agentBinEnvKey, agentSearchDirs } from './executables.js';
 import type { AgentLaunchResolution } from './launch.js';
 import type { AgentAuthProbeResult } from './auth.js';
 import type { AgentDiagnostic, RuntimeAgentDef } from './types.js';
-import type { AgentFixIntent } from '@open-design/contracts';
+import type { AgentFixIntent } from '@marketing-ax/contracts';
 
 // Cap on how many searched dirs we attach to a `not-on-path` diagnostic.
 // The resolver walks PATH + the user-toolchain whitelist, which can run to

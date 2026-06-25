@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import express from 'express';
-import { SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@marketing-ax/sidecar-proto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 import { buildMcpInstallPayload } from '../src/mcp-install-info.js';
@@ -165,8 +165,8 @@ describe('GET /api/mcp/install-info', () => {
   );
 
   afterEach(() => {
-    delete process.env.OD_ALLOWED_ORIGINS;
-    delete process.env.OD_BIND_HOST;
+    delete process.env.MAX_ALLOWED_ORIGINS;
+    delete process.env.MAX_BIND_HOST;
   });
 
   it('non-sidecar launch bakes --daemon-url so custom ports keep working', async () => {
@@ -179,9 +179,9 @@ describe('GET /api/mcp/install-info', () => {
     // URL so the spawned `od mcp` reaches the right port without any
     // discovery.
     expect(body.args).toEqual([cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`]);
-    // env always carries OD_DATA_DIR (issue #848); no sidecar keys in
+    // env always carries MAX_DATA_DIR (issue #848); no sidecar keys in
     // a non-sidecar launch.
-    expect(body.env).toEqual({ OD_DATA_DIR: dataDir });
+    expect(body.env).toEqual({ MAX_DATA_DIR: dataDir });
     expect(body.daemonUrl).toBe(`http://127.0.0.1:${port}`);
     expect(body.platform).toBe(process.platform);
     expect(body.cliExists).toBe(true);
@@ -189,12 +189,12 @@ describe('GET /api/mcp/install-info', () => {
     expect(body.buildHint).toBeNull();
   });
 
-  it('pins OD_DATA_DIR in the env so IDE-spawned MCP processes write to the daemon data dir (issue #848)', async () => {
+  it('pins MAX_DATA_DIR in the env so IDE-spawned MCP processes write to the daemon data dir (issue #848)', async () => {
     const { port } = nonSidecar;
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
     const body = await readInstallInfo(res);
     expect(body.env).toBeDefined();
-    expect(body.env.OD_DATA_DIR).toBe(dataDir);
+    expect(body.env.MAX_DATA_DIR).toBe(dataDir);
   });
 
   it('rejects cross-origin requests with 403', async () => {
@@ -221,7 +221,7 @@ describe('GET /api/mcp/install-info', () => {
 
   it('accepts explicitly configured deployment origins', async () => {
     const { port } = nonSidecar;
-    process.env.OD_ALLOWED_ORIGINS = `https://od.example.com,http://203.0.113.10:${port}`;
+    process.env.MAX_ALLOWED_ORIGINS = `https://od.example.com,http://203.0.113.10:${port}`;
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`, {
       headers: {
         Host: 'od.example.com',
@@ -242,11 +242,11 @@ describe('GET /api/mcp/install-info', () => {
     expect(after - before).toBeLessThanOrEqual(1);
   });
 
-  it('sidecar launch omits --daemon-url and emits the concrete IPC path with OD_DATA_DIR', async () => {
+  it('sidecar launch omits --daemon-url and emits the concrete IPC path with MAX_DATA_DIR', async () => {
     const { port, server } = await startHarness(
       cliPath,
       {
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/default/daemon.sock',
       },
       dataDir,
     );
@@ -255,8 +255,8 @@ describe('GET /api/mcp/install-info', () => {
       const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
       expect(body.env).toEqual({
-        OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+        MAX_DATA_DIR: dataDir,
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/default/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
@@ -267,7 +267,7 @@ describe('GET /api/mcp/install-info', () => {
     const { port, server } = await startHarness(
       cliPath,
       {
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/foo/daemon.sock',
       },
       dataDir,
     );
@@ -276,8 +276,8 @@ describe('GET /api/mcp/install-info', () => {
       const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
       expect(body.env).toEqual({
-        OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+        MAX_DATA_DIR: dataDir,
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/foo/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
@@ -298,7 +298,7 @@ describe('GET /api/mcp/install-info', () => {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
       const body = await readInstallInfo(res);
       expect(body.env).toEqual({
-        OD_DATA_DIR: dataDir,
+        MAX_DATA_DIR: dataDir,
         [SIDECAR_ENV.IPC_PATH]: '/var/run/open-design/foo/daemon.sock',
       });
     } finally {

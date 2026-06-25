@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@open-design/components";
-import { projectKindToTracking } from "@open-design/contracts/analytics";
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@marketing-ax/components";
+import { projectKindToTracking } from "@marketing-ax/contracts/analytics";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackPageView,

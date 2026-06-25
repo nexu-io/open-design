@@ -198,7 +198,7 @@ describe('error-tracking', () => {
     const error = new Error('scrub-target');
     error.stack = [
       'Error: scrub-target',
-      '    at handleClick (file:///Applications/Open Design.app/Contents/Resources/apps/web/src/FileViewer.tsx:147:23)',
+      '    at handleClick (file:///Applications/Marketing AX.app/Contents/Resources/apps/web/src/FileViewer.tsx:147:23)',
       '    at /Users/jane/dev/checkout/apps/web/src/index.tsx:12:1',
     ].join('\n');
     reportHandledException(error);
@@ -214,7 +214,7 @@ describe('error-tracking', () => {
       const filename = frame.filename;
       if (typeof filename === 'string') {
         expect(filename).toMatch(/^app:\/\/apps\/web\//);
-        expect(filename).not.toContain('Applications/Open Design.app');
+        expect(filename).not.toContain('Applications/Marketing AX.app');
         expect(filename).not.toContain('/Users/jane');
       }
     }

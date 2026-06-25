@@ -13,7 +13,7 @@ import {
 const SPEC: McpLaunchSpec = {
   command: '/usr/local/bin/node',
   args: ['/opt/open-design/cli.js', 'mcp', '--daemon-url', 'http://127.0.0.1:7456'],
-  env: { OD_DATA_DIR: '/home/u/.open-design' },
+  env: { MAX_DATA_DIR: '/home/u/.open-design' },
 };
 
 const SPEC_NO_ENV: McpLaunchSpec = { ...SPEC, env: {} };
@@ -41,7 +41,7 @@ describe('CLI-driven agents', () => {
     expect(plan.addArgv).toEqual([
       'mcp', 'add', '--scope', 'user',
       'open-design',
-      '-e', 'OD_DATA_DIR=/home/u/.open-design',
+      '-e', 'MAX_DATA_DIR=/home/u/.open-design',
       '--',
       SPEC.command, ...SPEC.args,
     ]);
@@ -52,7 +52,7 @@ describe('CLI-driven agents', () => {
     const plan = planAgentInstall('codex', SPEC, ctx());
     if (plan.kind !== 'cli') throw new Error('expected cli');
     expect(plan.addArgv).toContain('--env');
-    expect(plan.addArgv).toContain('OD_DATA_DIR=/home/u/.open-design');
+    expect(plan.addArgv).toContain('MAX_DATA_DIR=/home/u/.open-design');
     expect(plan.addArgv.slice(-SPEC.args.length - 2)).toEqual(['--', SPEC.command, ...SPEC.args]);
   });
 

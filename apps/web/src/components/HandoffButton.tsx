@@ -8,11 +8,11 @@ import type {
   HostEditor,
   HostEditorId,
   HostEditorsResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   handoffTargetIdToTracking,
   type TrackingArtifactKind,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import { trackHandoffClick } from '../analytics/events';
@@ -24,7 +24,7 @@ import { AgentIcon } from './AgentIcon';
 
 const PREFERRED_EDITOR_KEY = 'open-design:preferred-editor';
 const PREFERRED_FRAMEWORK_KEY = 'open-design:handoff-framework';
-const AMR_WEBSITE_URL = 'https://open-design.ai/amr';
+const AMR_WEBSITE_URL = 'https://marketing-ax.example/amr';
 const PROJECT_PATH_COPY_ID = 'project-path';
 
 type HandoffTab = 'editor' | 'cli';
@@ -81,7 +81,7 @@ const CLI_ORDER = [
 ];
 
 const FALLBACK_CLI_TARGETS: CliTarget[] = [
-  { id: 'amr', name: 'Open Design AMR', bin: 'vela', available: false },
+  { id: 'amr', name: 'Marketing AX AMR', bin: 'vela', available: false },
   { id: 'claude', name: 'Claude Code', bin: 'claude', available: false },
   { id: 'codex', name: 'Codex CLI', bin: 'codex', available: false },
   { id: 'opencode', name: 'OpenCode', bin: 'opencode-cli', available: false },
@@ -158,7 +158,7 @@ function writePreferredFramework(id: string): void {
 }
 
 function cliDisplayName(agent: Pick<CliTarget, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+  return agent.id === 'amr' ? 'Marketing AX AMR' : agent.name;
 }
 
 function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {

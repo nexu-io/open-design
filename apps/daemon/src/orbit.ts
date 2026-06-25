@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 
-import type { OrbitRunSummary, OrbitStatusResponse } from '@open-design/contracts/api/orbit';
+import type { OrbitRunSummary, OrbitStatusResponse } from '@marketing-ax/contracts/api/orbit';
 
 import type { OrbitConfigPrefs } from './app-config.js';
 import { skillCwdAliasSegment } from './cwd-aliases.js';

@@ -117,26 +117,26 @@ describe('aihubmix media generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-aihubmix-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    process.env.OD_AIHUBMIX_API_KEY = 'sk-aihubmix-test-1234';
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    process.env.MAX_AIHUBMIX_API_KEY = 'sk-aihubmix-test-1234';
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
-    delete process.env.OD_AIHUBMIX_API_KEY;
-    if (originalMediaConfigDir == null) delete process.env.OD_MEDIA_CONFIG_DIR;
-    else process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
-    if (originalDataDir == null) delete process.env.OD_DATA_DIR;
-    else process.env.OD_DATA_DIR = originalDataDir;
+    delete process.env.MAX_AIHUBMIX_API_KEY;
+    if (originalMediaConfigDir == null) delete process.env.MAX_MEDIA_CONFIG_DIR;
+    else process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    if (originalDataDir == null) delete process.env.MAX_DATA_DIR;
+    else process.env.MAX_DATA_DIR = originalDataDir;
     await rm(root, { recursive: true, force: true });
   });
 

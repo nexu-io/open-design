@@ -16,7 +16,7 @@
 // branch on a single discriminator and lets the unit tests assert
 // classification without touching React.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 
 export type PluginPreviewKind = 'media' | 'html' | 'design' | 'text';
 

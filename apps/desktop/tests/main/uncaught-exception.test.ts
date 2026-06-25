@@ -9,8 +9,8 @@
  * the EINVAL code — so a future regression that broadens the filter to
  * "every EINVAL" (which would silently swallow real bugs) trips a test.
  *
- * @see https://github.com/nexu-io/open-design/issues/647
- * @see https://github.com/nexu-io/open-design/issues/895
+ * @see https://github.com/marketing-ax/marketing-ax/issues/647
+ * @see https://github.com/marketing-ax/marketing-ax/issues/895
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';

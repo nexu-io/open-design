@@ -1,10 +1,10 @@
 import { appendFileSync } from "node:fs";
 
-import type { SidecarStamp } from "@open-design/sidecar-proto";
+import type { SidecarStamp } from "@marketing-ax/sidecar-proto";
 
 import type { PackagedNamespacePaths } from "./paths.js";
 
-const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
+const DESKTOP_LOG_ECHO_ENV = "MAX_DESKTOP_LOG_ECHO";
 
 type LogLevel = "error" | "info" | "warn";
 

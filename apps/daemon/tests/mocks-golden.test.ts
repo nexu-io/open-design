@@ -10,7 +10,7 @@
 // fails this test loudly.
 //
 // Update flow when a parser change is INTENTIONAL:
-//   MOCKS_GOLDEN_UPDATE=1 pnpm --filter @open-design/daemon test mocks-golden
+//   MOCKS_GOLDEN_UPDATE=1 pnpm --filter @marketing-ax/daemon test mocks-golden
 // then `git diff mocks/golden/` and commit the new shapes.
 //
 // Auto-skips when the recording corpus hasn't been fetched yet (see

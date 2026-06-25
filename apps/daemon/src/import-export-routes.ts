@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@open-design/contracts';
+import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@marketing-ax/contracts';
 import nodePath from 'node:path';
 import type { RouteDeps } from './server-context.js';
 import {
@@ -219,7 +219,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       // the imported folder's artifacts. Persist an empty saved tab state so
       // ProjectView does not auto-open the detected primary file on hydration.
       setTabs(db, projectId, [], null);
-      /** @type {import('@open-design/contracts').ReplaceProjectWorkingDirResponse} */
+      /** @type {import('@marketing-ax/contracts').ReplaceProjectWorkingDirResponse} */
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
     } catch (err: any) {
@@ -378,7 +378,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       // the imported folder's artifacts. Persist an empty saved tab state so
       // ProjectView does not auto-open the detected primary file on hydration.
       setTabs(db, id, [], null);
-      /** @type {import('@open-design/contracts').ImportFolderResponse} */
+      /** @type {import('@marketing-ax/contracts').ImportFolderResponse} */
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
     } catch (err: any) {
@@ -496,7 +496,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const files = await listFiles(PROJECTS_DIR, req.params.id, {
         metadata: project.metadata,
       });
-      /** @type {import('@open-design/contracts').ProjectExportManifestResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectExportManifestResponse} */
       const body = buildProjectExportManifestResponse({
         project,
         projectId: req.params.id,
@@ -567,8 +567,8 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // would otherwise pass the daemon middleware) cannot escalate to
   // daemon-origin privileges through script execution.
   //
-  // See nexu-io/open-design#368 and the architecture lock at
-  // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
+  // See marketing-ax/marketing-ax#368 and the architecture lock at
+  // https://github.com/marketing-ax/marketing-ax/issues/368#issuecomment-4366243218.
   app.get('/api/projects/:id/export/*splat', async (req, res) => {
     try {
       if (!isSafeId(req.params.id)) {

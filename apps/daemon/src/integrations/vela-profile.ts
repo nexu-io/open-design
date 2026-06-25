@@ -1,4 +1,4 @@
-const AMR_PROFILE_ENV = 'OPEN_DESIGN_AMR_PROFILE';
+const AMR_PROFILE_ENV = 'MARKETING_AX_AMR_PROFILE';
 const DEFAULT_PROFILE = 'prod';
 const ALLOWED_PROFILES = new Set(['prod', 'test', 'local']);
 

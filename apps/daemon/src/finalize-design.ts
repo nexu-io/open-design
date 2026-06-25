@@ -17,7 +17,7 @@
 // gateways still pass it explicitly.
 //
 // Inline `PersistedAgentEvent` shape is restated in this file (the daemon
-// tsconfig does not resolve the `@open-design/contracts/api/chat` subpath
+// tsconfig does not resolve the `@marketing-ax/contracts/api/chat` subpath
 // export — verified during PR #493). Schema-mismatch tests in the test
 // file would catch any drift between this restated union and the contract.
 
@@ -30,7 +30,7 @@ import type {
   FinalizeAnthropicResponse,
   FinalizeArtifactRef,
   FinalizeProviderProtocol,
-} from '@open-design/contracts/api/finalize';
+} from '@marketing-ax/contracts/api/finalize';
 import { getProject } from './db.js';
 import { readDesignSystem } from './design-systems.js';
 import {
@@ -45,7 +45,7 @@ import { googleGenerateContentUrl } from './google-models.js';
 
 // Re-export the request/response types so existing daemon-internal
 // imports (and the route handler) keep their referenced names. The
-// canonical definitions live in @open-design/contracts/api/finalize
+// canonical definitions live in @marketing-ax/contracts/api/finalize
 // per @lefarcen's P2 review feedback on PR #832, with a real runtime
 // entrypoint per @mrcfps's review feedback on the same PR.
 export type {
@@ -150,7 +150,7 @@ interface ResolvedArtifact {
  * `metadata` is the project row's `metadata` field (from `getProject`).
  * For imported-folder projects, `metadata.baseDir` redirects file IO
  * to the user's actual folder; without it, this resolver would only
- * look under `.od/projects/<id>` and miss the real artifacts.
+ * look under `.max/projects/<id>` and miss the real artifacts.
  *
  * Sidecar presence is checked via `existsSync` on the on-disk path so
  * the resolver does not depend on `inferLegacyManifest`'s heuristic.
@@ -276,14 +276,14 @@ export async function finalizeDesignPackage(
 
   // Imported-folder projects (created via /api/import/folder) carry
   // `metadata.baseDir` and write to the user's actual folder rather than
-  // `.od/projects/<id>`. resolveProjectDir handles both shapes; calling
+  // `.max/projects/<id>`. resolveProjectDir handles both shapes; calling
   // bare `projectDir` would silently land DESIGN.md in the hidden daemon
   // data dir for these projects (PR #832 P1 finding from @lefarcen).
   const projectMetadata = (project as { metadata?: { baseDir?: string } | null }).metadata ?? null;
   const dir = resolveProjectDir(projectsRoot, projectId, projectMetadata ?? undefined);
   // For imported-folder projects, `dir` is the user's own directory and
   // already exists; mkdirSync is a no-op (recursive:true is idempotent).
-  // For native projects, it lazily creates `.od/projects/<id>`.
+  // For native projects, it lazily creates `.max/projects/<id>`.
   fs.mkdirSync(dir, { recursive: true });
   const finalPath = path.join(dir, OUTPUT_FILENAME);
   const lockPath = path.join(dir, LOCK_FILENAME);
@@ -329,7 +329,7 @@ export async function finalizeDesignPackage(
 
     // Phase 5: current artifact (active tab → newest .artifact.json → null).
     // Thread metadata so imported-folder projects discover the real artifacts
-    // under metadata.baseDir rather than the empty `.od/projects/<id>` dir.
+    // under metadata.baseDir rather than the empty `.max/projects/<id>` dir.
     const artifact = await resolveCurrentArtifact(
       db,
       projectsRoot,

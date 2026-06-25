@@ -13,8 +13,8 @@
 // needs to commit.
 
 import { useMemo, useState } from 'react';
-import { VisuallyHidden } from '@open-design/components';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import { VisuallyHidden } from '@marketing-ax/components';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { useI18n } from '../../i18n';
 import type { PluginShareAction } from '../../state/projects';
 import { Icon } from '../Icon';
@@ -317,8 +317,8 @@ export function PluginCard({
                 onClick={() => onShareAction(record, 'contribute-open-design')}
                 disabled={pendingAny || shareBusy}
                 aria-busy={sharePendingAction === 'contribute-open-design' ? 'true' : undefined}
-                aria-label={`Contribute ${title} to Open Design`}
-                title="Contribute plugin to Open Design with a pull request"
+                aria-label={`Contribute ${title} to Marketing AX`}
+                title="Contribute plugin to Marketing AX with a pull request"
                 data-testid={`plugins-home-contribute-open-design-${record.id}`}
               >
                 <Icon

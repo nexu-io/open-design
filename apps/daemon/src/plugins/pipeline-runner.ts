@@ -23,7 +23,7 @@ import type {
   AppliedPluginSnapshot,
   GenUISurfaceSpec,
   PluginPipeline,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { runPipeline, type PipelineEnv, type PipelineEventSink, type StageOutcomeRecord, type StageRunner } from './pipeline.js';
 import { requestOrReuseSurface } from '../genui/registry.js';
 import type { GenUIEventSink } from '../genui/events.js';

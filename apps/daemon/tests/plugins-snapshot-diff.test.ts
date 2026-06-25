@@ -1,7 +1,7 @@
 // Plan §3.BB2 — diffSnapshots() pure helper.
 
 import { describe, expect, it } from 'vitest';
-import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import type { AppliedPluginSnapshot } from '@marketing-ax/contracts';
 import { diffSnapshots } from '../src/plugins/snapshot-diff.js';
 
 const make = (over: Partial<AppliedPluginSnapshot> = {}): AppliedPluginSnapshot => ({

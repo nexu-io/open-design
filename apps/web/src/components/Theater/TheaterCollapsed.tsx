@@ -1,6 +1,6 @@
 import { useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
-import type { ShipStatus } from '@open-design/contracts/critique';
+import type { ShipStatus } from '@marketing-ax/contracts/critique';
 import type { CritiqueState } from './state/reducer';
 
 interface Props {

@@ -1,9 +1,9 @@
 {
-  "name": "@open-design/metatool",
+  "name": "@marketing-ax/metatool",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Internal metadata helpers for checking freshness of built Open Design tool dist outputs.",
+  "description": "Internal metadata helpers for checking freshness of built Marketing AX tool dist outputs.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

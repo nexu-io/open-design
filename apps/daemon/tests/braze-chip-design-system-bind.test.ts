@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { PluginManifestSchema } from '@open-design/contracts';
+import { PluginManifestSchema } from '@marketing-ax/contracts';
 
 import { pickDesignSystemId } from '../src/plugins/apply.js';
 

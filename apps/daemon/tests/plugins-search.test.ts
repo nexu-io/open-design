@@ -1,7 +1,7 @@
 // Phase 4 / plan §3.Y1 — searchInstalledPlugins().
 
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginManifest } from '@marketing-ax/contracts';
 import { searchInstalledPlugins } from '../src/plugins/search.js';
 
 const make = (id: string, over: Partial<{ title: string; description: string; tags: string[]; taskKind: string; mode: string; trust: 'trusted' | 'restricted' | 'bundled'; sourceKind: 'bundled' | 'local' | 'github' | 'url'; }>): InstalledPluginRecord => ({
@@ -16,7 +16,7 @@ const make = (id: string, over: Partial<{ title: string; description: string; ta
   installedAt: 1,
   updatedAt: 1,
   manifest: {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     version: '0.1.0',
     title: over.title ?? `Title for ${id}`,

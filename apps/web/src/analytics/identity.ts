@@ -2,10 +2,10 @@
 // so it stays SSR-safe: every entry point guards window/localStorage access
 // and falls back to a deterministic-enough fake id under jsdom and Next.js
 // pre-render. The daemon mirrors these values via the x-od-analytics-*
-// headers (see @open-design/contracts/analytics).
+// headers (see @marketing-ax/contracts/analytics).
 
-import type { AnalyticsClientType } from '@open-design/contracts/analytics';
-import { detectOpenDesignHostClientType } from '@open-design/host';
+import type { AnalyticsClientType } from '@marketing-ax/contracts/analytics';
+import { detectOpenDesignHostClientType } from '@marketing-ax/host';
 
 const ANONYMOUS_ID_KEY = 'open-design:analytics.anonymous_id';
 const SESSION_ID_KEY = 'open-design:analytics.session_id';
@@ -53,7 +53,7 @@ export function getSessionId(): string {
   }
 }
 
-// Desktop packaged builds install the Open Design host bridge so the
+// Desktop packaged builds install the Marketing AX host bridge so the
 // same web bundle can distinguish desktop runs from browser visits.
 // Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {

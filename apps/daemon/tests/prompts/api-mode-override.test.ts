@@ -5,7 +5,7 @@ import { composeSystemPrompt } from '../../src/prompts/system.js';
 /**
  * Daemon-side mirror of the API-mode override fix for #313.
  *
- * The web-app/BYOK path goes through `@open-design/contracts`'s
+ * The web-app/BYOK path goes through `@marketing-ax/contracts`'s
  * `composeSystemPrompt`, which got the top-anchored fix first. But the
  * daemon has its own copy at `apps/daemon/src/prompts/system.ts`
  * (invoked by `apps/daemon/src/server.ts:6186-6193` for any agent whose

@@ -3,7 +3,7 @@
  * sequence in `ensureDaemonGateForDesktop`.
  *
  * Background: `tools-dev start daemon` followed by `tools-dev start desktop`
- * was leaving the daemon ungated because `OD_REQUIRE_DESKTOP_AUTH=1`
+ * was leaving the daemon ungated because `MAX_REQUIRE_DESKTOP_AUTH=1`
  * is only injected when daemon and desktop spawn together. The
  * helper now introspects the running daemon's STATUS over IPC and
  * restarts it (and web, if running) before launching desktop main
@@ -17,12 +17,12 @@
  * intermediate daemon down state).
  *
  * @see tools/dev/src/desktop-auth-gate.ts
- * @see https://github.com/nexu-io/open-design/pull/974
+ * @see https://github.com/marketing-ax/marketing-ax/pull/974
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { APP_KEYS, type DaemonStatusSnapshot, type WebStatusSnapshot } from "@open-design/sidecar-proto";
+import { APP_KEYS, type DaemonStatusSnapshot, type WebStatusSnapshot } from "@marketing-ax/sidecar-proto";
 
 import {
   ensureDaemonGateForDesktop,

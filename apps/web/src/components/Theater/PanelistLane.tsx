@@ -1,6 +1,6 @@
 import { useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
-import type { PanelistRole } from '@open-design/contracts/critique';
+import type { PanelistRole } from '@marketing-ax/contracts/critique';
 import type { CritiqueRound } from './state/reducer';
 
 interface Props {

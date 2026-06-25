@@ -8,8 +8,8 @@ import {
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
-} from "@open-design/launcher-proto";
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+} from "@marketing-ax/launcher-proto";
+import { SIDECAR_DEFAULTS } from "@marketing-ax/sidecar-proto";
 
 import type { ToolPackConfig, ToolPackPlatform } from "./config.js";
 
@@ -95,7 +95,7 @@ export function resolveToolPackLauncherPayloadLayout(
   const archivePath = join(
     config.roots.output.namespaceRoot,
     "payload",
-    `Open Design-${namespaceToken}-payload.${payloadArchiveExtension(config.platform)}`,
+    `Marketing AX-${namespaceToken}-payload.${payloadArchiveExtension(config.platform)}`,
   );
   return {
     archivePath,

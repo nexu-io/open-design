@@ -17,7 +17,7 @@ permissions:
 jobs:
   publish:
     name: Publish prompt-template preview assets to repository-assets R2
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

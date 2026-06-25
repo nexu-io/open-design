@@ -53,7 +53,7 @@ concurrency:
 jobs:
   build:
     name: Build nightly from release branch
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     uses: ./.github/workflows/release-stable.yml
     secrets: inherit
     with:

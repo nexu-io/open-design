@@ -51,7 +51,7 @@ export function codexNeedsDangerFullAccessSandbox(
   // Operator override for deployments where Codex cannot create its
   // workspace-write sandbox, for example unprivileged Linux containers.
   // Only danger-full-access is accepted; unknown values keep the default path.
-  if (env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access') return true;
+  if (env.MAX_CODEX_SANDBOX?.trim() === 'danger-full-access') return true;
   if (platform === 'win32') return true;
   // WSL reports `linux` but Codex still hits the Windows read-only
   // workspace-write sandbox path when launched from there (#2834).
@@ -127,7 +127,7 @@ export const codexAgentDef = {
       // Newer Codex builds honor permissions config over legacy sandbox
       // flags; without this, Windows/WSL launches can stay read-only (#2834).
       args.push('-c', 'default_permissions=":workspace"');
-      if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      if (process.env.MAX_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }
       if (runtimeContext.cwd) {

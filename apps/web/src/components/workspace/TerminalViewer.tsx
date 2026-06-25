@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ITheme, Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
-import type { TerminalDataEvent, TerminalExitEvent } from '@open-design/contracts';
+import type { TerminalDataEvent, TerminalExitEvent } from '@marketing-ax/contracts';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import {

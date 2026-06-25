@@ -27,9 +27,9 @@ type StartedServer = { server: http.Server; url: string };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
-const serverRuntimeDataRoot = process.env.OD_DATA_DIR
-  ? path.resolve(projectRoot, process.env.OD_DATA_DIR)
-  : path.join(projectRoot, '.od');
+const serverRuntimeDataRoot = process.env.MAX_DATA_DIR
+  ? path.resolve(projectRoot, process.env.MAX_DATA_DIR)
+  : path.join(projectRoot, '.max');
 
 const PLUGIN_ID = `phase2b-preview-fallback-${Date.now()}`;
 let pluginRoot: string;
@@ -72,7 +72,7 @@ beforeEach(async () => {
   await writeFile(
     path.join(folder, 'open-design.json'),
     JSON.stringify({
-      $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+      $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
       name: PLUGIN_ID,
       title: 'Preview fallback fixture',
       version: '1.0.0',
@@ -127,6 +127,6 @@ describe('GET /api/plugins/:id/preview — fallback chain', () => {
     const body = await resp.text();
     expect(body).toContain('<main id="deck">');
     expect(body).toContain('fallback body via assets');
-    expect(body).toContain('Preview fallback fixture | Open Design Example');
+    expect(body).toContain('Preview fallback fixture | Marketing AX Example');
   });
 });

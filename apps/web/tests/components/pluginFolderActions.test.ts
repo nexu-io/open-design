@@ -1,7 +1,7 @@
 // Contract test for the prompts the plugin-folder card buttons send to the
 // agent. `install` uses the simple shared template; `contribute` drives the
 // `gh repo fork → branch → commit → gh pr create --web` flow against
-// `nexu-io/open-design`; `publish` drives `gh repo create / push` against the
+// `marketing-ax/marketing-ax`; `publish` drives `gh repo create / push` against the
 // author's own `plugin.repo` URL. The tests below lock the *shape* of each
 // prompt (keywords + folder interpolation) without coupling to exact wording,
 // so prose tweaks don't break the suite but accidental removal of a critical
@@ -26,7 +26,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
 
     it('delegates repo publishing to the deterministic plugin CLI helper', () => {
       expect(prompt).toContain(`Plugin folder: \`${FOLDER}\``);
-      expect(prompt).toContain(`"$OD_NODE_BIN" "$OD_BIN" plugin publish-repo ${FOLDER}`);
+      expect(prompt).toContain(`"$MAX_NODE_BIN" "$MAX_BIN" plugin publish-repo ${FOLDER}`);
       expect(prompt).toMatch(/current gh login|target is not hard-coded/i);
     });
 
@@ -49,7 +49,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
         /Do NOT (call|route through) `?od plugin publish --to open-design`?/i,
       );
       expect(prompt).toMatch(
-        /registry[- ]submission|registry-submission flow|Open Design PR/i,
+        /registry[- ]submission|registry-submission flow|Marketing AX PR/i,
       );
     });
 
@@ -76,9 +76,9 @@ describe('buildPluginFolderAgentActionPrompt', () => {
   describe('contribute (PR-based flow)', () => {
     const prompt = buildPluginFolderAgentActionPrompt(FOLDER, 'contribute');
 
-    it('delegates Open Design PR creation to the deterministic plugin CLI helper', () => {
-      expect(prompt).toContain('nexu-io/open-design');
-      expect(prompt).toContain(`"$OD_NODE_BIN" "$OD_BIN" plugin open-design-pr ${FOLDER}`);
+    it('delegates Marketing AX PR creation to the deterministic plugin CLI helper', () => {
+      expect(prompt).toContain('marketing-ax/marketing-ax');
+      expect(prompt).toContain(`"$MAX_NODE_BIN" "$MAX_BIN" plugin open-design-pr ${FOLDER}`);
     });
 
     it('states the CLI-owned PR workflow instead of re-listing shell steps', () => {

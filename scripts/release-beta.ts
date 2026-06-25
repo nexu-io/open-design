@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 const execFile = promisify(execFileCallback);
 
 const stableVersionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
-const stableTagPattern = /^open-design-v(\d+\.\d+\.\d+)$/;
+const stableTagPattern = /^marketing-ax-v(\d+\.\d+\.\d+)$/;
 const betaVersionPattern = /^(\d+\.\d+\.\d+)-beta\.(\d+)$/;
 
 type ParsedStableVersion = {
@@ -284,9 +284,9 @@ const packagedVersion = await readPackagedVersion();
 const packagedParsed = parseStableVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
 
 let latestStable: ParsedStableVersion | null = null;
-const stableMetadataUrl = process.env.OPEN_DESIGN_STABLE_METADATA_URL;
+const stableMetadataUrl = process.env.MARKETING_AX_STABLE_METADATA_URL;
 if (stableMetadataUrl != null && stableMetadataUrl.length > 0) {
-  validateHttpsUrl(stableMetadataUrl, "OPEN_DESIGN_STABLE_METADATA_URL");
+  validateHttpsUrl(stableMetadataUrl, "MARKETING_AX_STABLE_METADATA_URL");
   const stableMetadataJson = await fetchOptionalHttpsText(stableMetadataUrl);
   if (stableMetadataJson == null) {
     fail(`stable metadata.json was not found: ${stableMetadataUrl}`);
@@ -294,7 +294,7 @@ if (stableMetadataUrl != null && stableMetadataUrl.length > 0) {
   latestStable = parseStableMetadataJson(stableMetadataJson);
   console.log(`[release-beta] stable metadata.json version: ${latestStable.value}`);
 } else {
-  const tags = await fetchGitTags("open-design-v*");
+  const tags = await fetchGitTags("marketing-ax-v*");
   for (const tag of tags) {
     const stableVersion = extractStableVersionFromTag(tag);
     if (stableVersion == null) continue;
@@ -309,11 +309,11 @@ if (latestStable != null && compareVersions(packagedParsed, latestStable.parsed)
   fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
 }
 
-const metadataUrl = process.env.OPEN_DESIGN_BETA_METADATA_URL;
+const metadataUrl = process.env.MARKETING_AX_BETA_METADATA_URL;
 if (metadataUrl == null || metadataUrl.length === 0) {
-  fail("OPEN_DESIGN_BETA_METADATA_URL is required");
+  fail("MARKETING_AX_BETA_METADATA_URL is required");
 }
-validateHttpsUrl(metadataUrl, "OPEN_DESIGN_BETA_METADATA_URL");
+validateHttpsUrl(metadataUrl, "MARKETING_AX_BETA_METADATA_URL");
 
 let betaNumber = 1;
 let latestBeta: ParsedBetaVersion | null = null;
@@ -355,7 +355,7 @@ if (latestBeta != null) {
 const betaVersion = `${packagedVersion}-beta.${betaNumber}`;
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const commit = process.env.GITHUB_SHA ?? "";
-const releaseName = `Open Design Beta ${betaVersion}`;
+const releaseName = `Marketing AX Beta ${betaVersion}`;
 
 console.log(`[release-beta] channel: beta`);
 console.log(`[release-beta] base version: ${packagedVersion}`);

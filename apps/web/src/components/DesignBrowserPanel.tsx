@@ -13,8 +13,8 @@ import { createPortal, flushSync } from 'react-dom';
 import {
   clearHostBrowserData,
   isOpenDesignHostAvailable,
-} from '@open-design/host';
-import type { TrackingReferenceBoardCategory } from '@open-design/contracts/analytics';
+} from '@marketing-ax/host';
+import type { TrackingReferenceBoardCategory } from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackReferenceBoardClick,
@@ -226,7 +226,7 @@ export interface BrowserPageInfo {
 }
 
 const EMPTY_URL = 'about:blank';
-const DESIGN_BROWSER_PARTITION = 'persist:open-design-design-browser';
+const DESIGN_BROWSER_PARTITION = 'persist:marketing-ax-design-browser';
 const HISTORY_LIMIT = 80;
 const HISTORY_SUGGESTION_LIMIT = 20;
 const EMPTY_PREVIEW_COMMENTS: PreviewComment[] = [];
@@ -627,7 +627,7 @@ export function browserUsePrompt(action: BrowserUseAction, context: BrowserUsePr
   return [
     '@agent-browser',
     '',
-    'Use the selected Open Design Browser tab as the bound target.',
+    'Use the selected Marketing AX Browser tab as the bound target.',
     'Browser tab context:',
     `- tab: ${tabLabel}`,
     `- title: ${title}`,
@@ -2673,7 +2673,7 @@ function DesignBrowserStart({
     <div className="db-start">
       <div className="db-start-hero">
         <div className="db-start-hero-copy">
-          <div className="db-kicker">Open Design browser</div>
+          <div className="db-kicker">Marketing AX browser</div>
           <h2>Reference Board</h2>
           <p className="db-start-sub">
             A curated set of references across inspiration, real product UI,

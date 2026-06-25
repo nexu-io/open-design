@@ -1,4 +1,4 @@
-import type { PanelEvent, PanelistRole } from '@open-design/contracts/critique';
+import type { PanelEvent, PanelistRole } from '@marketing-ax/contracts/critique';
 import { MalformedBlockError, MissingArtifactError, OversizeBlockError } from '../errors.js';
 import type { ShipArtifactCallback } from '../parser.js';
 

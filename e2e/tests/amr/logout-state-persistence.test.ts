@@ -13,10 +13,10 @@ import { createSmokeSuite } from '@/vitest/smoke-suite';
 describe('AMR logout state persistence', () => {
   test('a previously working AMR session stops working after local logout and requires re-login', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('amr-logout-state-persistence');
-    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+    const previousProfile = process.env.MARKETING_AX_AMR_PROFILE;
     const previousHome = process.env.HOME;
     const homeDir = join(suite.scratchDir, 'home-logout-state');
-    process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
+    process.env.MARKETING_AX_AMR_PROFILE = 'local';
     process.env.HOME = homeDir;
 
     try {
@@ -34,7 +34,7 @@ describe('AMR logout state persistence', () => {
           agentCliEnv: {
             amr: {
               VELA_BIN: successVelaBin,
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
               VELA_LINK_URL: 'http://localhost:18081',
               VELA_RUNTIME_KEY: 'fake-runtime-key',
             },
@@ -62,7 +62,7 @@ describe('AMR logout state persistence', () => {
           agentCliEnv: {
             amr: {
               VELA_BIN: strictVelaBin,
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
             },
           },
         });
@@ -88,8 +88,8 @@ describe('AMR logout state persistence', () => {
         await expect(readRunEvents(webUrl, secondRun.runId)).resolves.toMatch(/AMR_AUTH_REQUIRED/);
       });
     } finally {
-      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
-      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
+      if (previousProfile === undefined) delete process.env.MARKETING_AX_AMR_PROFILE;
+      else process.env.MARKETING_AX_AMR_PROFILE = previousProfile;
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
     }

@@ -86,7 +86,7 @@ describe('codex-cli install', () => {
       name: 'open-design',
       command: '/path/to/node',
       args: ['/path/to/cli.js', 'mcp'],
-      env: { OD_DATA_DIR: '/tmp/od', OD_SIDECAR_IPC_PATH: '/tmp/sock' },
+      env: { MAX_DATA_DIR: '/tmp/od', MAX_SIDECAR_IPC_PATH: '/tmp/sock' },
     });
 
     expect(runner.calls).toHaveLength(1);
@@ -95,9 +95,9 @@ describe('codex-cli install', () => {
       'add',
       'open-design',
       '--env',
-      'OD_DATA_DIR=/tmp/od',
+      'MAX_DATA_DIR=/tmp/od',
       '--env',
-      'OD_SIDECAR_IPC_PATH=/tmp/sock',
+      'MAX_SIDECAR_IPC_PATH=/tmp/sock',
       '--',
       '/path/to/node',
       '/path/to/cli.js',
