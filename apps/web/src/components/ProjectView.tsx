@@ -65,6 +65,7 @@ import {
   anonymizeArtifactId,
   artifactKindToTracking,
   projectKindFromMetadataToTracking,
+  projectKindToTracking,
 } from '@open-design/contracts/analytics';
 import type {
   TrackingArtifactKind,
@@ -5680,7 +5681,14 @@ export function ProjectView({
       // surfaces. `target_project_kind` derives from
       // `project.metadata.kind`.
       const target =
-        (projectKindFromMetadataToTracking(project.metadata) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
+        // NOTE: `target_project_kind` uses the narrower
+        // `TrackingDesignSystemApplyTargetKind` enum, which intentionally does
+        // NOT carry the prototype subtypes (wireframe/mobile) or `document`.
+        // Derive the coarse kind here (subtypes collapse back to `prototype`)
+        // so a Home-created Wireframe/Mobile/Document project never emits a
+        // value outside this field's schema. The fine-grained split only
+        // belongs on `project_kind` (create/run events).
+        (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
       const picked = nextId
         ? designSystems.find((d) => d.id === nextId)
         : null;
