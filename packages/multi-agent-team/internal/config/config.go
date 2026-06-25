@@ -22,7 +22,8 @@ type AgentSpec struct {
 // TeamConfig 团队配置根结构
 // 对应 YAML 文件顶级结构
 type TeamConfig struct {
-	Team Team `yaml:"team"`
+	Team        Team          `yaml:"team"`
+	Inheritance InheritanceCfg `yaml:"inheritance"`
 }
 
 // Team 团队定义
@@ -32,6 +33,19 @@ type Team struct {
 	Agents    []AgentSpec        `yaml:"agents"`
 	Experts   []ExpertSpec       `yaml:"experts,omitempty"`    // 互补模式：专家链配置
 	Cycle     *CycleSpec         `yaml:"cycle,omitempty"`      // 循环模式：循环参数
+}
+
+// InheritanceCfg 继承树配置
+// 对应 YAML 中 inheritance: 节点
+type InheritanceCfg struct {
+	Enabled bool      `yaml:"enabled"`
+	Tree    *TreeNode `yaml:"tree"`
+}
+
+// TreeNode 继承树节点
+type TreeNode struct {
+	AgentID  string     `yaml:"agent_id"`
+	Children []*TreeNode `yaml:"children"`
 }
 
 // ExpertSpec 互补模式中的专家定义
@@ -139,6 +153,31 @@ func (c *TeamConfig) Validate() error {
 		seen[a.ID] = true
 		if a.Type == "" {
 			return &ValidationError{"agent type is required for " + a.ID}
+		}
+	}
+	// 校验继承树引用的 agent id 都存在
+	if c.Inheritance.Enabled && c.Inheritance.Tree != nil {
+		if err := c.validateTree(c.Inheritance.Tree, seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTree 递归校验继承树节点引用的 agent id 都在 agents 列表中
+func (c *TeamConfig) validateTree(node *TreeNode, known map[string]bool) error {
+	if node == nil {
+		return nil
+	}
+	if node.AgentID == "" {
+		return &ValidationError{"inheritance tree node has empty agent_id"}
+	}
+	if !known[node.AgentID] {
+		return &ValidationError{fmt.Sprintf("inheritance tree references unknown agent: %s", node.AgentID)}
+	}
+	for _, child := range node.Children {
+		if err := c.validateTree(child, known); err != nil {
+			return err
 		}
 	}
 	return nil

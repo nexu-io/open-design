@@ -500,11 +500,16 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 			Timeout:    600,
 		}
 
-		// 对于继承模式，建立线性依赖链（task-N 依赖 task-N-1）
-		// 子任务通过 Dependencies 在 InheritanceScheduler.buildTree() 中
-		// 被挂到父任务下，形成继承树，确保 artifact/skills/designs 传递。
+		// 对于继承/串行模式，建立依赖链
 		if cfg.Team.Mode == "inheritance" || cfg.Team.Mode == "serial" {
-			if i > 0 {
+			if cfg.Inheritance.Enabled && cfg.Inheritance.Tree != nil && cfg.Team.Mode == "inheritance" {
+				// 优先从 YAML inheritance.tree 解析依赖关系
+				deps := findDependencies(cfg.Inheritance.Tree, spec.ID)
+				if len(deps) > 0 {
+					task.Dependencies = deps
+				}
+			} else if i > 0 {
+				// fallback：按 agents 列表顺序建线性依赖链
 				task.Dependencies = []string{fmt.Sprintf("task-%s", cfg.Team.Agents[i-1].ID)}
 			}
 		}
@@ -539,6 +544,26 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 	}
 
 	return plan
+}
+
+// findDependencies 在继承树中查找指定 agent 的父节点（即它依赖谁）
+// 返回父节点的 task ID 列表（通常为 0 或 1 个）
+func findDependencies(tree *config.TreeNode, agentID string) []string {
+	var deps []string
+	var walk func(node *config.TreeNode)
+	walk = func(node *config.TreeNode) {
+		if node == nil {
+			return
+		}
+		for _, child := range node.Children {
+			if child.AgentID == agentID {
+				deps = append(deps, fmt.Sprintf("task-%s", node.AgentID))
+			}
+			walk(child)
+		}
+	}
+	walk(tree)
+	return deps
 }
 
 // handleArtifacts 返回 artifact 内容
