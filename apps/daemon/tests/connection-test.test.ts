@@ -931,19 +931,23 @@ describe('POST /api/test/connection provider mode', () => {
       OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
     }, async () => {
       const seen: string[] = [];
+      let fallbackRunId: string | undefined;
       const fetchMock = passThroughOrUpstream((url, init) => {
         seen.push(url);
         if (url === 'https://authority.example.test/api/runs') {
           expect((init?.headers as Record<string, string>).Authorization).toBe(
             'Bearer deployment-secret',
           );
-          expect(JSON.parse(String(init?.body))).toMatchObject({
+          const requestBody = JSON.parse(String(init?.body));
+          expect(requestBody).toMatchObject({
             od_project_id: 'connection-test',
-            od_run_id: 'connection-test:openai:gpt-routed',
             purpose: 'connection-test',
             allowed_surfaces: ['reasoning'],
             max_total_cost_usd: 0.05,
           });
+          expect(requestBody.od_run_id).toMatch(/^connection-test:openai:/);
+          expect(requestBody.od_run_id).not.toBe('connection-test:openai:gpt-routed');
+          fallbackRunId = requestBody.od_run_id;
           return jsonResponse({ run_session_id: 'odrs_connection' }, { status: 201 });
         }
         expect(url).toBe('https://gateway.example.test/v1/chat/completions');
@@ -951,7 +955,7 @@ describe('POST /api/test/connection provider mode', () => {
         expect(body.metadata).toMatchObject({
           opendesign_run_session_id: 'odrs_connection',
           opendesign_cost_cap_usd: 0.05,
-          opendesign_idempotency_key: 'connection-test:openai:gpt-routed',
+          opendesign_idempotency_key: fallbackRunId,
         });
         return jsonResponse({
           choices: [{ message: { content: 'ok' } }],
@@ -980,6 +984,51 @@ describe('POST /api/test/connection provider mode', () => {
         'https://authority.example.test/api/runs',
         'https://gateway.example.test/v1/chat/completions',
       ]);
+    });
+  });
+
+  it('uses fresh deployment provider fallback ids for repeated connection-test attempts', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const runIds: string[] = [];
+      const idempotencyKeys: string[] = [];
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          runIds.push(String(requestBody.od_run_id));
+          return jsonResponse({ run_session_id: `odrs_connection_${runIds.length}` }, { status: 201 });
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        idempotencyKeys.push(String(body.metadata?.opendesign_idempotency_key));
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' } }],
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'provider',
+            protocol: 'openai',
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+          }),
+        });
+        expect(res.status).toBe(200);
+      }
+
+      expect(runIds).toHaveLength(2);
+      expect(new Set(runIds).size).toBe(2);
+      expect(runIds.every((id) => id.startsWith('connection-test:openai:'))).toBe(true);
+      expect(idempotencyKeys).toEqual(runIds);
     });
   });
 

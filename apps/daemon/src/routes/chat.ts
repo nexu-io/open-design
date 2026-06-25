@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -396,13 +396,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         });
         if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
         if (deploymentProfile) {
+          const fallbackRunId = `connection-test:${protocol}:${randomUUID()}`;
           const runMetadata = await deploymentProviderRunMetadata(
             deploymentProfile,
             {
               ...(body as Record<string, unknown>),
               projectId: body.projectId ?? 'connection-test',
-              providerRunId: body.providerRunId ?? `connection-test:${protocol}:${body.model}`,
-              providerOperationId: body.providerOperationId ?? `connection-test:${protocol}:${body.model}`,
+              providerRunId: body.providerRunId ?? fallbackRunId,
+              providerOperationId: body.providerOperationId ?? fallbackRunId,
               providerRunPurpose: body.providerRunPurpose ?? 'connection-test',
             },
             controller.signal,

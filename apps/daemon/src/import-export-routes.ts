@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
 import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+import { randomUUID } from 'node:crypto';
 import nodePath from 'node:path';
 import { readFile, rm } from 'node:fs/promises';
 import type { RouteDeps } from './server-context.js';
@@ -1152,13 +1153,14 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       try {
         let metadata: Record<string, unknown> | undefined;
         if (deploymentProfile) {
+          const fallbackRunId = `finalize:${randomUUID()}:${req.params.id}`;
           const runMetadata = await deploymentProviderRunMetadata(
             deploymentProfile,
             {
               ...(req.body as Record<string, unknown>),
               projectId: req.params.id,
-              providerRunId: req.body.providerRunId ?? `finalize:${req.params.id}`,
-              providerOperationId: req.body.providerOperationId ?? `finalize:${req.params.id}`,
+              providerRunId: req.body.providerRunId ?? fallbackRunId,
+              providerOperationId: req.body.providerOperationId ?? fallbackRunId,
               providerRunPurpose: 'finalize',
             },
             finalizeAbort.signal,
