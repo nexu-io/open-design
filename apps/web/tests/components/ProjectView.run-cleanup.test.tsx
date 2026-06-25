@@ -709,6 +709,98 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  // Regression (red on the buggy version): when the UI navigates straight into
+  // a freshly-created project (e.g. brand extraction), project.pendingPrompt is
+  // absent on the first render and arrives on a later prop update. The once-only
+  // render-time seed capture froze autoSendSeedRef to '' and the dispatch effect
+  // dropped the first message, so the agent never started. The seed-rescue in
+  // the clear-effect plus not consuming the auto-send flag on an empty seed must
+  // keep the auto-send alive across the late pendingPrompt.
+  it('auto-sends when pendingPrompt arrives after the first render', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    chatPaneSpy.mockClear();
+    streamViaDaemon.mockClear();
+    window.sessionStorage.setItem('od:auto-send-first:race-project', '1');
+
+    const prompt = 'extract the brand for example.com';
+
+    try {
+      // First render WITHOUT pendingPrompt (the placeholder phase before the
+      // project record loads). Lets the dispatch effect run once with no seed.
+      const view = render(
+        <ProjectView
+          project={{ id: 'race-project', name: 'Project', skillId: null, designSystemId: null } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+
+      // pendingPrompt arrives on a later prop update (same project id, no remount).
+      view.rerender(
+        <ProjectView
+          project={{ id: 'race-project', name: 'Project', skillId: null, designSystemId: null, pendingPrompt: prompt } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      const sent = streamViaDaemon.mock.calls[0]?.[0] as {
+        history?: Array<{ role: string; content: string }>;
+      };
+      expect(sent.history?.[sent.history.length - 1]).toMatchObject({
+        role: 'user',
+        content: prompt,
+      });
+    } finally {
+      window.sessionStorage.removeItem('od:auto-send-first:race-project');
+    }
+  });
+
   it('auto-sends Home-staged design files as first-turn daemon attachments', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);

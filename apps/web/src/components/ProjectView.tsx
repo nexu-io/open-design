@@ -5819,6 +5819,16 @@ export function ProjectView({
     const pendingPrompt = project.pendingPrompt;
     if (!pendingPrompt) return;
     if (autoSendFirstMessageRef.current) {
+      // Rescue the auto-send seed before clearing pendingPrompt server-side.
+      // INVARIANT: every caller that sets the `od:auto-send-first` flag also
+      // guarantees a non-empty pendingPrompt or attachments (App.tsx,
+      // BrandsTab, EntryShell, DesignSystemFlow). The once-only render-time
+      // capture above can freeze autoSendSeedRef to '' when we navigate
+      // straight into a freshly-created project whose pendingPrompt loads on a
+      // later render (e.g. brand extraction); without this rescue the dispatch
+      // effect below sees an empty seed and silently drops the first message,
+      // leaving the agent run unstarted.
+      if (!autoSendSeedRef.current) autoSendSeedRef.current = pendingPrompt;
       onClearPendingPrompt();
       return;
     }
@@ -6019,8 +6029,11 @@ export function ProjectView({
     ).trim();
     const attachments = autoSendAttachmentsRef.current ?? [];
     if (!seed && attachments.length === 0) {
-      autoSentRef.current = true;
-      clearAutoSendSession(project.id);
+      // Flag is set (auto-send expected) but the seed has not resolved yet.
+      // The project's pendingPrompt can still be loading right after navigating
+      // into a freshly-created project. Do NOT consume the flag here; return and
+      // let this effect retry once pendingPrompt / autoSendSeedRef populates
+      // (project.pendingPrompt is in the dep array, so the retry is automatic).
       return;
     }
     autoSentRef.current = true;

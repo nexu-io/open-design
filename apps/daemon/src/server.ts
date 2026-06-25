@@ -526,6 +526,7 @@ import { registerMediaRoutes } from './routes/media.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './routes/project/index.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
+import { registerBrandRoutes } from './brand-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
@@ -4008,6 +4009,19 @@ export async function startServer({
     conversations: conversationDeps,
     projectFiles: projectFileDeps,
     validation: validationDeps,
+  });
+
+  // Brands: list / extract / finalize / detail / delete / logo.
+  registerBrandRoutes(app, {
+    brandsRoot: path.join(RUNTIME_DATA_DIR, 'brands'),
+    userDesignSystemsRoot: USER_DESIGN_SYSTEMS_DIR,
+    projectsRoot: PROJECTS_DIR,
+    skillsRoot: SKILLS_DIR,
+    dataDir: RUNTIME_DATA_DIR,
+    db,
+    // In-memory run registry so brand status can reconcile with active or
+    // just-finished extraction runs before they flush to the DB.
+    runs: design.runs,
   });
 
   // Resource catalog
