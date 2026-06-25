@@ -1073,6 +1073,243 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText('Trend card')).toBeNull();
   });
 
+  // #3646 / #3647 exit-path regression: leaving edit mode while an inline text
+  // edit is live must ask the iframe to commit and WAIT for the session to end
+  // before tearing down, otherwise the final edit is dropped.
+  it('waits for the iframe to finish the inline text edit before leaving edit mode (#3646)', async () => {
+    const textTarget = {
+      ...manualEditTarget('copy', 'Editable copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Editable copy',
+      fields: { text: 'Editable copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Editable copy</p>',
+    };
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><p data-od-id="copy">Editable copy</p></body></html>'
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    // An inline text edit is in progress inside the iframe.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: true },
+    }));
+
+    // Exiting asks the iframe to commit, then must stay in edit mode until the
+    // session is acknowledged (the prior fix tore down here and lost the edit).
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-text-finish', commit: true }, '*');
+    });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    // The iframe acks the finished session; only now does exit complete.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: false, committed: true, changed: true },
+    }));
+
+    await waitFor(() => {
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  // #4291 review: if the exit-time text commit fails, the close path must NOT
+  // tear down edit mode (which clears the error) and look like a successful
+  // save — it has to keep edit mode open with the error preserved.
+  it('keeps edit mode open and preserves the error when the exit-time text commit fails (#4291)', async () => {
+    const textTarget = {
+      ...manualEditTarget('card-title', 'Pricing that scales', 20),
+      kind: 'text' as const,
+      tagName: 'div',
+      text: 'Pricing that scales',
+      fields: { text: 'Pricing that scales' },
+      isLayoutContainer: false,
+      outerHtml: '<div data-od-id="card-title">Pricing that scales</div>',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string }) => {
+      const u = String(url);
+      if (u.includes('/files') && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      // The pre-save history check re-fetches the source; treat it as absent so
+      // the commit proceeds to the (failing) save.
+      return new Response('', { status: 404 });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><div data-od-id="card-title">Pricing that scales</div></body></html>'
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: true },
+    }));
+    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+
+    // Exit while editing; the iframe commits new text, but the save fails.
+    fireEvent.click(toggle);
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-commit', id: 'card-title', value: 'New title' },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: false, committed: true, changed: true },
+    }));
+
+    // The save error is surfaced and edit mode stays open instead of tearing down.
+    expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  // #4291 review (iframe-driven path): an Enter-committed edit can still be
+  // in flight when the user exits. Exit must await that commit and honor a
+  // failure even though no host-side finish is pending, instead of tearing
+  // down through the race and hiding the failed save.
+  it('keeps edit mode open when an iframe-committed edit fails while exit races it (#4291)', async () => {
+    const textTarget = {
+      ...manualEditTarget('card-title', 'Pricing that scales', 20),
+      kind: 'text' as const,
+      tagName: 'div',
+      text: 'Pricing that scales',
+      fields: { text: 'Pricing that scales' },
+      isLayoutContainer: false,
+      outerHtml: '<div data-od-id="card-title">Pricing that scales</div>',
+    };
+    let releaseSave!: () => void;
+    const savePending = new Promise<void>((resolve) => { releaseSave = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string }) => {
+      const u = String(url);
+      if (u.includes('/files') && opts?.method === 'POST') {
+        await savePending; // hold the save in flight until the test releases it
+        return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><div data-od-id="card-title">Pricing that scales</div></body></html>'
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: true },
+    }));
+    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+
+    // Iframe-driven finish (Enter): commit + session-inactive with NO host finish.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-commit', id: 'card-title', value: 'New title' },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: false, committed: true, changed: true },
+    }));
+
+    // Exit while that commit is still in flight, then let the save fail.
+    fireEvent.click(toggle);
+    await Promise.resolve();
+    releaseSave();
+
+    expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('renders sandbox-shim artifacts on the srcdoc transport without entering edit mode (#2791)', () => {
     const file = baseFile({
       name: 'search.html',
@@ -5514,6 +5751,23 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('right: calc(env(safe-area-inset-right, 0px) + 20px);');
     expect(rule).toContain('display: inline-flex;');
     expect(rule).toContain('align-items: center;');
+  });
+
+  it('gives the in-tab present exit button a distinct elevated surface for dark-mode contrast', () => {
+    const css = readExpandedIndexCss();
+    const rule = css.match(/\.viewer\s+\.present-exit-btn\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('background: var(--bg-elevated)');
+    expect(rule).toContain('border: 1px solid var(--border-strong)');
+    expect(rule).toContain('box-shadow: var(--shadow-md)');
+  });
+
+  it('adds a keyboard focus ring to the in-tab present exit button', () => {
+    const css = readExpandedIndexCss();
+    const rule = css.match(/\.viewer\s+\.present-exit-btn:focus-visible\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('outline: 2px solid var(--accent)');
+    expect(rule).toContain('outline-offset: 2px');
   });
 
   it('keeps in-tab presentation overlays anchored to the inherited workspace tab height', () => {

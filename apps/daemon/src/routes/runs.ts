@@ -21,7 +21,12 @@ import {
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
+import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
+import {
+  codexSessionIdFromRunEvents,
+  readCodexRolloutFirstCall,
+} from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
 import { getProject, listConversations, upsertMessage } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
@@ -87,6 +92,7 @@ type RunDeliveryTarget = 'managed-project' | 'external-project' | 'none';
 interface ProjectRecord {
   id: string;
   name: string;
+  designSystemId?: string | null;
   metadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
 }
@@ -138,6 +144,15 @@ interface ChatRun {
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
+  designSystemId?: string | null;
+  designSystemRequestedId?: string | null;
+  designSystemSelectionSource?: string | null;
+  designSystemDigest?: string | null;
+  promptCache?: {
+    stablePromptHash?: string;
+    hit?: boolean;
+    missReason?: string | null;
+  };
 }
 
 interface RunCreateMeta extends JsonRecord {
@@ -339,6 +354,56 @@ function toScenarioProjectMetadata(
     kind: metadata.kind as ContractProjectMetadata['kind'],
     ...(metadata.intent === 'live-artifact' ? { intent: metadata.intent } : {}),
   };
+}
+
+type DesignSystemSelectionSource = 'request' | 'plugin' | 'project' | 'app-default' | 'none';
+
+function normalizedDesignSystemId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function resolveEffectiveDesignSystemSelection({
+  requestDesignSystemId,
+  pluginDesignSystemId,
+  projectDesignSystemId,
+  appDefaultDesignSystemId,
+  allowAppDefault = true,
+}: {
+  requestDesignSystemId?: unknown;
+  pluginDesignSystemId?: unknown;
+  projectDesignSystemId?: unknown;
+  appDefaultDesignSystemId?: unknown;
+  allowAppDefault?: boolean;
+}): { id: string | null; source: DesignSystemSelectionSource } {
+  const requestId = normalizedDesignSystemId(requestDesignSystemId);
+  if (requestId) return { id: requestId, source: 'request' };
+
+  const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
+  if (pluginId) return { id: pluginId, source: 'plugin' };
+
+  const projectId = normalizedDesignSystemId(projectDesignSystemId);
+  if (projectId) return { id: projectId, source: 'project' };
+
+  if (allowAppDefault) {
+    const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
+    if (appDefaultId) return { id: appDefaultId, source: 'app-default' };
+  }
+
+  return { id: null, source: 'none' };
+}
+
+function designSystemIdFromPluginSnapshot(snapshot: unknown): string | null {
+  const items = (snapshot as { resolvedContext?: { items?: unknown } } | null | undefined)
+    ?.resolvedContext?.items;
+  if (!Array.isArray(items)) return null;
+  const designSystemItems = items.filter(
+    (item): item is { kind: string; id?: unknown; primary?: unknown } =>
+      item !== null &&
+      typeof item === 'object' &&
+      (item as { kind?: unknown }).kind === 'design-system',
+  );
+  const primary = designSystemItems.find((item) => item.primary === true);
+  return normalizedDesignSystemId(primary?.id ?? designSystemItems[0]?.id);
 }
 
 function routeParamId(req: ApiRequest): string | null {
@@ -689,6 +754,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const runProjectForAnalytics = requestProjectId
         ? toProjectRecord(getProject(db, requestProjectId))
         : null;
+      const analyticsDesignSystemSelection = resolveEffectiveDesignSystemSelection({
+        requestDesignSystemId: reqBody.designSystemId,
+        pluginDesignSystemId: resolvedSnapshot?.ok
+          ? designSystemIdFromPluginSnapshot(resolvedSnapshot.snapshot)
+          : null,
+        projectDesignSystemId: runProjectForAnalytics?.designSystemId,
+        appDefaultDesignSystemId: (appCfgForAnalytics as { designSystemId?: unknown }).designSystemId,
+        allowAppDefault: runProjectForAnalytics === null,
+      });
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind,
         projectMetadata: runProjectForAnalytics?.metadata,
@@ -740,12 +814,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         ...sessionDimensionProps,
-        design_system_id:
-          typeof reqBody.designSystemId === 'string'
-            ? reqBody.designSystemId
-            : undefined,
+        design_system_id: analyticsDesignSystemSelection.id ?? undefined,
+        design_system_selection_source: analyticsDesignSystemSelection.source,
         design_system_source:
-          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
+          analyticsDesignSystemSelection.id
             ? 'unknown'
             : 'not_applicable',
         ...(isDesignSystemRun ? {
@@ -828,6 +900,70 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           reqBody.model,
           userQueryTokens,
         );
+        // Whether this run is a non-first turn in its conversation — i.e. a
+        // prior completed assistant turn exists (excluding this run's own
+        // placeholder). The session-reuse cache win only applies to follow-up
+        // turns, so slicing `first_call_cache_hit_ratio` by this flag is the
+        // baseline-vs-optimized comparison. Mirrors server.ts hasPriorAssistantTurn.
+        const isFollowupTurn = run.conversationId
+          ? Boolean(
+              db
+                .prepare(
+                  `SELECT 1 FROM messages
+                     WHERE conversation_id = ?
+                       AND role = 'assistant'
+                       AND COALESCE(content, '') <> ''
+                       AND id <> COALESCE(?, '')
+                     LIMIT 1`,
+                )
+                .get(run.conversationId, run.assistantMessageId ?? ''),
+            )
+          : false;
+        // Resolve the turn's first-call usage (cache-hit of the OPENING model
+        // call — the signal session reuse moves). Every coding agent except
+        // codex reports per-call usage on the stream, so the forward-scanned
+        // first usage event IS the opening call. codex reports only a single
+        // cumulative `turn.completed` usage on the stream, so its first stream
+        // event is the whole-session aggregate; its real per-call number lives
+        // in the rollout `last_token_usage`, read here best-effort.
+        const firstCallUsage = await (async (): Promise<{
+          first_call_input_tokens?: number;
+          first_call_cache_read_input_tokens?: number;
+          first_call_cache_hit_ratio?: number;
+        } | null> => {
+          if (run.agentId === 'codex') {
+            // Best-effort: a throw anywhere here (env resolution, rollout read)
+            // must degrade to "no codex first-call fields", never bubble to the
+            // outer run_finished .catch and drop the whole completion event.
+            try {
+              const sessionId = codexSessionIdFromRunEvents(run.events);
+              const codexHome = spawnEnvForAgent(
+                'codex',
+                { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
+                agentCliEnvForAgent(
+                  (appCfgAtFinish as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
+                  'codex',
+                ),
+              ).CODEX_HOME;
+              return await readCodexRolloutFirstCall({ codexHome, sessionId });
+            } catch {
+              return null;
+            }
+          }
+          if (usageAnalytics.first_call_input_tokens === undefined) return null;
+          return {
+            first_call_input_tokens: usageAnalytics.first_call_input_tokens,
+            ...(usageAnalytics.first_call_cache_read_input_tokens !== undefined
+              ? {
+                  first_call_cache_read_input_tokens:
+                    usageAnalytics.first_call_cache_read_input_tokens,
+                }
+              : {}),
+            ...(usageAnalytics.first_call_cache_hit_ratio !== undefined
+              ? { first_call_cache_hit_ratio: usageAnalytics.first_call_cache_hit_ratio }
+              : {}),
+          };
+        })();
         const analyticsCapturedAt = Date.now();
         const timingAnalytics = summarizeRunTimingAnalytics({
           runCreatedAt: run.createdAt,
@@ -906,6 +1042,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           appVersion: design.getAppVersion(),
           properties: {
             ...baseProps,
+            design_system_id: run.designSystemId ?? undefined,
+            design_system_digest: run.designSystemDigest ?? undefined,
+            design_system_selection_source: run.designSystemSelectionSource ?? 'none',
+            stable_prompt_hash: run.promptCache?.stablePromptHash,
+            stable_prompt_cache_hit: run.promptCache?.hit,
+            stable_prompt_cache_miss_reason: run.promptCache?.missReason,
             area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),
@@ -963,6 +1105,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ...(usageAnalytics.cache_hit_ratio !== undefined
               ? { cache_hit_ratio: usageAnalytics.cache_hit_ratio }
               : {}),
+            // First-call cache-hit of the turn's opening model call (per-call
+            // usage for claude/opencode/codebuddy/pi from the stream; codex from
+            // its rollout). Sliced by is_followup_turn, this isolates the
+            // session-reuse cache win on non-first turns.
+            ...(firstCallUsage ?? {}),
+            is_followup_turn: isFollowupTurn,
             cache_token_source: usageAnalytics.cache_token_source,
             token_count_source: usageAnalytics.token_count_source,
           },

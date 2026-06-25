@@ -238,6 +238,18 @@ export function runAskedUserQuestion(
   events: readonly RunEventLike[],
 ): boolean {
   if (!events || events.length === 0) return false;
+  return emittedRenderableQuestionForm(reconstructAssistantText(events));
+}
+
+// Reassemble the assistant's streamed text from a run's event log. Text
+// arrives as `text_delta` chunks (carried on `delta`; some runtimes emit a
+// whole-text `text` event instead), so markers like `<od-card>` can straddle
+// a chunk boundary — callers must concatenate before scanning. Used by the
+// POST self-verify enforcement (memory-verify) to find the scorecard card.
+export function reconstructAssistantText(
+  events: readonly RunEventLike[],
+): string {
+  if (!events || events.length === 0) return '';
   let text = '';
   for (const rec of events) {
     if (rec?.event !== 'agent') continue;
@@ -250,7 +262,7 @@ export function runAskedUserQuestion(
     if (typeof data.delta === 'string') text += data.delta;
     else if (typeof data.text === 'string') text += data.text;
   }
-  return emittedRenderableQuestionForm(text);
+  return text;
 }
 
 // First-touch activation milestones, written to the PostHog person record via

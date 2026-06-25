@@ -1,4 +1,11 @@
-import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult } from "@open-design/sidecar-proto";
+import type {
+  DaemonStatusSnapshot,
+  DesktopEvalResult,
+  DesktopScreenshotResult,
+  DesktopStatusSnapshot,
+  DesktopUpdateResult,
+  WebStatusSnapshot,
+} from "@open-design/sidecar-proto";
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import type { CacheReport } from "../cache.js";
@@ -222,6 +229,22 @@ export type WinStartResult = {
   status: DesktopStatusSnapshot | null;
 };
 
+export type WinIpcDiagnoseAttempt = {
+  attempt: number;
+  durationMs: number;
+  start: WinStartResult;
+  statusPoll: WinInspectStatusPollResult;
+  stop: WinStopResult;
+};
+
+export type WinIpcDiagnoseResult = {
+  attempts: WinIpcDiagnoseAttempt[];
+  namespace: string;
+  statusPollCount: number;
+  statusPollIntervalMs: number;
+  traceEnabled: boolean;
+};
+
 export type WinStopResult = {
   gracefulRequested: boolean;
   namespace: string;
@@ -331,6 +354,8 @@ export type WinResetResult = {
 };
 
 export type WinInspectResult = {
+  daemonStatus: DaemonStatusSnapshot | null;
+  daemonStatusError?: string;
   eval?: DesktopEvalResult;
   launcher: ToolPackLauncherRuntimeSnapshot;
   launcherSource: {
@@ -340,6 +365,8 @@ export type WinInspectResult = {
   };
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
+  statusError?: string;
+  statusPoll?: WinInspectStatusPollResult;
   updateCache: ToolPackUpdateCacheLifecycleSnapshot;
   updateCacheSource: {
     kind: "tools-pack-runtime";
@@ -347,4 +374,24 @@ export type WinInspectResult = {
     root: string;
   };
   update?: DesktopUpdateResult;
+  webStatus: WebStatusSnapshot | null;
+  webStatusError?: string;
+};
+
+export type WinInspectStatusPollSample = {
+  attempt: number;
+  daemonStatus: DaemonStatusSnapshot | null;
+  daemonStatusError?: string;
+  durationMs: number;
+  startedAt: string;
+  status: DesktopStatusSnapshot | null;
+  statusError?: string;
+  webStatus: WebStatusSnapshot | null;
+  webStatusError?: string;
+};
+
+export type WinInspectStatusPollResult = {
+  count: number;
+  intervalMs: number;
+  samples: WinInspectStatusPollSample[];
 };

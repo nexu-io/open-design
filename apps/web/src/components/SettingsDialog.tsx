@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
+import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -44,6 +45,7 @@ import {
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
 import {
+  fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
@@ -62,6 +64,7 @@ import {
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
   mergeDaemonMediaProviders,
+  saveConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -972,6 +975,23 @@ export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOption
   };
 }
 
+export function amrWalletValueLabel(input: {
+  balance: string | null;
+  loadingLabel: string;
+  ready: boolean;
+  snapshot: AmrWalletSnapshot | null;
+  unavailableLabel: string;
+}): string {
+  if (!input.ready) return input.loadingLabel;
+  if (input.balance) return input.balance;
+  const code = input.snapshot?.error?.code;
+  if (code === 'missing_control_key' || code === 'unauthorized') {
+    const message = input.snapshot?.error?.message?.trim();
+    if (message) return message;
+  }
+  return input.unavailableLabel;
+}
+
 function apiModelOptionLabel(
   model: ProviderModelOption,
   sourceLabel?: string,
@@ -1211,6 +1231,8 @@ export function SettingsDialog({
   }, []);
   const [showApiKey, setShowApiKey] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [settingsSidebarCollapsed, setSettingsSidebarCollapsed] = useState(false);
+  const [settingsFullscreen, setSettingsFullscreen] = useState(false);
   // Scroll the right-hand content pane back to the top whenever the user
   // picks a different settings section. Without this, switching from a
   // long section the user had scrolled (e.g. Library) into a short one
@@ -1236,6 +1258,9 @@ export function SettingsDialog({
   });
   const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
   const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
+  const [amrWalletSnapshot, setAmrWalletSnapshot] = useState<AmrWalletSnapshot | null>(null);
+  const [amrWalletReady, setAmrWalletReady] = useState(false);
+  const [amrWalletRefreshing, setAmrWalletRefreshing] = useState(false);
   const [hoveredAgentCardId, setHoveredAgentCardId] = useState<string | null>(null);
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
@@ -1244,6 +1269,44 @@ export function SettingsDialog({
   useEffect(() => {
     onAmrLoginStatusChange?.(amrCardStatus);
   }, [amrCardStatus, onAmrLoginStatusChange]);
+
+  const refreshAmrWallet = useCallback(async (refresh = false) => {
+    if (amrCardStatus?.loggedIn !== true) {
+      setAmrWalletSnapshot(null);
+      setAmrWalletReady(false);
+      return;
+    }
+    if (refresh) setAmrWalletRefreshing(true);
+    try {
+      const next = await fetchAmrWalletSnapshot({ refresh });
+      setAmrWalletSnapshot(next);
+      setAmrWalletReady(true);
+    } finally {
+      if (refresh) setAmrWalletRefreshing(false);
+    }
+  }, [amrCardStatus?.loggedIn]);
+
+  const formatAmrWalletBalance = useCallback((balanceUsd: string | null | undefined) => {
+    if (!balanceUsd) return null;
+    const amount = Number(balanceUsd);
+    if (!Number.isFinite(amount)) return `$${balanceUsd}`;
+    return new Intl.NumberFormat(locale, {
+      currency: 'USD',
+      maximumFractionDigits: 4,
+      minimumFractionDigits: 2,
+      style: 'currency',
+    }).format(amount);
+  }, [locale]);
+
+  const formatAmrWalletTime = useCallback((value: string | null | undefined) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(locale, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date);
+  }, [locale]);
 
   useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
@@ -1271,6 +1334,32 @@ export function SettingsDialog({
       cancelled = true;
     };
   }, [agents]);
+
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent || amrCardStatus?.loggedIn !== true) {
+      setAmrWalletSnapshot(null);
+      setAmrWalletReady(false);
+      setAmrWalletRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    setAmrWalletReady(false);
+    void fetchAmrWalletSnapshot().then((next) => {
+      if (cancelled) return;
+      setAmrWalletSnapshot(next);
+      setAmrWalletReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    agents,
+    amrCardStatus?.loggedIn,
+    amrCardStatus?.profile,
+    amrCardStatus?.user?.id,
+    amrCardStatus?.user?.email,
+  ]);
 
   // Reconcile AMR sign-in state whenever the user returns to the window. The
   // vela device-login flow completes in an external browser / AMR console; if
@@ -1423,6 +1512,19 @@ export function SettingsDialog({
     }
     window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
   }, [versionChecking, appVersionInfo, t]);
+
+  // Precise inverse of App.handleCompleteOnboarding: flip
+  // onboardingCompleted back to false, mirror it to localStorage and the
+  // daemon through the same config-persist path, then route the user into
+  // the first-run flow so they can replay setup (including brand extraction).
+  const handleResetOnboarding = useCallback(() => {
+    const next: AppConfig = { ...cfg, onboardingCompleted: false };
+    setCfg(next);
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    onClose();
+    navigateRoute({ kind: 'home', view: 'onboarding' });
+  }, [cfg, onClose]);
 
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
@@ -3171,10 +3273,21 @@ export function SettingsDialog({
     );
   };
 
+  const settingsSidebarToggleLabel = settingsSidebarCollapsed
+    ? 'Expand settings sidebar'
+    : 'Collapse settings sidebar';
+  const settingsFullscreenLabel = settingsFullscreen
+    ? t('common.exitFullscreen')
+    : t('common.fullscreen');
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal modal-settings"
+        className={
+          'modal modal-settings' +
+          (settingsSidebarCollapsed ? ' settings-sidebar-collapsed' : '') +
+          (settingsFullscreen ? ' settings-fullscreen' : '')
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-dialog-title"
@@ -3220,7 +3333,21 @@ export function SettingsDialog({
           </div>
           <button
             type="button"
-            className="settings-close"
+            className="settings-chrome-btn settings-fullscreen-toggle"
+            onClick={() => setSettingsFullscreen((current) => !current)}
+            aria-label={settingsFullscreenLabel}
+            aria-pressed={settingsFullscreen}
+            title={settingsFullscreenLabel}
+          >
+            <Icon
+              name={settingsFullscreen ? 'minimize' : 'maximize'}
+              size={15}
+              strokeWidth={2}
+            />
+          </button>
+          <button
+            type="button"
+            className="settings-chrome-btn settings-close"
             onClick={onClose}
             aria-label={t('common.close')}
             title={t('common.close')}
@@ -3247,7 +3374,27 @@ export function SettingsDialog({
         </header>
 
         <div className="modal-body">
-          <aside className="settings-sidebar" aria-label="Settings sections">
+          <button
+            type="button"
+            className="settings-sidebar-toggle"
+            onClick={() => setSettingsSidebarCollapsed((current) => !current)}
+            aria-label={settingsSidebarToggleLabel}
+            aria-pressed={settingsSidebarCollapsed}
+            aria-controls="settings-sidebar"
+            title={settingsSidebarToggleLabel}
+          >
+            <Icon
+              name={settingsSidebarCollapsed ? 'chevron-right' : 'chevron-left'}
+              size={15}
+              strokeWidth={2}
+            />
+          </button>
+          <aside
+            id="settings-sidebar"
+            className="settings-sidebar"
+            aria-label="Settings sections"
+            aria-hidden={settingsSidebarCollapsed ? true : undefined}
+          >
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
@@ -3649,6 +3796,18 @@ export function SettingsDialog({
                             isAmrAgent && active && amrCardStatus?.loggedIn
                               ? amrProfileBadgeLabel(amrCardStatus.profile)
                               : null;
+                          const amrWalletVisible =
+                            isAmrAgent && active && amrCardStatus?.loggedIn === true;
+                          const amrWalletBalance =
+                            amrWalletVisible && amrWalletSnapshot?.status === 'available'
+                              ? formatAmrWalletBalance(amrWalletSnapshot.balanceUsd)
+                              : null;
+                          const amrWalletTime =
+                            amrWalletVisible && amrWalletSnapshot?.status === 'available'
+                              ? formatAmrWalletTime(
+                                  amrWalletSnapshot?.updatedAt ?? amrWalletSnapshot?.fetchedAt,
+                                )
+                              : null;
                           const amrRevealPendingCancelAction =
                             isAmrAgent &&
                             active &&
@@ -3762,6 +3921,30 @@ export function SettingsDialog({
                                           ) : null}
                                         </div>
                                       ) : null}
+                                      {amrWalletVisible ? (
+                                        <div className="agent-card-amr-wallet">
+                                          <span className="agent-card-amr-wallet__label">
+                                            {t('settings.amrWalletBalance')}
+                                          </span>
+                                          <span className="agent-card-amr-wallet__value">
+                                            {amrWalletValueLabel({
+                                              balance: amrWalletBalance,
+                                              loadingLabel: t('common.loading'),
+                                              ready: amrWalletReady,
+                                              snapshot: amrWalletSnapshot,
+                                              unavailableLabel: t('settings.amrWalletUnavailable'),
+                                            })}
+                                          </span>
+                                          {amrWalletTime ? (
+                                            <span className="agent-card-amr-wallet__meta">
+                                              {t('settings.amrWalletUpdatedAt', { time: amrWalletTime })}
+                                              {amrWalletSnapshot?.source === 'daemon_cache'
+                                                ? ` · ${t('settings.amrWalletCached')}`
+                                                : ''}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
                                       {!active && modelSummary ? (
                                         <div className="agent-card-model-summary">
                                           <span>{t('settings.modelPicker')}</span>
@@ -3770,6 +3953,23 @@ export function SettingsDialog({
                                       ) : null}
                                   </div>
                                 </button>
+                                {amrWalletVisible ? (
+                                  <button
+                                    type="button"
+                                    className="agent-card-amr-wallet-refresh"
+                                    title={t('settings.amrWalletRefreshTitle')}
+                                    aria-label={t('settings.amrWalletRefreshTitle')}
+                                    disabled={amrWalletRefreshing}
+                                    onClick={() => void refreshAmrWallet(true)}
+                                  >
+                                    <Icon
+                                      name={amrWalletRefreshing ? 'spinner' : 'refresh'}
+                                      size={13}
+                                      className={amrWalletRefreshing ? 'icon-spin' : undefined}
+                                    />
+                                    <VisuallyHidden>{t('settings.amrWalletRefresh')}</VisuallyHidden>
+                                  </button>
+                                ) : null}
                                 {isAmrAgent ? (
                                   active && amrCardStatusReady ? (
                                     <span
@@ -4831,6 +5031,15 @@ export function SettingsDialog({
                   <p className="hint">{t('diagnostics.exportHint')}</p>
                 </div>
                 <ExportDiagnosticsRow />
+              </div>
+              <div className="settings-about-diagnostics">
+                <div className="settings-about-diagnostics-text">
+                  <h4>{t('settings.resetOnboarding')}</h4>
+                  <p className="hint">{t('settings.resetOnboardingDesc')}</p>
+                </div>
+                <Button onClick={handleResetOnboarding}>
+                  {t('settings.resetOnboardingButton')}
+                </Button>
               </div>
             </section>
           ) : null}

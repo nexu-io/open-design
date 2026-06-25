@@ -162,7 +162,7 @@ open templates/layout-showcase.html        # all 31 layouts
 open templates/animation-showcase.html     # all 47 animations
 open templates/full-decks-index.html       # all 14 full decks
 
-# Render any template to PNG via headless Chrome
+# Render any template to PNG via managed Chromium
 ./scripts/render.sh templates/theme-showcase.html
 ./scripts/render.sh examples/my-talk/index.html 12
 ```
@@ -213,7 +213,7 @@ html-ppt-skill/
 │   └── single-page/*.html        31 layout files with demo data
 ├── scripts/
 │   ├── new-deck.sh               scaffold
-│   ├── render.sh                 headless Chrome → PNG
+│   ├── render.sh                 managed Chromium → PNG
 │   └── verify-output/            56 self-test screenshots
 └── examples/demo-deck/           complete working deck
 ```

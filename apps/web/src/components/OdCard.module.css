@@ -1,0 +1,422 @@
+/*
+ * Inline <od-card> rendering — the display-only memory cards interleaved with
+ * assistant prose. Quiet themed surfaces keep these inside the chat flow as
+ * annotations, not heavy panels. Animation
+ * easing follows the repo convention (ease-out cubic-bezier).
+ */
+
+.card {
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ----- task-brief: collapsed chip → expandable brief --------------------- */
+
+.briefChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-subtle);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.14s cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.briefChip:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+
+.briefChipIcon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.briefChipLabel {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.briefChipSummary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.briefChipChevron {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+
+.briefBody {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-panel);
+}
+
+.briefTitle {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.briefFields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 0;
+}
+
+.briefField {
+  display: contents;
+}
+
+.briefField dt {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  align-self: baseline;
+  padding-top: 1px;
+}
+
+.briefField dd {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.briefNote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ----- memory-applied: one-line chip with type-dotted refs --------------- */
+
+.appliedCard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle);
+}
+
+.appliedIcon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.appliedSummary {
+  font-weight: 500;
+}
+
+.appliedRefs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.appliedRef {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.refDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--text-faint);
+}
+
+.refName {
+  white-space: nowrap;
+}
+
+/* Category dots — quiet, distinguishable hues for each memory bucket. */
+.dotProfile {
+  background: var(--purple);
+}
+.dotUser {
+  background: var(--blue);
+}
+.dotFeedback {
+  background: var(--amber);
+}
+.dotProject {
+  background: var(--green);
+}
+.dotReference {
+  background: var(--text-soft);
+}
+.dotRule {
+  background: var(--accent);
+}
+
+/* ----- verify-scorecard: status header over rubric rows ------------------ */
+
+.scorecard {
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-panel);
+}
+
+.scorecardHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.scorecardPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  background: var(--bg-fill-tertiary);
+  color: var(--text-muted);
+}
+
+.pillPass {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.pillPartial {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.pillFail {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.scorecardTitle {
+  font-weight: 600;
+}
+
+.scorecardSummary {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.scoreRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.scoreRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.scoreRowIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--text-faint);
+}
+
+.rowPass .scoreRowIcon {
+  color: var(--green);
+}
+
+.rowFail .scoreRowIcon {
+  color: var(--red);
+}
+
+.rowFixed .scoreRowIcon {
+  color: var(--amber);
+}
+
+.scoreRowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.scoreRowRule {
+  line-height: 1.4;
+}
+
+.scoreRowNote {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ----- rule-proposal: name/assertion/check/rationale + actions ----------- */
+
+.ruleCard {
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.ruleHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ruleHeadIcon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.ruleKicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ruleSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ruleName {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.ruleDescription {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.ruleFacts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 4px 0 0;
+}
+
+.ruleFacts > div {
+  display: contents;
+}
+
+.ruleFacts dt {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  align-self: baseline;
+  padding-top: 1px;
+}
+
+.ruleFacts dd {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.ruleFields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ruleFieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ruleFieldLabel input,
+.ruleFieldLabel textarea {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+
+.ruleError {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--red);
+}
+
+.ruleActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ruleAction {
+  font-size: 12.5px;
+  padding: 5px 12px;
+}
+
+.ruleSaved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.ruleSavedIcon {
+  display: inline-flex;
+  color: currentColor;
+}
+
+.ruleSavedLabel {
+  font-weight: 500;
+}

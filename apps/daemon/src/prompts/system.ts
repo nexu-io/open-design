@@ -29,15 +29,21 @@
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
  */
-import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.js';
+import { renderOfficialDesignerPrompt } from './official-system.js';
+import { renderDiscoveryAndPhilosophy, renderSharedFramesBlock } from './discovery.js';
 import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
-import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import {
+  executionProfileFromStreamFormat,
+  type ChatSessionMode,
+  type ExecutionProfile,
+  type MediaExecutionPolicy,
+  type MediaSurface,
+} from '@open-design/contracts';
 
 // Prepended first in every composed prompt so it wins precedence over all
 // later sections, including skill bodies and user/project instructions.
@@ -166,6 +172,9 @@ type ProjectMetadata = {
   audioModel?: string | null;
   audioDuration?: number | null;
   voice?: string | null;
+  brandId?: string | null;
+  brandSourceUrl?: string | null;
+  brandDesignSystemId?: string | null;
   promptTemplate?: {
     id?: string | null;
     surface?: 'image' | 'video' | null;
@@ -243,7 +252,7 @@ export function resolveExclusiveSurface(args: {
     ?? (composedSurfaceModes.length === 1 ? composedSurfaceModes[0] ?? null : null);
 }
 
-export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
+export const BASE_SYSTEM_PROMPT = renderOfficialDesignerPrompt('filesystem');
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
@@ -305,17 +314,30 @@ printf '%s\\n' "\$last"
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 
-const CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE = `
+const FILESYSTEM_HANDOFF_OVERRIDE = `
 
 ---
 
-## Claude Code filesystem handoff
+## Filesystem handoff
 
-You are running as Claude Code with filesystem tools. When you write or edit an HTML file in the project folder with Write/Edit, that file is already visible in the user's file panel and preview.
+This run uses Open Design's filesystem execution profile. Project files are the source of truth for generated artifacts.
 
-- Do not output the full same HTML again in a \`<artifact type="text/html">...</artifact>\` block after writing it to disk.
+Normal rhythm for artifact work:
+1. Start with a short ordinary assistant message or compact \`<od-card>\` that states the locked direction.
+2. Use progress tools for planning/status.
+3. Create or edit project files through the runtime's native tool-call interface.
+4. End with a short ordinary assistant message naming the written file(s) and summarizing the result.
+
+Never type a tool invocation into assistant text as XML, markdown, JSON, or prose; if the runtime cannot call the tool, briefly explain that instead of simulating it.
+
+This tool-call rule does not apply to Open Design UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
+
+When you write or edit an HTML file in the project folder through the native file tool, that file is already visible in the user's file panel and preview.
+
+- Do not output generated source code in a \`<artifact type="text/html">...</artifact>\` block.
+- Do not duplicate file contents in assistant text after writing them to disk.
 - After the final self-check, briefly name the written file and summarize the result instead.
-- Only emit a full HTML \`<artifact>\` block if you could not write the project file through the filesystem tools.`;
+- A filesystem run that emits a source-code \`<artifact>\` is treated as an unexpected fallback by the host.`;
 
 export function buildExamplePromptOverride(
   title?: string | null,
@@ -436,6 +458,15 @@ export interface ComposeInput {
   // built-in identity charter but still defer to the brand's hard tokens
   // and the active skill's workflow. Empty/undefined skips the block.
   memoryBody?: string | undefined;
+  // Per-hook switches for the two-loop memory feature, mirrored from the
+  // memory config (`profileEnabled` / `rewriteEnabled` / `verifyEnabled`).
+  // An absent object — or an absent field — is treated as TRUE so callers
+  // with no memory config wired (and the contracts/BYOK fallback) keep the
+  // loops on by default. `rewrite` drives the PRE intent-gateway task-brief
+  // card; `verify` drives the POST self-verify scorecard. `profile` is
+  // consumed by the memory-body composer; it is accepted here only so the
+  // same object threads through unchanged.
+  memoryHooks?: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
   // Project-level metadata captured by the new-project panel. Drives the
   // agent's understanding of artifact kind, fidelity, speaker-notes intent
   // and animation intent. Missing fields here are exactly what the
@@ -503,6 +534,10 @@ export interface ComposeInput {
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
+  // Explicit handoff profile. Filesystem runs write project files through
+  // native tools; text_artifact runs (BYOK/plain) deliver source through
+  // assistant-text <artifact> blocks.
+  executionProfile?: ExecutionProfile | undefined;
 }
 
 export function composeSystemPrompt({
@@ -523,6 +558,7 @@ export function composeSystemPrompt({
   craftBody,
   craftSections,
   memoryBody,
+  memoryHooks,
   metadata,
   template,
   audioVoiceOptions,
@@ -539,6 +575,7 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
   mediaExecution,
+  executionProfile,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -553,6 +590,8 @@ export function composeSystemPrompt({
         : [],
   );
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
+  const resolvedExecutionProfile =
+    executionProfile ?? executionProfileFromStreamFormat(streamFormat);
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -602,7 +641,7 @@ export function composeSystemPrompt({
   }
 
   if (!isMediaSurfaceEarly) {
-    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
     // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
@@ -631,12 +670,34 @@ export function composeSystemPrompt({
 
   parts.push(
     '# Identity and workflow charter (background)\n\n',
-    BASE_SYSTEM_PROMPT,
+    renderOfficialDesignerPrompt(resolvedExecutionProfile),
   );
 
   if (memoryBody && memoryBody.trim().length > 0) {
     parts.push(
-      `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\n${memoryBody.trim()}`,
+      `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\nUse memory as a task-intent gateway. When the user's request is short or underspecified, silently expand it into an internal task brief before acting: infer the task type, user/profile background, project/artifact context, delivery preferences, known feedback meanings, constraints, and validation/finish line. Proceed from that richer brief so the user does not need to repeat setup. Ask a clarifying question only when a critical target, permission, or conflict cannot be resolved from the current request plus memory. Do not dump the full internal brief unless the user asks to inspect it. Expanding intent this way changes only WHAT you know going in; it never shortcuts the standard build flow — you still plan with TodoWrite and still run the anti-slop / brand self-check on every artifact-producing turn.\n\n${memoryBody.trim()}`,
+    );
+
+    // Two-loop memory instruction blocks. These pair with the memory body
+    // above (Workstream 1A renders a `### Profile` first and a
+    // `### Verified rules` last), so they are only meaningful when memory
+    // is present. Each loop is independently gated by its config flag; an
+    // absent flag defaults ON. The card JSON examples below intentionally
+    // use no backticks so they stay literal inside the template strings.
+    if ((memoryHooks?.rewrite ?? true)) {
+      parts.push(
+        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
+      );
+    }
+
+    if ((memoryHooks?.verify ?? true)) {
+      parts.push(
+        `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
+      );
+    }
+
+    parts.push(
+      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
     );
   }
 
@@ -837,8 +898,8 @@ export function composeSystemPrompt({
     );
   }
 
-  if (agentId === 'claude') {
-    parts.push(CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE);
+  if (resolvedExecutionProfile === 'filesystem') {
+    parts.push(FILESYSTEM_HANDOFF_OVERRIDE);
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
@@ -847,7 +908,7 @@ export function composeSystemPrompt({
   // right-hand Questions tab, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
   parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.",
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
   );
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
@@ -1138,6 +1199,14 @@ function renderMetadataBlock(
     lines.push(
       '- **connector-source rule**: if the user names a connector/source (for example Notion) and daemon connector tools are available, list connectors before asking where the data comes from. When the named connector is `connected`, use its read-only tools and ask follow-up questions only for missing topic/page/database details, multiple equally plausible matches, or an unconnected/missing connector.',
     );
+  }
+  if (metadata.kind === 'brand') {
+    lines.push(
+      '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.',
+    );
+    if (metadata.brandId) lines.push(`- **brandId**: ${metadata.brandId}`);
+    if (metadata.brandSourceUrl) lines.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
+    if (metadata.brandDesignSystemId) lines.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);
   }
 
   if (metadata.kind === 'prototype') {
@@ -1503,5 +1572,5 @@ function derivePreflight(skillBody: string): string {
     refs.push('`references/html-in-canvas.md`');
   }
   if (refs.length === 0) return '';
-  return ` **Pre-flight (do this before any other tool):** Read ${refs.join(', ')} via the path written in the skill-root preamble. The seed template defines the class system you'll paste into; the layouts file is the only acceptable source of section/screen/slide skeletons; the checklist is your P0/P1/P2 gate before emitting \`<artifact>\`. Skipping this step is the #1 reason output regresses to generic AI-slop.`;
+  return ` **Pre-flight (do this before any other tool):** Read ${refs.join(', ')} via the path written in the skill-root preamble. The seed template defines the class system you'll paste into; the layouts file is the only acceptable source of section/screen/slide skeletons; the checklist is your P0/P1/P2 gate before final handoff. Skipping this step is the #1 reason output regresses to generic AI-slop.`;
 }

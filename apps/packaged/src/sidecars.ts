@@ -411,6 +411,7 @@ export function buildPackagedDaemonSpawnEnv(
 
 async function spawnSidecarChild(options: {
   app: AppKey;
+  electronNodeCommand: string | null;
   entryPath: string;
   env: NodeJS.ProcessEnv;
   nodeCommand: string | null;
@@ -432,6 +433,10 @@ async function spawnSidecarChild(options: {
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
   await retireExistingSidecarEndpoint(ipcPath, logPath);
+  const usesElectronAsNode = options.nodeCommand == null;
+  const command = options.nodeCommand
+    ?? options.electronNodeCommand
+    ?? await resolvePackagedElectronNodeCommand();
   const childEnv = createSidecarLaunchEnv({
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -445,11 +450,10 @@ async function spawnSidecarChild(options: {
       ...options.env,
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),
-      ...(options.nodeCommand == null ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      ...(usesElectronAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
     },
     stamp,
   });
-  const command = options.nodeCommand ?? (await resolvePackagedElectronNodeCommand());
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
@@ -495,6 +499,7 @@ export async function startPackagedSidecars(
     amrProfile: string | null;
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
+    electronNodeCommand: string | null;
     nodeCommand: string | null;
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
@@ -550,6 +555,7 @@ export async function startPackagedSidecars(
         posthogKey: options.posthogKey,
         posthogHost: options.posthogHost,
       }),
+      electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,
@@ -580,6 +586,7 @@ export async function startPackagedSidecars(
         OD_WEB_OUTPUT_MODE: options.webOutputMode,
         PORT: "0",
       },
+      electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,

@@ -43,6 +43,7 @@
 // — produces a record in `memory-extractions.ts` so the settings panel
 // can show running / skipped / success / failed states in real time.
 
+import { MEMORY_TYPES } from '@open-design/contracts';
 import {
   composeMemoryBody,
   listMemoryEntries,
@@ -103,6 +104,39 @@ Type rules:
 - feedback: corrections / preferences about how to work ("don't add comments unless asked")
 - project: ongoing initiatives, deadlines, why-decisions; usually time-bounded
 - reference: pointers to external systems (Linear projects, Slack channels, dashboards)`;
+
+// Specialised system prompt for the annotation distiller. The user just
+// reviewed a generated design artifact and left inline marks — comments,
+// highlights, or drawn strokes — on specific elements. We turn the durable
+// signal in those marks into `feedback` (a standing preference) and `rule`
+// (an enforceable, checkable constraint) memory so the next generation honors
+// it without the user re-explaining. The output shape matches the generic
+// extractor so the same parser/writer pipeline applies.
+const ANNOTATION_SYSTEM_PROMPT = `You are a memory distiller for a personal AI design assistant.
+
+The user just reviewed a generated design artifact and left inline annotations — comments, highlights, or drawn marks — each attached to a specific element. Your job is to distill any STANDING design preference or constraint the user is expressing, so future generations honor it without the user repeating themselves.
+
+Only extract a fact when the annotation expresses a durable preference that should apply to FUTURE work — never a one-off tweak to this single element.
+- "make THIS button green" → one-off, do NOT remember.
+- "always use the brand green for primary actions" / a complaint they clearly keep making → durable, remember.
+- "too busy" / "太花了" as a recurring critique → remember as feedback about visual density / decoration.
+
+Generalize the wording so it is not tied to this one element, page, or run.
+
+Output STRICT JSON in this exact shape — nothing else, no prose, no markdown fences:
+{
+  "entries": [
+    { "type": "feedback|rule", "name": "short title (≤ 60 chars)", "description": "one-line summary (≤ 140 chars)", "body": "the remembered preference/rule" }
+  ]
+}
+
+If nothing is durable, return: {"entries": []}
+
+Type rules:
+- feedback: a preference about how to work or what the user likes/dislikes ("keep decoration minimal — at most two accent colors").
+- rule: an enforceable, checkable constraint. The body MUST be exactly two lines:
+  Assertion: <what must always hold in the output>
+  Check: <how to verify it on a rendered artifact>`;
 
 // Provider defaults are centralised so the override path and the
 // auto-pick path can't drift apart. When the user picks "Custom →
@@ -993,7 +1027,10 @@ function parseEntries(rawText) {
     }
   }
   const list = Array.isArray(parsed?.entries) ? parsed.entries : [];
-  const validTypes = new Set(['user', 'feedback', 'project', 'reference']);
+  // Accept every type the shared contract knows about — including the new
+  // `profile` / `rule` buckets — so an LLM that proposes a verified rule or a
+  // profile fact isn't silently discarded here.
+  const validTypes = new Set(MEMORY_TYPES);
   return list
     .filter(
       (e) =>
@@ -1157,6 +1194,75 @@ export async function suggestWithLLM(dataDir, input, options) {
   });
 
   return suggestions;
+}
+
+// Build the distiller payload from a turn's annotations. Each annotation is
+// the user's words plus enough target context (what element, its current
+// copy, the mark intent) for the model to judge whether the critique is a
+// one-off or a standing preference. The typed message that rode along with
+// the annotations is appended as extra context.
+function renderAnnotationPayload(annotations, userMessage) {
+  const parts = [
+    'The user reviewed a generated design artifact and left these inline annotations:',
+  ];
+  annotations.forEach((a, index) => {
+    parts.push('');
+    parts.push(`Annotation ${index + 1}:`);
+    parts.push(`- comment: ${String(a.comment || '').trim()}`);
+    if (a.label) parts.push(`- target element: ${String(a.label).trim()}`);
+    if (a.currentText) {
+      parts.push(`- target current text: ${String(a.currentText).trim().slice(0, 240)}`);
+    }
+    if (a.selectionKind) parts.push(`- selection kind: ${a.selectionKind}`);
+    if (a.intent) parts.push(`- mark intent: ${a.intent}`);
+    if (a.markKind) parts.push(`- mark kind: ${a.markKind}`);
+  });
+  const trimmedMessage = String(userMessage || '').trim();
+  if (trimmedMessage.length > 0) {
+    parts.push('');
+    parts.push('The message the user sent alongside the annotations:');
+    parts.push(trimmedMessage.slice(0, 2000));
+  }
+  parts.push('');
+  parts.push(
+    'Return ONLY the JSON object described in the system prompt — no prose, no fences.',
+  );
+  return parts.join('\n');
+}
+
+// Auto-distill preview annotations (comments / highlights / drawn marks) into
+// durable `feedback` and `rule` memory. This is the automatic half of the
+// "interaction → memory" loop: instead of waiting for the agent to propose a
+// rule and the user to click Keep, every review turn that carries inline
+// feedback is mined in the background and written straight to the store
+// (auto-keep), de-duped against existing entries. Reuses extractWithLLM so the
+// provider selection, memory toggles, dedup, index linking, and the batched
+// `extract` change event (which drives the "Memory updated" toast) all apply.
+//
+// `input.annotations` is the turn's comment-attachment list; only annotations
+// carrying a non-empty user comment are mined (a bare highlight with no words
+// has no durable signal to distill). Returns the written entries.
+export async function distillAnnotationsToMemory(dataDir, input, options) {
+  const annotations = Array.isArray(input?.annotations) ? input.annotations : [];
+  const withComment = annotations.filter(
+    (a) => a && typeof a.comment === 'string' && a.comment.trim().length > 0,
+  );
+  if (withComment.length === 0) return [];
+  const payload = renderAnnotationPayload(withComment, input?.userMessage);
+  return extractWithLLM(
+    dataDir,
+    { userMessage: payload, assistantMessage: input?.assistantMessage },
+    {
+      ...options,
+      systemPrompt: ANNOTATION_SYSTEM_PROMPT,
+      source: 'annotation',
+      kind: 'annotation',
+      // The distiller only deals in durable preferences/constraints — never
+      // let it spawn project/reference/user noise from a design critique.
+      candidateFilter: (candidate) =>
+        candidate.type === 'feedback' || candidate.type === 'rule',
+    },
+  );
 }
 
 export async function extractWithLLM(dataDir, input, options) {

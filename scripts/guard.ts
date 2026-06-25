@@ -94,6 +94,14 @@ const residualAllowedExactPaths = new Set([
   // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
   // the CI environment and never pulled into the daemon/web TS build or bundle.
   "scripts/bake-plugin-previews.mjs",
+  // Manifest diff guard + its node:test coverage. Run directly by Node from the
+  // bake workflows (no TS build step there) to decide whether a `previews` entry
+  // actually changed, ignoring the per-run `generatedAt` timestamp.
+  "scripts/plugin-previews-diff.mjs",
+  "scripts/plugin-previews-diff.test.mjs",
+  // CI-only R2 garbage collector for orphaned preview clips + its node:test.
+  "scripts/plugin-previews-gc.mjs",
+  "scripts/plugin-previews-gc.test.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",
@@ -109,6 +117,9 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
+  // Checked-in bin shim so pnpm can link `tools-release` before dist output exists.
+  "tools/release/bin/tools-release.mjs",
+  "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
@@ -923,6 +934,7 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
+  ["release", "directory"],
   ["serve", "directory"],
 ]);
 
@@ -937,7 +949,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and serve/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, release/, and serve/`);
       continue;
     }
 

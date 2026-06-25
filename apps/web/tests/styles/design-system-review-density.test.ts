@@ -39,4 +39,11 @@ describe('design-system review preview density', () => {
     expect(toc).toContain('position: sticky;');
     expect(toc).toContain('border-right: 1px solid var(--border);');
   });
+
+  it('lets the contents rail scroll with the page in the single-column review layout', () => {
+    const toc = cssDeclarations('.ds-project-toc');
+
+    expect(toc).toContain('position: static;');
+    expect(toc).toContain('border-bottom: 1px solid var(--border);');
+  });
 });

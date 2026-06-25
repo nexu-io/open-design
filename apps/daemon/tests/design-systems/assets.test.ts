@@ -15,6 +15,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  clearDesignSystemAssetsCacheForTests,
+  digestDesignSystemContext,
   isDesignTokenChannelEnabled,
   listDesignSystems,
   readDesignSystem,
@@ -143,6 +145,44 @@ describe('readDesignSystemAssets', () => {
     const assets = await readDesignSystemAssets(root, 'partial');
     expect(assets.tokensCss).toBe(':root { --x: 1; }');
     expect(assets.fixtureHtml).toBeUndefined();
+  });
+
+  it('digests the actual design-system prompt context', () => {
+    const base = digestDesignSystemContext({
+      id: 'sample',
+      title: 'Sample',
+      body: '# Sample',
+      tokensCss: ':root { --accent: #111; }',
+    });
+    const changed = digestDesignSystemContext({
+      id: 'sample',
+      title: 'Sample',
+      body: '# Sample',
+      tokensCss: ':root { --accent: #222; }',
+    });
+
+    expect(base).toMatch(/^[a-f0-9]{64}$/);
+    expect(changed).toMatch(/^[a-f0-9]{64}$/);
+    expect(changed).not.toBe(base);
+    expect(digestDesignSystemContext({ id: 'empty' })).toBeNull();
+  });
+
+  it('refreshes cached resolved assets when token files change', async () => {
+    clearDesignSystemAssetsCacheForTests();
+    const builtInRoot = fresh();
+    const userRoot = fresh();
+    const dir = brandDir(builtInRoot, 'cached-system');
+    writeFileSync(path.join(dir, 'tokens.css'), ':root { --x: 1; }');
+    writeFileSync(path.join(dir, 'components.html'), '<button>one</button>');
+
+    const first = await resolveDesignSystemAssets('cached-system', builtInRoot, userRoot);
+    expect(first.tokensCss).toBe(':root { --x: 1; }');
+
+    writeFileSync(path.join(dir, 'tokens.css'), ':root { --x: 222222; }');
+
+    const second = await resolveDesignSystemAssets('cached-system', builtInRoot, userRoot);
+    expect(second.tokensCss).toBe(':root { --x: 222222; }');
+    clearDesignSystemAssetsCacheForTests();
   });
 });
 
