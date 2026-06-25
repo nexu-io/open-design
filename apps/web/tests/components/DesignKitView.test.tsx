@@ -176,6 +176,58 @@ describe('DesignKitView iframe sandboxing', () => {
     expect(screen.queryByRole('menuitem', { name: 'Open full system' })).toBeNull();
   });
 
+  it('renders sticky header action loading state in the overflow menu', () => {
+    render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          stickyHeader
+          headerMenuActions={[
+            {
+              id: 'refresh',
+              label: 'Refresh',
+              icon: 'refresh',
+              onClick: () => {},
+              disabled: true,
+              loading: true,
+            },
+          ]}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('design-kit-more-actions'));
+    const refresh = screen.getByRole('menuitem', { name: 'Refresh' });
+    expect(refresh.getAttribute('aria-busy')).toBe('true');
+    expect((refresh as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('reports clipboard success for DESIGN.md copy actions', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const onActionFeedback = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          stickyHeader
+          designMd={{ body: '# Preview Kit' }}
+          onActionFeedback={onActionFeedback}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('design-kit-more-actions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy DESIGN.md' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('# Preview Kit'));
+    expect(onActionFeedback).toHaveBeenCalledWith('loading', 'Copy DESIGN.md...');
+    expect(onActionFeedback).toHaveBeenCalledWith('success', 'Copied!');
+  });
+
   it('renders the embedded component kit without an Open full system action', () => {
     const baseKit = previewKit();
     const kit = {

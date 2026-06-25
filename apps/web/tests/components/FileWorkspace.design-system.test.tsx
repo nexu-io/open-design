@@ -176,6 +176,9 @@ describe('FileWorkspace design-system project surface', () => {
       await Promise.resolve();
     });
     expect(container.textContent).toContain('Edit DESIGN.md');
+    expect(container.textContent).toContain('Refresh');
+    expect(container.textContent).toContain('Download');
+    expect(container.textContent).not.toContain('Reset');
   });
 
   it('edits and resets palette colors through the color editor dialog', async () => {

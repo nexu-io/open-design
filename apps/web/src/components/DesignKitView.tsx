@@ -231,9 +231,12 @@ export interface HeaderMenuAction {
   icon: IconName;
   onClick: () => void;
   disabled?: boolean;
+  loading?: boolean;
   /** Toggles render with checkbox semantics + a trailing check when active. */
   active?: boolean;
 }
+
+export type DesignKitActionFeedbackTone = 'success' | 'error' | 'loading';
 
 export interface DesignKitViewProps {
   kit: DesignKit;
@@ -269,13 +272,15 @@ export interface DesignKitViewProps {
   onUploadModule?: (module: KitUploadModule, file: File) => void;
   onColorChange?: (index: number, hex: string) => void | Promise<void>;
   onColorReset?: (index: number) => void | Promise<void>;
-  onDeleteLogo?: (index: number) => void;
-  onDeleteImage?: (index: number) => void;
+  onDeleteLogo?: (index: number) => void | Promise<void>;
+  onDeleteImage?: (index: number) => void | Promise<void>;
   onRefresh?: () => void;
   onDownload?: () => void;
   onImport?: () => void;
   onReset?: () => void;
   uploading?: KitUploadModule | null;
+  actionBusy?: string | null;
+  onActionFeedback?: (tone: DesignKitActionFeedbackTone, message: string) => void;
   editFocusRequest?: DesignKitEditFocusRequest | null;
   dataTestId?: string;
 }
@@ -302,6 +307,8 @@ function DesignKitViewInner({
   onImport,
   onReset,
   uploading,
+  actionBusy,
+  onActionFeedback,
   editFocusRequest,
   dataTestId = 'design-kit-view',
 }: DesignKitViewProps) {
@@ -491,6 +498,7 @@ function DesignKitViewInner({
   const dsKitUrl = dsTheme === 'dark' ? kit.system?.kitDarkUrl ?? kit.system?.kitUrl : kit.system?.kitUrl;
   const canUpload = Boolean(kit.canUpload && onUploadModule);
   const canEditDesignMd = Boolean(designMd?.canEdit !== false && designMd?.onSave);
+  const anyActionBusy = Boolean(actionBusy);
   const designMdModules = useMemo<Record<DesignMdModuleId, DesignMdModuleSpec>>(
     () => ({
       identity: {
@@ -537,7 +545,10 @@ function DesignKitViewInner({
   function handleFile(module: KitUploadModule, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (file && onUploadModule) onUploadModule(module, file);
+    if (file && onUploadModule) {
+      onActionFeedback?.('loading', t('ds.uploading'));
+      onUploadModule(module, file);
+    }
   }
 
   function openInBrowser(event: MouseEvent<HTMLAnchorElement>, url: string) {
@@ -575,6 +586,7 @@ function DesignKitViewInner({
         if (!imageType) continue;
         const blob = await item.getType(imageType);
         const ext = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        onActionFeedback?.('loading', t('ds.uploading'));
         onUploadModule(module, new File([blob], `clipboard-${module}-${Date.now()}.${ext}`, { type: imageType }));
         return;
       }
@@ -599,11 +611,16 @@ function DesignKitViewInner({
   }
 
   async function copyDesignMdText(value: string) {
-    if (!value.trim() || !navigator.clipboard?.writeText) return;
+    if (!value.trim() || !navigator.clipboard?.writeText) {
+      onActionFeedback?.('error', t('ds.actionFailed'));
+      return;
+    }
     try {
+      onActionFeedback?.('loading', `${t('ds.copyDesignMd')}...`);
       await navigator.clipboard.writeText(value);
+      onActionFeedback?.('success', t('fileViewer.copied'));
     } catch {
-      // Clipboard write failures are non-fatal.
+      onActionFeedback?.('error', t('ds.actionFailed'));
     }
   }
 
@@ -648,7 +665,7 @@ function DesignKitViewInner({
       target.closest('[data-kit-logo-stage]')
     ) {
       event.preventDefault();
-      onDeleteLogo(activeLogo);
+      void onDeleteLogo(activeLogo);
     }
   }
 
@@ -734,17 +751,19 @@ function DesignKitViewInner({
     icon: IconName,
     onClick: () => void,
     disabled = false,
+    loading = false,
   ) {
     return (
       <button
         type="button"
-        className={styles.moduleAction}
+        className={`${styles.moduleAction} ${loading ? styles.moduleActionLoading : ''}`}
         onClick={onClick}
-        disabled={disabled}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
         title={label}
         aria-label={label}
       >
-        <Icon name={icon} size={13} />
+        <Icon name={loading ? 'spinner' : icon} size={13} />
         <span>{label}</span>
       </button>
     );
@@ -756,12 +775,12 @@ function DesignKitViewInner({
       <>
         {moduleActionButton(t('ds.copyDesignMd'), 'copy', () => void copyDesignMd(), !designMd.body)}
         {canEditDesignMd
-          ? moduleActionButton(t('ds.editDesignMd'), 'edit', openDesignMdEditor, Boolean(designMd.saving))
+          ? moduleActionButton(t('ds.editDesignMd'), 'edit', openDesignMdEditor, Boolean(designMd.saving || anyActionBusy))
           : designMd.onOpenFile
             ? moduleActionButton(t('ds.openDesignMd'), 'file-text', designMd.onOpenFile)
             : null}
         {canEditDesignMd
-          ? moduleActionButton(t('ds.uploadMd'), 'upload', () => designMdInputRef.current?.click(), Boolean(designMd.saving))
+          ? moduleActionButton(t('ds.uploadMd'), 'upload', () => designMdInputRef.current?.click(), Boolean(designMd.saving || anyActionBusy))
           : null}
       </>
     );
@@ -775,7 +794,7 @@ function DesignKitViewInner({
       <>
         {moduleActionButton(t('ds.copyDesignMdModule', moduleVars), 'copy', () => void copyDesignMdModule(module), !slice.text.trim())}
         {canEditDesignMd
-          ? moduleActionButton(t('ds.editDesignMdModule', moduleVars), 'edit', () => openDesignMdModuleEditor(module), Boolean(designMd.saving))
+          ? moduleActionButton(t('ds.editDesignMdModule', moduleVars), 'edit', () => openDesignMdModuleEditor(module), Boolean(designMd.saving || anyActionBusy))
           : designMd.onOpenFile
             ? moduleActionButton(t('ds.openDesignMdModule', moduleVars), 'file-text', designMd.onOpenFile)
             : null}
@@ -785,8 +804,9 @@ function DesignKitViewInner({
 
   function uploadAction(module: KitUploadModule) {
     if (!canUpload) return null;
+    const busy = uploading === module || actionBusy === `upload:${module}`;
     const label =
-      uploading === module
+      busy
         ? t('ds.uploading')
         : module === 'logo'
           ? t('ds.uploadLogo')
@@ -797,7 +817,8 @@ function DesignKitViewInner({
       label,
       'upload',
       () => (module === 'logo' ? logoInputRef : module === 'font' ? fontInputRef : imageInputRef).current?.click(),
-      Boolean(uploading),
+      Boolean(uploading || anyActionBusy),
+      busy,
     );
   }
 
@@ -809,10 +830,11 @@ function DesignKitViewInner({
           <button
             type="button"
             className={styles.uploadBtn}
-            disabled={uploading === module}
+            disabled={uploading === module || anyActionBusy}
+            aria-busy={(uploading === module || actionBusy === `upload:${module}`) || undefined}
             onClick={() => (module === 'logo' ? logoInputRef : module === 'font' ? fontInputRef : imageInputRef).current?.click()}
           >
-            {uploading === module
+            {uploading === module || actionBusy === `upload:${module}`
               ? t('ds.uploading')
               : module === 'logo'
                 ? t('ds.uploadLogo')
@@ -836,7 +858,8 @@ function DesignKitViewInner({
               label: t('ds.editDesignMd'),
               icon: 'edit' as IconName,
               onClick: openDesignMdEditor,
-              disabled: Boolean(designMd.saving),
+              disabled: Boolean(designMd.saving || anyActionBusy),
+              loading: actionBusy === 'design-md-save',
             }]
           : designMd.onOpenFile
             ? [{
@@ -1059,9 +1082,15 @@ function DesignKitViewInner({
                 {moduleActions(
                   <>
                     {uploadAction('logo')}
-                    {canUpload ? moduleActionButton(t('ds.pasteImage'), 'copy', () => void pasteImage('logo'), Boolean(uploading)) : null}
+                    {canUpload ? moduleActionButton(t('ds.pasteImage'), 'copy', () => void pasteImage('logo'), Boolean(uploading || anyActionBusy)) : null}
                     {activeLogoSrc && onDeleteLogo
-                      ? moduleActionButton(t('ds.deleteLogo'), 'trash', () => onDeleteLogo(activeLogo), Boolean(uploading))
+                      ? moduleActionButton(
+                          t('ds.deleteLogo'),
+                          'trash',
+                          () => void onDeleteLogo(activeLogo),
+                          Boolean(uploading || anyActionBusy),
+                          actionBusy === `delete-logo:${activeLogo}`,
+                        )
                       : null}
                   </>,
                 )}
@@ -1301,7 +1330,7 @@ function DesignKitViewInner({
                 {moduleActions(
                   <>
                     {uploadAction('image')}
-                    {canUpload ? moduleActionButton(t('ds.pasteImage'), 'copy', () => void pasteImage('image'), Boolean(uploading)) : null}
+                    {canUpload ? moduleActionButton(t('ds.pasteImage'), 'copy', () => void pasteImage('image'), Boolean(uploading || anyActionBusy)) : null}
                     {samples.length > IMAGE_CAP ? (
                       <button
                         type="button"
@@ -1338,12 +1367,16 @@ function DesignKitViewInner({
                         {onDeleteImage ? (
                           <button
                             type="button"
-                            className={styles.shotDelete}
-                            onClick={() => onDeleteImage(sampleIndex)}
+                            className={`${styles.shotDelete} ${
+                              actionBusy === `delete-image:${sampleIndex}` ? styles.shotDeleteLoading : ''
+                            }`}
+                            onClick={() => void onDeleteImage(sampleIndex)}
+                            disabled={Boolean(uploading || anyActionBusy)}
+                            aria-busy={(actionBusy === `delete-image:${sampleIndex}`) || undefined}
                             aria-label={t('ds.deleteImage', { caption: cap })}
                             title={t('ds.deleteImage', { caption: cap })}
                           >
-                            <Icon name="trash" size={13} />
+                            <Icon name={actionBusy === `delete-image:${sampleIndex}` ? 'spinner' : 'trash'} size={13} />
                           </button>
                         ) : null}
                         {s.caption || s.kind ? (
@@ -1369,10 +1402,10 @@ function DesignKitViewInner({
                 {moduleActions(
                   <>
                     {designMdModuleActionButtons(designMdModules.designSystem)}
-                    {!stickyHeader && onRefresh ? moduleActionButton(t('ds.refresh'), 'refresh', onRefresh) : null}
-                    {!stickyHeader && onDownload ? moduleActionButton(t('ds.download'), 'download', onDownload) : null}
-                    {!stickyHeader && onImport ? moduleActionButton(t('ds.importFolder'), 'import', onImport) : null}
-                    {!stickyHeader && onReset ? moduleActionButton(t('ds.reset'), 'reload', onReset) : null}
+                    {!stickyHeader && onRefresh ? moduleActionButton(t('ds.refresh'), 'refresh', onRefresh, anyActionBusy, actionBusy === 'refresh') : null}
+                    {!stickyHeader && onDownload ? moduleActionButton(t('ds.download'), 'download', onDownload, anyActionBusy, actionBusy === 'download') : null}
+                    {!stickyHeader && onImport ? moduleActionButton(t('ds.importFolder'), 'import', onImport, anyActionBusy, actionBusy === 'import') : null}
+                    {!stickyHeader && onReset ? moduleActionButton(t('ds.reset'), 'reload', onReset, anyActionBusy, actionBusy === 'reset') : null}
                   </>,
                 )}
               </div>
@@ -1690,8 +1723,8 @@ function DesignKitViewInner({
                         disabled={colorSaving || !onColorReset}
                         onClick={() => void resetColorDraft()}
                       >
-                        <Icon name="reload" size={13} />
-                        <span>{t('ds.reset')}</span>
+                        <Icon name={colorSaving ? 'spinner' : 'reload'} size={13} />
+                        <span>{colorSaving ? t('ds.saving') : t('ds.reset')}</span>
                       </button>
                       <Button variant="primary" disabled={colorSaving} onClick={() => void saveColorDraft()}>
                         {colorSaving ? t('ds.saving') : t('ds.saveColor')}
@@ -1782,14 +1815,15 @@ export function HeaderActionsMenu({
                   role={item.active === undefined ? 'menuitem' : 'menuitemcheckbox'}
                   aria-checked={item.active === undefined ? undefined : item.active}
                   className={styles.headerMenuItem}
-                  disabled={item.disabled}
+                  disabled={item.disabled || item.loading}
+                  aria-busy={item.loading || undefined}
                   onClick={() => {
                     item.onClick();
                     setOpen(false);
                   }}
                 >
                   <span className={styles.headerMenuItemIcon} aria-hidden>
-                    <Icon name={item.icon} size={15} />
+                    <Icon name={item.loading ? 'spinner' : item.icon} size={15} />
                   </span>
                   <span className={styles.headerMenuItemLabel}>{item.label}</span>
                   {item.active ? (

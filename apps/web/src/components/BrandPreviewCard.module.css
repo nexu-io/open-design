@@ -398,6 +398,12 @@
   color: var(--text-muted);
 }
 
+.headerMenuItem[aria-busy='true'] .headerMenuItemIcon svg,
+.moduleAction[aria-busy='true'] svg,
+.shotDelete[aria-busy='true'] svg {
+  animation: designKitActionSpin 0.8s linear infinite;
+}
+
 .headerMenuItem:hover:not(:disabled) .headerMenuItemIcon {
   color: var(--accent);
 }
@@ -532,6 +538,11 @@
 .moduleAction:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+.moduleActionLoading {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 
 .moduleAction:focus-visible {
@@ -1012,6 +1023,16 @@
 .shotDelete:hover {
   color: var(--red);
   border-color: var(--red-border);
+}
+
+.shotDelete:disabled {
+  cursor: default;
+}
+
+.shotDeleteLoading {
+  opacity: 1;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 
 .shotMeta {
@@ -1761,4 +1782,10 @@
 .uploadBtn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+@keyframes designKitActionSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }

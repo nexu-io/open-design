@@ -2937,6 +2937,14 @@ a.ds-source-link-open:focus-visible {
   height: 13px;
   flex: none;
 }
+.ds-project-publish-trigger > button[aria-busy='true'] svg {
+  animation: ds-project-action-spin 0.8s linear infinite;
+}
+@keyframes ds-project-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* A disabled button does not fire the hover or focus that shows its own `title`,
    so the publish guidance lives on this wrapper. Make the disabled button
    transparent to pointer events so hovering it reveals the wrapper title, and

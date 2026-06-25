@@ -55,6 +55,7 @@ import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
 import {
   DesignKitView,
+  type DesignKitActionFeedbackTone,
   type DesignKitEditFocusRequest,
   type HeaderMenuAction,
 } from './DesignKitView';
@@ -2514,10 +2515,14 @@ function DesignSystemProjectPanel({
   const [kitActionBusy, setKitActionBusy] = useState<string | null>(null);
   // Transient feedback for kit edits (upload / refresh / reset / delete) so an
   // action that previously fired-and-forgot now reports success or failure.
-  const [kitToast, setKitToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+  const [kitToast, setKitToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);
   const notifyKit = useCallback(
-    (tone: 'success' | 'error', message: string) => setKitToast({ tone, message }),
+    (tone: DesignKitActionFeedbackTone, message: string) => setKitToast({ tone, message }),
     [],
+  );
+  const notifyKitLoading = useCallback(
+    (label: string) => notifyKit('loading', label.endsWith('…') || label.endsWith('...') ? label : `${label}...`),
+    [notifyKit],
   );
   const [kitReloadKey, setKitReloadKey] = useState(0);
   const initialDesignMdRef = useRef<string | null>(null);
@@ -2560,12 +2565,18 @@ function DesignSystemProjectPanel({
   const { uploading: kitUploading, uploadModule: kitUploadModule } = useKitModuleUpload({
     projectId,
     title: system.title,
-    onUploaded: () => {
+    onUploaded: (module) => {
+      setKitActionBusy(`upload:${module}`);
+      notifyKit('loading', t('ds.uploading'));
       void refreshKitDependencies({ finalizeBrand: true })
         .then(() => notifyKit('success', t('ds.uploadDone')))
-        .catch(() => notifyKit('error', t('ds.actionFailed')));
+        .catch(() => notifyKit('error', t('ds.actionFailed')))
+        .finally(() => setKitActionBusy(null));
     },
-    onError: () => notifyKit('error', t('ds.uploadFailed')),
+    onError: () => {
+      setKitActionBusy(null);
+      notifyKit('error', t('ds.uploadFailed'));
+    },
   });
   const { kit } = useDesignKit({
     designSystemId: system.id,
@@ -2577,26 +2588,42 @@ function DesignSystemProjectPanel({
     host: kitHost,
     reloadKey: kitReloadKey,
   });
+  async function persistDesignMd(nextBody: string) {
+    const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
+    if (!updated) throw new Error(t('ds.actionFailed'));
+    const file = await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
+    if (!file) throw new Error(t('ds.actionFailed'));
+    setDesignMdBody(nextBody);
+    await refreshKitDependencies();
+  }
+
   async function saveDesignMd(nextBody: string) {
+    if (kitActionBusy) throw new Error(t('ds.actionFailed'));
     setSavingDesignMd(true);
+    setKitActionBusy('design-md-save');
+    notifyKit('loading', t('ds.saving'));
     try {
-      await updateDesignSystemDraft(system.id, { body: nextBody });
-      await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
-      setDesignMdBody(nextBody);
-      await refreshKitDependencies();
+      await persistDesignMd(nextBody);
+      notifyKit('success', t('ds.actionDone'));
+    } catch (err) {
+      notifyKit('error', t('ds.actionFailed'));
+      throw err;
     } finally {
       setSavingDesignMd(false);
+      setKitActionBusy(null);
     }
   }
 
   async function refreshKit() {
     if (kitActionBusy) return;
     setKitActionBusy('refresh');
+    notifyKitLoading(t('ds.refresh'));
     try {
       if (brandId) {
         await refreshKitDependencies({ finalizeBrand: true });
       } else {
-        await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
+        const job = await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
+        if (!job) throw new Error(t('ds.actionFailed'));
         await refreshKitDependencies();
       }
       notifyKit('success', t('ds.actionDone'));
@@ -2610,34 +2637,13 @@ function DesignSystemProjectPanel({
   async function downloadKit() {
     if (kitActionBusy) return;
     setKitActionBusy('download');
+    notifyKitLoading(t('ds.download'));
     try {
       await refreshKitDependencies({ finalizeBrand: true });
       const ok =
         await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
         await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title });
-      if (!ok) notifyKit('error', t('ds.actionFailed'));
-    } catch {
-      notifyKit('error', t('ds.actionFailed'));
-    } finally {
-      setKitActionBusy(null);
-    }
-  }
-
-  async function resetKitEdits() {
-    if (kitActionBusy) return;
-    setKitActionBusy('reset');
-    try {
-      const originalMd = initialDesignMdRef.current ?? designMdBody;
-      const originalBrand = initialBrandJsonRef.current;
-      await updateDesignSystemDraft(system.id, { body: originalMd });
-      await writeProjectTextFile(projectId, 'DESIGN.md', originalMd);
-      if (originalBrand !== null) {
-        await writeProjectTextFile(projectId, 'brand.json', originalBrand);
-      } else if (initialBrandJsonLoadedRef.current) {
-        await deleteProjectFile(projectId, 'brand.json');
-      }
-      setDesignMdBody(originalMd);
-      await refreshKitDependencies({ finalizeBrand: true });
+      if (!ok) throw new Error(t('ds.actionFailed'));
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2659,6 +2665,7 @@ function DesignSystemProjectPanel({
     );
     if (!ok) return;
     setKitActionBusy('delete');
+    notifyKitLoading(t('ds.deleteProjectAction', { title: system.title }));
     try {
       // Delete the backing project first: this navigates home and unmounts the
       // panel, so the tab exits cleanly instead of briefly rendering an empty
@@ -2681,15 +2688,26 @@ function DesignSystemProjectPanel({
   }
 
   async function changeKitColor(index: number, hex: string) {
+    if (kitActionBusy) throw new Error(t('ds.actionFailed'));
     const nextHex = normalizeDesignKitHex(hex);
     if (!nextHex) throw new Error(t('ds.invalidHexColor'));
-    const ok = await updateBrandColor(projectId, index, nextHex);
-    if (!ok) {
-      const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
-      await saveDesignMd(nextBody);
-      return;
+    setKitActionBusy('color');
+    notifyKit('loading', t('ds.saving'));
+    try {
+      const ok = await updateBrandColor(projectId, index, nextHex);
+      if (!ok) {
+        const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
+        await persistDesignMd(nextBody);
+      } else {
+        await refreshKitDependencies({ finalizeBrand: true });
+      }
+      notifyKit('success', t('ds.actionDone'));
+    } catch (err) {
+      notifyKit('error', t('ds.actionFailed'));
+      throw err;
+    } finally {
+      setKitActionBusy(null);
     }
-    await refreshKitDependencies({ finalizeBrand: true });
   }
 
   async function resetKitColor(index: number) {
@@ -2704,23 +2722,35 @@ function DesignSystemProjectPanel({
   }
 
   async function removeKitLogo(index: number) {
-    const ok = await deleteBrandLogo(projectId, index);
-    if (!ok) {
+    if (kitActionBusy) return;
+    setKitActionBusy(`delete-logo:${index}`);
+    notifyKitLoading(t('ds.deleteLogo'));
+    try {
+      const ok = await deleteBrandLogo(projectId, index);
+      if (!ok) throw new Error(t('ds.actionFailed'));
+      await refreshKitDependencies({ finalizeBrand: true });
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
       notifyKit('error', t('ds.actionFailed'));
-      return;
+    } finally {
+      setKitActionBusy(null);
     }
-    await refreshKitDependencies({ finalizeBrand: true });
-    notifyKit('success', t('ds.actionDone'));
   }
 
   async function removeKitImage(index: number) {
-    const ok = await deleteBrandImage(projectId, index);
-    if (!ok) {
+    if (kitActionBusy) return;
+    setKitActionBusy(`delete-image:${index}`);
+    notifyKitLoading(t('ds.deleteImage', { caption: '' }).trim());
+    try {
+      const ok = await deleteBrandImage(projectId, index);
+      if (!ok) throw new Error(t('ds.actionFailed'));
+      await refreshKitDependencies({ finalizeBrand: true });
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
       notifyKit('error', t('ds.actionFailed'));
-      return;
+    } finally {
+      setKitActionBusy(null);
     }
-    await refreshKitDependencies({ finalizeBrand: true });
-    notifyKit('success', t('ds.actionDone'));
   }
 
   const allFileNames = files.map((file) => file.name);
@@ -2823,11 +2853,16 @@ function DesignSystemProjectPanel({
   async function togglePublished(nextPublished: boolean) {
     if (nextPublished && !githubEvidence.ready) return;
     setStatusBusy(true);
+    notifyKitLoading(publishActionLabel);
     try {
       const nextStatus = nextPublished ? 'published' : 'draft';
       const updated = await updateDesignSystemDraft(system.id, { status: nextStatus });
-      if (updated) setStatus(updated.status ?? nextStatus);
+      if (!updated) throw new Error(t('ds.actionFailed'));
+      setStatus(updated.status ?? nextStatus);
       await onDesignSystemsRefresh?.();
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setStatusBusy(false);
     }
@@ -2836,8 +2871,12 @@ function DesignSystemProjectPanel({
   async function toggleDefault(nextDefault: boolean) {
     if (!onSetDefaultDesignSystem) return;
     setDefaultBusy(true);
+    notifyKitLoading(nextDefault ? t('dsManager.makeDefault') : t('dsManager.badgeDefault'));
     try {
       await onSetDefaultDesignSystem(nextDefault ? system.id : null);
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setDefaultBusy(false);
     }
@@ -3119,9 +3158,10 @@ function DesignSystemProjectPanel({
         aria-label={publishActionLabel}
         title={publishActionLabel}
         disabled={statusBusy || (!published && !githubEvidence.ready)}
+        aria-busy={statusBusy || undefined}
         onClick={() => void togglePublished(!published)}
       >
-        <Icon name={published ? 'check' : 'arrow-up'} size={14} />
+        <Icon name={statusBusy ? 'spinner' : published ? 'check' : 'arrow-up'} size={14} />
         {published ? t('ds.published') : t('ds.publish')}
       </button>
     </span>
@@ -3133,21 +3173,16 @@ function DesignSystemProjectPanel({
       label: t('ds.refresh'),
       icon: 'refresh',
       onClick: () => void refreshKit(),
-      disabled: Boolean(kitActionBusy),
+      disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+      loading: kitActionBusy === 'refresh',
     },
     {
       id: 'download',
       label: t('ds.download'),
       icon: 'download',
       onClick: () => void downloadKit(),
-      disabled: Boolean(kitActionBusy),
-    },
-    {
-      id: 'reset',
-      label: t('ds.reset'),
-      icon: 'reload',
-      onClick: () => void resetKitEdits(),
-      disabled: Boolean(kitActionBusy),
+      disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+      loading: kitActionBusy === 'download',
     },
     ...(published && onSetDefaultDesignSystem
       ? [
@@ -3156,7 +3191,8 @@ function DesignSystemProjectPanel({
             label: isDefault ? t('dsManager.badgeDefault') : t('dsManager.makeDefault'),
             icon: (isDefault ? 'check' : 'star') as IconName,
             onClick: () => void toggleDefault(!isDefault),
-            disabled: statusBusy || defaultBusy,
+            disabled: statusBusy || defaultBusy || Boolean(kitActionBusy),
+            loading: defaultBusy,
             active: isDefault,
           } satisfies HeaderMenuAction,
         ]
@@ -3168,7 +3204,8 @@ function DesignSystemProjectPanel({
             label: t('ds.deleteProjectAction', { title: system.title }),
             icon: 'trash' as IconName,
             onClick: () => void deleteDesignSystemProject(),
-            disabled: Boolean(kitActionBusy),
+            disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+            loading: kitActionBusy === 'delete',
           } satisfies HeaderMenuAction,
         ]
       : []),
@@ -3276,6 +3313,7 @@ function DesignSystemProjectPanel({
         <Toast
           message={kitToast.message}
           tone={kitToast.tone}
+          ttlMs={kitToast.tone === 'loading' ? 60000 : 2600}
           role={kitToast.tone === 'error' ? 'alert' : 'status'}
           onDismiss={() => setKitToast(null)}
         />
@@ -3301,8 +3339,9 @@ function DesignSystemProjectPanel({
           onDeleteImage={(index) => void removeKitImage(index)}
           onRefresh={() => void refreshKit()}
           onDownload={() => void downloadKit()}
-          onReset={() => void resetKitEdits()}
           uploading={kitUploading}
+          actionBusy={kitActionBusy}
+          onActionFeedback={notifyKit}
           editFocusRequest={editFocusRequest}
           dataTestId="design-system-project-kit"
         />
