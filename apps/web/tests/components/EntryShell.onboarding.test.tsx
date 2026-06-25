@@ -1260,6 +1260,44 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('does not rewrite persisted deployment provider mode when provider config is unavailable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'gpt-routed',
+      }),
+      deploymentProviderConfig: {
+        available: false,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Workspace provider',
+        kind: 'missing_config',
+        detail: 'Provider discovery failed.',
+      },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole('heading', { name: 'Workspace provider' })).toBeTruthy();
+    expect(props.onModeChange).not.toHaveBeenCalledWith('daemon');
+    expect(props.onAgentChange).not.toHaveBeenCalledWith('amr');
+    expect(props.onConfigPersist).not.toHaveBeenCalled();
+  });
+
   it('restores the saved OpenAI draft when switching from deployment back to BYOK', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

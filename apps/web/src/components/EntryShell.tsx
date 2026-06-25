@@ -1029,12 +1029,20 @@ function OnboardingView({
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
-  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | 'deployment' | null>(null);
+  const persistedDeploymentRuntime =
+    config.mode === 'api' &&
+    config.apiProtocol === 'openai' &&
+    config.apiCredentialSource === 'deployment';
+  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | 'deployment' | null>(
+    persistedDeploymentRuntime ? 'deployment' : null,
+  );
   // Connect step (step 0) faces: the minimal cloud sign-in landing (null), or
   // a single dedicated setup page for the local CLI or BYOK that the landing's
   // two secondary links open directly. AMR has no card anymore — it signs in
   // straight from the landing's primary button.
-  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | 'deployment' | null>(null);
+  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | 'deployment' | null>(
+    persistedDeploymentRuntime ? 'deployment' : null,
+  );
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
@@ -1228,14 +1236,7 @@ function OnboardingView({
   }, []);
 
   useEffect(() => {
-    if (!deploymentProviderAvailable || runtime !== null) return;
-    if (
-      config.mode !== 'api' ||
-      config.apiProtocol !== 'openai' ||
-      config.apiCredentialSource !== 'deployment'
-    ) {
-      return;
-    }
+    if (runtime !== null || !persistedDeploymentRuntime) return;
     setRuntime('deployment');
     setConnectExpanded('deployment');
     onModeChange('api');
@@ -1243,17 +1244,17 @@ function OnboardingView({
     config.apiCredentialSource,
     config.apiProtocol,
     config.mode,
-    deploymentProviderAvailable,
     onModeChange,
+    persistedDeploymentRuntime,
     runtime,
   ]);
 
   useEffect(() => {
-    if (!amrAgent || runtime !== null) return;
+    if (!amrAgent || runtime !== null || persistedDeploymentRuntime) return;
     setRuntime('amr');
     onModeChange('daemon');
     onAgentChange('amr');
-  }, [amrAgent, onAgentChange, onModeChange, runtime]);
+  }, [amrAgent, onAgentChange, onModeChange, persistedDeploymentRuntime, runtime]);
 
   useEffect(() => {
     if (runtime !== 'local') return;
