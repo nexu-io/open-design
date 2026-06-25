@@ -67,7 +67,7 @@ describe('buildPublishLink', () => {
     // PR traffic already are.
     const link = buildPublishLink({ catalog: 'open-design', meta: META });
     expect(link.catalogLabel).toBe('marketing-ax/marketing-ax');
-    expect(link.url).toMatch(/^https:\/\/github\.com\/nexu-io\/open-design\/issues\/new\?/);
+    expect(link.url).toMatch(/^https:\/\/github\.com\/marketing-ax\/marketing-ax\/issues\/new\?/);
     expect(link.prBody).toContain('plugins/community/<plugin-name>/open-design.json');
     expect(link.prBody).toContain('plugins/registry/community/open-design-marketplace.json');
   });

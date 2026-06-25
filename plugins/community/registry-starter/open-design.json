@@ -10,9 +10,9 @@
     "name": "Open Design Community",
     "url": "https://open-design.ai/marketplace/community"
   },
-  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/registry-starter",
+  "homepage": "https://github.com/marketing-ax/marketing-ax/tree/main/plugins/community/registry-starter",
   "plugin": {
-    "repo": "https://github.com/nexu-io/open-design/tree/main/plugins/community/registry-starter"
+    "repo": "https://github.com/marketing-ax/marketing-ax/tree/main/plugins/community/registry-starter"
   },
   "tags": [
     "community",
