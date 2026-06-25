@@ -46,13 +46,15 @@ export const BRAND_EXTRACTION_NEXT_STEP_ACTIONS = [
   {
     id: 'brand-ai-optimize',
     icon: 'sparkles' as IconName,
-    titleKey: 'brandEnrichment.cta' as keyof Dict,
+    titleKey: 'nextStep.brandAiOptimizeTitle' as keyof Dict,
+    descriptionKey: 'nextStep.brandAiOptimizeBody' as keyof Dict,
     busyKey: 'brandEnrichment.busy' as keyof Dict,
   },
   {
     id: 'brand-create-design',
     icon: 'plus' as IconName,
-    titleKey: 'ds.createNewDesign' as keyof Dict,
+    titleKey: 'nextStep.brandCreateDesignTitle' as keyof Dict,
+    descriptionKey: 'nextStep.brandCreateDesignBody' as keyof Dict,
     busyKey: 'nextStep.createDesignBusy' as keyof Dict,
   },
 ] as const;
@@ -137,6 +139,10 @@ function place(
 
 type Anchor = { left: number; top: number };
 type SubKind = 'toolbox' | 'share';
+type BrandExtractionActionId = (typeof BRAND_EXTRACTION_NEXT_STEP_ACTIONS)[number]['id'];
+type Detail =
+  | ({ kind: 'toolbox'; id: DesignToolboxActionId } & Anchor)
+  | ({ kind: 'brand'; id: BrandExtractionActionId } & Anchor);
 
 export function NextStepActions({
   fileName,
@@ -176,7 +182,7 @@ export function NextStepActions({
   //   Share          → Share / Download / Contribute (level 3)
   // A single close timer with hover-intent keeps the whole path open while the
   // cursor travels between levels; entering any panel cancels the pending close.
-  const [detail, setDetail] = useState<{ id: DesignToolboxActionId } & Anchor | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
   const [more, setMore] = useState<Anchor | null>(null);
   const [sub, setSub] = useState<({ kind: SubKind } & Anchor) | null>(null);
   const [toolboxQuery, setToolboxQuery] = useState('');
@@ -207,7 +213,16 @@ export function NextStepActions({
       cancelClose();
       setMore(null);
       setSub(null);
-      setDetail({ id, ...place(rect, DETAIL_WIDTH, DETAIL_HEIGHT) });
+      setDetail({ kind: 'toolbox', id, ...place(rect, DETAIL_WIDTH, DETAIL_HEIGHT) });
+    },
+    [cancelClose],
+  );
+  const openBrandDetail = useCallback(
+    (id: BrandExtractionActionId, rect: DOMRect) => {
+      cancelClose();
+      setMore(null);
+      setSub(null);
+      setDetail({ kind: 'brand', id, ...place(rect, DETAIL_WIDTH, DETAIL_HEIGHT) });
     },
     [cancelClose],
   );
@@ -363,6 +378,8 @@ export function NextStepActions({
                   (action.id === 'brand-ai-optimize' && !onAiOptimize) ||
                   (action.id === 'brand-create-design' && !onCreateDesign);
                 if (unavailable) return null;
+                const title = t(busy ? action.busyKey : action.titleKey);
+                const description = t(action.descriptionKey);
                 return (
                   <button
                     key={action.id}
@@ -370,16 +387,21 @@ export function NextStepActions({
                     className={styles.toolboxRow}
                     data-testid={`next-step-brand-action-${action.id}`}
                     aria-busy={busy || undefined}
+                    aria-label={`${title}. ${description}`}
                     disabled={busy}
+                    title={description}
                     onClick={action.id === 'brand-ai-optimize' ? handleAiOptimize : handleCreateDesign}
+                    onMouseEnter={(e) => openBrandDetail(action.id, e.currentTarget.getBoundingClientRect())}
+                    onMouseLeave={scheduleClose}
                   >
                     <Icon
                       name={busy ? 'spinner' : action.icon}
                       size={14}
                       className={busy ? 'icon-spin' : styles.toolboxRowIcon}
                     />
-                    <span className={styles.toolboxRowTitle}>
-                      {t(busy ? action.busyKey : action.titleKey)}
+                    <span className={styles.toolboxRowText}>
+                      <span className={styles.toolboxRowTitle}>{title}</span>
+                      <span className={styles.toolboxRowDescription}>{description}</span>
                     </span>
                     <Icon name="chevron-right" size={13} className={styles.toolboxRowArrow} />
                   </button>
@@ -447,6 +469,21 @@ export function NextStepActions({
       {detail && typeof document !== 'undefined'
         ? createPortal(
             (() => {
+              if (detail.kind === 'brand') {
+                const action = BRAND_EXTRACTION_NEXT_STEP_ACTIONS.find((item) => item.id === detail.id);
+                if (!action) return null;
+                return (
+                  <div
+                    className={styles.detail}
+                    role="tooltip"
+                    style={{ left: detail.left, top: detail.top }}
+                    {...keepOpen}
+                  >
+                    <div className={styles.detailTitle}>{t(action.titleKey)}</div>
+                    <div className={styles.detailDesc}>{t(action.descriptionKey)}</div>
+                  </div>
+                );
+              }
               const action = getDesignToolboxAction(detail.id);
               if (!action) return null;
               const skillName = toolboxSkillNames?.[detail.id] ?? null;

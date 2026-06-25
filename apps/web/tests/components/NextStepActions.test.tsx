@@ -108,8 +108,10 @@ describe('NextStepActions', () => {
 
     expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
     expect(screen.queryByText(VISUAL_POLISH_TITLE)).toBeNull();
-    expect(screen.getByText(en['brandEnrichment.cta'])).toBeTruthy();
-    expect(screen.getByText(en['ds.createNewDesign'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.brandAiOptimizeTitle'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.brandAiOptimizeBody'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.brandCreateDesignTitle'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.brandCreateDesignBody'])).toBeTruthy();
     expect(screen.getByTestId('next-step-toolbox-more')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('next-step-brand-action-brand-ai-optimize'));

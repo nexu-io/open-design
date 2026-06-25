@@ -3257,6 +3257,10 @@ export interface Dict {
   'nextStep.share': string;
   'nextStep.download': string;
   'nextStep.contribute': string;
+  'nextStep.brandAiOptimizeTitle': string;
+  'nextStep.brandAiOptimizeBody': string;
+  'nextStep.brandCreateDesignTitle': string;
+  'nextStep.brandCreateDesignBody': string;
   'nextStep.createDesignBusy': string;
   'assistant.thinking': string;
   'assistant.thought': string;
