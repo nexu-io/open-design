@@ -46,11 +46,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          # Production always ships `main`. workflow_dispatch can be launched
-          # from any ref via the Actions "Use workflow from" dropdown, so pin
-          # the checkout to main — the deployed artifact must equal reviewed
-          # main, never whatever branch/tag the operator happened to select.
-          ref: main
+          # The job-level gate above ensures this dispatch came from main.
+          # Pin checkout to the dispatch SHA, not floating main, so the
+          # workflow_run.head_sha used by follow-up QA/reporting jobs is exactly
+          # the commit that production shipped.
+          ref: ${{ github.sha }}
+
+      - name: Verify production checkout commit
+        run: |
+          set -euo pipefail
+          deployed_sha="$(git rev-parse HEAD)"
+          if [ "$deployed_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::production checkout resolved $deployed_sha but workflow dispatch SHA is $GITHUB_SHA"
+            exit 1
+          fi
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "$GITHUB_SHA" != "$main_sha" ]; then
+            echo "::error::refusing production deploy for stale workflow SHA $GITHUB_SHA; current origin/main is $main_sha"
+            echo "::error::dispatch a fresh production workflow from current main, or add an explicit rollback path instead of rerunning an old deploy."
+            exit 1
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
