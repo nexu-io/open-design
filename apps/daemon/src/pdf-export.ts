@@ -1,6 +1,11 @@
 import path from 'node:path';
 
-import type { DesktopExportPdfInput } from '@open-design/sidecar-proto';
+import type {
+  DesktopExportArtifactFormat,
+  DesktopExportArtifactImageFormat,
+  DesktopExportArtifactInput,
+  DesktopExportPdfInput,
+} from '@open-design/sidecar-proto';
 
 import { readProjectFile } from './projects.js';
 
@@ -24,6 +29,36 @@ export async function buildDesktopPdfExportInput(
     defaultFilename: `${safeFilename(title, 'artifact')}.pdf`,
     html: file.buffer.toString('utf8'),
     title,
+  };
+}
+
+export interface BuildDesktopArtifactExportInputOptions {
+  daemonUrl: string;
+  deck?: boolean;
+  fileName: string;
+  format: DesktopExportArtifactFormat;
+  imageFormat?: DesktopExportArtifactImageFormat;
+  projectId: string;
+  projectsRoot: string;
+  title?: string;
+  width?: number;
+  height?: number;
+}
+
+export async function buildDesktopArtifactExportInput(
+  options: BuildDesktopArtifactExportInputOptions,
+): Promise<DesktopExportArtifactInput> {
+  const file = await readProjectFile(options.projectsRoot, options.projectId, options.fileName);
+  const title = displayTitle(options.title, options.fileName);
+  return {
+    baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
+    deck: options.deck === true,
+    format: options.format,
+    html: file.buffer.toString('utf8'),
+    title,
+    ...(options.imageFormat ? { imageFormat: options.imageFormat } : {}),
+    ...(options.width ? { width: options.width } : {}),
+    ...(options.height ? { height: options.height } : {}),
   };
 }
 

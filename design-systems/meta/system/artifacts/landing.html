@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meta (Store) - Landing page</title>
+  <style>
+:root {
+    --accent: #0064e0;
+    --accent-active: #004bb9;
+    --accent-hover: #0143b5;
+    --accent-on: #ffffff;
+    --bg: #ffffff;
+    --border: #ced0d4;
+    --border-soft: #dee3e9;
+    --container-gutter-desktop: 40px;
+    --container-gutter-phone: 16px;
+    --container-gutter-tablet: 24px;
+    --container-max: 1440px;
+    --danger: #e41e3f;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --elev-flat: none;
+    --elev-raised: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+    --elev-ring: 0 0 0 1px var(--border);
+    --fg: #1c2b33;
+    --fg-2: #5d6c7b;
+    --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+    --font-body: "Optimistic VF", "Optimistic", Inter, Montserrat, Helvetica, Arial, "Noto Sans", sans-serif;
+    --font-display: "Optimistic VF", "Optimistic", Inter, Montserrat, Helvetica, Arial, "Noto Sans", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+    --leading-body: 1.5;
+    --leading-tight: 1.16;
+    --meta: #8595a4;
+    --motion-base: 200ms;
+    --motion-fast: 150ms;
+    --muted: #65676b;
+    --radius-lg: 24px;
+    --radius-md: 20px;
+    --radius-pill: 100px;
+    --radius-sm: 8px;
+    --section-y-desktop: 80px;
+    --section-y-phone: 48px;
+    --section-y-tablet: 64px;
+    --space-1: 4px;
+    --space-12: 48px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --success: #31a24c;
+    --surface: #f7f8fa;
+    --surface-warm: #f2f0e6;
+    --text-2xl: 36px;
+    --text-3xl: 48px;
+    --text-4xl: 64px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-sm: 14px;
+    --text-xl: 28px;
+    --text-xs: 12px;
+    --tracking-display: -0.01em;
+    --warn: #f7b928;
+}
+:root {
+  --od-page-bg: #ffffff;
+  --od-surface: #f7f8fa;
+  --od-text: #1c2b33;
+  --od-muted: #65676b;
+  --od-border: #ced0d4;
+  --od-accent: #0064e0;
+  --od-radius: 20px;
+  --od-font-body: "Optimistic VF", "Optimistic", Inter, Montserrat, Helvetica, Arial, "Noto Sans", sans-serif;
+  --od-font-display: "Optimistic VF", "Optimistic", Inter, Montserrat, Helvetica, Arial, "Noto Sans", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--od-page-bg);
+  color: var(--od-text);
+  font-family: var(--od-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+.page { width: min(1100px, calc(100vw - 48px)); margin: 0 auto; padding: 72px 0; }
+.eyebrow { color: var(--od-accent); font-size: 12px; font-weight: 750; letter-spacing: 0; text-transform: uppercase; }
+.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 32px; align-items: center; }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { font-family: var(--od-font-display); letter-spacing: 0; line-height: 1.05; }
+h1 { margin-top: 12px; font-size: 64px; }
+h2 { font-size: 40px; }
+h3 { font-size: 22px; }
+.lead { margin-top: 18px; color: var(--od-muted); font-size: 20px; line-height: 1.55; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: var(--od-radius); padding: 0 18px; font-weight: 750; text-decoration: none; border: 1px solid var(--od-border); }
+.button.primary { background: var(--od-accent); border-color: var(--od-accent); color: #ffffff; }
+.button.secondary { background: var(--od-surface); }
+.panel, .card, .field, .slide, .email, .poster { border: 1px solid var(--od-border); border-radius: var(--od-radius); background: var(--od-surface); }
+.panel { padding: 24px; box-shadow: 0 24px 80px rgba(15, 17, 23, 0.08); }
+.metric-grid, .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+.metric, .card { padding: 18px; }
+.metric strong { display: block; font-size: 30px; line-height: 1; }
+.metric span, .card p, .field span { color: var(--od-muted); font-size: 14px; line-height: 1.5; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.chip { border: 1px solid var(--od-border); border-radius: 999px; padding: 8px 12px; color: var(--od-muted); }
+input, textarea, select { width: 100%; min-height: 44px; border: 1px solid var(--od-border); border-radius: var(--od-radius); background: var(--od-page-bg); color: var(--od-text); font: inherit; padding: 10px 12px; }
+label { display: grid; gap: 8px; color: var(--od-muted); font-size: 13px; font-weight: 700; }
+@media (max-width: 820px) { .hero, .metric-grid, .card-grid { grid-template-columns: 1fr; } .page { width: min(100vw - 28px, 1100px); padding: 40px 0; } h1 { font-size: 42px; } h2 { font-size: 30px; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Landing module</p>
+        <h1>Meta (Store) Launch narrative</h1>
+        <p class="lead">Hero, proof points, and conversion actions composed from the design system tokens.</p>
+        <div class="actions">
+          <a class="button primary" href="#">Continue</a>
+          <a class="button secondary" href="#">View details</a>
+        </div>
+      </div>
+      <article class="panel">
+        <p class="eyebrow">Preview</p>
+        <h3>Landing page</h3>
+        <p class="lead" style="font-size:16px">Bundled Open Design package for Meta (Store), derived from curated DESIGN.md, tokens.css, and components.html fixtures.</p>
+        <div class="card-grid" style="grid-template-columns:1fr 1fr">
+          <div class="field"><label>Primary input<input value="Meta (Store)" /></label></div>
+          <div class="field"><label>Status<select><option>Ready</option><option>Draft</option></select></label></div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -101,12 +101,14 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: ({ tabsState, onTabsStateChange }: {
+  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject }: {
     tabsState: { tabs: string[]; active: string | null };
     onTabsStateChange: (state: { tabs: string[]; active: string | null }) => void;
+    designSystemProject?: DesignSystemSummary | null;
   }) => (
     <div data-testid="file-workspace">
       <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
+      <output data-testid="workspace-design-system-id">{designSystemProject?.id ?? ''}</output>
       <button
         type="button"
         data-testid="close-all-tabs"
@@ -162,16 +164,19 @@ const conversation: Conversation = {
   updatedAt: 1,
 };
 
-function renderProjectView() {
+function renderProjectView(props?: {
+  project?: Project;
+  designSystems?: DesignSystemSummary[];
+}) {
   return render(
     <ProjectView
-      project={project}
+      project={props?.project ?? project}
       routeFileName={null}
       config={config}
       agents={[] as AgentInfo[]}
       skills={[] as SkillSummary[]}
       designTemplates={[] as SkillSummary[]}
-      designSystems={[] as DesignSystemSummary[]}
+      designSystems={props?.designSystems ?? ([] as DesignSystemSummary[])}
       daemonLive
       onModeChange={vi.fn()}
       onAgentChange={vi.fn()}
@@ -219,6 +224,37 @@ describe('ProjectView tab URL hydration', () => {
         },
         { replace: true },
       );
+    });
+  });
+
+  it('passes brand-extracted backing systems to the in-project Design System tab', async () => {
+    const extractedSystem: DesignSystemSummary = {
+      id: 'user:baidu',
+      title: '百度一下，你就知道',
+      category: 'Custom',
+      summary: 'Programmatic extraction from DESIGN.md.',
+      swatches: [],
+      surface: 'web',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+    };
+    renderProjectView({
+      project: {
+        ...project,
+        name: '百度一下，你就知道',
+        designSystemId: null,
+        metadata: {
+          kind: 'brand',
+          importedFrom: 'brand-extraction',
+          brandDesignSystemId: 'user:baidu',
+        },
+      },
+      designSystems: [extractedSystem],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-design-system-id').textContent).toBe('user:baidu');
     });
   });
 

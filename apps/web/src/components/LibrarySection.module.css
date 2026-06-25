@@ -1,0 +1,746 @@
+/* Positioning context for the drag-to-upload overlay. */
+.root {
+  position: relative;
+}
+
+/* Clipper call-out in the section head — description + a download CTA, hugging
+   the right edge opposite the "Library" title. */
+.clipperHint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 62ch;
+}
+.headerHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* Download link — an accent-tinted pill matching the toolbar control sizing. */
+.clipperDownload {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.clipperDownload:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0;
+  flex-wrap: wrap;
+}
+
+/* Search is the only control that expands; everything else stays compact so
+   the whole bar reads as one tidy row. */
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 240px;
+  min-width: 180px;
+}
+.searchIcon {
+  position: absolute;
+  left: 11px;
+  color: var(--text-soft);
+  pointer-events: none;
+}
+.search {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* Filters — content-width pills. Override the global `width:100%` base rule
+   (primitives.css) so they sit inline instead of each wrapping to its own
+   row; the chevron is painted by that same global <select> rule. */
+.select {
+  width: auto;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background-color: var(--bg-panel);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Refresh — compact icon + label, closes out the row. */
+.refreshBtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 13px;
+  white-space: nowrap;
+}
+
+/* View-mode segmented control (Grid / Timeline). */
+.viewToggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  height: 36px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-panel);
+}
+.viewToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms;
+}
+.viewToggleBtn[data-active='true'] {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+/* Upload — primary action, anchors the right end of the toolbar. */
+.uploadBtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 15px;
+  white-space: nowrap;
+}
+.spin {
+  animation: librarySpin 700ms linear infinite;
+}
+@keyframes librarySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.emptyHint {
+  font-size: 13px;
+  max-width: 56ch;
+  margin: 8px auto 0;
+}
+.emptyHint code {
+  font-family: var(--mono);
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+/* --- timeline view ------------------------------------------------------ */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+/* Each day is a segment of one continuous left spine, marked by a node dot at
+   its heading; the day's assets sit in the same auto-fill grid as the grid view. */
+.timelineDay {
+  position: relative;
+  margin-left: 6px;
+  padding: 0 0 26px 26px;
+  border-left: 2px solid var(--border);
+}
+.timelineDay:last-child {
+  padding-bottom: 4px;
+  border-left-color: transparent;
+}
+.timelineDot {
+  position: absolute;
+  left: -7px;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg-panel);
+}
+.timelineHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.timelineDate {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+.timelineCount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+}
+.timelineGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-panel);
+  transition: box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  /* Skip layout + paint of cards scrolled off-screen so a large grid stays
+     responsive. The reserved intrinsic size keeps the scrollbar and the
+     box-select rect snapshot stable; `auto` lets each card remember its real
+     rendered height once seen. Mirrors the plugins-home gallery
+     (styles/home/plugins-home.css). Applied to `.card` only — never the grid /
+     timeline / root scroll containers. */
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: auto 248px;
+}
+.card:hover {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+.card[data-selected='true'] {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
+}
+
+/* Transparent fill-button over the thumbnail; opens the preview on click. */
+.thumbButton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+/* Fills the 4:3 thumb box and centers its child — a faint kind glyph while the
+   real thumbnail (img / video / iframe / font specimen) is deferred, then the
+   thumbnail itself once the card scrolls in. Lives below the transparent
+   preview button (z-index:1) so clicks still open the preview. */
+.thumbLazy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Fade in over the shimmer skeleton once the bytes decode (MediaThumb flips
+     data-loaded). Starts hidden so the skeleton — not a half-painted image —
+     is what shows while loading. */
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.thumbFrame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.thumbImg[data-loaded='true'],
+.thumbFrame[data-loaded='true'] {
+  opacity: 1;
+}
+
+/* Shimmer skeleton shown while an image / video / html / design-system
+   thumbnail's bytes load — mirrors the clipper's "Select images to save"
+   picker (clipper/content.js → `.thumb.shim`). It fills the thumb box behind
+   the fading-in media and unmounts once loaded. Only in-view, still-loading
+   thumbs animate: heavy kinds mount lazily (LibraryThumb) and `.card` carries
+   `content-visibility:auto`, so a large grid never runs hundreds of background
+   animations at once. */
+.thumbSkeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+      100deg,
+      var(--bg-subtle) 30%,
+      color-mix(in srgb, var(--bg-subtle) 55%, #fff) 50%,
+      var(--bg-subtle) 70%
+    )
+    var(--bg-subtle);
+  background-size: 200% 100%;
+  animation: libraryShimmer 1.1s linear infinite;
+}
+@keyframes libraryShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumbSkeleton {
+    animation: none;
+  }
+  .thumbImg,
+  .thumbFrame {
+    transition: none;
+  }
+}
+.thumbFont {
+  font-size: 64px;
+  line-height: 1;
+  color: var(--text);
+}
+.thumbColor {
+  width: 100%;
+  height: 100%;
+}
+.thumbGlyph {
+  color: var(--text-soft);
+}
+
+/* Centered play affordance over a video thumbnail. */
+.playGlyph {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.6);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* Magnifier that fades in on hover to signal the card is previewable. */
+.previewOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.28);
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  pointer-events: none;
+}
+.thumbButton:hover .previewOverlay,
+.thumbButton:focus-visible .previewOverlay {
+  opacity: 1;
+}
+
+/* Selection checkbox — top-left, fades in on hover or while selecting. */
+.selectCheck {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.35);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms,
+    border-color 160ms;
+}
+.card:hover .selectCheck,
+.grid[data-selecting='true'] .selectCheck,
+.timeline[data-selecting='true'] .selectCheck,
+.card[data-selected='true'] .selectCheck {
+  opacity: 1;
+}
+.selectCheck[data-checked='true'] {
+  background: var(--selected);
+  border-color: var(--selected);
+}
+
+.badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  pointer-events: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.78);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+.badge[data-source='clipper'] {
+  background: color-mix(in srgb, var(--accent) 88%, transparent);
+}
+.badge[data-source='generated'] {
+  background: color-mix(in srgb, var(--purple) 88%, transparent);
+}
+.badge[data-source='design-system'] {
+  background: color-mix(in srgb, var(--green) 88%, transparent);
+}
+.badge[data-source='agent-task'] {
+  background: color-mix(in srgb, var(--amber) 88%, transparent);
+}
+
+/* Kind badge — always visible, top-right, tinted per asset kind. */
+.kindBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px 2px 6px;
+  border-radius: 999px;
+  color: var(--kind-tint, #374151);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(4px);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 4px;
+  min-width: 0;
+}
+.title {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.title:hover {
+  color: var(--accent);
+}
+.sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px 12px;
+}
+.linkBtn,
+.deleteBtn {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--accent);
+  text-decoration: none;
+}
+.deleteBtn {
+  color: var(--text-soft);
+}
+.deleteBtn:hover {
+  color: var(--red);
+}
+
+/* --- multi-select ------------------------------------------------------- */
+
+/* Rubber-band rectangle drawn while box-selecting (viewport-fixed coords). */
+.band {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  border: 1px solid var(--selected);
+  border-radius: 2px;
+  background: var(--selected-soft);
+}
+
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--selected);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--selected) 7%, var(--bg-panel));
+}
+.selectionCount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.selectionLink {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--accent);
+}
+.selectionLink:hover {
+  text-decoration: underline;
+}
+.selectionSpacer {
+  flex: 1 1 auto;
+}
+
+/* "Chat to design" — the headline creative action: send the selection into the
+   Home chat composer to spawn a new project. Accent-filled to read as primary,
+   distinct from the neutral design-system menu and the red delete. */
+.chatBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chatBtn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.chatBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* "Use in design system" split action + dropdown. */
+.dsMenuWrap {
+  position: relative;
+  display: inline-flex;
+}
+.dsMenuBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.dsMenuBtn:hover {
+  background: var(--bg-subtle);
+}
+.dsMenuBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.dsMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 244px;
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  animation: libraryDropFade 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.dsMenuItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+.dsMenuItem:hover {
+  background: var(--bg-subtle);
+}
+.dsMenuItemTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dsMenuItemSub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dsMenuDivider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+.dsMenuHeader {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+}
+.dsMenuEmpty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.selectionDelete {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.selectionDelete:hover {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+}
+
+/* --- drag-anywhere upload overlay --------------------------------------- */
+
+/* Shown while OS files are dragged over the whole Library section. Sits above
+   the grid but ignores pointer events so the browser still fires the drop. */
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.7));
+  backdrop-filter: blur(2px);
+  animation: libraryDropFade 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.dropOverlayInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 40px;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  color: var(--accent);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.dropOverlayText {
+  font-size: 15px;
+  font-weight: 600;
+}
+@keyframes libraryDropFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

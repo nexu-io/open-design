@@ -3,6 +3,11 @@
 import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
+  PlaceholderCarousel: () => null,
+}));
+
 import { HomeView } from '../../src/components/HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -726,18 +731,23 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ))).toBe(false);
+    // The design-system picker is now a persistent control in the row below the
+    // composer (next to the working-directory picker), available for every
+    // product kind rather than gated on the prototype/deck footer.
     expect(
-      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+      screen.getByTestId('home-hero-design-system-trigger').textContent,
     ).toContain('Refly Design System');
     // Fidelity is no longer a prototype footer control — the agent asks for it
-    // in discovery instead. Only the design-system picker stays in the footer.
+    // in discovery instead.
     expect(screen.queryByTestId('home-hero-footer-option-fidelity')).toBeNull();
-    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    // The design-system footer pill is gone; the persistent picker replaces it.
+    expect(screen.queryByTestId('home-hero-footer-option-designSystem')).toBeNull();
+    expect(screen.getByTestId('home-hero-design-system-trigger')).toBeTruthy();
     expect(homeHeroPromptValue()).toBe('');
     expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
     // Inline `{{slot}}` prompt widgets were removed in the Lexical migration;
@@ -747,8 +757,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
     // The inline plugin inputs form was removed from the Home composer, so the
-    // non-footer inputs (artifactKind / audience / template) no longer render;
-    // fidelity / designSystem still surface as footer options above.
+    // non-footer inputs (artifactKind / audience / template) no longer render.
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     await setPromptAndSettle('Build a pricing-page prototype.');
@@ -824,10 +833,10 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
     expect(
-      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+      screen.getByTestId('home-hero-design-system-trigger').textContent,
     ).toContain('No design system');
 
     await setPromptAndSettle('Build a pricing-page prototype.');
@@ -887,19 +896,19 @@ describe('HomeView prompt handoff', () => {
     // The personal default pre-selects, as before.
     await waitFor(() => {
       expect(
-        screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+        screen.getByTestId('home-hero-design-system-trigger').textContent,
       ).toContain('Refly Design System');
     });
 
     // Open the shared design-system picker popover and pick the explicit
     // "No design system" row.
-    fireEvent.click(screen.getByTestId('home-hero-footer-option-designSystem'));
+    fireEvent.click(screen.getByTestId('home-hero-design-system-trigger'));
     const popover = await screen.findByTestId('project-ds-picker-popover');
     const noneOption = await within(popover).findByText('No design system');
     fireEvent.mouseDown(noneOption);
     await waitFor(() => {
       expect(
-        screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+        screen.getByTestId('home-hero-design-system-trigger').textContent,
       ).toContain('No design system');
     });
 
@@ -957,12 +966,14 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ))).toBe(false);
-    expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+    // The design-system picker is now the persistent control below the composer.
     expect(
-      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+      screen.getByTestId('home-hero-design-system-trigger').textContent,
     ).toContain('Refly Design System');
     // Fidelity is no longer a prototype footer control (asked in discovery).
     expect(screen.queryByTestId('home-hero-footer-option-fidelity')).toBeNull();
+    expect(screen.queryByTestId('home-hero-footer-option-designSystem')).toBeNull();
     // Inline `{{slot}}` prompt widgets were removed in the Lexical migration.
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
@@ -970,8 +981,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
     // The inline plugin inputs form was removed from the Home composer; the
     // preset card still seeds the prompt and keeps the chip's structured inputs
-    // in state (submitted below), but no inputs form renders. fidelity /
-    // designSystem stay in the footer options above.
+    // in state (submitted below), but no inputs form renders.
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -1062,7 +1072,7 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/apply')
     ))).toBe(false);
-    expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Live artifact');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Live artifact');
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -1121,7 +1131,7 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-live-artifact'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Live artifact');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Live artifact');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')
@@ -1191,11 +1201,13 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Slide deck');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
     });
     expect(screen.queryByTestId('home-hero-footer-option-speakerNotes')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-slideCount')).toBeNull();
-    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-footer-option-designSystem')).toBeNull();
+    // The design-system picker is the persistent control below the composer.
+    expect(screen.getByTestId('home-hero-design-system-trigger')).toBeTruthy();
 
     await setPromptAndSettle('Create an investor deck for a local-first design tool.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -1243,7 +1255,7 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
@@ -1291,7 +1303,7 @@ describe('HomeView prompt handoff', () => {
     await clearActiveTypeChip();
     fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Slide deck');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
     });
     expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
     expect(screen.getByTestId('home-hero-plugin-presets').textContent).toContain('Simple Deck');
@@ -1847,8 +1859,13 @@ async function setPromptAndSettle(value: string): Promise<void> {
 }
 
 async function clearActiveTypeChip() {
-  const chip = screen.queryByTestId('home-hero-active-type-chip');
-  if (chip) fireEvent.click(chip);
+  // Reset the Template selection back to "None" via the dropdown's Clear.
+  const trigger = screen.queryByTestId('home-hero-template-trigger');
+  if (!trigger) return;
+  fireEvent.click(trigger);
+  const clear = screen.queryByTestId('home-hero-template-clear');
+  if (clear) fireEvent.click(clear);
+  fireEvent.keyDown(document, { key: 'Escape' });
 }
 
 async function clickHomeShortcut(id: string) {

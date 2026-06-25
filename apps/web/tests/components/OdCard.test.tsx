@@ -3,9 +3,27 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { OdCardRuleProposal } from '@open-design/contracts';
+import type { OdCardRuleProposal, OdCardBrandBrowserAssist } from '@open-design/contracts';
 import { OdCardView } from '../../src/components/OdCard';
 import { I18nProvider } from '../../src/i18n';
+
+const ASSIST_CARD: OdCardBrandBrowserAssist = {
+  kind: 'brand-browser-assist',
+  brandId: 'brand-123',
+  browserTabId: '__browser__:1',
+  url: 'https://acme.test/',
+  reason: 'Cloudflare',
+};
+
+function renderAssistCard(
+  onConfirm: (card: OdCardBrandBrowserAssist) => Promise<{ ok: boolean; message?: string }>,
+) {
+  return render(
+    <I18nProvider initial="en">
+      <OdCardView card={ASSIST_CARD} onBrandBrowserAssistConfirm={onConfirm} />
+    </I18nProvider>,
+  );
+}
 
 const RULE_CARD: OdCardRuleProposal = {
   kind: 'rule-proposal',
@@ -33,6 +51,34 @@ afterEach(() => {
   cleanup();
   window.localStorage.clear();
   vi.restoreAllMocks();
+});
+
+describe('OdCard brand browser assist', () => {
+  it('marks browser assist done only when the confirm handler succeeds', async () => {
+    const onConfirm = vi.fn().mockResolvedValue({ ok: true });
+
+    renderAssistCard(onConfirm);
+    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Browser assist confirmed')).toBeTruthy();
+    });
+    expect(onConfirm).toHaveBeenCalledWith(ASSIST_CARD);
+    expect(window.localStorage.getItem('od:brand-browser-assist-decision:brand-123')).toBe('done');
+  });
+
+  it('keeps browser assist retryable when the confirm handler reports failure', async () => {
+    const onConfirm = vi.fn().mockResolvedValue({ ok: false, message: 'Open this in the desktop app.' });
+
+    renderAssistCard(onConfirm);
+    fireEvent.click(screen.getByRole('button', { name: 'Open browser assist' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toContain('desktop app');
+    });
+    expect(screen.getByRole('button', { name: 'Open browser assist' })).toBeTruthy();
+    expect(screen.queryByText('Browser assist confirmed')).toBeNull();
+  });
 });
 
 describe('OdCard rule proposal decisions', () => {

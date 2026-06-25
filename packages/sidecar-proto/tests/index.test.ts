@@ -195,6 +195,28 @@ describe("open-design sidecar contract", () => {
     ).toThrow();
   });
 
+  it("accepts PNG/JPEG artifact image export and rejects WebP up front", () => {
+    // The off-screen Electron renderer (nativeImage) can only encode PNG/JPEG.
+    for (const imageFormat of ["png", "jpeg"] as const) {
+      expect(
+        normalizeDesktopSidecarMessage({
+          input: { deck: false, format: "image", html: "<p>x</p>", imageFormat, title: "Shot" },
+          type: SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+        }),
+      ).toEqual({
+        input: { deck: false, format: "image", html: "<p>x</p>", imageFormat, title: "Shot" },
+        type: "export-artifact",
+      });
+    }
+    // WebP must fail fast with a clear error rather than silently downgrade to PNG.
+    expect(() =>
+      normalizeDesktopSidecarMessage({
+        input: { deck: false, format: "image", html: "<p>x</p>", imageFormat: "webp", title: "Shot" },
+        type: SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+      }),
+    ).toThrow(/unsupported artifact export image format/);
+  });
+
   it("validates desktop update IPC message inputs", () => {
     expect(
       normalizeDesktopSidecarMessage({

@@ -28,6 +28,7 @@ import {
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
+import { takeComposerSeedFor } from '../state/libraryHandoff';
 import type { TodoItem } from '../runtime/todos';
 import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
@@ -41,6 +42,11 @@ import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, Cha
 import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
+import type { BrandBrowserAssistConfirm } from './OdCard';
+import {
+  DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
+  type NextStepActionsVariant,
+} from './NextStepActions';
 import { AmrGuidance } from './AmrGuidance';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
@@ -58,6 +64,7 @@ import {
   type ChatComposerHandle,
   type ChatSendMeta,
 } from './ChatComposer';
+import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
@@ -494,10 +501,14 @@ interface Props {
   // time before the full `tool_use` arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   initialDraft?: string;
+  composerPlaceholder?: string;
   // Focus the right-hand Questions tab from the chat banner.
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
+  // Client-side confirm for a brand-browser-assist od-card: read the unblocked
+  // browser DOM and re-extract the brand. Routed through the stable callbacks ref.
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   // "Next step" affordance handlers forwarded to the last assistant message.
   // The featured design-toolbox rows are driven directly off the composer ref
   // owned here, so they need no handler from ProjectView (unlike onArtifactShare).
@@ -554,6 +565,17 @@ interface Props {
   // it does based on connector status (open Connectors, or prefill the composer
   // with the import instruction).
   onConnectRepo?: () => void;
+  // True for a programmatically-extracted brand project whose AI enrichment
+  // never ran. The next-step card uses this to offer AI Optimize after the
+  // extraction completion message.
+  brandEnrichmentEligible?: boolean;
+  // Runs the optional brand-enrichment turn. The parent sends the project's
+  // seeded enrichment prompt with the default per-turn skill bundle.
+  onContinueBrandEnrichment?: () => void;
+  brandEnrichmentBusy?: boolean;
+  // Creates a fresh design project using the current extracted design system.
+  onCreateDesignFromActiveDesignSystem?: () => void;
+  createDesignFromActiveDesignSystemBusy?: boolean;
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
@@ -692,9 +714,11 @@ export function ChatPane({
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
+  composerPlaceholder,
   onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
+  onBrandBrowserAssistConfirm,
   onArtifactShare,
   onArtifactDownload,
   onForkFromMessage,
@@ -718,6 +742,11 @@ export function ChatPane({
   connectRepoNeeded,
   githubConnected,
   onConnectRepo,
+  brandEnrichmentEligible,
+  onContinueBrandEnrichment,
+  brandEnrichmentBusy,
+  onCreateDesignFromActiveDesignSystem,
+  createDesignFromActiveDesignSystemBusy,
   composerDraftSignal,
   petConfig,
   onAdoptPet,
@@ -754,6 +783,7 @@ export function ChatPane({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const displayMessages = messages;
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
@@ -821,9 +851,10 @@ export function ChatPane({
   // excluded from its memo comparison (so streaming doesn't re-render every
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
-  const assistantCallbacksRef = useRef({
+  const assistantCallbacksRef = useRef<AssistantCallbacks>({
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onBrandBrowserAssistConfirm,
     onArtifactShare,
     onForkFromMessage,
     onShareToOpenDesign,
@@ -831,6 +862,7 @@ export function ChatPane({
   assistantCallbacksRef.current = {
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onBrandBrowserAssistConfirm,
     onArtifactShare,
     onForkFromMessage,
     onShareToOpenDesign,
@@ -842,9 +874,17 @@ export function ChatPane({
   const handleToolboxAction = useCallback((id: DesignToolboxActionId) => {
     composerRef.current?.applyDesignToolboxAction(id);
   }, []);
+  const handleNextStepPromptAction = useCallback((prompt: string) => {
+    composerRef.current?.setDraft(prompt);
+  }, []);
   const handlePickSkill = useCallback((skillId: string) => {
     composerRef.current?.applyDesignToolboxSkill(skillId);
   }, []);
+  const nextStepVariant: NextStepActionsVariant = isDesignSystemNextStepProject(projectMetadata)
+    ? isBrandExtractionNextStepProject(projectMetadata)
+      ? 'brand-extraction'
+      : 'design-system'
+    : 'default';
   // The `@skill` shown in each featured row's hover detail — matched the same
   // way the composer matches it, using the raw skill name (what gets inlined
   // into the draft). Recomputed only when the skill list changes.
@@ -856,6 +896,47 @@ export function ChatPane({
     }
     return map;
   }, [skills]);
+  const blankProjectComposerScenarios = useMemo<PlaceholderScenario[]>(
+    () => pickStarters(projectMetadata, t).map((starter, index) => ({
+      id: `blank-${projectMetadata?.kind ?? 'prototype'}-${index}`,
+      text: starter.prompt,
+      chipId: 'project',
+    })),
+    [projectMetadata, t],
+  );
+  const followUpComposerScenarios = useMemo<PlaceholderScenario[]>(() => {
+    if (nextStepVariant === 'design-system') {
+      return DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => ({
+        id: action.id,
+        text: action.prompt,
+        chipId: 'design-system',
+      }));
+    }
+    const promptPairs: Array<[string, string]> = [
+      ['auto-match', t('chat.designToolbox.prompt.autoMatchIntro')],
+      ['visual-polish', t('chat.designToolbox.prompt.visualPolish')],
+      ['anti-ai-polish', t('chat.designToolbox.prompt.antiAiPolish')],
+      ['motion-polish', t('chat.designToolbox.prompt.motionPolish')],
+    ];
+    return promptPairs.map(([id, text]) => ({
+      id: `follow-up-${id}`,
+      text,
+      chipId: 'design-toolbox',
+    }));
+  }, [nextStepVariant, t]);
+  const composerPlaceholderScenarios = useMemo<PlaceholderScenario[]>(() => {
+    if (loading || initialDraft?.trim()) return [];
+    if (displayMessages.length === 0 && queuedItems.length === 0) return blankProjectComposerScenarios;
+    if (displayMessages.length > 0) return followUpComposerScenarios;
+    return [];
+  }, [
+    blankProjectComposerScenarios,
+    displayMessages.length,
+    followUpComposerScenarios,
+    initialDraft,
+    loading,
+    queuedItems.length,
+  ]);
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [conversationSearch, setConversationSearch] = useState('');
@@ -874,15 +955,15 @@ export function ChatPane({
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]!.role === 'assistant') return messages[i]!.id;
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      if (displayMessages[i]!.role === 'assistant') return displayMessages[i]!.id;
     }
     return undefined;
-  }, [messages]);
-  const hasActiveRunMessage = messages.some(
+  }, [displayMessages]);
+  const hasActiveRunMessage = displayMessages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
-  const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
+  const retryAssistant = retryableAssistantMessage(displayMessages, lastAssistantId, streaming);
   // The failed run's error event lives on the (persisted) assistant message, so
   // the error card + AMR card survive a reload — unlike the ephemeral global
   // `error` state. Drive both off this event.
@@ -1093,29 +1174,29 @@ export function ChatPane({
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
   const firstUserMessageId = useMemo(
-    () => messages.find((m) => m.role === 'user')?.id,
-    [messages],
+    () => displayMessages.find((m) => m.role === 'user')?.id,
+    [displayMessages],
   );
   const shouldBalanceFinishedTranscript =
     !loading &&
     !streaming &&
     !displayError &&
     !hasActiveRunMessage &&
-    messages.length > 0;
+    displayMessages.length > 0;
   // Map each assistant message id to the user message that follows it (if any)
   // so the chat-side Questions banner can reopen that exact answered form in
   // the right-hand panel later.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
-    for (let i = 0; i < messages.length - 1; i++) {
-      const m = messages[i]!;
-      const next = messages[i + 1]!;
+    for (let i = 0; i < displayMessages.length - 1; i++) {
+      const m = displayMessages[i]!;
+      const next = displayMessages[i + 1]!;
       if (m.role === 'assistant' && next.role === 'user') {
         map.set(m.id, next.content);
       }
     }
     return map;
-  }, [messages]);
+  }, [displayMessages]);
 
   useEffect(() => {
     didInitialScrollRef.current = false;
@@ -1162,6 +1243,22 @@ export function ChatPane({
     composerRef.current?.setDraft(composerDraftSignal.text);
   }, [composerDraftSignal]);
 
+  // Library "optimize design system" hand-off: when the user pushed selected
+  // assets into this project's design system from the Library, pre-fill the
+  // composer with the query + those assets (as attachment chips) so they only
+  // need to review and Send. Fires once, after the composer mounts for the
+  // routed conversation; re-checks on conversation change so an async-loaded
+  // composer still gets seeded. The seed is consumed (cleared) on apply.
+  const seededComposerSeedRef = useRef(false);
+  useEffect(() => {
+    if (seededComposerSeedRef.current) return;
+    if (!projectId || !composerRef.current) return;
+    const seed = takeComposerSeedFor(projectId);
+    if (!seed) return;
+    seededComposerSeedRef.current = true;
+    composerRef.current.restoreDraft({ text: seed.text, attachments: seed.attachments });
+  }, [projectId, activeConversationId]);
+
   useEffect(() => {
     if (!editingQueuedSendId) return;
     if (queuedItems.some((item) => item.id === editingQueuedSendId)) return;
@@ -1180,12 +1277,12 @@ export function ChatPane({
 
   useEffect(() => {
     const el = logRef.current;
-    if (!el || didInitialScrollRef.current || messages.length === 0) return;
+    if (!el || didInitialScrollRef.current || displayMessages.length === 0) return;
     didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user sees the form first.
-      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistantMsg = [...displayMessages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistantMsg?.content.includes('<question-form')) {
         const assistantEls = el.querySelectorAll('.msg.assistant');
         const lastAssistantEl = assistantEls[assistantEls.length - 1];
@@ -1212,7 +1309,7 @@ export function ChatPane({
     // didInitialScrollRef while the chat-log is unmounted; this effect
     // then re-runs when the user returns to Chat and the element is
     // available, scrolling the new conversation to its initial bottom.
-  }, [activeConversationId, messages.length, tab]);
+  }, [activeConversationId, displayMessages, tab]);
 
   // When a turn finishes streaming, release the anchor-to-top reserve. The
   // tail spacer only exists to give a streaming reply room to grow while the
@@ -1251,7 +1348,7 @@ export function ChatPane({
 
     // A brand-new user turn from a local send: switch to "anchor to top"
     // mode and smooth-scroll their message to the top of the viewport.
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const lastUser = [...displayMessages].reverse().find((m) => m.role === 'user');
     const prevUserId = prevLastUserIdRef.current;
     prevLastUserIdRef.current = lastUser?.id;
     if (anchorPendingRef.current && lastUser && lastUser.id !== prevUserId) {
@@ -1277,7 +1374,7 @@ export function ChatPane({
     if (pinnedToBottomRef.current) {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user lands on the form.
-      const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+      const lastAssistantMsg = [...displayMessages].reverse().find((m) => m.role === 'assistant');
       if (lastAssistantMsg?.content.includes('<question-form')) {
         const assistantEls = el.querySelectorAll('.msg.assistant');
         const lastAssistantEl = assistantEls[assistantEls.length - 1];
@@ -1299,7 +1396,7 @@ export function ChatPane({
       // breaking auto-follow for subsequent chunks.
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, error, streaming]);
+  }, [displayMessages, error, streaming]);
 
   // Saved chat-log scroll state, preserved across tab switches. The
   // chat-log <div> is conditionally rendered so it unmounts when the
@@ -1713,6 +1810,8 @@ export function ChatPane({
       streaming={streaming}
       sendDisabled={sendDisabled}
       initialDraft={initialDraft}
+      composerPlaceholder={composerPlaceholder}
+      placeholderScenarios={composerPlaceholderScenarios}
       draftStorageKey={composerDraftStorageKey}
       onEnsureProject={onEnsureProject}
       commentAttachments={commentsToAttachments(attachedComments)}
@@ -1948,7 +2047,7 @@ export function ChatPane({
               }}
             >
               {loading ? <ChatConversationLoading t={t} /> : null}
-              {messages.length === 0 && !loading ? (
+              {displayMessages.length === 0 && !loading ? (
                 <div className="chat-empty-wrap">
                   {showImportedFolderArtifacts ? (
                     <ImportedFolderArtifacts
@@ -2005,10 +2104,10 @@ export function ChatPane({
                           </span>
                           <span className="chat-connect-repo-body">
                             <span className="chat-connect-repo-title">
-                              {repoConnectCopy(githubConnected).cardTitle}
+                              {repoConnectCopy(t, githubConnected).cardTitle}
                             </span>
                             <span className="chat-connect-repo-text">
-                              {repoConnectCopy(githubConnected).cardBody}
+                              {repoConnectCopy(t, githubConnected).cardBody}
                             </span>
                           </span>
                           <button
@@ -2018,7 +2117,7 @@ export function ChatPane({
                             onClick={() => onConnectRepo?.()}
                           >
                             <Icon name="github" size={13} />
-                            {repoConnectCopy(githubConnected).buttonLabel}
+                            {repoConnectCopy(t, githubConnected).buttonLabel}
                           </button>
                         </div>
                       ) : null}
@@ -2027,7 +2126,7 @@ export function ChatPane({
                 </div>
               ) : null}
               <ChatRows
-                messages={messages}
+                messages={displayMessages}
                 streaming={streaming}
                 liveToolInput={liveToolInput}
                 projectId={projectId}
@@ -2054,12 +2153,19 @@ export function ChatPane({
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
+                onNextStepPromptAction={handleNextStepPromptAction}
+                onNextStepAiOptimize={onContinueBrandEnrichment}
+                nextStepAiOptimizeBusy={brandEnrichmentBusy}
+                onNextStepCreateDesign={onCreateDesignFromActiveDesignSystem}
+                nextStepCreateDesignBusy={createDesignFromActiveDesignSystemBusy}
                 onPickSkill={handlePickSkill}
                 onArtifactDownload={onArtifactDownload}
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
+                nextStepVariant={nextStepVariant}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -2383,6 +2489,7 @@ interface AssistantCallbacks {
   onAssistantFeedback:
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
+  onBrandBrowserAssistConfirm: BrandBrowserAssistConfirm | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
   onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
@@ -2440,12 +2547,19 @@ function ChatRows({
   nextUserContentByAssistantId,
   assistantCallbacksRef,
   onContinueRemainingTasks,
+  onBrandBrowserAssistConfirm,
   onArtifactShare,
   onToolboxAction,
+  onNextStepPromptAction,
+  onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
+  onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
   toolboxSkillNames,
+  nextStepVariant,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -2480,12 +2594,19 @@ function ChatRows({
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
+  onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
   toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
+  nextStepVariant?: NextStepActionsVariant;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -2581,6 +2702,11 @@ function ChatRows({
         suppressDirectionForms={hasActiveDesignSystem}
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
         onOpenQuestions={onOpenQuestions}
+        onBrandBrowserAssistConfirm={
+          onBrandBrowserAssistConfirm
+            ? (card) => assistantCallbacksRef.current.onBrandBrowserAssistConfirm?.(card)
+            : undefined
+        }
         onContinueRemainingTasks={
           m.id === lastAssistantId && onContinueRemainingTasks
             ? (todos) => assistantCallbacksRef.current.onContinueRemainingTasks?.(m, todos)
@@ -2603,10 +2729,16 @@ function ChatRows({
             : undefined
         }
         onToolboxAction={onToolboxAction}
+        onNextStepPromptAction={onNextStepPromptAction}
+        onNextStepAiOptimize={onNextStepAiOptimize}
+        nextStepAiOptimizeBusy={nextStepAiOptimizeBusy}
+        onNextStepCreateDesign={onNextStepCreateDesign}
+        nextStepCreateDesignBusy={nextStepCreateDesignBusy}
         onPickSkill={onPickSkill}
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
         toolboxSkillNames={toolboxSkillNames}
+        nextStepVariant={nextStepVariant}
       />
     );
   };
@@ -3811,6 +3943,26 @@ function sortChatAttachmentsForDisplay(attachments: ChatAttachment[]): ChatAttac
       return a.index - b.index;
     })
     .map((entry) => entry.attachment);
+}
+
+function isDesignSystemNextStepProject(metadata: ProjectMetadata | undefined): boolean {
+  if (!metadata) return false;
+  return (
+    metadata.kind === 'brand' ||
+    metadata.importedFrom === 'design-system' ||
+    metadata.importedFrom === 'brand-extraction' ||
+    Boolean(metadata.brandDesignSystemId)
+  );
+}
+
+function isBrandExtractionNextStepProject(metadata: ProjectMetadata | undefined): boolean {
+  if (!metadata) return false;
+  return (
+    metadata.kind === 'brand' ||
+    metadata.importedFrom === 'brand-extraction' ||
+    Boolean(metadata.brandId) ||
+    Boolean(metadata.brandDesignSystemId)
+  );
 }
 
 function relTime(ts: number, t: TranslateFn): string {

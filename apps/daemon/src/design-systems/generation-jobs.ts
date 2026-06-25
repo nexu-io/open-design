@@ -409,7 +409,8 @@ async function safeCollectSourceContext(
 function sourceSummary(input: UserDesignSystemInput, context?: DesignSystemSourceContext): string {
   const provenance = input.provenance;
   const counts = [
-    provenance?.githubUrls?.length ? `${provenance.githubUrls.length} GitHub link(s)` : '',
+    provenance?.sourceUrls?.length ? `${provenance.sourceUrls.length} source link(s)` : '',
+    provenance?.githubUrls?.length ? `${provenance.githubUrls.length} GitHub repo link(s)` : '',
     provenance?.localCodeFiles?.length ? `${provenance.localCodeFiles.length} local code reference(s)` : '',
     provenance?.figFiles?.length ? `${provenance.figFiles.length} Figma file(s)` : '',
     provenance?.assetFiles?.length ? `${provenance.assetFiles.length} asset(s)` : '',

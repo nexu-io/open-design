@@ -37,6 +37,7 @@ const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const cancelBrandExtraction = vi.fn();
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -121,6 +122,14 @@ vi.mock('../../src/providers/registry', () => ({
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
+
+vi.mock('../../src/runtime/brands', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/brands')>('../../src/runtime/brands');
+  return {
+    ...actual,
+    cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
+  };
+});
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -334,6 +343,7 @@ describe('retry target resolution', () => {
 describe('ProjectView daemon cleanup', () => {
   beforeEach(() => {
     listProjectRuns.mockResolvedValue([]);
+    cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
   afterEach(() => {
@@ -708,6 +718,102 @@ describe('ProjectView daemon cleanup', () => {
     } finally {
       window.sessionStorage.removeItem('od:auto-send-first:project-2');
     }
+  });
+
+  it('reloads an empty brand-extraction transcript without auto-sending the fallback prompt', async () => {
+    const programmaticMessages: ChatMessage[] = [
+      {
+        id: 'brand-user-1',
+        role: 'user',
+        content: 'Extract a design system from https://refly.ai/.',
+        createdAt: 1,
+      },
+      {
+        id: 'brand-assistant-1',
+        role: 'assistant',
+        content: 'Programmatic design-system extraction started from https://refly.ai/.',
+        createdAt: 1,
+        startedAt: 1,
+        runStatus: 'running',
+      },
+    ];
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(programmaticMessages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: ['brand.html'], activeTabId: 'brand.html' });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    window.sessionStorage.setItem('od:auto-send-first:brand-project', '1');
+
+    render(
+      <ProjectView
+        project={{
+          id: 'brand-project',
+          name: 'refly.ai Design System',
+          skillId: null,
+          designSystemId: null,
+          pendingPrompt: 'Extract refly.ai into a design system.',
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'refly-ai',
+            brandSourceUrl: 'https://refly.ai/',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.messages).toEqual(programmaticMessages);
+    });
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    const latestChatPaneProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onStop?: () => void;
+    };
+    latestChatPaneProps.onStop?.();
+    await waitFor(() => expect(cancelBrandExtraction).toHaveBeenCalledWith('refly-ai'));
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'brand-project',
+        'conv-brand',
+        expect.objectContaining({
+          id: 'brand-assistant-1',
+          runStatus: 'canceled',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
   });
 
   it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {

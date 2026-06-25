@@ -379,6 +379,47 @@ describe('FileViewer manual edit regressions', () => {
     });
     expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
   });
+
+  it('keeps the preview mounted and does not save when deleting the only rendered root', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="app-root">App</main><script>window.bootApp && window.bootApp();</script></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget({
+      ...heroTarget(),
+      id: 'app-root',
+      label: 'App root',
+      text: 'App',
+      outerHtml: '<main data-od-id="app-root">App</main>',
+    });
+
+    fireEvent.click(screen.getByLabelText('Delete element'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cannot remove the last rendered element in the document.')).toBeTruthy();
+    });
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toContain('data-od-id="app-root"');
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/projects/project-1/files',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });
 
 function heroTarget(): ManualEditTarget {

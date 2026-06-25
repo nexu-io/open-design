@@ -137,38 +137,13 @@
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-/* Portalled variant (New Project design-system picker). Rendered into
-   document.body and positioned from the trigger's viewport rect, so it escapes
-   the modal's `.newproj-body { overflow-y: auto }` clip box that truncated the
-   list (issue #4303). `position: fixed` + the inline top/bottom/left/width/
-   max-height drive placement; the list flexes inside the bounded height and
-   scrolls instead of overflowing past the modal edge. z-index clears the New
-   Project modal backdrop (920). */
-.ds-picker-popover-portal {
-  position: fixed;
-  right: auto;
-  z-index: 1000;
-}
-.ds-picker-popover-portal > .ds-picker-popover {
-  position: relative;
-  top: auto;
-  left: auto;
-  right: auto;
-  width: 100%;
-  max-height: inherit;
-}
-.ds-picker-popover-portal .ds-picker-list {
-  max-height: none;
-  flex: 1 1 auto;
-  min-height: 0;
-}
 /* Rich brand preview flyout — a side panel anchored to the popover that shows
    the compact Brand Kit card for the hovered / selected brand. It sits OUTSIDE
    the `overflow: hidden` popover (as a sibling) so it is not clipped, and to
    the right of the popover via the wrapper's relative positioning. */
 .ds-picker-brand-flyout {
   position: absolute;
-  top: 0;
+  top: calc(100% + 6px);
   left: calc(100% + 8px);
   z-index: 31;
   width: 320px;
@@ -455,15 +430,6 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
-}
-/* Compact placement (cloud-landing top bar): the pill sits top-right, so the
-   menu drops DOWN and aligns to the pill's right edge, opening toward the
-   lower-left instead of upward. */
-.lang-menu-popover--compact {
-  top: calc(100% + 6px);
-  bottom: auto;
-  left: auto;
-  right: 0;
 }
 .lang-menu-item {
   display: grid;

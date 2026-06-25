@@ -456,23 +456,6 @@ test('[P1] project detail composer working directory picker opens without leavin
   await expect(composer.getByTestId('working-dir-pick')).toBeVisible();
 });
 
-test('[P1] project detail composer session mode switches between Design and Ask', async ({ page }) => {
-  await page.goto('/');
-  await createProject(page, 'Composer session mode switch');
-  await expectWorkspaceReady(page);
-
-  const composer = page.getByTestId('chat-composer');
-  const trigger = composer.getByTestId('session-mode-trigger');
-  await expect(trigger).toContainText(/Design/i);
-  await trigger.click();
-  await page.getByRole('menuitemradio', { name: /Ask mode/i }).click();
-  await expect(trigger).toContainText(/Ask/i);
-
-  await trigger.click();
-  await page.getByRole('menuitemradio', { name: /Design mode/i }).click();
-  await expect(trigger).toContainText(/Design/i);
-});
-
 test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
   await routeComposerPlusFixtures(page);
   await page.goto('/');

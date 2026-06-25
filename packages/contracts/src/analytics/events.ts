@@ -236,7 +236,6 @@ export type TrackingArtifactKind =
 // tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).
 export type TrackingExportFormat =
   | 'pdf'
-  | 'pptx'
   | 'zip'
   | 'html'
   | 'image'
@@ -472,8 +471,8 @@ export type TrackingChatPanelPageViewSource =
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
 // welcome flow. The current first-run flow is Connect → About you →
-// Newsletter → Brand extraction; the design-system and generation literals
-// remain in the contract for historical rows and a future reintroduction.
+// Newsletter → Design system CTA. The legacy brand-extraction literal remains
+// in the contract for historical rows only.
 // Each step's `step_index` / `step_name` must match the enum pairs below.
 // `onboarding_session_id` is generated once per session so dashboards can
 // stitch the funnel.
@@ -481,8 +480,9 @@ export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
   | 'newsletter'
-  | 'brand'
   | 'design_system'
+  /** @deprecated legacy onboarding final-step area; use `design_system`. */
+  | 'brand'
   | 'generation_progress';
 
 // Mixed string enum: numeric steps render as the strings `'1' | '2' | '3' | '4'`
@@ -493,8 +493,9 @@ export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
   | 'newsletter'
-  | 'brand_extract'
   | 'design_system'
+  /** @deprecated legacy onboarding final-step name; use `design_system`. */
+  | 'brand_extract'
   | 'generation';
 
 // How the user chose to connect to a model provider. `amr_cloud` is the
@@ -507,7 +508,7 @@ export type TrackingOnboardingStepName =
 export type TrackingOnboardingRuntimeType = TrackingRuntimeType;
 
 // What kind of source material the user pinned in the design-system
-// step. `text` covers the brand description textarea; `mixed` is
+// step. `text` covers the freeform design-system description; `mixed` is
 // reserved for batches that combined more than one type.
 export type TrackingOnboardingSourceType =
   | 'text'
@@ -626,8 +627,8 @@ export type TrackingOnboardingClickAction =
 // ride along on About-you clicks AND on the `about_you_submit` snapshot
 // click. `source_type`/`has_brand_description`/`source_count` only on
 // Design-system source clicks. `runtime_type`/`is_recommended` only on
-// Connect clicks. Doc explicitly forbids brand text, GitHub URL, file
-// name, or path values — all enum + bool + count, no free-text.
+// Connect clicks. Doc explicitly forbids freeform design-system description,
+// GitHub URL, file name, or path values — all enum + bool + count, no free-text.
 export interface OnboardingClickProps {
   page_name: 'onboarding';
   area: TrackingOnboardingArea;
@@ -732,6 +733,7 @@ export type TrackingDesignSystemsEntryFrom =
 export type TrackingDesignSystemOrigin =
   | 'onboarding'
   | 'manual_create'
+  | 'source_url'
   | 'github_repo'
   | 'local_code'
   | 'fig'
@@ -1157,6 +1159,12 @@ export interface HomeChatComposerClickProps {
     // composer's `element: 'attachment'` so the same dashboard counts
     // "user opened the file picker" across both surfaces.
     | 'attachment'
+    // Opening the "Import from library" picker from the home composer's "+"
+    // menu. Mirrors the chat_panel composer's `element: 'library'`.
+    | 'library'
+    // Opening the "Import from Figma" modal from the home composer's "+" menu
+    // (offline .fig decode). Mirrors the chat_panel composer's `figma_import`.
+    | 'figma_import'
     // Local-storage / working-dir picker under the home composer; `task_chip`
     // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
     | 'working_dir'
@@ -1178,6 +1186,11 @@ export interface HomeChatComposerClickProps {
     // task type; for plugin-preset cards `plugin_id` / `plugin_type` identify
     // the preset. The raw prompt text is never sent (free text / PII rule).
     | 'example_prompt'
+    // The "Open as project" action on an example card — one-click remix that
+    // creates and enters a project seeded from the example instead of only
+    // loading it into the composer. Same `chip_id` / `plugin_id` / `plugin_type`
+    // attribution as `example_prompt`.
+    | 'example_open_project'
     // The "+" menu on the home composer (same control as the in-project
     // composer's `plus_*` events): opening it, inserting a
     // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
@@ -1550,7 +1563,8 @@ export interface DesignSystemsCreateClickProps {
   page_name: 'design_systems';
   area: 'design_system_create';
   element:
-    | 'github_repo_add'
+    | 'source_url_add'
+    | 'figma_url_add'
     | 'show_access_methods'
     | 'browse_folder'
     | 'upload_fig'
@@ -1633,6 +1647,10 @@ export interface ChatPanelClickProps {
     | 'chat_input'
     | 'composer_settings'
     | 'attachment'
+    | 'library'
+    // Opening the "Import from Figma" modal from the chat composer's "+" menu
+    // (offline .fig decode). Sits beside `library` as a sibling import source.
+    | 'figma_import'
     | 'send'
     | 'mention_popover_trigger'
     | 'resources_popover_trigger';
@@ -1850,8 +1868,11 @@ export interface FileManagerClickProps {
   area: 'file_manager';
   element:
     | 'new_sketch'
+    | 'new_browser'
+    | 'create_design_system'
     | 'paste'
     | 'upload'
+    | 'library'
     | 'select_all_on_page'
     | 'select_everything'
     | 'download_as_zip'

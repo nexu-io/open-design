@@ -7,14 +7,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '../../src/types';
 
 vi.mock('../../src/providers/registry', () => ({
+  fetchDesignSystem: vi.fn(),
   fetchDesignSystemPreview: vi.fn(),
+  fetchDesignSystemShowcase: vi.fn(),
 }));
 
 import { DesignSystemPicker } from '../../src/components/DesignSystemPicker';
 import { I18nProvider, type Locale } from '../../src/i18n';
-import { fetchDesignSystemPreview } from '../../src/providers/registry';
+import {
+  fetchDesignSystem,
+  fetchDesignSystemPreview,
+  fetchDesignSystemShowcase,
+} from '../../src/providers/registry';
 
+const fetchDesignSystemMock = vi.mocked(fetchDesignSystem);
 const fetchDesignSystemPreviewMock = vi.mocked(fetchDesignSystemPreview);
+const fetchDesignSystemShowcaseMock = vi.mocked(fetchDesignSystemShowcase);
 
 const designSystems: DesignSystemSummary[] = [
   {
@@ -34,7 +42,15 @@ const designSystems: DesignSystemSummary[] = [
 ];
 
 beforeEach(() => {
+  fetchDesignSystemMock.mockImplementation(async (id) => ({
+    id,
+    title: id === 'clay' ? 'Clay' : 'Editorial Noir',
+    summary: id === 'clay' ? 'Friendly tactile product UI.' : 'High-contrast editorial system.',
+    category: id === 'clay' ? 'Product' : 'Editorial',
+    body: `# ${id}`,
+  }));
   fetchDesignSystemPreviewMock.mockResolvedValue('<html><body><h1>Preview</h1></body></html>');
+  fetchDesignSystemShowcaseMock.mockResolvedValue('<html><body><h1>Showcase</h1></body></html>');
 });
 
 afterEach(() => {
@@ -89,7 +105,7 @@ describe('DesignSystemPicker', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getAllByText('Clay').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByLabelText('关闭全屏预览'));
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

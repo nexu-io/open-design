@@ -86,7 +86,7 @@ describe('HomeView community filter decoupling', () => {
     // Picking another chip drives the composer, not the gallery filter.
     fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Slide deck');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
     });
     expect(ariaSelected('plugins-home-pill-category-all')).toBe('true');
     expect(ariaSelected('plugins-home-pill-category-deck')).toBe('false');

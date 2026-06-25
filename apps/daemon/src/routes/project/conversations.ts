@@ -1,10 +1,11 @@
 import type { Express } from 'express';
 import { type ChatSessionMode } from '@open-design/contracts';
 import { readAnalyticsContext } from '../../analytics.js';
+import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.js';
 import type { RouteDeps } from '../../server-context.js';
 import { registerProjectCommentRoutes } from './comments.js';
 
-export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'projectStore' | 'conversations' | 'ids' | 'telemetry'> {}
+export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {}
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' ? 'chat' : 'design';
@@ -23,6 +24,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     upsertMessage,
   } = ctx.conversations;
   const { randomId } = ctx.ids;
+  const { BRANDS_DIR, PROJECTS_DIR } = ctx.paths;
+  const { readAppConfig } = ctx.appConfig;
+  const { getAgentDef } = ctx.agents;
 
   // ---- Conversations --------------------------------------------------------
 
@@ -140,10 +144,31 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
 
   // ---- Messages -------------------------------------------------------------
 
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
+  app.get('/api/projects/:id/conversations/:cid/messages', async (req, res) => {
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
+    }
+    const project = getProject(db, req.params.id);
+    if (project && listMessages(db, req.params.cid).length === 0) {
+      const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
+      const agentId = typeof config.agentId === 'string' && config.agentId ? config.agentId : null;
+      await backfillBrandExtractionTranscriptForProject({
+        db,
+        conversationId: req.params.cid,
+        randomId,
+        brandsRoot: BRANDS_DIR,
+        projectsRoot: PROJECTS_DIR,
+        project,
+        ...(agentId ? {
+          transcriptAgent: {
+            agentId,
+            agentName: getAgentDef(agentId)?.name ?? agentId,
+          },
+        } : {}),
+      }).catch((err) => {
+        console.warn(`[brand] failed to backfill programmatic extraction transcript for ${req.params.id}`, err);
+      });
     }
     res.json({ messages: listMessages(db, req.params.cid) });
   });

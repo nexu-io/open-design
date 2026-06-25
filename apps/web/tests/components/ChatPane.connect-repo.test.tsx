@@ -68,7 +68,7 @@ describe('ChatPane connect-repo CTA', () => {
     const { container } = renderPane({ connectRepoNeeded: true, githubConnected: false, onConnectRepo });
 
     expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
-    const connectButton = screen.getByRole('button', { name: /Connect GitHub/ });
+    const connectButton = screen.getByRole('button', { name: /ds\.repoConnectButton/ });
     fireEvent.click(connectButton);
 
     expect(onConnectRepo).toHaveBeenCalledTimes(1);
@@ -79,12 +79,12 @@ describe('ChatPane connect-repo CTA', () => {
     // githubConnected omitted -> undefined -> status still loading.
     renderPane({ connectRepoNeeded: true, onConnectRepo });
 
-    const pendingButton = screen.getByRole('button', { name: /Checking GitHub/ });
+    const pendingButton = screen.getByRole('button', { name: /ds\.repoConnectPendingButton/ });
     expect((pendingButton as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(pendingButton);
     expect(onConnectRepo).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Import repo/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ds\.repoConnectButton/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ds\.repoImportButton/ })).toBeNull();
   });
 
   it('switches to an Import repo action when GitHub is already connected', () => {
@@ -92,12 +92,12 @@ describe('ChatPane connect-repo CTA', () => {
     const { container } = renderPane({ connectRepoNeeded: true, githubConnected: true, onConnectRepo });
 
     expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
-    expect(screen.getByText('GitHub is connected')).toBeTruthy();
-    const importButton = screen.getByRole('button', { name: /Import repo/ });
+    expect(screen.getByText('ds.repoConnectedTitle')).toBeTruthy();
+    const importButton = screen.getByRole('button', { name: /ds\.repoImportButton/ });
     fireEvent.click(importButton);
 
     expect(onConnectRepo).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ds\.repoConnectButton/ })).toBeNull();
   });
 
   it('prefills the composer when the parent pushes a draft signal', () => {

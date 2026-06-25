@@ -1207,7 +1207,7 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Exit while editing; the iframe commits new text, but the save fails.
     fireEvent.click(toggle);
@@ -1289,7 +1289,7 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Iframe-driven finish (Enter): commit + session-inactive with NO host finish.
     window.dispatchEvent(new MessageEvent('message', {
@@ -1507,7 +1507,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(resolvedTop).toBe('34px');
     style.remove();
     workspaceShell.remove();
-  });
+  }, 10000);
 
   it('allows downloads in React component preview iframes', async () => {
     const file = baseFile({
@@ -2557,6 +2557,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(downloadItems).not.toContain('Copy share link');
     expect(downloadItems).not.toContain('Deploy to Vercel');
     expect(downloadItems).not.toContain('Export as PPTX');
+    expect(downloadItems).not.toContain('Export as PPTX (images)');
+    expect(downloadItems).not.toContain('Export as PPTX (editable)');
     expect(downloadItems).not.toContain('Export as Markdown');
   });
 

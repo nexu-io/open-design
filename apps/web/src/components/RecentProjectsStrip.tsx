@@ -7,9 +7,10 @@
 // surfaces (e.g. an in-project quick-switcher pane).
 
 import type { CSSProperties } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { useT } from '../i18n';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { fetchProjectFiles, fetchProjectFileText, projectFileUrl } from '../providers/registry';
 import type { DesignSystemSummary, Project, ProjectDisplayStatus, ProjectFile } from '../types';
 import { Icon } from './Icon';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
@@ -25,6 +26,8 @@ interface Props {
   loading?: boolean;
   onOpen: (id: string) => void;
   onViewAll: () => void;
+  onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
+  onRename?: (id: string, name: string) => void;
   limit?: number;
 }
 
@@ -40,6 +43,8 @@ export function RecentProjectsStrip({
   designSystems = EMPTY_DESIGN_SYSTEMS,
   onOpen,
   onViewAll,
+  onDelete,
+  onRename,
   limit = 6,
 }: Props) {
   const t = useT();
@@ -52,6 +57,25 @@ export function RecentProjectsStrip({
   const [coverByProject, setCoverByProject] = useState<
     Record<string, { kind: 'html' | 'image' | 'video' | 'logo'; name: string } | null>
   >({});
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+  const [confirmTarget, setConfirmTarget] = useState<Project | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const renameTitleId = useId();
+  const confirmTitleId = useId();
+  const actionsAvailable = Boolean(onDelete || onRename);
+
+  useEffect(() => {
+    if (!menuOpenId) return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && menuContainerRef.current?.contains(target)) return;
+      setMenuOpenId(null);
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [menuOpenId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,11 +95,11 @@ export function RecentProjectsStrip({
           return [project.id, null] as const;
         }
         if (designSystemProject) {
-          const logo = findDesignSystemLogoFile(files);
-          if (logo) {
+          const cover = await findDesignSystemCover(project.id, files);
+          if (cover) {
             return [
               project.id,
-              { kind: 'logo' as const, name: logo.path ?? logo.name },
+              cover,
             ] as const;
           }
           return [project.id, null] as const;
@@ -130,6 +154,38 @@ export function RecentProjectsStrip({
     return null;
   }
 
+  function startRename(project: Project) {
+    setMenuOpenId(null);
+    setRenameTarget({ id: project.id, original: project.name });
+    setRenameInput(project.name);
+  }
+
+  function cancelRename() {
+    setRenameTarget(null);
+    setRenameInput('');
+  }
+
+  function commitRename() {
+    if (!renameTarget || !onRename) return;
+    const trimmed = renameInput.trim();
+    if (trimmed && trimmed !== renameTarget.original) {
+      onRename(renameTarget.id, trimmed);
+    }
+    cancelRename();
+  }
+
+  function requestDelete(project: Project) {
+    setMenuOpenId(null);
+    setConfirmTarget(project);
+  }
+
+  async function commitDelete() {
+    if (!confirmTarget || !onDelete) return;
+    const target = confirmTarget;
+    setConfirmTarget(null);
+    await onDelete(target.id);
+  }
+
   return (
     <section className="recent-projects" data-testid="recent-projects-strip">
       <header className="recent-projects__head">
@@ -144,7 +200,10 @@ export function RecentProjectsStrip({
           <Icon name="chevron-right" size={12} />
         </button>
       </header>
-      <div className="recent-projects__row" role="list">
+      <div
+        className={`recent-projects__row${menuOpenId ? ' recent-projects__row--menu-open' : ''}`}
+        role="list"
+      >
         {recent.map((project) => {
           const cover = projectCover(project, coverByProject[project.id] ?? null);
           const designSystemProject = isDesignSystemProject(project);
@@ -154,70 +213,176 @@ export function RecentProjectsStrip({
             !publishedDesignSystem &&
             (status === 'running' || status === 'queued' || status === 'awaiting_input');
           return (
-            <button
+            <div
               key={project.id}
-              type="button"
               role="listitem"
-              className={`recent-projects__card${designSystemProject ? ' is-design-system-project' : ''}`}
-              onClick={() => onOpen(project.id)}
-              title={project.name}
+              className={`recent-projects__card${designSystemProject ? ' is-design-system-project' : ''}${menuOpenId === project.id ? ' is-menu-open' : ''}`}
               data-project-id={project.id}
             >
-              <div
-                className={`recent-projects__card-thumb recent-projects__card-thumb-${cover.kind}`}
-                style={cover.style}
-                aria-hidden
+              <button
+                type="button"
+                className="recent-projects__card-main"
+                onClick={() => onOpen(project.id)}
+                title={project.name}
               >
-                {(cover.kind === 'image' || cover.kind === 'logo') && cover.src ? (
-                  <img
-                    className="recent-projects__thumb-media"
-                    src={cover.src}
-                    alt=""
-                    loading="lazy"
-                  />
-                ) : cover.kind === 'video' && cover.src ? (
-                  <video
-                    className="recent-projects__thumb-media"
-                    src={cover.src}
-                    muted
-                    preload="metadata"
-                    playsInline
-                  />
-                ) : cover.kind === 'html' && cover.src ? (
-                  <RecentProjectHtmlThumb
-                    src={cover.src}
-                    deckCoverOnly={project.metadata?.kind === 'deck'}
-                  />
-                ) : (
-                  <span className="recent-projects__card-glyph">{cover.initial}</span>
-                )}
-              </div>
-              <div className="recent-projects__card-meta">
-                <div className="design-card-tag-row">
-                  {designSystemProject ? (
-                    <DesignSystemProjectTag />
+                <div
+                  className={`recent-projects__card-thumb recent-projects__card-thumb-${cover.kind}`}
+                  style={cover.style}
+                  aria-hidden
+                >
+                  {(cover.kind === 'image' || cover.kind === 'logo') && cover.src ? (
+                    <img
+                      className="recent-projects__thumb-media"
+                      src={cover.src}
+                      alt=""
+                      loading="lazy"
+                    />
+                  ) : cover.kind === 'video' && cover.src ? (
+                    <video
+                      className="recent-projects__thumb-media"
+                      src={cover.src}
+                      muted
+                      preload="metadata"
+                      playsInline
+                    />
+                  ) : cover.kind === 'html' && cover.src ? (
+                    <RecentProjectHtmlThumb
+                      src={cover.src}
+                      deckCoverOnly={project.metadata?.kind === 'deck'}
+                    />
                   ) : (
-                    <ProjectTag category={projectCategory(project)} />
+                    <span className="recent-projects__card-glyph">{cover.initial}</span>
                   )}
                 </div>
-                <div className="recent-projects__card-name">{project.name}</div>
-                <div className="recent-projects__card-time">
-                  <span
-                    className={`recent-projects__card-status recent-projects__card-status-${publishedDesignSystem ? 'published' : status}`}
-                  >
-                    {isActive ? (
-                      <span className="recent-projects__card-status-dot" aria-hidden />
-                    ) : null}
-                    {publishedDesignSystem ? t('designs.status.published') : statusLabel(status, t)}
-                  </span>
-                  <span className="recent-projects__card-sep" aria-hidden>·</span>
-                  {relativeTime(project.updatedAt, t)}
+                <div className="recent-projects__card-meta">
+                  <div className="design-card-tag-row">
+                    {designSystemProject ? (
+                      <DesignSystemProjectTag />
+                    ) : (
+                      <ProjectTag category={projectCategory(project)} />
+                    )}
+                  </div>
+                  <div className="recent-projects__card-name">{project.name}</div>
+                  <div className="recent-projects__card-time">
+                    <span
+                      className={`recent-projects__card-status recent-projects__card-status-${publishedDesignSystem ? 'published' : status}`}
+                    >
+                      {isActive ? (
+                        <span className="recent-projects__card-status-dot" aria-hidden />
+                      ) : null}
+                      {publishedDesignSystem ? t('designs.status.published') : statusLabel(status, t)}
+                    </span>
+                    <span className="recent-projects__card-sep" aria-hidden>·</span>
+                    {relativeTime(project.updatedAt, t)}
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+              {actionsAvailable ? (
+                <div
+                  className="recent-projects__card-menu-anchor"
+                  ref={menuOpenId === project.id ? menuContainerRef : undefined}
+                >
+                  <button
+                    type="button"
+                  className="recent-projects__card-more"
+                  aria-label={t('designs.menuMore')}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpenId === project.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setMenuOpenId((current) => current === project.id ? null : project.id);
+                    }}
+                  >
+                    <Icon name="more-horizontal" size={14} />
+                  </button>
+                  {menuOpenId === project.id ? (
+                    <div
+                      className="recent-projects__card-menu"
+                      role="menu"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {onRename ? (
+                        <button type="button" role="menuitem" onClick={() => startRename(project)}>
+                          <Icon name="pencil" size={12} />
+                          <span>{t('designs.menuRename')}</span>
+                        </button>
+                      ) : null}
+                      {onDelete ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="danger"
+                          onClick={() => requestDelete(project)}
+                        >
+                          <Icon name="close" size={12} />
+                          <span>{t('designs.menuDelete')}</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>
+      {renameTarget ? (
+        <Dialog
+          as="form"
+          className="modal-rename"
+          onClose={cancelRename}
+          closeOnEscape
+          ariaLabelledBy={renameTitleId}
+          onSubmit={(event) => {
+            event.preventDefault();
+            commitRename();
+          }}
+        >
+          <DialogTitle id={renameTitleId}>{t('designs.renameTitle')}</DialogTitle>
+          <label>
+            {t('designs.renamePrompt', { name: renameTarget.original })}
+            <input
+              type="text"
+              value={renameInput}
+              autoFocus
+              onChange={(event) => setRenameInput(event.target.value)}
+            />
+          </label>
+          <DialogFooter className="row">
+            <button type="button" onClick={cancelRename}>
+              {t('designs.renameCancel')}
+            </button>
+            <button
+              type="submit"
+              className="primary"
+              disabled={!renameInput.trim() || renameInput.trim() === renameTarget.original}
+            >
+              {t('designs.renameSave')}
+            </button>
+          </DialogFooter>
+        </Dialog>
+      ) : null}
+      {confirmTarget ? (
+        <Dialog
+          className="modal-confirm"
+          role="alertdialog"
+          onClose={() => setConfirmTarget(null)}
+          ariaLabelledBy={confirmTitleId}
+        >
+          <DialogTitle id={confirmTitleId}>{t('designs.deleteTitle')}</DialogTitle>
+          <DialogDescription>
+            {t('designs.deleteConfirm', { name: confirmTarget.name })}
+          </DialogDescription>
+          <DialogFooter className="row">
+            <button type="button" onClick={() => setConfirmTarget(null)}>
+              {t('designs.renameCancel')}
+            </button>
+            <button type="button" className="primary danger" onClick={() => void commitDelete()}>
+              {t('designs.menuDelete')}
+            </button>
+          </DialogFooter>
+        </Dialog>
+      ) : null}
     </section>
   );
 }
@@ -509,4 +674,73 @@ function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
     logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
     null
   );
+}
+
+async function findDesignSystemCover(
+  projectId: string,
+  files: ProjectFile[],
+): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
+  const knownFiles = new Set(files.map((file) => file.path ?? file.name));
+  const brandCover = await designSystemCoverFromBrandJson(projectId, knownFiles);
+  if (brandCover) return brandCover;
+
+  const logo = findDesignSystemLogoFile(files);
+  if (!logo) return null;
+  return { kind: 'logo', name: logo.path ?? logo.name };
+}
+
+async function designSystemCoverFromBrandJson(
+  projectId: string,
+  knownFiles: ReadonlySet<string>,
+): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
+  const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
+  if (!raw) return null;
+  let brand: unknown;
+  try {
+    brand = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!brand || typeof brand !== 'object') return null;
+  const root = brand as Record<string, unknown>;
+  const imagery = root.imagery && typeof root.imagery === 'object'
+    ? root.imagery as Record<string, unknown>
+    : null;
+  const samples = Array.isArray(imagery?.samples) ? imagery.samples : [];
+  const samplePaths = samples
+    .filter((sample): sample is Record<string, unknown> => Boolean(sample && typeof sample === 'object'))
+    .sort((a, b) => imageSampleRank(a.kind) - imageSampleRank(b.kind))
+    .map((sample) => typeof sample.file === 'string' ? sample.file : null)
+    .filter((file): file is string => Boolean(file));
+  const image = samplePaths.find((file) => knownFiles.has(file) && isRasterOrSvgImage(file));
+  if (image) return { kind: 'image', name: image };
+
+  const logo = root.logo && typeof root.logo === 'object' ? root.logo as Record<string, unknown> : null;
+  const alternates = Array.isArray(logo?.alternates) ? logo.alternates : [];
+  const logoCandidates = [
+    typeof logo?.primary === 'string' ? logo.primary : null,
+    ...alternates,
+  ];
+  const nonFaviconLogo = logoCandidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' &&
+      knownFiles.has(candidate) &&
+      isRasterOrSvgImage(candidate) &&
+      !/(^|\/)favicon[-.]/iu.test(candidate),
+  );
+  if (nonFaviconLogo) return { kind: 'logo', name: nonFaviconLogo };
+  if (typeof logo?.primary === 'string' && knownFiles.has(logo.primary) && isRasterOrSvgImage(logo.primary)) {
+    return { kind: 'logo', name: logo.primary };
+  }
+  return null;
+}
+
+function imageSampleRank(kind: unknown): number {
+  if (kind === 'cover') return 0;
+  if (kind === 'hero') return 1;
+  return 2;
+}
+
+function isRasterOrSvgImage(path: string): boolean {
+  return /\.(svg|png|jpe?g|webp|gif)$/iu.test(path);
 }

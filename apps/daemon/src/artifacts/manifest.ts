@@ -43,7 +43,7 @@ const ALLOWED_RENDERERS = new Set<string>([
   'design-system',
 ]);
 
-const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'pptx', 'jsx', 'md', 'svg', 'txt']);
+const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'jsx', 'md', 'svg', 'txt']);
 const ALLOWED_STATUS = new Set<string>(['streaming', 'complete', 'error']);
 
 function isPlainObject(value: unknown): value is JsonRecord {
@@ -275,7 +275,7 @@ export function inferLegacyManifest(entry: string): JsonRecord | null {
       entry,
       renderer: isDeck ? 'deck-html' : 'html',
       status: 'complete',
-      exports: isDeck ? ['html', 'pdf', 'pptx', 'zip'] : ['html', 'pdf', 'zip'],
+      exports: ['html', 'pdf', 'zip'],
       metadata: { inferred: true },
     };
   }

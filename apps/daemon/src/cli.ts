@@ -175,6 +175,12 @@ const DAEMON_BOOLEAN_FLAGS = new Set([
 ]);
 const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+// `od library …` (OD Library asset registry). Hoisted so the dispatcher can
+// parse flags without hitting a temporal-dead-zone on these sets.
+const LIBRARY_ASSET_STRING_FLAGS = new Set([
+  'daemon-url', 'kind', 'tag', 'source', 'date', 'query', 'project', 'label', 'out', 'dir',
+]);
+const LIBRARY_ASSET_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
@@ -235,6 +241,15 @@ const SHARE_STRING_FLAGS = new Set([
 const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+// Defined near the top because `runFigma` is reachable through the
+// top-of-file SUBCOMMAND_MAP dispatch during module evaluation; a `const`
+// further down would still be in TDZ when the handler reads it.
+const FIGMA_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'file', 'figma-url', 'notes', 'prompt', 'prompt-file',
+]);
+const FIGMA_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json', 'build',
+]);
 // `od brand …` mirrors the Brands library + New Brand modal. Same surface,
 // same /api/brands store. The CLI form is the embeddability contract: an
 // external agent (hermes-agent, openclaw, scripted job) can extract, list,
@@ -243,7 +258,8 @@ const SHARE_BOOLEAN_FLAGS = new Set([
 // reachable through the top-of-file SUBCOMMAND_MAP dispatch, which runs during
 // module evaluation — a const declared further down would still be in TDZ.
 const BRAND_STRING_FLAGS = new Set([
-  'daemon-url', 'prompt-file', 'project',
+  'daemon-url', 'prompt-file', 'project', 'locale',
+  'html-file', 'css-file', 'base-url',
 ]);
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
@@ -312,7 +328,113 @@ const SUBCOMMAND_MAP = {
   version: runVersion,
   doctor: runDoctor,
   config: runConfig,
+  library: runLibrary,
+  figma: runFigma,
+  export: runExport,
 };
+
+const EXPORT_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'format', 'out', 'image-format', 'title', 'file',
+]);
+const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck']);
+const EXPORT_FORMATS = ['pdf', 'image'];
+// Mirrors EXPORT_IMAGE_FORMATS in packages/contracts. The desktop renderer
+// (Electron nativeImage) can only encode PNG/JPEG, so WebP is rejected here
+// with a clear error instead of silently downgrading to PNG.
+const EXPORT_IMAGE_FORMATS = ['png', 'jpeg'];
+
+function printExportHelp() {
+  console.log(`Usage:
+  od export <file> --project <id> --format <fmt> [options]
+
+Programmatic export of an HTML/deck artifact to PDF or image. Runs
+entirely from the rendered design (no model/agent calls). Rasterization uses
+the desktop runtime's bundled Chromium, so a desktop/packaged runtime must be
+reachable; otherwise the command reports that the renderer is unavailable.
+
+Formats:  ${EXPORT_FORMATS.join(', ')}
+
+Options:
+  --project <id>           Project id (required)
+  --format <fmt>           One of: ${EXPORT_FORMATS.join(' | ')} (required)
+  --out <path>             Write the file here (defaults to the suggested name)
+  --image-format <fmt>     png | jpeg (for --format image)
+  --deck                   Treat the artifact as a multi-slide deck
+  --title <title>          Title used for metadata / default filename
+  --json                   Print a machine-readable result envelope
+  --daemon-url <url>       Override daemon URL
+
+Examples:
+  od export index.html --project p1 --format pdf --out page.pdf
+  od export slide.html --project p1 --format image --image-format png --out slide.png`);
+}
+
+async function runExport(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printExportHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  let flags;
+  try {
+    flags = parseFlags(args, { string: EXPORT_STRING_FLAGS, boolean: EXPORT_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const pos = positionalArgs(args, EXPORT_STRING_FLAGS);
+  const file = flags.file || pos[0];
+  const projectId = flags.project;
+  const format = flags.format;
+  if (!file || !projectId || !format) {
+    printExportHelp();
+    process.exit(2);
+  }
+  if (!EXPORT_FORMATS.includes(format)) {
+    console.error(`invalid --format: ${format} (expected ${EXPORT_FORMATS.join(' | ')})`);
+    process.exit(2);
+  }
+  if (flags['image-format'] && !EXPORT_IMAGE_FORMATS.includes(flags['image-format'])) {
+    console.error(`invalid --image-format: ${flags['image-format']} (expected ${EXPORT_IMAGE_FORMATS.join(' | ')})`);
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/export`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file,
+      format,
+      deck: flags.deck === true,
+      ...(flags['image-format'] ? { imageFormat: flags['image-format'] } : {}),
+      ...(flags.title ? { title: flags.title } : {}),
+    }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  let out = flags.out;
+  if (!out) {
+    const cd = resp.headers.get('content-disposition') || '';
+    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    const plain = /filename="([^"]+)"/i.exec(cd);
+    if (star && star[1]) {
+      try { out = decodeURIComponent(star[1]); } catch { out = plain && plain[1] ? plain[1] : null; }
+    } else if (plain && plain[1]) {
+      out = plain[1];
+    }
+    if (!out) {
+      const ext = format === 'image'
+        ? (flags['image-format'] === 'jpeg' ? 'jpg' : 'png')
+        : 'pdf';
+      out = `artifact.${ext}`;
+    }
+  }
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(out, buffer);
+  if (flags.json) {
+    return process.stdout.write(JSON.stringify({ ok: true, out, bytes: buffer.length, format }, null, 2) + '\n');
+  }
+  console.log(`wrote ${out} (${buffer.length} bytes)`);
+}
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
   try {
@@ -422,6 +544,11 @@ function printRootHelp() {
       Bundle daemon/web/desktop logs, machine info, and recent crash reports
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
+
+  od export <file> --project <id> --format <pdf|image> [--out <path>]
+      Programmatically export an HTML/deck artifact to PDF or image
+      (no model/agent calls). Mirrors the web Download menu; rasterization uses
+      the desktop runtime's bundled Chromium.
 
   "$OD_NODE_BIN" "$OD_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.
@@ -4798,6 +4925,125 @@ async function runShare(args) {
   }
 }
 
+function printFigmaUsage() {
+  console.log(`Usage:
+  od figma import --project <id> --file <path.fig> [--notes "<text>"]
+                  [--build] [--prompt "<text>" | --prompt-file <path|->] [--json]
+  od figma import --project <id> --figma-url <url> [--notes "<text>"] [--json]
+
+Imports a Figma design into a project. A .fig file is decoded fully offline
+(no Figma account); a Figma URL runs through the od-figma-migration scenario
+(OAuth). Either way it stages a figma/ snapshot the agent reshapes into a
+webpage.
+
+Flags:
+  --project <id>       Target project id (required).
+  --file <path.fig>    Local .fig to decode offline.
+  --figma-url <url>    Figma file URL (https://figma.com/(file|design)/<key>).
+  --notes "<text>"     Design brief folded into the reshape prompt.
+  --build              After import, start a run that builds the webpage.
+  --prompt / --prompt-file   Override the build prompt (file or - for stdin).
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+}
+
+async function runFigma(args) {
+  const sub = args.find((a) => !a.startsWith('-'));
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    printFigmaUsage();
+    process.exit(sub ? 0 : 2);
+  }
+  if (sub !== 'import') {
+    console.error(`unknown subcommand: od figma ${sub}`);
+    printFigmaUsage();
+    process.exit(2);
+  }
+  const idx = args.indexOf(sub);
+  const rest = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  const flags = parseFlags(rest, { string: FIGMA_STRING_FLAGS, boolean: FIGMA_BOOLEAN_FLAGS });
+  const base = (await cliDaemonUrl(flags)).replace(/\/$/, '');
+
+  if (!flags.project) {
+    console.error('--project <id> is required');
+    process.exit(2);
+  }
+  const file = flags.file;
+  const figmaUrl = flags['figma-url'];
+  if (!file && !figmaUrl) {
+    console.error('one of --file <path.fig> or --figma-url <url> is required');
+    process.exit(2);
+  }
+
+  // Figma URL → the existing migration scenario (OAuth lives in the run
+  // pipeline). Start it through the same /api/runs path `od run start` uses.
+  if (figmaUrl && !file) {
+    const runBody = {
+      projectId: flags.project,
+      pluginId: 'od-figma-migration',
+      pluginInputs: { figmaUrl, ...(flags.notes ? { notes: flags.notes } : {}) },
+    };
+    const runResp = await fetch(`${base}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(runBody),
+    });
+    const runData = await runResp.json().catch(() => ({}));
+    if (!runResp.ok) {
+      console.error(`POST /api/runs failed: ${runResp.status} ${JSON.stringify(runData)}`);
+      process.exit(1);
+    }
+    if (flags.json) return process.stdout.write(JSON.stringify(runData, null, 2) + '\n');
+    console.log(`[figma] migration run started ${runData.runId}`);
+    return;
+  }
+
+  // Offline .fig path → multipart upload to the import endpoint.
+  let bytes;
+  try {
+    bytes = readFileSync(file);
+  } catch (err) {
+    console.error(`cannot read ${file}: ${err.message}`);
+    process.exit(2);
+  }
+  const form = new FormData();
+  form.append('file', new Blob([bytes]), basename(file));
+  if (flags.notes) form.append('notes', String(flags.notes));
+  const resp = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/figma/import`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+
+  if (flags.json && !flags.build) {
+    return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  }
+  const inv = data.inventory ?? {};
+  if (!flags.json) {
+    console.log(`[figma] imported "${data.label}" → ${data.snapshotDir}/`);
+    console.log(`  ${inv.decoded ? 'decoded' : 'assets-only'}: ${inv.nodeCount} nodes, ${inv.pageCount} pages, ${inv.frameCount} frames, ${inv.componentCount} components`);
+    console.log(`  ${(inv.colors ?? []).length} colors, ${(inv.fonts ?? []).length} fonts, ${inv.assetCount} assets${inv.hasThumbnail ? ', + preview' : ''}`);
+    for (const w of inv.warnings ?? []) console.log(`  ! ${w}`);
+  }
+
+  if (flags.build) {
+    const override = await readPromptFromFlags(flags);
+    const message = override || data.suggestedPrompt;
+    const runResp = await fetch(`${base}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectId: flags.project, message }),
+    });
+    const runData = await runResp.json().catch(() => ({}));
+    if (!runResp.ok) {
+      console.error(`build run failed: ${runResp.status} ${JSON.stringify(runData)}`);
+      process.exit(1);
+    }
+    if (flags.json) return process.stdout.write(JSON.stringify({ ...data, build: runData }, null, 2) + '\n');
+    console.log(`[figma] build run started ${runData.runId}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Subcommand: od brand …
 //
@@ -4846,6 +5092,7 @@ async function runBrand(args) {
     case 'extract':  return runBrandCreate(rest);
     case 'preview':  return runBrandPreview(rest);
     case 'finalize': return runBrandFinalize(rest);
+    case 'extract-from-html': return runBrandExtractFromHtml(rest);
     case 'get':      return runBrandGet(rest);
     case 'show':     return runBrandGet(rest);
     case 'delete':   return runBrandDelete(rest);
@@ -4917,7 +5164,12 @@ async function runBrandCreate(rest) {
     resp = await fetch(`${base}/api/brands`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        ...(typeof flags.locale === 'string' && flags.locale.trim()
+          ? { locale: flags.locale.trim() }
+          : {}),
+      }),
     });
   } catch (err) {
     surfaceFetchError(err, base);
@@ -4959,6 +5211,7 @@ async function runBrandFinalize(rest) {
   const base = await cliDaemonBaseUrl(flags);
   const body = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
+  if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
   try {
     resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/finalize`, {
@@ -4985,6 +5238,98 @@ async function runBrandFinalize(rest) {
   if (data?.designSystemId) process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
 }
 
+// Read a flag value as file content (or stdin when the value is "-"). Returns
+// null when the flag is unset. Mirrors readPromptFromFlags' file/stdin handling
+// but for an arbitrary flag name (--html-file / --css-file).
+async function readFileFlagOrStdin(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (value === '-') {
+    return await new Promise((resolve, reject) => {
+      let buf = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', (chunk) => { buf += chunk; });
+      process.stdin.on('end', () => resolve(buf));
+      process.stdin.on('error', reject);
+    });
+  }
+  const { readFile } = await import('node:fs/promises');
+  return await readFile(value, 'utf8');
+}
+
+// od brand extract-from-html <id> --html-file <path|-> [--css-file <path>]
+//   [--base-url <url>] [--json]
+// Re-runs extraction against pre-captured rendered HTML (e.g. a page an external
+// agent already loaded past an anti-bot wall), mirroring the UI's browser-assist
+// confirm path so the capability is reachable from the CLI too.
+async function runBrandExtractFromHtml(rest) {
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od brand extract-from-html <id> --html-file <path|-> '
+      + '[--css-file <path>] [--base-url <url>] [--json]');
+    process.exit(2);
+  }
+  let html;
+  try {
+    html = await readFileFlagOrStdin(flags['html-file']);
+  } catch (err) {
+    console.error(`could not read --html-file: ${err.message}`);
+    process.exit(2);
+  }
+  if (!html || !html.trim()) {
+    console.error('--html-file <path|-> is required (the rendered page HTML)');
+    process.exit(2);
+  }
+  let css = '';
+  if (typeof flags['css-file'] === 'string' && flags['css-file'].length > 0) {
+    try {
+      css = (await readFileFlagOrStdin(flags['css-file'])) ?? '';
+    } catch (err) {
+      console.error(`could not read --css-file: ${err.message}`);
+      process.exit(2);
+    }
+  }
+  const body = { html };
+  if (css.trim()) body.css = css;
+  if (typeof flags['base-url'] === 'string' && flags['base-url'].trim()) {
+    body.baseUrl = flags['base-url'].trim();
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/extract-from-html`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (resp.status === 404) {
+    console.error(`brand not found: ${id}`);
+    process.exit(4);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
+    return;
+  }
+  const name = data?.brand?.name ?? data?.id ?? id;
+  console.log(`${data?.id ?? id}\t${name}`);
+  if (data?.designSystemId) {
+    process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
+  }
+}
+
 async function runBrandPreview(rest) {
   let flags;
   try {
@@ -5001,6 +5346,7 @@ async function runBrandPreview(rest) {
   const base = await cliDaemonBaseUrl(flags);
   const body = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
+  if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
   try {
     resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/preview`, {
@@ -6722,6 +7068,254 @@ Common options:
   }
 }
 
+function printLibraryHelp() {
+  console.log(`Usage: od library <command> [options]
+
+Commands:
+  list                      List library assets. Filters: --kind --tag --source --date
+  get <id>                  Print one asset (JSON).
+  rm <id>                   Delete an asset.
+  search <query>            Keyword search across captions / tags / titles.
+  import <file|url>...      Import one or more local files / remote URLs into the library.
+                            Restricted to design formats (images, fonts, text, HTML, JSON);
+                            audio, video, and other binaries are rejected.
+  apply <id>                Copy an asset into a project's design files. Requires --project.
+  edit-as-page <id>         Turn a captured html asset into a new editable OD project (prints projectId).
+  figma <id>                Export an html asset's OD Figma capture IR (clipper-captured pages).
+  sync                      Pull design systems + agent-generated project artifacts into the Library.
+  pair                      Mint a browser-extension pairing code.
+
+Options:
+  --json                    Machine-readable output.
+  --daemon-url <url>        Override daemon URL (default: auto-discover).
+  --kind <image|design-system|video|...>
+                            Filter/declare asset kind.
+  --tag <tag>               Filter by / attach a tag.
+  --source <kind>           Filter by source (clipper|manual-upload|agent-task|design-system|generated).
+  --date <YYYY-MM-DD>       Filter by archive date.
+  --project <id>            Target project for apply.
+  --dir <subdir>            Subdirectory inside the project for apply (default: library).
+  --out <file>              Write the figma export to a file (default: stdout).`);
+}
+
+async function runLibrary(args) {
+  const sub = args.find((a) => !a.startsWith('-')) || '';
+  if (!sub || sub === 'help' || sub === '-h' || sub === '--help') {
+    printLibraryHelp();
+    process.exit(sub ? 0 : 2);
+  }
+  const idx = args.indexOf(sub);
+  const rest = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  let flags;
+  try {
+    flags = parseFlags(rest, {
+      string: LIBRARY_ASSET_STRING_FLAGS,
+      boolean: LIBRARY_ASSET_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  const pos = positionalArgs(rest, LIBRARY_ASSET_STRING_FLAGS);
+  const writeJson = (data) => process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+
+  try {
+    switch (sub) {
+      case 'list':
+      case 'search': {
+        const params = new URLSearchParams();
+        const query = sub === 'search' ? flags.query || pos[0] : flags.query;
+        if (query) params.set('q', query);
+        if (flags.kind) params.set('kind', flags.kind);
+        if (flags.tag) params.set('tag', flags.tag);
+        if (flags.source) params.set('source', flags.source);
+        if (flags.date) params.set('date', flags.date);
+        if (flags.project) params.set('projectId', flags.project);
+        const qs = params.toString();
+        const resp = await fetch(`${base}/api/library/assets${qs ? `?${qs}` : ''}`);
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return writeJson(data);
+        for (const asset of data.assets ?? []) {
+          const dims = asset.width && asset.height ? `${asset.width}x${asset.height}` : '';
+          const label = asset.sourceTitle || asset.sourceUrl || asset.caption || '';
+          console.log(`${asset.id}\t${asset.kind}\t${dims}\t${label}`);
+        }
+        return;
+      }
+      case 'get': {
+        const id = pos[0];
+        if (!id) {
+          console.error('Usage: od library get <id>');
+          process.exit(2);
+        }
+        const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}`);
+        if (!resp.ok) return structuredHttpFailure(resp);
+        return writeJson(await resp.json());
+      }
+      case 'rm': {
+        const id = pos[0];
+        if (!id) {
+          console.error('Usage: od library rm <id>');
+          process.exit(2);
+        }
+        const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        if (!resp.ok) return structuredHttpFailure(resp);
+        if (flags.json) return writeJson(await resp.json());
+        console.log(`deleted ${id}`);
+        return;
+      }
+      case 'import': {
+        const sources = pos;
+        if (!sources.length) {
+          console.error('Usage: od library import <file|url> [<file|url> ...]');
+          process.exit(2);
+        }
+        const { readFile } = await import('node:fs/promises');
+        const nodePath = await import('node:path');
+        const results = [];
+        let failed = false;
+        for (const src of sources) {
+          const body = {};
+          try {
+            if (/^https?:\/\//i.test(src)) {
+              body.url = src;
+              body.sourceUrl = src;
+            } else {
+              const bytes = await readFile(src);
+              // Empty mediatype → daemon sniffs the bytes for the real mime.
+              body.dataUrl = `data:;base64,${bytes.toString('base64')}`;
+              body.filename = nodePath.basename(src);
+            }
+          } catch (err) {
+            failed = true;
+            results.push({ source: src, ok: false, error: err?.message ?? String(err) });
+            if (!flags.json) console.error(`${src}\terror\t${err?.message ?? err}`);
+            continue;
+          }
+          if (flags.kind) body.kind = flags.kind;
+          if (flags.tag) body.tags = [flags.tag];
+          const resp = await fetch(`${base}/api/library/ingest`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!resp.ok) {
+            failed = true;
+            // The daemon rejects unsupported formats (415) and oversized files
+            // (413); surface the reason per source instead of aborting the run.
+            const detail = await resp.json().catch(() => null);
+            const message = detail?.error?.message ?? `HTTP ${resp.status}`;
+            results.push({ source: src, ok: false, status: resp.status, error: message });
+            if (!flags.json) console.error(`${src}\trejected\t${message}`);
+            continue;
+          }
+          const data = await resp.json();
+          results.push({ source: src, ok: true, ...data });
+          if (!flags.json) {
+            console.log(`${data.asset.id}\t${data.deduped ? 'deduped' : 'imported'}\t${data.asset.kind}`);
+          }
+        }
+        if (flags.json) writeJson(sources.length === 1 ? results[0] : results);
+        if (failed) process.exit(1);
+        return;
+      }
+      case 'apply': {
+        const id = pos[0];
+        if (!id) {
+          console.error('Usage: od library apply <id> --project <projectId> [--dir <subdir>]');
+          process.exit(2);
+        }
+        if (!flags.project) {
+          console.error('Usage: od library apply <id> --project <projectId> [--dir <subdir>]');
+          process.exit(2);
+        }
+        const body = { projectId: flags.project };
+        if (flags.dir) body.dir = flags.dir;
+        const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/apply`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return writeJson(data);
+        console.log(`applied ${id} → ${data.relPath}`);
+        return;
+      }
+      case 'edit-as-page': {
+        const id = pos[0];
+        if (!id) {
+          console.error('Usage: od library edit-as-page <id>');
+          process.exit(2);
+        }
+        const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/edit-as-page`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        });
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return writeJson(data);
+        console.log(`created project ${data.projectId} → ${data.relPath}`);
+        return;
+      }
+      case 'figma': {
+        const id = pos[0];
+        if (!id) {
+          console.error('Usage: od library figma <id> [--out <file>]');
+          process.exit(2);
+        }
+        const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/figma`);
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const ir = await resp.text();
+        if (flags.out) {
+          const { writeFile } = await import('node:fs/promises');
+          await writeFile(flags.out, ir, 'utf8');
+          if (flags.json) return writeJson({ ok: true, id, out: flags.out, bytes: Buffer.byteLength(ir) });
+          console.log(`wrote ${flags.out}`);
+          return;
+        }
+        process.stdout.write(ir.endsWith('\n') ? ir : ir + '\n');
+        return;
+      }
+      case 'sync': {
+        const resp = await fetch(`${base}/api/library/sync`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        });
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return writeJson(data);
+        console.log(
+          `Synced ${data.total} new (${data.designSystems} design systems, ${data.projectAssets} project assets; ${data.deduped} already indexed).`,
+        );
+        return;
+      }
+      case 'pair': {
+        const resp = await fetch(`${base}/api/library/pair`, { method: 'POST' });
+        if (!resp.ok) return structuredHttpFailure(resp);
+        const data = await resp.json();
+        if (flags.json) return writeJson(data);
+        console.log(`Pairing code: ${data.code}`);
+        console.log('Enter this code in the OD Clipper extension popup within 5 minutes.');
+        return;
+      }
+      default:
+        console.error(`unknown subcommand: od library ${sub}`);
+        printLibraryHelp();
+        process.exit(2);
+    }
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+}
+
 async function runLibraryList(name, args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -6770,6 +7364,7 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (args[0] === 'download') return runDesignSystemDownload(args.slice(1));
   if (args[0] === 'import-local') return runDesignSystemImportLocal(args.slice(1));
   if (args[0] === 'import-github') return runDesignSystemImportGithub(args.slice(1));
   if (args[0] === 'import-shadcn') return runDesignSystemImportShadcn(args.slice(1));
@@ -6779,6 +7374,67 @@ async function runDesignSystems(args) {
     process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
   }
   return runLibraryList('design-systems', args);
+}
+
+// od design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
+//
+// Streams GET /api/design-systems/:id/archive — the same self-contained brand
+// .zip (every system file plus a generated SKILLS.md usage guide) the web
+// "Download brand" button produces — and writes it to disk. Only user design
+// systems are downloadable; presets return 404.
+async function runDesignSystemDownload(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
+
+Downloads an editable design system as a shareable .zip (all files plus a
+generated SKILLS.md usage guide).
+
+  <id>                   Design system id (e.g. user:my-brand).
+  --out <path>           Write the .zip here (defaults to the brand's name).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'out']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const id = positionalArgs(args, stringFlags)[0];
+  if (!id) {
+    console.error('Usage: od design-systems download <id> [--out <path>]');
+    process.exit(2);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/archive`);
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (resp.status === 404) {
+    console.error(`downloadable design system not found: ${id}`);
+    process.exit(4);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  let out = typeof flags.out === 'string' ? flags.out : null;
+  if (!out) {
+    const cd = resp.headers.get('content-disposition') || '';
+    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    const plain = /filename="([^"]+)"/i.exec(cd);
+    if (star && star[1]) {
+      try { out = decodeURIComponent(star[1]); } catch { out = plain && plain[1] ? plain[1] : null; }
+    } else if (plain && plain[1]) {
+      out = plain[1];
+    }
+    if (!out) out = 'design-system.zip';
+  }
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(out, buffer);
+  if (flags.json) {
+    return process.stdout.write(
+      JSON.stringify({ ok: true, id, out, bytes: buffer.length }, null, 2) + '\n',
+    );
+  }
+  console.log(`Downloaded ${id} -> ${out} (${buffer.length} bytes)`);
 }
 
 // od design-systems import-local <path> [--name <name>]

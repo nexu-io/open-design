@@ -3,14 +3,16 @@ import { existsSync } from "node:fs";
 import { resolveOnPath } from "../runtimes/executables.js";
 
 /**
- * Headless-Chrome fallback for the prefetch pipeline — CLI flags only, no
- * CDP, no new dependencies. Used when the plain fetch path comes back blocked
- * or thin: `--dump-dom` returns the JS-rendered DOM (which also carries the
- * <style> tags CSS-in-JS frameworks inject at runtime), and `--screenshot`
- * gives the synthesis agent a visual of the page it can Read with vision.
+ * Optional system-Chrome fallback for the prefetch pipeline.
  *
- * The app is local-first, so the user's installed browser is fair game — the
- * same trust model as spawning their coding-agent CLI.
+ * Brand extraction opens the target site in Open Design's in-product browser
+ * tab so the user can clear Cloudflare / human checks there and the agent can
+ * continue in the same product loop. Launching an unrelated local Chrome here
+ * breaks that loop: cookies, user confirmation, and page state do not carry
+ * over, so the deterministic harvester sees a different browser than the user.
+ *
+ * Keep this module as an explicit escape hatch for local diagnostics only.
+ * Production extraction should stay inside the in-app browser path.
  */
 
 const MAC_CHROMES = [
@@ -27,8 +29,15 @@ let cached: { path: string | null; expiresAt: number } | null = null;
 export function findChrome(): string | null {
   const now = Date.now();
   if (cached && cached.expiresAt > now) return cached.path;
-  let found: string | null = null;
   const override = process.env.BRANDING_AGENT_CHROME?.trim();
+  const enabled =
+    process.env.OD_BRAND_ALLOW_SYSTEM_CHROME === '1'
+    || Boolean(override);
+  if (!enabled) {
+    cached = { path: null, expiresAt: now + 5 * 60_000 };
+    return null;
+  }
+  let found: string | null = null;
   if (override && existsSync(override)) {
     found = override;
   } else {

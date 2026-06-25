@@ -11,6 +11,11 @@ import type {
   SkillSummary,
   TrustTier,
 } from '@open-design/contracts';
+
+vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
+  PlaceholderCarousel: () => null,
+}));
+
 import { HomeHero } from '../../src/components/HomeHero';
 import { I18nProvider } from '../../src/i18n';
 import {

@@ -2636,6 +2636,7 @@
 }
 .project-ds-picker-search input {
   flex: 1 1 auto;
+  min-width: 0;
   border: 0;
   outline: none;
   background: transparent;
@@ -2643,6 +2644,58 @@
   font-size: 12.5px;
   line-height: 1.2;
   color: var(--text);
+}
+/* The borderless search field sits inside a framed popover row, so it does
+   not need the global `input:focus` blue selected-halo (box-shadow) from
+   primitives.css — suppress it here (higher specificity wins) so focusing the
+   field stays chromeless. */
+.project-ds-picker-search input:focus,
+.project-ds-picker-search input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Inline Clear / Create actions sit flush against the search field so the
+   popover header reads as one row (search + reset + create new system). */
+.project-ds-picker-action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.project-ds-picker-action:hover,
+.project-ds-picker-action:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.project-ds-picker-action--primary {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.project-ds-picker-action--primary:hover,
+.project-ds-picker-action--primary:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .project-ds-picker-body {
   display: grid;
@@ -2658,6 +2711,23 @@
   flex-direction: column;
   gap: 1px;
   border-right: 1px solid var(--border);
+}
+/* Group heading separating "your systems" from "official presets", matching the
+   Design Systems tab split. Sticks to the top while scrolling the list. */
+.project-ds-picker-group-label {
+  position: sticky;
+  top: -5px;
+  z-index: 1;
+  padding: 8px 8px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg, var(--surface, #fff));
+}
+.project-ds-picker-group-label:first-child {
+  padding-top: 4px;
 }
 .project-ds-picker-option {
   display: flex;
@@ -2746,6 +2816,29 @@
    full width. */
 .project-ds-picker-preview-brand {
   width: 100%;
+}
+.project-ds-picker-preview-open {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-ds-picker-preview-open:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 .project-ds-picker-preview-head {
   display: flex;

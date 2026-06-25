@@ -65,7 +65,7 @@
   margin: 0;
   font-family: var(--serif);
   font-weight: 600;
-  font-size: 30px;
+  font-size: 40px;
   letter-spacing: -0.02em;
   color: var(--text-strong);
   text-align: center;
@@ -346,24 +346,10 @@
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .home-hero__input-card:has(.inline-switcher__popover),
-.home-hero__input-card:has(.session-mode-toggle__popover),
-.home-hero__input-card:has(.home-hero__plugin-picker) {
+.home-hero__input-card:has(.home-hero__plugin-picker),
+.home-hero__input-card:has(.home-hero__template-menu) {
   z-index: 1700;
   overflow: visible;
-}
-/* The mode toggle's description card (chat.css) anchors upward and is only
-   shown on the home hero — it is `display:none` inside the chat composer.
-   The home-hero toggle sits well down the composer, so the card grows up
-   toward the page header; at its default 360px it crowds (and on smaller
-   windows clips) the top chrome. Cap it shorter here so it always clears the
-   header, and keep the inner scroll for the overflow. */
-.home-hero__input-card .session-mode-toggle__popover-card {
-  max-height: min(300px, calc(100vh - 120px));
-}
-.home-hero__input-card .session-mode-toggle__popover {
-  right: 0;
-  left: auto;
-  flex-direction: row-reverse;
 }
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
@@ -417,6 +403,20 @@
 }
 .home-hero__active-file-group {
   display: contents;
+}
+.home-hero__active-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--text) 7%, var(--bg-subtle));
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1;
 }
 .home-hero__active-label {
   min-width: 0;
@@ -542,6 +542,55 @@
   top: 8px;
   left: 4px;
   color: var(--text-soft);
+}
+/* Typewriter placeholder carousel — a pointer-events-none overlay aligned to
+   the editor's first text line (matches .composer-input-placeholder metrics).
+   Shown only while the composer is empty; the editor's own placeholder is
+   blanked behind it. See home-hero/PlaceholderCarousel.tsx. */
+.home-hero__lexical .home-hero__carousel {
+  position: absolute;
+  top: 8px;
+  left: 4px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  user-select: none;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-soft);
+  overflow: hidden;
+}
+.home-hero__carousel-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-hero__carousel-caret {
+  flex: none;
+  width: 1.5px;
+  align-self: stretch;
+  margin: 3px 0 3px 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: home-hero-caret-blink 1.05s steps(1, end) infinite;
+}
+@keyframes home-hero-caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero__carousel-caret {
+    animation: none;
+    opacity: 1;
+  }
 }
 .home-hero__input-card .plugin-inputs-form {
   display: grid;
@@ -886,35 +935,28 @@
 }
 .home-hero__execution-switcher .inline-switcher {
   min-width: 0;
-  max-width: 48px;
+  width: 58px;
+  max-width: 58px;
 }
 .home-hero__execution-switcher .inline-switcher__chip {
-  height: 30px;
-  max-width: 48px;
-  padding: 0 7px;
+  width: 58px;
+  height: 32px;
+  max-width: 58px;
+  justify-content: space-between;
+  padding: 0 8px 0 9px;
   gap: 4px;
   border-radius: var(--radius-sm);
 }
-.home-hero__foot-right .session-mode-toggle {
-  height: 32px;
+.home-hero__execution-switcher .inline-switcher__chip-icon {
+  width: 20px;
+  height: 20px;
 }
-.home-hero__foot-right .session-mode-toggle__trigger {
-  height: 32px;
-  max-width: 120px;
-  padding: 0 12px;
-  gap: 6px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-}
-.home-hero__foot-right .session-mode-toggle__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.home-hero__execution-switcher .inline-switcher__chip-chevron {
+  flex: 0 0 auto;
 }
 .home-hero__execution-switcher .inline-switcher__popover {
-  right: auto;
-  left: 0;
+  right: 0;
+  left: auto;
   z-index: 1503;
 }
 .home-hero__execution-switcher .inline-switcher__agent-grid {
@@ -1103,11 +1145,73 @@
 .home-hero__workdir-row {
   width: 100%;
   max-width: 720px;
-  /* Hug the input card: cancel the 14px column gap and the trigger's 4px
-     top padding so the picker sits ~5px below the card. */
-  margin: -13px auto 0;
+  /* Sit a little below the input card. The parent `.home-hero` flex column
+     adds a 14px gap; we trim ~4px of it so the pickers (and their hover fill)
+     keep a clear ~10px of breathing room below the card instead of colliding
+     with its bottom border. */
+  margin: -4px auto 0;
   display: flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 4px;
+}
+/* Thin separator between the persistent design-system picker and the
+   working-directory picker when both share the row. */
+.home-hero__workdir-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  opacity: 0.7;
+}
+/* Persistent design-system picker — borderless trigger mirroring the
+   working-directory picker so the two read as one row of leading accessories
+   below the composer. The shared popover (search + preview) is unchanged. */
+.home-hero__ds-row-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.home-hero__ds-row-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+.home-hero__ds-row-trigger:hover,
+.home-hero__ds-row-trigger:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.home-hero__ds-row-trigger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.home-hero__ds-row-trigger-icon {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+.home-hero__ds-row-trigger-label {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-hero__ds-row-trigger-chevron {
+  flex: 0 0 auto;
+  opacity: 0.55;
 }
 .home-hero__active-type-chip {
   appearance: none;
@@ -1156,11 +1260,12 @@
   color: var(--selected);
 }
 .home-hero__active-type-chip-close {
+  /* Always visible so the chip reads as removable at a glance — it brightens
+     to full opacity on hover/focus rather than appearing from nothing. */
   flex: 0 0 auto;
-  width: 0;
-  opacity: 0;
-  transform: translateX(-2px) scale(0.9);
-  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out), width 120ms var(--ease-out);
+  width: 12px;
+  opacity: 0.55;
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .home-hero__active-type-chip span {
   min-width: 0;
@@ -1180,9 +1285,7 @@
 }
 .home-hero__active-type-chip:hover .home-hero__active-type-chip-close,
 .home-hero__active-type-chip:focus-visible .home-hero__active-type-chip-close {
-  width: 12px;
   opacity: 1;
-  transform: translateX(0) scale(1);
 }
 .home-hero__footer-options {
   display: contents;
@@ -2047,20 +2150,35 @@
   max-width: min(880px, 100%);
 }
 
+/* Positioning context so the edge auto-scroll zones anchor to just the
+   scrolling presets row (not the title above it). */
+.home-hero__rail-scroller {
+  position: relative;
+}
+
 .home-hero__plugin-presets {
   display: flex;
   gap: 10px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
   padding: 1px 2px 8px;
   scrollbar-width: thin;
+}
+
+/* Each preset is wrapped in a positioning cell so the "Open as project"
+   overlay can sit over the thumbnail without nesting a button inside the
+   card button. The flex sizing lives on the cell; the card button fills it. */
+.home-hero__plugin-preset-cell {
+  position: relative;
+  flex: 0 0 248px;
+  min-width: 0;
+  display: flex;
 }
 
 .home-hero__plugin-preset {
   appearance: none;
   position: relative;
-  flex: 0 0 248px;
+  width: 100%;
   min-width: 0;
   display: grid;
   grid-template-rows: 150px minmax(0, auto);
@@ -2074,7 +2192,6 @@
   text-align: left;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
-  scroll-snap-align: start;
   overflow: hidden;
   transition:
     border-color 140ms var(--ease-out),
@@ -2309,13 +2426,15 @@
 
 @media (max-width: 900px) {
   .home-hero__title {
-    font-size: 24px;
+    font-size: 30px;
   }
   .home-hero__prompt-examples-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .home-hero__plugin-preset {
+  .home-hero__plugin-preset-cell {
     flex-basis: 224px;
+  }
+  .home-hero__plugin-preset {
     grid-template-rows: 136px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
@@ -2347,8 +2466,8 @@
   }
   .home-hero__execution-switcher .inline-switcher,
   .home-hero__execution-switcher .inline-switcher__chip {
-    width: auto;
-    max-width: 48px;
+    width: 58px;
+    max-width: 58px;
   }
 }
 
@@ -2360,11 +2479,492 @@
   .home-hero__prompt-examples-grid {
     grid-template-columns: 1fr;
   }
-  .home-hero__plugin-preset {
+  .home-hero__plugin-preset-cell {
     flex-basis: 208px;
+  }
+  .home-hero__plugin-preset {
     grid-template-rows: 126px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     transform: scale(0.134);
+  }
+}
+
+/* ------------------------------------------------------------
+   Scenario card rail — the illustrated, scenario-based create
+   rail (icon art + title + one-line description) with a hover
+   "what happens next" hint. Layers over the flat `.home-hero__type-tab`
+   pill base so existing disabled/pending/attention states keep working.
+   ------------------------------------------------------------ */
+/* Positioning context for the rail so the edge auto-scroll zones can anchor to
+   the visible rail box (not the full page width). Carries the centering and
+   max-width the scroll container used to own. */
+/* Template starter block: a "Start with a template…" caption above the
+   scenario-card rail, and a "…or start a blank project" escape hatch below it.
+   The section is one flex child of the centered hero column. */
+.home-hero__template-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.home-hero__template-heading {
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+}
+.home-hero__blank-project {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
+.home-hero__blank-project:hover,
+.home-hero__blank-project:focus-visible {
+  outline: none;
+  color: var(--text-strong);
+  background: var(--bg-subtle);
+}
+.home-hero__blank-project svg {
+  opacity: 0.7;
+  transition: transform 120ms var(--ease-out);
+}
+.home-hero__blank-project:hover svg {
+  transform: translateX(2px);
+}
+.home-hero__scenario-cards-wrap {
+  position: relative;
+  max-width: min(900px, 100%);
+  margin: 2px auto 0;
+}
+.home-hero__type-tabs.home-hero__scenario-cards {
+  width: 100%;
+  flex-wrap: nowrap;
+  justify-content: safe center;
+  align-items: stretch;
+  gap: 10px;
+  padding: 2px 12px 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+/* Edge hover zones: hovering an edge auto-scrolls the rail in that direction so
+   the cards stay reachable without a trackpad or horizontal mouse-wheel. Each
+   zone is only visible/interactive when there is content to scroll toward
+   (toggled via data-active). */
+.home-hero__rail-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  width: 60px;
+  z-index: 2;
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out);
+}
+.home-hero__rail-edge[data-active='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.home-hero__rail-edge:hover .home-hero__rail-edge-icon {
+  color: var(--accent);
+  transform: scale(1.1);
+}
+.home-hero__rail-edge-icon {
+  transition:
+    transform 160ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+.home-hero__rail-edge--left {
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 8px;
+  cursor: w-resize;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--bg-app) 92%, transparent),
+    transparent
+  );
+}
+.home-hero__rail-edge--right {
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 8px;
+  cursor: e-resize;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--bg-app) 92%, transparent),
+    transparent
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero__rail-edge,
+  .home-hero__rail-edge-icon {
+    transition: none;
+  }
+}
+
+.home-hero__scenario-card.home-hero__type-tab {
+  flex: 0 0 156px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  text-align: left;
+  overflow: hidden;
+}
+.home-hero__scenario-card.home-hero__type-tab:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+}
+.home-hero__scenario-card.home-hero__type-tab.is-active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+}
+
+.home-hero__scenario-card-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 74px;
+  color: var(--accent);
+  background: radial-gradient(
+    120% 120% at 30% 20%,
+    color-mix(in srgb, var(--accent-tint) 78%, var(--bg-panel)),
+    var(--bg-subtle)
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+/* Illustrative intent thumbnail (ScenarioArt). A small hover lift on the art
+   keeps the card feeling responsive now that the hint no longer animates. */
+.home-hero__scenario-art-svg {
+  transition: transform 160ms var(--ease-out);
+}
+.home-hero__scenario-card:hover:not(:disabled) .home-hero__scenario-art-svg {
+  transform: scale(1.05);
+}
+.home-hero__scenario-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px 11px;
+}
+.home-hero__scenario-card-title {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.home-hero__scenario-card.is-active .home-hero__scenario-card-title {
+  color: var(--accent);
+}
+.home-hero__scenario-card-desc {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero__scenario-card.home-hero__type-tab,
+  .home-hero__scenario-art-svg {
+    transition: none;
+  }
+}
+
+
+/* ============================================================
+   Composer-footer Template picker (project-type templates)
+   ============================================================ */
+.home-hero__footer-option--select[data-field-name='template'] {
+  max-width: 220px;
+}
+.home-hero__footer-option--select[data-field-name='template'].has-selection {
+  max-width: 250px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent-tint) 58%, var(--bg-panel));
+  color: var(--accent);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.home-hero__template-trigger {
+  flex: 1 1 auto;
+  max-width: 188px;
+}
+/* Small "Template" caption inside the trigger so the field is self-labeling
+   (the field's sr-only <span> pattern is not used here). */
+.home-hero__template-kicker {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+/* Mini ScenarioArt thumbnail in the trigger so the pill's leading glyph matches
+   the dropdown's illustrative cards (instead of a flat line icon). */
+.home-hero__template-trigger-thumb {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 18px;
+  overflow: hidden;
+  border-radius: var(--radius-xs, 4px);
+  color: var(--accent);
+}
+.home-hero__template-trigger-thumb .home-hero__scenario-art-svg {
+  width: 24px;
+  height: auto;
+}
+.home-hero__template-option.has-selection .home-hero__template-kicker {
+  color: color-mix(in srgb, var(--accent) 52%, var(--text-faint));
+}
+.home-hero__template-option.has-selection .home-hero__footer-select-label {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+.home-hero__template-reset {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -2px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.home-hero__template-reset svg {
+  display: block;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+.home-hero__template-reset:hover,
+.home-hero__template-reset:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.home-hero__template-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 7px);
+  z-index: 140;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(440px, calc(100vh - 200px));
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-panel) 98%, white);
+  box-shadow:
+    0 16px 38px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+  isolation: isolate;
+}
+.home-hero__template-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.home-hero__template-search {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  transition:
+    border-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
+}
+.home-hero__template-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.home-hero__template-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.home-hero__template-search input:focus,
+.home-hero__template-search input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+.home-hero__template-clear {
+  appearance: none;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
+.home-hero__template-clear:hover,
+.home-hero__template-clear:focus-visible {
+  outline: none;
+  color: var(--text-strong);
+  background: var(--bg-subtle);
+}
+.home-hero__template-group-label {
+  padding: 2px 2px 8px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.home-hero__template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.home-hero__template-empty {
+  padding: 12px 4px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.home-hero__template-card {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.home-hero__template-card:hover:not(:disabled),
+.home-hero__template-card:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  transform: translateY(-1px);
+}
+.home-hero__template-card:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.home-hero__template-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-tint);
+}
+.home-hero__template-card-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 54px;
+  border-radius: var(--radius);
+  /* Same illustrative gradient as the rail's scenario-card art, so the
+     dropdown thumbnails read as the same template set. */
+  background: radial-gradient(
+    120% 120% at 30% 20%,
+    color-mix(in srgb, var(--accent-tint) 78%, var(--bg-panel)),
+    var(--bg-subtle)
+  );
+  color: var(--accent);
+}
+.home-hero__template-card .home-hero__scenario-art-svg {
+  transition: transform 160ms var(--ease-out);
+}
+.home-hero__template-card:hover:not(:disabled) .home-hero__scenario-art-svg {
+  transform: scale(1.05);
+}
+.home-hero__template-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+.home-hero__template-card-label {
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.home-hero__template-card.is-active .home-hero__template-card-label {
+  color: var(--accent);
+}
+.home-hero__template-card-desc {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+/* Hover-preview value in the trigger reads as transient (lighter) until
+   committed by a click. */
+.home-hero__template-option .home-hero__footer-select-label.is-preview {
+  color: var(--text-muted);
+  font-style: italic;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero__template-card .home-hero__scenario-art-svg {
+    transition: none;
   }
 }

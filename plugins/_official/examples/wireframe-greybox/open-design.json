@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-wireframe-greybox",
+  "title": "Wireframe Greybox",
+  "title_i18n": {
+    "zh-CN": "灰盒线框图",
+    "zh-TW": "灰盒線框圖",
+    "ja": "グレーボックスワイヤーフレーム",
+    "ko": "그레이박스 와이어프레임",
+    "de": "Greybox-Wireframe",
+    "fr": "Wireframe Greybox",
+    "ru": "Грейбокс-вайрфрейм",
+    "es": "Wireframe Greybox",
+    "pt-BR": "Wireframe Greybox",
+    "it": "Wireframe Greybox",
+    "vi": "Wireframe Hộp Xám",
+    "pl": "Wireframe Greybox",
+    "id": "Wireframe Greybox",
+    "nl": "Greybox Wireframe",
+    "ar": "إطار سلكي Greybox",
+    "tr": "Greybox Wireframe",
+    "uk": "Грейбокс-вайрфрейм",
+    "en": "Wireframe Greybox"
+  },
+  "version": "0.1.0",
+  "description": "A crisp greybox / blueprint lo-fi wireframe of a desktop SaaS dashboard — neutral grey blocks, image placeholders with a diagonal-cross X, lorem-bar text, a schematic chart panel, and monospace redline annotations on a 12-column grid. Use when the brief asks for \"greybox\", \"blueprint wireframe\", \"lo-fi dashboard\", \"low fidelity\", \"线框图\", or \"灰盒原型\".",
+  "description_i18n": {
+    "zh-CN": "桌面端 SaaS 仪表盘的清晰灰盒/蓝图低保真线框图——中性灰色块、带对角叉号的图片占位符、lorem 文本条、示意图表面板，以及 12 栏栅格上的等宽标注。适用于「灰盒」「蓝图线框」「低保真仪表盘」「低保真」「线框图」「灰盒原型」等需求。",
+    "zh-TW": "桌面端 SaaS 儀表板的清晰灰盒/藍圖低保真線框圖——中性灰色塊、帶對角叉號的圖片佔位符、lorem 文字條、示意圖表面板，以及 12 欄柵格上的等寬標註。適用於「灰盒」「藍圖線框」「低保真儀表板」「低保真」「線框圖」「灰盒原型」等需求。",
+    "ja": "デスクトップ SaaS ダッシュボードの精緻なグレーボックス/設計図ローファイワイヤーフレーム。中性的なグレーのブロック、対角クロス X 付き画像プレースホルダー、lorem バーのテキスト、模式的なチャートパネル、12 カラムグリッド上の等幅レッドライン注釈。「グレーボックス」「設計図ワイヤーフレーム」「ローファイダッシュボード」「低忠実度」などの要件に最適。",
+    "ko": "데스크톱 SaaS 대시보드의 선명한 그레이박스/청사진 로우파이 와이어프레임. 중성 회색 블록, 대각선 십자 X 이미지 플레이스홀더, lorem 바 텍스트, 도식적 차트 패널, 12열 그리드의 등폭 레드라인 주석. '그레이박스', '청사진 와이어프레임', '로우파이 대시보드', '저충실도' 등의 요구사항에 적합.",
+    "de": "Ein klares Greybox-/Blueprint-Lo-Fi-Wireframe eines Desktop-SaaS-Dashboards — neutrale graue Blöcke, Bildplatzhalter mit Diagonalkreuz, Lorem-Balken-Text, ein schematisches Diagrammpanel und Monospace-Redline-Anmerkungen auf einem 12-Spalten-Raster. Ideal für Anfragen nach Greybox, Blueprint-Wireframe, Lo-Fi-Dashboard oder Low Fidelity.",
+    "fr": "Un wireframe greybox / blueprint lo-fi épuré d'un tableau de bord SaaS desktop — blocs gris neutres, espaces réservés d'image avec une croix diagonale, texte en barres lorem, panneau de graphique schématique et annotations redline monospace sur une grille à 12 colonnes. Idéal pour les demandes de greybox, wireframe blueprint, dashboard lo-fi ou basse fidélité.",
+    "ru": "Чёткий грейбокс/блюпринт lo-fi вайрфрейм десктопного SaaS-дашборда — нейтральные серые блоки, плейсхолдеры изображений с диагональным крестом, текст в виде lorem-полос, схематичная панель графика и моноширинные redline-аннотации на 12-колоночной сетке. Подходит для запросов «грейбокс», «блюпринт-вайрфрейм», «lo-fi дашборд», «низкая детализация».",
+    "es": "Un wireframe greybox / blueprint lo-fi nítido de un panel SaaS de escritorio — bloques grises neutros, marcadores de imagen con una cruz diagonal, texto en barras lorem, un panel de gráfico esquemático y anotaciones redline monoespaciadas en una cuadrícula de 12 columnas. Ideal para solicitudes de greybox, wireframe blueprint, dashboard lo-fi o baja fidelidad.",
+    "pt-BR": "Um wireframe greybox / blueprint lo-fi nítido de um dashboard SaaS desktop — blocos cinza neutros, placeholders de imagem com um X diagonal, texto em barras lorem, um painel de gráfico esquemático e anotações redline monoespaçadas em uma grade de 12 colunas. Ideal para solicitações de greybox, wireframe blueprint, dashboard lo-fi ou baixa fidelidade.",
+    "it": "Un wireframe greybox / blueprint lo-fi nitido di una dashboard SaaS desktop — blocchi grigi neutri, segnaposto immagine con una croce diagonale, testo a barre lorem, un pannello grafico schematico e annotazioni redline monospace su una griglia a 12 colonne. Ideale per richieste di greybox, wireframe blueprint, dashboard lo-fi o bassa fedeltà.",
+    "vi": "Một wireframe greybox / blueprint lo-fi gọn gàng cho bảng điều khiển SaaS desktop — khối xám trung tính, ô giữ chỗ hình ảnh với dấu chéo X, văn bản dạng thanh lorem, bảng biểu đồ sơ đồ và chú thích redline đơn cách trên lưới 12 cột. Phù hợp cho yêu cầu greybox, wireframe blueprint, dashboard lo-fi hoặc độ trung thực thấp.",
+    "pl": "Wyrazisty greybox / blueprint lo-fi wireframe pulpitu SaaS na desktop — neutralne szare bloki, placeholdery obrazów z przekątnym krzyżem X, tekst w paskach lorem, schematyczny panel wykresu i monospace'owe adnotacje redline na siatce 12-kolumnowej. Idealny do zapytań o greybox, wireframe blueprint, dashboard lo-fi lub niską wierność.",
+    "id": "Wireframe greybox / blueprint lo-fi yang tajam untuk dashboard SaaS desktop — blok abu-abu netral, placeholder gambar dengan tanda silang diagonal, teks bilah lorem, panel grafik skematik, dan anotasi redline monospace pada grid 12 kolom. Cocok untuk permintaan greybox, wireframe blueprint, dashboard lo-fi, atau fidelitas rendah.",
+    "nl": "Een strak greybox / blueprint lo-fi wireframe van een desktop SaaS-dashboard — neutrale grijze blokken, afbeeldingplaceholders met een diagonaal kruis, lorem-balk tekst, een schematisch grafiekpaneel en monospace redline-annotaties op een 12-koloms raster. Ideaal voor verzoeken naar greybox, blueprint-wireframe, lo-fi dashboard of low fidelity.",
+    "ar": "إطار سلكي greybox / مخطط أزرق منخفض الدقة وواضح للوحة معلومات SaaS لسطح المكتب — كتل رمادية محايدة، عناصر نائبة للصور مع علامة X قطرية، نص بأشرطة lorem، لوحة مخطط تخطيطية، وتعليقات redline أحادية المسافة على شبكة من 12 عمودًا. مثالي لطلبات greybox أو الإطار السلكي المخطط أو لوحة المعلومات منخفضة الدقة أو الدقة المنخفضة.",
+    "tr": "Bir masaüstü SaaS panosunun keskin bir greybox / blueprint lo-fi wireframe'i — nötr gri bloklar, çapraz X işaretli görsel yer tutucuları, lorem çubuğu metin, şematik bir grafik paneli ve 12 sütunlu ızgarada tek aralıklı redline açıklamaları. Greybox, blueprint wireframe, lo-fi pano veya düşük çözünürlük talepleri için ideal.",
+    "uk": "Чіткий грейбокс/блюпринт lo-fi вайрфрейм десктопної SaaS-панелі — нейтральні сірі блоки, плейсхолдери зображень із діагональним хрестом, текст у вигляді lorem-смуг, схематична панель графіка та моноширинні redline-анотації на 12-колонковій сітці. Підходить для запитів «грейбокс», «блюпринт-вайрфрейм», «lo-fi панель», «низька деталізація».",
+    "en": "A crisp greybox / blueprint lo-fi wireframe of a desktop SaaS dashboard — neutral grey blocks, image placeholders with a diagonal-cross X, lorem-bar text, a schematic chart panel, and monospace redline annotations on a 12-column grid. Use when the brief asks for \"greybox\", \"blueprint wireframe\", \"lo-fi dashboard\", \"low fidelity\", \"线框图\", or \"灰盒原型\"."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/wireframe-greybox",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "wireframe",
+    "greybox",
+    "blueprint-wireframe",
+    "lo-fi-dashboard",
+    "low-fidelity",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Lay out a greybox lo-fi wireframe of a SaaS dashboard — sidebar nav, a 4-up KPI row, a schematic chart panel, and a list table, with monospace redline annotations on a 12-column grid.",
+        "zh-CN": "使用这个插件完成以下任务：布局一个 SaaS 仪表盘的灰盒低保真线框图——侧边栏导航、4 个一组的 KPI 行、示意图表面板和列表表格，并在 12 栏栅格上配以等宽 redline 标注。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Wireframe Greybox"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

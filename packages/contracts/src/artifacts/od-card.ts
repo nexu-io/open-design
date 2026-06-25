@@ -30,18 +30,20 @@
 // is complete-only (no partial-JSON repair); a still-streaming, not-yet-closed
 // block is stripped by `stripTrailingOpenOdCard` so raw markup never flashes.
 
-/** The four card kinds. Mirrors the `type` attribute and the payload `kind`. */
+/** The card kinds. Mirrors the `type` attribute and the payload `kind`. */
 export type OdCardKind =
   | 'task-brief'
   | 'memory-applied'
   | 'verify-scorecard'
-  | 'rule-proposal';
+  | 'rule-proposal'
+  | 'brand-browser-assist';
 
 export const OD_CARD_KINDS: readonly OdCardKind[] = [
   'task-brief',
   'memory-applied',
   'verify-scorecard',
   'rule-proposal',
+  'brand-browser-assist',
 ] as const;
 
 /** A single labelled fact row used by the task-brief card. */
@@ -119,11 +121,28 @@ export interface OdCardRuleProposal {
   rationale?: string;
 }
 
+/** A client-action card shown when brand extraction is blocked by an anti-bot
+ *  wall: it asks the user to solve the challenge in the in-app browser tab, then
+ *  its Confirm button (handled client-side, NOT round-tripped to the agent)
+ *  reads the unblocked DOM and re-runs extraction from it. */
+export interface OdCardBrandBrowserAssist {
+  kind: 'brand-browser-assist';
+  /** Brand whose extraction to re-run from the rendered page. */
+  brandId: string;
+  /** In-app browser tab to harvest from. Defaults to the brand browser tab. */
+  browserTabId?: string;
+  /** Page URL, shown to the user and used as the extraction base URL. */
+  url?: string;
+  /** Human label for the wall that blocked extraction (e.g. "Cloudflare"). */
+  reason?: string;
+}
+
 export type OdCard =
   | OdCardTaskBrief
   | OdCardMemoryApplied
   | OdCardVerifyScorecard
-  | OdCardRuleProposal;
+  | OdCardRuleProposal
+  | OdCardBrandBrowserAssist;
 
 export type OdCardSegment =
   | { kind: 'text'; text: string }
@@ -267,6 +286,8 @@ export function tryParseOdCard(
       return parseVerifyScorecard(obj);
     case 'rule-proposal':
       return parseRuleProposal(obj);
+    case 'brand-browser-assist':
+      return parseBrandBrowserAssist(obj);
     default:
       return null;
   }
@@ -406,6 +427,23 @@ function parseRuleProposal(
     check: check || assertion,
     ...(description ? { description } : {}),
     ...(rationale ? { rationale } : {}),
+  };
+}
+
+function parseBrandBrowserAssist(
+  obj: Record<string, unknown>,
+): OdCardBrandBrowserAssist | null {
+  const brandId = str(obj.brandId);
+  if (!brandId) return null;
+  const browserTabId = str(obj.browserTabId);
+  const url = str(obj.url);
+  const reason = str(obj.reason);
+  return {
+    kind: 'brand-browser-assist',
+    brandId,
+    ...(browserTabId ? { browserTabId } : {}),
+    ...(url ? { url } : {}),
+    ...(reason ? { reason } : {}),
   };
 }
 

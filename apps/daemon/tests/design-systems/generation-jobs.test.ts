@@ -67,7 +67,7 @@ describe('design system generation jobs', () => {
       'succeeded',
     ]);
     expect(done.steps.map((step) => step.message).join('\n')).toContain(
-      '1 GitHub link(s)',
+      '1 GitHub repo link(s)',
     );
   });
 

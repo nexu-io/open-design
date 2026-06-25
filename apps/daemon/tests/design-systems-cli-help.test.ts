@@ -23,6 +23,7 @@ describe('od design-systems help surface', () => {
     expect(DESIGN_SYSTEMS_USAGE).toContain('list');
     expect(DESIGN_SYSTEMS_USAGE).toContain('show');
     expect(DESIGN_SYSTEMS_USAGE).toContain('rename');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('download');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-local');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-github');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-shadcn');

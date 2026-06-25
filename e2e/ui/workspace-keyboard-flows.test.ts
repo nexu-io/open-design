@@ -109,7 +109,13 @@ test('[P0] workspace tab launcher creates a Browser tab on the reference board h
   await page.getByTestId('workspace-add-tab').click();
   await expect(page.getByTestId('tab-launcher-menu')).toBeVisible();
   await expect(page.getByTestId('tab-launcher-search')).toBeFocused();
-  await page.getByRole('button', { name: /New Browser/i }).click();
+  // Scope to the launcher menu: the reference-board home now also renders a
+  // "New Browser" empty-state CTA (design-files-empty-open-browser), so an
+  // unscoped /New Browser/i matches two buttons.
+  await page
+    .getByTestId('tab-launcher-menu')
+    .getByRole('button', { name: /New Browser/i })
+    .click();
 
   const browserTab = page.getByTestId('file-workspace').getByRole('tab', { name: /^Browser\b/i });
   await expect(browserTab).toBeVisible();

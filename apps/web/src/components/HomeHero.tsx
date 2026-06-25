@@ -34,16 +34,16 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import {
-  trackComposerSessionModeClick,
-  trackHomeChatComposerClick,
-} from '../analytics/events';
-import { sessionModeToTracking } from '@open-design/contracts/analytics';
+import { trackHomeChatComposerClick } from '../analytics/events';
 import {
   chipsForGroup,
+  orderedCreateChips,
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
+import { homeHeroChipLabel } from './home-hero/chip-labels';
+import { ScenarioArt } from './home-hero/ScenarioArt';
+import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
 import {
   isSubChipParent,
   subChipsForChip,
@@ -74,8 +74,13 @@ import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
-import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { SessionModeToggle } from './SessionModeToggle';
+import { TemplatePicker } from './home-hero/TemplatePicker';
+import { LibraryPicker } from './LibraryPicker';
+import { assetTitle } from './LibraryAssetMeta';
+import { libraryAssetRawUrl } from '../providers/registry';
+import type { LibraryAsset } from '@open-design/contracts';
 import { WorkingDirPicker } from './WorkingDirPicker';
 import {
   LexicalComposerInput,
@@ -83,6 +88,12 @@ import {
   type CaretRect,
 } from './composer/LexicalComposerInput';
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
+import { PlaceholderCarousel } from './home-hero/PlaceholderCarousel';
+import {
+  PLACEHOLDER_BASE_HINT_KEY,
+  PLACEHOLDER_SCENARIO_DEFS,
+  type PlaceholderScenario,
+} from './home-hero/placeholderScenarios';
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -116,6 +127,10 @@ interface Props {
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
+  // Send pressed on an EMPTY composer while the placeholder carousel is
+  // showing: the host seeds the prompt with `scenario.text`, binds the
+  // scenario's template, and creates the project — one-click "just start".
+  onSubmitScenario?: (scenario: PlaceholderScenario) => void;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
@@ -154,9 +169,16 @@ interface Props {
   inlineEditableInputNames?: string[];
   footerInputNames?: string[];
   designSystems?: DesignSystemSummary[];
+  // Persistent design-system selection, surfaced as a borderless picker in the
+  // row below the composer (next to the working-directory picker) so it is
+  // available for every product kind. `null` = "No design system".
+  selectedDesignSystemId?: string | null;
+  onDesignSystemChange?: (id: string | null) => void;
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
+  /** Opens the "Import from Figma" dialog; omit to hide the menu entry. */
+  onImportFigma?: () => void;
   pluginOptions: InstalledPluginRecord[];
   pluginsLoading: boolean;
   skillOptions?: SkillSummary[];
@@ -186,6 +208,9 @@ interface Props {
   onSelectRecentWorkingDir?: (dir: string) => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
+  // "…or start a blank project" — creates an empty project directly (no dialog,
+  // no design system / template / prompt) and enters it. Omit to hide the link.
+  onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
 }
 
@@ -238,6 +263,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     prompt,
     onPromptChange,
     onSubmit,
+    onSubmitScenario = () => undefined,
     firstRunGuide,
     sessionMode = 'design',
     onSessionModeChange,
@@ -266,8 +292,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPluginInputValuesChange = () => undefined,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystems = EMPTY_DESIGN_SYSTEMS,
+    selectedDesignSystemId = null,
+    onDesignSystemChange,
     stagedFiles = EMPTY_STAGED_FILES,
     onAddFiles = () => undefined,
+    onImportFigma,
     onRemoveFile = () => undefined,
     pluginOptions,
     pluginsLoading,
@@ -295,6 +324,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onSelectRecentWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
+    onStartBlankProject,
     executionSwitcher,
   },
   ref,
@@ -305,6 +335,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Two-flash attention pulse on the send button; armed via the
   // imperative `pulseSend()` handle, cleared when the animation ends.
@@ -317,6 +348,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // Local-only: it filters the example-prompt cards below the rail. It never
   // binds a plugin or stamps an active badge.
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  // Footer Template pill preview: the create-rail card the pointer is over,
+  // so hovering a card below previews it in the pill (cleared on rail-leave).
+  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
+  // A committed pick or Clear must win over a lingering hover-preview. The rail
+  // that sets previewTemplateId unmounts the instant a template becomes active,
+  // so its onMouseLeave never fires; without this reset the stale preview keeps
+  // the pill showing the old template even after Clear nulls the value.
+  useEffect(() => {
+    setPreviewTemplateId(null);
+  }, [activeChipId]);
   const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const [previewHomeFileKey, setPreviewHomeFileKey] = useState<string | null>(null);
   const [stagedFilePreviewUrls, setStagedFilePreviewUrls] = useState<Map<string, string>>(() => new Map());
@@ -324,6 +365,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // getContextMention regex) + the caret box the popover anchors to.
   const [mentionTrigger, setMentionTrigger] = useState<{ query: string } | null>(null);
   const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
+  // The scenario the placeholder carousel is currently showing. A Send on an
+  // empty composer submits THIS scenario's text + template (see handleSend).
+  const [carouselScenario, setCarouselScenario] = useState<PlaceholderScenario | null>(null);
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const mentionPickerRef = useRef<HTMLDivElement | null>(null);
@@ -341,6 +385,55 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     : t('homeHero.placeholder');
   const mentionActive = Boolean(mentionTrigger);
   const mentionQuery = mentionTrigger?.query ?? '';
+  // Scenarios the carousel cycles, with copy resolved through `t()` so the
+  // typed placeholder AND the submitted query follow the locale. With a
+  // create-template chip selected we narrow to that template's scenarios (so
+  // the suggestions match the picked output and a submit keeps that template);
+  // with nothing bound we cycle the full set. Memoised by chip + locale so the
+  // reference only changes on a real switch, which restarts the carousel.
+  const carouselScenarios = useMemo<PlaceholderScenario[]>(() => {
+    const resolved = PLACEHOLDER_SCENARIO_DEFS.map((def) => ({
+      id: def.id,
+      chipId: def.chipId,
+      text: t(def.textKey),
+    }));
+    return activeChipId
+      ? resolved.filter((scenario) => scenario.chipId === activeChipId)
+      : resolved;
+  }, [activeChipId, t]);
+  // The placeholder carousel runs while the composer is empty and nothing
+  // OTHER than a create-template chip is bound. A selected template keeps it
+  // alive (showing that template's scenarios); only an explicit plugin/skill
+  // pick — which owns its own placeholder — or a non-empty composer stops it.
+  // Media/live-artifact templates carry no scenarios, so the pool is empty and
+  // the editor falls back to its own placeholder there.
+  const carouselActive =
+    active &&
+    !submitting &&
+    !submitDisabled &&
+    prompt.trim().length === 0 &&
+    stagedFiles.length === 0 &&
+    !activeSkillTitle &&
+    !activePluginIsExplicit &&
+    !mentionActive &&
+    carouselScenarios.length > 0;
+  // Empty composer, but the carousel is offering a runnable scenario from the
+  // CURRENT pool: Send stays highlighted and submits that scenario instead of
+  // sitting disabled. The membership check guards the brief window after a
+  // template switch before the carousel reports the new pool's first scenario.
+  const carouselSubmittable =
+    carouselActive &&
+    carouselScenario !== null &&
+    carouselScenarios.some((scenario) => scenario.id === carouselScenario.id);
+  const sendEnabled = canSubmit || carouselSubmittable;
+  function handleSend() {
+    if (submitting || submitDisabled) return;
+    if (canSubmit) {
+      onSubmit();
+      return;
+    }
+    if (carouselSubmittable && carouselScenario) onSubmitScenario(carouselScenario);
+  }
   const fileMatches = useMemo(
     () =>
       mentionActive
@@ -521,6 +614,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       : null,
     [activeChipId],
   );
+  // Footer Template picker options: the ordered create-scenario chips (pure
+  // project-type templates — Slides / Prototype / Wireframe / Document / …).
+  // Excludes action chips (Brand Kit / Figma) that navigate away instead of
+  // seeding a template, so the dropdown matches the rail's template set.
+  const templateChips = useMemo(
+    () => orderedCreateChips().filter((chip) => chip.action.kind === 'apply-scenario'),
+    [],
+  );
   const activeExamplePlugins = useMemo(
     () =>
       activeChipId
@@ -663,6 +764,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     const closeOnPointer = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && shortcutsMenuRef.current?.contains(target)) return;
+      // The dropdown is portaled to <body>, so it's outside shortcutsMenuRef;
+      // recognize it explicitly or a click on a menu item would close the menu
+      // before the item's handler runs.
+      if (target instanceof Element && target.closest('[data-shortcuts-panel]')) return;
       setShortcutsOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -861,6 +966,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onAddFiles(files);
   }
 
+  // "Import from library": the home composer has no project yet, so we fetch
+  // each picked asset's bytes and stage them as regular files. They ride the
+  // existing upload-on-submit path into the new project's design files.
+  async function importLibraryAssets(assets: LibraryAsset[]) {
+    const files: File[] = [];
+    for (const asset of assets) {
+      const file = await fileFromLibraryAsset(asset);
+      if (file) files.push(file);
+    }
+    handleFiles(files);
+  }
+
   function removeFileChip(index: number, file: File) {
     const nextPrompt = stripHomeMentionToken(prompt, file.name);
     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
@@ -1024,6 +1141,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                       className="home-hero__active-chip home-hero__active-chip--context home-hero__active-chip--file"
                       title={`${file.name} · ${formatFileSize(file.size)}`}
                     >
+                      <span className="home-hero__active-order" aria-label={`Attachment ${index + 1}`}>
+                        {index + 1}
+                      </span>
                       {previewUrl ? (
                         <button
                           type="button"
@@ -1198,8 +1318,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               ref={editorRef}
               testId="home-hero-input"
               draft={prompt}
-              placeholder={placeholder}
-              title={placeholder}
+              // While the carousel animates, blank the editor's own placeholder
+              // so it doesn't double under the overlay; keep the base hint as
+              // the accessible/tooltip label.
+              placeholder={carouselActive ? '' : placeholder}
+              title={carouselActive ? t(PLACEHOLDER_BASE_HINT_KEY) : placeholder}
               knownEntities={promptMentionEntities}
               onChange={(plainText) => {
                 // A programmatic seed (host setPrompt → draft prop →
@@ -1218,9 +1341,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 }
               }}
               onTrigger={handleTrigger}
-              onEnterSend={() => {
-                if (canSubmit) onSubmit();
-              }}
+              onEnterSend={handleSend}
               onPasteFiles={handleFiles}
               popoverOpen={pickerOpen && visiblePickerOptions.length > 0}
               onPopoverKey={handlePopoverKey}
@@ -1228,6 +1349,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 expanded: pickerOpen,
                 activeId: pickerOpen ? `home-hero-option-${selectedIndex}` : null,
               }}
+            />
+            <PlaceholderCarousel
+              active={carouselActive}
+              scenarios={carouselScenarios}
+              onScenarioChange={setCarouselScenario}
             />
           </div>
         </div>
@@ -1437,10 +1563,46 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 fileInputRef.current?.click();
               }}
+              onSelectFromLibrary={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'library',
+                });
+                setLibraryPickerOpen(true);
+              }}
+              onImportFigma={onImportFigma ? () => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'figma_import',
+                });
+                onImportFigma();
+              } : undefined}
             />
-            {activeCreateChip ? (
-              <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
+            {libraryPickerOpen ? (
+              <LibraryPicker
+                onClose={() => setLibraryPickerOpen(false)}
+                onConfirm={(assets) => importLibraryAssets(assets)}
+              />
             ) : null}
+            <TemplatePicker
+              templates={templateChips}
+              activeChipId={activeChipId}
+              previewChipId={previewTemplateId}
+              disabled={pluginsLoading}
+              pickDisabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
+              labelFor={(id) => homeHeroChipLabel(id, t)}
+              descriptionFor={(id) => homeHeroChipDescription(id, t)}
+              onPick={handlePickTaskChip}
+              onClear={() => {
+                // Drop any lingering hover-preview too: when the rail card was
+                // hovered but the active chip is still null, clearing the chip
+                // alone is a no-op and the pill would stay on the preview.
+                setPreviewTemplateId(null);
+                onClearActiveChip();
+              }}
+            />
             {footerInputFields.length > 0 ? (
               <div className="home-hero__footer-options" data-testid="home-hero-footer-options">
                 {footerInputFields.map((field) => (
@@ -1462,22 +1624,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
           </div>
           <div className="home-hero__foot-right">
-            <SessionModeToggle
-              mode={sessionMode}
-              onChange={(next) => {
-                if (next !== sessionMode) {
-                  trackComposerSessionModeClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'chat_composer',
-                    element: 'session_mode_toggle',
-                    mode_before: sessionModeToTracking(sessionMode),
-                    mode_after: sessionModeToTracking(next),
-                  });
-                }
-                onSessionModeChange?.(next);
-              }}
-              disabled={Boolean(submitDisabled)}
-            />
+            {onSessionModeChange ? (
+              <SessionModeToggle
+                mode={sessionMode}
+                onChange={onSessionModeChange}
+                disabled={submitting}
+              />
+            ) : null}
             {executionSwitcher ? (
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}
@@ -1487,11 +1640,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               type="button"
               className={`home-hero__submit od-tooltip${sendAttention ? ' home-hero__attention-sheen' : ''}${submitting ? ' is-sending' : ''}`}
               data-testid="home-hero-submit"
-              onClick={onSubmit}
+              onClick={handleSend}
               onAnimationEnd={() => setSendAttention(false)}
-              disabled={!canSubmit}
-              title={submitting ? t('chat.comments.sending') : canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-              data-tooltip={submitting ? t('chat.comments.sending') : canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              disabled={!sendEnabled}
+              title={submitting ? t('chat.comments.sending') : sendEnabled ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              data-tooltip={submitting ? t('chat.comments.sending') : sendEnabled ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
               aria-label={submitting ? t('chat.comments.sending') : t('homeHero.run')}
               aria-busy={submitting}
             >
@@ -1502,64 +1655,94 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </div>
       </div>
 
-      {onPickWorkingDir ? (
+      {onDesignSystemChange || onPickWorkingDir ? (
         <div className="home-hero__workdir-row">
-          <WorkingDirPicker
-            workingDir={workingDir}
-            recentDirs={recentDirs}
-            onPickDirectory={() => {
-              trackHomeChatComposerClick(analytics.track, {
-                page_name: 'home',
-                area: 'chat_composer',
-                element: 'working_dir',
-              });
-              onPickWorkingDir();
-            }}
-            onSelectRecent={(dir) => {
-              trackHomeChatComposerClick(analytics.track, {
-                page_name: 'home',
-                area: 'chat_composer',
-                element: 'working_dir_recent',
-              });
-              onSelectRecentWorkingDir?.(dir);
-            }}
-            onClear={() => {
-              trackHomeChatComposerClick(analytics.track, {
-                page_name: 'home',
-                area: 'chat_composer',
-                element: 'working_dir_clear',
-              });
-              onClearWorkingDir?.();
-            }}
-          />
+          {onDesignSystemChange ? (
+            <DesignSystemPicker
+              variant="home"
+              designSystems={designSystems}
+              selectedId={selectedDesignSystemId}
+              onChange={onDesignSystemChange}
+            />
+          ) : null}
+          {onDesignSystemChange && onPickWorkingDir ? (
+            <span className="home-hero__workdir-divider" aria-hidden />
+          ) : null}
+          {onPickWorkingDir ? (
+            <WorkingDirPicker
+              workingDir={workingDir}
+              recentDirs={recentDirs}
+              onPickDirectory={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'working_dir',
+                });
+                onPickWorkingDir();
+              }}
+              onSelectRecent={(dir) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'working_dir_recent',
+                });
+                onSelectRecentWorkingDir?.(dir);
+              }}
+              onClear={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'working_dir_clear',
+                });
+                onClearWorkingDir?.();
+              }}
+            />
+          ) : null}
         </div>
       ) : null}
 
       {activeCreateChip ? null : (
-        <RailGroup
-          group="create"
-          activeChipId={activeChipId}
-          pendingChipId={pendingChipId}
-          pendingPluginId={pendingPluginId}
-          pluginsLoading={pluginsLoading}
-          onPickChip={handlePickTaskChip}
-          variant="tabs"
-          pulseChipId={guidePulseChipId}
-        >
-          <ShortcutsMenu
+        <div className="home-hero__template-section" data-testid="home-hero-template-section">
+          <div className="home-hero__template-heading">
+            {t('homeHero.startWithTemplate')}
+          </div>
+          <RailGroup
+            group="create"
             activeChipId={activeChipId}
             pendingChipId={pendingChipId}
             pendingPluginId={pendingPluginId}
             pluginsLoading={pluginsLoading}
-            open={shortcutsOpen}
-            refNode={shortcutsMenuRef}
-            onOpenChange={setShortcutsOpen}
-            onPickChip={(chip) => {
-              setShortcutsOpen(false);
-              handlePickTaskChip(chip);
-            }}
-          />
-        </RailGroup>
+            onPickChip={handlePickTaskChip}
+            variant="tabs"
+            pulseChipId={guidePulseChipId}
+            onHoverChip={setPreviewTemplateId}
+          >
+            <ShortcutsMenu
+              activeChipId={activeChipId}
+              pendingChipId={pendingChipId}
+              pendingPluginId={pendingPluginId}
+              pluginsLoading={pluginsLoading}
+              open={shortcutsOpen}
+              refNode={shortcutsMenuRef}
+              onOpenChange={setShortcutsOpen}
+              onPickChip={(chip) => {
+                setShortcutsOpen(false);
+                handlePickTaskChip(chip);
+              }}
+            />
+          </RailGroup>
+          {onStartBlankProject ? (
+            <button
+              type="button"
+              className="home-hero__blank-project"
+              data-testid="home-hero-blank-project"
+              onClick={onStartBlankProject}
+            >
+              {t('homeHero.startBlankProject')}
+              <Icon name="chevron-right" size={13} aria-hidden />
+            </button>
+          ) : null}
+        </div>
       )}
 
       {activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
@@ -1681,6 +1864,9 @@ function PluginPromptPresets({
   pulseFirstPreset?: boolean;
 }) {
   const { t } = useI18n();
+  // Same edge hover/click auto-scroll as the scenario rail, so this row is
+  // reachable without a trackpad when it overflows.
+  const edgeScroll = useEdgeAutoScroll(plugins.length);
   return (
     <div
       className="home-hero__prompt-examples home-hero__plugin-presets-wrap"
@@ -1689,20 +1875,27 @@ function PluginPromptPresets({
       <div className="home-hero__prompt-examples-title">
         {t('homeHero.promptExamples')}
       </div>
-      <div className="home-hero__plugin-presets" role="list">
-        {plugins.map((record, index) => (
-          <PluginPromptPresetCard
-            key={record.id}
-            chipId={chipId}
-            locale={locale}
-            record={record}
-            active={activePluginId === record.id}
-            pending={pendingPluginId === record.id}
-            disabled={pendingPluginId !== null}
-            pulse={pulseFirstPreset && index === 0}
-            onPick={onPick}
-          />
-        ))}
+      <div className="home-hero__rail-scroller">
+        <div
+          ref={edgeScroll.scrollRef}
+          className="home-hero__plugin-presets"
+          role="list"
+        >
+          {plugins.map((record, index) => (
+            <PluginPromptPresetCard
+              key={record.id}
+              chipId={chipId}
+              locale={locale}
+              record={record}
+              active={activePluginId === record.id}
+              pending={pendingPluginId === record.id}
+              disabled={pendingPluginId !== null}
+              pulse={pulseFirstPreset && index === 0}
+              onPick={onPick}
+            />
+          ))}
+        </div>
+        <EdgeScrollZones {...edgeScroll} />
       </div>
     </div>
   );
@@ -1740,32 +1933,33 @@ function PluginPromptPresetCard({
   // dark band above it (matches the Community gallery deck treatment).
   const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
   return (
-    <button
-      type="button"
-      className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}${pulse ? ' home-hero__attention-sheen' : ''}`}
-      data-testid="home-hero-plugin-preset"
-      data-plugin-id={record.id}
-      {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
-      role="listitem"
-      disabled={disabled}
-      onClick={() => onPick(record, chipId, seedPrompt)}
-    >
-      <span className="home-hero__plugin-preset-preview" aria-hidden>
-        <PreviewSurface
-          pluginId={record.id}
-          pluginTitle={localizePluginTitle(locale, record)}
-          preview={preview}
-        />
-        {active ? (
-          <span className="home-hero__plugin-preset-check" aria-hidden>
-            <Icon name="check" size={12} />
-          </span>
-        ) : null}
-      </span>
-      <span className="home-hero__plugin-preset-title">
-        {localizePluginTitle(locale, record)}
-      </span>
-    </button>
+    <span className="home-hero__plugin-preset-cell" role="listitem">
+      <button
+        type="button"
+        className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}${pulse ? ' home-hero__attention-sheen' : ''}`}
+        data-testid="home-hero-plugin-preset"
+        data-plugin-id={record.id}
+        {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
+        disabled={disabled}
+        onClick={() => onPick(record, chipId, seedPrompt)}
+      >
+        <span className="home-hero__plugin-preset-preview" aria-hidden>
+          <PreviewSurface
+            pluginId={record.id}
+            pluginTitle={localizePluginTitle(locale, record)}
+            preview={preview}
+          />
+          {active ? (
+            <span className="home-hero__plugin-preset-check" aria-hidden>
+              <Icon name="check" size={12} />
+            </span>
+          ) : null}
+        </span>
+        <span className="home-hero__plugin-preset-title">
+          {localizePluginTitle(locale, record)}
+        </span>
+      </button>
+    </span>
   );
 }
 
@@ -1778,6 +1972,45 @@ function promptExampleChipLabel(example: string): string {
 
 function homeFileKey(file: File, index: number): string {
   return `${file.name}-${file.size}-${file.lastModified}-${index}`;
+}
+
+const LIBRARY_MIME_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/svg+xml': 'svg',
+  'image/avif': 'avif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'text/html': 'html',
+  'text/css': 'css',
+  'text/plain': 'txt',
+  'application/json': 'json',
+  'font/woff2': 'woff2',
+  'font/woff': 'woff',
+  'font/ttf': 'ttf',
+  'font/otf': 'otf',
+};
+
+/** Fetch a library asset's bytes and wrap them in a named File for staging. */
+async function fileFromLibraryAsset(asset: LibraryAsset): Promise<File | null> {
+  try {
+    const resp = await fetch(libraryAssetRawUrl(asset.id));
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    let name =
+      asset.relPath?.split('/').pop() ||
+      assetTitle(asset).replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) ||
+      `library-${asset.id.slice(0, 8)}`;
+    if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
+      const ext = LIBRARY_MIME_EXT[(blob.type || asset.mime || '').toLowerCase()];
+      if (ext) name = `${name}.${ext}`;
+    }
+    return new File([blob], name, { type: blob.type || asset.mime || 'application/octet-stream' });
+  } catch {
+    return null;
+  }
 }
 
 function isImageFile(file: File): boolean {
@@ -2545,6 +2778,9 @@ interface RailGroupProps {
   variant?: 'rail' | 'tabs';
   // First-run guide: this chip carries the attention sheen.
   pulseChipId?: string | null;
+  // Hover-preview hook: the create rail reports which chip the pointer is over
+  // (or null on leave) so the footer Template picker can preview it.
+  onHoverChip?: (chipId: string | null) => void;
   children?: ReactNode;
 }
 
@@ -2557,57 +2793,124 @@ function RailGroup({
   onPickChip,
   variant = 'rail',
   pulseChipId = null,
+  onHoverChip,
   children,
 }: RailGroupProps) {
   const t = useT();
-  const chips = useMemo(() => chipsForGroup(group), [group]);
+  // The inline create rail leads with the slide deck and runs through the core
+  // build scenarios in a fixed order (see `orderedCreateChips`); every other
+  // group renders in catalog order.
+  const chips = useMemo(
+    () => (group === 'create' ? orderedCreateChips() : chipsForGroup(group)),
+    [group],
+  );
   const isTabs = variant === 'tabs';
-  return (
-    <div
-      className={
-        isTabs
-          ? `home-hero__type-tabs home-hero__type-tabs--${group}`
-          : `home-hero__rail-group home-hero__rail-group--${group}`
-      }
-      data-testid={isTabs ? 'home-hero-type-tabs' : undefined}
-      data-rail-group={group}
-      role={isTabs ? 'tablist' : undefined}
-      aria-label={isTabs ? t('homeHero.railAria') : undefined}
-    >
-      {chips.map((chip) => {
-        const isActive = activeChipId === chip.id;
-        const isPending = pendingChipId === chip.id;
-        const cls = isTabs
-          ? ['home-hero__type-tab', `home-hero__type-tab--${group}`]
-          : ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
-        if (isActive) cls.push('is-active');
-        if (isPending) cls.push('is-pending');
-        if (pulseChipId === chip.id) cls.push('home-hero__attention-sheen');
-        return (
-          <button
-            key={chip.id}
-            type="button"
-            className={cls.join(' ')}
-            data-chip-id={chip.id}
-            data-testid={`home-hero-rail-${chip.id}`}
-            onClick={() => onPickChip(chip)}
-            disabled={pluginsLoading || isPending || pendingPluginId !== null}
-            role={isTabs ? 'tab' : undefined}
-            aria-selected={isTabs ? isActive : undefined}
-            aria-pressed={isTabs ? undefined : isActive}
-            title={homeHeroChipTitle(chip, t)}
-          >
-            <Icon
-              name={chip.icon}
-              size={14}
-              className={isTabs ? 'home-hero__type-tab-icon' : 'home-hero__rail-chip-icon'}
-            />
-            <span className={isTabs ? 'home-hero__type-tab-label' : 'home-hero__rail-chip-label'}>
+
+  // Edge auto-scroll so the overflowing scenario rail stays reachable without a
+  // trackpad (see EdgeAutoScroll). Only the tabs variant scrolls; for the
+  // legacy rail variant scrollRef stays unattached and the hook is inert.
+  const edgeScroll = useEdgeAutoScroll(chips.length);
+
+  const cards = chips.map((chip) => {
+    const isActive = activeChipId === chip.id;
+    const isPending = pendingChipId === chip.id;
+    const disabled = pluginsLoading || isPending || pendingPluginId !== null;
+    const nextStep = homeHeroChipTitle(chip, t);
+    // Card variant (the default create rail): an illustrated scenario card —
+    // an intent thumbnail (ScenarioArt) + title + one-line description. The
+    // full "what happens next" sentence stays on the native `title` tooltip
+    // instead of an inline line that resized the card on hover. The legacy
+    // `rail`/pill markup is kept for any caller that still asks for `variant="rail"`.
+    if (isTabs) {
+      const description = homeHeroChipDescription(chip.id, t);
+      const cardCls = ['home-hero__type-tab', `home-hero__type-tab--${group}`, 'home-hero__scenario-card'];
+      if (isActive) cardCls.push('is-active');
+      if (isPending) cardCls.push('is-pending');
+      if (pulseChipId === chip.id) cardCls.push('home-hero__attention-sheen');
+      return (
+        <button
+          key={chip.id}
+          type="button"
+          className={cardCls.join(' ')}
+          data-chip-id={chip.id}
+          data-testid={`home-hero-rail-${chip.id}`}
+          onClick={() => onPickChip(chip)}
+          onMouseEnter={() => onHoverChip?.(chip.id)}
+          disabled={disabled}
+          role="tab"
+          aria-selected={isActive}
+          title={nextStep}
+        >
+          <span className="home-hero__scenario-card-art" aria-hidden>
+            <ScenarioArt chipId={chip.id} fallbackIcon={chip.icon} />
+          </span>
+          <span className="home-hero__scenario-card-body">
+            <span className="home-hero__scenario-card-title home-hero__type-tab-label">
               {homeHeroChipLabel(chip.id, t)}
             </span>
-          </button>
-        );
-      })}
+            {description ? (
+              <span className="home-hero__scenario-card-desc">{description}</span>
+            ) : null}
+          </span>
+        </button>
+      );
+    }
+    const cls = ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
+    if (isActive) cls.push('is-active');
+    if (isPending) cls.push('is-pending');
+    if (pulseChipId === chip.id) cls.push('home-hero__attention-sheen');
+    return (
+      <button
+        key={chip.id}
+        type="button"
+        className={cls.join(' ')}
+        data-chip-id={chip.id}
+        data-testid={`home-hero-rail-${chip.id}`}
+        onClick={() => onPickChip(chip)}
+        disabled={disabled}
+        aria-pressed={isActive}
+        title={nextStep}
+      >
+        <Icon
+          name={chip.icon}
+          size={14}
+          className="home-hero__rail-chip-icon"
+        />
+        <span className="home-hero__rail-chip-label">
+          {homeHeroChipLabel(chip.id, t)}
+        </span>
+      </button>
+    );
+  });
+
+  if (isTabs) {
+    return (
+      <div
+        className="home-hero__scenario-cards-wrap"
+        onMouseLeave={() => onHoverChip?.(null)}
+      >
+        <div
+          ref={edgeScroll.scrollRef}
+          className={`home-hero__type-tabs home-hero__type-tabs--${group} home-hero__scenario-cards`}
+          data-testid="home-hero-type-tabs"
+          data-rail-group={group}
+          role="tablist"
+          aria-label={t('homeHero.railAria')}
+        >
+          {cards}
+          {children}
+        </div>
+        <EdgeScrollZones {...edgeScroll} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`home-hero__rail-group home-hero__rail-group--${group}`}
+      data-rail-group={group}
+    >
+      {cards}
       {children}
     </div>
   );
@@ -2674,28 +2977,6 @@ function SubTypeRow({
   );
 }
 
-function ActiveTypeChip({ chip, onClear }: { chip: HomeHeroChip; onClear: () => void }) {
-  const t = useT();
-  return (
-    <button
-      type="button"
-      className="home-hero__active-type-chip is-active"
-      data-testid="home-hero-active-type-chip"
-      data-chip-id={chip.id}
-      title={homeHeroChipTitle(chip, t)}
-      aria-label={`${homeHeroChipLabel(chip.id, t)} ${t('common.delete')}`}
-      aria-pressed="true"
-      onClick={onClear}
-    >
-      <span className="home-hero__active-type-chip-icon" aria-hidden>
-        <Icon name={chip.icon} size={13} />
-      </span>
-      <span>{homeHeroChipLabel(chip.id, t)}</span>
-      <Icon name="close" size={12} className="home-hero__active-type-chip-close" />
-    </button>
-  );
-}
-
 interface ShortcutsMenuProps {
   activeChipId: string | null;
   pendingChipId: string | null;
@@ -2728,6 +3009,39 @@ function ShortcutsMenu({
     hasActiveShortcut ? 'is-active' : '',
     hasPendingShortcut ? 'is-pending' : '',
   ].filter(Boolean).join(' ');
+
+  // The trigger lives inside the horizontally-scrolling rail, whose
+  // `overflow-x: auto` also clips vertically — so an in-flow dropdown gets
+  // truncated. Portal the panel to the body with fixed positioning anchored to
+  // the trigger, and keep it aligned as the rail scrolls or the window resizes.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [panelPos, setPanelPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!open) {
+      setPanelPos(null);
+      return;
+    }
+    const update = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setPanelPos({
+        top: Math.round(rect.bottom + 6),
+        right: Math.round(window.innerWidth - rect.right),
+      });
+    };
+    update();
+    window.addEventListener('resize', update);
+    // Capture phase: scroll events don't bubble, so this is how the panel
+    // follows the trigger when the rail itself scrolls.
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
   return (
     <div
       ref={refNode}
@@ -2736,6 +3050,7 @@ function ShortcutsMenu({
       data-rail-group="migrate"
     >
       <button
+        ref={triggerRef}
         type="button"
         className={triggerClass}
         data-testid="home-hero-shortcuts-trigger"
@@ -2748,12 +3063,16 @@ function ShortcutsMenu({
       >
         <Icon name="more-horizontal" size={16} className="home-hero__type-tab-icon" />
       </button>
-      {open ? (
+      {open && panelPos
+        ? createPortal(
         <div
           className="home-hero__shortcut-menu-panel"
           role="menu"
           aria-label={t('homeHero.moreShortcuts')}
           data-testid="home-hero-shortcuts-menu"
+          data-shortcuts-panel=""
+          data-rail-group="migrate"
+          style={{ position: 'fixed', top: panelPos.top, right: panelPos.right }}
         >
           {shortcuts.map((chip) => {
             const isActive = activeChipId === chip.id;
@@ -2778,31 +3097,44 @@ function ShortcutsMenu({
               </button>
             );
           })}
-        </div>
-      ) : null}
+        </div>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }
 
-function homeHeroChipLabel(chipId: string, t: ReturnType<typeof useT>): string {
+// Scenario subtitle shown under the title on the illustrated card rail.
+function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
-    case 'prototype': return t('homeHero.chip.prototype');
-    case 'live-artifact': return t('homeHero.chip.liveArtifact');
-    case 'deck': return t('homeHero.chip.deck');
-    case 'image': return t('homeHero.chip.image');
-    case 'video': return t('homeHero.chip.video');
-    case 'hyperframes': return t('homeHero.chip.hyperframes');
-    case 'audio': return t('homeHero.chip.audio');
-    case 'create-brand-kit': return t('homeHero.chip.createBrandKit');
-    case 'create-plugin': return t('homeHero.chip.createPlugin');
-    case 'figma': return t('homeHero.chip.figma');
-    case 'template': return t('homeHero.chip.template');
-    default: return chipId;
+    case 'prototype': return t('homeHero.chip.prototypeDesc');
+    case 'wireframe': return t('homeHero.chip.wireframeDesc');
+    case 'mobile': return t('homeHero.chip.mobileDesc');
+    case 'deck': return t('homeHero.chip.deckDesc');
+    case 'document': return t('homeHero.chip.documentDesc');
+    case 'image': return t('homeHero.chip.imageDesc');
+    case 'video': return t('homeHero.chip.videoDesc');
+    case 'audio': return t('homeHero.chip.audioDesc');
+    case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
+    case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
+    case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
+    default: return '';
   }
 }
 
+// The hover "what happens next" line — describes how the scenario will be
+// consumed once picked (e.g. "Open a chat that builds a clickable prototype").
 function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): string {
   switch (chip.id) {
+    case 'prototype': return t('homeHero.chip.prototypeNext');
+    case 'wireframe': return t('homeHero.chip.wireframeNext');
+    case 'mobile': return t('homeHero.chip.mobileNext');
+    case 'deck': return t('homeHero.chip.deckNext');
+    case 'document': return t('homeHero.chip.documentNext');
+    case 'image': return t('homeHero.chip.imageNext');
+    case 'video': return t('homeHero.chip.videoNext');
+    case 'audio': return t('homeHero.chip.audioNext');
     case 'live-artifact': return t('homeHero.chip.liveArtifactHint');
     case 'hyperframes': return t('homeHero.chip.hyperframesHint');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitHint');
@@ -2894,6 +3226,40 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
+    case 'wireframe':
+      // Lo-fi / sketch / whiteboard explorations (e.g. wireframe-sketch).
+      return (
+        hasPart('wireframe') ||
+        has('low-fidelity', 'lo-fi-mockup', 'sketch-wireframe', 'whiteboard-sketch', 'hand-drawn')
+      );
+    case 'mobile':
+      // Native mobile app prototypes: iOS / Android phone screens.
+      return (
+        (hasPart('mobile') ||
+          has('ios-app', 'android-app', 'phone-screen', 'app-mockup', 'app-ui')) &&
+        !hasPart('video', 'audio', 'image', 'hyperframes')
+      );
+    case 'document':
+      // Documents: resumes, reports, invoices, papers, briefs, PDFs.
+      return (
+        (has('resume', 'cv', 'invoice', 'document', 'docs', 'report', 'paper') ||
+          hasPart(
+            'resume',
+            'documentation',
+            'invoice',
+            'report',
+            'whitepaper',
+            'academic-paper',
+            'case-report',
+            'meeting-notes',
+            'runbook',
+            'eguide',
+            'letter',
+            'dossier',
+            'memo',
+          )) &&
+        !hasPart('video', 'audio', 'hyperframes', 'deck', 'slides')
+      );
     case 'deck':
       return has('deck', 'slides', 'slide-deck') || hasPart('slide', 'deck');
     case 'hyperframes':
@@ -3151,6 +3517,24 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
       "Create a desktop dashboard for a team knowledge base with search, recent updates, permissions, and collaboration entry points",
       "Redesign onboarding for a financial SaaS product so new users can connect data, finish setup, and see first value fast",
       "Prototype a mobile fitness coaching app covering goal setup, weekly plans, workout check-ins, and progress review",
+    ],
+    wireframe: [
+      "Wireframe a SaaS dashboard with navigation, key metrics, a data table, and an empty state",
+      "Sketch the lo-fi flow for a checkout: cart, shipping, payment, and confirmation screens",
+      "Lay out a content management screen with list, detail, and edit states in greybox fidelity",
+      "Wireframe an onboarding wizard covering account, workspace, invite, and first-run steps",
+    ],
+    mobile: [
+      "Design a mobile banking app with home balance, transactions, transfer, and card management screens",
+      "Lay out a food delivery app covering browse, restaurant detail, cart, and order tracking",
+      "Prototype a habit-tracker app with today view, streak detail, add-habit, and stats screens",
+      "Design a messaging app with chat list, conversation, profile, and settings screens",
+    ],
+    document: [
+      "Draft a one-page resume for a senior product designer with summary, experience, skills, and selected work",
+      "Write a polished project proposal with problem, approach, timeline, and budget sections",
+      "Create a product one-pager covering the pitch, key features, pricing, and a call to action",
+      "Generate a tidy meeting brief with agenda, decisions, owners, and next steps",
     ],
     deck: [
       "Research the market opportunity for a product launch, including competitors, target users, pricing hypotheses, and launch narrative",
@@ -3894,6 +4278,12 @@ function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {
     case 'prototype':
       return { artifact_type: 'web prototype', audience: 'product evaluators', fidelity: 'high-fidelity' };
+    case 'wireframe':
+      return { artifact_type: 'lo-fi wireframe', audience: 'product team', fidelity: 'wireframe' };
+    case 'mobile':
+      return { artifact_type: 'mobile app prototype', audience: 'product evaluators', platform: 'iOS & Android' };
+    case 'document':
+      return { artifact_type: 'document (resume / report / PDF)', audience: 'readers' };
     case 'deck':
       return { artifact_type: 'pitch deck / presentation', audience: 'decision makers', slide_count: '10-15 pages' };
     case 'image':

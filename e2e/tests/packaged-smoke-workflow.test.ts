@@ -18,6 +18,8 @@ const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
+const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
@@ -373,6 +375,27 @@ describe("packaged smoke workflow", () => {
       expect(workflow).not.toContain("--field body=\"$(cat");
       expect(workflow).not.toContain("--field \"body=$(cat");
     }
+  });
+
+  it("[P2] keeps pull-request plugin preview baking secretless and read-only", async () => {
+    const [prWorkflow, postMergeWorkflow] = await Promise.all([
+      readFile(bakePluginPreviewsPrWorkflowPath, "utf8"),
+      readFile(bakePluginPreviewsWorkflowPath, "utf8"),
+    ]);
+
+    expect(prWorkflow).toContain("permissions:\n  contents: read");
+    expect(prWorkflow).toContain("Checkout PR head");
+    expect(prWorkflow).toContain("ref: ${{ github.event.pull_request.head.sha }}");
+    expect(prWorkflow).toContain("upload: 'false'");
+    expect(prWorkflow).toContain("post-merge bake will publish clips and open the rolling manifest PR");
+    expect(prWorkflow).not.toContain("contents: write");
+    expect(prWorkflow).not.toContain("PREVIEW_BAKE_TOKEN");
+    expect(prWorkflow).not.toContain("CLOUDFLARE_R2_REPOSITORY_ASSETS");
+    expect(prWorkflow).not.toContain("git push");
+
+    expect(postMergeWorkflow).toContain("permissions:\n  contents: write");
+    expect(postMergeWorkflow).toContain("CLOUDFLARE_R2_REPOSITORY_ASSETS_AK");
+    expect(postMergeWorkflow).toContain("PREVIEW_BAKE_TOKEN");
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {

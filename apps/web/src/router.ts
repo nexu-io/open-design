@@ -4,6 +4,7 @@
 // that in the URL is the simplest way to make it deep-linkable.
 
 import { useSyncExternalStore } from 'react';
+import { LIBRARY_UI_VISIBLE } from './features/libraryUi';
 
 // Entry-shell sub-views. The home/project landing renders one of three
 // columns and each sub-view now owns a top-level path so the browser
@@ -16,6 +17,7 @@ export type EntryHomeView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
+  | 'library'
   | 'brands'
   | 'integrations';
 
@@ -95,19 +97,19 @@ export function parseRoute(pathname: string): Route {
     return { kind: 'home', view: 'design-systems' };
   }
   if (parts[0] === 'brands') {
-    // The Brands tab shows everything inline in its preview panel; there is no
-    // separate detail view. A `/brands/:id` deep-link just preselects which
-    // brand the inline preview renders.
-    if (parts[1]) {
-      return { kind: 'home', view: 'brands', brandId: decodeURIComponent(parts[1]) };
-    }
-    return { kind: 'home', view: 'brands' };
+    // Brands merged into Design systems: a brand is a `user:<id>` design system
+    // and extraction now starts from the design-system create wizard. Legacy
+    // `/brands` and `/brands/:id` deep-links redirect onto the unified tab.
+    return { kind: 'home', view: 'design-systems' };
   }
   if (parts[0] === 'automations' || parts[0] === 'tasks') {
     return { kind: 'home', view: 'tasks' };
   }
   if (parts[0] === 'plugins' && !parts[1]) {
     return { kind: 'home', view: 'plugins' };
+  }
+  if (LIBRARY_UI_VISIBLE && parts[0] === 'library' && !parts[1]) {
+    return { kind: 'home', view: 'library' };
   }
   if (parts[0] === 'integrations') {
     return { kind: 'home', view: 'integrations' };
@@ -133,6 +135,7 @@ export function buildPath(route: Route): string {
     if (route.view === 'tasks') return '/automations';
     if (route.view === 'plugins') return '/plugins';
     if (route.view === 'design-systems') return '/design-systems';
+    if (route.view === 'library') return LIBRARY_UI_VISIBLE ? '/library' : '/';
     if (route.view === 'brands') {
       return route.brandId ? `/brands/${encodeURIComponent(route.brandId)}` : '/brands';
     }

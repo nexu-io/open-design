@@ -709,6 +709,10 @@
 /* Claude Code-style edit inspector panel. */
 .cc-panel { display: flex; flex-direction: column; gap: 0; padding: 8px 0; overflow: hidden; background: var(--bg-panel); }
 .cc-inspector { display: flex; flex-direction: column; gap: 12px; padding: 6px 12px; }
+.manual-edit-content-inspector {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
 .cc-section { display: flex; flex-direction: column; gap: 6px; }
 .cc-section-inactive { opacity: 0.58; }
 .cc-section-head {

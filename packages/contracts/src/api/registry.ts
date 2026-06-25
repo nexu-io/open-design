@@ -353,6 +353,7 @@ export interface DesignSystemResponse {
 
 export interface DesignSystemProvenance {
   companyBlurb?: string;
+  sourceUrls?: string[];
   githubUrls?: string[];
   localCodeFiles?: string[];
   figFiles?: string[];

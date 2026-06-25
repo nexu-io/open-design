@@ -15,6 +15,7 @@ import type { ProjectMetadata } from '@open-design/contracts';
 
 import { resolveProjectDir, writeProjectFile } from '../projects.js';
 import { fontFaceCss, readFontManifest } from './fonts.js';
+import { brandKitCopy, localizedBrandKitAssetDefs } from './kit-i18n.js';
 
 /** Location of the bundled template relative to the daemon's skills root. */
 const BRAND_KIT_TEMPLATE_REL = path.join('brand-extract', 'templates', 'brand-kit.html');
@@ -24,6 +25,8 @@ export const BRAND_KIT_FILE = 'brand.html';
 
 const PAYLOAD_TOKEN = '__OD_BRAND_PAYLOAD__';
 const FONTFACE_TOKEN = '__OD_BRAND_FONTFACE__';
+const LANG_TOKEN = '__OD_BRAND_LANG__';
+const TITLE_TOKEN = '__OD_BRAND_TITLE__';
 
 /** Token-engine fields the kit page surfaces as design-system chips. */
 interface BrandKitTokenSubset {
@@ -36,29 +39,11 @@ interface BrandKitTokenSubset {
 }
 
 interface BrandKitSystem {
-  indexHref: string | null;
   kitHref: string;
   kitDarkHref: string | null;
   themes: string[];
   tokens: BrandKitTokenSubset | null;
 }
-
-/** The six brand assets the deterministic system builder emits, in the order
- *  the kit page lists them. `href` is relative to `brand.html` at the project
- *  root so links resolve under the FileViewer's raw URL load. */
-export const BRAND_KIT_ASSET_DEFS: ReadonlyArray<{
-  kind: string;
-  label: string;
-  desc: string;
-  href: string;
-}> = [
-  { kind: 'landing', label: 'Landing page', desc: 'Hero, features, CTA — the brand’s web face', href: 'system/artifacts/landing.html' },
-  { kind: 'deck', label: 'Pitch deck', desc: '16:9 slides with keyboard navigation', href: 'system/artifacts/deck.html' },
-  { kind: 'poster', label: 'Poster', desc: 'Print-style key-art poster', href: 'system/artifacts/poster.html' },
-  { kind: 'email', label: 'Email', desc: 'Bulletproof table-layout HTML email', href: 'system/artifacts/email.html' },
-  { kind: 'newsletter', label: 'Newsletter', desc: 'Multi-story email digest', href: 'system/artifacts/newsletter.html' },
-  { kind: 'form', label: 'Form page', desc: 'Signup / contact form, brand-styled', href: 'system/artifacts/form.html' },
-];
 
 let cachedTemplate: { root: string; html: string } | null = null;
 
@@ -78,6 +63,8 @@ export interface BrandKitPayload {
   assets: Array<{ kind: string; label: string; desc: string; href: string; available: boolean }>;
   system: BrandKitSystem | null;
   brandMd: { href: string } | null;
+  locale?: string;
+  copy?: ReturnType<typeof brandKitCopy>;
 }
 
 /** Embed the payload (and optional self-hosted @font-face CSS) into the
@@ -100,7 +87,11 @@ export function renderBrandKitHtml(
     .split(PAYLOAD_TOKEN)
     .join(json)
     .split(FONTFACE_TOKEN)
-    .join(fontFace);
+    .join(fontFace)
+    .split(LANG_TOKEN)
+    .join(payload.copy?.lang ?? 'en')
+    .split(TITLE_TOKEN)
+    .join(payload.copy?.title ?? 'Brand Kit');
 }
 
 /** Read the six engine tokens the kit chips show from a tokens.default.json. */
@@ -125,7 +116,6 @@ function readTokenSubset(absPath: string): BrandKitTokenSubset | null {
 function readSystem(projectDir: string): BrandKitSystem | null {
   if (!fileExists(path.join(projectDir, 'system', 'kit.html'))) return null;
   return {
-    indexHref: fileExists(path.join(projectDir, 'system', 'index.html')) ? 'system/index.html' : null,
     kitHref: 'system/kit.html',
     kitDarkHref: fileExists(path.join(projectDir, 'system', 'kit.dark.html')) ? 'system/kit.dark.html' : null,
     themes: ['default', 'dark', 'compact'],
@@ -161,6 +151,7 @@ export interface WriteBrandKitOptions {
   /** Fallback host label before brand.sourceUrl is known. */
   host?: string;
   metadata?: ProjectMetadata;
+  locale?: string | null | undefined;
 }
 
 /**
@@ -185,7 +176,8 @@ export async function writeBrandKitPreview(opts: WriteBrandKitOptions): Promise<
   }
   const host = hostOf(opts.brand, opts.host ?? 'Brand');
   const brandMdAvailable = fileExists(path.join(projectDir, 'BRAND.md'));
-  const assets = BRAND_KIT_ASSET_DEFS.map((def) => ({
+  const copy = brandKitCopy(opts.locale);
+  const assets = localizedBrandKitAssetDefs(opts.locale).map((def) => ({
     kind: def.kind,
     label: def.label,
     desc: def.desc,
@@ -199,6 +191,8 @@ export async function writeBrandKitPreview(opts: WriteBrandKitOptions): Promise<
     assets,
     system: readSystem(projectDir),
     brandMd: brandMdAvailable ? { href: 'BRAND.md' } : null,
+    locale: copy.lang,
+    copy,
   };
   // Self-host the harvested webfonts (if any) so specimens + the kit render in
   // the brand's real typefaces; urls are relative to the project's fonts/.

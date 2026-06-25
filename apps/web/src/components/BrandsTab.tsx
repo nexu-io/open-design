@@ -63,9 +63,10 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
   }, [isBrandsView, refresh]);
 
   // While a brand is mid-extraction (or paused awaiting user input), poll so its
-  // card flips to the finalized preview — or back from `needs_input` once the
-  // user answers — without leaving and returning. Scoped to the active view and
-  // torn down once nothing is in-flight, so a hidden tab never polls.
+  // card flips from `extracting` to the finalized preview — or back from
+  // `needs_input` once the user answers — without leaving and returning. Scoped
+  // to the active view and torn down once nothing is in-flight, so a hidden tab
+  // never polls.
   const hasExtracting = useMemo(
     () =>
       (brands ?? []).some(
@@ -80,27 +81,15 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
   }, [isBrandsView, hasExtracting, refresh]);
 
   // The "Create Brand Kit" home chip routes here and asks the tab to open its
-  // New Brand Kit modal. EntryShell keeps BrandsTab mounted while hidden, so
-  // only consume the one-shot intent when the Brands view is actually active.
+  // New Brand Kit modal. BrandsTab stays mounted across view switches, so we
+  // react to the intent event; a pending latch left before mount is drained
+  // once on first render as a fallback.
   useEffect(() => {
-    if (isBrandsView && consumePendingNewBrandKit()) setModalOpen(true);
-  }, [isBrandsView]);
-
-  useEffect(() => {
-    if (!isBrandsView) {
-      setModalOpen(false);
-    }
-  }, [isBrandsView]);
-
-  useEffect(() => {
-    const openModal = () => {
-      if (!isBrandsView) return;
-      consumePendingNewBrandKit();
-      setModalOpen(true);
-    };
+    const openModal = () => setModalOpen(true);
+    if (consumePendingNewBrandKit()) openModal();
     window.addEventListener(NEW_BRAND_KIT_INTENT_EVENT, openModal);
     return () => window.removeEventListener(NEW_BRAND_KIT_INTENT_EVENT, openModal);
-  }, [isBrandsView]);
+  }, []);
 
   const filtered = useMemo(() => {
     const list = brands ?? [];
@@ -114,10 +103,9 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
   }, [brands, query]);
 
   // Resolve which brand the preview shows. A routed brand id (deep-link / rail
-  // selection) wins only when it is present in the reconciled list. If the
-  // route points at a brand that was just deleted or refreshed away, leave the
-  // detail pane empty instead of silently aiming panel actions at another
-  // brand while the URL still names the stale id.
+  // selection) wins when it exists; otherwise keep the current pick valid as
+  // the list refreshes (e.g. a brand finishes extracting or is removed), and
+  // fall back to the first entry only when the current pick is gone.
   useEffect(() => {
     const list = brands ?? [];
     if (list.length === 0) {
@@ -125,9 +113,7 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
       return;
     }
     setSelectedBrandId((cur) => {
-      if (routedBrandId) {
-        return list.some((b) => b.meta.id === routedBrandId) ? routedBrandId : null;
-      }
+      if (routedBrandId && list.some((b) => b.meta.id === routedBrandId)) return routedBrandId;
       if (cur && list.some((b) => b.meta.id === cur)) return cur;
       return list[0]?.meta.id ?? null;
     });
@@ -145,21 +131,11 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
     if (!selectedBrandId) return null;
     return (brands ?? []).find((b) => b.meta.id === selectedBrandId) ?? null;
   }, [brands, selectedBrandId]);
-  const selectedIsRouteSynced = Boolean(
-    selected && selected.meta.id === selectedBrandId && (!routedBrandId || routedBrandId === selected.meta.id),
-  );
 
   const handleCreated = useCallback(
     (_brandId: string, projectId: string, conversationId: string) => {
       setModalOpen(false);
       void refresh();
-      try {
-        // Auto-send the seeded extraction prompt so the agent starts the moment
-        // the project opens (same pattern as plugin-share / design-system handoff).
-        window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
-      } catch {
-        // Private-mode storage failures should not block navigation.
-      }
       navigate({ kind: 'project', projectId, fileName: null, conversationId });
     },
     [refresh],
@@ -239,10 +215,8 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
             summary={selected}
             variant="panel"
             onChanged={refresh}
-            onBeforeMutation={() => setSelectedBrandId(null)}
             onApplyDesignSystem={onApplyDesignSystem}
             onOpenProject={onOpenProject}
-            actionsDisabled={!selectedIsRouteSynced}
           />
         ) : isEmpty ? (
           <div className={styles.pickerPane} data-testid="brands-picker-pane">
@@ -284,7 +258,6 @@ function BrandListItem({ summary, active, onSelect }: ListItemProps) {
   const host = hostnameOf(meta.sourceUrl);
   const name = brand?.name?.trim() || host;
   const extracting = meta.status === 'extracting';
-  const needsInput = meta.status === 'needs_input';
   const failed = meta.status === 'failed';
 
   return (
@@ -309,13 +282,7 @@ function BrandListItem({ summary, active, onSelect }: ListItemProps) {
         <span className={styles.itemName}>{name}</span>
         <span className={styles.itemHost}>{host}</span>
       </span>
-      {needsInput ? (
-        <span
-          className={`${styles.statusDot} ${styles.statusDotNeedsInput}`}
-          title={t('brand.needsInput')}
-          aria-label={t('brand.needsInput')}
-        />
-      ) : extracting ? (
+      {extracting ? (
         <span
           className={`${styles.statusDot} ${styles.statusDotBusy}`}
           title={t('brand.extracting')}

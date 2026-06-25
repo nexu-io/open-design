@@ -71,6 +71,34 @@ describe('message event persistence', () => {
     ]);
   });
 
+  it('persists explicit message createdAt values on insert', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    const createdAt = now - 5_000;
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Timestamp project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-1',
+      projectId: 'proj-1',
+      title: 'Timestamp run',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    upsertMessage(db, 'conv-1', {
+      id: 'message-1',
+      role: 'user',
+      content: 'started earlier',
+      createdAt,
+    });
+
+    expect(listMessages(db, 'conv-1')[0]?.createdAt).toBe(createdAt);
+  });
+
   it('appends agent events and mirrors text deltas into message content', () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const now = Date.now();

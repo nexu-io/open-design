@@ -3,9 +3,9 @@ import { writeFile } from "node:fs/promises";
 import { BrowserWindow, dialog } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
-type PageSize = { height: number; width: number };
+export type PageSize = { height: number; width: number };
 
-const DECK_PAGE_SIZE: PageSize = { width: 13.333333, height: 7.5 };
+export const DECK_PAGE_SIZE: PageSize = { width: 13.333333, height: 7.5 };
 const MAX_PAGE_INCHES = 200;
 
 export type PrintReadyPdfOptions = {
@@ -19,7 +19,7 @@ type PrintToPdfOptions = {
   printBackground: boolean;
 };
 
-const DECK_PRINT_CSS = `
+export const DECK_PRINT_CSS = `
 @media print {
   @page { size: 1920px 1080px; margin: 0; }
   html, body {

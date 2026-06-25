@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
+import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
@@ -57,6 +58,10 @@ interface Props {
   onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
   onNewSketch: () => void;
+  onOpenBrowser?: () => void;
+  onCreateDesignSystem?: () => void;
+  /** Opens the "Select from library" picker to pull registry assets in. */
+  onSelectFromLibrary?: () => void;
   // Reports the folder the panel is currently viewing so the parent can create
   // new files (upload / paste / new sketch / dropped files) under it instead
   // of the project root. Fires whenever the user navigates folders.
@@ -282,6 +287,9 @@ export function DesignFilesPanel({
   onUploadFiles,
   onPaste,
   onNewSketch,
+  onOpenBrowser,
+  onCreateDesignSystem,
+  onSelectFromLibrary,
   uploadError = null,
   onClearUploadError,
   preferredPreviewFile = null,
@@ -803,6 +811,17 @@ export function DesignFilesPanel({
 
   const fileActions = (
     <div className="df-actions">
+      {LIBRARY_UI_VISIBLE && onSelectFromLibrary ? (
+        <button
+          type="button"
+          data-testid="design-files-library-trigger"
+          onClick={onSelectFromLibrary}
+          title={t('designFiles.library.title')}
+        >
+          <Icon name="layers-filled" size={13} />
+          <span>{t('designFiles.library.label')}</span>
+        </button>
+      ) : null}
       <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
         <Icon name="pencil" size={13} />
         <span>{t('designFiles.newSketch')}</span>
@@ -961,16 +980,43 @@ export function DesignFilesPanel({
                 <span className="df-empty-title">
                   {t('designFiles.empty')}
                 </span>
-                <button
-                  type="button"
-                  className="df-empty-cta"
-                  data-testid="design-files-empty-new-sketch"
-                  onClick={onNewSketch}
-                  title={t('designFiles.newSketch')}
-                >
-                  <Icon name="pencil" size={13} />
-                  <span>{t('designFiles.newSketch')}</span>
-                </button>
+                <div className="df-empty-actions">
+                  <button
+                    type="button"
+                    className="df-empty-cta df-empty-cta-primary"
+                    data-testid="design-files-empty-new-sketch"
+                    onClick={onNewSketch}
+                    title={t('designFiles.newSketch')}
+                  >
+                    <Icon name="pencil" size={13} />
+                    <span>{t('designFiles.newSketch')}</span>
+                  </button>
+                  {onOpenBrowser ? (
+                    <button
+                      type="button"
+                      className="df-empty-cta df-empty-cta-secondary"
+                      data-testid="design-files-empty-open-browser"
+                      onClick={onOpenBrowser}
+                      aria-label={t('workspace.newBrowserDescription')}
+                      title={t('workspace.newBrowserDescription')}
+                    >
+                      <Icon name="globe" size={13} />
+                      <span>{t('workspace.newBrowser')}</span>
+                    </button>
+                  ) : null}
+                  {onCreateDesignSystem ? (
+                    <button
+                      type="button"
+                      className="df-empty-cta df-empty-cta-tertiary"
+                      data-testid="design-files-empty-create-design-system"
+                      onClick={onCreateDesignSystem}
+                      title={t('dsManager.createTitle')}
+                    >
+                      <Icon name="blocks" size={13} />
+                      <span>{t('dsManager.createTitle')}</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : (

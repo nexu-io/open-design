@@ -23,6 +23,7 @@ export type IconName =
   | 'eye-off'
   | 'file'
   | 'file-code'
+  | 'file-text'
   | 'folder'
   | 'folder-filled'
   | 'fork'
@@ -42,6 +43,7 @@ export type IconName =
   | 'kanban'
   | 'layers-filled'
   | 'languages'
+  | 'layout'
   | 'lightbulb'
   | 'link'
   | 'log-out'
@@ -71,6 +73,7 @@ export type IconName =
   | 'settings'
   | 'share'
   | 'sliders'
+  | 'smartphone'
   | 'spinner'
   | 'sparkles'
   | 'stop'
@@ -485,10 +488,10 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       );
     case 'more-horizontal':
       return (
-        <svg {...common}>
-          <circle cx="5" cy="12" r="1.4" />
-          <circle cx="12" cy="12" r="1.4" />
-          <circle cx="19" cy="12" r="1.4" />
+        <svg {...common} fill="currentColor" stroke="none">
+          <circle cx="5.5" cy="12" r="1.75" />
+          <circle cx="12" cy="12" r="1.75" />
+          <circle cx="18.5" cy="12" r="1.75" />
         </svg>
       );
     case 'orbit':
@@ -536,6 +539,32 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" />
+        </svg>
+      );
+    case 'layout':
+      // Dashboard/wireframe frame: outer card with a header band and a
+      // sidebar column — reads as "lo-fi screen layout" at small sizes.
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+          <path d="M9 21V9" />
+        </svg>
+      );
+    case 'smartphone':
+      return (
+        <svg {...common}>
+          <rect x="5" y="2" width="14" height="20" rx="2.5" />
+          <path d="M11 18h2" />
+        </svg>
+      );
+    case 'file-text':
+      return (
+        <svg {...common}>
+          <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+          <path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+          <path d="M8 13h8" />
+          <path d="M8 17h6" />
         </svg>
       );
     case 'plus':

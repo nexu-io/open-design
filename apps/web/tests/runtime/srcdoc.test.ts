@@ -45,10 +45,10 @@ describe('buildSrcdoc', () => {
     // clipboards/viewers (the reported bug). The bridge must fill first.
     expect(srcdoc).toContain('function snapshotBackgroundColor()');
     expect(srcdoc).toContain('ctx.fillStyle = bgColor;');
-    expect(srcdoc).toContain('ctx.fillRect(0, 0, w, h);');
+    expect(srcdoc).toContain('ctx.fillRect(0, 0, capW, capH);');
     // The fill happens before the rasterized image is drawn over it.
-    const fillIdx = srcdoc.indexOf('ctx.fillRect(0, 0, w, h);');
-    const drawIdx = srcdoc.indexOf('ctx.drawImage(img, 0, 0, w, h);');
+    const fillIdx = srcdoc.indexOf('ctx.fillRect(0, 0, capW, capH);');
+    const drawIdx = srcdoc.indexOf('ctx.drawImage(img, 0, 0, capW, capH);');
     expect(fillIdx).toBeGreaterThan(-1);
     expect(drawIdx).toBeGreaterThan(fillIdx);
   });
@@ -57,17 +57,17 @@ describe('buildSrcdoc', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 
     // When the foreignObject paints nothing the canvas is uniform; the bridge
-    // must surface that as an honest failure so the host can fall back / show
-    // an error rather than copy a (now white-filled but still empty) frame.
+    // must surface that as an honest failure (rejected promise → od:snapshot:result
+    // error) so the host can fall back / show an error rather than copy a (now
+    // white-filled but still empty) frame.
     expect(srcdoc).toContain('function canvasLooksBlank(');
-    expect(srcdoc).toContain("error: 'empty-render'");
+    expect(srcdoc).toContain("reject(new Error('empty-render'))");
   });
 
   it('renders snapshot SVGs through data URLs so canvas export stays origin-clean', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 
-    expect(srcdoc).toContain('function encodedSvgDataUrl()');
-    expect(srcdoc).toContain('img.src = encodedSvgDataUrl();');
+    expect(srcdoc).toContain("img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);");
     expect(srcdoc).not.toContain('createObjectURL');
     expect(srcdoc).not.toContain('snapshot too large');
   });

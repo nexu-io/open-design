@@ -7,6 +7,8 @@ import {
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
   type DaemonStatusSnapshot,
+  type DesktopExportArtifactInput,
+  type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
   type MintImportTokenResult,
@@ -126,6 +128,18 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
       return await requestJsonIpc<DesktopExportPdfResult>(
         desktopIpc,
         { input, type: SIDECAR_MESSAGES.EXPORT_PDF },
+        { timeoutMs: 600_000 },
+      );
+    },
+    desktopArtifactExporter: async (input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult> => {
+      const desktopIpc = resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace: runtime.namespace,
+      });
+      return await requestJsonIpc<DesktopExportArtifactResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.EXPORT_ARTIFACT },
         { timeoutMs: 600_000 },
       );
     },

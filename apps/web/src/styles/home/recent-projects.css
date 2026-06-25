@@ -53,7 +53,7 @@
   gap: 12px;
 }
 .recent-projects__card {
-  appearance: none;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -61,10 +61,26 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-panel);
+  text-align: left;
+  overflow: visible;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.recent-projects__card-main {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
+  font: inherit;
   text-align: left;
   overflow: hidden;
-  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .recent-projects__card:hover {
   border-color: var(--border-strong);
@@ -227,6 +243,92 @@
 }
 .recent-projects__card-status-running .recent-projects__card-status-dot {
   animation: recent-projects-pulse 1.4s ease-in-out infinite;
+}
+.recent-projects__card-menu-anchor {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+}
+.recent-projects__card-more {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-1px);
+  transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out), border-color 140ms var(--ease-out), color 140ms var(--ease-out), background-color 140ms var(--ease-out);
+}
+.recent-projects__card:hover .recent-projects__card-more,
+.recent-projects__card:focus-within .recent-projects__card-more,
+.recent-projects__card-more[aria-expanded="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+.recent-projects__row--menu-open .recent-projects__card:not(.is-menu-open) .recent-projects__card-more {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-1px);
+}
+.recent-projects__card-more:hover,
+.recent-projects__card-more:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+}
+.recent-projects__card-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  gap: 2px;
+  min-width: 144px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.recent-projects__card-menu button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.recent-projects__card-menu button:hover,
+.recent-projects__card-menu button:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.recent-projects__card-menu button.danger {
+  color: var(--red);
+}
+@media (hover: none) {
+  .recent-projects__card-more {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes recent-projects-pulse {
   0%, 100% { opacity: 1; }

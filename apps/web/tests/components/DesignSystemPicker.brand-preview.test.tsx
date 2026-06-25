@@ -22,6 +22,21 @@ vi.mock('../../src/runtime/brands', () => ({
   useBrandsByDesignSystemId: () => brandsByDesignSystem,
 }));
 
+vi.mock('../../src/components/DesignSystemPreviewModal', () => ({
+  DesignSystemPreviewModal: ({
+    system,
+    onClose,
+  }: {
+    system: DesignSystemSummary;
+    onClose: () => void;
+  }) => (
+    <div role="dialog" data-testid="design-system-preview-modal">
+      <span>{system.title}</span>
+      <button type="button" onClick={onClose}>Close</button>
+    </div>
+  ),
+}));
+
 import { DesignSystemPicker } from '../../src/components/DesignSystemPicker';
 import { I18nProvider, type Locale } from '../../src/i18n';
 import { fetchDesignSystemPreview } from '../../src/providers/registry';
@@ -118,6 +133,9 @@ describe('DesignSystemPicker brand preview', () => {
     expect(screen.getByText('Space Grotesk')).toBeTruthy();
     expect(screen.getByText('#0b5fff')).toBeTruthy();
     expect(screen.queryByTestId('project-ds-picker-preview-frame')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-preview-expand'));
+    expect(screen.getByTestId('design-system-preview-modal')).toBeTruthy();
   });
 
   it('falls back to the thin design-system preview for a non-brand system', async () => {

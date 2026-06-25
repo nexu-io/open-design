@@ -34,6 +34,8 @@ export type ColorCandidate = {
   count: number;
   /** True for near-white / near-black — listed but de-prioritized. */
   extreme?: boolean;
+  /** Compact evidence strings such as css-var:--accent, prop:background, logo-svg:mark.svg. */
+  sources?: string[];
 };
 
 export type FontCandidate = { family: string; count: number };
@@ -280,25 +282,129 @@ function luma(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-export function extractColors(css: string): ColorCandidate[] {
-  const counts = new Map<string, number>();
-  const re = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]{1,48}\)|hsla?\([^)]{1,48}\)|oklch\([^)]{1,64}\)/g;
-  for (const m of css.matchAll(re)) {
-    const norm = normalizeColor(m[0]) ?? m[0].trim().toLowerCase();
-    counts.set(norm, (counts.get(norm) ?? 0) + 1);
+function addColorCandidate(
+  counts: Map<string, { count: number; sources: Set<string> }>,
+  raw: string,
+  source?: string,
+  weight = 1,
+): void {
+  const norm = normalizeColor(raw) ?? raw.trim().toLowerCase();
+  const existing = counts.get(norm) ?? { count: 0, sources: new Set<string>() };
+  existing.count += weight;
+  if (source) existing.sources.add(source);
+  counts.set(norm, existing);
+}
+
+function colorSourceForMatch(css: string, index: number): string | undefined {
+  const before = css.slice(Math.max(0, index - 900), index);
+  const declStart = Math.max(before.lastIndexOf(';'), before.lastIndexOf('{'));
+  const declaration = before.slice(declStart + 1);
+  const prop = /([-\w]+)\s*:\s*[^:]*$/i.exec(declaration)?.[1]?.trim();
+
+  const selectorStart = before.lastIndexOf('}');
+  const blockStart = before.lastIndexOf('{');
+  const selector =
+    blockStart > selectorStart
+      ? before.slice(selectorStart + 1, blockStart).replace(/\s+/g, ' ').trim().slice(-160)
+      : '';
+
+  const parts: string[] = [];
+  if (prop) parts.push(prop.startsWith('--') ? `css-var:${prop}` : `prop:${prop}`);
+  if (selector) parts.push(`selector:${selector}`);
+  return parts.length ? parts.join(' ') : undefined;
+}
+
+function mergeColorCandidates(...groups: ColorCandidate[][]): ColorCandidate[] {
+  const counts = new Map<string, { count: number; sources: Set<string>; extreme?: boolean }>();
+  for (const group of groups) {
+    for (const candidate of group) {
+      const existing = counts.get(candidate.hex) ?? { count: 0, sources: new Set<string>() };
+      existing.count += candidate.count;
+      existing.extreme ||= candidate.extreme;
+      for (const source of candidate.sources ?? []) existing.sources.add(source);
+      counts.set(candidate.hex, existing);
+    }
   }
+  return sortColorCandidates(counts);
+}
+
+function hasHighSignalColorSource(candidate: ColorCandidate): boolean {
+  const source = (candidate.sources ?? []).join(' ').toLowerCase();
+  if (/logo-svg:/.test(source)) return true;
+  return /css-var:--(?!token-|framer-)[-\w]*(?:brand|primary|accent|coral|mustard|olive|cta|action|highlight|link)/i.test(source);
+}
+
+function sortColorCandidates(
+  counts: Map<string, { count: number; sources: Set<string>; extreme?: boolean }>,
+): ColorCandidate[] {
   const all = [...counts.entries()]
-    .map(([hex, count]): ColorCandidate => {
+    .map(([hex, value]): ColorCandidate => {
       const isHex = hex.startsWith("#") && hex.length === 7;
-      const extreme = isHex ? luma(hex) > 0.96 || luma(hex) < 0.04 : false;
-      return extreme ? { hex, count, extreme } : { hex, count };
+      const extreme = value.extreme ?? (isHex ? luma(hex) > 0.96 || luma(hex) < 0.04 : false);
+      const sources = [...value.sources].slice(0, 12);
+      return {
+        hex,
+        count: value.count,
+        ...(extreme ? { extreme } : {}),
+        ...(sources.length ? { sources } : {}),
+      };
     })
     .sort((a, b) => b.count - a.count);
-  // Chromatic colors first (capped), then a couple of extremes so the agent
-  // still sees the site's actual black/white.
+  // Keep high-signal brand evidence even when its literal appears only once or
+  // twice. Then add the frequency-ranked chromatic set and a few extremes so
+  // the agent still sees the site's actual black/white.
+  const highSignal = all.filter((c) => !c.extreme && hasHighSignalColorSource(c)).slice(0, 8);
   const chromatic = all.filter((c) => !c.extreme).slice(0, 15);
   const extremes = all.filter((c) => c.extreme).slice(0, 4);
-  return [...chromatic, ...extremes];
+  const out: ColorCandidate[] = [];
+  const seen = new Set<string>();
+  for (const candidate of [...highSignal, ...chromatic, ...extremes]) {
+    if (seen.has(candidate.hex)) continue;
+    seen.add(candidate.hex);
+    out.push(candidate);
+  }
+  return out;
+}
+
+export function extractColors(css: string): ColorCandidate[] {
+  const counts = new Map<string, { count: number; sources: Set<string> }>();
+  const re = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]{1,48}\)|hsla?\([^)]{1,48}\)|oklch\([^)]{1,64}\)/g;
+  for (const m of css.matchAll(re)) {
+    addColorCandidate(counts, m[0], colorSourceForMatch(css, m.index ?? 0));
+  }
+  return sortColorCandidates(counts);
+}
+
+function extractSvgLogoColors(svg: string, label: string): ColorCandidate[] {
+  const counts = new Map<string, { count: number; sources: Set<string> }>();
+  const addFromValue = (value: string) => {
+    if (/^(none|currentcolor|transparent|inherit)$/i.test(value.trim())) return;
+    const colorRe = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]{1,48}\)|hsla?\([^)]{1,48}\)|oklch\([^)]{1,64}\)/g;
+    for (const match of value.matchAll(colorRe)) {
+      addColorCandidate(counts, match[0], `logo-svg:${label}`, 18);
+    }
+  };
+  for (const match of svg.matchAll(/(?:fill|stroke|stop-color|color)=["']([^"']+)["']/gi)) {
+    addFromValue(match[1] ?? '');
+  }
+  for (const match of svg.matchAll(/style=["']([^"']+)["']/gi)) {
+    addFromValue(match[1] ?? '');
+  }
+  return sortColorCandidates(counts);
+}
+
+function extractLogoSvgColorCandidates(logosDir: string, logos: LogoCandidate[]): ColorCandidate[] {
+  const groups: ColorCandidate[][] = [];
+  for (const logo of logos) {
+    if (!/\.svg$/i.test(logo.file)) continue;
+    try {
+      const svg = fs.readFileSync(path.join(logosDir, logo.file), 'utf8');
+      groups.push(extractSvgLogoColors(svg, logo.file));
+    } catch {
+      /* best-effort evidence only */
+    }
+  }
+  return groups.length ? mergeColorCandidates(...groups) : [];
 }
 
 // ─── fonts ───────────────────────────────────────────────────────────
@@ -311,21 +417,29 @@ const GENERIC_FONTS = new Set([
   "apple color emoji", "segoe ui emoji", "segoe ui symbol", "noto color emoji",
 ]);
 
+function isIconFontFamily(family: string): boolean {
+  return /\b(icon|icons|symbol|symbols|fontawesome|remix|material icons|material symbols|lucide)\b/i.test(family);
+}
+
 export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFamilies: string[] } {
   const counts = new Map<string, number>();
   for (const m of css.matchAll(/font-family\s*:\s*([^;}{!]+)/gi)) {
     // First non-generic family in the stack is the intended face.
     for (const partRaw of m[1].split(",")) {
-      const part = partRaw.trim().replace(/^["']|["']$/g, "").trim();
+      const part = decodeEntities(partRaw).trim().replace(/^["']|["']$/g, "").trim();
       if (!part || part.startsWith("var(")) continue;
+      if (part.includes('&quot') || /placeholder$/i.test(part)) continue;
       if (GENERIC_FONTS.has(part.toLowerCase())) continue;
+      if (isIconFontFamily(part)) continue;
       counts.set(part, (counts.get(part) ?? 0) + 1);
       break;
     }
   }
   const fontFace = new Set<string>();
   for (const m of css.matchAll(/@font-face\s*{[^}]*font-family\s*:\s*["']?([^;"'}]+)/gi)) {
-    fontFace.add(m[1].trim());
+    const family = decodeEntities(m[1]).trim().replace(/^["']|["']$/g, "").trim();
+    if (!family || /placeholder$/i.test(family) || isIconFontFamily(family)) continue;
+    fontFace.add(family);
   }
   return {
     fonts: [...counts.entries()]
@@ -477,6 +591,27 @@ function extractNavLinks(html: string, baseUrl: string): Array<{ label: string; 
   return out.slice(0, 20);
 }
 
+function inlineStyleSelector(tagName: string, attrs: string): string {
+  const tag = tagName.toLowerCase();
+  const classAttr = /class=["']([^"']+)["']/i.exec(attrs)?.[1] ?? '';
+  const classes = classAttr
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((name) => `.${name.replace(/[^\w-]/g, '')}`)
+    .join('');
+  const framerName = /data-framer-name=["']([^"']+)["']/i.exec(attrs)?.[1];
+  const ariaLabel = /aria-label=["']([^"']+)["']/i.exec(attrs)?.[1];
+  const role = /role=["']([^"']+)["']/i.exec(attrs)?.[1];
+  const extras = [
+    framerName ? `[data-framer-name="${framerName.replace(/["\\]/g, '')}"]` : '',
+    ariaLabel ? `[aria-label="${ariaLabel.replace(/["\\]/g, '')}"]` : '',
+    role ? `[role="${role.replace(/["\\]/g, '')}"]` : '',
+    /\sdata-highlight=["']?true["']?/i.test(attrs) ? '[data-highlight="true"]' : '',
+  ].join('');
+  return `${tag}${classes}${extras}`.slice(0, 220) || tag;
+}
+
 // ─── material.md ─────────────────────────────────────────────────────
 
 function buildMaterialMd(r: Omit<PrefetchResult, "materialMd" | "thin">): string {
@@ -498,7 +633,8 @@ function buildMaterialMd(r: Omit<PrefetchResult, "materialMd" | "thin">): string
   lines.push("## Measured colors (frequency-ranked from the site's actual CSS)", "");
   if (r.colors.length === 0) lines.push("(none found)");
   for (const c of r.colors) {
-    lines.push(`- \`${c.hex}\` ×${c.count}${c.extreme ? " (near-white/black)" : ""}`);
+    const sources = c.sources?.length ? ` — ${c.sources.slice(0, 3).join("; ")}` : "";
+    lines.push(`- \`${c.hex}\` ×${c.count}${c.extreme ? " (near-white/black)" : ""}${sources}`);
   }
   lines.push("");
 
@@ -602,6 +738,38 @@ export async function prefetchBrand(
       return null;
     }
   }
+  return harvestFromHtml(html, baseUrl, brandDir, { url, renderedDom, onProgress });
+}
+
+interface HarvestFromHtmlOptions {
+  /** Original input URL recorded as `result.url`. */
+  url: string;
+  /** Pre-rendered DOM (headless Chrome) captured during fetch, used as a logo
+   *  fallback source. Null for the extract-from-html path. */
+  renderedDom?: string | null;
+  /** Extra CSS folded into the harvest before parsing (e.g. stylesheet text the
+   *  web read out of the rendered browser page). */
+  cssSeed?: string;
+  /** Whether headless-Chrome rescue passes (thin-CSS re-harvest, screenshot) may
+   *  run. False when the caller already supplied rendered DOM. Defaults true. */
+  allowChrome?: boolean;
+  onProgress?: PrefetchProgress;
+}
+
+/** Turn page HTML (+ optional seed CSS) into a PrefetchResult: harvest colors,
+ *  fonts, logos, and copy, self-host webfonts, and build the material digest.
+ *  `prefetchBrand` feeds fetched / Chrome-rendered HTML; `prefetchFromHtml`
+ *  feeds the DOM the web read out of the unblocked in-app browser tab. */
+async function harvestFromHtml(
+  html: string,
+  baseUrl: string,
+  brandDir: string,
+  opts: HarvestFromHtmlOptions,
+): Promise<PrefetchResult> {
+  const { url } = opts;
+  const onProgress: PrefetchProgress = opts.onProgress ?? (() => {});
+  const allowChrome = opts.allowChrome ?? true;
+  let renderedDom = opts.renderedDom ?? null;
   // Chrome can render a challenge page too (interactive Turnstile etc.) —
   // re-check the HTML we actually ended up with.
   const blocked = isChallengePage(html);
@@ -620,8 +788,11 @@ export async function prefetchBrand(
   if (!blocked) {
     onProgress("css");
     const cssChunks: string[] = [];
+    if (opts.cssSeed && opts.cssSeed.trim()) cssChunks.push(opts.cssSeed);
     for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1]);
-    for (const m of html.matchAll(/style=["']([^"']{1,2000})["']/gi)) cssChunks.push(m[1] + ";");
+    for (const m of html.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
+      cssChunks.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
+    }
 
     const cssLinks: string[] = [];
     for (const m of html.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]*>|<link[^>]+href=["'][^"']+["'][^>]+rel=["']stylesheet["'][^>]*>/gi)) {
@@ -652,13 +823,15 @@ export async function prefetchBrand(
     // CSS-in-JS rescue: a thin static harvest usually means styles are injected
     // at runtime. Render once with headless Chrome — the dumped DOM carries the
     // injected <style> tags and inline styles — and re-extract.
-    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && findChrome()) {
+    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && allowChrome && findChrome()) {
       onProgress("chrome", "thin static CSS — re-harvesting from the rendered DOM");
       renderedDom = await chromeDumpDom(baseUrl);
       if (renderedDom) {
         const domCss: string[] = [];
         for (const m of renderedDom.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) domCss.push(m[1]);
-        for (const m of renderedDom.matchAll(/style=["']([^"']{1,2000})["']/gi)) domCss.push(m[1] + ";");
+        for (const m of renderedDom.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
+          domCss.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
+        }
         if (domCss.length) {
           allCss = [allCss, ...domCss].join("\n");
           colors = extractColors(allCss);
@@ -731,13 +904,17 @@ export async function prefetchBrand(
       /* unparseable baseUrl — skip the service tier */
     }
   }
+  if (!blocked && logos.length > 0) {
+    const logoColors = extractLogoSvgColorCandidates(logosDir, logos);
+    if (logoColors.length > 0) colors = mergeColorCandidates(colors, logoColors);
+  }
   // Still nothing → grab a page screenshot instead; the synthesis agent Reads
   // it with vision to locate the logo and judge visual style. Pointless for a
   // challenge page — the screenshot would show the interstitial.
   const prefetchDir = path.join(brandDir, "prefetch");
   fs.mkdirSync(prefetchDir, { recursive: true });
   let screenshot: string | null = null;
-  if (logos.length === 0 && !blocked && findChrome()) {
+  if (logos.length === 0 && !blocked && allowChrome && findChrome()) {
     onProgress("chrome", "no logo downloadable — capturing a page screenshot");
     const shotPath = path.join(prefetchDir, "screenshot.png");
     if (await chromeScreenshot(baseUrl, shotPath)) screenshot = "prefetch/screenshot.png";
@@ -825,4 +1002,33 @@ export async function prefetchBrand(
   fs.writeFileSync(path.join(prefetchDir, "styles.css"), allCss.slice(0, 2_000_000));
 
   return { ...partial, thin, materialMd };
+}
+
+/** Harvest a brand from HTML the web already rendered (e.g. the in-app browser
+ *  tab after the user cleared an anti-bot wall) instead of fetching it. Skips
+ *  all main-page network fetching and headless-Chrome rescue; logo/webfont
+ *  downloads still run best-effort against `baseUrl`. Returns null on empty
+ *  input. The provided `css` (stylesheet text + computed styles collected from
+ *  the rendered page) is folded in alongside the inline `<style>` in `html`. */
+export async function prefetchFromHtml(
+  html: string,
+  css: string,
+  baseUrl: string,
+  brandDir: string,
+  onProgress: PrefetchProgress = () => {},
+): Promise<PrefetchResult | null> {
+  if (!html || !html.trim()) return null;
+  let resolvedBase = baseUrl;
+  try {
+    resolvedBase = new URL(baseUrl).href;
+  } catch {
+    // Keep the raw string; downstream `new URL(..., baseUrl)` calls guard themselves.
+  }
+  return harvestFromHtml(html.slice(0, HTML_CAP), resolvedBase, brandDir, {
+    url: baseUrl,
+    cssSeed: css ?? "",
+    renderedDom: null,
+    allowChrome: false,
+    onProgress,
+  });
 }

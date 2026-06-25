@@ -1,0 +1,184 @@
+/* "Design system is ready" prompt shown in a brand-extraction project once the
+   extraction finalizes. A light success surface (mirrors .od-toast.tone-success
+   tokens) so it reads as a confirmation, not an alert. Center inside the
+   workspace panel, not the full viewport, so it never covers the chat composer. */
+.prompt {
+  position: fixed;
+  bottom: max(32px, env(safe-area-inset-bottom));
+  left: var(--brand-ready-left-offset, 0px);
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 440px;
+  z-index: 1400;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--success, #2da44e) 12%, var(--bg, #fff));
+  color: var(--text, #1f2328);
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 38%, var(--border, #d0d7de));
+  box-shadow:
+    0 6px 22px rgba(0, 0, 0, 0.12),
+    0 0 0 1px color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
+  pointer-events: auto;
+}
+
+@media (max-width: 900px) {
+  .prompt {
+    bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success, #2da44e) 18%, var(--bg, #fff));
+  color: var(--success, #2da44e);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #0969da);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cta:hover {
+  text-decoration: underline;
+}
+.cta svg {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.cta:hover svg {
+  transform: translateX(2px);
+}
+
+/* Always-visible close affordance: a faint circular chip (not a bare icon) so it
+   reads as a button on the green-tinted surface even before hover. Pinned to the
+   top of the (now possibly multi-line) card. */
+.dismiss {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-top: -4px;
+  margin-right: -4px;
+  margin-left: 6px;
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 50%, var(--border, #d0d7de));
+  border-radius: 999px;
+  background: var(--bg, #fff);
+  color: var(--text-strong, #111827);
+  cursor: pointer;
+  box-shadow:
+    0 2px 7px rgba(31, 35, 40, 0.14),
+    0 0 0 3px color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.dismiss svg {
+  display: block;
+  pointer-events: none;
+}
+.dismiss:hover {
+  background: color-mix(in srgb, var(--success, #2da44e) 10%, var(--bg, #fff));
+  border-color: color-mix(in srgb, var(--success, #2da44e) 70%, var(--border, #d0d7de));
+  color: var(--text, #1f2328);
+  box-shadow:
+    0 3px 10px rgba(31, 35, 40, 0.18),
+    0 0 0 3px color-mix(in srgb, var(--success, #2da44e) 14%, transparent);
+}
+.dismiss:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--success, #2da44e) 70%, var(--accent, #0969da));
+  outline-offset: 2px;
+}
+
+/* Refinement nudge: programmatic extraction can miss details, so offer AI
+   Optimize / manual edit right under the preview CTA. */
+.refine {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--success, #2da44e) 20%, var(--border, #d0d7de));
+}
+
+.refineHint {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted, #6e7781);
+}
+
+.refineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.refineAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 999px;
+  background: var(--bg, #fff);
+  color: var(--text, #1f2328);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.refineAction:hover {
+  background: color-mix(in srgb, var(--text, #1f2328) 5%, var(--bg, #fff));
+  border-color: color-mix(in srgb, var(--text, #1f2328) 22%, var(--border, #d0d7de));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta svg {
+    transition: none;
+  }
+  .dismiss,
+  .refineAction {
+    transition: none;
+  }
+}

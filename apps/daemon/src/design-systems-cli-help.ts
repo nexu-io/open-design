@@ -6,6 +6,7 @@ export const DESIGN_SYSTEMS_USAGE = `Usage:
   od design-systems list                       List design systems.
   od design-systems show <id>                  Print one entry.
   od design-systems rename <id> --title <new>  Rename an editable design system.
+  od design-systems download <id> [--out <p>]  Download a brand .zip (files + SKILLS.md).
   od design-systems import-local <path>        Import a local project.
   od design-systems import-github <url>        Import a public GitHub repo.
   od design-systems import-shadcn <reference>  Import a shadcn registry item.
