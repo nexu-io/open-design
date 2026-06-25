@@ -108,7 +108,7 @@ describe('BrandsTab refresh reconciliation', () => {
 
     // The poll fires while extraction is in flight.
     await vi.advanceTimersByTimeAsync(4000);
-    expect(fetchBrandsMock).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(fetchBrandsMock).toHaveBeenCalledTimes(2));
 
     // Extraction settles to ready — the next poll tick tears the interval down.
     fetchBrandsMock.mockResolvedValue([brandSummary('acme', 'ready')]);

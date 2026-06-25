@@ -31,7 +31,7 @@ concurrency:
 jobs:
   scopes:
     name: Detect validation scopes
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((vars.OD_CI_RUNNER_MODE == 'performance' || vars.OD_CI_RUNNER_MODE == 'economic') && '["ubuntu-24.04"]' || '["self-hosted","Linux","X64","od-persistent-ci","od-ci-hot-poc"]') }}
     outputs:
       ci_mode: ${{ steps.detect.outputs.ci_mode }}
       daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
@@ -115,9 +115,30 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  runners:
+    name: Resolve runner profiles
+    runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.runners.outputs.mode }}
+      github_hosted: ${{ steps.runners.outputs.github_hosted }}
+      contabo_control: ${{ steps.runners.outputs.contabo_control }}
+      hosted_or_blacksmith: ${{ steps.runners.outputs.hosted_or_blacksmith }}
+      blacksmith_default: ${{ steps.runners.outputs.blacksmith_default }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve runner profiles
+        id: runners
+        env:
+          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+        run: python3 .github/scripts/runners.py
+
   static_gate:
     name: Static gate
-    runs-on: ubuntu-latest
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.contabo_control) }}
     timeout-minutes: 10
     env:
       ACTIONLINT_VERSION: 1.7.12
@@ -197,9 +218,9 @@ jobs:
 
   nix_validation:
     name: Validate Nix flake
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.hosted_or_blacksmith) }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -405,17 +426,22 @@ jobs:
 
   preflight:
     name: Preflight
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.hosted_or_blacksmith) }}
     timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.hosted_or_blacksmith }}
 
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
@@ -440,7 +466,7 @@ jobs:
 
       - name: Typecheck workspaces
         run: |
-          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies
@@ -459,6 +485,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -516,17 +545,22 @@ jobs:
 
   web_workspace_tests:
     name: Web workspace tests
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Prebuild web sidecar declarations
         run: pnpm --filter @open-design/web build:sidecar
@@ -536,23 +570,29 @@ jobs:
 
   e2e_vitest:
     name: E2E Vitest
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -565,9 +605,9 @@ jobs:
 
   playwright_critical:
     name: Playwright critical (${{ matrix.group }})
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -582,14 +622,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -602,29 +648,34 @@ jobs:
 
       - name: Playwright critical
         env:
-          OD_PLAYWRIGHT_WORKERS: "4"
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
 
   ui_p0_smoke:
     name: UI P0 smoke
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -636,8 +687,6 @@ jobs:
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run UI shell smoke
-        env:
-          OD_PLAYWRIGHT_WORKERS: "4"
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
 
       - name: Upload Playwright debug artifact
@@ -655,9 +704,9 @@ jobs:
 
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -668,14 +717,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -687,8 +742,6 @@ jobs:
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run UI P0 domain
-        env:
-          OD_PLAYWRIGHT_WORKERS: "4"
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
 
       - name: Upload Playwright debug artifact
@@ -706,9 +759,9 @@ jobs:
 
   playwright_visual:
     name: Playwright visual (${{ matrix.name }})
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -719,14 +772,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -739,7 +798,6 @@ jobs:
         continue-on-error: true
         env:
           OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
-          OD_PLAYWRIGHT_WORKERS: "4"
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -790,9 +848,9 @@ jobs:
 
   docker_pr:
     name: Docker image build
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.hosted_or_blacksmith) }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -833,6 +891,7 @@ jobs:
     name: Validate workspace
     needs:
       - scopes
+      - runners
       - static_gate
       - preflight
       - nix_validation
@@ -846,7 +905,7 @@ jobs:
       - playwright_visual
       - docker_pr
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.contabo_control) }}
     timeout-minutes: 5
 
     steps:
@@ -959,9 +1018,10 @@ jobs:
   runtime_summary:
     name: Runtime summary
     needs:
+      - runners
       - validate
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.contabo_control) }}
     timeout-minutes: 5
     continue-on-error: true
 

@@ -8,10 +8,37 @@ inputs:
   install-command:
     description: Command used to install browsers
     required: true
+  runner-labels:
+    description: JSON array of labels selected for this job's runs-on value
+    required: false
+    default: '[]'
 
 runs:
   using: composite
   steps:
+    - name: Detect persistent Playwright cache
+      id: persistent-playwright-cache
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        case "$RUNNER_LABELS_JSON" in
+          *'"od-persistent-ci"'*) persistent_enabled=true ;;
+          *) persistent_enabled=false ;;
+        esac
+
+        if [ "$persistent_enabled" = "true" ]; then
+          if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+            echo "runner-labels contains od-persistent-ci, but PLAYWRIGHT_BROWSERS_PATH is not set" >&2
+            exit 1
+          fi
+          mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "path=$PLAYWRIGHT_BROWSERS_PATH" >> "$GITHUB_OUTPUT"
+        else
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Resolve Playwright version
       id: playwright-version
       shell: bash
@@ -24,6 +51,7 @@ runs:
         echo "version=$version" >> "$GITHUB_OUTPUT"
 
     - name: Cache Playwright browser binaries
+      if: ${{ steps.persistent-playwright-cache.outputs.enabled != 'true' }}
       uses: actions/cache@v5.0.5
       with:
         path: ~/.cache/ms-playwright
