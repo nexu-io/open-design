@@ -26,27 +26,27 @@ function tempDataDir(): string {
 }
 
 describe('sandbox mode env parsing', () => {
-  it('is disabled when OD_SANDBOX_MODE is unset or false-like', () => {
+  it('is disabled when MAX_SANDBOX_MODE is unset or false-like', () => {
     expect(isSandboxModeEnabled({})).toBe(false);
-    expect(isSandboxModeEnabled({ OD_SANDBOX_MODE: '0' })).toBe(false);
-    expect(isSandboxModeEnabled({ OD_SANDBOX_MODE: 'false' })).toBe(false);
+    expect(isSandboxModeEnabled({ MAX_SANDBOX_MODE: '0' })).toBe(false);
+    expect(isSandboxModeEnabled({ MAX_SANDBOX_MODE: 'false' })).toBe(false);
   });
 
   it('is enabled for explicit true-like values', () => {
-    expect(isSandboxModeEnabled({ OD_SANDBOX_MODE: '1' })).toBe(true);
-    expect(isSandboxModeEnabled({ OD_SANDBOX_MODE: 'true' })).toBe(true);
-    expect(isSandboxModeEnabled({ OD_SANDBOX_MODE: 'YES' })).toBe(true);
+    expect(isSandboxModeEnabled({ MAX_SANDBOX_MODE: '1' })).toBe(true);
+    expect(isSandboxModeEnabled({ MAX_SANDBOX_MODE: 'true' })).toBe(true);
+    expect(isSandboxModeEnabled({ MAX_SANDBOX_MODE: 'YES' })).toBe(true);
   });
 
   it('rejects ambiguous non-empty values', () => {
-    expect(() => isSandboxModeEnabled({ OD_SANDBOX_MODE: 'sandbox' })).toThrow(
-      'OD_SANDBOX_MODE must be one of',
+    expect(() => isSandboxModeEnabled({ MAX_SANDBOX_MODE: 'sandbox' })).toThrow(
+      'MAX_SANDBOX_MODE must be one of',
     );
   });
 });
 
 describe('sandbox runtime roots', () => {
-  it('keeps all run-scoped roots under OD_DATA_DIR', () => {
+  it('keeps all run-scoped roots under MAX_DATA_DIR', () => {
     const dataDir = tempDataDir();
     const config = resolveSandboxRuntimeConfig(true, dataDir);
 
@@ -80,7 +80,7 @@ describe('sandbox runtime roots', () => {
         CLAUDE_CONFIG_DIR: '/real/home/.claude',
         OPENCODE_TEST_HOME: '/real/home/.opencode',
         NPM_CONFIG_USERCONFIG: '/real/home/.npmrc',
-        OD_DATA_DIR: dataDir,
+        MAX_DATA_DIR: dataDir,
         PATH: '/bin',
       },
       config,
@@ -88,7 +88,7 @@ describe('sandbox runtime roots', () => {
 
     expect(env.HOME).toBe(config.roots.agentHomeDir);
     expect(env.USERPROFILE).toBe(config.roots.agentHomeDir);
-    expect(env.OD_AGENT_HOME).toBe(config.roots.agentHomeDir);
+    expect(env.MAX_AGENT_HOME).toBe(config.roots.agentHomeDir);
     expect(env.CODEX_HOME).toBe(path.join(config.roots.agentHomeDir, '.codex'));
     expect(env.CLAUDE_CONFIG_DIR).toBe(path.join(config.roots.configDir, 'claude'));
     expect(env.OPENCODE_TEST_HOME).toBe(path.join(config.roots.agentHomeDir, '.opencode'));

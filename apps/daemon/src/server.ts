@@ -550,7 +550,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
-const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+const RESOURCE_ROOT_ENV = 'MAX_RESOURCE_ROOT';
 
 export function composeLiveInstructionPrompt({
   daemonSystemPrompt,
@@ -1292,7 +1292,7 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
   safeBases: [
     PROJECT_ROOT,
     resolveProcessResourcesPath(),
-    process.env.OD_INSTALLATION_DIR,
+    process.env.MAX_INSTALLATION_DIR,
   ],
 });
 // Built web app lives in `out/` — that's where Next.js writes the static
@@ -1307,8 +1307,8 @@ const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
   resourceRoot: DAEMON_RESOURCE_ROOT,
   projectRoot: PROJECT_ROOT,
 });
-const OD_BIN = resolveDaemonCliPath();
-const OD_NODE_BIN = process.execPath;
+const MAX_BIN = resolveDaemonCliPath();
+const MAX_NODE_BIN = process.execPath;
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -1334,7 +1334,7 @@ const CRAFT_DIR = resolveDaemonResourceDir(
   path.join(PROJECT_ROOT, 'craft'),
 );
 // User-installed skills and design systems live under the runtime data dir
-// so they respect OD_DATA_DIR overrides (test isolation, packaged runs).
+// so they respect MAX_DATA_DIR overrides (test isolation, packaged runs).
 // Defined after RUNTIME_DATA_DIR is resolved below.
 const FRAMES_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
@@ -1442,7 +1442,7 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
 }
 
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
-const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
+const RUNTIME_DATA_DIR = resolveDataDir(process.env.MAX_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
@@ -1452,7 +1452,7 @@ const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
 // that compare it against a user-supplied realpath() result. On macOS, /var
 // is a symlink to /private/var, so an import realpath lands in /private/var
 // and would never start-with the raw RUNTIME_DATA_DIR. Keep RUNTIME_DATA_DIR
-// itself as the stable, user-shaped path so OD_DATA_DIR resolution stays
+// itself as the stable, user-shaped path so MAX_DATA_DIR resolution stays
 // predictable; only this canonical alias is used for symlink-aware checks.
 const RUNTIME_DATA_DIR_CANONICAL = (() => {
   try {
@@ -1461,13 +1461,13 @@ const RUNTIME_DATA_DIR_CANONICAL = (() => {
     return RUNTIME_DATA_DIR;
   }
 })();
-// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
+// One-shot legacy data migration. When MAX_LEGACY_DATA_DIR is set and the
 // new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
 // across before SQLite opens. Synchronous on purpose: openDatabase below
 // would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
 // and https://github.com/nexu-io/open-design/issues/710.
 migrateLegacyDataDirSync({
-  legacyDir: process.env.OD_LEGACY_DATA_DIR,
+  legacyDir: process.env.MAX_LEGACY_DATA_DIR,
   dataDir: RUNTIME_DATA_DIR,
 });
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
@@ -1523,7 +1523,7 @@ const mcpPendingAuth = new PendingAuthCache();
  * Resolve the daemon's public base URL — the origin the user's browser
  * (or the OAuth provider) reaches us at. Order of precedence:
  *
- *   1. `OD_PUBLIC_BASE_URL` env var. Cloud and packaged-electron deployments
+ *   1. `MAX_PUBLIC_BASE_URL` env var. Cloud and packaged-electron deployments
  *      set this to the externally-routable URL (e.g. `https://app.example.com`).
  *   2. `req.protocol://req.get('host')` from the inbound request. Works in
  *      local dev and most reverse-proxy setups (Express respects
@@ -1535,13 +1535,13 @@ const mcpPendingAuth = new PendingAuthCache();
  * will reject `redirect_uri` mismatches.
  */
 function getPublicBaseUrl(req) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
+  const env = process.env.MAX_PUBLIC_BASE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
   }
   const proto = req.protocol || 'http';
   const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
+  if (!host) return `http://localhost:${process.env.MAX_PORT ?? '7456'}`;
   return `${proto}://${host}`;
 }
 
@@ -1688,7 +1688,7 @@ const promptFileBootstrap = (fp) =>
   'it contains the system prompt, design system, skill workflow, and user request. ' +
   'Do not begin your response until you have read the entire file.';
 
-// Load Critique Theater config once at startup so a bad OD_CRITIQUE_* value
+// Load Critique Theater config once at startup so a bad MAX_CRITIQUE_* value
 // surfaces immediately as a boot-time RangeError instead of silently at
 // run time. Default: enabled=false (M0 dark launch).
 const critiqueCfg = loadCritiqueConfigFromEnv();
@@ -1713,9 +1713,9 @@ export function createAgentRuntimeEnv(
   const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
     {
       ...baseEnv,
-      OD_DATA_DIR: RUNTIME_DATA_DIR,
-      OD_DAEMON_URL: daemonUrl,
-      OD_NODE_BIN: nodeBin,
+      MAX_DATA_DIR: RUNTIME_DATA_DIR,
+      MAX_DAEMON_URL: daemonUrl,
+      MAX_NODE_BIN: nodeBin,
     },
     SANDBOX_RUNTIME,
   );
@@ -1760,9 +1760,9 @@ export function createAgentRuntimeEnv(
   }
 
   if (toolTokenGrant?.token) {
-    env.OD_TOOL_TOKEN = toolTokenGrant.token;
+    env.MAX_TOOL_TOKEN = toolTokenGrant.token;
   } else {
-    delete env.OD_TOOL_TOKEN;
+    delete env.MAX_TOOL_TOKEN;
   }
 
   return env;
@@ -1773,18 +1773,18 @@ export function createAgentRuntimeToolPrompt(
   toolTokenGrant: { token?: string } | null = null,
 ): string {
   const tokenLine = toolTokenGrant?.token
-    ? '- `OD_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
-    : '- `OD_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
+    ? '- `MAX_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
+    : '- `MAX_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
 
   return [
     '## Runtime tool environment',
     '',
-    `- Daemon URL: \`${daemonUrl}\` (also available as \`OD_DAEMON_URL\`).`,
-    '- `OD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
-    '- `OD_BIN` is the absolute path to the Open Design CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
-    '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
+    `- Daemon URL: \`${daemonUrl}\` (also available as \`MAX_DAEMON_URL\`).`,
+    '- `MAX_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
+    '- `MAX_BIN` is the absolute path to the Open Design CLI script. On POSIX shells run wrappers with `"$MAX_NODE_BIN" "$MAX_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
+    '- On PowerShell use `& $env:MAX_NODE_BIN $env:MAX_BIN tools ...`; on cmd.exe use `"%MAX_NODE_BIN%" "%MAX_BIN%" tools ...`.',
     tokenLine,
-    '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
+    '- Prefer project wrapper commands through `MAX_NODE_BIN` + `MAX_BIN` over raw HTTP. The wrappers read these environment values automatically.',
   ].join('\n');
 }
 
@@ -2001,7 +2001,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.connectorIds) && context.connectorIds.length > 0) {
     lines.push('### Selected connectors');
     lines.push(
-      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
+      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$MAX_NODE_BIN" "$MAX_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
     );
     lines.push(formatContextRefList(context.connectorIds, metadata?.contextConnectors ?? [], 'name'));
   }
@@ -2271,7 +2271,7 @@ function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
       'Use the local daemon share endpoint so the publish flow runs through Open Design\'s validated GitHub path:',
       '',
       '```bash',
-      `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/publish-github" \\`,
+      `curl -sS -X POST "$MAX_DAEMON_URL/api/projects/$MAX_PROJECT_ID/plugins/publish-github" \\`,
       `  -H 'content-type: application/json' \\`,
       `  -d '${JSON.stringify({ path: stagedPath })}'`,
       '```',
@@ -2288,7 +2288,7 @@ function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
     'Use the local daemon share endpoint so the contribution flow runs through Open Design\'s validated GitHub path:',
     '',
     '```bash',
-    `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/contribute-open-design" \\`,
+    `curl -sS -X POST "$MAX_DAEMON_URL/api/projects/$MAX_PROJECT_ID/plugins/contribute-open-design" \\`,
     `  -H 'content-type: application/json' \\`,
     `  -d '${JSON.stringify({ path: stagedPath })}'`,
     '```',
@@ -3389,15 +3389,15 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
-const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
-const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
-const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
-const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
-const OPEN_DESIGN_DISCORD_INVITE_CODE = 'mHAjSMV6gz';
-const OPEN_DESIGN_DISCORD_INVITE_URL = `https://discord.gg/${OPEN_DESIGN_DISCORD_INVITE_CODE}`;
-const OPEN_DESIGN_DISCORD_INVITE_API = `https://discord.com/api/v10/invites/${OPEN_DESIGN_DISCORD_INVITE_CODE}?with_counts=true`;
-const OPEN_DESIGN_DISCORD_CACHE_TTL_MS = 5 * 60 * 1000;
-const OPEN_DESIGN_DISCORD_TIMEOUT_MS = 4_000;
+const MARKETING_AX_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+const MARKETING_AX_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
+const MARKETING_AX_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
+const MARKETING_AX_GITHUB_TIMEOUT_MS = 4_000;
+const MARKETING_AX_DISCORD_INVITE_CODE = 'mHAjSMV6gz';
+const MARKETING_AX_DISCORD_INVITE_URL = `https://discord.gg/${MARKETING_AX_DISCORD_INVITE_CODE}`;
+const MARKETING_AX_DISCORD_INVITE_API = `https://discord.com/api/v10/invites/${MARKETING_AX_DISCORD_INVITE_CODE}?with_counts=true`;
+const MARKETING_AX_DISCORD_CACHE_TTL_MS = 5 * 60 * 1000;
+const MARKETING_AX_DISCORD_TIMEOUT_MS = 4_000;
 
 let openDesignGithubRepoCache = null;
 let openDesignGithubRepoInflight = null;
@@ -3410,7 +3410,7 @@ async function readOpenDesignGithubRepoStats() {
   const now = Date.now();
   if (
     openDesignGithubRepoCache &&
-    now - openDesignGithubRepoCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+    now - openDesignGithubRepoCache.fetchedAt < MARKETING_AX_GITHUB_CACHE_TTL_MS
   ) {
     return { ...openDesignGithubRepoCache, stale: false };
   }
@@ -3421,9 +3421,9 @@ async function readOpenDesignGithubRepoStats() {
 
   openDesignGithubRepoInflight = (async () => {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    const timeout = setTimeout(() => ctrl.abort(), MARKETING_AX_GITHUB_TIMEOUT_MS);
     try {
-      const response = await fetch(OPEN_DESIGN_GITHUB_REPO_API, {
+      const response = await fetch(MARKETING_AX_GITHUB_REPO_API, {
         headers: {
           accept: 'application/vnd.github+json',
           'user-agent': 'open-design-daemon',
@@ -3463,7 +3463,7 @@ async function readOpenDesignLatestReleaseInfo() {
   const now = Date.now();
   if (
     openDesignGithubLatestReleaseCache &&
-    now - openDesignGithubLatestReleaseCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+    now - openDesignGithubLatestReleaseCache.fetchedAt < MARKETING_AX_GITHUB_CACHE_TTL_MS
   ) {
     return { ...openDesignGithubLatestReleaseCache, stale: false };
   }
@@ -3474,9 +3474,9 @@ async function readOpenDesignLatestReleaseInfo() {
 
   openDesignGithubLatestReleaseInflight = (async () => {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    const timeout = setTimeout(() => ctrl.abort(), MARKETING_AX_GITHUB_TIMEOUT_MS);
     try {
-      const response = await fetch(OPEN_DESIGN_GITHUB_RELEASE_LATEST_API, {
+      const response = await fetch(MARKETING_AX_GITHUB_RELEASE_LATEST_API, {
         headers: {
           accept: 'application/vnd.github+json',
           'user-agent': 'open-design-daemon',
@@ -3516,7 +3516,7 @@ async function readOpenDesignDiscordPresence() {
   const now = Date.now();
   if (
     openDesignDiscordPresenceCache &&
-    now - openDesignDiscordPresenceCache.fetchedAt < OPEN_DESIGN_DISCORD_CACHE_TTL_MS
+    now - openDesignDiscordPresenceCache.fetchedAt < MARKETING_AX_DISCORD_CACHE_TTL_MS
   ) {
     return { ...openDesignDiscordPresenceCache, stale: false };
   }
@@ -3527,9 +3527,9 @@ async function readOpenDesignDiscordPresence() {
 
   openDesignDiscordPresenceInflight = (async () => {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_DISCORD_TIMEOUT_MS);
+    const timeout = setTimeout(() => ctrl.abort(), MARKETING_AX_DISCORD_TIMEOUT_MS);
     try {
-      const response = await fetch(OPEN_DESIGN_DISCORD_INVITE_API, {
+      const response = await fetch(MARKETING_AX_DISCORD_INVITE_API, {
         headers: {
           accept: 'application/json',
           'user-agent': 'open-design-daemon',
@@ -3753,8 +3753,8 @@ const pluginUpload = multer({
 const pluginShareTaskStore = createPluginShareTaskStore({
   randomUUID,
   execCommandViaLoginShell,
-  OD_NODE_BIN,
-  OD_BIN,
+  MAX_NODE_BIN,
+  MAX_BIN,
 });
 
 // Project-scoped multi-file upload. Lands files directly in the project
@@ -4075,7 +4075,7 @@ const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
 // Resolve the chat-run inactivity watchdog ceiling. Priority order:
-//   1. `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` (operator escape hatch).
+//   1. `MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS` (operator escape hatch).
 //   2. The agent runtime def's `inactivityTimeoutMs` recommendation —
 //      lets agents whose CLIs go silent for long stretches during
 //      legitimate work (e.g. Copilot from #2467) raise the ceiling
@@ -4118,7 +4118,7 @@ export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number):
 
 export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
   assertValidRuntimeDefInactivityTimeoutMs(agentDefault);
-  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
+  const env = Number(process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
   if (Number.isFinite(env)) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
   }
@@ -4133,7 +4133,7 @@ export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
 // to a 1ms timer. Exported so tests can pin the env behavior without
 // reaching into chat-run internals.
 export function resolveChatRunArtifactQuietPeriodMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
+  const raw = Number(process.env.MAX_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
   if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS;
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
@@ -4141,7 +4141,7 @@ export function resolveChatRunArtifactQuietPeriodMs() {
 // Pure resolver for the chat run's *currently active* inactivity
 // ceiling. Used by both `noteAgentActivity` and `noteArtifactRegistered`
 // to pick between the pre-artifact watchdog and the shortened quiet
-// period. Extracted so the `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
+// period. Extracted so the `MAX_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
 // "disable the quiet period" semantics can be pinned with focused unit
 // tests (#1451 review: a 0-value override must not strand the pre-artifact
 // timer or stop further reschedules — it has to fall back to the
@@ -4283,7 +4283,7 @@ export function applyClaudeStreamJsonRunBookkeeping(
 }
 
 function resolveChatRunShutdownGraceMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
+  const raw = Number(process.env.MAX_CHAT_RUN_SHUTDOWN_GRACE_MS);
   if (!Number.isFinite(raw)) return 3_000;
   return Math.max(0, Math.floor(raw));
 }
@@ -4291,10 +4291,10 @@ function resolveChatRunShutdownGraceMs() {
 function resolveAcpStageTimeoutMs(): number | undefined {
   // Per-stage silence watchdog for ACP chat sessions. Defaults are owned by
   // `attachAcpSession` in acp.ts; this resolver only applies when an operator
-  // sets `OD_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
+  // sets `MAX_ACP_STAGE_TIMEOUT_MS`. Bounded to the same 24h ceiling as the
   // outer chat inactivity watchdog so an oversized override doesn't get
   // clamped to 1ms by Node's signed-32-bit delay limit.
-  const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
+  const raw = Number(process.env.MAX_ACP_STAGE_TIMEOUT_MS);
   if (!Number.isFinite(raw)) return undefined;
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
@@ -4398,7 +4398,7 @@ export function bufferedAntigravityGeminiFirstTokenAt(
 
 export async function startServer({
   port = 7456,
-  host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
+  host = normalizeDaemonBindHost(process.env.MAX_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
   runtime = null,
@@ -4411,19 +4411,19 @@ export async function startServer({
   // Plan §3.K1 / spec §15.7 — bound-API-token guard.
   //
   // The daemon refuses to bind to a public interface unless an
-  // OD_API_TOKEN is set. This is the spec §16 Phase 5 safety floor:
+  // MAX_API_TOKEN is set. This is the spec §16 Phase 5 safety floor:
   // a hosted operator can no longer accidentally publish an unsecured
-  // daemon by setting OD_BIND_HOST=0.0.0.0 without a token.
+  // daemon by setting MAX_BIND_HOST=0.0.0.0 without a token.
   //
   // Loopback hosts (127.0.0.1 / ::1 / localhost) are always allowed —
-  // the desktop / dev flow remains unchanged. Setting OD_API_TOKEN is
+  // the desktop / dev flow remains unchanged. Setting MAX_API_TOKEN is
   // purely additive: when present, every /api/* request must carry a
   // matching `Authorization: Bearer <token>` header (loopback origins
   // are exempted so the desktop UI keeps working).
-  const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
+  const apiToken = (process.env.MAX_API_TOKEN ?? '').trim();
   if (!isLoopbackHostname(host) && apiToken.length === 0) {
     throw new Error(
-      `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
+      `MAX_BIND_HOST=${host} requires MAX_API_TOKEN to be set. ` +
       `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
       `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
     );
@@ -4436,10 +4436,10 @@ export async function startServer({
 
   // Plan §3.K1 — bearer-token middleware.
   //
-  // Active only when OD_API_TOKEN is set. Loopback origins skip the
+  // Active only when MAX_API_TOKEN is set. Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / readiness / version remain
+  // value matching `MAX_API_TOKEN`. Health / readiness / version remain
   // open so monitoring probes don't need the token. Server-minted
   // project preview asset scopes are also accepted for GETs so sandboxed
   // browser iframes can load HTML/CSS/JS without privileged headers.
@@ -4474,7 +4474,7 @@ export async function startServer({
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
       if (!match || match[1] !== apiToken) {
         return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <MAX_API_TOKEN> required' },
         });
       }
       return next();
@@ -4865,8 +4865,8 @@ export async function startServer({
     hydrateMediaTask(row);
   }
 
-  if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
-    console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
+  if (process.env.MAX_CODEX_DISABLE_PLUGINS === '1') {
+    console.log('[od] Codex plugins disabled via MAX_CODEX_DISABLE_PLUGINS=1');
   }
 
   let bundledMarketplaceEntries = [];
@@ -4941,7 +4941,7 @@ export async function startServer({
   }
 
   // Plan §3.A5 / spec §16 Phase 5 / PB2: periodic snapshot GC. Disabled
-  // when OD_SNAPSHOT_GC_INTERVAL_MS is 0; otherwise one-time bootstrap
+  // when MAX_SNAPSHOT_GC_INTERVAL_MS is 0; otherwise one-time bootstrap
   // sweep + interval. The function returns a NOOP_HANDLE when disabled
   // so we don't have to branch on the result.
   const snapshotGc = startSnapshotGc({ db });
@@ -5034,8 +5034,8 @@ export async function startServer({
     try {
       const presence = await readOpenDesignDiscordPresence();
       const payload = /** @type {OpenDesignDiscordPresenceResponse} */ ({
-        inviteCode: OPEN_DESIGN_DISCORD_INVITE_CODE,
-        inviteUrl: OPEN_DESIGN_DISCORD_INVITE_URL,
+        inviteCode: MARKETING_AX_DISCORD_INVITE_CODE,
+        inviteUrl: MARKETING_AX_DISCORD_INVITE_URL,
         onlineCount: presence.onlineCount,
         memberCount: presence.memberCount,
         fetchedAt: presence.fetchedAt,
@@ -5061,7 +5061,7 @@ export async function startServer({
       bindHost: host,
       port: resolvedPort,
       dataDir: RUNTIME_DATA_DIR,
-      mediaConfigDir: process.env.OD_MEDIA_CONFIG_DIR ?? null,
+      mediaConfigDir: process.env.MAX_MEDIA_CONFIG_DIR ?? null,
       sandboxMode: SANDBOX_RUNTIME.enabled,
       sandbox: SANDBOX_RUNTIME.enabled
         ? { enabled: true, roots: SANDBOX_RUNTIME.roots }
@@ -5206,9 +5206,9 @@ export async function startServer({
   // format string. Operators put this behind their existing auth proxy;
   // there is no built-in authn on the daemon HTTP server. To disable
   // the endpoint entirely (air-gapped installs, regulatory contexts),
-  // set `OD_METRICS_ENDPOINT=disabled`; the route is registered only
+  // set `MAX_METRICS_ENDPOINT=disabled`; the route is registered only
   // when that env value is not the literal string 'disabled'.
-  if (process.env.OD_METRICS_ENDPOINT !== 'disabled') {
+  if (process.env.MAX_METRICS_ENDPOINT !== 'disabled') {
     app.get('/api/metrics', async (_req, res) => {
       res.setHeader('Content-Type', register.contentType);
       res.send(await getCritiqueMetrics());
@@ -5217,7 +5217,7 @@ export async function startServer({
 
   // Phase 16 ratchet endpoint. Returns the rolling conformance window
   // and the ratchet's current recommendation. Operator-driven by
-  // design: the recommendation does not flip OD_CRITIQUE_ROLLOUT_PHASE
+  // design: the recommendation does not flip MAX_CRITIQUE_ROLLOUT_PHASE
   // automatically, it surfaces so a deploy-pipeline follow-up can
   // consume it. Tunables come from query string; defaults are the
   // spec values (14 days, 0.90 shipped, 0.95 clean-parse).
@@ -5244,7 +5244,7 @@ export async function startServer({
       const cleanParseThreshold = parseRate(req.query.cleanParseThreshold, 0.95);
       const history = await readConformanceHistory(RUNTIME_DATA_DIR, windowDays);
       const decision = evaluateRollout({
-        current: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+        current: parseRolloutPhase(process.env.MAX_CRITIQUE_ROLLOUT_PHASE),
         history,
         windowDays,
         shippedThreshold,
@@ -5600,7 +5600,7 @@ export async function startServer({
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
-    OD_BIN,
+    MAX_BIN,
   };
   const nodeDeps = { fs, path };
   const idDeps = { randomId, randomUUID };
@@ -6338,7 +6338,7 @@ export async function startServer({
     const cacheKey = JSON.stringify({
       launchPath,
       home: env.HOME ?? env.USERPROFILE ?? '',
-      openDesignAmrProfile: env.OPEN_DESIGN_AMR_PROFILE ?? '',
+      openDesignAmrProfile: env.MARKETING_AX_AMR_PROFILE ?? '',
       velaProfile: env.VELA_PROFILE ?? '',
       velaLinkUrl: env.VELA_LINK_URL ?? '',
       velaRuntimeKey: env.VELA_RUNTIME_KEY ?? '',
@@ -6681,7 +6681,7 @@ export async function startServer({
       try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
     },
     handleProjectPluginCli: async (req, res, action) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(MAX_NODE_BIN, [MAX_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
     },
     handleCandidateDraft: async (req, res) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
@@ -7777,7 +7777,7 @@ export async function startServer({
     // files are absent) gets the structured token contract appended to
     // the system prompt automatically.
     //
-    // `OD_DESIGN_TOKEN_CHANNEL=0` is the kill switch: it forces the
+    // `MAX_DESIGN_TOKEN_CHANNEL=0` is the kill switch: it forces the
     // daemon back to the pre-PR-C DESIGN.md-only path for every brand,
     // including the structured ones. Any other value (unset, `1`,
     // `true`, etc.) keeps the new default. Drift on prose-only brands
@@ -7889,10 +7889,10 @@ export async function startServer({
     // the way it did when the toggle had never been touched.
     const projectCritiqueOverride = narrowProjectCritiqueOverride(metadata);
     const critiqueEnabledForRun = isCritiqueEnabled({
-      phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
+      phase: parseRolloutPhase(process.env.MAX_CRITIQUE_ROLLOUT_PHASE),
       skillPolicy: skillCritiquePolicy,
       projectOverride: projectCritiqueOverride,
-      envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
+      envOverride: parseEnvEnabled(process.env.MAX_CRITIQUE_ENABLED),
     });
     const critiqueBrand = critiqueEnabledForRun
       && typeof designSystemTitle === 'string'
@@ -7954,11 +7954,11 @@ export async function startServer({
     // into `## Active stage` blocks via the contracts helper when
     // the run carries a snapshot with a pipeline. Default is now ON
     // (flipped in §3.V1 once the bundled SKILL.md fragments covered
-    // every Phase 6/7/8 atom); set OD_BUNDLED_ATOM_PROMPTS=0 to opt
+    // every Phase 6/7/8 atom); set MAX_BUNDLED_ATOM_PROMPTS=0 to opt
     // out (the runs that need pre-§3.V1 byte-equal prompts: snapshot
     // replay against an older daemon, regression-bisects).
     let activeStageBlocks;
-    const bundledAtomPromptsEnabled = process.env.OD_BUNDLED_ATOM_PROMPTS !== '0';
+    const bundledAtomPromptsEnabled = process.env.MAX_BUNDLED_ATOM_PROMPTS !== '0';
     if (
       bundledAtomPromptsEnabled
       && typeof appliedPluginSnapshotId === 'string'
@@ -8005,7 +8005,7 @@ export async function startServer({
       template,
       audioVoiceOptions,
       audioVoiceOptionsError,
-      // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
+      // critiqueCfg.enabled is loaded from MAX_CRITIQUE_ENABLED only, so a
       // run that the resolver enabled via phase / project / skill (env
       // unset) would have critiqueShouldRun = true while critiqueCfg.enabled
       // remains false. Without this override the composer's own gate
@@ -8053,7 +8053,7 @@ export async function startServer({
   // run's SSE stream. Synchronous first emit (the first
   // pipeline_stage_started event lands before the agent process
   // starts) + async tail. Stage D wires the atom-worker registry as
-  // the default stage runner; set OD_PIPELINE_RUNNER=stub to fall
+  // the default stage runner; set MAX_PIPELINE_RUNNER=stub to fall
   // back to the canned v1 stub for diagnostic bisection or replay
   // of pre-Stage-D runs. Errors are swallowed (logged) so a bad
   // pipeline never blocks the agent run.
@@ -8070,7 +8070,7 @@ export async function startServer({
     const projectIdForRun = run.projectId
       ?? snapshot.resolvedContext?.items?.[0]?.id
       ?? 'project-unknown';
-    const runnerMode = process.env.OD_PIPELINE_RUNNER === 'stub'
+    const runnerMode = process.env.MAX_PIPELINE_RUNNER === 'stub'
       ? 'stub'
       : 'registry';
     let runStage;
@@ -8476,7 +8476,7 @@ export async function startServer({
         mediaExecution: run?.mediaExecution,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
-        // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
+        // Default ON; set MAX_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
       });
 
@@ -9038,7 +9038,7 @@ export async function startServer({
     const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
       enabled: Boolean(toolTokenGrant?.token),
       command: process.execPath,
-      argsPrefix: [OD_BIN],
+      argsPrefix: [MAX_BIN],
     });
 
     // External MCP servers configured by the user in Settings → External MCP.
@@ -9656,8 +9656,8 @@ export async function startServer({
       // immediately so we don't have to wait for the next agent event
       // before the new ceiling takes effect. Call unconditionally:
       // an earlier `if (inactivityTimer)` gate left the run in limbo
-      // when `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS=0` but
-      // `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS>0` — noteAgentActivity()
+      // when `MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS=0` but
+      // `MAX_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS>0` — noteAgentActivity()
       // had returned early at run start (pre-artifact delay = 0,
       // no timer set), so the guard then skipped the re-arm and the
       // newly-positive quiet-period delay never armed a timer at all.
@@ -9698,10 +9698,10 @@ export async function startServer({
     }
     const browserUseRuntimeEnv = run.browserUse
       ? {
-          OD_BROWSER_USE_REQUESTED: run.browserUse.requested ? '1' : '0',
-          OD_BROWSER_USE_AVAILABLE: run.browserUse.available ? '1' : '0',
-          ...(run.browserUse.reason ? { OD_BROWSER_USE_UNAVAILABLE_REASON: run.browserUse.reason } : {}),
-          OD_BROWSER_USE_REGISTRY_PATH: run.browserUse.diagnostics?.registryPath ?? '',
+          MAX_BROWSER_USE_REQUESTED: run.browserUse.requested ? '1' : '0',
+          MAX_BROWSER_USE_AVAILABLE: run.browserUse.available ? '1' : '0',
+          ...(run.browserUse.reason ? { MAX_BROWSER_USE_UNAVAILABLE_REASON: run.browserUse.reason } : {}),
+          MAX_BROWSER_USE_REGISTRY_PATH: run.browserUse.diagnostics?.registryPath ?? '',
         }
       : {};
     const agentSpawnEnv = spawnEnvForAgent(
@@ -9730,13 +9730,13 @@ export async function startServer({
       }
     }
     const odMediaEnv = {
-      OD_BIN,
-      OD_NODE_BIN,
-      OD_DAEMON_URL: daemonUrl,
+      MAX_BIN,
+      MAX_NODE_BIN,
+      MAX_DAEMON_URL: daemonUrl,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
-            OD_PROJECT_ID: projectId,
-            OD_PROJECT_DIR: cwd,
+            MAX_PROJECT_ID: projectId,
+            MAX_PROJECT_DIR: cwd,
           }
         : {}),
     };
@@ -11155,7 +11155,7 @@ export async function startServer({
         'You must discover connectors and connector tools yourself through the OD CLI; the daemon has not chosen tools for you.',
         'You must create and register a Live Artifact as the final deliverable. Do not merely describe what you would do.',
         'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
-        'Keep connector credentials and OD_TOOL_TOKEN private; never print or persist secrets.',
+        'Keep connector credentials and MAX_TOOL_TOKEN private; never print or persist secrets.',
       ].join('\n'),
     }, run));
 

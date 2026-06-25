@@ -47,7 +47,7 @@ function writeDelayedSuccessProbe(delayMs: number): { dir: string; bin: string }
   return { dir, bin };
 }
 
-test('detectAcpModels uses OD_ACP_TIMEOUT_MS from the ACP probe environment', async () => {
+test('detectAcpModels uses MAX_ACP_TIMEOUT_MS from the ACP probe environment', async () => {
   const { dir, bin } = writeStallingProbe();
   try {
     const started = Date.now();
@@ -55,28 +55,28 @@ test('detectAcpModels uses OD_ACP_TIMEOUT_MS from the ACP probe environment', as
       detectAcpModels({
         bin: process.execPath,
         args: [bin],
-        env: { OD_ACP_TIMEOUT_MS: '123' },
+        env: { MAX_ACP_TIMEOUT_MS: '123' },
         timeoutMs: 15_000,
       }),
       /ACP model detection timed out after 123ms/,
     );
     assert.ok(
       Date.now() - started < 5_000,
-      'expected OD_ACP_TIMEOUT_MS to bound the probe instead of waiting for the 15s caller timeout',
+      'expected MAX_ACP_TIMEOUT_MS to bound the probe instead of waiting for the 15s caller timeout',
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('detectAcpModels ignores invalid OD_ACP_TIMEOUT_MS values', async () => {
+test('detectAcpModels ignores invalid MAX_ACP_TIMEOUT_MS values', async () => {
   const { dir, bin } = writeStallingProbe();
   try {
     await assert.rejects(
       detectAcpModels({
         bin: process.execPath,
         args: [bin],
-        env: { OD_ACP_TIMEOUT_MS: 'not-a-number' },
+        env: { MAX_ACP_TIMEOUT_MS: 'not-a-number' },
         timeoutMs: 50,
       }),
       /ACP model detection timed out after 50ms/,
@@ -86,14 +86,14 @@ test('detectAcpModels ignores invalid OD_ACP_TIMEOUT_MS values', async () => {
   }
 });
 
-test('detectAcpModels caps oversized OD_ACP_TIMEOUT_MS values before scheduling timers', async () => {
+test('detectAcpModels caps oversized MAX_ACP_TIMEOUT_MS values before scheduling timers', async () => {
   vi.useFakeTimers();
   const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
   try {
     const probe = detectAcpModels({
       bin: process.execPath,
       args: ['-e', 'process.stdin.resume()'],
-      env: { OD_ACP_TIMEOUT_MS: '10000000000' },
+      env: { MAX_ACP_TIMEOUT_MS: '10000000000' },
       timeoutMs: 15_000,
     });
     probe.catch(() => {});
@@ -111,13 +111,13 @@ test('detectAcpModels caps oversized OD_ACP_TIMEOUT_MS values before scheduling 
   }
 });
 
-test('detectAcpModels treats OD_ACP_TIMEOUT_MS=0 as disabling the ACP probe timeout', async () => {
+test('detectAcpModels treats MAX_ACP_TIMEOUT_MS=0 as disabling the ACP probe timeout', async () => {
   const { dir, bin } = writeDelayedSuccessProbe(120);
   try {
     const models = await detectAcpModels({
       bin: process.execPath,
       args: [bin],
-      env: { OD_ACP_TIMEOUT_MS: '0' },
+      env: { MAX_ACP_TIMEOUT_MS: '0' },
       timeoutMs: 50,
     });
 

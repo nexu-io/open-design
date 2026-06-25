@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const runWebStandaloneAfterPack = require("../resources/web-standalone-after-pack.cjs") as (context: unknown) => Promise<void>;
 
-const CONFIG_ENV = "OD_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
+const CONFIG_ENV = "MAX_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
 const darwinSymlinkIt = process.platform === "win32" ? it.skip : it;
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -291,18 +291,18 @@ describe("web standalone afterPack hook", () => {
     const codesignBin = join(codesignRoot, "bin");
     const codesignLog = join(codesignRoot, "codesign.log");
     const oldPath = process.env.PATH;
-    const oldCodesignLog = process.env.OD_FAKE_CODESIGN_LOG;
+    const oldCodesignLog = process.env.MAX_FAKE_CODESIGN_LOG;
 
     await mkdir(codesignBin, { recursive: true });
     await writeFile(
       join(codesignBin, "codesign"),
-      "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$OD_FAKE_CODESIGN_LOG\"\n",
+      "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$MAX_FAKE_CODESIGN_LOG\"\n",
       "utf8",
     );
     await chmod(join(codesignBin, "codesign"), 0o755);
 
     process.env.PATH = `${codesignBin}${path.delimiter}${oldPath ?? ""}`;
-    process.env.OD_FAKE_CODESIGN_LOG = codesignLog;
+    process.env.MAX_FAKE_CODESIGN_LOG = codesignLog;
 
     let fixture: Awaited<ReturnType<typeof runFixture>> | null = null;
     try {
@@ -373,9 +373,9 @@ describe("web standalone afterPack hook", () => {
         process.env.PATH = oldPath;
       }
       if (oldCodesignLog == null) {
-        delete process.env.OD_FAKE_CODESIGN_LOG;
+        delete process.env.MAX_FAKE_CODESIGN_LOG;
       } else {
-        process.env.OD_FAKE_CODESIGN_LOG = oldCodesignLog;
+        process.env.MAX_FAKE_CODESIGN_LOG = oldCodesignLog;
       }
     }
   });

@@ -27,9 +27,9 @@ import {
   type SidecarRuntimeContext,
 } from "@marketing-ax/sidecar";
 
-const HOST = process.env.OD_HOST || "127.0.0.1";
-if (process.env.OD_HOST != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(process.env.OD_HOST)) {
-  throw new Error(`OD_HOST contains invalid characters: ${process.env.OD_HOST}`);
+const HOST = process.env.MAX_HOST || "127.0.0.1";
+if (process.env.MAX_HOST != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(process.env.MAX_HOST)) {
+  throw new Error(`MAX_HOST contains invalid characters: ${process.env.MAX_HOST}`);
 }
 const DAEMON_HOST = "127.0.0.1";
 const STANDALONE_BACKEND_HOST = "127.0.0.1";
@@ -37,10 +37,10 @@ const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_DIST_DIR_ENV = SIDECAR_ENV.WEB_DIST_DIR;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
-const WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
-const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
-const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
-const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
+const WEB_OUTPUT_MODE_ENV = "MAX_WEB_OUTPUT_MODE";
+const WEB_STANDALONE_ROOT_ENV = "MAX_WEB_STANDALONE_ROOT";
+const STANDALONE_PARENT_PID_ENV = "MAX_STANDALONE_PARENT_PID";
+const STANDALONE_STARTUP_TIMEOUT_ENV = "MAX_STANDALONE_STARTUP_TIMEOUT_MS";
 const SHUTDOWN_TIMEOUT_MS = 3000;
 const STANDALONE_READINESS_POLL_MS = 150;
 const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
@@ -71,7 +71,7 @@ function createNextApp(options: { dev: boolean; dir: string } & NextBundlerOptio
 
 export function resolveNextBundlerOptions(isDev: boolean): NextBundlerOptions {
   if (!isDev) return {};
-  const configured = (process.env.OD_WEB_DEV_BUNDLER ?? "webpack").trim().toLowerCase();
+  const configured = (process.env.MAX_WEB_DEV_BUNDLER ?? "webpack").trim().toLowerCase();
   if (configured === "turbopack" || configured === "turbo") return { turbopack: true };
   return { webpack: true };
 }
@@ -323,7 +323,7 @@ function parseAllowedDevHost(value: string): string | null {
 
 function configuredAllowedDevHosts(): Set<string> {
   return new Set(
-    (process.env.OD_ALLOWED_DEV_ORIGINS ?? "")
+    (process.env.MAX_ALLOWED_DEV_ORIGINS ?? "")
       .split(",")
       .map(parseAllowedDevHost)
       .filter((host): host is string => host != null),
@@ -828,7 +828,7 @@ async function startRegularNextSidecar(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   webRoot: string,
 ): Promise<WebSidecarHandle> {
-  const dev = process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev";
+  const dev = process.env.MAX_WEB_PROD !== "1" && runtime.mode === "dev";
   const app = createNextApp({ dev, dir: webRoot, ...resolveNextBundlerOptions(dev) });
   await prepareNextApp(app, webRoot);
 

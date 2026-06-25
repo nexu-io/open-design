@@ -1,5 +1,5 @@
 import {
-  OPEN_DESIGN_HOST_UPDATER_STATES,
+  MARKETING_AX_HOST_UPDATER_STATES,
   checkHostUpdater,
   downloadHostUpdater,
   getHostUpdaterStatus,
@@ -68,7 +68,7 @@ function downloadProgressFromStatus(
   status: OpenDesignHostUpdaterStatusSnapshot | null,
 ): UpdaterDownloadProgress | null {
   if (status == null) return null;
-  if (status.state !== OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADING) return null;
+  if (status.state !== MARKETING_AX_HOST_UPDATER_STATES.DOWNLOADING) return null;
   const sourceProgress = status.incoming?.progress ?? status.progress;
 
   const receivedBytes = Math.max(0, sourceProgress?.receivedBytes ?? 0);
@@ -92,9 +92,9 @@ export function deriveUpdaterModel(
   const environment: UpdaterEnvironment = hostAvailable ? 'desktop' : 'web';
   const state = status?.state;
   const busy =
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.CHECKING ||
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADING ||
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.INSTALLING;
+    state === MARKETING_AX_HOST_UPDATER_STATES.CHECKING ||
+    state === MARKETING_AX_HOST_UPDATER_STATES.DOWNLOADING ||
+    state === MARKETING_AX_HOST_UPDATER_STATES.INSTALLING;
   const canOpenInstaller = Boolean(
     hostAvailable &&
     status?.enabled &&
@@ -102,7 +102,7 @@ export function deriveUpdaterModel(
     status.capabilities.canOpenInstaller,
   );
   const hasDownloadedInstaller = Boolean(
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADED &&
+    state === MARKETING_AX_HOST_UPDATER_STATES.DOWNLOADED &&
     status?.downloadPath,
   );
   const installerOpened = status?.installResult != null;
@@ -111,7 +111,7 @@ export function deriveUpdaterModel(
   const availableVersion = status?.availableVersion ?? null;
   const currentVersion = status?.currentVersion ?? null;
   const downloadProgress = downloadProgressFromStatus(status);
-  const upToDate = state === OPEN_DESIGN_HOST_UPDATER_STATES.NOT_AVAILABLE;
+  const upToDate = state === MARKETING_AX_HOST_UPDATER_STATES.NOT_AVAILABLE;
   const promptKey =
     status == null || availableVersion == null
       ? null

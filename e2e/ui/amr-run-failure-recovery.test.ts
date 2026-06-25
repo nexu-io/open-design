@@ -378,7 +378,7 @@ async function setupAmrWorkspace(
         HOME: homeDir,
         VELA_LINK_URL: 'http://localhost:18081',
         VELA_RUNTIME_KEY: 'fake-runtime-key',
-        ...(options.profile ? { OPEN_DESIGN_AMR_PROFILE: options.profile } : {}),
+        ...(options.profile ? { MARKETING_AX_AMR_PROFILE: options.profile } : {}),
       },
       codex: codexRuntime.env,
     },

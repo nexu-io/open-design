@@ -135,9 +135,9 @@ function storageRef(projectId: string, runId: string, objectClass: ObjectClass, 
 }
 
 function inferRelayUrl(env: NodeJS.ProcessEnv): string | null {
-  const explicit = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
+  const explicit = env.MARKETING_AX_OBJECT_RELAY_URL?.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
-  const rawTelemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
+  const rawTelemetryRelayUrl = env.MARKETING_AX_TELEMETRY_RELAY_URL?.trim();
   if (!rawTelemetryRelayUrl) return null;
   const telemetryRelayUrl = rawTelemetryRelayUrl.replace(/\/+$/, '');
   try {
@@ -176,15 +176,15 @@ function readRelayConfig(env: NodeJS.ProcessEnv): ObjectRelayConfig | null {
     authorizeUrl: inferAuthorizeUrl(url),
     uploadsEnabled: true,
     timeoutMs: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
+      env.MARKETING_AX_OBJECT_RELAY_TIMEOUT_MS ?? env.MARKETING_AX_TELEMETRY_TIMEOUT_MS,
       10_000,
     ),
     objectMaxBytes: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_MAX_BYTES,
+      env.MARKETING_AX_OBJECT_MAX_BYTES,
       DEFAULT_OBJECT_MAX_BYTES,
     ),
     objectBatchMaxBytes: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_BATCH_MAX_BYTES ?? env.TRACE_OBJECT_BATCH_MAX_BYTES,
+      env.MARKETING_AX_OBJECT_BATCH_MAX_BYTES ?? env.TRACE_OBJECT_BATCH_MAX_BYTES,
       DEFAULT_OBJECT_BATCH_MAX_BYTES,
     ),
   };

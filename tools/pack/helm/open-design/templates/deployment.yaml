@@ -55,9 +55,9 @@ spec:
           {{- if .Values.persistence.enabled }}
           volumeMounts:
             - name: data
-              mountPath: {{ .Values.env.OD_DATA_DIR | default "/data/od" }}
+              mountPath: {{ .Values.env.MAX_DATA_DIR | default "/data/od" }}
             - name: config
-              mountPath: {{ .Values.env.OD_MEDIA_CONFIG_DIR | default "/data/config" }}
+              mountPath: {{ .Values.env.MAX_MEDIA_CONFIG_DIR | default "/data/config" }}
           {{- end }}
       {{- if .Values.persistence.enabled }}
       volumes:

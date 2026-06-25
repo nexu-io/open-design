@@ -1,12 +1,12 @@
-export const OPEN_DESIGN_HOST_GLOBAL = "__od__";
-export const OPEN_DESIGN_HOST_VERSION = 2;
+export const MARKETING_AX_HOST_GLOBAL = "__od__";
+export const MARKETING_AX_HOST_VERSION = 2;
 
-export const OPEN_DESIGN_HOST_CLIENT_TYPES = Object.freeze({
+export const MARKETING_AX_HOST_CLIENT_TYPES = Object.freeze({
   DESKTOP: "desktop",
 } as const);
 
 export type OpenDesignHostClientType =
-  (typeof OPEN_DESIGN_HOST_CLIENT_TYPES)[keyof typeof OPEN_DESIGN_HOST_CLIENT_TYPES];
+  (typeof MARKETING_AX_HOST_CLIENT_TYPES)[keyof typeof MARKETING_AX_HOST_CLIENT_TYPES];
 
 export type OpenDesignHostClient = {
   // BCP-47 locale string (e.g. "zh-CN", "pt-BR") the host process read from
@@ -95,7 +95,7 @@ export type OpenDesignHostBrowserClearDataOptions = {
   storage?: boolean;
 };
 
-export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
+export const MARKETING_AX_HOST_UPDATER_ACTIONS = Object.freeze({
   CHECK: "check",
   DOWNLOAD: "download",
   INSTALL: "install",
@@ -104,13 +104,13 @@ export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
 } as const);
 
 export type OpenDesignHostUpdaterAction =
-  (typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS)[keyof typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS];
+  (typeof MARKETING_AX_HOST_UPDATER_ACTIONS)[keyof typeof MARKETING_AX_HOST_UPDATER_ACTIONS];
 type OpenDesignHostUpdaterStatusAction = Exclude<
   OpenDesignHostUpdaterAction,
-  typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS.QUIT
+  typeof MARKETING_AX_HOST_UPDATER_ACTIONS.QUIT
 >;
 
-export const OPEN_DESIGN_HOST_UPDATER_STATES = Object.freeze({
+export const MARKETING_AX_HOST_UPDATER_STATES = Object.freeze({
   AVAILABLE: "available",
   CHECKING: "checking",
   DOWNLOADED: "downloaded",
@@ -123,7 +123,7 @@ export const OPEN_DESIGN_HOST_UPDATER_STATES = Object.freeze({
 } as const);
 
 export type OpenDesignHostUpdaterState =
-  (typeof OPEN_DESIGN_HOST_UPDATER_STATES)[keyof typeof OPEN_DESIGN_HOST_UPDATER_STATES];
+  (typeof MARKETING_AX_HOST_UPDATER_STATES)[keyof typeof MARKETING_AX_HOST_UPDATER_STATES];
 
 export type OpenDesignHostUpdaterMode = "js-incremental" | "package-launcher";
 export type OpenDesignHostUpdaterChannel = "beta" | "nightly" | "preview" | "stable";
@@ -297,7 +297,7 @@ export type OpenDesignHostBridge = {
     status(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     subscribe(listener: OpenDesignHostUpdaterStatusListener): () => void;
   };
-  version: typeof OPEN_DESIGN_HOST_VERSION;
+  version: typeof MARKETING_AX_HOST_VERSION;
 };
 
 export type OpenDesignHostGlobalScope = Record<string, unknown> & {
@@ -322,9 +322,9 @@ function hasFunction(record: Record<string, unknown>, key: string): boolean {
 
 export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostBridge {
   if (!isRecord(value)) return false;
-  if (value.version !== OPEN_DESIGN_HOST_VERSION) return false;
+  if (value.version !== MARKETING_AX_HOST_VERSION) return false;
   const client = value.client;
-  if (!isRecord(client) || client.type !== OPEN_DESIGN_HOST_CLIENT_TYPES.DESKTOP) return false;
+  if (!isRecord(client) || client.type !== MARKETING_AX_HOST_CLIENT_TYPES.DESKTOP) return false;
   if (client.platform != null && typeof client.platform !== "string") return false;
   if (client.osLocale != null && typeof client.osLocale !== "string") return false;
 
@@ -458,10 +458,10 @@ export function normalizeOpenDesignHostPickWorkingDirResult(
 }
 
 function candidateFromScope(scope: OpenDesignHostGlobalScope): unknown {
-  if (OPEN_DESIGN_HOST_GLOBAL in scope) return scope[OPEN_DESIGN_HOST_GLOBAL];
+  if (MARKETING_AX_HOST_GLOBAL in scope) return scope[MARKETING_AX_HOST_GLOBAL];
   const windowValue = scope.window;
-  if (isRecord(windowValue) && OPEN_DESIGN_HOST_GLOBAL in windowValue) {
-    return windowValue[OPEN_DESIGN_HOST_GLOBAL];
+  if (isRecord(windowValue) && MARKETING_AX_HOST_GLOBAL in windowValue) {
+    return windowValue[MARKETING_AX_HOST_GLOBAL];
   }
   return undefined;
 }
@@ -621,28 +621,28 @@ export async function getHostUpdaterStatus(
   options?: OpenDesignHostUpdaterActionOptions,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostUpdaterResult> {
-  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.STATUS, options, scope);
+  return await runHostUpdaterAction(MARKETING_AX_HOST_UPDATER_ACTIONS.STATUS, options, scope);
 }
 
 export async function checkHostUpdater(
   options?: OpenDesignHostUpdaterActionOptions,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostUpdaterResult> {
-  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.CHECK, options, scope);
+  return await runHostUpdaterAction(MARKETING_AX_HOST_UPDATER_ACTIONS.CHECK, options, scope);
 }
 
 export async function downloadHostUpdater(
   options?: OpenDesignHostUpdaterActionOptions,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostUpdaterResult> {
-  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.DOWNLOAD, options, scope);
+  return await runHostUpdaterAction(MARKETING_AX_HOST_UPDATER_ACTIONS.DOWNLOAD, options, scope);
 }
 
 export async function installHostUpdater(
   options?: OpenDesignHostUpdaterActionOptions,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostUpdaterResult> {
-  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.INSTALL, options, scope);
+  return await runHostUpdaterAction(MARKETING_AX_HOST_UPDATER_ACTIONS.INSTALL, options, scope);
 }
 
 export async function quitHostAfterUpdaterInstallerOpen(

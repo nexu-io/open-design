@@ -67,7 +67,7 @@ notarize_mac_dmg_once() {
   local auth_args=()
   local s3_arg="--no-s3-acceleration"
   local status
-  if [ "${OPEN_DESIGN_NOTARIZE_S3_ACCELERATION:-false}" = "true" ]; then
+  if [ "${MARKETING_AX_NOTARIZE_S3_ACCELERATION:-false}" = "true" ]; then
     s3_arg="--s3-acceleration"
   fi
   while IFS= read -r -d '' arg; do
@@ -89,8 +89,8 @@ notarize_mac_dmg_once() {
 
 notarize_mac_dmg() {
   local dmg_path="$1"
-  local attempts="${OPEN_DESIGN_NOTARIZE_ATTEMPTS:-8}"
-  local retry_delay_ms="${OPEN_DESIGN_NOTARIZE_RETRY_DELAY_MS:-15000}"
+  local attempts="${MARKETING_AX_NOTARIZE_ATTEMPTS:-8}"
+  local retry_delay_ms="${MARKETING_AX_NOTARIZE_RETRY_DELAY_MS:-15000}"
   local attempt output status
   if [ ! -f "$dmg_path" ]; then
     echo "expected dmg not found for notarization: $dmg_path" >&2
@@ -296,16 +296,16 @@ if [ "$RELEASE_SMOKE_MODE" = "skip" ]; then
 elif [ "$RELEASE_TARGET" = "linux_x64" ]; then
   required RELEASE_REPORT_DIR
   mkdir -p "$RELEASE_REPORT_DIR/screenshots"
-  OD_PACKAGED_E2E_LINUX_APPIMAGE=1 \
-  OD_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
-  OD_PACKAGED_E2E_SCREENSHOT_PATH="$RELEASE_REPORT_DIR/screenshots/open-design-linux-smoke.png" \
-  OD_PACKAGED_E2E_TOOLS_PACK_DIR="$TOOLS_PACK_DIR" \
+  MAX_PACKAGED_E2E_LINUX_APPIMAGE=1 \
+  MAX_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
+  MAX_PACKAGED_E2E_SCREENSHOT_PATH="$RELEASE_REPORT_DIR/screenshots/open-design-linux-smoke.png" \
+  MAX_PACKAGED_E2E_TOOLS_PACK_DIR="$TOOLS_PACK_DIR" \
   pnpm --dir e2e test specs/linux.spec.ts 2>&1 | tee "$RELEASE_REPORT_DIR/vitest.log"
 else
   required RELEASE_REPORT_DIR
   update_build_json_path=""
   update_version=""
-  if [ "$RELEASE_SMOKE_MODE" = "full" ] && [ "$RELEASE_TARGET" = "mac_arm64" ] && [ -z "${OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" ]; then
+  if [ "$RELEASE_SMOKE_MODE" = "full" ] && [ "$RELEASE_TARGET" = "mac_arm64" ] && [ -z "${MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" ]; then
     if [[ "$RELEASE_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
       update_version="${BASH_REMATCH[1]}-beta.$((BASH_REMATCH[2] + 1))"
       update_fixture_dir="$RELEASE_WORK_DIR/tools-pack-update-fixture"
@@ -332,18 +332,18 @@ else
       exit 1
     fi
   fi
-  OD_PACKAGED_E2E_BUILD_JSON_PATH="$BUILD_JSON_PATH" \
-  OD_PACKAGED_E2E_BUILD_LOG_PATH="$BUILD_LOG_PATH" \
-  OD_PACKAGED_E2E_MAC=1 \
-  OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path" \
-  OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL="${OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" \
-  OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}" \
-  OD_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE" \
-  OD_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
-  OD_PACKAGED_E2E_RELEASE_CHANNEL=beta \
-  OD_PACKAGED_E2E_RELEASE_VERSION="$RELEASE_VERSION" \
-  OD_PACKAGED_E2E_REPORT_DIR="$RELEASE_REPORT_DIR" \
-  OD_PACKAGED_E2E_TOOLS_PACK_DIR="$TOOLS_PACK_DIR" \
+  MAX_PACKAGED_E2E_BUILD_JSON_PATH="$BUILD_JSON_PATH" \
+  MAX_PACKAGED_E2E_BUILD_LOG_PATH="$BUILD_LOG_PATH" \
+  MAX_PACKAGED_E2E_MAC=1 \
+  MAX_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path" \
+  MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL="${MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" \
+  MAX_PACKAGED_E2E_MAC_UPDATE_VERSION="${MAX_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}" \
+  MAX_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE" \
+  MAX_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
+  MAX_PACKAGED_E2E_RELEASE_CHANNEL=beta \
+  MAX_PACKAGED_E2E_RELEASE_VERSION="$RELEASE_VERSION" \
+  MAX_PACKAGED_E2E_REPORT_DIR="$RELEASE_REPORT_DIR" \
+  MAX_PACKAGED_E2E_TOOLS_PACK_DIR="$TOOLS_PACK_DIR" \
   pnpm --dir e2e exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
 fi
 

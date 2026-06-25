@@ -31,8 +31,8 @@ describe('deploy provider routes', () => {
 
   it('dispatches deploy config reads and writes by providerId', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     try {
       const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
@@ -92,16 +92,16 @@ describe('deploy provider routes', () => {
         projectName: '',
       });
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
 
   it('lists Cloudflare Pages zones for saved account credentials', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-zones-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     try {
       const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
@@ -154,15 +154,15 @@ describe('deploy provider routes', () => {
         vi.unstubAllGlobals();
       }
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
 
   it('dispatches deploy preflight by providerId', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     const projectId = `deploy-route-${Date.now()}`;
     const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(
@@ -189,8 +189,8 @@ describe('deploy provider routes', () => {
 
   it('derives Cloudflare Pages project names from the Open Design project', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-auto-project-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     const projectId = 'cf-route-123456';
     const expectedPagesProject = 'od-ai-cf-route-123';
     try {
@@ -369,18 +369,18 @@ describe('deploy provider routes', () => {
         vi.unstubAllGlobals();
       }
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
 
   it('rejects invalid Cloudflare custom-domain selection before Pages deploy', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-invalid-domain-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     const projectId = `cf-invalid-${Date.now()}`;
     const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
@@ -440,18 +440,18 @@ describe('deploy provider routes', () => {
         vi.unstubAllGlobals();
       }
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
 
   it('refreshes Cloudflare Pages custom-domain API status during check-link', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-domain-check-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     const projectId = `cf-domain-check-${Date.now()}`;
     const expectedPagesProject = cloudflarePagesProjectNameForProject(projectId, 'Domain check test');
     const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
@@ -662,18 +662,18 @@ describe('deploy provider routes', () => {
         vi.unstubAllGlobals();
       }
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
 
   it('keeps Vercel deploy payload free of Cloudflare custom-domain fields', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-payload-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     const projectId = `vercel-payload-${Date.now()}`;
     const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
@@ -771,8 +771,8 @@ describe('deploy provider routes', () => {
         vi.unstubAllGlobals();
       }
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });

@@ -126,11 +126,11 @@ describe('snapshot GC', () => {
 
   // Plan §3.M1 / spec PB2 — referenced-row TTL.
   //
-  // Operators who opt into OD_SNAPSHOT_RETENTION_DAYS expect referenced
+  // Operators who opt into MAX_SNAPSHOT_RETENTION_DAYS expect referenced
   // snapshots whose project has been deleted to be reaped after the
   // configured window. Live projects keep their snapshots pinned
   // forever (reproducibility wins).
-  describe('OD_SNAPSHOT_RETENTION_DAYS referenced-row TTL', () => {
+  describe('MAX_SNAPSHOT_RETENTION_DAYS referenced-row TTL', () => {
     it('prunes referenced snapshots whose project no longer exists and applied_at is older than the window', () => {
       const referenced = createSnapshot(db, baseInput());
       linkSnapshotToRun(db, referenced.snapshotId, 'run-r');

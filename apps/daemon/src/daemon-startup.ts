@@ -46,8 +46,8 @@ export function parseDaemonCliStartupArgs(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): DaemonCliStartupParseResult {
-  let port = Number(env.OD_PORT) || 7456;
-  let host = normalizeDaemonBindHost(env.OD_BIND_HOST);
+  let port = Number(env.MAX_PORT) || 7456;
+  let host = normalizeDaemonBindHost(env.MAX_BIND_HOST);
   let open = true;
 
   for (let i = 0; i < argv.length; i++) {

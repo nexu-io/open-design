@@ -1,9 +1,9 @@
 /**
- * Regression coverage for the OD_LEGACY_DATA_DIR migration-aware
+ * Regression coverage for the MAX_LEGACY_DATA_DIR migration-aware
  * daemon status timeout in apps/packaged/src/sidecars.ts.
  *
  * Background: when the user is recovering 0.3.x `.od/` data via
- * OD_LEGACY_DATA_DIR, apps/daemon/src/legacy-data-migrator.ts runs a
+ * MAX_LEGACY_DATA_DIR, apps/daemon/src/legacy-data-migrator.ts runs a
  * synchronous payload copy at module import time, before the daemon
  * sidecar can answer status. With the default 35-second status budget
  * a multi-GB legacy `.od/projects` or `.od/artifacts` tree can hit the
@@ -36,31 +36,31 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     expect(resolveDaemonStatusTimeoutMs({})).toBe(35_000);
   });
 
-  it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' })).toBe(35_000);
+  it('treats an empty MAX_LEGACY_DATA_DIR as unset', () => {
+    expect(resolveDaemonStatusTimeoutMs({ MAX_LEGACY_DATA_DIR: '' })).toBe(35_000);
   });
 
-  it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
+  it('extends the budget to 30 minutes when MAX_LEGACY_DATA_DIR is set', () => {
     // The packaged sidecar must give the daemon a long-enough window to
     // sync-copy a multi-GB legacy `.od/` payload. Anything below ~10
     // minutes was historically observed to time out on real installs.
     const value = resolveDaemonStatusTimeoutMs({
-      OD_LEGACY_DATA_DIR: '/path/to/old/.od',
+      MAX_LEGACY_DATA_DIR: '/path/to/old/.od',
     });
     expect(value).toBeGreaterThanOrEqual(10 * 60 * 1000);
     expect(value).toBe(30 * 60 * 1000);
   });
 
   it('falls back to process.env when called with no argument', () => {
-    const original = process.env.OD_LEGACY_DATA_DIR;
+    const original = process.env.MAX_LEGACY_DATA_DIR;
     try {
-      delete process.env.OD_LEGACY_DATA_DIR;
+      delete process.env.MAX_LEGACY_DATA_DIR;
       expect(resolveDaemonStatusTimeoutMs()).toBe(35_000);
-      process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
+      process.env.MAX_LEGACY_DATA_DIR = '/some/legacy/path';
       expect(resolveDaemonStatusTimeoutMs()).toBe(30 * 60 * 1000);
     } finally {
-      if (original == null) delete process.env.OD_LEGACY_DATA_DIR;
-      else process.env.OD_LEGACY_DATA_DIR = original;
+      if (original == null) delete process.env.MAX_LEGACY_DATA_DIR;
+      else process.env.MAX_LEGACY_DATA_DIR = original;
     }
   });
 });
@@ -313,21 +313,21 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     };
   }
 
-  it('sets OD_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (Electron entry)', () => {
+  it('sets MAX_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (Electron entry)', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: '1.2.3',
       daemonCliEntry: null,
       legacyDataDir: null,
       requireDesktopAuth: true,
     });
-    expect(env.OD_REQUIRE_DESKTOP_AUTH).toBe('1');
-    expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
-    expect(env.OD_RESOURCE_ROOT).toBe('/tmp/od-pkg/resources');
-    expect(env.OD_APP_VERSION).toBe('1.2.3');
-    expect(env.OD_LEGACY_DATA_DIR).toBeUndefined();
+    expect(env.MAX_REQUIRE_DESKTOP_AUTH).toBe('1');
+    expect(env.MAX_DATA_DIR).toBe('/tmp/od-pkg/data');
+    expect(env.MAX_RESOURCE_ROOT).toBe('/tmp/od-pkg/resources');
+    expect(env.MAX_APP_VERSION).toBe('1.2.3');
+    expect(env.MAX_LEGACY_DATA_DIR).toBeUndefined();
   });
 
-  it('omits OD_REQUIRE_DESKTOP_AUTH entirely when requireDesktopAuth=false (headless)', () => {
+  it('omits MAX_REQUIRE_DESKTOP_AUTH entirely when requireDesktopAuth=false (headless)', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
       daemonCliEntry: null,
@@ -335,23 +335,23 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: false,
     });
     // Round-5 (lefarcen P2): MUST NOT set the env var, even to "0" —
-    // the daemon's gate trigger is `process.env.OD_REQUIRE_DESKTOP_AUTH === '1'`,
+    // the daemon's gate trigger is `process.env.MAX_REQUIRE_DESKTOP_AUTH === '1'`,
     // so a literal "0" would behave the same as omitted today, but a
     // future code change to truthy-check the variable would silently
     // re-arm the gate. Omitted is the intent.
-    expect('OD_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
-    expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
-    expect(env.OD_APP_VERSION).toBeUndefined();
+    expect('MAX_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
+    expect(env.MAX_DATA_DIR).toBe('/tmp/od-pkg/data');
+    expect(env.MAX_APP_VERSION).toBeUndefined();
   });
 
-  it('forwards OD_LEGACY_DATA_DIR only when set, irrespective of requireDesktopAuth', () => {
+  it('forwards MAX_LEGACY_DATA_DIR only when set, irrespective of requireDesktopAuth', () => {
     const withLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
       daemonCliEntry: null,
       legacyDataDir: '/old/.od',
       requireDesktopAuth: false,
     });
-    expect(withLegacy.OD_LEGACY_DATA_DIR).toBe('/old/.od');
+    expect(withLegacy.MAX_LEGACY_DATA_DIR).toBe('/old/.od');
 
     const withEmptyLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
@@ -361,17 +361,17 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     });
     // Empty string must NOT propagate — daemon treats "env set but
     // path invalid" as an error and refuses to start.
-    expect('OD_LEGACY_DATA_DIR' in withEmptyLegacy).toBe(false);
+    expect('MAX_LEGACY_DATA_DIR' in withEmptyLegacy).toBe(false);
   });
 
-  it('forwards daemonCliEntry through OD_DAEMON_CLI_PATH when set', () => {
+  it('forwards daemonCliEntry through MAX_DAEMON_CLI_PATH when set', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
       daemonCliEntry: '/path/to/cli/dist/index.js',
       legacyDataDir: null,
       requireDesktopAuth: true,
     });
-    expect(env.OD_DAEMON_CLI_PATH).toBe('/path/to/cli/dist/index.js');
+    expect(env.MAX_DAEMON_CLI_PATH).toBe('/path/to/cli/dist/index.js');
   });
 
   it('forwards the packaged telemetry relay URL to the daemon when configured', () => {
@@ -382,7 +382,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: true,
       telemetryRelayUrl: 'https://telemetry.open-design.ai/api/langfuse',
     });
-    expect(env.OPEN_DESIGN_TELEMETRY_RELAY_URL).toBe(
+    expect(env.MARKETING_AX_TELEMETRY_RELAY_URL).toBe(
       'https://telemetry.open-design.ai/api/langfuse',
     );
   });
@@ -395,7 +395,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       legacyDataDir: null,
       requireDesktopAuth: true,
     });
-    expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
+    expect(env.MARKETING_AX_AMR_PROFILE).toBe('test');
   });
 
   it('forwards POSTHOG_KEY/POSTHOG_HOST to the daemon spawn env when baked into the bundle', () => {
@@ -426,7 +426,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
 });
 
 describe('waitForStatus child-exit fast-fail', () => {
-  // mrcfps round-7: when OD_LEGACY_DATA_DIR is set the daemon status
+  // mrcfps round-7: when MAX_LEGACY_DATA_DIR is set the daemon status
   // budget extends to 30 minutes for legitimate large-payload migrations.
   // But a daemon that throws LegacyMigrationError at startup (invalid
   // legacy dir, existing target payload, symlink, marker write failure)

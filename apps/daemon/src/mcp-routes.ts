@@ -12,7 +12,7 @@ export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp
 
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
-  const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
+  const { MAX_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
   const { pendingAuth, daemonUrlRef } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
   const getDaemonUrl = () => daemonUrlRef.current;
@@ -34,9 +34,9 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // the factoring — divergence here would mean Codex behaves
   // differently depending on which install path the user took.
   function computeInstallPayload(): McpInstallPayload {
-    const cliPath = OD_BIN;
+    const cliPath = MAX_BIN;
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
-    // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
+    // bootstrapSidecarRuntime stamped MAX_SIDECAR_IPC_PATH into the env.
     // In sidecar mode the snippet omits --daemon-url and the spawned
     // `od mcp` discovers the live URL via the concrete IPC endpoint on
     // every spawn, so the client config survives ephemeral-port
@@ -49,12 +49,12 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (isSidecarMode) {
       sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
     }
-    // tools-dev / packaged launchers export OD_WEB_PORT so the daemon
+    // tools-dev / packaged launchers export MAX_WEB_PORT so the daemon
     // knows where the browser-facing Open Design studio is running.
     // CLI-only / headless launches set neither and webBaseUrl falls
     // through as null — MCP clients then just omit the studio deep
     // link from their responses.
-    const webPortRaw = process.env.OD_WEB_PORT;
+    const webPortRaw = process.env.MAX_WEB_PORT;
     const webPortNum = webPortRaw ? Number(webPortRaw) : Number.NaN;
     const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
       ? `http://127.0.0.1:${webPortNum}`
@@ -184,7 +184,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // header into the `.mcp.json` we write for Claude Code at spawn time.
   // The redirect URI points at THIS daemon's public origin so the flow
   // works the same in local dev (loopback) and in cloud deployments
-  // where OD_PUBLIC_BASE_URL pins the externally-routable URL.
+  // where MAX_PUBLIC_BASE_URL pins the externally-routable URL.
   // ─────────────────────────────────────────────────────────────────
 
   app.post('/api/mcp/oauth/start', async (req, res) => {
@@ -357,13 +357,13 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 }
 
 function getPublicBaseUrl(req: any) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
+  const env = process.env.MAX_PUBLIC_BASE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
   }
   const proto = req.protocol || 'http';
   const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
+  if (!host) return `http://localhost:${process.env.MAX_PORT ?? '7456'}`;
   return `${proto}://${host}`;
 }
 

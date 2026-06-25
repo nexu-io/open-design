@@ -270,7 +270,7 @@ export function createChatRunService({
   };
 
   const forceWaitMs = () => {
-    const raw = Number(process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS);
+    const raw = Number(process.env.MAX_CHAT_RUN_CANCEL_FORCE_WAIT_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
 
@@ -296,7 +296,7 @@ export function createChatRunService({
   };
 
   const cancelGraceMs = () => {
-    const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
+    const raw = Number(process.env.MAX_CHAT_RUN_CANCEL_GRACE_MS || process.env.MAX_CHAT_RUN_SHUTDOWN_GRACE_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : 3000;
   };
 

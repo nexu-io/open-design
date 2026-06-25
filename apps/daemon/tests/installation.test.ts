@@ -28,7 +28,7 @@ import {
 let rootDir: string;
 let dataDir: string;
 let installDir: string;
-const SAVED_INSTALL_ENV = process.env.OD_INSTALLATION_DIR;
+const SAVED_INSTALL_ENV = process.env.MAX_INSTALLATION_DIR;
 
 beforeEach(async () => {
   rootDir = await mkdtemp(join(tmpdir(), 'od-install-test-'));
@@ -36,14 +36,14 @@ beforeEach(async () => {
   installDir = join(rootDir, 'channel-root');
   await mkdir(dataDir, { recursive: true });
   await mkdir(installDir, { recursive: true });
-  process.env.OD_INSTALLATION_DIR = installDir;
+  process.env.MAX_INSTALLATION_DIR = installDir;
 });
 
 afterEach(async () => {
   if (SAVED_INSTALL_ENV == null) {
-    delete process.env.OD_INSTALLATION_DIR;
+    delete process.env.MAX_INSTALLATION_DIR;
   } else {
-    process.env.OD_INSTALLATION_DIR = SAVED_INSTALL_ENV;
+    process.env.MAX_INSTALLATION_DIR = SAVED_INSTALL_ENV;
   }
   if (rootDir != null) {
     await rm(rootDir, { recursive: true, force: true });
@@ -112,8 +112,8 @@ describe('installation.json migration', () => {
     expect(persisted.installationId).toBe('untouched');
   });
 
-  it('falls back to dataDir when OD_INSTALLATION_DIR is unset (dev / OSS / tools-dev paths)', async () => {
-    delete process.env.OD_INSTALLATION_DIR;
+  it('falls back to dataDir when MAX_INSTALLATION_DIR is unset (dev / OSS / tools-dev paths)', async () => {
+    delete process.env.MAX_INSTALLATION_DIR;
     await writeAppConfig(dataDir, { installationId: 'devmode-id' });
     // With no override, the install file should land next to app-config.json.
     const persisted = JSON.parse(

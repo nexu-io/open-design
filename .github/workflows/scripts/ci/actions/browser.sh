@@ -29,9 +29,9 @@ read -r daemon_port web_port < <(
   '
 )
 
-export OD_PORT="$daemon_port"
-export OD_WEB_PORT="$web_port"
-export OD_E2E_NAMESPACE="ci-browser-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+export MAX_PORT="$daemon_port"
+export MAX_WEB_PORT="$web_port"
+export MAX_E2E_NAMESPACE="ci-browser-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
 
 # shellcheck disable=SC2086
 ci_gate_timed_step "playwright-install" pnpm -C e2e exec playwright install $playwright_flags

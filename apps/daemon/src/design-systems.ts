@@ -502,7 +502,7 @@ export async function readDesignSystemPullFile(
 export function isDesignTokenChannelEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return env.OD_DESIGN_TOKEN_CHANNEL !== '0';
+  return env.MAX_DESIGN_TOKEN_CHANNEL !== '0';
 }
 
 export async function resolveDesignSystemAssets(

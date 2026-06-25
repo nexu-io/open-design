@@ -48,7 +48,7 @@ ACP_VERSION="${ACP_VERSION:-0.15.0}"
 ACP_ARCH_PKG="${ACP_ARCH_PKG:-@zed-industries/codex-acp-darwin-arm64}"  # match the runner arch
 NPM_MIRROR="${NPM_MIRROR:-https://registry.npmmirror.com}"
 DEPLOY_KEY="${DEPLOY_KEY:-$HOME/.ssh/od_agent_deploy}"
-MIRROR_DIR="${OD_SANDBOX_REPO_MIRROR:-$HOME/.cache/agent-pr-explore/open-design.git}"
+MIRROR_DIR="${MAX_SANDBOX_REPO_MIRROR:-$HOME/.cache/agent-pr-explore/open-design.git}"
 TOOLS_DIR="$HOME/agent-pr-explore-tools"
 export PATH="$TOOLS_DIR/lima-2.1.1/bin:$HOME/agent-pr-explore-bin:$HOME/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -167,7 +167,7 @@ cat > "$TOOLS_DIR/refresh-sandbox-image.sh" <<'RSH'
 # flaky), so this is the decoupled refresh path; it never fails the host.
 set -uo pipefail
 export PATH="$HOME/agent-pr-explore-tools/lima-2.1.1/bin:$HOME/agent-pr-explore-bin:$HOME/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-image="${OD_SANDBOX_IMAGE:-node:24-bookworm}"
+image="${MAX_SANDBOX_IMAGE:-node:24-bookworm}"
 ts() { date "+%Y-%m-%dT%H:%M:%S%z"; }
 echo "[$(ts)] refresh start: $image"
 colima status >/dev/null 2>&1 || { echo "[$(ts)] colima down; skip"; exit 0; }

@@ -13,9 +13,9 @@ describe("desktop preload host boundary", () => {
     const runtimeRequires = Array.from(source.matchAll(/require\((['"][^'"]+['"])\)/g))
       .map((match) => match[1]);
 
-    expect(exposedGlobals).toEqual(["OPEN_DESIGN_HOST_GLOBAL", "'openDesignDesktop'"]);
+    expect(exposedGlobals).toEqual(["MARKETING_AX_HOST_GLOBAL", "'openDesignDesktop'"]);
     expect(runtimeRequires).toEqual(["'electron'"]);
-    expect(source).toContain("OPEN_DESIGN_HOST_GLOBAL");
+    expect(source).toContain("MARKETING_AX_HOST_GLOBAL");
     expect(source).toContain("exportDiagnostics");
     expect(source).toContain("satisfies OpenDesignHostBridge");
     expect(source).toContain("browser");

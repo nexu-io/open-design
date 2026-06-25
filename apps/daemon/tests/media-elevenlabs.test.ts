@@ -12,33 +12,33 @@ describe('elevenlabs media generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-elevenlabs-'));
     projectRoot = path.join(root, 'project-root');
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    delete process.env.OD_ELEVENLABS_API_KEY;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    delete process.env.MAX_ELEVENLABS_API_KEY;
     delete process.env.ELEVENLABS_API_KEY;
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
-    delete process.env.OD_ELEVENLABS_API_KEY;
+    delete process.env.MAX_ELEVENLABS_API_KEY;
     delete process.env.ELEVENLABS_API_KEY;
     await rm(root, { recursive: true, force: true });
   });

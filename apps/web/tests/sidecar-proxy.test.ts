@@ -39,8 +39,8 @@ describe('resolveDaemonProxyTarget', () => {
 
 describe('resolveStandaloneServerEntry', () => {
   it('resolves the traced monorepo standalone server entry', async () => {
-    const previousDistDir = process.env.OD_WEB_DIST_DIR;
-    delete process.env.OD_WEB_DIST_DIR;
+    const previousDistDir = process.env.MAX_WEB_DIST_DIR;
+    delete process.env.MAX_WEB_DIST_DIR;
     const webRoot = await mkdtemp(join(tmpdir(), 'open-design-web-standalone-'));
     const nestedRoot = join(webRoot, '.next', 'standalone', 'apps', 'web');
     const fallbackRoot = join(webRoot, '.next', 'standalone');
@@ -54,17 +54,17 @@ describe('resolveStandaloneServerEntry', () => {
       expect(resolveStandaloneServerEntry(webRoot)).toBe(join(nestedRoot, 'server.js'));
     } finally {
       if (previousDistDir == null) {
-        delete process.env.OD_WEB_DIST_DIR;
+        delete process.env.MAX_WEB_DIST_DIR;
       } else {
-        process.env.OD_WEB_DIST_DIR = previousDistDir;
+        process.env.MAX_WEB_DIST_DIR = previousDistDir;
       }
       await rm(webRoot, { force: true, recursive: true });
     }
   });
 
   it('prefers a copied standalone resource root before package fallback entries', async () => {
-    const previousDistDir = process.env.OD_WEB_DIST_DIR;
-    delete process.env.OD_WEB_DIST_DIR;
+    const previousDistDir = process.env.MAX_WEB_DIST_DIR;
+    delete process.env.MAX_WEB_DIST_DIR;
     const webRoot = await mkdtemp(join(tmpdir(), 'open-design-web-package-'));
     const copiedRoot = await mkdtemp(join(tmpdir(), 'open-design-web-copied-'));
     const copiedWebRoot = join(copiedRoot, 'apps', 'web');
@@ -79,9 +79,9 @@ describe('resolveStandaloneServerEntry', () => {
       expect(resolveStandaloneServerEntry(webRoot, copiedRoot)).toBe(join(copiedWebRoot, 'server.js'));
     } finally {
       if (previousDistDir == null) {
-        delete process.env.OD_WEB_DIST_DIR;
+        delete process.env.MAX_WEB_DIST_DIR;
       } else {
-        process.env.OD_WEB_DIST_DIR = previousDistDir;
+        process.env.MAX_WEB_DIST_DIR = previousDistDir;
       }
       await rm(webRoot, { force: true, recursive: true });
       await rm(copiedRoot, { force: true, recursive: true });
@@ -114,11 +114,11 @@ describe('createStandaloneServerArgs', () => {
   });
 
   it('uses a data import that exits when the recorded parent disappears', () => {
-    const importSpecifier = createStandaloneParentMonitorImport('OD_TEST_PARENT_PID');
+    const importSpecifier = createStandaloneParentMonitorImport('MAX_TEST_PARENT_PID');
     const source = decodeURIComponent(importSpecifier.replace(/^data:text\/javascript,/, ''));
 
     expect(importSpecifier).toMatch(/^data:text\/javascript,/);
-    expect(source).toContain('process.env["OD_TEST_PARENT_PID"]');
+    expect(source).toContain('process.env["MAX_TEST_PARENT_PID"]');
     expect(source).toContain('process.ppid === parentPid');
     expect(source).toContain('process.kill(parentPid, 0)');
     expect(source).toContain('process.exit(0)');
@@ -128,7 +128,7 @@ describe('createStandaloneServerArgs', () => {
 describe('standalone backend binding', () => {
   it('keeps the hidden standalone backend on loopback even when the public sidecar host is wider', () => {
     const env = createStandaloneBackendEnv({
-      baseEnv: { ...process.env, OD_HOST: '0.0.0.0' },
+      baseEnv: { ...process.env, MAX_HOST: '0.0.0.0' },
       parentPid: 1234,
       port: 5876,
     });
@@ -137,13 +137,13 @@ describe('standalone backend binding', () => {
     expect(env.HOSTNAME).toBe('127.0.0.1');
     expect(env.PORT).toBe('5876');
     expect(env.NODE_ENV).toBe('production');
-    expect(env.OD_STANDALONE_PARENT_PID).toBe('1234');
+    expect(env.MAX_STANDALONE_PARENT_PID).toBe('1234');
   });
 
   it('accepts a listening standalone backend before the app root responds to HTTP', async () => {
-    const previousOutputMode = process.env.OD_WEB_OUTPUT_MODE;
-    const previousStandaloneRoot = process.env.OD_WEB_STANDALONE_ROOT;
-    const previousStartupTimeout = process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+    const previousOutputMode = process.env.MAX_WEB_OUTPUT_MODE;
+    const previousStandaloneRoot = process.env.MAX_WEB_STANDALONE_ROOT;
+    const previousStartupTimeout = process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS;
     const standaloneRoot = await mkdtemp(join(tmpdir(), 'open-design-web-slow-http-'));
     const runtimeRoot = await mkdtemp(join(tmpdir(), 'open-design-web-runtime-'));
     const fakeWebRoot = join(standaloneRoot, 'apps', 'web');
@@ -166,9 +166,9 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
         'utf8',
       );
 
-      process.env.OD_WEB_OUTPUT_MODE = 'standalone';
-      process.env.OD_WEB_STANDALONE_ROOT = standaloneRoot;
-      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '500';
+      process.env.MAX_WEB_OUTPUT_MODE = 'standalone';
+      process.env.MAX_WEB_STANDALONE_ROOT = standaloneRoot;
+      process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS = '500';
 
       const handle = await startWebSidecar({
         app: 'web',
@@ -185,21 +185,21 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
         await handle.stop();
       }
     } finally {
-      if (previousOutputMode == null) delete process.env.OD_WEB_OUTPUT_MODE;
-      else process.env.OD_WEB_OUTPUT_MODE = previousOutputMode;
-      if (previousStandaloneRoot == null) delete process.env.OD_WEB_STANDALONE_ROOT;
-      else process.env.OD_WEB_STANDALONE_ROOT = previousStandaloneRoot;
-      if (previousStartupTimeout == null) delete process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
-      else process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
+      if (previousOutputMode == null) delete process.env.MAX_WEB_OUTPUT_MODE;
+      else process.env.MAX_WEB_OUTPUT_MODE = previousOutputMode;
+      if (previousStandaloneRoot == null) delete process.env.MAX_WEB_STANDALONE_ROOT;
+      else process.env.MAX_WEB_STANDALONE_ROOT = previousStandaloneRoot;
+      if (previousStartupTimeout == null) delete process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS;
+      else process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
       await rm(standaloneRoot, { force: true, recursive: true });
       await rm(runtimeRoot, { force: true, recursive: true });
     }
   });
 
   it('does not treat a hijacked backend port as standalone readiness', async () => {
-    const previousOutputMode = process.env.OD_WEB_OUTPUT_MODE;
-    const previousStandaloneRoot = process.env.OD_WEB_STANDALONE_ROOT;
-    const previousStartupTimeout = process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+    const previousOutputMode = process.env.MAX_WEB_OUTPUT_MODE;
+    const previousStandaloneRoot = process.env.MAX_WEB_STANDALONE_ROOT;
+    const previousStartupTimeout = process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS;
     const standaloneRoot = await mkdtemp(join(tmpdir(), 'open-design-web-hijacked-port-'));
     const runtimeRoot = await mkdtemp(join(tmpdir(), 'open-design-web-hijacked-runtime-'));
     const fakeWebRoot = join(standaloneRoot, 'apps', 'web');
@@ -237,9 +237,9 @@ process.on('SIGTERM', () => dummyServer.close(() => process.exit(0)));
         'utf8',
       );
 
-      process.env.OD_WEB_OUTPUT_MODE = 'standalone';
-      process.env.OD_WEB_STANDALONE_ROOT = standaloneRoot;
-      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '1000';
+      process.env.MAX_WEB_OUTPUT_MODE = 'standalone';
+      process.env.MAX_WEB_STANDALONE_ROOT = standaloneRoot;
+      process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS = '1000';
 
       await expect((async () => {
         handle = await startWebSidecar({
@@ -253,12 +253,12 @@ process.on('SIGTERM', () => dummyServer.close(() => process.exit(0)));
       })()).rejects.toThrow(/standalone Next\.js server exited before readiness/);
     } finally {
       await handle?.stop();
-      if (previousOutputMode == null) delete process.env.OD_WEB_OUTPUT_MODE;
-      else process.env.OD_WEB_OUTPUT_MODE = previousOutputMode;
-      if (previousStandaloneRoot == null) delete process.env.OD_WEB_STANDALONE_ROOT;
-      else process.env.OD_WEB_STANDALONE_ROOT = previousStandaloneRoot;
-      if (previousStartupTimeout == null) delete process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
-      else process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
+      if (previousOutputMode == null) delete process.env.MAX_WEB_OUTPUT_MODE;
+      else process.env.MAX_WEB_OUTPUT_MODE = previousOutputMode;
+      if (previousStandaloneRoot == null) delete process.env.MAX_WEB_STANDALONE_ROOT;
+      else process.env.MAX_WEB_STANDALONE_ROOT = previousStandaloneRoot;
+      if (previousStartupTimeout == null) delete process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS;
+      else process.env.MAX_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
       await rm(standaloneRoot, { force: true, recursive: true });
       await rm(runtimeRoot, { force: true, recursive: true });
     }
@@ -267,26 +267,26 @@ process.on('SIGTERM', () => dummyServer.close(() => process.exit(0)));
 
 describe('resolveNextBundlerOptions', () => {
   it('uses webpack for local dev by default to avoid stale Turbopack chunk graphs', () => {
-    const previous = process.env.OD_WEB_DEV_BUNDLER;
-    delete process.env.OD_WEB_DEV_BUNDLER;
+    const previous = process.env.MAX_WEB_DEV_BUNDLER;
+    delete process.env.MAX_WEB_DEV_BUNDLER;
 
     try {
       expect(resolveNextBundlerOptions(true)).toEqual({ webpack: true });
     } finally {
-      if (previous == null) delete process.env.OD_WEB_DEV_BUNDLER;
-      else process.env.OD_WEB_DEV_BUNDLER = previous;
+      if (previous == null) delete process.env.MAX_WEB_DEV_BUNDLER;
+      else process.env.MAX_WEB_DEV_BUNDLER = previous;
     }
   });
 
   it('lets local developers explicitly opt back into Turbopack', () => {
-    const previous = process.env.OD_WEB_DEV_BUNDLER;
-    process.env.OD_WEB_DEV_BUNDLER = 'turbopack';
+    const previous = process.env.MAX_WEB_DEV_BUNDLER;
+    process.env.MAX_WEB_DEV_BUNDLER = 'turbopack';
 
     try {
       expect(resolveNextBundlerOptions(true)).toEqual({ turbopack: true });
     } finally {
-      if (previous == null) delete process.env.OD_WEB_DEV_BUNDLER;
-      else process.env.OD_WEB_DEV_BUNDLER = previous;
+      if (previous == null) delete process.env.MAX_WEB_DEV_BUNDLER;
+      else process.env.MAX_WEB_DEV_BUNDLER = previous;
     }
   });
 
@@ -339,8 +339,8 @@ describe('normalizeDaemonProxyOriginHeader', () => {
   });
 
   it('normalizes matching wildcard configured dev origins to the daemon origin', () => {
-    const previous = process.env.OD_ALLOWED_DEV_ORIGINS;
-    process.env.OD_ALLOWED_DEV_ORIGINS = '*.local-origin.dev';
+    const previous = process.env.MAX_ALLOWED_DEV_ORIGINS;
+    process.env.MAX_ALLOWED_DEV_ORIGINS = '*.local-origin.dev';
     try {
       expect(
         normalizeDaemonProxyOriginHeader({
@@ -351,8 +351,8 @@ describe('normalizeDaemonProxyOriginHeader', () => {
         }),
       ).toBe('http://127.0.0.1:7456');
     } finally {
-      if (previous == null) delete process.env.OD_ALLOWED_DEV_ORIGINS;
-      else process.env.OD_ALLOWED_DEV_ORIGINS = previous;
+      if (previous == null) delete process.env.MAX_ALLOWED_DEV_ORIGINS;
+      else process.env.MAX_ALLOWED_DEV_ORIGINS = previous;
     }
   });
 

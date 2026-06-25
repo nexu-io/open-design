@@ -395,10 +395,10 @@ function Read-JsonFile([string]$Path) {
 }
 
 function Get-SmokeSummary {
-  if ([string]::IsNullOrWhiteSpace($env:OD_PACKAGED_E2E_REPORT_DIR)) {
+  if ([string]::IsNullOrWhiteSpace($env:MAX_PACKAGED_E2E_REPORT_DIR)) {
     return $null
   }
-  $summaryJsonPath = Join-Path $env:OD_PACKAGED_E2E_REPORT_DIR "summary.json"
+  $summaryJsonPath = Join-Path $env:MAX_PACKAGED_E2E_REPORT_DIR "summary.json"
   if (-not (Test-Path -LiteralPath $summaryJsonPath)) {
     return $null
   }
@@ -485,7 +485,7 @@ function Write-IndexAndSummary([string]$Status) {
     toolsPackDir = $toolsPackDir
     cacheDir = $cacheDir
     buildJsonPath = $buildJsonPath
-    reportDir = $env:OD_PACKAGED_E2E_REPORT_DIR
+    reportDir = $env:MAX_PACKAGED_E2E_REPORT_DIR
     smokeMode = $SmokeMode
     smoke = $smokeSummary
     artifacts = $artifactSummary
@@ -514,7 +514,7 @@ function Write-IndexAndSummary([string]$Status) {
     "- smokeMode: ``$SmokeMode``",
     "- duration: ``$(Format-Duration $durationMs)``",
     "- index: ``$indexPath``",
-    "- reportDir: ``$($env:OD_PACKAGED_E2E_REPORT_DIR)``"
+    "- reportDir: ``$($env:MAX_PACKAGED_E2E_REPORT_DIR)``"
   )
 
   if ($script:failureMessage -ne $null) {
@@ -607,8 +607,8 @@ $metadataOutputPath = Join-Path $platformRoot "metadata.outputs"
 New-Item -ItemType Directory -Force -Path $platformRoot, $toolsPackDir, $updateFixtureToolsPackDir, $cacheDir, $reportDir, $indexDir | Out-Null
 Remove-Item -LiteralPath $buildJsonPath -Force -ErrorAction SilentlyContinue
 $script:windowsSigningEnabled = $false
-$env:OD_PACKAGED_E2E_REPORT_DIR = Join-Path $reportDir "win"
-$env:OD_PACKAGED_E2E_TOOLS_PACK_DIR = $toolsPackDir
+$env:MAX_PACKAGED_E2E_REPORT_DIR = Join-Path $reportDir "win"
+$env:MAX_PACKAGED_E2E_TOOLS_PACK_DIR = $toolsPackDir
 Set-WindowsDownloadMirrorDefaults
 
 try {
@@ -635,9 +635,9 @@ try {
     $script:requestedWindowsSigningEnabled = [bool]$signingProbe.requested
     $script:windowsSigningEnabled = [bool]$signingProbe.enabled
     if ($script:windowsSigningEnabled) {
-      $env:OD_WIN_SIGN_CERT_SHA1 = [string]$signingProbe.thumbprint
-      $env:OD_WIN_SIGNTOOL_PATH = [string]$signingProbe.signToolPath
-      $env:OD_WIN_SIGN_TIMESTAMP_URL = "http://timestamp.digicert.com"
+      $env:MAX_WIN_SIGN_CERT_SHA1 = [string]$signingProbe.thumbprint
+      $env:MAX_WIN_SIGNTOOL_PATH = [string]$signingProbe.signToolPath
+      $env:MAX_WIN_SIGN_TIMESTAMP_URL = "http://timestamp.digicert.com"
       Write-Host "Windows signing enabled with certificate $($signingProbe.thumbprint)"
     } elseif (-not [string]::IsNullOrWhiteSpace([string]$signingProbe.reason)) {
       Write-Host "Windows signing disabled: $($signingProbe.reason)"
@@ -679,17 +679,17 @@ try {
     Measure-Step "resolve beta metadata" {
       git fetch --force --depth=1 origin "+refs/tags/open-design-v*:refs/tags/open-design-v*"
 
-      $previousMetadataUrl = $env:OPEN_DESIGN_BETA_METADATA_URL
+      $previousMetadataUrl = $env:MARKETING_AX_BETA_METADATA_URL
       $previousGitHubOutput = $env:GITHUB_OUTPUT
       try {
-        $env:OPEN_DESIGN_BETA_METADATA_URL = $MetadataUrl
+        $env:MARKETING_AX_BETA_METADATA_URL = $MetadataUrl
         $env:GITHUB_OUTPUT = $metadataOutputPath
         Remove-Item -LiteralPath $metadataOutputPath -Force -ErrorAction SilentlyContinue
         Invoke-Node24 -Arguments @("node", "--experimental-strip-types", ".\scripts\release-beta.ts")
         $metadata = Read-GitHubOutput $metadataOutputPath
         $script:ReleaseVersion = [string]$metadata["beta_version"]
       } finally {
-        $env:OPEN_DESIGN_BETA_METADATA_URL = $previousMetadataUrl
+        $env:MARKETING_AX_BETA_METADATA_URL = $previousMetadataUrl
         $env:GITHUB_OUTPUT = $previousGitHubOutput
       }
     }
@@ -732,9 +732,9 @@ try {
 
   $localUpdateArtifactPath = $null
   $localUpdateVersion = $null
-  $externalUpdateMetadataUrl = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL
-  $externalUpdateArtifactPath = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
-  $externalUpdateVersion = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION
+  $externalUpdateMetadataUrl = [string]$env:MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL
+  $externalUpdateArtifactPath = [string]$env:MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
+  $externalUpdateVersion = [string]$env:MAX_PACKAGED_E2E_WIN_UPDATE_VERSION
   $hasExternalUpdateMetadata = -not [string]::IsNullOrWhiteSpace($externalUpdateMetadataUrl)
   $hasExternalUpdateArtifactPair = -not [string]::IsNullOrWhiteSpace($externalUpdateArtifactPath) -and -not [string]::IsNullOrWhiteSpace($externalUpdateVersion)
   if ($SmokeMode -eq "full" -and -not $hasExternalUpdateMetadata -and -not $hasExternalUpdateArtifactPair) {
@@ -773,37 +773,37 @@ try {
     Write-Host "Skipping local Windows update fixture build because external update metadata or installer inputs are set"
   }
 
-  $env:OD_PACKAGED_E2E_BUILD_JSON_PATH = $buildJsonPath
-  $env:OD_PACKAGED_E2E_WIN = "1"
-  $env:OD_PACKAGED_E2E_WIN_SMOKE_PROFILE = $SmokeMode
-  $env:OD_PACKAGED_E2E_NAMESPACE = $Namespace
-  $env:OD_PACKAGED_E2E_RELEASE_CHANNEL = "beta"
-  $env:OD_PACKAGED_E2E_RELEASE_VERSION = $ReleaseVersion
+  $env:MAX_PACKAGED_E2E_BUILD_JSON_PATH = $buildJsonPath
+  $env:MAX_PACKAGED_E2E_WIN = "1"
+  $env:MAX_PACKAGED_E2E_WIN_SMOKE_PROFILE = $SmokeMode
+  $env:MAX_PACKAGED_E2E_NAMESPACE = $Namespace
+  $env:MAX_PACKAGED_E2E_RELEASE_CHANNEL = "beta"
+  $env:MAX_PACKAGED_E2E_RELEASE_VERSION = $ReleaseVersion
   if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
     if (-not $hasExternalUpdateArtifactPair) {
-      Remove-Item Env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH -ErrorAction SilentlyContinue
+      Remove-Item Env:MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH -ErrorAction SilentlyContinue
     }
   } else {
-    $env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $localUpdateArtifactPath
+    $env:MAX_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $localUpdateArtifactPath
   }
   if ([string]::IsNullOrWhiteSpace($localUpdateVersion)) {
     if (-not $hasExternalUpdateArtifactPair -and -not $hasExternalUpdateMetadata) {
-      Remove-Item Env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION -ErrorAction SilentlyContinue
+      Remove-Item Env:MAX_PACKAGED_E2E_WIN_UPDATE_VERSION -ErrorAction SilentlyContinue
     }
   } else {
-    $env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION = $localUpdateVersion
+    $env:MAX_PACKAGED_E2E_WIN_UPDATE_VERSION = $localUpdateVersion
   }
   if ($SmokeMode -eq "full" -and -not [string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
-    $env:OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = (Join-Path $platformRoot "windows-tools-pack-update-build.json")
+    $env:MAX_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = (Join-Path $platformRoot "windows-tools-pack-update-build.json")
   } else {
-    Remove-Item Env:OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH -ErrorAction SilentlyContinue
+    Remove-Item Env:MAX_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH -ErrorAction SilentlyContinue
   }
 
   if ($SmokeMode -eq "skip") {
     Write-Host "Skipping Windows packaged runtime smoke: smoke mode skip"
   } else {
     Measure-Step "release smoke win" {
-      Remove-Item -LiteralPath $env:OD_PACKAGED_E2E_REPORT_DIR -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $env:MAX_PACKAGED_E2E_REPORT_DIR -Recurse -Force -ErrorAction SilentlyContinue
       Invoke-Node24 -Arguments @("pnpm.cmd", "exec", "tsx", "scripts/release-smoke.ts", "win", "specs/win.spec.ts") -WorkingDirectory (Join-Path $workspaceRoot "e2e")
     }
   }

@@ -107,14 +107,14 @@
 
   daemonEnvironment =
     {
-      OD_PORT = toString cfg.port;
-      OD_DATA_DIR = toString cfg.dataDir;
+      MAX_PORT = toString cfg.port;
+      MAX_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
     // lib.optionalAttrs cfg.webFrontend.enable {
       # See nix/home-manager.nix — the daemon's /api origin allowlist
       # needs to know about the caddy port or it will 403 SPA writes.
-      OD_WEB_PORT = toString cfg.webFrontend.port;
+      MAX_WEB_PORT = toString cfg.webFrontend.port;
     }
     // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
       # Operator-declared external origins for the LAN-exposure escape
@@ -124,7 +124,7 @@
       # widen the daemon's same-origin allowlist via this option.
       # Comma-joined; parsed by configuredAllowedOrigins() in
       # apps/daemon/src/origin-validation.ts.
-      OD_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+      MAX_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
     }
     // cfg.extraEnv;
 in {
@@ -160,14 +160,14 @@ in {
 
           If you also need the daemon's `/api` exposed directly (i.e.
           without the bundled caddy in front), set
-          `extraEnv.OD_BIND_HOST` to the externally reachable address
+          `extraEnv.MAX_BIND_HOST` to the externally reachable address
           (e.g. a LAN IP or Tailscale host) — not `0.0.0.0`, since the
           daemon's `Origin` allowlist is built from the literal bind
           host and browsers send `Origin: http://<actual-host>:<port>`,
           not `http://0.0.0.0:<port>`. Alternatively keep
-          `OD_BIND_HOST = "0.0.0.0"` and add the externally reachable
+          `MAX_BIND_HOST = "0.0.0.0"` and add the externally reachable
           origin (e.g. `http://laptop.local:7456`) to
-          `webFrontend.allowedOrigins`, which feeds `OD_ALLOWED_ORIGINS`.
+          `webFrontend.allowedOrigins`, which feeds `MAX_ALLOWED_ORIGINS`.
         '';
       };
     };

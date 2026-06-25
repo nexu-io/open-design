@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-mode="${1:-${OD_CI_MODE:-}}"
+mode="${1:-${MAX_CI_MODE:-}}"
 
 if [ -z "$mode" ]; then
   echo "usage: $0 <probe|setup|core|policy|unit|typecheck|daemon|daemon-shard|daemon-parallel|web|build|browser>" >&2
@@ -75,20 +75,20 @@ require_mode() {
 
 require_mode
 
-lane="${OD_CI_LANE:-unknown}"
-allow_docker="${OD_CI_ALLOW_DOCKER:-0}"
-install_timeout_seconds="${OD_CI_INSTALL_TIMEOUT_SECONDS:-1500}"
-pnpm_fetch_retries="${OD_CI_PNPM_FETCH_RETRIES:-6}"
-pnpm_fetch_retry_maxtimeout="${OD_CI_PNPM_FETCH_RETRY_MAXTIMEOUT:-120000}"
-pnpm_fetch_retry_mintimeout="${OD_CI_PNPM_FETCH_RETRY_MINTIMEOUT:-20000}"
-pnpm_install_flags="${OD_CI_PNPM_INSTALL_FLAGS:---frozen-lockfile}"
-pnpm_network_timeout="${OD_CI_PNPM_NETWORK_TIMEOUT:-180000}"
-pnpm_store_dir="${OD_CI_PNPM_STORE_DIR:-}"
-playwright_install_flags="${OD_CI_PLAYWRIGHT_INSTALL_FLAGS:-chromium}"
-step_timeout_seconds="${OD_CI_STEP_TIMEOUT_SECONDS:-600}"
+lane="${MAX_CI_LANE:-unknown}"
+allow_docker="${MAX_CI_ALLOW_DOCKER:-0}"
+install_timeout_seconds="${MAX_CI_INSTALL_TIMEOUT_SECONDS:-1500}"
+pnpm_fetch_retries="${MAX_CI_PNPM_FETCH_RETRIES:-6}"
+pnpm_fetch_retry_maxtimeout="${MAX_CI_PNPM_FETCH_RETRY_MAXTIMEOUT:-120000}"
+pnpm_fetch_retry_mintimeout="${MAX_CI_PNPM_FETCH_RETRY_MINTIMEOUT:-20000}"
+pnpm_install_flags="${MAX_CI_PNPM_INSTALL_FLAGS:---frozen-lockfile}"
+pnpm_network_timeout="${MAX_CI_PNPM_NETWORK_TIMEOUT:-180000}"
+pnpm_store_dir="${MAX_CI_PNPM_STORE_DIR:-}"
+playwright_install_flags="${MAX_CI_PLAYWRIGHT_INSTALL_FLAGS:-chromium}"
+step_timeout_seconds="${MAX_CI_STEP_TIMEOUT_SECONDS:-600}"
 corepack_home="${COREPACK_HOME:-}"
-daemon_shard="${OD_CI_DAEMON_SHARD:-}"
-daemon_max_workers="${OD_CI_DAEMON_MAX_WORKERS:-}"
+daemon_shard="${MAX_CI_DAEMON_SHARD:-}"
+daemon_max_workers="${MAX_CI_DAEMON_MAX_WORKERS:-}"
 runner_name="${RUNNER_NAME:-unknown}"
 runner_os="${RUNNER_OS:-unknown}"
 runner_arch="${RUNNER_ARCH:-unknown}"
@@ -322,7 +322,7 @@ run_ci_command() {
   set -e
   seconds="$(( $(date +%s) - started ))"
   echo "completed: $label exit=$exit_code seconds=$seconds"
-  echo "OD_CI_COMMAND {\"lane\":\"$(json_escape "$lane")\",\"mode\":\"$(json_escape "$mode")\",\"label\":\"$(json_escape "$label")\",\"exitCode\":$exit_code,\"seconds\":$seconds}"
+  echo "MAX_CI_COMMAND {\"lane\":\"$(json_escape "$lane")\",\"mode\":\"$(json_escape "$mode")\",\"label\":\"$(json_escape "$label")\",\"exitCode\":$exit_code,\"seconds\":$seconds}"
 
   last_command_exit_code="$exit_code"
   last_command_seconds="$seconds"
@@ -692,10 +692,10 @@ emit_ci_metric() {
   local status="$2"
   local exit_code="$3"
   local seconds="$4"
-  echo "OD_CI_METRIC {\"lane\":\"$(json_escape "$lane")\",\"mode\":\"$(json_escape "$mode")\",\"name\":\"$(json_escape "$name")\",\"status\":\"$(json_escape "$status")\",\"exitCode\":$exit_code,\"seconds\":$seconds}"
+  echo "MAX_CI_METRIC {\"lane\":\"$(json_escape "$lane")\",\"mode\":\"$(json_escape "$mode")\",\"name\":\"$(json_escape "$name")\",\"status\":\"$(json_escape "$status")\",\"exitCode\":$exit_code,\"seconds\":$seconds}"
 }
 
-echo "OD_CI_SUMMARY {\"lane\":\"$(json_escape "$lane")\",\"mode\":\"$(json_escape "$mode")\",\"runner\":\"$(json_escape "$runner_name")\",\"sha\":\"$(json_escape "$github_sha")\",\"installStatus\":\"$(json_escape "$install_status")\",\"policyStatus\":\"$(json_escape "$policy_status")\",\"unitStatus\":\"$(json_escape "$unit_status")\",\"typecheckStatus\":\"$(json_escape "$typecheck_status")\",\"daemonStatus\":\"$(json_escape "$daemon_status")\",\"webStatus\":\"$(json_escape "$web_status")\",\"buildStatus\":\"$(json_escape "$build_status")\",\"browserStatus\":\"$(json_escape "$browser_status")\"}"
+echo "MAX_CI_SUMMARY {\"lane\":\"$(json_escape "$lane")\",\"mode\":\"$(json_escape "$mode")\",\"runner\":\"$(json_escape "$runner_name")\",\"sha\":\"$(json_escape "$github_sha")\",\"installStatus\":\"$(json_escape "$install_status")\",\"policyStatus\":\"$(json_escape "$policy_status")\",\"unitStatus\":\"$(json_escape "$unit_status")\",\"typecheckStatus\":\"$(json_escape "$typecheck_status")\",\"daemonStatus\":\"$(json_escape "$daemon_status")\",\"webStatus\":\"$(json_escape "$web_status")\",\"buildStatus\":\"$(json_escape "$build_status")\",\"browserStatus\":\"$(json_escape "$browser_status")\"}"
 emit_ci_metric "corepack_prepare" "$corepack_prepare_status" "$corepack_prepare_exit_code" "$corepack_prepare_seconds"
 emit_ci_metric "install" "$install_status" "$install_exit_code" "$install_seconds"
 emit_ci_metric "policy_total" "$policy_status" "$policy_exit_code" "$policy_seconds"

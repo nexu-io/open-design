@@ -74,7 +74,7 @@ export class DeployError extends Error {
 }
 
 export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+  const base = process.env.MAX_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
 }
 
@@ -249,7 +249,7 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   const entryBase = path.posix.dirname(entryPath);
   const deployHtml = injectDeployHookScript(
     rewriteEntryHtmlReferences(html, entryBase),
-    options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
+    options.hookScriptUrl ?? process.env.MAX_DEPLOY_HOOK_SCRIPT_URL,
   );
   const files = new Map<string, DeployFile>();
   files.set('index.html', {

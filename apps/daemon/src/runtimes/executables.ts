@@ -48,7 +48,7 @@ function userToolchainDirs() {
     RUNTIME_PROJECT_ROOT,
   );
   const homeOverride =
-    sandboxRuntime?.roots.agentHomeDir ?? process.env.OD_AGENT_HOME;
+    sandboxRuntime?.roots.agentHomeDir ?? process.env.MAX_AGENT_HOME;
   const home = homeOverride || homedir();
   const now = Date.now();
   if (
@@ -60,7 +60,7 @@ function userToolchainDirs() {
   }
   cachedToolchainHome = home;
   cachedToolchainDirsAt = now;
-  // When OD_AGENT_HOME is set, scope the search strictly to the override
+  // When MAX_AGENT_HOME is set, scope the search strictly to the override
   // home: skip Homebrew / /usr/local *and* pass an empty env so that a
   // developer or CI runner with NPM_CONFIG_PREFIX / npm_config_prefix
   // exported can't leak the real machine's <prefix>/bin into a sandboxed
@@ -179,11 +179,11 @@ export function resolveAmrOpenCodeExecutable(
   const configured = executableFilePath(env.VELA_OPENCODE_BIN);
   if (configured) return configured;
   // In packaged builds prefer the bundled companion under
-  // `OD_RESOURCE_ROOT/bin/libexec/opencode/opencode` so a stale global
+  // `MAX_RESOURCE_ROOT/bin/libexec/opencode/opencode` so a stale global
   // `opencode` on the user's PATH can't override the known-good build that
   // shipped with this app. PATH is only consulted as a last resort.
   const resourceRoot = (
-    env.OD_RESOURCE_ROOT ?? process.env.OD_RESOURCE_ROOT
+    env.MAX_RESOURCE_ROOT ?? process.env.MAX_RESOURCE_ROOT
   )?.trim();
   if (resourceRoot) {
     const bundledDir = packagedVelaOpenCodeCompanionTree(resourceRoot);
@@ -231,7 +231,7 @@ function packagedBuiltInExecutable(
   configuredEnv: Record<string, string> = {},
 ): string | null {
   if (def.id !== 'amr') return null;
-  const resourceRoot = process.env.OD_RESOURCE_ROOT?.trim();
+  const resourceRoot = process.env.MAX_RESOURCE_ROOT?.trim();
   if (!resourceRoot) return null;
   if (
     !resolveAmrOpenCodeExecutable({ ...process.env, ...configuredEnv }) &&

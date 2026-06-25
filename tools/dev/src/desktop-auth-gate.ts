@@ -5,7 +5,7 @@ import { APP_KEYS } from "@marketing-ax/sidecar-proto";
  * PR #974 round 6 (mrcfps): close the split-start dev-flow gap.
  *
  * `tools-dev start daemon` followed by `tools-dev start desktop` was
- * leaving the daemon running without `OD_REQUIRE_DESKTOP_AUTH=1`,
+ * leaving the daemon running without `MAX_REQUIRE_DESKTOP_AUTH=1`,
  * because the env var is only injected when (A) daemon and desktop
  * are spawned in the same orchestrator invocation (`startApp` in
  * `index.ts`), or (B) a desktop runtime is already alive at daemon

@@ -4,7 +4,7 @@ import { Button, Input, Select } from '@marketing-ax/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   buildSocialSharePayload,
-  OPEN_DESIGN_GITHUB_REPO_URL,
+  MARKETING_AX_GITHUB_REPO_URL,
   type SocialShareRequest,
   type SocialShareResponse,
 } from '@marketing-ax/contracts';
@@ -122,7 +122,7 @@ import {
 import { applyPodMemberRemoval } from '../lib/pod-members';
 import { AnnotationHoverPopover, BoardComposerPopover } from './BoardComposerPopover';
 import {
-  OD_PREVIEW_KEEP_ALIVE,
+  MAX_PREVIEW_KEEP_ALIVE,
   PooledIframe,
   previewIframeKeepAliveKey,
 } from './IframeKeepAlivePool';
@@ -7593,7 +7593,7 @@ function HtmlViewer({
     const title = t('socialShare.projectTitle', { title: exportTitle });
     const text = t('socialShare.projectText', {
       title: exportTitle,
-      repo: OPEN_DESIGN_GITHUB_REPO_URL,
+      repo: MARKETING_AX_GITHUB_REPO_URL,
     });
     return {
       kind: 'project-html',
@@ -7604,7 +7604,7 @@ function HtmlViewer({
       copyText: t('socialShare.projectCopyText', {
         title: exportTitle,
         url: socialShareDisplayUrl,
-        repo: OPEN_DESIGN_GITHUB_REPO_URL,
+        repo: MARKETING_AX_GITHUB_REPO_URL,
       }),
     };
   }, [exportTitle, locale, socialShareDisplayUrl, t]);
@@ -8541,7 +8541,7 @@ function HtmlViewer({
                     onToolbarClick={fireDrawToolbarClick}
                   >
                     <div className="artifact-preview-transport-stack">
-                      {OD_PREVIEW_KEEP_ALIVE ? (
+                      {MAX_PREVIEW_KEEP_ALIVE ? (
                         <PooledIframe
                           ref={urlPreviewIframeRef}
                           cacheKey={urlPreviewKeepAliveKey}

@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import { resolveProjectRelativePath } from './home-expansion.js';
 
-export const SANDBOX_MODE_ENV = 'OD_SANDBOX_MODE';
-export const SANDBOX_IMPORT_ALLOWED_ROOTS_ENV = 'OD_SANDBOX_IMPORT_ALLOWED_ROOTS';
+export const SANDBOX_MODE_ENV = 'MAX_SANDBOX_MODE';
+export const SANDBOX_IMPORT_ALLOWED_ROOTS_ENV = 'MAX_SANDBOX_IMPORT_ALLOWED_ROOTS';
 export const SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE =
   `Imported-folder projects are not available in ${SANDBOX_MODE_ENV} unless ` +
   `their root is under ${SANDBOX_IMPORT_ALLOWED_ROOTS_ENV}.`;
@@ -132,9 +132,9 @@ export function resolveSandboxRuntimeConfigFromEnv(
   projectRoot: string,
 ): SandboxRuntimeConfig | null {
   if (!isSandboxModeEnabled(env)) return null;
-  const rawDataDir = env.OD_DATA_DIR?.trim();
+  const rawDataDir = env.MAX_DATA_DIR?.trim();
   if (!rawDataDir) {
-    throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+    throw new Error('MAX_DATA_DIR is required when MAX_SANDBOX_MODE is enabled');
   }
   return resolveSandboxRuntimeConfig(
     true,
@@ -173,8 +173,8 @@ export function applySandboxRuntimeEnv(
   const npmUserConfig = path.join(roots.toolConfigDir, 'npmrc');
 
   env[SANDBOX_MODE_ENV] = '1';
-  env.OD_DATA_DIR = config.dataDir;
-  env.OD_AGENT_HOME = roots.agentHomeDir;
+  env.MAX_DATA_DIR = config.dataDir;
+  env.MAX_AGENT_HOME = roots.agentHomeDir;
   env.HOME = roots.agentHomeDir;
   env.USERPROFILE = roots.agentHomeDir;
   env.XDG_CONFIG_HOME = roots.configDir;
@@ -187,7 +187,7 @@ export function applySandboxRuntimeEnv(
   env.CODEX_HOME = codexHome;
   env.CLAUDE_CONFIG_DIR = claudeConfigDir;
   env.OPENCODE_TEST_HOME = opencodeHome;
-  env.OD_AGENT_PROFILES_CONFIG = sandboxAgentProfilesConfigPath(config);
+  env.MAX_AGENT_PROFILES_CONFIG = sandboxAgentProfilesConfigPath(config);
   env.NPM_CONFIG_USERCONFIG = npmUserConfig;
   env.npm_config_userconfig = npmUserConfig;
 

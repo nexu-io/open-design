@@ -3,7 +3,7 @@ import path from "node:path";
 
 export const LOCAL_ENV_FILE_NAME = ".env.local";
 export const LOCAL_DEVELOPMENT_TELEMETRY_ENV = "local_development";
-export const TELEMETRY_ENV_KEY = "OD_TELEMETRY_ENV";
+export const TELEMETRY_ENV_KEY = "MAX_TELEMETRY_ENV";
 
 export interface LoadWorkspaceLocalEnvResult {
   envPath: string;

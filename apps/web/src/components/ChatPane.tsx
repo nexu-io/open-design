@@ -598,7 +598,7 @@ interface Props {
   config?: AppConfig;
 }
 
-const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+const AMR_PROFILE_ENV_KEY = 'MARKETING_AX_AMR_PROFILE';
 
 type Tab = 'chat' | 'comments';
 

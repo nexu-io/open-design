@@ -606,10 +606,10 @@ function velaLoginAttributionEnv(
 ): Record<string, string> {
   if (!attribution) return {};
   return {
-    OPEN_DESIGN_AMR_ENTRY_ID: attribution.entryId,
-    OPEN_DESIGN_AMR_ENTRY_SOURCE: attribution.sourceDetail,
-    OPEN_DESIGN_AMR_ENTRY_AT: attribution.occurredAt,
-    OPEN_DESIGN_AMR_ORIGIN: attribution.sourceProduct,
+    MARKETING_AX_AMR_ENTRY_ID: attribution.entryId,
+    MARKETING_AX_AMR_ENTRY_SOURCE: attribution.sourceDetail,
+    MARKETING_AX_AMR_ENTRY_AT: attribution.occurredAt,
+    MARKETING_AX_AMR_ORIGIN: attribution.sourceProduct,
   };
 }
 
@@ -645,11 +645,11 @@ function buildAmrEntryAnalyticsCommon(
 }
 
 function resolveAmrAnalyticsEventsUrl(env: NodeJS.ProcessEnv): string {
-  return env.OPEN_DESIGN_AMR_ANALYTICS_URL?.trim() || AMR_ANALYTICS_EVENTS_URL;
+  return env.MARKETING_AX_AMR_ANALYTICS_URL?.trim() || AMR_ANALYTICS_EVENTS_URL;
 }
 
 function resolveAmrAnalyticsEnv(env: NodeJS.ProcessEnv): AmrAnalyticsEnv {
-  const raw = env.OPEN_DESIGN_AMR_ANALYTICS_ENV?.trim();
+  const raw = env.MARKETING_AX_AMR_ANALYTICS_ENV?.trim();
   if (raw && AMR_ANALYTICS_ENVS.has(raw as AmrAnalyticsEnv)) {
     return raw as AmrAnalyticsEnv;
   }

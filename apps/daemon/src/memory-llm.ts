@@ -186,14 +186,14 @@ function envKeyFor(provider) {
   }
   if (provider === 'senseaudio') {
     return (
-      process.env.OD_SENSEAUDIO_API_KEY?.trim()
+      process.env.MAX_SENSEAUDIO_API_KEY?.trim()
       || process.env.SENSEAUDIO_API_KEY?.trim()
       || ''
     );
   }
   if (provider === 'aihubmix') {
     return (
-      process.env.OD_AIHUBMIX_API_KEY?.trim()
+      process.env.MAX_AIHUBMIX_API_KEY?.trim()
       || process.env.AIHUBMIX_API_KEY?.trim()
       || ''
     );
@@ -291,7 +291,7 @@ function localCliProviderFor(agentId, provider, model) {
 //   5. (legacy fallback) OPENAI_API_KEY env → gpt-4o-mini
 //   6. (legacy fallback) media-config OpenAI BYOK → gpt-4o-mini
 //
-// The `OD_MEMORY_MODEL` env continues to override the model name across
+// The `MAX_MEMORY_MODEL` env continues to override the model name across
 // (1)–(6) so power users don't lose that lever. It does NOT override the
 // memory-config provider since that one carries an explicit user choice.
 // `projectRoot` is required for the media-config path; `chatAgentId` is
@@ -381,7 +381,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
     };
   }
 
-  const envOverrideModel = (process.env.OD_MEMORY_MODEL || '').trim();
+  const envOverrideModel = (process.env.MAX_MEMORY_MODEL || '').trim();
 
   // Chat-protocol-constrained branch (path 1). Only run when we know
   // which CLI is in use AND it maps to one of the four providers; we
@@ -393,7 +393,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
     const localCliProvider = localCliProviderFor(
       normalizedChatAgentId,
       chatProtocol,
-      process.env.OD_MEMORY_MODEL || chatModel,
+      process.env.MAX_MEMORY_MODEL || chatModel,
     );
     if (localCliProvider) return localCliProvider;
 

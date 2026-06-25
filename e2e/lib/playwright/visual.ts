@@ -439,7 +439,7 @@ export async function waitForVisualFonts(page: Page): Promise<void> {
 }
 
 export async function captureVisual(page: Page, name: string): Promise<string> {
-  const outputDir = path.resolve(process.env.OD_VISUAL_OUTPUT_DIR || 'ui/reports/visual-screenshots');
+  const outputDir = path.resolve(process.env.MAX_VISUAL_OUTPUT_DIR || 'ui/reports/visual-screenshots');
   const safeName = sanitizeVisualName(name);
   const outputPath = path.join(outputDir, `${safeName}.png`);
   await mkdir(outputDir, { recursive: true });

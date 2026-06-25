@@ -5,21 +5,21 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Daemon port the local Express server binds to (see apps/daemon/src/cli.ts). The
-// dev-all launcher overrides OD_PORT after probing for a free port; we read
+// dev-all launcher overrides MAX_PORT after probing for a free port; we read
 // the same env so /api, /artifacts, and /frames always reach the right
 // daemon instance during `next dev`.
-const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
+const DAEMON_PORT = Number(process.env.MAX_PORT) || 7456;
 const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
 
 // The regular CLI build still ships as a static export so the `od` daemon can
 // serve a single-process production build. Packaged desktop builds opt into a
-// server runtime with OD_WEB_OUTPUT_MODE=server; in that mode the web sidecar
+// server runtime with MAX_WEB_OUTPUT_MODE=server; in that mode the web sidecar
 // owns the Next.js SSR server and proxies daemon routes at runtime. The
-// packaged-size standalone spike uses OD_WEB_OUTPUT_MODE=standalone to ask
+// packaged-size standalone spike uses MAX_WEB_OUTPUT_MODE=standalone to ask
 // Next.js for a traced standalone server while keeping the sidecar-owned daemon
 // proxy in front of it at runtime.
 const isProd = process.env.NODE_ENV !== 'development';
-const webOutputMode = process.env.OD_WEB_OUTPUT_MODE;
+const webOutputMode = process.env.MAX_WEB_OUTPUT_MODE;
 const isServerOutput = webOutputMode === 'server' || webOutputMode === 'standalone';
 const shouldStaticExport = isProd && !isServerOutput;
 
@@ -27,12 +27,12 @@ const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
 
 function resolveWorkspaceRoot(): string {
   const computed = dirname(dirname(WEB_ROOT));
-  const override = process.env.OD_WORKSPACE_ROOT;
+  const override = process.env.MAX_WORKSPACE_ROOT;
   if (override && override.trim()) {
     const resolved = isAbsolute(override.trim()) ? override.trim() : resolve(WEB_ROOT, override.trim());
     if (!existsSync(resolved)) {
       throw new Error(
-        `OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist. ` +
+        `MAX_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist. ` +
         `Fix the path or unset the variable to use the computed default.`,
       );
     }
@@ -46,7 +46,7 @@ function resolveWorkspaceRoot(): string {
     // returns an absolute path (e.g. C:\repo\apps\web) instead of a ..-path.
     if (rel.startsWith('..') || isAbsolute(rel)) {
       throw new Error(
-        `OD_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but WEB_ROOT "${canonicalWebRoot}" ` +
+        `MAX_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but WEB_ROOT "${canonicalWebRoot}" ` +
         `is not inside it (relative path "${rel}"). ` +
         `The override must be an ancestor of apps/web.`,
       );
@@ -58,7 +58,7 @@ function resolveWorkspaceRoot(): string {
     // inside file tracing / Turbopack with a much harder-to-diagnose error.
     if (!existsSync(resolve(canonicalResolved, 'pnpm-workspace.yaml'))) {
       throw new Error(
-        `OD_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but no ` +
+        `MAX_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but no ` +
         `pnpm-workspace.yaml was found there. The override must point at the ` +
         `pnpm workspace root so outputFileTracingRoot and turbopack.root can ` +
         `resolve sibling packages.`,
@@ -73,18 +73,18 @@ const WORKSPACE_ROOT = resolveWorkspaceRoot();
 const toPosixPath = (value: string) => value.replaceAll('\\', '/');
 
 function resolveDistDir(defaultValue: string) {
-  if (process.env.OD_WEB_PROD === '1') return defaultValue;
-  const configured = process.env.OD_WEB_DIST_DIR;
+  if (process.env.MAX_WEB_PROD === '1') return defaultValue;
+  const configured = process.env.MAX_WEB_DIST_DIR;
   if (!configured) return defaultValue;
   return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || '.' : configured);
 }
 
-const DIST_DIR = shouldStaticExport && !process.env.OD_WEB_DIST_DIR
+const DIST_DIR = shouldStaticExport && !process.env.MAX_WEB_DIST_DIR
   ? null
   : resolveDistDir('.next');
 
 function resolveDevTsconfigPath() {
-  const configured = process.env.OD_WEB_TSCONFIG_PATH;
+  const configured = process.env.MAX_WEB_TSCONFIG_PATH;
   if (!configured) return undefined;
   return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || 'tsconfig.json' : configured);
 }
@@ -135,17 +135,17 @@ function localPrivateLanHosts(): string[] {
 }
 
 function configuredAllowedDevHosts(): string[] {
-  const configured = (process.env.OD_ALLOWED_DEV_ORIGINS ?? '')
+  const configured = (process.env.MAX_ALLOWED_DEV_ORIGINS ?? '')
     .split(',')
     .map(parseAllowedDevHost)
     .filter((host): host is string => host != null);
 
-  const allowedOrigins = (process.env.OD_ALLOWED_ORIGINS ?? '')
+  const allowedOrigins = (process.env.MAX_ALLOWED_ORIGINS ?? '')
     .split(',')
     .map(parseAllowedDevHost)
     .filter((host): host is string => host != null);
 
-  const bindHost = parseAllowedDevHost(process.env.OD_HOST ?? '');
+  const bindHost = parseAllowedDevHost(process.env.MAX_HOST ?? '');
   return Array.from(new Set([
     '127.0.0.1',
     ...localPrivateLanHosts(),

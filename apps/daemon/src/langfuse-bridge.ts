@@ -176,9 +176,9 @@ function mergeTraceSafeManifests(
 }
 
 function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
+  const objectRelayUrl = env.MARKETING_AX_OBJECT_RELAY_URL?.trim();
   if (!objectRelayUrl) {
-    const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
+    const telemetryRelayUrl = env.MARKETING_AX_TELEMETRY_RELAY_URL?.trim();
     return telemetryRelayUrl ? telemetryRelayUrl.replace(/\/+$/, '') : null;
   }
   try {
@@ -211,10 +211,10 @@ function objectRegistrationTelemetryConfig(
     kind: 'relay',
     relayUrl,
     timeoutMs: parsePositiveInt(
-      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
+      env.MARKETING_AX_OBJECT_RELAY_TIMEOUT_MS ?? env.MARKETING_AX_TELEMETRY_TIMEOUT_MS,
       20_000,
     ),
-    retries: parseNonNegativeInt(env.OPEN_DESIGN_TELEMETRY_RETRIES, 1),
+    retries: parseNonNegativeInt(env.MARKETING_AX_TELEMETRY_RETRIES, 1),
   };
 }
 

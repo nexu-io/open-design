@@ -40,7 +40,7 @@ const BUILD_COMMANDS = [
   { args: ["--filter", "@marketing-ax/plugin-runtime", "build"] },
   { args: ["--filter", "@marketing-ax/diagnostics", "build"] },
   { args: ["--filter", "@marketing-ax/daemon", "build"] },
-  { args: ["--filter", "@marketing-ax/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
+  { args: ["--filter", "@marketing-ax/web", "build"], env: ["MAX_WEB_OUTPUT_MODE"] },
   { args: ["--filter", "@marketing-ax/web", "build:sidecar"] },
   { args: ["--filter", "@marketing-ax/desktop", "build"] },
   { args: ["--filter", "@marketing-ax/packaged", "build"] },

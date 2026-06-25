@@ -13,38 +13,38 @@ describe('OpenAI-compatible media providers', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalImageRouterKey = process.env.OD_IMAGEROUTER_API_KEY;
-  const originalCustomImageKey = process.env.OD_CUSTOM_IMAGE_API_KEY;
+  const originalImageRouterKey = process.env.MAX_IMAGEROUTER_API_KEY;
+  const originalCustomImageKey = process.env.MAX_CUSTOM_IMAGE_API_KEY;
   const originalCodexBin = process.env.CODEX_BIN;
   const originalCodexHome = process.env.CODEX_HOME;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openai-compatible-media-'));
     projectRoot = path.join(root, 'project-root');
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_IMAGEROUTER_API_KEY;
-    delete process.env.OD_CUSTOM_IMAGE_API_KEY;
+    delete process.env.MAX_IMAGEROUTER_API_KEY;
+    delete process.env.MAX_CUSTOM_IMAGE_API_KEY;
     delete process.env.CODEX_BIN;
     delete process.env.CODEX_HOME;
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
     vi.unstubAllGlobals();
     if (originalImageRouterKey == null) {
-      delete process.env.OD_IMAGEROUTER_API_KEY;
+      delete process.env.MAX_IMAGEROUTER_API_KEY;
     } else {
-      process.env.OD_IMAGEROUTER_API_KEY = originalImageRouterKey;
+      process.env.MAX_IMAGEROUTER_API_KEY = originalImageRouterKey;
     }
     if (originalCustomImageKey == null) {
-      delete process.env.OD_CUSTOM_IMAGE_API_KEY;
+      delete process.env.MAX_CUSTOM_IMAGE_API_KEY;
     } else {
-      process.env.OD_CUSTOM_IMAGE_API_KEY = originalCustomImageKey;
+      process.env.MAX_CUSTOM_IMAGE_API_KEY = originalCustomImageKey;
     }
     if (originalCodexBin == null) {
       delete process.env.CODEX_BIN;
@@ -57,14 +57,14 @@ describe('OpenAI-compatible media providers', () => {
       process.env.CODEX_HOME = originalCodexHome;
     }
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -321,7 +321,7 @@ describe('OpenAI-compatible media providers', () => {
   });
 
   it('renders ImageRouter images through the OpenAI-compatible JSON endpoint', async () => {
-    process.env.OD_IMAGEROUTER_API_KEY = 'ir-test-key';
+    process.env.MAX_IMAGEROUTER_API_KEY = 'ir-test-key';
 
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.imagerouter.io/v1/openai/images/generations');
@@ -363,7 +363,7 @@ describe('OpenAI-compatible media providers', () => {
   });
 
   it('renders ImageRouter videos through the OpenAI-compatible JSON endpoint', async () => {
-    process.env.OD_IMAGEROUTER_API_KEY = 'ir-test-key';
+    process.env.MAX_IMAGEROUTER_API_KEY = 'ir-test-key';
 
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.imagerouter.io/v1/openai/videos/generations');
@@ -500,7 +500,7 @@ process.stdin.on('end', () => {
 });
 `, 'utf8');
     await chmod(codexBin, 0o755);
-    process.env.OD_DATA_DIR = dataDir;
+    process.env.MAX_DATA_DIR = dataDir;
     process.env.CODEX_BIN = wrongCodexBin;
     process.env.CODEX_HOME = path.join(root, 'wrong-codex-home');
 
@@ -520,7 +520,7 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
-  it('uses default app-config Codex CLI env overrides when OD_DATA_DIR is absent', async () => {
+  it('uses default app-config Codex CLI env overrides when MAX_DATA_DIR is absent', async () => {
     const dataDir = path.join(projectRoot, '.od');
     const generatedHome = path.join(root, 'default-codex-home');
     const codexBin = path.join(root, 'default-codex.mjs');
@@ -535,7 +535,7 @@ process.stdin.on('end', () => {
       },
     }), 'utf8');
     await writeFile(wrongCodexBin, `#!/usr/bin/env node
-process.stderr.write('wrong codex bin used without OD_DATA_DIR');
+process.stderr.write('wrong codex bin used without MAX_DATA_DIR');
 process.exit(24);
 `, 'utf8');
     await chmod(wrongCodexBin, 0o755);
@@ -565,7 +565,7 @@ process.stdin.on('end', () => {
 });
 `, 'utf8');
     await chmod(codexBin, 0o755);
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_DATA_DIR;
     process.env.CODEX_BIN = wrongCodexBin;
     process.env.CODEX_HOME = path.join(root, 'wrong-default-codex-home');
 
@@ -631,7 +631,7 @@ process.stdin.on('end', () => {
 });
 `, 'utf8');
     await chmod(codexBin, 0o755);
-    process.env.OD_DATA_DIR = dataDir;
+    process.env.MAX_DATA_DIR = dataDir;
 
     const result = await generateMedia({
       projectRoot,

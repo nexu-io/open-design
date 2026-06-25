@@ -25,8 +25,8 @@ export interface CreatePluginShareTaskInfo {
 export interface CreatePluginShareTaskStoreDeps {
   randomUUID: typeof randomUUID;
   execCommandViaLoginShell: (command: string, args: string[], opts?: Record<string, unknown>) => Promise<ExecCommandResult>;
-  OD_NODE_BIN: string;
-  OD_BIN: string;
+  MAX_NODE_BIN: string;
+  MAX_BIN: string;
 }
 
 interface ExecCommandResult {
@@ -167,8 +167,8 @@ export function createPluginShareTaskStore(deps: CreatePluginShareTaskStoreDeps)
     appendProgress(task, `$ ${share.command} ${task.path}`);
     for (const step of pluginShareProgressPlan(action)) appendProgress(task, `- ${step}`);
     const result = await deps.execCommandViaLoginShell(
-      deps.OD_NODE_BIN,
-      [deps.OD_BIN, ...share.argv, folder, '--json'],
+      deps.MAX_NODE_BIN,
+      [deps.MAX_BIN, ...share.argv, folder, '--json'],
       { timeout: action === 'publish-github' ? 240_000 : 300_000 },
     );
     let payload: PluginShareCliPayload | null = null;

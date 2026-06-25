@@ -1,10 +1,10 @@
 // Plan §3.K1 / spec §15.7 — bound-API-token guard.
 //
 // Two halves:
-//   1. The daemon refuses to start with OD_BIND_HOST=0.0.0.0 when no
-//      OD_API_TOKEN is set.
-//   2. When OD_API_TOKEN is set, every /api/* request from a non-loopback
-//      peer must carry `Authorization: Bearer <OD_API_TOKEN>`. The
+//   1. The daemon refuses to start with MAX_BIND_HOST=0.0.0.0 when no
+//      MAX_API_TOKEN is set.
+//   2. When MAX_API_TOKEN is set, every /api/* request from a non-loopback
+//      peer must carry `Authorization: Bearer <MAX_API_TOKEN>`. The
 //      health/readiness/version probes stay open for monitoring.
 //
 // Tests force the bearer-required code path by stamping the env vars
@@ -16,8 +16,8 @@ import type http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startServer } from '../src/server.js';
 
-const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
-const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
+const PREVIOUS_TOKEN = process.env.MAX_API_TOKEN;
+const PREVIOUS_HOST  = process.env.MAX_BIND_HOST;
 
 let server: http.Server | undefined;
 let baseUrl = '';
@@ -28,21 +28,21 @@ afterEach(async () => {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   server = undefined;
   shutdown = undefined;
-  if (PREVIOUS_TOKEN === undefined) delete process.env.OD_API_TOKEN;
-  else process.env.OD_API_TOKEN = PREVIOUS_TOKEN;
-  if (PREVIOUS_HOST === undefined) delete process.env.OD_BIND_HOST;
-  else process.env.OD_BIND_HOST = PREVIOUS_HOST;
+  if (PREVIOUS_TOKEN === undefined) delete process.env.MAX_API_TOKEN;
+  else process.env.MAX_API_TOKEN = PREVIOUS_TOKEN;
+  if (PREVIOUS_HOST === undefined) delete process.env.MAX_BIND_HOST;
+  else process.env.MAX_BIND_HOST = PREVIOUS_HOST;
 });
 
 describe('bound-API-token guard', () => {
-  it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
-    delete process.env.OD_API_TOKEN;
+  it('refuses to start with MAX_BIND_HOST=0.0.0.0 when MAX_API_TOKEN is unset', async () => {
+    delete process.env.MAX_API_TOKEN;
     await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
-      .rejects.toThrow(/OD_API_TOKEN/);
+      .rejects.toThrow(/MAX_API_TOKEN/);
   });
 
-  it('starts on a public host when OD_API_TOKEN is set', async () => {
-    process.env.OD_API_TOKEN = 'test-token-abc';
+  it('starts on a public host when MAX_API_TOKEN is set', async () => {
+    process.env.MAX_API_TOKEN = 'test-token-abc';
     // Bind to 127.0.0.1 (loopback) but pretend we crossed the guard
     // by setting the env var; the assertion is that startup succeeds.
     const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
@@ -59,7 +59,7 @@ describe('bound-API-token guard', () => {
 
 describe('bearer middleware', () => {
   beforeEach(async () => {
-    process.env.OD_API_TOKEN = 'secret-test-token';
+    process.env.MAX_API_TOKEN = 'secret-test-token';
     const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
       url: string;
       server: http.Server;

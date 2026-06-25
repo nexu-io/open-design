@@ -15,10 +15,10 @@ const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // watchdog (10 min) so agents that spend several minutes silently writing
 // large artifacts do not get killed before the outer watchdog can apply.
 // Callers can override via `stageTimeoutMs`; the chat server reads
-// `OD_ACP_STAGE_TIMEOUT_MS` from the environment.
+// `MAX_ACP_STAGE_TIMEOUT_MS` from the environment.
 // A non-positive `stageTimeoutMs` (`<= 0`) disables the watchdog entirely,
 // mirroring the outer chat watchdog's escape-hatch semantics — without this,
-// `OD_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
+// `MAX_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
 // ACP session on the next tick instead of disabling the watchdog.
 const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
 const ACP_ARTIFACT_OPEN_PATTERN = String.raw`<\s*(?:\|?\s*DSML[\s,]+artifact\b|artifact\b)`;
@@ -96,7 +96,7 @@ function errorMessage(err: unknown): string {
 }
 
 function resolveAcpTimeoutMs(env: NodeJS.ProcessEnv, fallbackMs: number): number {
-  const raw = Number(env.OD_ACP_TIMEOUT_MS);
+  const raw = Number(env.MAX_ACP_TIMEOUT_MS);
   if (!Number.isFinite(raw)) return fallbackMs;
   return Math.min(MAX_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
@@ -828,7 +828,7 @@ export function attachAcpSession({
     if (stageTimer) clearTimeout(stageTimer);
     // `stageTimeoutMs <= 0` disables the watchdog. Mirrors the outer chat
     // inactivity watchdog escape hatch (see server.ts → inactivityTimer).
-    // Without this, an operator setting `OD_ACP_STAGE_TIMEOUT_MS=0` would
+    // Without this, an operator setting `MAX_ACP_STAGE_TIMEOUT_MS=0` would
     // schedule a 0ms timeout that fires on the next tick and kills the
     // session immediately.
     if (stageWatchdogDisabled) return;

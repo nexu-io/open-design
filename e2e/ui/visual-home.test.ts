@@ -486,7 +486,7 @@ test('[P1] Avatar menu exposes the AMR account wallet entry for the active AMR a
       mode: 'daemon',
       agentId: 'amr',
       agentModels: { amr: { model: 'deepseek-v4-flash', reasoning: 'default' } },
-      agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
+      agentCliEnv: { amr: { MARKETING_AX_AMR_PROFILE: 'test' } },
     },
   });
   await gotoVisualHome(page);

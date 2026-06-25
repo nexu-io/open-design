@@ -1087,7 +1087,7 @@ test('attachAcpSession treats stageTimeoutMs <= 0 as a watchdog disable, not an 
       model: null,
       mcpServers: [],
       send: (event, payload) => events.push({ event, payload }),
-      // OD_ACP_STAGE_TIMEOUT_MS=0 escape hatch: operator wants to disable the
+      // MAX_ACP_STAGE_TIMEOUT_MS=0 escape hatch: operator wants to disable the
       // inner stage watchdog entirely (e.g. when relying solely on the outer
       // chat inactivity watchdog). Must NOT schedule a 0ms setTimeout that
       // would fail every ACP session on the next tick.

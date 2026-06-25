@@ -3532,7 +3532,7 @@ describe('SettingsDialog appearance interactions', () => {
         agentCliEnv: {
           codex: { CODEX_BIN: '/tmp/codex-dev' },
           amr: {
-            OPEN_DESIGN_AMR_PROFILE: 'prod',
+            MARKETING_AX_AMR_PROFILE: 'prod',
             AMR_API_BASE_URL: 'https://draft.example.test',
           },
         },
@@ -3549,7 +3549,7 @@ describe('SettingsDialog appearance interactions', () => {
           theme: 'dark',
           agentCliEnv: {
             amr: {
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
               AMR_API_BASE_URL: 'https://daemon.example.test',
             },
           },
@@ -3575,7 +3575,7 @@ describe('SettingsDialog appearance interactions', () => {
         agentCliEnv: {
           codex: { CODEX_BIN: '/tmp/codex-dev' },
           amr: {
-            OPEN_DESIGN_AMR_PROFILE: 'local',
+            MARKETING_AX_AMR_PROFILE: 'local',
             AMR_API_BASE_URL: 'https://draft.example.test',
           },
         },
@@ -3603,7 +3603,7 @@ describe('SettingsDialog appearance interactions', () => {
           },
           agentCliEnv: {
             amr: {
-              OPEN_DESIGN_AMR_PROFILE: 'prod',
+              MARKETING_AX_AMR_PROFILE: 'prod',
             },
           },
         },
@@ -3612,7 +3612,7 @@ describe('SettingsDialog appearance interactions', () => {
           agentModels: {},
           agentCliEnv: {
             amr: {
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
             },
           },
         },
@@ -3626,13 +3626,13 @@ describe('SettingsDialog appearance interactions', () => {
         {
           codex: { CODEX_BIN: '/tmp/codex-dev' },
           amr: {
-            OPEN_DESIGN_AMR_PROFILE: 'prod',
+            MARKETING_AX_AMR_PROFILE: 'prod',
             AMR_API_BASE_URL: 'https://draft.example.test',
           },
         },
         {
           amr: {
-            OPEN_DESIGN_AMR_PROFILE: 'local',
+            MARKETING_AX_AMR_PROFILE: 'local',
             AMR_API_BASE_URL: 'https://daemon.example.test',
           },
         },
@@ -3640,7 +3640,7 @@ describe('SettingsDialog appearance interactions', () => {
     ).toEqual({
       codex: { CODEX_BIN: '/tmp/codex-dev' },
       amr: {
-        OPEN_DESIGN_AMR_PROFILE: 'local',
+        MARKETING_AX_AMR_PROFILE: 'local',
         AMR_API_BASE_URL: 'https://draft.example.test',
       },
     });

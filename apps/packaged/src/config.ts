@@ -12,11 +12,11 @@ async function loadElectronApp() {
   return electron.app;
 }
 
-export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
-export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
-export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
-export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
-export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
+export const PACKAGED_CONFIG_PATH_ENV = "MAX_PACKAGED_CONFIG_PATH";
+export const PACKAGED_NAMESPACE_ENV = "MAX_PACKAGED_NAMESPACE";
+export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "MAX_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
+export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "MAX_WEB_STANDALONE_ROOT";
+export const PACKAGED_WEB_OUTPUT_MODE_ENV = "MAX_WEB_OUTPUT_MODE";
 
 export type PackagedWebOutputMode = "server" | "standalone";
 export type PackagedAmrProfile = "prod" | "test" | "local";
@@ -30,7 +30,7 @@ export type RawPackagedConfig = {
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
-  // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
+  // Baked by tools/pack from MARKETING_AX_TELEMETRY_RELAY_URL and forwarded to
   // the daemon at runtime; Langfuse credentials never ship in packaged config.
   telemetryRelayUrl?: string;
   updateMetadataUrl?: string;

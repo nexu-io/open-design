@@ -7,7 +7,7 @@
 // `mcpServers` parameter) so the agent surfaces their tools to the model.
 //
 // Storage: <dataDir>/mcp-config.json with shape `{ servers: [...] }`. The
-// dataDir resolution mirrors app-config.ts so OD_DATA_DIR / packaged daemon
+// dataDir resolution mirrors app-config.ts so MAX_DATA_DIR / packaged daemon
 // runtime layouts route this file alongside the rest of the runtime state.
 //
 // We deliberately keep the schema close to Claude Code's `.mcp.json` and

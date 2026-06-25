@@ -22,17 +22,17 @@ export const SIDECAR_SOURCES = Object.freeze({
 export type SidecarSource = (typeof SIDECAR_SOURCES)[keyof typeof SIDECAR_SOURCES];
 
 export const SIDECAR_ENV = Object.freeze({
-  BASE: "OD_SIDECAR_BASE",
-  DAEMON_CLI_PATH: "OD_DAEMON_CLI_PATH",
-  DAEMON_PORT: "OD_PORT",
-  IPC_BASE: "OD_SIDECAR_IPC_BASE",
-  IPC_PATH: "OD_SIDECAR_IPC_PATH",
-  NAMESPACE: "OD_SIDECAR_NAMESPACE",
-  SOURCE: "OD_SIDECAR_SOURCE",
-  TOOLS_DEV_PARENT_PID: "OD_TOOLS_DEV_PARENT_PID",
-  WEB_DIST_DIR: "OD_WEB_DIST_DIR",
-  WEB_PORT: "OD_WEB_PORT",
-  WEB_TSCONFIG_PATH: "OD_WEB_TSCONFIG_PATH",
+  BASE: "MAX_SIDECAR_BASE",
+  DAEMON_CLI_PATH: "MAX_DAEMON_CLI_PATH",
+  DAEMON_PORT: "MAX_PORT",
+  IPC_BASE: "MAX_SIDECAR_IPC_BASE",
+  IPC_PATH: "MAX_SIDECAR_IPC_PATH",
+  NAMESPACE: "MAX_SIDECAR_NAMESPACE",
+  SOURCE: "MAX_SIDECAR_SOURCE",
+  TOOLS_DEV_PARENT_PID: "MAX_TOOLS_DEV_PARENT_PID",
+  WEB_DIST_DIR: "MAX_WEB_DIST_DIR",
+  WEB_PORT: "MAX_WEB_PORT",
+  WEB_TSCONFIG_PATH: "MAX_WEB_TSCONFIG_PATH",
 } as const);
 
 export const SIDECAR_RUNTIME_ENV = Object.freeze({
@@ -67,7 +67,7 @@ export const SIDECAR_DEFAULTS = Object.freeze({
   windowsPipePrefix: "open-design",
 } as const);
 
-export const OPEN_DESIGN_PRODUCT_NAME = "Open Design";
+export const MARKETING_AX_PRODUCT_NAME = "Open Design";
 
 export function resolveWindowsReleaseNamespaceToken(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
@@ -75,7 +75,7 @@ export function resolveWindowsReleaseNamespaceToken(value: string): string {
 
 export function resolveWindowsUninstallRegistryKey(namespace: string): string {
   const namespaceToken = resolveWindowsReleaseNamespaceToken(namespace);
-  return `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${OPEN_DESIGN_PRODUCT_NAME}-${namespaceToken}`;
+  return `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${MARKETING_AX_PRODUCT_NAME}-${namespaceToken}`;
 }
 
 export const SIDECAR_MESSAGES = Object.freeze({
@@ -160,7 +160,7 @@ export type DaemonStatusSnapshot = {
    * PR #974 round 6 (mrcfps): true when the daemon's
    * `/api/import/folder` route refuses tokenless requests. Surfaced
    * over IPC so `tools-dev start desktop` can detect a daemon that
-   * was spawned without `OD_REQUIRE_DESKTOP_AUTH=1` (the split-start
+   * was spawned without `MAX_REQUIRE_DESKTOP_AUTH=1` (the split-start
    * dev flow `start daemon` -> `start desktop`) and restart it
    * before launching desktop main, instead of letting a renderer
    * race the registration handshake. Mirrors
@@ -717,7 +717,7 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
   }
 }
 
-export const OPEN_DESIGN_SIDECAR_CONTRACT = Object.freeze({
+export const MARKETING_AX_SIDECAR_CONTRACT = Object.freeze({
   appKeys: APP_KEYS,
   defaults: SIDECAR_DEFAULTS,
   env: SIDECAR_RUNTIME_ENV,

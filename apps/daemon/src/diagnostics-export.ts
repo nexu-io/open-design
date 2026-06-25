@@ -14,7 +14,7 @@ import {
 } from '@marketing-ax/diagnostics';
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   type SidecarStamp,
 } from '@marketing-ax/sidecar-proto';
@@ -55,7 +55,7 @@ async function resolveAgentHomes(dataDir: string | null | undefined): Promise<Re
     const envFor = (agentId: string) =>
       spawnEnvForAgent(
         agentId,
-        { ...process.env, OD_DATA_DIR: dataDir },
+        { ...process.env, MAX_DATA_DIR: dataDir },
         agentCliEnvForAgent(appConfig.agentCliEnv, agentId),
       );
     const clean = (value: string | undefined): string | null => {
@@ -84,7 +84,7 @@ export interface DiagnosticsHandlerOptions {
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
   runsDir?: string | null;
-  /** Open Design data dir (OD_DATA_DIR), used to locate the AMR OpenCode home. */
+  /** Open Design data dir (MAX_DATA_DIR), used to locate the AMR OpenCode home. */
   dataDir?: string | null;
 }
 
@@ -111,7 +111,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
   // accounts for that (a plain `resolveNamespaceRoot` here resolved every
   // daemon/web log to an ENOENT phantom path and captured none of them).
   const namespaceRoot = resolveRuntimeNamespaceRoot({
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     runtime,
     runtimeMode: SIDECAR_MODES.RUNTIME,
   });
@@ -120,7 +120,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
   for (const app of apps) {
     const absolutePath = resolveLogFilePath({
       app,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       runtimeRoot: namespaceRoot,
     });
     sources.push({

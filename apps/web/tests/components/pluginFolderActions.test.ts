@@ -26,7 +26,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
 
     it('delegates repo publishing to the deterministic plugin CLI helper', () => {
       expect(prompt).toContain(`Plugin folder: \`${FOLDER}\``);
-      expect(prompt).toContain(`"$OD_NODE_BIN" "$OD_BIN" plugin publish-repo ${FOLDER}`);
+      expect(prompt).toContain(`"$MAX_NODE_BIN" "$MAX_BIN" plugin publish-repo ${FOLDER}`);
       expect(prompt).toMatch(/current gh login|target is not hard-coded/i);
     });
 
@@ -78,7 +78,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
 
     it('delegates Open Design PR creation to the deterministic plugin CLI helper', () => {
       expect(prompt).toContain('nexu-io/open-design');
-      expect(prompt).toContain(`"$OD_NODE_BIN" "$OD_BIN" plugin open-design-pr ${FOLDER}`);
+      expect(prompt).toContain(`"$MAX_NODE_BIN" "$MAX_BIN" plugin open-design-pr ${FOLDER}`);
     });
 
     it('states the CLI-owned PR workflow instead of re-listing shell steps', () => {

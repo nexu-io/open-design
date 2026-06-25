@@ -25,31 +25,31 @@ describe('openrouter video generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openrouter-video-'));
     projectRoot = path.join(root, 'project-root');
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    process.env.OD_OPENROUTER_API_KEY = 'sk-or-test-key-1234';
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    process.env.MAX_OPENROUTER_API_KEY = 'sk-or-test-key-1234';
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
-    delete process.env.OD_OPENROUTER_API_KEY;
+    delete process.env.MAX_OPENROUTER_API_KEY;
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -429,10 +429,10 @@ describe('openrouter video generation', () => {
     expect(submitBody.resolution).toBe('720p');
   });
 
-  it('honours OD_MEDIA_MODEL_ALIASES for video (alias contract regression)', async () => {
+  it('honours MAX_MEDIA_MODEL_ALIASES for video (alias contract regression)', async () => {
     // Set an alias: the catalog id 'openrouter/bytedance/seedance-2.0'
     // should resolve to wire name 'my-custom-seedance-deployment'.
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'openrouter/bytedance/seedance-2.0': 'my-custom-seedance-deployment',
     });
 
@@ -459,12 +459,12 @@ describe('openrouter video generation', () => {
     // providerNote should reflect the wire name.
     expect(result.providerNote).toContain('my-custom-seedance-deployment');
 
-    delete process.env.OD_MEDIA_MODEL_ALIASES;
+    delete process.env.MAX_MEDIA_MODEL_ALIASES;
   });
 
   it('defaults the poll ceiling to 30 minutes (timeout contract regression)', async () => {
-    // Without OD_OPENROUTER_VIDEO_MAX_POLL_MS, the default should be 30 min.
-    delete process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS;
+    // Without MAX_OPENROUTER_VIDEO_MAX_POLL_MS, the default should be 30 min.
+    delete process.env.MAX_OPENROUTER_VIDEO_MAX_POLL_MS;
 
     // We use a fast-failing job so we don't actually wait 30 minutes.
     const fetchMock = vi.fn()
@@ -499,31 +499,31 @@ describe('openrouter image generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openrouter-image-'));
     projectRoot = path.join(root, 'project-root');
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    process.env.OD_OPENROUTER_API_KEY = 'sk-or-img-test-key';
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    process.env.MAX_OPENROUTER_API_KEY = 'sk-or-img-test-key';
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
-    delete process.env.OD_OPENROUTER_API_KEY;
+    delete process.env.MAX_OPENROUTER_API_KEY;
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -691,9 +691,9 @@ describe('openrouter image generation', () => {
     );
   });
 
-  it('honours OD_MEDIA_MODEL_ALIASES for image (alias contract regression)', async () => {
+  it('honours MAX_MEDIA_MODEL_ALIASES for image (alias contract regression)', async () => {
     // Set an alias: the catalog id should resolve to a custom wire name.
-    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+    process.env.MAX_MEDIA_MODEL_ALIASES = JSON.stringify({
       'openrouter/google/gemini-2.5-flash-image': 'my-custom-gemini-img',
     });
 
@@ -711,6 +711,6 @@ describe('openrouter image generation', () => {
     // providerNote should reflect the wire name.
     expect(result.providerNote).toContain('my-custom-gemini-img');
 
-    delete process.env.OD_MEDIA_MODEL_ALIASES;
+    delete process.env.MAX_MEDIA_MODEL_ALIASES;
   });
 });

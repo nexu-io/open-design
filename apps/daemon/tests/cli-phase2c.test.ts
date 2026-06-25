@@ -64,7 +64,7 @@ describe('Phase 2C CLI wrappers', () => {
   ): Promise<{ stdout: string; stderr: string }> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      OD_DAEMON_URL: baseUrl,
+      MAX_DAEMON_URL: baseUrl,
       ...options.env,
     };
     delete env.NODE_OPTIONS;
@@ -112,7 +112,7 @@ describe('Phase 2C CLI wrappers', () => {
   ): Promise<{ code: number | null; stdout: string; stderr: string }> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      OD_DAEMON_URL: baseUrl,
+      MAX_DAEMON_URL: baseUrl,
       ...options.env,
     };
     delete env.NODE_OPTIONS;

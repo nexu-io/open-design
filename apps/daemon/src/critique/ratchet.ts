@@ -6,7 +6,7 @@
  * is the bridge: it takes a window of daily conformance numbers and
  * answers "given the current rollout phase, should we promote, hold,
  * or demote?". The answer is a recommendation, not an action. An
- * operator-driven follow-up wires the actual `OD_CRITIQUE_ROLLOUT_PHASE`
+ * operator-driven follow-up wires the actual `MAX_CRITIQUE_ROLLOUT_PHASE`
  * flip into a deploy pipeline; this module's job is to make the
  * recommendation explicit and auditable so the operator does not have
  * to read a Grafana panel to know what to do.

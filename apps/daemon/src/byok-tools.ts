@@ -623,7 +623,7 @@ export async function executeGenerateImage(
 
   // Prefer the BYOK session's key (what the user is actively using).
   // Fall back to media-config (env var > stored) so a user who set
-  // OD_SENSEAUDIO_API_KEY but forgot to fill the chat panel still
+  // MAX_SENSEAUDIO_API_KEY but forgot to fill the chat panel still
   // gets a working tool call.
   let apiKey = ctx.upstreamApiKey;
   let baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;

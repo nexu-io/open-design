@@ -82,9 +82,9 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        OPEN_DESIGN_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
-        OPEN_DESIGN_OBJECT_MAX_BYTES: '1024',
-        OPEN_DESIGN_OBJECT_BATCH_MAX_BYTES: '2300',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_MAX_BYTES: '1024',
+        MARKETING_AX_OBJECT_BATCH_MAX_BYTES: '2300',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
@@ -162,7 +162,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        OPEN_DESIGN_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
@@ -202,7 +202,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: vi.fn() as any,
       env: {
         NODE_ENV: 'test',
-        OPEN_DESIGN_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
       },
       uploadMode: 'manifest-only',
       now: () => new Date('2026-06-08T00:00:00.000Z'),
@@ -262,7 +262,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        OPEN_DESIGN_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
@@ -313,7 +313,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'production',
-        OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
+        MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
@@ -350,8 +350,8 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        OPEN_DESIGN_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
-        OPEN_DESIGN_OBJECT_MAX_BYTES: '8',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_MAX_BYTES: '8',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });

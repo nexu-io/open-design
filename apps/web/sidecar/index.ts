@@ -1,16 +1,16 @@
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from "@marketing-ax/sidecar-proto";
+import { APP_KEYS, MARKETING_AX_SIDECAR_CONTRACT } from "@marketing-ax/sidecar-proto";
 import { bootstrapSidecarRuntime } from "@marketing-ax/sidecar";
 import { readProcessStamp } from "@marketing-ax/platform";
 
 import { startWebSidecar } from "./server.js";
 
 async function main(): Promise<void> {
-  const stamp = readProcessStamp(process.argv.slice(2), OPEN_DESIGN_SIDECAR_CONTRACT);
+  const stamp = readProcessStamp(process.argv.slice(2), MARKETING_AX_SIDECAR_CONTRACT);
   if (stamp == null) throw new Error("sidecar stamp is required");
 
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.WEB,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
   });
   const server = await startWebSidecar(runtime);
 

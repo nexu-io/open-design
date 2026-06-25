@@ -56,7 +56,7 @@ export const API_ERROR_CODES = [
   // a prior artifact sharing the same metadata.identifier. Almost always means
   // the agent shipped a placeholder ("see other-file.html in this project",
   // a bare filename string, an empty fallback page) instead of the full
-  // document. Configurable via OD_ARTIFACT_STUB_GUARD (reject|warn|off).
+  // document. Configurable via MAX_ARTIFACT_STUB_GUARD (reject|warn|off).
   'ARTIFACT_REGRESSION',
   // The daemon's publication guard found unresolved template placeholders
   // (e.g. pitch-deck `Name to confirm` / `$X.XM`) in an HTML/deck artifact

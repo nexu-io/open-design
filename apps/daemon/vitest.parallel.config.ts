@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-const configuredMaxWorkers = Number.parseInt(process.env.OD_CI_DAEMON_MAX_WORKERS ?? '4', 10);
+const configuredMaxWorkers = Number.parseInt(process.env.MAX_CI_DAEMON_MAX_WORKERS ?? '4', 10);
 const maxWorkers = Number.isFinite(configuredMaxWorkers) && configuredMaxWorkers > 0
   ? configuredMaxWorkers
   : 4;

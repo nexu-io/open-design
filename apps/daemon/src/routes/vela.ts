@@ -160,7 +160,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     const cacheKey = JSON.stringify({
       launchPath,
       home: spawnEnv.HOME ?? spawnEnv.USERPROFILE ?? '',
-      openDesignAmrProfile: spawnEnv.OPEN_DESIGN_AMR_PROFILE ?? '',
+      openDesignAmrProfile: spawnEnv.MARKETING_AX_AMR_PROFILE ?? '',
       velaProfile: spawnEnv.VELA_PROFILE ?? '',
       velaLinkUrl: spawnEnv.VELA_LINK_URL ?? '',
       velaRuntimeKey: spawnEnv.VELA_RUNTIME_KEY ?? '',

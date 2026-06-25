@@ -8,7 +8,7 @@
  * `kami`); the other ~138 brands are prose-only and rely on the legacy
  * DESIGN.md-only behaviour.
  *
- * PR-D will flip the `OD_DESIGN_TOKEN_CHANNEL` env default from off to
+ * PR-D will flip the `MAX_DESIGN_TOKEN_CHANNEL` env default from off to
  * on. For prose-only brands, that flip MUST be a no-op: missing files
  * resolve to `undefined`, undefined fields skip the new prompt blocks,
  * and the composed system prompt should be byte-identical to today's
@@ -204,7 +204,7 @@ export async function checkDesignSystemFlagParity(): Promise<boolean> {
     if (flagOn !== flagOff) {
       violations.push(
         [
-          `[${brand.id}] prose-only brand produced different prompts under flag-off vs flag-on — flipping OD_DESIGN_TOKEN_CHANNEL would silently change behaviour for this brand.`,
+          `[${brand.id}] prose-only brand produced different prompts under flag-off vs flag-on — flipping MAX_DESIGN_TOKEN_CHANNEL would silently change behaviour for this brand.`,
           describeFirstDivergence(flagOff, flagOn),
           `  Either ${toRepositoryPath(brand.brandRoot)} now ships tokens.css / components.html (in which case it should be promoted to the structured tier and pass the divergence side of this check), or composeSystemPrompt is leaking output for undefined asset fields.`,
         ].join("\n"),
@@ -218,7 +218,7 @@ export async function checkDesignSystemFlagParity(): Promise<boolean> {
       console.error(`- ${violation}`);
     }
     console.error(
-      "PR-D's promise is that flipping OD_DESIGN_TOKEN_CHANNEL on by default is a no-op for the ~138 prose-only brands and a deliberate uplift for the structured tier. Both halves of that promise must keep holding.",
+      "PR-D's promise is that flipping MAX_DESIGN_TOKEN_CHANNEL on by default is a no-op for the ~138 prose-only brands and a deliberate uplift for the structured tier. Both halves of that promise must keep holding.",
     );
     return false;
   }
@@ -226,7 +226,7 @@ export async function checkDesignSystemFlagParity(): Promise<boolean> {
   const structuredLabel = `${structuredChecked} structured brand${structuredChecked === 1 ? "" : "s"}`;
   const proseLabel = `${proseOnlyChecked} prose-only brand${proseOnlyChecked === 1 ? "" : "s"}`;
   console.log(
-    `Design system flag parity passed: ${proseLabel} produce byte-identical prompts under OD_DESIGN_TOKEN_CHANNEL flag-off vs flag-on; ${structuredLabel} show the expected token-channel divergence.`,
+    `Design system flag parity passed: ${proseLabel} produce byte-identical prompts under MAX_DESIGN_TOKEN_CHANNEL flag-off vs flag-on; ${structuredLabel} show the expected token-channel divergence.`,
   );
   return true;
 }

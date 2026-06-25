@@ -2,7 +2,7 @@ import { defaultCritiqueConfig, FALLBACK_POLICIES } from '@marketing-ax/contract
 import type { CritiqueConfig } from '@marketing-ax/contracts/critique';
 
 /**
- * Load CritiqueConfig from process.env. Keys map 1:1 to OD_CRITIQUE_*.
+ * Load CritiqueConfig from process.env. Keys map 1:1 to MAX_CRITIQUE_*.
  * Missing values fall back to defaultCritiqueConfig(). Invalid values
  * (non-numeric, negative, out-of-range) throw RangeError so misconfig
  * surfaces at boot, never silently.
@@ -12,19 +12,19 @@ import type { CritiqueConfig } from '@marketing-ax/contracts/critique';
 export function loadCritiqueConfigFromEnv(env: NodeJS.ProcessEnv = process.env): CritiqueConfig {
   const defaults = defaultCritiqueConfig();
 
-  const enabled = parseEnabled(env['OD_CRITIQUE_ENABLED'], defaults.enabled);
-  const maxRounds = parsePositiveInt('OD_CRITIQUE_MAX_ROUNDS', env['OD_CRITIQUE_MAX_ROUNDS'], defaults.maxRounds);
-  const scoreThreshold = parseNonNegativeFloat('OD_CRITIQUE_SCORE_THRESHOLD', env['OD_CRITIQUE_SCORE_THRESHOLD'], defaults.scoreThreshold);
-  const scoreScale = parsePositiveInt('OD_CRITIQUE_SCORE_SCALE', env['OD_CRITIQUE_SCORE_SCALE'], defaults.scoreScale);
-  const perRoundTimeoutMs = parsePositiveInt('OD_CRITIQUE_PER_ROUND_TIMEOUT_MS', env['OD_CRITIQUE_PER_ROUND_TIMEOUT_MS'], defaults.perRoundTimeoutMs);
-  const totalTimeoutMs = parsePositiveInt('OD_CRITIQUE_TOTAL_TIMEOUT_MS', env['OD_CRITIQUE_TOTAL_TIMEOUT_MS'], defaults.totalTimeoutMs);
-  const parserMaxBlockBytes = parsePositiveInt('OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES', env['OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES'], defaults.parserMaxBlockBytes);
-  const fallbackPolicy = parseFallbackPolicy(env['OD_CRITIQUE_FALLBACK_POLICY'], defaults.fallbackPolicy);
+  const enabled = parseEnabled(env['MAX_CRITIQUE_ENABLED'], defaults.enabled);
+  const maxRounds = parsePositiveInt('MAX_CRITIQUE_MAX_ROUNDS', env['MAX_CRITIQUE_MAX_ROUNDS'], defaults.maxRounds);
+  const scoreThreshold = parseNonNegativeFloat('MAX_CRITIQUE_SCORE_THRESHOLD', env['MAX_CRITIQUE_SCORE_THRESHOLD'], defaults.scoreThreshold);
+  const scoreScale = parsePositiveInt('MAX_CRITIQUE_SCORE_SCALE', env['MAX_CRITIQUE_SCORE_SCALE'], defaults.scoreScale);
+  const perRoundTimeoutMs = parsePositiveInt('MAX_CRITIQUE_PER_ROUND_TIMEOUT_MS', env['MAX_CRITIQUE_PER_ROUND_TIMEOUT_MS'], defaults.perRoundTimeoutMs);
+  const totalTimeoutMs = parsePositiveInt('MAX_CRITIQUE_TOTAL_TIMEOUT_MS', env['MAX_CRITIQUE_TOTAL_TIMEOUT_MS'], defaults.totalTimeoutMs);
+  const parserMaxBlockBytes = parsePositiveInt('MAX_CRITIQUE_PARSER_MAX_BLOCK_BYTES', env['MAX_CRITIQUE_PARSER_MAX_BLOCK_BYTES'], defaults.parserMaxBlockBytes);
+  const fallbackPolicy = parseFallbackPolicy(env['MAX_CRITIQUE_FALLBACK_POLICY'], defaults.fallbackPolicy);
 
   // Cross-field validation: threshold cannot exceed scale.
   if (scoreThreshold > scoreScale + 1e-9) {
     throw new RangeError(
-      `OD_CRITIQUE_SCORE_THRESHOLD (${scoreThreshold}) must be <= OD_CRITIQUE_SCORE_SCALE (${scoreScale})`,
+      `MAX_CRITIQUE_SCORE_THRESHOLD (${scoreThreshold}) must be <= MAX_CRITIQUE_SCORE_SCALE (${scoreScale})`,
     );
   }
 
@@ -83,6 +83,6 @@ function parseFallbackPolicy(
     return trimmed as CritiqueConfig['fallbackPolicy'];
   }
   throw new RangeError(
-    `OD_CRITIQUE_FALLBACK_POLICY must be one of ${FALLBACK_POLICIES.join(', ')}, got "${raw}"`,
+    `MAX_CRITIQUE_FALLBACK_POLICY must be one of ${FALLBACK_POLICIES.join(', ')}, got "${raw}"`,
   );
 }

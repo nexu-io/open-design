@@ -50,7 +50,7 @@ function loadBetterSqlite(): new (filename: string) => BackfillDatabase {
 }
 
 function parseArgs(argv: string[]): { dataDir: string; dryRun: boolean } {
-  let dataDir = process.env.OD_DATA_DIR?.trim() || './.od';
+  let dataDir = process.env.MAX_DATA_DIR?.trim() || './.od';
   let dryRun = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];

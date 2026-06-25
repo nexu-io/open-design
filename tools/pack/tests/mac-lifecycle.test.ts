@@ -100,7 +100,7 @@ describe("startPackedMacApp", () => {
 
       expect(result.source).toBe("installed");
       expect(result.status?.state).toBe("running");
-      expect(launchEnv?.OD_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
+      expect(launchEnv?.MAX_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain(
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );
@@ -138,7 +138,7 @@ describe("startPackedMacApp", () => {
 
       expect(result.source).toBe("installed");
       expect(result.status?.state).toBe("running");
-      expect(launchEnv?.OD_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
+      expect(launchEnv?.MAX_PACKAGED_CONFIG_PATH).toBe(launchConfigPath);
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain(
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );

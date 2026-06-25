@@ -105,27 +105,27 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: nodeOptions
             }
             {
-              name: 'OD_BIND_HOST'
+              name: 'MAX_BIND_HOST'
               value: '0.0.0.0'
             }
             {
-              name: 'OD_PORT'
+              name: 'MAX_PORT'
               value: string(appPort)
             }
             {
-              name: 'OD_WEB_PORT'
+              name: 'MAX_WEB_PORT'
               value: string(appPort)
             }
             {
-              name: 'OD_DATA_DIR'
+              name: 'MAX_DATA_DIR'
               value: '/app/.od'
             }
             {
-              name: 'OD_ALLOWED_ORIGINS'
+              name: 'MAX_ALLOWED_ORIGINS'
               value: allowedOrigins
             }
             {
-              name: 'OD_API_TOKEN'
+              name: 'MAX_API_TOKEN'
               secureValue: odApiToken
             }
           ]

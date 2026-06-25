@@ -25,13 +25,13 @@ describe('renderResearchCommandContract', () => {
     expect(prompt).toContain('Mention the report path in the final answer');
     expect(prompt).toContain('EV market 2025 trends');
     expect(prompt).toContain(
-      '"$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 15',
+      '"$MAX_NODE_BIN" "$MAX_BIN" research search --query "<search query>" --max-sources 15',
     );
     expect(prompt).toContain(
-      '& $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 15',
+      '& $env:MAX_NODE_BIN $env:MAX_BIN research search --query "<search query>" --max-sources 15',
     );
     expect(prompt).toContain(
-      '"%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 15',
+      '"%MAX_NODE_BIN%" "%MAX_BIN%" research search --query "<search query>" --max-sources 15',
     );
   });
 

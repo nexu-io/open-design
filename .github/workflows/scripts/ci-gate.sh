@@ -212,5 +212,5 @@ jq -sc \
   }' "$actions_jsonl" > "$results_path"
 
 echo "ci results: $results_path"
-echo "OD_CI_RESULTS_JSON $(base64 < "$results_path" | tr -d '\n')"
+echo "MAX_CI_RESULTS_JSON $(base64 < "$results_path" | tr -d '\n')"
 exit "$overall_exit"

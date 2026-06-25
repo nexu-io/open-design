@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
@@ -36,11 +36,11 @@ const execFileAsync = promisify(execFile);
 
 const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
-const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
+const DESKTOP_LOG_ECHO_ENV = "MAX_DESKTOP_LOG_ECHO";
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
 // `electronuserland/builder:base`, which strips npm/npx/corepack.
-const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
+const PRODUCTION_INSTALL_PNPM_BIN_ENV = "MAX_TOOLS_PACK_PNPM_BIN";
 const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
@@ -217,9 +217,9 @@ export function buildDockerArgs(
     `${PRODUCTION_INSTALL_PNPM_BIN_ENV}=${CONTAINER_PNPM_PATH}`,
   ];
   if (config.telemetryRelayUrl != null) {
-    dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
+    dockerArgs.push("-e", `MARKETING_AX_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
   }
-  const velaBinHost = process.env.OPEN_DESIGN_VELA_CLI_BIN?.trim();
+  const velaBinHost = process.env.MARKETING_AX_VELA_CLI_BIN?.trim();
   if (velaBinHost) {
     // The container only mounts /project, /tools-pack and cache/home dirs by
     // default, so a Vela CLI living outside those (a host path like
@@ -231,10 +231,10 @@ export function buildDockerArgs(
     const velaBinBase = basename(velaBinHost);
     const containerVelaDir = "/opt/vela-cli";
     dockerArgs.push("-v", `${hostVelaDir}:${containerVelaDir}:ro`);
-    dockerArgs.push("-e", `OPEN_DESIGN_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
+    dockerArgs.push("-e", `MARKETING_AX_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
   }
   if (config.amrProfile != null) {
-    dockerArgs.push("-e", `OPEN_DESIGN_AMR_PROFILE=${config.amrProfile}`);
+    dockerArgs.push("-e", `MARKETING_AX_AMR_PROFILE=${config.amrProfile}`);
   }
   dockerArgs.push(
     "-w",
@@ -359,7 +359,7 @@ export type ProductionInstallCommand = { command: string; args: string[] };
 // during writeAssembledApp. The default (`npm`) preserves host behavior for
 // developer-machine builds. When the build runs inside
 // `electronuserland/builder:base` (which strips npm, npx, and corepack),
-// buildDockerArgs sets OD_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
+// buildDockerArgs sets MAX_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
 // bootstrapped, and this resolver routes the install through that binary.
 // `--config.node-linker=hoisted` keeps the resulting layout flat so
 // electron-builder packs node_modules the same way it does for npm-installed
@@ -407,7 +407,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@marketing-ax/components", "build"]);
   await runPnpm(config, ["--filter", "@marketing-ax/daemon", "build"]);
   try {
-    await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
+    await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], { MAX_WEB_OUTPUT_MODE: "server" });
     await runPnpm(config, ["--filter", "@marketing-ax/web", "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files before AppImage packaging. See
@@ -918,7 +918,7 @@ async function validateDesktopAppImageMarker(
   // Validate the marker stamp (file content written by apps/packaged itself)
   // rather than the process command line. Menu launches via the .desktop
   // entry don't pass createProcessStampArgs to the AppImage -- they only set
-  // OD_PACKAGED_NAMESPACE -- so apps/packaged falls back to a SIDECAR_SOURCES.PACKAGED
+  // MAX_PACKAGED_NAMESPACE -- so apps/packaged falls back to a SIDECAR_SOURCES.PACKAGED
   // stamp. Validating the process command would reject those legitimate
   // launches as `unmanaged`, which on uninstall would also remove the
   // AppImage/desktop/icon files out from under the still-running app.
@@ -926,7 +926,7 @@ async function validateDesktopAppImageMarker(
   // the dual-source acceptance pattern in mac/lifecycle.ts.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace: config.namespace,
   });
   const stampOk =
@@ -973,7 +973,7 @@ function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
     app: APP_KEYS.DESKTOP,
     ipc: resolveAppIpcPath({
       app: APP_KEYS.DESKTOP,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace: config.namespace,
     }),
     mode: SIDECAR_MODES.RUNTIME,
@@ -994,7 +994,7 @@ async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boo
 async function fetchDesktopStatus(config: ToolPackConfig): Promise<DesktopStatusSnapshot | null> {
   try {
     const ipc = resolveAppIpcPath({
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       namespace: config.namespace,
       app: APP_KEYS.DESKTOP,
     });
@@ -1031,7 +1031,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
   // --appimage-extract-and-run bypasses FUSE-mounted SquashFS, which is too slow
   // for daemon startup on first launch (smoke testing showed startup exceeded the
   // packaged sidecar's 35-second timeout when running from FUSE).
-  const args = ["--appimage-extract-and-run", ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)];
+  const args = ["--appimage-extract-and-run", ...createProcessStampArgs(stamp, MARKETING_AX_SIDECAR_CONTRACT)];
 
   const child = await spawnBackgroundProcess({
     args,
@@ -1039,7 +1039,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     cwd: dirname(appImagePath),
     env: createSidecarLaunchEnv({
       base: join(config.roots.runtime.namespaceRoot, "runtime"),
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       extraEnv: { ...process.env, [DESKTOP_LOG_ECHO_ENV]: "0" },
       stamp,
     }),
@@ -1431,14 +1431,14 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
 
   // Write a self-contained launcher script. The namespace is baked in so the
   // launcher name and the runtime namespace always agree. namespace is
-  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. OD_DATA_DIR is baked
+  // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. MAX_DATA_DIR is baked
   // so the headless process writes its runtime data under the same paths that
   // tools-pack stop/logs expect.
   const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
   const script = [
     "#!/bin/sh",
     `# Open Design headless launcher — namespace: ${config.namespace}`,
-    `OD_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
+    `MAX_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} MAX_DATA_DIR=${JSON.stringify(dataDir)} MAX_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 
   await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
@@ -1483,13 +1483,13 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
         ...process.env,
         // Bake in the packaged namespace so headless uses the same namespace
         // as the tools-pack config regardless of the caller's environment.
-        OD_PACKAGED_NAMESPACE: config.namespace,
+        MAX_PACKAGED_NAMESPACE: config.namespace,
         // Point the headless data root at the tools-pack runtime directory so
         // the identity marker is written to the path this function polls.
-        // headless.ts computes: join(OD_DATA_DIR, "namespaces") which must
+        // headless.ts computes: join(MAX_DATA_DIR, "namespaces") which must
         // equal config.roots.runtime.namespaceBaseRoot.
-        OD_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
-        OD_RESOURCE_ROOT: paths.resourceRoot,
+        MAX_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
+        MAX_RESOURCE_ROOT: paths.resourceRoot,
       },
       logFd: logHandle.fd,
     });
@@ -1553,7 +1553,7 @@ export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<L
   // the AppImage runtime.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace: config.namespace,
   });
   const stampOk =

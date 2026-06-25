@@ -23,7 +23,7 @@ describe('analytics telemetry environment', () => {
 
     expect(readPublicConfigResponse({
       POSTHOG_KEY: 'phc_test',
-      OD_TELEMETRY_ENV: 'local_development',
+      MAX_TELEMETRY_ENV: 'local_development',
     })).toMatchObject({
       enabled: true,
       env: 'local_development',
@@ -43,7 +43,7 @@ describe('analytics telemetry environment', () => {
       dataDir,
       env: {
         POSTHOG_KEY: 'phc_test',
-        OD_TELEMETRY_ENV: 'local_development',
+        MAX_TELEMETRY_ENV: 'local_development',
       },
     });
 

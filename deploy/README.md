@@ -20,23 +20,23 @@ Before starting:
    openssl rand -hex 32
    ```
 
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+3. Open `.env` in your editor, find `MAX_API_TOKEN=`, and paste the generated token there.
 
 Then pull and start the service:
 
 ```bash
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose pull
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose up -d --no-build
+MARKETING_AX_IMAGE=docker.io/vanjayak/open-design:latest docker compose pull
+MARKETING_AX_IMAGE=docker.io/vanjayak/open-design:latest docker compose up -d --no-build
 ```
 
 Defaults:
 
-- Host port: `127.0.0.1:7456` (`OPEN_DESIGN_PORT=8080` to publish on `127.0.0.1:8080`)
+- Host port: `127.0.0.1:7456` (`MARKETING_AX_PORT=8080` to publish on `127.0.0.1:8080`)
 - Runtime data: before documenting, changing, or choosing persistent daemon
   storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
   directory contract**. This README MUST NOT restate it.
 - Node heap cap: `--max-old-space-size=192`
-- Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
+- Compose memory cap: `384m` (`MARKETING_AX_MEM_LIMIT=256m` to override)
 
 Do not publish the daemon directly on a public or shared LAN interface. The API is
 unauthenticated for non-browser clients, so remote deployments should keep Compose
@@ -44,17 +44,17 @@ bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
 front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
-proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be
+proxy, set `MARKETING_AX_ALLOWED_ORIGINS` to the browser origins that should be
 allowed to call `/api`:
 
 ```bash
-OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
+MARKETING_AX_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
 
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
 ```bash
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design@sha256:<digest> docker compose up -d --no-build
+MARKETING_AX_IMAGE=docker.io/vanjayak/open-design@sha256:<digest> docker compose up -d --no-build
 ```
 The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
@@ -65,7 +65,7 @@ creating its `workspace-write` sandbox, opt into Codex's full-access mode for
 all Codex runs in that deployment:
 
 ```bash
-OD_CODEX_SANDBOX=danger-full-access docker compose up -d --no-build
+MAX_CODEX_SANDBOX=danger-full-access docker compose up -d --no-build
 ```
 
 Only the exact value `danger-full-access` is supported; unknown values are
@@ -145,9 +145,9 @@ custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 
 ### Docker Desktop on macOS
 
-When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
+When running Docker Compose on macOS with `MAX_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
 
-`Authorization: Bearer <OD_API_TOKEN> required`
+`Authorization: Bearer <MAX_API_TOKEN> required`
 
 Workaround:
 

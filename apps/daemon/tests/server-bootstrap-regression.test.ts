@@ -284,9 +284,9 @@ describe('static SPA fallback classification', () => {
 });
 
 describe('daemon data dir resolver', () => {
-  it('requires explicit OD_DATA_DIR in sandbox mode and resolves project-relative dirs', () => {
+  it('requires explicit MAX_DATA_DIR in sandbox mode and resolves project-relative dirs', () => {
     expect(() => resolveDataDir('', '/tmp/open-design-test', { requireExplicit: true })).toThrow(
-      /OD_DATA_DIR is required/,
+      /MAX_DATA_DIR is required/,
     );
     expect(resolveDataDir('relative-data', '/tmp/open-design-test')).toBe('/tmp/open-design-test/relative-data');
   });

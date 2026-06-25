@@ -78,7 +78,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
     footer:
       'The daemon writes to `./.od/` (project-local) by default. Set ' +
-      '`OD_DATA_DIR=~/.open-design` to share data across projects.',
+      '`MAX_DATA_DIR=~/.open-design` to share data across projects.',
   },
   {
     id: 'cli',
@@ -117,9 +117,9 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           'pnpm install\n' +
           'pnpm --filter @marketing-ax/daemon build\n' +
           '\n' +
-          'export OD_NODE_BIN="${OD_NODE_BIN:-/opt/homebrew/opt/node@24/bin/node}"\n' +
-          'export OD_BIN="$PWD/apps/daemon/dist/cli.js"\n' +
-          '"$OD_NODE_BIN" "$OD_BIN" daemon start --headless --serve-web --port 7456',
+          'export MAX_NODE_BIN="${MAX_NODE_BIN:-/opt/homebrew/opt/node@24/bin/node}"\n' +
+          'export MAX_BIN="$PWD/apps/daemon/dist/cli.js"\n' +
+          '"$MAX_NODE_BIN" "$MAX_BIN" daemon start --headless --serve-web --port 7456',
       },
       {
         label: 'Run a design project headlessly and stream events',
@@ -190,7 +190,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'All subcommands accept `--daemon-url http://127.0.0.1:<port>` to ' +
       'target a specific running daemon — useful when running a sandboxed ' +
       'second instance for tests. From a source checkout, replace `od` with ' +
-      '`"$OD_NODE_BIN" "$OD_BIN"` after exporting those variables.',
+      '`"$MAX_NODE_BIN" "$MAX_BIN"` after exporting those variables.',
   },
   {
     id: 'mcp',
@@ -207,7 +207,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'Stdio transport — no extra port, the client spawns `od mcp` directly.',
       'Auto-discovers the live daemon URL via the local IPC status socket when launched as a sidecar.',
       'Falls back to `--daemon-url http://127.0.0.1:<port>` for plain installs so the MCP process always finds a running daemon.',
-      'Pins `OD_DATA_DIR` so the spawned MCP process writes to the same place the daemon already uses (avoids EPERM in packaged macOS app bundles).',
+      'Pins `MAX_DATA_DIR` so the spawned MCP process writes to the same place the daemon already uses (avoids EPERM in packaged macOS app bundles).',
     ],
     snippets: [
       {
@@ -219,7 +219,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           '    "open-design": {\n' +
           '      "command": "od",\n' +
           '      "args": ["mcp", "--daemon-url", "http://127.0.0.1:7456"],\n' +
-          '      "env": { "OD_DATA_DIR": "~/.open-design" }\n' +
+          '      "env": { "MAX_DATA_DIR": "~/.open-design" }\n' +
           '    }\n' +
           '  }\n' +
           '}',

@@ -27,7 +27,7 @@ import {
   resolveChatRunArtifactQuietPeriodMs,
 } from '../src/server.js';
 
-const ENV_KEY = 'OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS';
+const ENV_KEY = 'MAX_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS';
 const ONE_MINUTE_MS = 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
@@ -197,7 +197,7 @@ describe('resolveActiveInactivityTimeoutMs (#1451 quiet-period switch)', () => {
 
   it('treats artifactQuietPeriodMs=0 as "disable the quiet period" — keeps the pre-artifact ceiling after registration', () => {
     // The bug from the #2585 review: when an operator sets
-    // OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0, the prior implementation
+    // MAX_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0, the prior implementation
     // dropped the active ceiling to 0 once the artifact was registered,
     // which made noteAgentActivity() early-return without rescheduling,
     // stranding the pre-artifact timer. Falling back to the pre-artifact

@@ -3,7 +3,7 @@
  * sequence in `ensureDaemonGateForDesktop`.
  *
  * Background: `tools-dev start daemon` followed by `tools-dev start desktop`
- * was leaving the daemon ungated because `OD_REQUIRE_DESKTOP_AUTH=1`
+ * was leaving the daemon ungated because `MAX_REQUIRE_DESKTOP_AUTH=1`
  * is only injected when daemon and desktop spawn together. The
  * helper now introspects the running daemon's STATUS over IPC and
  * restarts it (and web, if running) before launching desktop main

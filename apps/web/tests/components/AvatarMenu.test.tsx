@@ -216,7 +216,7 @@ describe('AvatarMenu', () => {
         agentId: 'amr',
         agentCliEnv: {
           amr: {
-            OPEN_DESIGN_AMR_PROFILE: 'test',
+            MARKETING_AX_AMR_PROFILE: 'test',
           },
         },
       },

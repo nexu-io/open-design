@@ -4,29 +4,29 @@
 // /api/media/config; the daemon persists them to .od/media-config.json
 // and reads them at generation time. Environment variables override the
 // stored values so power users can keep keys out of the workspace
-// folder altogether (`OD_OPENAI_API_KEY=… node daemon/cli.js`).
+// folder altogether (`MAX_OPENAI_API_KEY=… node daemon/cli.js`).
 //
 // Storage location (precedence high → low):
-//   1. OD_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
-//   2. OD_DATA_DIR=DIR           → <DIR>/media-config.json
+//   1. MAX_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
+//   2. MAX_DATA_DIR=DIR           → <DIR>/media-config.json
 //   3. (default)                 → <projectRoot>/.od/media-config.json
 // The default is unchanged for workspace-local installs. (1) lets a
 // supervisor relocate just the credentials file. (2) means installs
-// that already set OD_DATA_DIR for the rest of the daemon's runtime
+// that already set MAX_DATA_DIR for the rest of the daemon's runtime
 // state (Nix-store / immutable-image installs, the packaged daemon at
 // apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv,
 // the Home Manager / NixOS modules) get media-config there too without
 // any extra plumbing. Both env values are resolved with the same
-// semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared
+// semantics as MAX_DATA_DIR in server.ts:resolveDataDir(): the shared
 // expandHomePrefix() helper handles `~`, `$HOME`, and `${HOME}` (with
 // either `/` or `\` separator), then relative paths anchor to
 // <projectRoot> (NOT process.cwd, which is unrelated to the workspace
 // when systemd or launchd starts the daemon).
 //
-// Migration note: a workspace install that sets a custom OD_DATA_DIR
+// Migration note: a workspace install that sets a custom MAX_DATA_DIR
 // AND has a pre-existing `<projectRoot>/.od/media-config.json` will
-// start reading from `<OD_DATA_DIR>/media-config.json` instead. Move
-// the file once or set OD_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
+// start reading from `<MAX_DATA_DIR>/media-config.json` instead. Move
+// the file once or set MAX_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
 // the old location.
 //
 // The file is intentionally simple JSON — no encryption, no schema
@@ -51,14 +51,14 @@ type JsonRecord = Record<string, unknown>;
 type OAuthCredential = { apiKey: string; source: string };
 
 // Single env var carries the full alias map as JSON so we don't have
-// to dynamically lift `OD_MEDIA_MODEL_ALIAS_<id>=value` into a record
+// to dynamically lift `MAX_MEDIA_MODEL_ALIAS_<id>=value` into a record
 // with all the env-var-name escaping that entails (Windows cmd.exe in
 // particular rejects hyphens). The shape mirrors the on-disk
 // `aliases` map so users can switch storage layers without rewriting
 // their workflow:
 //
-//   OD_MEDIA_MODEL_ALIASES='{"doubao-seedream-3-0-t2i-250415":"doubao-seedream-5-0"}'
-const ENV_MODEL_ALIASES = 'OD_MEDIA_MODEL_ALIASES';
+//   MAX_MEDIA_MODEL_ALIASES='{"doubao-seedream-3-0-t2i-250415":"doubao-seedream-5-0"}'
+const ENV_MODEL_ALIASES = 'MAX_MEDIA_MODEL_ALIASES';
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object';
@@ -75,39 +75,39 @@ const ENV_KEYS: Record<string, string[]> = {
   // who pastes an Azure deployment URL into the OpenAI Base URL field
   // gets the credential picked up automatically.
   openai: [
-    'OD_OPENAI_API_KEY',
+    'MAX_OPENAI_API_KEY',
     'OPENAI_API_KEY',
     'AZURE_API_KEY',
     'AZURE_OPENAI_API_KEY',
   ],
-  volcengine: ['OD_VOLCENGINE_API_KEY', 'ARK_API_KEY', 'VOLCENGINE_API_KEY'],
-  // OD_GROK_API_KEY first (the project-reserved override, same shape as
+  volcengine: ['MAX_VOLCENGINE_API_KEY', 'ARK_API_KEY', 'VOLCENGINE_API_KEY'],
+  // MAX_GROK_API_KEY first (the project-reserved override, same shape as
   // every other provider above), then XAI_API_KEY as the canonical
   // upstream env per docs.x.ai quickstart — so users who already export
   // it for the official SDK don't have to re-paste into Settings.
-  grok: ['OD_GROK_API_KEY', 'XAI_API_KEY'],
-  nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
-  imagerouter: ['OD_IMAGEROUTER_API_KEY', 'IMAGEROUTER_API_KEY'],
-  openrouter: ['OD_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
-  'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
-  bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
-  fal: ['OD_FAL_KEY', 'FAL_KEY'],
-  replicate: ['OD_REPLICATE_API_TOKEN', 'REPLICATE_API_TOKEN'],
-  google: ['OD_GOOGLE_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
-  kling: ['OD_KLING_API_KEY', 'KLING_API_KEY'],
-  midjourney: ['OD_MIDJOURNEY_API_KEY'],
-  minimax: ['OD_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
-  suno: ['OD_SUNO_API_KEY'],
-  udio: ['OD_UDIO_API_KEY'],
-  elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
-  fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
-  senseaudio: ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'],
-  aihubmix: ['OD_AIHUBMIX_API_KEY', 'AIHUBMIX_API_KEY'],
-  tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
-  leonardo: ['OD_LEONARDO_API_KEY', 'LEONARDO_API_KEY'],
+  grok: ['MAX_GROK_API_KEY', 'XAI_API_KEY'],
+  nanobanana: ['MAX_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+  imagerouter: ['MAX_IMAGEROUTER_API_KEY', 'IMAGEROUTER_API_KEY'],
+  openrouter: ['MAX_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
+  'custom-image': ['MAX_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
+  bfl: ['MAX_BFL_API_KEY', 'BFL_API_KEY'],
+  fal: ['MAX_FAL_KEY', 'FAL_KEY'],
+  replicate: ['MAX_REPLICATE_API_TOKEN', 'REPLICATE_API_TOKEN'],
+  google: ['MAX_GOOGLE_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+  kling: ['MAX_KLING_API_KEY', 'KLING_API_KEY'],
+  midjourney: ['MAX_MIDJOURNEY_API_KEY'],
+  minimax: ['MAX_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
+  suno: ['MAX_SUNO_API_KEY'],
+  udio: ['MAX_UDIO_API_KEY'],
+  elevenlabs: ['MAX_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
+  fishaudio: ['MAX_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
+  senseaudio: ['MAX_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'],
+  aihubmix: ['MAX_AIHUBMIX_API_KEY', 'AIHUBMIX_API_KEY'],
+  tavily: ['MAX_TAVILY_API_KEY', 'TAVILY_API_KEY'],
+  leonardo: ['MAX_LEONARDO_API_KEY', 'LEONARDO_API_KEY'],
 };
 
-// Resolve an `OD_*_DIR` env override using the same semantics as
+// Resolve an `MAX_*_DIR` env override using the same semantics as
 // `resolveDataDir()` in server.ts: expandHomePrefix() handles the `~`,
 // `$HOME`, and `${HOME}` shorthands (with either `/` or `\` separator),
 // then relative paths anchor to <projectRoot>, not process.cwd, since
@@ -118,9 +118,9 @@ const ENV_KEYS: Record<string, string[]> = {
 // is a normal "no config yet" condition handled by readStored(); the
 // write path's mkdir(recursive) creates the directory on first use.
 function resolveOverrideDir(raw: string, projectRoot: string): string {
-  // Share expandHomePrefix with resolveDataDir (server.ts) so OD_DATA_DIR
-  // and OD_MEDIA_CONFIG_DIR cannot split state under a $HOME-style value.
-  // A launcher passing OD_DATA_DIR=$HOME/.open-design without a shell to
+  // Share expandHomePrefix with resolveDataDir (server.ts) so MAX_DATA_DIR
+  // and MAX_MEDIA_CONFIG_DIR cannot split state under a $HOME-style value.
+  // A launcher passing MAX_DATA_DIR=$HOME/.open-design without a shell to
   // expand it would otherwise route SQLite/projects/artifacts to the
   // expanded path while media-config.json stayed under
   // <projectRoot>/$HOME/.open-design, leaving stored credentials
@@ -145,8 +145,8 @@ function envOverrideDir(envName: string, projectRoot: string): string | null {
  */
 export function mediaConfigDir(projectRoot: string): string {
   return (
-    envOverrideDir('OD_MEDIA_CONFIG_DIR', projectRoot)
-    ?? envOverrideDir('OD_DATA_DIR', projectRoot)
+    envOverrideDir('MAX_MEDIA_CONFIG_DIR', projectRoot)
+    ?? envOverrideDir('MAX_DATA_DIR', projectRoot)
     ?? path.join(projectRoot, '.od')
   );
 }

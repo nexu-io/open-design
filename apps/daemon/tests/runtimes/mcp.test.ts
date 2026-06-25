@@ -62,7 +62,7 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
 
   for (const tool of tools) {
     assert.equal(typeof tool.description, 'string');
-    assert.match(tool.description, /POSIX equivalent: `"\$OD_NODE_BIN" "\$OD_BIN" tools /u);
+    assert.match(tool.description, /POSIX equivalent: `"\$MAX_NODE_BIN" "\$MAX_BIN" tools /u);
     assert.equal(tool.inputSchema.type, 'object');
   }
 
@@ -85,8 +85,8 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
 });
 
 test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {
-  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456/base';
-  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  process.env.MAX_DAEMON_URL = 'http://127.0.0.1:17456/base';
+  process.env.MAX_TOOL_TOKEN = 'test-tool-token';
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -108,8 +108,8 @@ test('live artifact MCP connector list forwards daily digest use case to daemon 
 });
 
 test('live artifact MCP create forwards input and artifact payload fields to daemon tools', async () => {
-  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
-  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  process.env.MAX_DAEMON_URL = 'http://127.0.0.1:17456';
+  process.env.MAX_TOOL_TOKEN = 'test-tool-token';
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -136,8 +136,8 @@ test('live artifact MCP create forwards input and artifact payload fields to dae
 });
 
 test('live artifact MCP update preserves nested input and artifact payload fields', async () => {
-  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
-  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  process.env.MAX_DAEMON_URL = 'http://127.0.0.1:17456';
+  process.env.MAX_TOOL_TOKEN = 'test-tool-token';
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });

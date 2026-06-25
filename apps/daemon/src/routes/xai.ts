@@ -262,7 +262,7 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
 
     // Reuse media-config's credential chain so the search endpoint sees
     // the same OAuth-first cascade Grok image / video already gets:
-    // OD-native xai-tokens → Hermes auth.json borrow → OD_GROK_API_KEY
+    // OD-native xai-tokens → Hermes auth.json borrow → MAX_GROK_API_KEY
     // → XAI_API_KEY. Anything that lights up the Grok image button
     // automatically lights up X search too.
     const provider = await resolveProviderConfig(PROJECT_ROOT, 'grok');

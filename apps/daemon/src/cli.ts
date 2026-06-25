@@ -405,13 +405,13 @@ function printRootHelp() {
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
-  "$OD_NODE_BIN" "$OD_BIN" tools ...
+  "$MAX_NODE_BIN" "$MAX_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.
 
   od media generate --surface <image|video|audio> --model <id> [opts]
       Generate a media artifact and write it into the active project.
-      Designed to be invoked by a code agent - picks up OD_DAEMON_URL
-      and OD_PROJECT_ID from the env that the daemon injected on spawn.
+      Designed to be invoked by a code agent - picks up MAX_DAEMON_URL
+      and MAX_PROJECT_ID from the env that the daemon injected on spawn.
 
   od mcp [--daemon-url <url>]
       Run a stdio MCP server that proxies project tool calls to a
@@ -421,8 +421,8 @@ function printRootHelp() {
       project-scoped artifacts without exporting a zip.
 
 Options:
-  --port <n>       Port to listen on (default: 7456, env: OD_PORT).
-  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: OD_BIND_HOST).
+  --port <n>       Port to listen on (default: 7456, env: MAX_PORT).
+  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: MAX_BIND_HOST).
                    Set to a specific IP (e.g. a Tailscale address) to restrict access
                    to that interface only.
   --no-open        Do not open the browser after start.
@@ -512,7 +512,7 @@ Output is JSON only on stdout:
 Flags:
   --query        Required search query.
   --max-sources  Optional source cap. Defaults to 5, clamped to Tavily's max.
-  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
+  --daemon-url   Local daemon URL. Defaults to MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,11 +551,11 @@ async function runMediaGenerate(rawArgs) {
   }
 
   const daemonUrl = await cliDaemonUrl(flags);
-  const projectId = flags.project || process.env.OD_PROJECT_ID;
-  const token = process.env.OD_TOOL_TOKEN;
+  const projectId = flags.project || process.env.MAX_PROJECT_ID;
+  const token = process.env.MAX_TOOL_TOKEN;
   if (!projectId && !token) {
     console.error(
-      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+      'project id required. Pass --project <id> or set MAX_PROJECT_ID. The daemon injects this when it spawns the code agent.',
     );
     process.exit(2);
   }
@@ -748,7 +748,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       : `exit code ${stillRunningExitCode} = still running.`;
   process.stderr.write(
     `task ${taskId} still running after ${handoff.elapsed}s. ` +
-      `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
+      `Run \`"$MAX_NODE_BIN" "$MAX_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
       `(${stillRunningHint}).\n`,
   );
   process.exit(stillRunningExitCode);
@@ -855,12 +855,12 @@ async function cliDaemonBaseUrl(flags) {
 
 function printMediaHelp() {
   console.log(`Usage: od media generate --surface <image|video|audio> --model <id> [opts]
-       "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
+       "$MAX_NODE_BIN" "$MAX_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 
 Required:
   --surface  image | video | audio
   --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
-  --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
+  --project  Project id. Auto-resolved from MAX_PROJECT_ID when invoked by the daemon.
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
@@ -932,7 +932,7 @@ every iteration.
 
 Options:
   --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
-                       order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
+                       order: this flag, MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH,
                        then http://127.0.0.1:7456. Each new MCP spawn
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
@@ -1767,7 +1767,7 @@ async function runMarketplace(args) {
                                                               Update the marketplace trust tier.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   Open Design daemon HTTP base (default MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts).`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -4575,7 +4575,7 @@ function printUiHelp() {
                                                      Pre-answer a surface so the run never broadcasts it.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   Open Design daemon HTTP base (default MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.`);
 }
 
@@ -4624,7 +4624,7 @@ function printPluginHelp() {
   od plugin whoami [--host github.com]     Show the gh account used for publishing.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   Open Design daemon HTTP base (default MAX_DAEMON_URL, MAX_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.
 
 Installs support local folders, github:owner/repo refs, HTTPS .tgz archives,
@@ -6076,7 +6076,7 @@ async function runDaemonDb(rest, flags) {
 
 status:
   Prints a structured inventory of the daemon's SQLite backend:
-    - file path (under .od/ by default; OD_DATA_DIR overrides)
+    - file path (under .od/ by default; MAX_DATA_DIR overrides)
     - size on disk (primary + WAL + SHM)
     - schema version (user_version PRAGMA)
     - per-table row counts (system tables excluded)
@@ -6173,8 +6173,8 @@ function formatBytes(n) {
 }
 
 async function runDaemonStart(flags) {
-  const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
-  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
+  const port = Number(flags.port ?? process.env.MAX_PORT ?? 7456);
+  const host = String(flags.host ?? process.env.MAX_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
   const runtime = await startDaemonRuntime({
     host,

@@ -65,9 +65,9 @@ describe('live artifact tool CLI environment', () => {
     return artifactPath;
   }
 
-  it('reads OD_DAEMON_URL and OD_TOOL_TOKEN from the injected environment', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456/base/';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+  it('reads MAX_DAEMON_URL and MAX_TOOL_TOKEN from the injected environment', async () => {
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456/base/';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
 
     const result = await runLiveArtifactsToolCli(['list']);
 
@@ -86,8 +86,8 @@ describe('live artifact tool CLI environment', () => {
   });
 
   it('prints compact success JSON for list results', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -127,8 +127,8 @@ describe('live artifact tool CLI environment', () => {
   });
 
   it('injects sibling data.json into document dataJson when creating artifacts', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456/base/';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456/base/';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     const artifactPath = await makeArtifactInputFiles();
     fetchMock.mockResolvedValueOnce(
       new Response(
@@ -156,8 +156,8 @@ describe('live artifact tool CLI environment', () => {
   });
 
   it('calls the refresh tool endpoint with the artifact id', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456/base/';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456/base/';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -201,8 +201,8 @@ describe('live artifact tool CLI environment', () => {
   });
 
   it('prints compact validation errors and exits non-zero on API failure', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -253,24 +253,24 @@ describe('live artifact tool CLI environment', () => {
   });
 
   it('fails before making a request when the injected environment is missing', async () => {
-    delete process.env.OD_DAEMON_URL;
-    delete process.env.OD_TOOL_TOKEN;
+    delete process.env.MAX_DAEMON_URL;
+    delete process.env.MAX_TOOL_TOKEN;
 
     const result = await runLiveArtifactsToolCli(['list']);
 
     expect(result.exitCode).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(stderrOutput.join('')).toContain('OD_DAEMON_URL is required');
+    expect(stderrOutput.join('')).toContain('MAX_DAEMON_URL is required');
   });
 
-  it('requires OD_TOOL_TOKEN from the injected environment', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    delete process.env.OD_TOOL_TOKEN;
+  it('requires MAX_TOOL_TOKEN from the injected environment', async () => {
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    delete process.env.MAX_TOOL_TOKEN;
 
     const result = await runLiveArtifactsToolCli(['list']);
 
     expect(result.exitCode).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(stderrOutput.join('')).toContain('OD_TOOL_TOKEN is required');
+    expect(stderrOutput.join('')).toContain('MAX_TOOL_TOKEN is required');
   });
 });

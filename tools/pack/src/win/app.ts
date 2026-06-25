@@ -131,7 +131,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@marketing-ax/components", "build"]);
   await runPnpm(config, ["--filter", "@marketing-ax/daemon", "build"]);
   try {
-    await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
+    await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], { MAX_WEB_OUTPUT_MODE: config.webOutputMode });
     await runPnpm(config, ["--filter", "@marketing-ax/web", "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files before any packaging step copies the web output into the
@@ -356,8 +356,8 @@ async function buildPrebundledStandaloneRuntime(
     [
       'import { fileURLToPath } from "node:url";',
       "const selfPath = fileURLToPath(import.meta.url);",
-      "process.env.OD_BIN ??= selfPath;",
-      "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
+      "process.env.MAX_BIN ??= selfPath;",
+      "process.env.MAX_DAEMON_CLI_PATH ??= selfPath;",
       `await import(${JSON.stringify(
         toRelativeImportSpecifier(
           dirname(paths.daemonCliPrebundleEntrypointPath),

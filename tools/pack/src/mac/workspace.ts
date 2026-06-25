@@ -26,7 +26,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@marketing-ax/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], {
-      OD_WEB_OUTPUT_MODE: config.webOutputMode,
+      MAX_WEB_OUTPUT_MODE: config.webOutputMode,
     });
     await runPnpm(config, ["--filter", "@marketing-ax/web", "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip

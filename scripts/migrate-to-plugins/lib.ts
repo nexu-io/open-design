@@ -231,7 +231,7 @@ const TOP_ORDER = [
   'compat',
   'od',
 ];
-const OD_ORDER = [
+const MAX_ORDER = [
   'kind',
   'taskKind',
   'mode',
@@ -279,7 +279,7 @@ export function buildManifest(seed: PluginManifestSeed): Record<string, unknown>
     version: PLUGIN_VERSION,
     ...seed,
   };
-  if (seed.od) base.od = sortKeys(seed.od, OD_ORDER);
+  if (seed.od) base.od = sortKeys(seed.od, MAX_ORDER);
   return sortKeys(base, TOP_ORDER);
 }
 

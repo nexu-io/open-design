@@ -22,7 +22,7 @@ async function withFakeClaude<T>(run: () => Promise<T>): Promise<T> {
   const dir = await fsp.mkdtemp(join(tmpdir(), 'od-mcp-spawn-bin-'));
   const oldPath = process.env.PATH;
   const oldClaudeBin = process.env.CLAUDE_BIN;
-  const oldAgentHome = process.env.OD_AGENT_HOME;
+  const oldAgentHome = process.env.MAX_AGENT_HOME;
   // Fake `claude` that prints stream-json the daemon understands and exits 0.
   // The single result frame is enough to drive the run to `succeeded`.
   const script = `
@@ -53,14 +53,14 @@ process.exit(0);
     }
     process.env.PATH = `${dir}${delimiter}${oldPath ?? ''}`;
     delete process.env.CLAUDE_BIN;
-    process.env.OD_AGENT_HOME = dir;
+    process.env.MAX_AGENT_HOME = dir;
     return await run();
   } finally {
     process.env.PATH = oldPath;
     if (oldClaudeBin === undefined) delete process.env.CLAUDE_BIN;
     else process.env.CLAUDE_BIN = oldClaudeBin;
-    if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
-    else process.env.OD_AGENT_HOME = oldAgentHome;
+    if (oldAgentHome === undefined) delete process.env.MAX_AGENT_HOME;
+    else process.env.MAX_AGENT_HOME = oldAgentHome;
     await fsp.rm(dir, { recursive: true, force: true });
   }
 }
@@ -129,8 +129,8 @@ describe('spawn writes external MCP config for Claude Code', () => {
     // The daemon owns its data dir; we discover the on-disk project path by
     // having the daemon return the upload root, then composing path manually.
     // Use the same path the daemon's `ensureProject` uses.
-    const projectsBase = process.env.OD_DATA_DIR
-      ? join(process.env.OD_DATA_DIR, 'projects')
+    const projectsBase = process.env.MAX_DATA_DIR
+      ? join(process.env.MAX_DATA_DIR, 'projects')
       : join(process.cwd(), '.od', 'projects');
     return { id, dir: join(projectsBase, id), conversationId: body.conversationId };
   }
@@ -152,8 +152,8 @@ describe('spawn writes external MCP config for Claude Code', () => {
     expect(r.ok).toBe(true);
     const body = (await r.json()) as { project: { id: string }; conversationId: string };
     projectsToClean.push(body.project.id);
-    const projectsBase = process.env.OD_DATA_DIR
-      ? join(process.env.OD_DATA_DIR, 'projects')
+    const projectsBase = process.env.MAX_DATA_DIR
+      ? join(process.env.MAX_DATA_DIR, 'projects')
       : join(process.cwd(), '.od', 'projects');
     return {
       id: body.project.id,
@@ -164,13 +164,13 @@ describe('spawn writes external MCP config for Claude Code', () => {
   }
 
   async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
-    const previous = process.env.OD_SANDBOX_MODE;
-    process.env.OD_SANDBOX_MODE = '1';
+    const previous = process.env.MAX_SANDBOX_MODE;
+    process.env.MAX_SANDBOX_MODE = '1';
     try {
       return await run();
     } finally {
-      if (previous == null) delete process.env.OD_SANDBOX_MODE;
-      else process.env.OD_SANDBOX_MODE = previous;
+      if (previous == null) delete process.env.MAX_SANDBOX_MODE;
+      else process.env.MAX_SANDBOX_MODE = previous;
     }
   }
 
@@ -277,7 +277,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
         });
         expect(chatRes.status).toBe(400);
         const body = (await chatRes.json()) as { error?: { message?: string } };
-        expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+        expect(body.error?.message).toMatch(/imported-folder projects.*MAX_SANDBOX_MODE/i);
       });
 
       const managedTarget = join(dir, '.mcp.json');
@@ -329,7 +329,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
         });
         expect(runRoutineRes.status).toBe(500);
         const runRoutineBody = (await runRoutineRes.json()) as { error?: string };
-        expect(runRoutineBody.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+        expect(runRoutineBody.error).toMatch(/imported-folder projects.*MAX_SANDBOX_MODE/i);
       });
 
       const routineRunsRes = await fetch(`${baseUrl}/api/routines/${routineId}/runs?limit=10`);

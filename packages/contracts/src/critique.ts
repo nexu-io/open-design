@@ -68,7 +68,7 @@ export function defaultCritiqueConfig(): CritiqueConfig {
     parserMaxBlockBytes: 262_144,
     fallbackPolicy: 'ship_best',
     protocolVersion: CRITIQUE_PROTOCOL_VERSION,
-    // Contracts layer cannot call os.cpus(); daemon env layer overrides via OD_CRITIQUE_MAX_CONCURRENT_RUNS.
+    // Contracts layer cannot call os.cpus(); daemon env layer overrides via MAX_CRITIQUE_MAX_CONCURRENT_RUNS.
     maxConcurrentRuns: 4,
   };
 }

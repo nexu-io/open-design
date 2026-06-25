@@ -110,7 +110,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  MARKETING_AX_TELEMETRY_RELAY_URL: ${{ vars.MARKETING_AX_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
   # without these run the daemon in no-op analytics mode (events never
@@ -145,13 +145,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
-      OPEN_DESIGN_NIGHTLY_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/nightly/latest/metadata.json
-      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}
-      OPEN_DESIGN_RELEASE_CHANNEL: ${{ inputs.channel }}
-      OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      OPEN_DESIGN_STABLE_NIGHTLY_VERSION: ${{ inputs.nightly_version }}
-      OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}
-      OPEN_DESIGN_SKIP_STABLE_NIGHTLY_GATE: ${{ inputs.skip_nightly_gate }}
+      MARKETING_AX_NIGHTLY_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/nightly/latest/metadata.json
+      MARKETING_AX_RELEASE_DRY_RUN: ${{ inputs.dry_run }}
+      MARKETING_AX_RELEASE_CHANNEL: ${{ inputs.channel }}
+      MARKETING_AX_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      MARKETING_AX_STABLE_NIGHTLY_VERSION: ${{ inputs.nightly_version }}
+      MARKETING_AX_STABLE_VERSION: ${{ inputs.release_version }}
+      MARKETING_AX_SKIP_STABLE_NIGHTLY_GATE: ${{ inputs.skip_nightly_gate }}
     outputs:
       base_version: ${{ steps.stable.outputs.base_version }}
       branch: ${{ steps.stable.outputs.branch }}
@@ -197,7 +197,7 @@ jobs:
         id: prev
         run: |
           set -euo pipefail
-          prev="$(curl -fsSL "$OPEN_DESIGN_NIGHTLY_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
+          prev="$(curl -fsSL "$MARKETING_AX_NIGHTLY_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
           echo "previous nightly commit: ${prev:-<none>}"
           echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
 
@@ -454,14 +454,14 @@ jobs:
       - name: Smoke release mac packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          MAX_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          MAX_PACKAGED_E2E_MAC: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
+          MAX_PACKAGED_E2E_RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          MAX_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          MAX_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           set -euo pipefail
           pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
@@ -760,13 +760,13 @@ jobs:
       - name: Smoke release windows packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
-          OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
+          MAX_PACKAGED_E2E_WIN: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
+          MAX_PACKAGED_E2E_RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          MAX_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          MAX_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           $ErrorActionPreference = "Stop"
           pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
@@ -929,10 +929,10 @@ jobs:
       - name: Smoke release linux AppImage runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
-          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_LINUX_APPIMAGE: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
+          MAX_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           set -euo pipefail
           report_dir="$RUNNER_TEMP/release-report/linux"

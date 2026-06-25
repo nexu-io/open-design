@@ -159,7 +159,7 @@ describe('readLangfuseConfig', () => {
 describe('readTelemetrySinkConfig', () => {
   it('prefers the Open Design telemetry relay when configured', () => {
     const cfg = readTelemetrySinkConfig({
-      OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
+      MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
       LANGFUSE_PUBLIC_KEY: 'pk',
       LANGFUSE_SECRET_KEY: 'sk',
     });
@@ -173,9 +173,9 @@ describe('readTelemetrySinkConfig', () => {
 
   it('uses relay-specific timeout and retry tuning when present', () => {
     const cfg = readTelemetrySinkConfig({
-      OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse',
-      OPEN_DESIGN_TELEMETRY_TIMEOUT_MS: '30000',
-      OPEN_DESIGN_TELEMETRY_RETRIES: '3',
+      MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse',
+      MARKETING_AX_TELEMETRY_TIMEOUT_MS: '30000',
+      MARKETING_AX_TELEMETRY_RETRIES: '3',
       LANGFUSE_TIMEOUT_MS: '1',
       LANGFUSE_RETRIES: '0',
     });

@@ -2,7 +2,7 @@ function Resolve-WindowsSignToolPath([string]$PreferredPath = "") {
   $candidates = @()
   foreach ($value in @(
     $PreferredPath,
-    [Environment]::GetEnvironmentVariable("OD_WIN_SIGNTOOL_PATH"),
+    [Environment]::GetEnvironmentVariable("MAX_WIN_SIGNTOOL_PATH"),
     "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
   )) {
     if (-not [string]::IsNullOrWhiteSpace($value)) {
@@ -100,19 +100,19 @@ function Get-WindowsSigningProbe {
 }
 
 function Read-WindowsSigningProbeFromEnvironment {
-  $probed = [Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_PROBED")
+  $probed = [Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_PROBED")
   if (-not (ConvertTo-Boolean $probed)) {
     return $null
   }
 
   return [ordered]@{
-    certificateFound = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND"))
-    enabled = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_ENABLED"))
-    mode = [Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_MODE")
-    reason = [Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_REASON")
-    requested = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_REQUESTED"))
-    signToolFound = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND"))
-    signToolPath = [Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGNTOOL_PATH")
-    thumbprint = [Environment]::GetEnvironmentVariable("OD_BETA_WINDOWS_SIGN_CERT_SHA1")
+    certificateFound = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND"))
+    enabled = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_ENABLED"))
+    mode = [Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_MODE")
+    reason = [Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_REASON")
+    requested = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_REQUESTED"))
+    signToolFound = ConvertTo-Boolean ([Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND"))
+    signToolPath = [Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGNTOOL_PATH")
+    thumbprint = [Environment]::GetEnvironmentVariable("MAX_BETA_WINDOWS_SIGN_CERT_SHA1")
   }
 }

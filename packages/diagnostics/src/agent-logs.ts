@@ -91,7 +91,7 @@ async function latestLogFilesIn(
 export interface AgentCliLogOptions {
   /** User home directory; CLI configs/logs live under here. */
   homeDir: string;
-  /** Open Design data dir (OD_DATA_DIR); fallback location of the AMR OpenCode home. */
+  /** Open Design data dir (MAX_DATA_DIR); fallback location of the AMR OpenCode home. */
   dataDir?: string | null;
   /**
    * Effective AMR OpenCode home (the resolved `OPENCODE_TEST_HOME`). Callers

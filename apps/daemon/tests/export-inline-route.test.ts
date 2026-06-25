@@ -462,7 +462,7 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
   const projectId = 'proj-export-inline-test';
 
   const cssBody = 'body{color:#0a0}';
-  const jsBody = 'window.OD_EXPORT_OK = 42;';
+  const jsBody = 'window.MAX_EXPORT_OK = 42;';
   const nestedJsBody = 'export const N = 7;';
 
   beforeAll(async () => {
@@ -473,7 +473,7 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     baseUrl = started.url;
     server = started.server;
 
-    projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
+    projectsRoot = path.join(process.env.MAX_DATA_DIR!, 'projects');
     const dir = path.join(projectsRoot, projectId);
     const pages = path.join(dir, 'pages');
     const shared = path.join(dir, 'shared');

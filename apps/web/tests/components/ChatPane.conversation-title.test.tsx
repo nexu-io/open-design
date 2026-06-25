@@ -167,7 +167,7 @@ describe('ChatPane session switcher', () => {
         activeConversationId="conv-1"
         onSelectConversation={vi.fn()}
         onDeleteConversation={vi.fn()}
-        config={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } } } as unknown as AppConfig}
+        config={{ agentCliEnv: { amr: { MARKETING_AX_AMR_PROFILE: 'test' } } } as unknown as AppConfig}
       />,
     );
 

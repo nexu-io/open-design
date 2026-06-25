@@ -51,7 +51,7 @@ function makeHarness() {
     BUNDLED_PETS_DIR: '',
     DESIGN_SYSTEMS_DIR: '',
     DESIGN_TEMPLATES_DIR: '',
-    OD_BIN: '',
+    MAX_BIN: '',
     PROJECT_ROOT: '',
     PROJECTS_DIR: projectsDir,
     PROMPT_TEMPLATES_DIR: '',

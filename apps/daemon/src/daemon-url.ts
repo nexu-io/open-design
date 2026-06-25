@@ -23,9 +23,9 @@ export interface ResolveDaemonUrlOptions {
 /**
  * Resolve the daemon HTTP base URL for `od` client commands.
  *
- * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
+ * Spawn order: explicit `--daemon-url` flag, `MAX_DAEMON_URL` env, then
  * a STATUS roundtrip to the concrete sidecar IPC endpoint supplied by
- * the lifecycle owner in `OD_SIDECAR_IPC_PATH`, then the default
+ * the lifecycle owner in `MAX_SIDECAR_IPC_PATH`, then the default
  * `tools-dev status --json` runtime. Falls back to the legacy default
  * for direct `od` launches that do not run as a sidecar.
  */
@@ -35,7 +35,7 @@ export async function resolveDaemonUrl(
   const env = options.env ?? process.env;
   const flagUrl = options.flagUrl ?? null;
   if (flagUrl != null && flagUrl.length > 0) return flagUrl;
-  const envUrl = env.OD_DAEMON_URL;
+  const envUrl = env.MAX_DAEMON_URL;
   if (envUrl != null && envUrl.length > 0) return envUrl;
   const discovered = await discoverDaemonUrlFromIpc(env, options.timeoutMs ?? 800);
   if (discovered != null) return discovered;

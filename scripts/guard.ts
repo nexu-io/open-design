@@ -532,7 +532,7 @@ const productNeutralitySkippedDirectories = new Set([
 // Public contracts, help/prompt strings, docs, and shipped content should
 // describe the integration role, not name a private deployment. The default
 // check blocks named "orchestrator such as ..." examples; private forks can
-// add stricter local terms through OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
+// add stricter local terms through MAX_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
 const productNeutralityCheckedPathPrefixes = [
   "apps/daemon/src/",
   "apps/web/app/",
@@ -568,7 +568,7 @@ function isProductNeutralityTextFile(repositoryPath: string): boolean {
 }
 
 function productNeutralityForbiddenTerms(): string[] {
-  return String(process.env.OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS ?? "")
+  return String(process.env.MAX_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS ?? "")
     .split(",")
     .map((term) => term.trim())
     .filter((term) => term.length > 0);

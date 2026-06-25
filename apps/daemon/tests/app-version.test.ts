@@ -30,7 +30,7 @@ describe('app version helpers', () => {
   it('prefers packaged app version metadata from the environment', () => {
     expect(resolveAppVersionInfo({
       packageMetadata: { version: '0.3.0' },
-      env: { OD_APP_VERSION: '0.3.1-beta.1' },
+      env: { MAX_APP_VERSION: '0.3.1-beta.1' },
       resourcesPath: '/Applications/Open Design.app/Contents/Resources',
       execPath: '/Applications/Open Design.app/Contents/Resources/open-design/bin/node',
       platform: 'darwin',
@@ -64,7 +64,7 @@ describe('app version helpers', () => {
   it('honors an explicit release channel', () => {
     expect(resolveAppVersionInfo({
       packageMetadata: { version: '1.2.3' },
-      env: { OD_RELEASE_CHANNEL: 'beta' },
+      env: { MAX_RELEASE_CHANNEL: 'beta' },
     }).channel).toBe('beta');
   });
 

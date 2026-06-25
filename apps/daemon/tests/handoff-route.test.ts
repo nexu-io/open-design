@@ -30,8 +30,8 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     baseUrl = started.url;
     server = started.server;
 
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
 
     await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
@@ -321,8 +321,8 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     // lockfile on disk to simulate the contention without spawning a second
     // request (which would be race-flaky), then assert the route returns
     // 409 CONFLICT with the shared ApiErrorCode value.
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     const lockPath = path.join(dataDir, 'projects', PROJECT_ID, '.transcript.lock');
 
     let lockFd: number | null = null;

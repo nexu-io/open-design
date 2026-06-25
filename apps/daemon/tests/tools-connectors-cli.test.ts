@@ -492,8 +492,8 @@ exit 128
   }
 
   it('appends curated useCase query params for connector listing', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456/base/';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456/base/';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ connectors: [] }), { headers: { 'Content-Type': 'application/json' }, status: 200 }));
 
     const result = await runConnectorsToolCli(['list', '--use-case', 'personal_daily_digest']);
@@ -509,8 +509,8 @@ exit 128
   });
 
   it('includes curation in compact connector output', async () => {
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
       connectors: [{
         id: 'slack',
@@ -554,8 +554,8 @@ exit 128
   it('writes GitHub design evidence through connected connector tools', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-connectors-cli-'));
     process.chdir(tmpDir);
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     await installFailingLocalGithubTools(tmpDir);
 
     const encode = (value: string) => Buffer.from(value, 'utf8').toString('base64');
@@ -2308,8 +2308,8 @@ exit 128
   it('falls back to bounded connector directory browsing when the repository tree is too large', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-connectors-cli-'));
     process.chdir(tmpDir);
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     await installFailingLocalGithubTools(tmpDir);
 
     const encode = (value: string) => Buffer.from(value, 'utf8').toString('base64');
@@ -2394,8 +2394,8 @@ exit 128
   it('continues bounded GitHub intake when repository metadata is too large', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-connectors-cli-'));
     process.chdir(tmpDir);
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
     await installFailingLocalGithubTools(tmpDir);
 
     const encode = (value: string) => Buffer.from(value, 'utf8').toString('base64');
@@ -2463,8 +2463,8 @@ exit 128
   it('uses shallow local git clone before connector-backed intake', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-connectors-cli-'));
     process.chdir(tmpDir);
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
 
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });
@@ -2586,8 +2586,8 @@ printf 'font-data' > "$last/fonts/ubuntu/Ubuntu-Regular.ttf"
   it('uses GitHub CLI authenticated clone before connector fallback', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-connectors-cli-'));
     process.chdir(tmpDir);
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
 
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });
@@ -2682,8 +2682,8 @@ exit 1
   it('reports GitHub CLI login when connector and local clone cannot read a repository', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-connectors-cli-'));
     process.chdir(tmpDir);
-    process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
-    process.env.OD_TOOL_TOKEN = 'agent-run-token';
+    process.env.MAX_DAEMON_URL = 'http://127.0.0.1:7456';
+    process.env.MAX_TOOL_TOKEN = 'agent-run-token';
 
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });

@@ -42,7 +42,7 @@
   # Synthesize a Caddyfile pointing at the static package's out tree.
   #
   # The web frontend is a static SPA bundled at build time with
-  # `OD_DAEMON_URL=""`, so the bundled JS calls relative URLs like
+  # `MAX_DAEMON_URL=""`, so the bundled JS calls relative URLs like
   # `/api/agents`, `/artifacts/...`, and `/frames/...`. The daemon
   # serves those routes on `cfg.port`; caddy reverse-proxies them so
   # the SPA works same-origin without CORS or runtime config.
@@ -133,8 +133,8 @@
 
   daemonEnv =
     {
-      OD_PORT = toString cfg.port;
-      OD_DATA_DIR = toString cfg.dataDir;
+      MAX_PORT = toString cfg.port;
+      MAX_DATA_DIR = toString cfg.dataDir;
       PATH = lib.concatStringsSep ":" daemonPathEntries;
     }
     // lib.optionalAttrs cfg.webFrontend.enable {
@@ -142,7 +142,7 @@
       # otherwise PUT/POST requests from the SPA served on
       # `webFrontend.port` get 403'd by the /api middleware
       # (apps/daemon/src/server.ts buildAllowedOrigins).
-      OD_WEB_PORT = toString cfg.webFrontend.port;
+      MAX_WEB_PORT = toString cfg.webFrontend.port;
     }
     // lib.optionalAttrs (cfg.webFrontend.allowedOrigins != []) {
       # Operator-declared external origins for the LAN-exposure escape
@@ -152,7 +152,7 @@
       # still widen the daemon's same-origin allowlist via this
       # option. Comma-joined; parsed by configuredAllowedOrigins() in
       # apps/daemon/src/origin-validation.ts.
-      OD_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
+      MAX_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.webFrontend.allowedOrigins;
     }
     // cfg.extraEnv;
 

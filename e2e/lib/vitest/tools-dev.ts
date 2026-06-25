@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { e2eWorkspaceRoot, type SmokeSuite } from './smoke-suite.ts';
 
 const execFileAsync = promisify(execFile);
-const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
+const pnpmCommand = process.env.MAX_E2E_PNPM_COMMAND ?? 'pnpm';
 const pnpmExecPath = process.env.npm_execpath;
 const nodeLoadablePackageManagerExtensions = new Set(['.js', '.cjs', '.mjs']);
 
@@ -191,12 +191,12 @@ async function runToolsDevJson<T>(
   args: string[],
   extraEnv: Record<string, string | undefined> = {},
 ): Promise<T> {
-  const useNpmExecPathWithNode = process.env.OD_E2E_PNPM_COMMAND == null
+  const useNpmExecPathWithNode = process.env.MAX_E2E_PNPM_COMMAND == null
     && pnpmExecPath != null
     && nodeLoadablePackageManagerExtensions.has(extname(pnpmExecPath).toLowerCase());
   const command = useNpmExecPathWithNode
     ? process.execPath
-    : (process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath ? pnpmExecPath : pnpmCommand);
+    : (process.env.MAX_E2E_PNPM_COMMAND == null && pnpmExecPath ? pnpmExecPath : pnpmCommand);
   const commandArgs = useNpmExecPathWithNode
     ? [pnpmExecPath, 'tools-dev', ...args]
     : ['tools-dev', ...args];
@@ -206,8 +206,8 @@ async function runToolsDevJson<T>(
       ...process.env,
       ...extraEnv,
       CODEX_HOME: suite.codexHomeDir,
-      OD_DATA_DIR: suite.dataDir,
-      OD_MEDIA_CONFIG_DIR: suite.dataDir,
+      MAX_DATA_DIR: suite.dataDir,
+      MAX_MEDIA_CONFIG_DIR: suite.dataDir,
     },
     maxBuffer: 20 * 1024 * 1024,
     shell: process.platform === 'win32' && command !== process.execPath,

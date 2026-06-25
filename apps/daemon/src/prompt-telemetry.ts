@@ -160,7 +160,7 @@ function redactPromptText(input: string): string {
 function stripRuntimeToolPromptTokens(input: string): string {
   return input
     .split(/\r?\n/)
-    .filter((line) => !line.includes('OD_TOOL_TOKEN'))
+    .filter((line) => !line.includes('MAX_TOOL_TOKEN'))
     .join('\n');
 }
 

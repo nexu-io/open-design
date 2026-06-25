@@ -5,7 +5,7 @@
 // export-zip-import dance.
 //
 // The server itself holds no state and never touches the filesystem;
-// every tool resolves to a fetch() against `OD_DAEMON_URL`. Spawn the
+// every tool resolves to a fetch() against `MAX_DAEMON_URL`. Spawn the
 // MCP server with no daemon running and tool calls return a clear
 // "daemon not reachable" error - the server itself still launches so
 // the client can list its tool schema.

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import {
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
 } from "@marketing-ax/sidecar-proto";
 import { resolveNamespace } from "@marketing-ax/sidecar";
@@ -168,7 +168,7 @@ function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string 
   if (platform === "linux") return "server";
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
-  throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
+  throw new Error(`unsupported MAX_WEB_OUTPUT_MODE value: ${value}`);
 }
 
 function resolveToolPackAmrProfile(value: string | undefined): ToolPackAmrProfile | undefined {
@@ -176,7 +176,7 @@ function resolveToolPackAmrProfile(value: string | undefined): ToolPackAmrProfil
   const normalized = value.trim();
   if (normalized.length === 0) return undefined;
   if (normalized === "prod" || normalized === "test" || normalized === "local") return normalized;
-  throw new Error(`OPEN_DESIGN_AMR_PROFILE must be prod, test, or local: ${value}`);
+  throw new Error(`MARKETING_AX_AMR_PROFILE must be prod, test, or local: ${value}`);
 }
 
 function resolveToolPackPosthogKey(value: string | undefined): string | undefined {
@@ -257,10 +257,10 @@ function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | u
   try {
     parsed = new URL(normalized);
   } catch {
-    throw new Error(`OPEN_DESIGN_TELEMETRY_RELAY_URL must be an absolute https URL: ${value}`);
+    throw new Error(`MARKETING_AX_TELEMETRY_RELAY_URL must be an absolute https URL: ${value}`);
   }
   if (parsed.protocol !== "https:") {
-    throw new Error(`OPEN_DESIGN_TELEMETRY_RELAY_URL must use https: ${value}`);
+    throw new Error(`MARKETING_AX_TELEMETRY_RELAY_URL must use https: ${value}`);
   }
   return normalized.replace(/\/+$/, "");
 }
@@ -273,10 +273,10 @@ function resolveToolPackUpdateMetadataUrl(value: string | undefined): string | u
   try {
     parsed = new URL(normalized);
   } catch {
-    throw new Error(`OD_UPDATE_METADATA_URL must be an absolute URL: ${value}`);
+    throw new Error(`MAX_UPDATE_METADATA_URL must be an absolute URL: ${value}`);
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`OD_UPDATE_METADATA_URL must use http(s): ${value}`);
+    throw new Error(`MAX_UPDATE_METADATA_URL must use http(s): ${value}`);
   }
   return normalized;
 }
@@ -310,7 +310,7 @@ export function resolveToolPackConfig(
 ): ToolPackConfig {
   const appVersion = resolveToolPackAppVersion(options.appVersion);
   const namespace = resolveNamespace({
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     env: process.env,
     namespace: options.namespace ?? defaultNamespaceForAppVersion(platform, appVersion),
   });
@@ -353,9 +353,9 @@ export function resolveToolPackConfig(
     requireVelaCli: options.requireVelaCli === true,
     silent: options.silent !== false,
     signed: options.signed === true,
-    amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
-    telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
-    updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),
+    amrProfile: resolveToolPackAmrProfile(process.env.MARKETING_AX_AMR_PROFILE),
+    telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.MARKETING_AX_TELEMETRY_RELAY_URL),
+    updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.MAX_UPDATE_METADATA_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
     posthogCliApiKey: resolveToolPackPosthogCliApiKey(
@@ -366,7 +366,7 @@ export function resolveToolPackConfig(
     ),
     posthogCliHost: resolveToolPackPosthogCliHost(process.env.POSTHOG_CLI_HOST),
     to: resolveToolPackBuildOutput(platform, options.to),
-    webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
+    webOutputMode: resolveToolPackWebOutputMode(platform, process.env.MAX_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,
   };
 }

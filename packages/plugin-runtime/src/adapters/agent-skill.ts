@@ -1,5 +1,5 @@
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MARKETING_AX_PLUGIN_SPEC_VERSION,
   type InputField,
   type PluginManifest,
 } from '@marketing-ax/contracts';
@@ -80,7 +80,7 @@ export function adaptAgentSkill(
     : undefined;
 
   const manifest: PluginManifest = {
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    specVersion: MARKETING_AX_PLUGIN_SPEC_VERSION,
     name,
     title,
     version,

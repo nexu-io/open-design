@@ -105,8 +105,8 @@ The two services are independent. `autoStart` controls the daemon;
 > daemon's same-origin gate will 403 the SPA's writes until you tell
 > it about that origin. Either set
 > `services.open-design.webFrontend.allowedOrigins = [ "<your-proxy-origin>" ]`
-> (which feeds `OD_ALLOWED_ORIGINS`) or, for the loopback-only
-> split-port case, set `extraEnv.OD_WEB_PORT = "<proxy-port>"`. See
+> (which feeds `MAX_ALLOWED_ORIGINS`) or, for the loopback-only
+> split-port case, set `extraEnv.MAX_WEB_PORT = "<proxy-port>"`. See
 > section (4) for the full decision tree.
 
 ### Exposing the bundled frontend on a non-loopback host
@@ -136,13 +136,13 @@ services.open-design.openFirewall = true;
 ```
 
 Under the hood `allowedOrigins` is forwarded to the daemon as the
-`OD_ALLOWED_ORIGINS` environment variable (comma-separated). If you
+`MAX_ALLOWED_ORIGINS` environment variable (comma-separated). If you
 run the daemon outside the modules — for example, behind your own
-nginx/caddy — set `OD_ALLOWED_ORIGINS` directly in the daemon's
+nginx/caddy — set `MAX_ALLOWED_ORIGINS` directly in the daemon's
 environment with the same shape:
 
 ```
-OD_ALLOWED_ORIGINS=http://host1:port,https://host1:port,http://host2:port
+MAX_ALLOWED_ORIGINS=http://host1:port,https://host1:port,http://host2:port
 ```
 
 Each entry must be a bare origin (`scheme://host[:port]`); only
@@ -154,10 +154,10 @@ design.
 
 ## (4) Same-origin proxying contract
 
-The web package is built with `OD_DAEMON_URL = ""` so the bundled JS
+The web package is built with `MAX_DAEMON_URL = ""` so the bundled JS
 issues **relative** requests — `/api/*`, `/artifacts/*`, `/frames/*` —
 instead of baking a daemon URL into the export. There is no runtime
-config endpoint; the SPA does not read `OD_DAEMON_URL` from the
+config endpoint; the SPA does not read `MAX_DAEMON_URL` from the
 serving environment.
 
 The serving contract is therefore: **the static export must be served
@@ -179,7 +179,7 @@ If you serve the static bundle yourself, replicate that shape:
 
 The static-server's environment does not need any Open Design env
 vars — but **the daemon's environment usually does**, because its
-same-origin gate is built from `OD_BIND_HOST:port` (loopback hosts
+same-origin gate is built from `MAX_BIND_HOST:port` (loopback hosts
 included). The browser's `Origin` and `Host` are whatever your proxy
 exposes, so unless that matches `127.0.0.1:<daemon-port>` exactly,
 the daemon will 403 every PUT/POST until told otherwise:
@@ -187,12 +187,12 @@ the daemon will 403 every PUT/POST until told otherwise:
 | Your custom-server setup                                                                                                                    | What to set on the daemon                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Proxy at `http://127.0.0.1:<daemon-port>` (same host, same port — unusual)                                                                  | Nothing.                                                                                                                                          |
-| Proxy at a loopback host but different port (e.g. `http://127.0.0.1:8080` while daemon is on `:7457`)                                       | Either `extraEnv.OD_WEB_PORT = "8080"` (whitelists `8080` on every loopback host) or `services.open-design.webFrontend.allowedOrigins`.           |
+| Proxy at a loopback host but different port (e.g. `http://127.0.0.1:8080` while daemon is on `:7457`)                                       | Either `extraEnv.MAX_WEB_PORT = "8080"` (whitelists `8080` on every loopback host) or `services.open-design.webFrontend.allowedOrigins`.           |
 | Proxy on any non-loopback host (LAN IP, mDNS name, Tailscale name, public domain — `https://od.example.com`, `http://laptop.local:5174`, …) | `services.open-design.webFrontend.allowedOrigins = [ "<full origin>" ]`. List every scheme + host[:port] combo a browser might load the SPA from. |
 
 `webFrontend.allowedOrigins` is forwarded to the daemon as
-`OD_ALLOWED_ORIGINS`; if you run the daemon outside the modules,
-export `OD_ALLOWED_ORIGINS` directly with the same shape (see
+`MAX_ALLOWED_ORIGINS`; if you run the daemon outside the modules,
+export `MAX_ALLOWED_ORIGINS` directly with the same shape (see
 section (3)). The variable widens only the general `/api/*` gate —
 connector-credential and live-artifact preview/refresh routes stay
 strictly loopback-only by design.

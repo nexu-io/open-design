@@ -6,7 +6,7 @@ import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   type SidecarStamp,
 } from "@marketing-ax/sidecar-proto";
@@ -85,7 +85,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp>): L
   // accounts for that (a plain `resolveNamespaceRoot` here resolved every
   // daemon/web log to an ENOENT phantom path and captured none of them).
   const namespaceRoot = resolveRuntimeNamespaceRoot({
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     runtime,
     runtimeMode: SIDECAR_MODES.RUNTIME,
   });
@@ -94,7 +94,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp>): L
   for (const appKey of apps) {
     const absolutePath = resolveLogFilePath({
       app: appKey,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       runtimeRoot: namespaceRoot,
     });
     sources.push({
@@ -148,13 +148,13 @@ export async function exportDiagnosticsToFile(
 
   try {
     // The packaged daemon writes its runtime data at `<namespaceRoot>/data`
-    // (OD_DATA_DIR), with per-run event logs under `data/runs` and the
+    // (MAX_DATA_DIR), with per-run event logs under `data/runs` and the
     // AMR-managed OpenCode home under `data/amr`. Derive both so this export
     // — the one users actually trigger from the desktop UI — carries the same
     // run/agent diagnostics the daemon HTTP export does, instead of only the
     // three sidecar logs.
     const namespaceRoot = resolveRuntimeNamespaceRoot({
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       runtime,
       runtimeMode: SIDECAR_MODES.RUNTIME,
     });

@@ -26,8 +26,8 @@ type ProjectEventStream = {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
-const serverRuntimeDataRoot = process.env.OD_DATA_DIR
-  ? path.resolve(projectRoot, process.env.OD_DATA_DIR)
+const serverRuntimeDataRoot = process.env.MAX_DATA_DIR
+  ? path.resolve(projectRoot, process.env.MAX_DATA_DIR)
   : path.join(projectRoot, '.od');
 
 let server: http.Server | undefined;

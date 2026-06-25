@@ -17,7 +17,7 @@
 # index.html plus _next/ and asset subdirectories). Drop $out into any
 # static file server.
 #
-# OD_DAEMON_URL is set to "" at build time so the bundled JS issues
+# MAX_DAEMON_URL is set to "" at build time so the bundled JS issues
 # relative requests (`/api/*`, `/artifacts/*`, `/frames/*`) instead of
 # baking a build-time daemon URL into the export. The serving
 # environment is therefore expected to be same-origin with the daemon —
@@ -55,7 +55,7 @@ in
 
     env = {
       NODE_ENV = "production";
-      OD_DAEMON_URL = "";
+      MAX_DAEMON_URL = "";
     };
 
     buildPhase = ''

@@ -59,8 +59,8 @@ afterEach(() => {
 describe('deploy config', () => {
   it('stores Vercel credentials in vercel.json and returns only the public mask', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     try {
       const saved = await writeVercelConfig({
         token: 'vercel-token-secret',
@@ -95,8 +95,8 @@ describe('deploy config', () => {
         teamSlug: 'renamed-team',
       });
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
@@ -118,8 +118,8 @@ describe('deploy config', () => {
 
   it('stores Cloudflare Pages credentials separately from vercel.json', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     try {
       const saved = await writeCloudflarePagesConfig({
         token: 'cloudflare-token-secret',
@@ -194,16 +194,16 @@ describe('deploy config', () => {
         'lastDomainPrefix',
       );
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
 
   it('requires Cloudflare Pages token and account id while deriving project names automatically', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-required-'));
-    const priorStateRoot = process.env.OD_USER_STATE_DIR;
-    process.env.OD_USER_STATE_DIR = stateRoot;
+    const priorStateRoot = process.env.MAX_USER_STATE_DIR;
+    process.env.MAX_USER_STATE_DIR = stateRoot;
     try {
       await expect(writeCloudflarePagesConfig({
         token: 'cloudflare-token-secret',
@@ -218,8 +218,8 @@ describe('deploy config', () => {
         'od-project-12345678',
       );
     } finally {
-      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
-      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      if (priorStateRoot === undefined) delete process.env.MAX_USER_STATE_DIR;
+      else process.env.MAX_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
   });

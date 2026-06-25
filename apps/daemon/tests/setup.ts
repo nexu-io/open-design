@@ -43,10 +43,10 @@ if (!globalState[TEST_DATA_DIR_SYMBOL]) {
 // Server paths are resolved at module import time. Force every daemon test
 // process to use one isolated data directory before any test imports server.ts,
 // so tests can never read or overwrite the developer's real repo `.od` data.
-process.env.OD_DATA_DIR = globalState[TEST_DATA_DIR_SYMBOL];
+process.env.MAX_DATA_DIR = globalState[TEST_DATA_DIR_SYMBOL];
 
-// Publish/share endpoints shell out through OD_NODE_BIN + OD_BIN (dist/cli.js).
+// Publish/share endpoints shell out through MAX_NODE_BIN + MAX_BIN (dist/cli.js).
 // Build the CLI artifact once per vitest process so package tests do not depend
 // on a prior manual `pnpm --filter @marketing-ax/daemon build`.
 ensureDaemonCliBuilt();
-process.env.OD_DAEMON_CLI_PATH = daemonCliDist;
+process.env.MAX_DAEMON_CLI_PATH = daemonCliDist;

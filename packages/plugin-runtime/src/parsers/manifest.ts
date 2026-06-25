@@ -1,5 +1,5 @@
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MARKETING_AX_PLUGIN_SPEC_VERSION,
   PluginManifestSchema,
   type PluginManifest,
 } from '@marketing-ax/contracts';
@@ -48,7 +48,7 @@ export function parseManifestObject(value: unknown): ManifestParseResult {
   return {
     ok: true,
     manifest: {
-      specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+      specVersion: MARKETING_AX_PLUGIN_SPEC_VERSION,
       ...result.data,
     },
     warnings: [],

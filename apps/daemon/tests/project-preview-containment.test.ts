@@ -108,9 +108,9 @@ describe('project preview containment routes', () => {
   });
 
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
-    const previousToken = process.env.OD_API_TOKEN;
+    const previousToken = process.env.MAX_API_TOKEN;
     const token = `preview-token-${randomUUID()}`;
-    process.env.OD_API_TOKEN = token;
+    process.env.MAX_API_TOKEN = token;
     let tokenServer: http.Server | undefined;
     let shutdown: (() => Promise<void> | void) | undefined;
     let tokenBaseUrl = '';
@@ -198,8 +198,8 @@ describe('project preview containment routes', () => {
       }
       if (shutdown) await Promise.resolve(shutdown());
       if (tokenServer) await new Promise<void>((resolve) => tokenServer!.close(() => resolve()));
-      if (previousToken === undefined) delete process.env.OD_API_TOKEN;
-      else process.env.OD_API_TOKEN = previousToken;
+      if (previousToken === undefined) delete process.env.MAX_API_TOKEN;
+      else process.env.MAX_API_TOKEN = previousToken;
     }
   });
 

@@ -49,7 +49,7 @@ jobs:
       - name: Run strict visual Playwright suite
         if: ${{ steps.changes.outputs.should_run == 'true' }}
         env:
-          OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
+          MAX_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
           pnpm -C e2e exec playwright test -c playwright.visual.config.ts

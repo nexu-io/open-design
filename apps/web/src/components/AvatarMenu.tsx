@@ -159,7 +159,7 @@ export function AvatarMenu({
   const amrAvailable = installedAgents.some((a) => a.id === 'amr');
   const showAmrAccountShortcut =
     config.mode === 'daemon' && currentAgent?.id === 'amr' && amrAvailable;
-  const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE;
+  const amrProfile = config.agentCliEnv?.amr?.MARKETING_AX_AMR_PROFILE;
   const amrConsoleUrl = amrConsoleUrlForProfile(amrProfile);
 
   // Resolve the user's model + reasoning pick for the active agent. Falls

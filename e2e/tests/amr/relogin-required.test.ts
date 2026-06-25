@@ -12,10 +12,10 @@ import { createSmokeSuite } from '@/vitest/smoke-suite';
 describe('AMR relogin-required run failures', () => {
   test('fails a new /api/runs request when the local AMR login config is missing', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('amr-relogin-required');
-    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+    const previousProfile = process.env.MARKETING_AX_AMR_PROFILE;
     const previousHome = process.env.HOME;
     const homeDir = join(suite.scratchDir, 'home-missing-login');
-    process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
+    process.env.MARKETING_AX_AMR_PROFILE = 'local';
     process.env.HOME = homeDir;
 
     try {
@@ -27,7 +27,7 @@ describe('AMR relogin-required run failures', () => {
           agentCliEnv: {
             amr: {
               VELA_BIN: velaBin,
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
             },
           },
         });
@@ -53,8 +53,8 @@ describe('AMR relogin-required run failures', () => {
         await expect(readRunEvents(webUrl, run.runId)).resolves.toMatch(/AMR_AUTH_REQUIRED/);
       });
     } finally {
-      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
-      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
+      if (previousProfile === undefined) delete process.env.MARKETING_AX_AMR_PROFILE;
+      else process.env.MARKETING_AX_AMR_PROFILE = previousProfile;
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
     }
@@ -62,10 +62,10 @@ describe('AMR relogin-required run failures', () => {
 
   test('uses configured AMR profile env for pre-run login status', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('amr-configured-profile-preflight');
-    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+    const previousProfile = process.env.MARKETING_AX_AMR_PROFILE;
     const previousHome = process.env.HOME;
     const homeDir = join(suite.scratchDir, 'home-configured-profile');
-    process.env.OPEN_DESIGN_AMR_PROFILE = 'prod';
+    process.env.MARKETING_AX_AMR_PROFILE = 'prod';
     process.env.HOME = homeDir;
 
     try {
@@ -78,7 +78,7 @@ describe('AMR relogin-required run failures', () => {
           agentCliEnv: {
             amr: {
               VELA_BIN: velaBin,
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
             },
           },
         });
@@ -100,8 +100,8 @@ describe('AMR relogin-required run failures', () => {
         await waitForRunStatus(webUrl, run.runId, 'succeeded', { timeoutMs: 20_000 });
       });
     } finally {
-      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
-      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
+      if (previousProfile === undefined) delete process.env.MARKETING_AX_AMR_PROFILE;
+      else process.env.MARKETING_AX_AMR_PROFILE = previousProfile;
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
     }
@@ -109,12 +109,12 @@ describe('AMR relogin-required run failures', () => {
 
   test('uses daemon AMR runtime credentials for pre-run login status', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('amr-daemon-env-credentials-preflight');
-    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+    const previousProfile = process.env.MARKETING_AX_AMR_PROFILE;
     const previousHome = process.env.HOME;
     const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
     const previousLinkUrl = process.env.VELA_LINK_URL;
     const homeDir = join(suite.scratchDir, 'home-daemon-env-credentials');
-    process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
+    process.env.MARKETING_AX_AMR_PROFILE = 'local';
     process.env.HOME = homeDir;
     process.env.VELA_RUNTIME_KEY = 'fake-runtime-key-from-daemon-env';
     process.env.VELA_LINK_URL = 'http://localhost:18081';
@@ -130,7 +130,7 @@ describe('AMR relogin-required run failures', () => {
           agentCliEnv: {
             amr: {
               VELA_BIN: velaBin,
-              OPEN_DESIGN_AMR_PROFILE: 'local',
+              MARKETING_AX_AMR_PROFILE: 'local',
             },
           },
         });
@@ -152,8 +152,8 @@ describe('AMR relogin-required run failures', () => {
         await waitForRunStatus(webUrl, run.runId, 'succeeded', { timeoutMs: 20_000 });
       });
     } finally {
-      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
-      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
+      if (previousProfile === undefined) delete process.env.MARKETING_AX_AMR_PROFILE;
+      else process.env.MARKETING_AX_AMR_PROFILE = previousProfile;
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
       if (previousRuntimeKey === undefined) delete process.env.VELA_RUNTIME_KEY;

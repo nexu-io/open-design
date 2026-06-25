@@ -20,18 +20,18 @@ import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vite
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
-const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
-const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta-win';
+const toolsPackDir = resolveFromWorkspace(process.env.MAX_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
+const namespace = process.env.MAX_PACKAGED_E2E_NAMESPACE ?? 'release-beta-win';
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
-const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
-const smokeProfile = process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';
+const maxInstallDurationMs = Number.parseInt(process.env.MAX_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
+const smokeProfile = process.env.MAX_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';
 const verifyCoreOnly = smokeProfile === 'core';
-const verifyReinstallWhileRunning = !verifyCoreOnly && process.env.OD_PACKAGED_E2E_WIN_VERIFY_REINSTALL !== '0';
-const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL);
-const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_VERSION);
-const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH);
-const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
-const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
+const verifyReinstallWhileRunning = !verifyCoreOnly && process.env.MAX_PACKAGED_E2E_WIN_VERIFY_REINSTALL !== '0';
+const updateMetadataUrl = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL);
+const updateVersion = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_WIN_UPDATE_VERSION);
+const updateBuildJsonPath = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH);
+const releaseChannel = process.env.MAX_PACKAGED_E2E_RELEASE_CHANNEL;
+const releaseVersion = process.env.MAX_PACKAGED_E2E_RELEASE_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion });
 const installIdentity = resolvePackagedWinInstallIdentity({ namespace, releaseVersion });
 const toolsPackReleaseVersionArgs = releaseAppVersionArgs(releaseVersion);
@@ -314,7 +314,7 @@ type InstalledAppPackage = {
   version?: unknown;
 };
 
-const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.OD_PACKAGED_E2E_WIN === '1';
+const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.MAX_PACKAGED_E2E_WIN === '1';
 const winDescribe = shouldRunPackagedWinSmoke ? describe : describe.skip;
 
 winDescribe('packaged windows runtime smoke', () => {
@@ -697,14 +697,14 @@ async function runDirectInstaller(installerPath: string, installDir: string): Pr
             '-ExecutionPolicy',
             'Bypass',
             '-Command',
-            "& { $process = Start-Process -FilePath $env:OD_TEST_INSTALLER_PATH -ArgumentList '/S', $env:OD_TEST_INSTALL_DIR_ARG -Wait -PassThru; exit $process.ExitCode }",
+            "& { $process = Start-Process -FilePath $env:MAX_TEST_INSTALLER_PATH -ArgumentList '/S', $env:MAX_TEST_INSTALL_DIR_ARG -Wait -PassThru; exit $process.ExitCode }",
           ],
           {
             cwd: dirname(installerPath),
             env: {
               ...process.env,
-              OD_TEST_INSTALL_DIR_ARG: `/D=${installDir}`,
-              OD_TEST_INSTALLER_PATH: installerPath,
+              MAX_TEST_INSTALL_DIR_ARG: `/D=${installDir}`,
+              MAX_TEST_INSTALLER_PATH: installerPath,
             },
             maxBuffer: 20 * 1024 * 1024,
           },
@@ -734,7 +734,7 @@ async function resolveLocalPayloadUpdateFixture(): Promise<{ payloadPath: string
   const fallbackBuildJsonPath = resolveFallbackUpdateBuildJsonPath();
   if (fallbackBuildJsonPath == null) {
     throw new Error(
-      'full packaged windows payload smoke requires update payload metadata; set OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL or provide windows-tools-pack-update-build.json next to OD_PACKAGED_E2E_BUILD_JSON_PATH',
+      'full packaged windows payload smoke requires update payload metadata; set MAX_PACKAGED_E2E_WIN_UPDATE_METADATA_URL or provide windows-tools-pack-update-build.json next to MAX_PACKAGED_E2E_BUILD_JSON_PATH',
     );
   }
   const updateBuild = JSON.parse(stripUtf8Bom(await readFile(fallbackBuildJsonPath, 'utf8'))) as {
@@ -802,7 +802,7 @@ function assertLauncherPointer(
 
 function resolveFallbackUpdateBuildJsonPath(): string | null {
   if (updateBuildJsonPath != null && updateBuildJsonPath !== '') return resolveFromWorkspace(updateBuildJsonPath);
-  const mainBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
+  const mainBuildJsonPath = normalizeOptionalEnv(process.env.MAX_PACKAGED_E2E_BUILD_JSON_PATH);
   if (mainBuildJsonPath == null || mainBuildJsonPath === '') return null;
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'windows-tools-pack-update-build.json');
 }
@@ -819,11 +819,11 @@ function stripUtf8Bom(value: string): string {
 }
 
 const UPDATE_ENV_KEYS = [
-  'OD_UPDATE_AUTO_CHECK',
-  'OD_UPDATE_ENABLED',
-  'OD_UPDATE_METADATA_URL',
-  'OD_UPDATE_CURRENT_VERSION',
-  'OD_UPDATE_OPEN_DRY_RUN',
+  'MAX_UPDATE_AUTO_CHECK',
+  'MAX_UPDATE_ENABLED',
+  'MAX_UPDATE_METADATA_URL',
+  'MAX_UPDATE_CURRENT_VERSION',
+  'MAX_UPDATE_OPEN_DRY_RUN',
 ] as const;
 
 function captureUpdateEnv(): Partial<Record<(typeof UPDATE_ENV_KEYS)[number], string>> {

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  OPEN_DESIGN_SITE_ORIGIN,
+  MARKETING_AX_SITE_ORIGIN,
   pluginSlug,
   pluginSlugSegment,
   pluginDetailSlug,
@@ -54,7 +54,7 @@ describe('pluginDetailPath / pluginPreviewPath', () => {
 
 describe('pluginShareUrl', () => {
   it('defaults to the public open-design.ai origin, single-segment path', () => {
-    expect(OPEN_DESIGN_SITE_ORIGIN).toBe('https://open-design.ai');
+    expect(MARKETING_AX_SITE_ORIGIN).toBe('https://open-design.ai');
     expect(pluginShareUrl('open-design/live-dashboard')).toBe(
       'https://open-design.ai/plugins/live-dashboard/',
     );

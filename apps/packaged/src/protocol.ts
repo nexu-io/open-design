@@ -1,7 +1,7 @@
 import { protocol } from "electron";
 
-const OD_SCHEME = "od";
-const OD_ENTRY_URL = `${OD_SCHEME}://app/`;
+const MAX_SCHEME = "od";
+const MAX_ENTRY_URL = `${MAX_SCHEME}://app/`;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -12,7 +12,7 @@ protocol.registerSchemesAsPrivileged([
       stream: true,
       supportFetchAPI: true,
     },
-    scheme: OD_SCHEME,
+    scheme: MAX_SCHEME,
   },
 ]);
 
@@ -33,7 +33,7 @@ function buildProxyErrorResponse(error: unknown, target: string): Response {
       : null;
   return new Response(
     JSON.stringify({
-      error: "OD_PROTOCOL_PROXY_FAILED",
+      error: "MAX_PROTOCOL_PROXY_FAILED",
       message,
       ...(code === null ? {} : { code }),
       target,
@@ -77,11 +77,11 @@ export async function handleOdRequest(
 }
 
 export function packagedEntryUrl(): string {
-  return OD_ENTRY_URL;
+  return MAX_ENTRY_URL;
 }
 
 export function registerOdProtocol(webRuntimeUrl: string): void {
-  protocol.handle(OD_SCHEME, async (request) => {
+  protocol.handle(MAX_SCHEME, async (request) => {
     return await handleOdRequest(request, webRuntimeUrl);
   });
 }

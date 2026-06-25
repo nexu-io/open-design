@@ -49,7 +49,7 @@ beforeEach(() => {
   originalHome = process.env.HOME;
   tmpHome = mkdtempSync(path.join(tmpdir(), 'od-vela-test-'));
   process.env.HOME = tmpHome;
-  delete process.env.OPEN_DESIGN_AMR_PROFILE;
+  delete process.env.MARKETING_AX_AMR_PROFILE;
   delete process.env.VELA_PROFILE;
 });
 
@@ -60,32 +60,32 @@ afterEach(() => {
 });
 
 describe('resolveAmrProfile', () => {
-  it('defaults to "prod" when OPEN_DESIGN_AMR_PROFILE is unset or empty', () => {
+  it('defaults to "prod" when MARKETING_AX_AMR_PROFILE is unset or empty', () => {
     expect(resolveAmrProfile({})).toBe('prod');
-    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: '   ' })).toBe('prod');
+    expect(resolveAmrProfile({ MARKETING_AX_AMR_PROFILE: '   ' })).toBe('prod');
   });
 
-  it('honors OPEN_DESIGN_AMR_PROFILE when set to a known profile', () => {
-    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'prod' })).toBe('prod');
-    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'local' })).toBe('local');
-    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'test' })).toBe('test');
+  it('honors MARKETING_AX_AMR_PROFILE when set to a known profile', () => {
+    expect(resolveAmrProfile({ MARKETING_AX_AMR_PROFILE: 'prod' })).toBe('prod');
+    expect(resolveAmrProfile({ MARKETING_AX_AMR_PROFILE: 'local' })).toBe('local');
+    expect(resolveAmrProfile({ MARKETING_AX_AMR_PROFILE: 'test' })).toBe('test');
   });
 
   it('ignores lower-priority VELA_PROFILE values', () => {
     expect(resolveAmrProfile({ VELA_PROFILE: 'local' })).toBe('prod');
     expect(
       resolveAmrProfile({
-        OPEN_DESIGN_AMR_PROFILE: 'test',
+        MARKETING_AX_AMR_PROFILE: 'test',
         VELA_PROFILE: 'local',
       }),
     ).toBe('test');
   });
 
-  it('warns for unknown OPEN_DESIGN_AMR_PROFILE values and falls back to prod', () => {
+  it('warns for unknown MARKETING_AX_AMR_PROFILE values and falls back to prod', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'evil' })).toBe('prod');
+    expect(resolveAmrProfile({ MARKETING_AX_AMR_PROFILE: 'evil' })).toBe('prod');
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('OPEN_DESIGN_AMR_PROFILE'),
+      expect.stringContaining('MARKETING_AX_AMR_PROFILE'),
     );
     warn.mockRestore();
   });
@@ -93,7 +93,7 @@ describe('resolveAmrProfile', () => {
 
 describe('readVelaLoginStatus', () => {
   it('returns loggedIn=false when ~/.amr/config.json is absent', () => {
-    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const status = readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(status.loggedIn).toBe(false);
     expect(status.user).toBeNull();
     expect(status.profile).toBe('local');
@@ -109,7 +109,7 @@ describe('readVelaLoginStatus', () => {
         },
       },
     });
-    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const status = readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(status.loggedIn).toBe(false);
     expect(status.user).toBeNull();
     expect(status.configPath).toBe(amrConfigPath());
@@ -117,7 +117,7 @@ describe('readVelaLoginStatus', () => {
 
   it('treats configured AMR env credentials as logged in without an AMR config file', () => {
     const status = readVelaLoginStatus(
-      { OPEN_DESIGN_AMR_PROFILE: 'local' },
+      { MARKETING_AX_AMR_PROFILE: 'local' },
       {
         VELA_RUNTIME_KEY: 'rt-env-secret',
         VELA_LINK_URL: 'https://openrouter.example/v1',
@@ -139,7 +139,7 @@ describe('readVelaLoginStatus', () => {
       },
     });
     const status = readVelaLoginStatus(
-      { OPEN_DESIGN_AMR_PROFILE: 'local' },
+      { MARKETING_AX_AMR_PROFILE: 'local' },
       {
         VELA_RUNTIME_KEY: 'rt-env-secret',
         VELA_LINK_URL: 'https://openrouter.example/v1',
@@ -160,8 +160,8 @@ describe('readVelaLoginStatus', () => {
       },
     });
     const status = readVelaLoginStatus(
-      { OPEN_DESIGN_AMR_PROFILE: 'prod' },
-      { OPEN_DESIGN_AMR_PROFILE: 'local' },
+      { MARKETING_AX_AMR_PROFILE: 'prod' },
+      { MARKETING_AX_AMR_PROFILE: 'local' },
     );
     expect(status.loggedIn).toBe(true);
     expect(status.profile).toBe('local');
@@ -170,7 +170,7 @@ describe('readVelaLoginStatus', () => {
 
   it('treats daemon process AMR env credentials as logged in without an AMR config file', () => {
     const status = readVelaLoginStatus({
-      OPEN_DESIGN_AMR_PROFILE: 'local',
+      MARKETING_AX_AMR_PROFILE: 'local',
       VELA_RUNTIME_KEY: 'rt-process-secret',
       VELA_LINK_URL: 'https://openrouter.example/v1',
     });
@@ -183,13 +183,13 @@ describe('readVelaLoginStatus', () => {
   it('requires both env runtime key and link URL before reporting env-only login', () => {
     expect(
       readVelaLoginStatus(
-        { OPEN_DESIGN_AMR_PROFILE: 'local' },
+        { MARKETING_AX_AMR_PROFILE: 'local' },
         { VELA_RUNTIME_KEY: 'rt-env-secret' },
       ).loggedIn,
     ).toBe(false);
     expect(
       readVelaLoginStatus(
-        { OPEN_DESIGN_AMR_PROFILE: 'local' },
+        { MARKETING_AX_AMR_PROFILE: 'local' },
         { VELA_LINK_URL: 'https://openrouter.example/v1' },
       ).loggedIn,
     ).toBe(false);
@@ -213,7 +213,7 @@ describe('readVelaLoginStatus', () => {
         },
       },
     });
-    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const status = readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(status.loggedIn).toBe(true);
     expect(status.profile).toBe('local');
     expect(status.user?.email).toBe('leaf@example.com');
@@ -231,7 +231,7 @@ describe('readVelaLoginStatus', () => {
         local: { apiUrl: 'http://localhost:18080', user: { id: 'u', email: 'e' } },
       },
     });
-    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const status = readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(status.loggedIn).toBe(false);
   });
 
@@ -241,8 +241,8 @@ describe('readVelaLoginStatus', () => {
         local: { runtimeKey: 'rt-local', user: { id: 'u', email: 'leaf@example.com' } },
       },
     });
-    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(true);
-    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'prod' }).loggedIn).toBe(false);
+    expect(readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' }).loggedIn).toBe(true);
+    expect(readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'prod' }).loggedIn).toBe(false);
   });
 
   it('does not let VELA_PROFILE select the active status profile', () => {
@@ -253,7 +253,7 @@ describe('readVelaLoginStatus', () => {
     });
     expect(
       readVelaLoginStatus({
-        OPEN_DESIGN_AMR_PROFILE: 'prod',
+        MARKETING_AX_AMR_PROFILE: 'prod',
         VELA_PROFILE: 'local',
       }).loggedIn,
     ).toBe(false);
@@ -263,7 +263,7 @@ describe('readVelaLoginStatus', () => {
     const file = path.join(tmpHome, '.amr', 'config.json');
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, '{not json', 'utf8');
-    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(false);
+    expect(readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' }).loggedIn).toBe(false);
   });
 
   it('treats the local runtimeKey as the source of truth even when user fields are missing', () => {
@@ -275,7 +275,7 @@ describe('readVelaLoginStatus', () => {
         },
       },
     });
-    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const status = readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(status.loggedIn).toBe(true);
     expect(status.user?.id).toBe('');
     expect(status.user?.email).toBe('');
@@ -293,7 +293,7 @@ describe('readVelaCredentialRevision', () => {
         },
       },
     });
-    const before = readVelaCredentialRevision({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const before = readVelaCredentialRevision({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(before).toMatchObject({
       authSource: 'file',
       loggedIn: true,
@@ -302,9 +302,9 @@ describe('readVelaCredentialRevision', () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 5));
-    forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    forgetVelaLogin({ MARKETING_AX_AMR_PROFILE: 'local' });
 
-    const after = readVelaCredentialRevision({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    const after = readVelaCredentialRevision({ MARKETING_AX_AMR_PROFILE: 'local' });
     expect(after).toMatchObject({
       authSource: 'none',
       loggedIn: false,
@@ -331,10 +331,10 @@ describe('forgetVelaLogin', () => {
       },
       otherTopLevel: true,
     });
-    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(true);
-    forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' });
-    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(false);
-    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'prod' }).loggedIn).toBe(true);
+    expect(readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' }).loggedIn).toBe(true);
+    forgetVelaLogin({ MARKETING_AX_AMR_PROFILE: 'local' });
+    expect(readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'local' }).loggedIn).toBe(false);
+    expect(readVelaLoginStatus({ MARKETING_AX_AMR_PROFILE: 'prod' }).loggedIn).toBe(true);
 
     const next = JSON.parse(readFileSync(file, 'utf8'));
     expect(next.otherTopLevel).toBe(true);
@@ -352,7 +352,7 @@ describe('forgetVelaLogin', () => {
         prod: { runtimeKey: 'rt-prod', user: { id: 'p', email: 'prod@example.com' } },
       },
     });
-    expect(() => forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' })).not.toThrow();
+    expect(() => forgetVelaLogin({ MARKETING_AX_AMR_PROFILE: 'local' })).not.toThrow();
     const next = JSON.parse(readFileSync(file, 'utf8'));
     expect(next.profiles.prod.runtimeKey).toBe('rt-prod');
   });
@@ -365,10 +365,10 @@ describe('forgetVelaLogin', () => {
 describe('spawnVelaLogin', () => {
   it('returns an actionable error when no vela binary can be resolved', async () => {
     const originalPath = process.env.PATH;
-    const originalResourceRoot = process.env.OD_RESOURCE_ROOT;
+    const originalResourceRoot = process.env.MAX_RESOURCE_ROOT;
     try {
       process.env.PATH = '';
-      delete process.env.OD_RESOURCE_ROOT;
+      delete process.env.MAX_RESOURCE_ROOT;
       await expect(
         spawnVelaLogin({
           baseEnv: { ...process.env, HOME: tmpHome },
@@ -378,8 +378,8 @@ describe('spawnVelaLogin', () => {
     } finally {
       if (originalPath === undefined) delete process.env.PATH;
       else process.env.PATH = originalPath;
-      if (originalResourceRoot === undefined) delete process.env.OD_RESOURCE_ROOT;
-      else process.env.OD_RESOURCE_ROOT = originalResourceRoot;
+      if (originalResourceRoot === undefined) delete process.env.MAX_RESOURCE_ROOT;
+      else process.env.MAX_RESOURCE_ROOT = originalResourceRoot;
     }
   });
 
@@ -388,7 +388,7 @@ describe('spawnVelaLogin', () => {
       baseEnv: {
         ...process.env,
         HOME: tmpHome,
-        OPEN_DESIGN_AMR_PROFILE: 'test',
+        MARKETING_AX_AMR_PROFILE: 'test',
         VELA_PROFILE: 'prod',
         FAKE_VELA_LOGIN_USER_EMAIL: 'spawn-login@example.com',
       },
@@ -416,13 +416,13 @@ describe('spawnVelaLogin', () => {
       baseEnv: {
         ...process.env,
         HOME: tmpHome,
-        OPEN_DESIGN_AMR_PROFILE: 'prod',
+        MARKETING_AX_AMR_PROFILE: 'prod',
         VELA_PROFILE: 'prod',
         FAKE_VELA_LOGIN_USER_EMAIL: 'settings-profile@example.com',
       },
       configuredEnv: {
         VELA_BIN: FAKE_VELA,
-        OPEN_DESIGN_AMR_PROFILE: 'local',
+        MARKETING_AX_AMR_PROFILE: 'local',
       },
     });
 

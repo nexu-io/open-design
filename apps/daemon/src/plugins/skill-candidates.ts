@@ -6,7 +6,7 @@ import type {
   SkillPluginCandidate,
   SkillPluginCandidateSourceRef,
 } from '@marketing-ax/contracts';
-import { OPEN_DESIGN_PLUGIN_SPEC_VERSION } from '@marketing-ax/contracts';
+import { MARKETING_AX_PLUGIN_SPEC_VERSION } from '@marketing-ax/contracts';
 import { validatePluginFolder, flattenValidationDiagnostics } from './validate.js';
 
 type SqliteDb = Database.Database;
@@ -357,7 +357,7 @@ function synthesizeSkill(candidate: SkillPluginCandidate): string {
 function buildManifest(slug: string, candidate: SkillPluginCandidate) {
   return {
     $schema: 'https://open-design.ai/schemas/plugin.v1.json',
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    specVersion: MARKETING_AX_PLUGIN_SPEC_VERSION,
     name: slug,
     title: candidate.title,
     version: '0.1.0',

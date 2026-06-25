@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MARKETING_AX_PLUGIN_SPEC_VERSION,
   MarketplacePluginEntrySchema,
   PluginManifestSchema,
   resolveLocalizedText,
@@ -8,7 +8,7 @@ import {
 
 describe('plugin manifest localized text', () => {
   it('exports the current plugin spec version for manifests and registries', () => {
-    expect(OPEN_DESIGN_PLUGIN_SPEC_VERSION).toBe('1.0.0');
+    expect(MARKETING_AX_PLUGIN_SPEC_VERSION).toBe('1.0.0');
   });
 
   it('accepts legacy string use-case queries', () => {

@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 let desktopAuthSecret: Buffer | null = null;
-let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+let desktopAuthEverRegistered = process.env.MAX_REQUIRE_DESKTOP_AUTH === '1';
 export const consumedImportNonces = new Map<string, number>();
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 const DESKTOP_IMPORT_TOKEN_FIELD_SEP = '~';
@@ -28,7 +28,7 @@ export function isDesktopAuthGateActive(): boolean {
 
 export function resetDesktopAuthForTests(): void {
   desktopAuthSecret = null;
-  desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+  desktopAuthEverRegistered = process.env.MAX_REQUIRE_DESKTOP_AUTH === '1';
   consumedImportNonces.clear();
 }
 

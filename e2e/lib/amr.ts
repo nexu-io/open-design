@@ -99,7 +99,7 @@ function writeNotification(method, params) {
   writeMessage({ jsonrpc: '2.0', method, params });
 }
 function currentProfile() {
-  return (env.OPEN_DESIGN_AMR_PROFILE || env.VELA_PROFILE || 'local').trim() || 'local';
+  return (env.MARKETING_AX_AMR_PROFILE || env.VELA_PROFILE || 'local').trim() || 'local';
 }
 function readLoginConfig() {
   const file = join(homedir(), '.amr', 'config.json');

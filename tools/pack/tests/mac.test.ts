@@ -63,13 +63,13 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
   };
 }
 
-const envState = { odDataDir: process.env.OD_DATA_DIR };
+const envState = { odDataDir: process.env.MAX_DATA_DIR };
 
 afterEach(() => {
   if (envState.odDataDir == null) {
-    delete process.env.OD_DATA_DIR;
+    delete process.env.MAX_DATA_DIR;
   } else {
-    process.env.OD_DATA_DIR = envState.odDataDir;
+    process.env.MAX_DATA_DIR = envState.odDataDir;
   }
 });
 
@@ -82,8 +82,8 @@ describe("resolveSeededAppConfigPaths", () => {
     });
   });
 
-  it("prefers OD_DATA_DIR when provided", () => {
-    process.env.OD_DATA_DIR = "/custom/data";
+  it("prefers MAX_DATA_DIR when provided", () => {
+    process.env.MAX_DATA_DIR = "/custom/data";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
       sourcePath: join("/custom/data", "app-config.json"),
@@ -91,8 +91,8 @@ describe("resolveSeededAppConfigPaths", () => {
     });
   });
 
-  it("resolves relative OD_DATA_DIR against the workspace root", () => {
-    process.env.OD_DATA_DIR = "e2e/ui/.od-data";
+  it("resolves relative MAX_DATA_DIR against the workspace root", () => {
+    process.env.MAX_DATA_DIR = "e2e/ui/.od-data";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
       sourcePath: resolve("/work", "e2e", "ui", ".od-data", "app-config.json"),
@@ -100,8 +100,8 @@ describe("resolveSeededAppConfigPaths", () => {
     });
   });
 
-  it("expands $HOME-style OD_DATA_DIR values", () => {
-    process.env.OD_DATA_DIR = "$HOME/.open-design";
+  it("expands $HOME-style MAX_DATA_DIR values", () => {
+    process.env.MAX_DATA_DIR = "$HOME/.open-design";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
       sourcePath: join(os.homedir(), ".open-design", "app-config.json"),

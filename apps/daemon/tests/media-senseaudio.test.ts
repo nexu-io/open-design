@@ -34,33 +34,33 @@ describe('senseaudio media generation', () => {
   let projectRoot: string;
   let projectsRoot: string;
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
-  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.MAX_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-senseaudio-'));
     projectRoot = path.join(root, 'project-root');
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     await mkdir(projectsRoot, { recursive: true });
-    delete process.env.OD_MEDIA_CONFIG_DIR;
-    delete process.env.OD_DATA_DIR;
-    delete process.env.OD_SENSEAUDIO_API_KEY;
+    delete process.env.MAX_MEDIA_CONFIG_DIR;
+    delete process.env.MAX_DATA_DIR;
+    delete process.env.MAX_SENSEAUDIO_API_KEY;
     delete process.env.SENSEAUDIO_API_KEY;
   });
 
   afterEach(async () => {
     globalThis.fetch = realFetch;
     if (originalMediaConfigDir == null) {
-      delete process.env.OD_MEDIA_CONFIG_DIR;
+      delete process.env.MAX_MEDIA_CONFIG_DIR;
     } else {
-      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+      process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     }
     if (originalDataDir == null) {
-      delete process.env.OD_DATA_DIR;
+      delete process.env.MAX_DATA_DIR;
     } else {
-      process.env.OD_DATA_DIR = originalDataDir;
+      process.env.MAX_DATA_DIR = originalDataDir;
     }
-    delete process.env.OD_SENSEAUDIO_API_KEY;
+    delete process.env.MAX_SENSEAUDIO_API_KEY;
     delete process.env.SENSEAUDIO_API_KEY;
     await rm(root, { recursive: true, force: true });
   });
@@ -190,8 +190,8 @@ describe('senseaudio media generation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('reads the API key from OD_SENSEAUDIO_API_KEY when storage is empty', async () => {
-    process.env.OD_SENSEAUDIO_API_KEY = 'env-sense-key';
+  it('reads the API key from MAX_SENSEAUDIO_API_KEY when storage is empty', async () => {
+    process.env.MAX_SENSEAUDIO_API_KEY = 'env-sense-key';
     const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({
         authorization: 'Bearer env-sense-key',

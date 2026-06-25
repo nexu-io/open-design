@@ -44,7 +44,7 @@ const processWithResources = process as NodeJS.Process & { resourcesPath?: strin
 // back to `APP_VERSION_FALLBACK`. Walk up from `import.meta.url` until we find
 // a real `package.json` so both build outputs (and the TypeScript source
 // during `tools-dev`) read the daemon's actual version. Callers that already
-// inject the version via `OD_APP_VERSION` (packaged runtime) keep working
+// inject the version via `MAX_APP_VERSION` (packaged runtime) keep working
 // because that env still wins inside `resolveAppVersionInfo`.
 async function findNearestPackageJsonUrl(startUrl: URL): Promise<URL | null> {
   let currentDir: string;
@@ -113,12 +113,12 @@ export function resolveAppVersionInfo({
   arch = process.arch,
 }: ResolveAppVersionInfoOptions = {}): AppVersionInfo {
   const packaged = isPackagedRuntime({ resourcesPath, execPath, platform });
-  const version = cleanString(env.OD_APP_VERSION)
+  const version = cleanString(env.MAX_APP_VERSION)
     ?? cleanString(packageMetadata?.version)
     ?? APP_VERSION_FALLBACK;
   const inferredChannel = inferReleaseChannelFromVersion(version);
-  const channel = cleanString(env.OD_RELEASE_CHANNEL)
-    ?? cleanString(env.OD_APP_CHANNEL)
+  const channel = cleanString(env.MAX_RELEASE_CHANNEL)
+    ?? cleanString(env.MAX_APP_CHANNEL)
     ?? inferredChannel
     ?? (packaged ? 'stable' : 'development');
 

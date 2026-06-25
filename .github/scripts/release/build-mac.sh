@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source_profile="${OPEN_DESIGN_RELEASE_PROFILE:-}"
+source_profile="${MARKETING_AX_RELEASE_PROFILE:-}"
 if [ -n "$source_profile" ]; then
   # Self-hosted mac runners run as LaunchDaemons with a thin default PATH.
   # Source the runner profile explicitly when the workflow provides one.
@@ -114,7 +114,7 @@ prepare_mac_notarization() {
 
 install_mac_signing_keychain() {
   local cert_path="$1"
-  local helper="${OPEN_DESIGN_MAC_SIGNING_HELPER:-}"
+  local helper="${MARKETING_AX_MAC_SIGNING_HELPER:-}"
   if [ -z "$helper" ]; then
     return 1
   fi
@@ -134,8 +134,8 @@ install_mac_signing_keychain() {
   fi
   rm -f "$password_path"
 
-  export CSC_KEYCHAIN="${OPEN_DESIGN_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
-  local wrapper_dir="${OPEN_DESIGN_MAC_SIGNING_WRAPPER_DIR:-/usr/local/libexec/open-design/wrappers}"
+  export CSC_KEYCHAIN="${MARKETING_AX_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
+  local wrapper_dir="${MARKETING_AX_MAC_SIGNING_WRAPPER_DIR:-/usr/local/libexec/open-design/wrappers}"
   if [ -x "$wrapper_dir/codesign" ]; then
     export PATH="$wrapper_dir:$PATH"
   fi
@@ -273,7 +273,7 @@ measure_step "electron framework symlink inspection" inspect_electron_framework_
 
 if [ "$sign_mode" != "no" ]; then
   measure_step "prepare mac signing" prepare_mac_signing
-  if [ -n "${OPEN_DESIGN_MAC_SIGNING_HELPER:-}" ]; then
+  if [ -n "${MARKETING_AX_MAC_SIGNING_HELPER:-}" ]; then
     measure_step "install mac signing keychain" install_mac_signing_keychain "$CSC_LINK"
   fi
   measure_step "select mac signing identity" select_mac_signing_identity

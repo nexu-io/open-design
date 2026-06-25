@@ -2,16 +2,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveToolPackConfig } from "../src/config.js";
 
-const savedTelemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+const savedTelemetryRelayUrl = process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
 const savedPosthogKey = process.env.POSTHOG_KEY;
 const savedPosthogHost = process.env.POSTHOG_HOST;
-const savedAmrProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+const savedAmrProfile = process.env.MARKETING_AX_AMR_PROFILE;
 
 afterEach(() => {
   if (savedTelemetryRelayUrl == null) {
-    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
   } else {
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = savedTelemetryRelayUrl;
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = savedTelemetryRelayUrl;
   }
   if (savedPosthogKey == null) {
     delete process.env.POSTHOG_KEY;
@@ -24,23 +24,23 @@ afterEach(() => {
     process.env.POSTHOG_HOST = savedPosthogHost;
   }
   if (savedAmrProfile == null) {
-    delete process.env.OPEN_DESIGN_AMR_PROFILE;
+    delete process.env.MARKETING_AX_AMR_PROFILE;
   } else {
-    process.env.OPEN_DESIGN_AMR_PROFILE = savedAmrProfile;
+    process.env.MARKETING_AX_AMR_PROFILE = savedAmrProfile;
   }
 });
 
 describe("resolveToolPackConfig AMR profile", () => {
-  it("bakes OPEN_DESIGN_AMR_PROFILE into packaged config when set at build time", () => {
-    process.env.OPEN_DESIGN_AMR_PROFILE = "test";
+  it("bakes MARKETING_AX_AMR_PROFILE into packaged config when set at build time", () => {
+    process.env.MARKETING_AX_AMR_PROFILE = "test";
     const config = resolveToolPackConfig("mac", { namespace: "amr-profile-test" });
     expect(config.amrProfile).toBe("test");
   });
 
   it("rejects unsupported AMR profiles before packaging", () => {
-    process.env.OPEN_DESIGN_AMR_PROFILE = "staging";
+    process.env.MARKETING_AX_AMR_PROFILE = "staging";
     expect(() => resolveToolPackConfig("mac")).toThrow(
-      /OPEN_DESIGN_AMR_PROFILE must be prod, test, or local/,
+      /MARKETING_AX_AMR_PROFILE must be prod, test, or local/,
     );
   });
 });
@@ -95,23 +95,23 @@ describe("resolveToolPackConfig namespace defaults", () => {
 });
 
 describe("resolveToolPackConfig telemetry relay", () => {
-  it("reads and normalizes OPEN_DESIGN_TELEMETRY_RELAY_URL for packaged config", () => {
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = "https://telemetry.open-design.ai/api/langfuse//";
+  it("reads and normalizes MARKETING_AX_TELEMETRY_RELAY_URL for packaged config", () => {
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "https://telemetry.open-design.ai/api/langfuse//";
     const config = resolveToolPackConfig("mac", { namespace: "telemetry-test" });
     expect(config.telemetryRelayUrl).toBe("https://telemetry.open-design.ai/api/langfuse");
   });
 
   it("rejects invalid telemetry relay URLs", () => {
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = "not-a-url";
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "not-a-url";
     expect(() => resolveToolPackConfig("mac")).toThrow(
-      /OPEN_DESIGN_TELEMETRY_RELAY_URL must be an absolute https URL/,
+      /MARKETING_AX_TELEMETRY_RELAY_URL must be an absolute https URL/,
     );
   });
 
   it("rejects plaintext telemetry relay URLs for packaged config", () => {
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = "http://telemetry.open-design.ai/api/langfuse";
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "http://telemetry.open-design.ai/api/langfuse";
     expect(() => resolveToolPackConfig("mac")).toThrow(
-      /OPEN_DESIGN_TELEMETRY_RELAY_URL must use https/,
+      /MARKETING_AX_TELEMETRY_RELAY_URL must use https/,
     );
   });
 });

@@ -9,21 +9,21 @@ describe('hyperframes-html media renderer preflight', () => {
   let root: string;
   let projectRoot: string;
   let projectsRoot: string;
-  const originalAllowStubs = process.env.OD_MEDIA_ALLOW_STUBS;
+  const originalAllowStubs = process.env.MAX_MEDIA_ALLOW_STUBS;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-hyperframes-media-'));
     projectRoot = path.join(root, 'project-root');
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     await mkdir(path.join(projectsRoot, 'project-1'), { recursive: true });
-    process.env.OD_MEDIA_ALLOW_STUBS = '1';
+    process.env.MAX_MEDIA_ALLOW_STUBS = '1';
   });
 
   afterEach(async () => {
     if (originalAllowStubs == null) {
-      delete process.env.OD_MEDIA_ALLOW_STUBS;
+      delete process.env.MAX_MEDIA_ALLOW_STUBS;
     } else {
-      process.env.OD_MEDIA_ALLOW_STUBS = originalAllowStubs;
+      process.env.MAX_MEDIA_ALLOW_STUBS = originalAllowStubs;
     }
     await rm(root, { recursive: true, force: true });
   });

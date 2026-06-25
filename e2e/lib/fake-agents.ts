@@ -317,10 +317,10 @@ async function emitOrbitRun() {
 }
 
 async function createOrbitLiveArtifact() {
-  const baseUrl = process.env.OD_DAEMON_URL;
-  const token = process.env.OD_TOOL_TOKEN;
+  const baseUrl = process.env.MAX_DAEMON_URL;
+  const token = process.env.MAX_TOOL_TOKEN;
   if (!baseUrl || !token) {
-    throw new Error('Orbit fake run requires OD_DAEMON_URL and OD_TOOL_TOKEN');
+    throw new Error('Orbit fake run requires MAX_DAEMON_URL and MAX_TOOL_TOKEN');
   }
   const url = new URL('/api/tools/live-artifacts/create', baseUrl);
   const payload = {

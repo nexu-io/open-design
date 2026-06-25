@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
 } from "@marketing-ax/sidecar-proto";
@@ -52,7 +52,7 @@ describe("packaged identity markers", () => {
       app: APP_KEYS.DESKTOP,
       ipc: resolveAppIpcPath({
         app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        contract: MARKETING_AX_SIDECAR_CONTRACT,
         namespace: "default",
       }),
       mode: SIDECAR_MODES.RUNTIME,

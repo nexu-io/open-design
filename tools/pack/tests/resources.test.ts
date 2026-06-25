@@ -192,7 +192,7 @@ describe("copyOptionalVelaCliBinary", () => {
       await writeFakeOpenCodeCompanion(source, "#!/bin/sh\necho opencode\n");
 
       const copied = await copyOptionalVelaCliBinary({
-        env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+        env: { MARKETING_AX_VELA_CLI_BIN: source },
         platform: "mac",
         requireBundled: true,
         resourceRoot,
@@ -227,12 +227,12 @@ describe("copyOptionalVelaCliBinary", () => {
 
       await expect(
         copyOptionalVelaCliBinary({
-          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          env: { MARKETING_AX_VELA_CLI_BIN: source },
           platform: "mac",
           requireBundled: true,
           resourceRoot,
         }),
-      ).rejects.toThrow(/OpenCode companion directory is missing.*OPEN_DESIGN_VELA_CLI_BIN/);
+      ).rejects.toThrow(/OpenCode companion directory is missing.*MARKETING_AX_VELA_CLI_BIN/);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -248,7 +248,7 @@ describe("copyOptionalVelaCliBinary", () => {
       await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
 
       const copied = await copyOptionalVelaCliBinary({
-        env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+        env: { MARKETING_AX_VELA_CLI_BIN: source },
         platform: "mac",
         requireBundled: false,
         resourceRoot,
@@ -275,7 +275,7 @@ describe("copyOptionalVelaCliBinary", () => {
       await writeFakeOpenCodeCompanion(source, "fake opencode\n");
 
       const copied = await copyOptionalVelaCliBinary({
-        env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+        env: { MARKETING_AX_VELA_CLI_BIN: source },
         platform: "win",
         resourceRoot,
       });
@@ -346,10 +346,10 @@ describe("copyOptionalVelaCliBinary", () => {
 });
 
 describe("resolveOptionalVelaCliBinary", () => {
-  it("prefers OPEN_DESIGN_VELA_CLI_BIN over the npm resolver", async () => {
+  it("prefers MARKETING_AX_VELA_CLI_BIN over the npm resolver", async () => {
     await expect(
       resolveOptionalVelaCliBinary({
-        env: { OPEN_DESIGN_VELA_CLI_BIN: "/tmp/local-vela" },
+        env: { MARKETING_AX_VELA_CLI_BIN: "/tmp/local-vela" },
         importPackage: async () => ({
           resolveVelaCliBin: () => "/tmp/npm-vela",
         }),
@@ -366,7 +366,7 @@ describe("resolveOptionalVelaCliBinary", () => {
         },
         requireBundled: true,
       }),
-    ).rejects.toThrow(/@powerformer\/vela-cli.*OPEN_DESIGN_VELA_CLI_BIN/);
+    ).rejects.toThrow(/@powerformer\/vela-cli.*MARKETING_AX_VELA_CLI_BIN/);
   });
 
   it("fails strict mode when the resolver returns no binary", async () => {
@@ -378,7 +378,7 @@ describe("resolveOptionalVelaCliBinary", () => {
         }),
         requireBundled: true,
       }),
-    ).rejects.toThrow(/@powerformer\/vela-cli.*OPEN_DESIGN_VELA_CLI_BIN/);
+    ).rejects.toThrow(/@powerformer\/vela-cli.*MARKETING_AX_VELA_CLI_BIN/);
   });
 
   it("returns null in non-strict mode when the resolver package is missing", async () => {

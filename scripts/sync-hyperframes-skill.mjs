@@ -137,8 +137,8 @@ async function main() {
   } finally {
     // Best-effort cleanup. Leaves the upstream dir behind if the user
     // wants to inspect it in the failure path.
-    if (process.env.OD_KEEP_HF_SYNC_TMP) {
-      console.log(`[sync] OD_KEEP_HF_SYNC_TMP set — leaving ${tmpRoot}`);
+    if (process.env.MAX_KEEP_HF_SYNC_TMP) {
+      console.log(`[sync] MAX_KEEP_HF_SYNC_TMP set — leaving ${tmpRoot}`);
     } else {
       await rm(tmpRoot, { recursive: true, force: true });
     }

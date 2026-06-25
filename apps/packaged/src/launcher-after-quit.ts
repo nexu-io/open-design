@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { waitForProcessExit } from "@marketing-ax/platform";
 import type { LauncherAfterQuitRequest } from "@marketing-ax/launcher-proto";
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_MESSAGES, type DesktopStatusSnapshot } from "@marketing-ax/sidecar-proto";
+import { APP_KEYS, MARKETING_AX_SIDECAR_CONTRACT, SIDECAR_MESSAGES, type DesktopStatusSnapshot } from "@marketing-ax/sidecar-proto";
 import { requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -53,7 +53,7 @@ export async function inspectExistingDesktopForLauncher(
   const requestIpc = options.requestIpc ?? requestJsonIpc;
   const ipcPath = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    contract: MARKETING_AX_SIDECAR_CONTRACT,
     namespace,
   });
   let status: DesktopStatusSnapshot | null = null;

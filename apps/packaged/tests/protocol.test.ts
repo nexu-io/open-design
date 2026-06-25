@@ -97,7 +97,7 @@ describe('od:// protocol proxy', () => {
       code?: string;
       target: string;
     };
-    expect(body.error).toBe('OD_PROTOCOL_PROXY_FAILED');
+    expect(body.error).toBe('MAX_PROTOCOL_PROXY_FAILED');
     expect(body.message).toContain('setTypeOfService');
     expect(body.code).toBe('EINVAL');
     expect(body.target).toBe('http://127.0.0.1:17579/api/codex-pets/sync');

@@ -1,5 +1,5 @@
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MARKETING_AX_PLUGIN_SPEC_VERSION,
   type PluginManifest,
 } from '@marketing-ax/contracts';
 
@@ -57,7 +57,7 @@ export function adaptClaudePlugin(
     warnings.push(`claude-plugin declares ${commands} command(s); v1 OD apply does not auto-register hooks. Add them via od.context.claudePlugins[].`);
   }
   const manifest: PluginManifest = {
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    specVersion: MARKETING_AX_PLUGIN_SPEC_VERSION,
     name: safeName,
     title: typeof obj['title'] === 'string' ? obj['title'] : safeName,
     version,
@@ -73,7 +73,7 @@ export function adaptClaudePlugin(
 
 function synthesizeFallback(folderId: string, compatPath: string): PluginManifest {
   return {
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    specVersion: MARKETING_AX_PLUGIN_SPEC_VERSION,
     name: folderId,
     title: folderId,
     version: '0.0.0',

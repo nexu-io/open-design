@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  MARKETING_AX_TELEMETRY_RELAY_URL: ${{ vars.MARKETING_AX_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
   # without these run the daemon in no-op analytics mode (events never
@@ -32,7 +32,7 @@ jobs:
     name: Prepare preview metadata
     runs-on: ubuntu-latest
     env:
-      OPEN_DESIGN_PREVIEW_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/preview/latest/metadata.json
+      MARKETING_AX_PREVIEW_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/preview/latest/metadata.json
     outputs:
       base_version: ${{ steps.preview.outputs.base_version }}
       branch: ${{ steps.preview.outputs.branch }}
@@ -279,14 +279,14 @@ jobs:
       - name: Smoke preview mac packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-preview
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: preview
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          MAX_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          MAX_PACKAGED_E2E_MAC: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: release-preview
+          MAX_PACKAGED_E2E_RELEASE_CHANNEL: preview
+          MAX_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          MAX_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           set -euo pipefail
           pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
@@ -557,13 +557,13 @@ jobs:
       - name: Smoke preview windows packaged runtime
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
-          OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-preview-win
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: preview
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          MAX_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
+          MAX_PACKAGED_E2E_WIN: "1"
+          MAX_PACKAGED_E2E_NAMESPACE: release-preview-win
+          MAX_PACKAGED_E2E_RELEASE_CHANNEL: preview
+          MAX_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          MAX_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
+          MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           $ErrorActionPreference = "Stop"
           pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts

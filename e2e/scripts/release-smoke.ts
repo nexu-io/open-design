@@ -14,21 +14,21 @@ const workspaceRoot = dirname(e2eRoot);
 async function main(): Promise<void> {
   const platform = parsePlatform(process.argv[2]);
   const spec = process.argv[3] ?? defaultSpec(platform);
-  const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? defaultNamespace(platform);
+  const namespace = process.env.MAX_PACKAGED_E2E_NAMESPACE ?? defaultNamespace(platform);
   const reportRoot = resolveFromWorkspace(
-    process.env.OD_PACKAGED_E2E_REPORT_DIR ?? join('.tmp', 'release-report', platform),
+    process.env.MAX_PACKAGED_E2E_REPORT_DIR ?? join('.tmp', 'release-report', platform),
   );
   const report = await createReport(reportRoot);
 
-  process.env.OD_PACKAGED_E2E_REPORT_DIR = report.root;
+  process.env.MAX_PACKAGED_E2E_REPORT_DIR = report.root;
 
   await report.json('manifest.json', {
-    ...(process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL == null
+    ...(process.env.MAX_PACKAGED_E2E_RELEASE_CHANNEL == null
       ? {}
-      : { channel: process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL }),
-    ...(process.env.OD_PACKAGED_E2E_RELEASE_VERSION == null
+      : { channel: process.env.MAX_PACKAGED_E2E_RELEASE_CHANNEL }),
+    ...(process.env.MAX_PACKAGED_E2E_RELEASE_VERSION == null
       ? {}
-      : { releaseVersion: process.env.OD_PACKAGED_E2E_RELEASE_VERSION }),
+      : { releaseVersion: process.env.MAX_PACKAGED_E2E_RELEASE_VERSION }),
     commit: process.env.GITHUB_SHA ?? null,
     generatedAt: new Date().toISOString(),
     githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
@@ -39,8 +39,8 @@ async function main(): Promise<void> {
     screenshot: `screenshots/open-design-${platform}-smoke.png`,
     spec,
   });
-  await saveRequiredSource(report, 'tools-pack.json', process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
-  await saveOptionalSource(report, 'tools-pack.log', process.env.OD_PACKAGED_E2E_BUILD_LOG_PATH);
+  await saveRequiredSource(report, 'tools-pack.json', process.env.MAX_PACKAGED_E2E_BUILD_JSON_PATH);
+  await saveOptionalSource(report, 'tools-pack.log', process.env.MAX_PACKAGED_E2E_BUILD_LOG_PATH);
 
   const startedAt = Date.now();
   const result = await runVitest(spec).catch((error: unknown) => ({

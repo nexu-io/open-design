@@ -190,7 +190,7 @@ export type RuntimeAgentDef = {
   // during legitimate work (e.g. Copilot's deck-generation thinking
   // phase from #2467) need a longer ceiling than the 10-minute global
   // default. Operators can still override per-process via
-  // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
+  // `MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
   inactivityTimeoutMs?: number;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined

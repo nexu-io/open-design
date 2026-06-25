@@ -37,18 +37,18 @@ persistence:
     storageClass: ""
 
 env:
-  OD_BIND_HOST: 0.0.0.0
-  OD_PORT: "7456"
-  OD_DATA_DIR: /data/od
-  OD_MEDIA_CONFIG_DIR: /data/config
-  OD_SNAPSHOT_UNREFERENCED_TTL_DAYS: "30"
-  OD_SNAPSHOT_GC_INTERVAL_MS: "21600000"
+  MAX_BIND_HOST: 0.0.0.0
+  MAX_PORT: "7456"
+  MAX_DATA_DIR: /data/od
+  MAX_MEDIA_CONFIG_DIR: /data/config
+  MAX_SNAPSHOT_UNREFERENCED_TTL_DAYS: "30"
+  MAX_SNAPSHOT_GC_INTERVAL_MS: "21600000"
 
 # Secrets are NOT inlined in values.yaml — operators inject them
 # through their cloud's secret manager. This block is the schema the
 # templates will consume.
 secrets:
-  apiToken: ""           # OD_API_TOKEN
+  apiToken: ""           # MAX_API_TOKEN
   anthropicApiKey: ""    # ANTHROPIC_API_KEY
   tavilyApiKey: ""       # TAVILY_API_KEY
 

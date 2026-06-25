@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
 } from "@marketing-ax/sidecar-proto";
@@ -129,7 +129,7 @@ describe("buildDockerArgs", () => {
       },
       { uid: 1000, gid: 1000 },
     );
-    expect(args).toContain("OPEN_DESIGN_TELEMETRY_RELAY_URL=https://telemetry.open-design.ai/api/langfuse");
+    expect(args).toContain("MARKETING_AX_TELEMETRY_RELAY_URL=https://telemetry.open-design.ai/api/langfuse");
   });
 
   it("passes the AMR profile into containerized builds when configured", () => {
@@ -140,12 +140,12 @@ describe("buildDockerArgs", () => {
       },
       { uid: 1000, gid: 1000 },
     );
-    expect(args).toContain("OPEN_DESIGN_AMR_PROFILE=test");
+    expect(args).toContain("MARKETING_AX_AMR_PROFILE=test");
   });
 
   it("bind-mounts the host Vela binary directory and rewrites the env path into the container", () => {
-    const previous = process.env.OPEN_DESIGN_VELA_CLI_BIN;
-    process.env.OPEN_DESIGN_VELA_CLI_BIN = "/host/bin/vela";
+    const previous = process.env.MARKETING_AX_VELA_CLI_BIN;
+    process.env.MARKETING_AX_VELA_CLI_BIN = "/host/bin/vela";
     try {
       const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
       // The container only mounts /project, /tools-pack, and cache/home by
@@ -154,11 +154,11 @@ describe("buildDockerArgs", () => {
       // and the env rewritten to the container-side path so the resource
       // copier can actually read the binary.
       expect(args).toContain("/host/bin:/opt/vela-cli:ro");
-      expect(args).toContain("OPEN_DESIGN_VELA_CLI_BIN=/opt/vela-cli/vela");
-      expect(args).not.toContain("OPEN_DESIGN_VELA_CLI_BIN=/host/bin/vela");
+      expect(args).toContain("MARKETING_AX_VELA_CLI_BIN=/opt/vela-cli/vela");
+      expect(args).not.toContain("MARKETING_AX_VELA_CLI_BIN=/host/bin/vela");
     } finally {
-      if (previous === undefined) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
-      else process.env.OPEN_DESIGN_VELA_CLI_BIN = previous;
+      if (previous === undefined) delete process.env.MARKETING_AX_VELA_CLI_BIN;
+      else process.env.MARKETING_AX_VELA_CLI_BIN = previous;
     }
   });
 
@@ -296,10 +296,10 @@ describe("buildDockerArgs", () => {
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
   });
 
-  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
+  it("exports MAX_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = args.findIndex(
-      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
+      (arg, i) => arg === "-e" && args[i + 1] === "MAX_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
     );
     expect(envFlagIndex).toBeGreaterThan(-1);
   });
@@ -326,7 +326,7 @@ describe("stopPackedLinuxHeadless", () => {
       app: APP_KEYS.DESKTOP,
       ipc: resolveAppIpcPath({
         app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        contract: MARKETING_AX_SIDECAR_CONTRACT,
         namespace,
       }),
       mode: SIDECAR_MODES.RUNTIME,
@@ -387,7 +387,7 @@ describe("stopPackedLinuxHeadless", () => {
       app: APP_KEYS.DESKTOP,
       ipc: resolveAppIpcPath({
         app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        contract: MARKETING_AX_SIDECAR_CONTRACT,
         namespace,
       }),
       mode: SIDECAR_MODES.RUNTIME,
@@ -452,7 +452,7 @@ describe("stopPackedLinuxHeadless", () => {
       app: APP_KEYS.DESKTOP,
       ipc: resolveAppIpcPath({
         app: APP_KEYS.DESKTOP,
-        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        contract: MARKETING_AX_SIDECAR_CONTRACT,
         namespace,
       }),
       mode: SIDECAR_MODES.RUNTIME,
@@ -499,42 +499,42 @@ describe("stopPackedLinuxHeadless", () => {
 });
 
 describe("resolveProductionInstallCommand", () => {
-  it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
+  it("defaults to npm install --omit=dev --no-package-lock when MAX_TOOLS_PACK_PNPM_BIN is unset", () => {
     expect(resolveProductionInstallCommand({})).toEqual({
       command: "npm",
       args: ["install", "--omit=dev", "--no-package-lock"],
     });
   });
 
-  it("treats an empty OD_TOOLS_PACK_PNPM_BIN as unset and keeps the npm host default", () => {
-    expect(resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "" })).toEqual({
+  it("treats an empty MAX_TOOLS_PACK_PNPM_BIN as unset and keeps the npm host default", () => {
+    expect(resolveProductionInstallCommand({ MAX_TOOLS_PACK_PNPM_BIN: "" })).toEqual({
       command: "npm",
       args: ["install", "--omit=dev", "--no-package-lock"],
     });
   });
 
-  it("uses OD_TOOLS_PACK_PNPM_BIN with hoisted-layout pnpm flags when set", () => {
+  it("uses MAX_TOOLS_PACK_PNPM_BIN with hoisted-layout pnpm flags when set", () => {
     // --config.node-linker=hoisted intentionally matches the prior
     // npm/electron-builder packaging layout so the AppImage pack step keeps
     // working when the assembled-app install runs through pnpm.
     expect(
-      resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm" }),
+      resolveProductionInstallCommand({ MAX_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm" }),
     ).toEqual({
       command: "/tmp/pnpm",
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
     });
   });
 
-  it("chains end-to-end with buildDockerArgs: docker exports OD_TOOLS_PACK_PNPM_BIN and the resolver returns the standalone pnpm install for that value", () => {
+  it("chains end-to-end with buildDockerArgs: docker exports MAX_TOOLS_PACK_PNPM_BIN and the resolver returns the standalone pnpm install for that value", () => {
     const dockerArgs = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = dockerArgs.findIndex(
-      (arg, i) => arg === "-e" && dockerArgs[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
+      (arg, i) => arg === "-e" && dockerArgs[i + 1]?.startsWith("MAX_TOOLS_PACK_PNPM_BIN="),
     );
     expect(envFlagIndex).toBeGreaterThan(-1);
     const envValue = dockerArgs[envFlagIndex + 1]?.split("=")[1];
     expect(envValue).toBe("/tmp/pnpm");
 
-    const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
+    const resolved = resolveProductionInstallCommand({ MAX_TOOLS_PACK_PNPM_BIN: envValue });
     expect(resolved).toEqual({
       command: "/tmp/pnpm",
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
@@ -547,7 +547,7 @@ describe("renderDesktopTemplate", () => {
   const template = `[Desktop Entry]
 Type=Application
 Name=Open Design (@@NAMESPACE@@)
-Exec=env OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
+Exec=env MAX_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
 Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
 `;
@@ -560,19 +560,19 @@ MimeType=x-scheme-handler/od;
     });
     expect(out).toContain("Name=Open Design (default)");
     expect(out).toContain(
-      "Exec=env OD_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
+      "Exec=env MAX_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
     );
     expect(out).toContain("Icon=open-design-default");
   });
 
-  it("uses OD_PACKAGED_NAMESPACE (not OD_NAMESPACE) so apps/packaged actually picks up the namespace override", () => {
+  it("uses MAX_PACKAGED_NAMESPACE (not MAX_NAMESPACE) so apps/packaged actually picks up the namespace override", () => {
     const out = renderDesktopTemplate(template, {
       namespace: "ns",
       execPath: "/x",
       iconName: "open-design-ns",
     });
-    expect(out).toMatch(/^Exec=env OD_PACKAGED_NAMESPACE=ns /m);
-    expect(out).not.toMatch(/OD_NAMESPACE=/);
+    expect(out).toMatch(/^Exec=env MAX_PACKAGED_NAMESPACE=ns /m);
+    expect(out).not.toMatch(/MAX_NAMESPACE=/);
   });
 
   it("preserves --appimage-extract-and-run on the Exec= line so menu launches bypass FUSE", () => {

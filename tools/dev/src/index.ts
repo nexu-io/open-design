@@ -6,7 +6,7 @@ import { cac } from "cac";
 
 import {
   APP_KEYS,
-  OPEN_DESIGN_SIDECAR_CONTRACT,
+  MARKETING_AX_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
@@ -349,10 +349,10 @@ function createAppStamp(config: ToolDevConfig, appName: ToolDevAppName) {
   };
 
   return {
-    args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+    args: createProcessStampArgs(stamp, MARKETING_AX_SIDECAR_CONTRACT),
     env: createSidecarLaunchEnv({
       base: config.toolsDevRoot,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      contract: MARKETING_AX_SIDECAR_CONTRACT,
       stamp,
     }),
     stamp,
@@ -368,7 +368,7 @@ async function findAppProcessTree(config: ToolDevConfig, appName: ToolDevAppName
         mode: "dev",
         namespace: config.namespace,
         source: SIDECAR_SOURCES.TOOLS_DEV,
-      }, OPEN_DESIGN_SIDECAR_CONTRACT),
+      }, MARKETING_AX_SIDECAR_CONTRACT),
     )
     .map((processInfo) => processInfo.pid);
   const pids = collectProcessTreePids(processes, rootPids);
@@ -446,7 +446,7 @@ async function spawnDaemonRuntime(
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-        ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+        ...(spawnOptions.requireDesktopAuth ? { MAX_REQUIRE_DESKTOP_AUTH: "1" } : {}),
       },
       logHandle,
     });
@@ -483,7 +483,7 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
         PORT: String(webPort ?? 0),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(options.prod === true
-          ? { NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "server", OD_WEB_PROD: "1" }
+          ? { NODE_ENV: "production", MAX_WEB_OUTPUT_MODE: "server", MAX_WEB_PROD: "1" }
           : {}),
       },
       logHandle,

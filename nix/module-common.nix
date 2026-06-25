@@ -47,7 +47,7 @@ in {
       built-in `webFrontend` caddy or your own nginx/Caddy) must
       reverse-proxy those three path prefixes to `127.0.0.1:<this
       port>` and serve same-origin with the SPA. There is no runtime
-      `OD_DAEMON_URL` injection — see section (4) of `nix/README.md`.
+      `MAX_DAEMON_URL` injection — see section (4) of `nix/README.md`.
     '';
   };
 
@@ -98,12 +98,12 @@ in {
     default = {};
     description = ''
       Additional non-secret environment variables for the daemon
-      service (e.g. `OD_CODEX_DISABLE_PLUGINS = "1"`). Secrets belong
+      service (e.g. `MAX_CODEX_DISABLE_PLUGINS = "1"`). Secrets belong
       in `environmentFile`, not here.
     '';
     example = lib.literalExpression ''
       {
-        OD_CODEX_DISABLE_PLUGINS = "1";
+        MAX_CODEX_DISABLE_PLUGINS = "1";
       }
     '';
   };
@@ -133,7 +133,7 @@ in {
     # The Open Design web frontend is a static SPA built by
     # `apps/web` → `apps/web/out/`. The daemon is a separate Express
     # process that serves the JSON API at `/api/*`. The SPA is built
-    # with `OD_DAEMON_URL=""`, so the bundled JS issues relative
+    # with `MAX_DAEMON_URL=""`, so the bundled JS issues relative
     # `/api/*`, `/artifacts/*`, and `/frames/*` requests and expects
     # the static-server in front of it to reverse-proxy those to the
     # daemon — there is no runtime daemon-URL injection.
@@ -215,10 +215,10 @@ in {
             setups like `http://127.0.0.1:8080`.
 
         For the loopback split-port case specifically, an alternative is
-        to set `extraEnv.OD_WEB_PORT = "<proxy-port>"`, which whitelists
+        to set `extraEnv.MAX_WEB_PORT = "<proxy-port>"`, which whitelists
         that port on every loopback host without enumerating origins.
 
-        Each entry is forwarded to the daemon via the `OD_ALLOWED_ORIGINS`
+        Each entry is forwarded to the daemon via the `MAX_ALLOWED_ORIGINS`
         env var. The daemon both compares it verbatim against the
         browser's `Origin` header AND admits its host:port to the
         `Host`-header allowlist (Caddy v2 reverse_proxy preserves the

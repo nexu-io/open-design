@@ -128,8 +128,8 @@ describe('GET /api/projects/:id resolvedDir', () => {
     };
     expect(detail.project.metadata?.baseDir).toBeUndefined();
 
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     const expected = path.join(dataDir, 'projects', projectId);
     expect(detail.resolvedDir).toBe(expected);
     expect(path.isAbsolute(detail.resolvedDir)).toBe(true);
@@ -502,8 +502,8 @@ describe('GET /api/projects/:id resolvedDir', () => {
       expect(body.error?.code).toBe('PROJECT_NOT_FOUND');
     }
 
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR is required for daemon route tests');
     await expect(stat(path.join(dataDir, 'projects', missingProjectId))).rejects.toMatchObject({
       code: 'ENOENT',
     });
@@ -1025,8 +1025,8 @@ describe('project locations routes', () => {
   });
 
   it('PUT /api/project-locations rejects a root overlapping the daemon projects dir', async () => {
-    const dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR required for daemon route tests');
+    const dataDir = process.env.MAX_DATA_DIR;
+    if (!dataDir) throw new Error('MAX_DATA_DIR required for daemon route tests');
     const projectsDir = path.join(dataDir, 'projects');
 
     const canonicalProjectsDir = await realpath(projectsDir);
@@ -1242,12 +1242,12 @@ describe('project locations routes', () => {
 });
 
 async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
-  const previous = process.env.OD_SANDBOX_MODE;
-  process.env.OD_SANDBOX_MODE = '1';
+  const previous = process.env.MAX_SANDBOX_MODE;
+  process.env.MAX_SANDBOX_MODE = '1';
   try {
     return await run();
   } finally {
-    if (previous == null) delete process.env.OD_SANDBOX_MODE;
-    else process.env.OD_SANDBOX_MODE = previous;
+    if (previous == null) delete process.env.MAX_SANDBOX_MODE;
+    else process.env.MAX_SANDBOX_MODE = previous;
   }
 }

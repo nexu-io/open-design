@@ -82,13 +82,13 @@ printf "\n"
 PORT=7456
 ENV_FILE="${DEPLOY_DIR}/.env"
 if [ -f "$ENV_FILE" ]; then
-  _port="$(grep '^OPEN_DESIGN_PORT=' "$ENV_FILE" | cut -d= -f2)"
+  _port="$(grep '^MARKETING_AX_PORT=' "$ENV_FILE" | cut -d= -f2)"
   if [ -n "$_port" ]; then PORT="$_port"; fi
 fi
 
 # Override image if specified
 if [ -n "$OPT_IMAGE" ]; then
-  export OPEN_DESIGN_IMAGE="$OPT_IMAGE"
+  export MARKETING_AX_IMAGE="$OPT_IMAGE"
 fi
 
 # Pull latest image

@@ -3,7 +3,7 @@
 // This module is intentionally dependency-free (no `langfuse` SDK). It builds
 // Langfuse ingestion batches for completed runs and sends them either to the
 // official Open Design telemetry relay or, for local smoke tests, directly to
-// Langfuse. Without OPEN_DESIGN_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
+// Langfuse. Without MARKETING_AX_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
 // LANGFUSE_SECRET_KEY in the env, every entry point becomes a no-op so that
 // dev runs and forks of this open-source repo do not accidentally report.
 //
@@ -347,17 +347,17 @@ export function readLangfuseConfig(
 export function readTelemetrySinkConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): TelemetrySinkConfig | null {
-  const relayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
+  const relayUrl = env.MARKETING_AX_TELEMETRY_RELAY_URL?.trim();
   if (relayUrl) {
     return {
       kind: 'relay',
       relayUrl: relayUrl.replace(/\/+$/, ''),
       timeoutMs: parsePositiveInt(
-        env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS ?? env.LANGFUSE_TIMEOUT_MS,
+        env.MARKETING_AX_TELEMETRY_TIMEOUT_MS ?? env.LANGFUSE_TIMEOUT_MS,
         DEFAULT_FETCH_TIMEOUT_MS,
       ),
       retries: parseNonNegativeInt(
-        env.OPEN_DESIGN_TELEMETRY_RETRIES ?? env.LANGFUSE_RETRIES,
+        env.MARKETING_AX_TELEMETRY_RETRIES ?? env.LANGFUSE_RETRIES,
         DEFAULT_FETCH_RETRIES,
       ),
     };

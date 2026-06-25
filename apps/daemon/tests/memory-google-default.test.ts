@@ -5,7 +5,7 @@ import { extractWithLLM } from '../src/memory-llm.js';
 import { memoryDir } from '../src/memory.js';
 import { __resetExtractionsForTests } from '../src/memory-extractions.js';
 
-const dataDir = path.join(process.env.OD_DATA_DIR as string, 'memory-google-default-test');
+const dataDir = path.join(process.env.MAX_DATA_DIR as string, 'memory-google-default-test');
 const originalFetch = globalThis.fetch;
 
 beforeEach(async () => {

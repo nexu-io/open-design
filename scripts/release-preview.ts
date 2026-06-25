@@ -262,11 +262,11 @@ if (latestStable != null && compareVersions(packagedParsed, latestStable.parsed)
   fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
 }
 
-const metadataUrl = process.env.OPEN_DESIGN_PREVIEW_METADATA_URL;
+const metadataUrl = process.env.MARKETING_AX_PREVIEW_METADATA_URL;
 if (metadataUrl == null || metadataUrl.length === 0) {
-  fail("OPEN_DESIGN_PREVIEW_METADATA_URL is required");
+  fail("MARKETING_AX_PREVIEW_METADATA_URL is required");
 }
-validateHttpsUrl(metadataUrl, "OPEN_DESIGN_PREVIEW_METADATA_URL");
+validateHttpsUrl(metadataUrl, "MARKETING_AX_PREVIEW_METADATA_URL");
 
 let previewNumber = 1;
 let latestPreview: ParsedPreviewVersion | null = null;

@@ -92,7 +92,7 @@ describe('/api/chat', () => {
   let baseUrl: string;
   let originalMemoryConfig: Awaited<ReturnType<typeof readMemoryConfig>> | null = null;
   const originalPath = process.env.PATH;
-  const originalAgentHome = process.env.OD_AGENT_HOME;
+  const originalAgentHome = process.env.MAX_AGENT_HOME;
   const tempDirs: string[] = [];
 
   async function createPluginFixture(args: {
@@ -129,9 +129,9 @@ describe('/api/chat', () => {
   }
 
   beforeAll(async () => {
-    if (process.env.OD_DATA_DIR) {
-      originalMemoryConfig = await readMemoryConfig(process.env.OD_DATA_DIR);
-      await writeMemoryConfig(process.env.OD_DATA_DIR, {
+    if (process.env.MAX_DATA_DIR) {
+      originalMemoryConfig = await readMemoryConfig(process.env.MAX_DATA_DIR);
+      await writeMemoryConfig(process.env.MAX_DATA_DIR, {
         enabled: false,
         extraction: null,
       });
@@ -151,9 +151,9 @@ describe('/api/chat', () => {
       process.env.PATH = originalPath;
     }
     if (originalAgentHome == null) {
-      delete process.env.OD_AGENT_HOME;
+      delete process.env.MAX_AGENT_HOME;
     } else {
-      process.env.OD_AGENT_HOME = originalAgentHome;
+      process.env.MAX_AGENT_HOME = originalAgentHome;
     }
   });
 
@@ -164,8 +164,8 @@ describe('/api/chat', () => {
     if (server) {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-    if (process.env.OD_DATA_DIR && originalMemoryConfig) {
-      await writeMemoryConfig(process.env.OD_DATA_DIR, {
+    if (process.env.MAX_DATA_DIR && originalMemoryConfig) {
+      await writeMemoryConfig(process.env.MAX_DATA_DIR, {
         enabled: originalMemoryConfig.enabled,
         extraction: originalMemoryConfig.extraction,
       });
@@ -176,7 +176,7 @@ describe('/api/chat', () => {
     process.env.PATH = '';
     const emptyAgentHome = mkdtempSync(join(tmpdir(), 'od-empty-agent-home-'));
     tempDirs.push(emptyAgentHome);
-    process.env.OD_AGENT_HOME = emptyAgentHome;
+    process.env.MAX_AGENT_HOME = emptyAgentHome;
 
     const response = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
@@ -241,8 +241,8 @@ process.exit(0);
   });
 
   it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
-    if (!process.env.OD_DATA_DIR) {
-      throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');
+    if (!process.env.MAX_DATA_DIR) {
+      throw new Error('MAX_DATA_DIR is required for OpenCode cwd permission tests');
     }
 
     const projectId = `proj-${randomUUID()}`;
@@ -353,8 +353,8 @@ process.stdin.on('end', () => {
 
 
   it('reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied', async () => {
-    if (!process.env.OD_DATA_DIR) {
-      throw new Error('OD_DATA_DIR is required for assistant message reuse tests');
+    if (!process.env.MAX_DATA_DIR) {
+      throw new Error('MAX_DATA_DIR is required for assistant message reuse tests');
     }
     const projectId = `proj-${randomUUID()}`;
     const assistantMessageId = `assistant-${randomUUID()}`;
@@ -374,7 +374,7 @@ process.stdin.on('end', () => {
     const conversationId = conversationsBody.conversations[0]?.id;
     expect(conversationId).toBeTruthy();
 
-    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    const dbFile = resolve(process.env.MAX_DATA_DIR, 'app.sqlite');
     const sqlite = new Database(dbFile);
     try {
       upsertMessage(sqlite as never, conversationId!, {
@@ -1380,13 +1380,13 @@ process.stdin.on('end', () => {
   });
 
   it('propagates ad-hoc skill critique policy into the chat resolver', async () => {
-    if (!process.env.OD_DATA_DIR) {
-      throw new Error('OD_DATA_DIR is required for user skill critique-policy tests');
+    if (!process.env.MAX_DATA_DIR) {
+      throw new Error('MAX_DATA_DIR is required for user skill critique-policy tests');
     }
 
     const skillId = `critique-opt-out-${randomUUID()}`;
-    const skillDir = resolve(process.env.OD_DATA_DIR, 'skills', skillId);
-    const originalCritiqueEnabled = process.env.OD_CRITIQUE_ENABLED;
+    const skillDir = resolve(process.env.MAX_DATA_DIR, 'skills', skillId);
+    const originalCritiqueEnabled = process.env.MAX_CRITIQUE_ENABLED;
 
     await fsp.mkdir(skillDir, { recursive: true });
     await fsp.writeFile(
@@ -1406,7 +1406,7 @@ This skill should suppress critique when selected through skillIds.
       'utf8',
     );
 
-    process.env.OD_CRITIQUE_ENABLED = 'true';
+    process.env.MAX_CRITIQUE_ENABLED = 'true';
 
     try {
       await withFakeAgent(
@@ -1450,9 +1450,9 @@ process.stdin.on('end', () => {
       );
     } finally {
       if (originalCritiqueEnabled == null) {
-        delete process.env.OD_CRITIQUE_ENABLED;
+        delete process.env.MAX_CRITIQUE_ENABLED;
       } else {
-        process.env.OD_CRITIQUE_ENABLED = originalCritiqueEnabled;
+        process.env.MAX_CRITIQUE_ENABLED = originalCritiqueEnabled;
       }
       await fsp.rm(skillDir, { recursive: true, force: true });
     }
@@ -1543,8 +1543,8 @@ process.stdin.on('end', () => {
   });
 
   it('stages colliding plugin and composed skill dirs under distinct aliases', async () => {
-    if (!process.env.OD_DATA_DIR) {
-      throw new Error('OD_DATA_DIR is required for colliding skill-dir staging tests');
+    if (!process.env.MAX_DATA_DIR) {
+      throw new Error('MAX_DATA_DIR is required for colliding skill-dir staging tests');
     }
 
     const pluginId = `plugin-collision-${randomUUID()}`;
@@ -1564,7 +1564,7 @@ process.stdin.on('end', () => {
     expect(installBody).toContain(`"id":"${pluginId}"`);
 
     const projectId = `project-${randomUUID()}`;
-    const userSkillDir = resolve(process.env.OD_DATA_DIR, 'skills', 'sample-plugin');
+    const userSkillDir = resolve(process.env.MAX_DATA_DIR, 'skills', 'sample-plugin');
     const userChecklist = 'user-skill-checklist';
     const userAlias = skillCwdAliasSegment(userSkillDir);
 
@@ -2238,8 +2238,8 @@ process.exit(0);
   });
 
   it('fails stalled json-stream runs after the inactivity timeout elapses', async () => {
-    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    const previous = process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
     try {
       await withFakeAgent(
         'opencode',
@@ -2278,16 +2278,16 @@ setInterval(() => {}, 1000);
       );
     } finally {
       if (previous == null) {
-        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+        delete process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
       } else {
-        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+        process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
       }
     }
   });
 
   it('keeps Claude stream runs alive while structured output is still flowing', async () => {
-    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '3000';
+    const previous = process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '3000';
     try {
       await withFakeAgent(
         'claude',
@@ -2329,9 +2329,9 @@ const timer = setInterval(() => {
       );
     } finally {
       if (previous == null) {
-        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+        delete process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
       } else {
-        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+        process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
       }
     }
   });
@@ -2372,8 +2372,8 @@ process.exit(1);
   });
 
   it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
-    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
+    const previous = process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
     try {
       await withFakeAgent(
         'opencode',
@@ -2401,16 +2401,16 @@ setTimeout(() => {
       );
     } finally {
       if (previous == null) {
-        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+        delete process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
       } else {
-        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+        process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
       }
     }
   });
 
   it('marks stalled runs failed even when the child ignores SIGTERM', async () => {
-    const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
+    const previous = process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+    process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
     try {
       await withFakeAgent(
         'opencode',
@@ -2445,9 +2445,9 @@ setInterval(() => {}, 1000);
       );
     } finally {
       if (previous == null) {
-        delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+        delete process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
       } else {
-        process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+        process.env.MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
       }
     }
   });
@@ -2456,8 +2456,8 @@ setInterval(() => {}, 1000);
     const captureDir = mkdtempSync(join(tmpdir(), 'od-form-answer-prompt-'));
     tempDirs.push(captureDir);
     const capturePath = join(captureDir, 'prompt.txt');
-    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
-    process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+    const previousCapturePath = process.env.MAX_CAPTURE_PROMPT_PATH;
+    process.env.MAX_CAPTURE_PROMPT_PATH = capturePath;
     try {
       await withFakeAgent(
         'opencode',
@@ -2467,7 +2467,7 @@ let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
-  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  fs.writeFileSync(process.env.MAX_CAPTURE_PROMPT_PATH, input, 'utf8');
   console.log(JSON.stringify({ type: 'text', part: { text: 'building now' } }));
 });
 `,
@@ -2515,9 +2515,9 @@ process.stdin.on('end', () => {
       );
     } finally {
       if (previousCapturePath == null) {
-        delete process.env.OD_CAPTURE_PROMPT_PATH;
+        delete process.env.MAX_CAPTURE_PROMPT_PATH;
       } else {
-        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
+        process.env.MAX_CAPTURE_PROMPT_PATH = previousCapturePath;
       }
     }
   });
@@ -2525,8 +2525,8 @@ process.stdin.on('end', () => {
 
 describe('daemon run creation during shutdown', () => {
   it('rejects new run creation while shutdown cleanup is still in flight', async () => {
-    const previousGrace = process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
-    process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = '100';
+    const previousGrace = process.env.MAX_CHAT_RUN_SHUTDOWN_GRACE_MS;
+    process.env.MAX_CHAT_RUN_SHUTDOWN_GRACE_MS = '100';
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
@@ -2569,9 +2569,9 @@ setInterval(() => {}, 1000);
       );
     } finally {
       if (previousGrace == null) {
-        delete process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS;
+        delete process.env.MAX_CHAT_RUN_SHUTDOWN_GRACE_MS;
       } else {
-        process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS = previousGrace;
+        process.env.MAX_CHAT_RUN_SHUTDOWN_GRACE_MS = previousGrace;
       }
       await new Promise<void>((resolve) => started.server.close(() => resolve()));
     }

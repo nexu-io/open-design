@@ -480,7 +480,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
     const priorNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -520,7 +520,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       } else {
         process.env.NODE_ENV = priorNodeEnv;
       }
-      delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+      delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
       delete process.env.LANGFUSE_PUBLIC_KEY;
       delete process.env.LANGFUSE_SECRET_KEY;
     }
@@ -605,7 +605,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       return new Response('{}', { status: 207 });
     });
 
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -640,7 +640,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
         fetchImpl: fetchSpy as any,
       });
     } finally {
-      delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+      delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
       delete process.env.LANGFUSE_PUBLIC_KEY;
       delete process.env.LANGFUSE_SECRET_KEY;
     }
@@ -732,7 +732,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       return new Response('{}', { status: 207 });
     });
 
-    process.env.OPEN_DESIGN_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
+    process.env.MARKETING_AX_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -753,7 +753,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
         fetchImpl: fetchSpy as any,
       });
     } finally {
-      delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+      delete process.env.MARKETING_AX_OBJECT_RELAY_URL;
       delete process.env.LANGFUSE_PUBLIC_KEY;
       delete process.env.LANGFUSE_SECRET_KEY;
     }
@@ -814,8 +814,8 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       return new Response('{}', { status: 207 });
     });
 
-    process.env.OPEN_DESIGN_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
-    process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
+    process.env.MARKETING_AX_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -841,8 +841,8 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
         fetchImpl: fetchSpy as any,
       });
     } finally {
-      delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
-      delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+      delete process.env.MARKETING_AX_OBJECT_RELAY_URL;
+      delete process.env.MARKETING_AX_TELEMETRY_RELAY_URL;
       delete process.env.LANGFUSE_PUBLIC_KEY;
       delete process.env.LANGFUSE_SECRET_KEY;
     }

@@ -13,7 +13,7 @@
  * on disk wherever they used to run from), but the new daemon had no
  * way to know about it. See https://github.com/nexu-io/open-design/issues/710.
  *
- * This module gives operators a recovery path. When `OD_LEGACY_DATA_DIR`
+ * This module gives operators a recovery path. When `MAX_LEGACY_DATA_DIR`
  * is set on daemon boot, the migrator:
  *
  *   1. Refuses if the legacy dir doesn't have `app.sqlite` (typo / wrong
@@ -43,7 +43,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 export interface MigrateLegacyDataDirOptions {
-  /** Path to the legacy `.od/` directory (typically OD_LEGACY_DATA_DIR). */
+  /** Path to the legacy `.od/` directory (typically MAX_LEGACY_DATA_DIR). */
   legacyDir: string | undefined;
   /** Resolved current data root (RUNTIME_DATA_DIR). */
   dataDir: string;
@@ -72,7 +72,7 @@ export interface MigrateLegacyDataDirResult {
 }
 
 /**
- * Daemon startup throws this when OD_LEGACY_DATA_DIR is explicitly set
+ * Daemon startup throws this when MAX_LEGACY_DATA_DIR is explicitly set
  * but the path is not a usable legacy data dir, or the new dataDir is
  * already populated and would be merged into. Failing loud here is the
  * point: silent skips trained users to assume migration ran when it
@@ -309,18 +309,18 @@ export function migrateLegacyDataDirSync(
 
   const raw = options.legacyDir;
   if (raw === undefined || raw.length === 0) {
-    return { status: 'noop', reason: 'OD_LEGACY_DATA_DIR not set' };
+    return { status: 'noop', reason: 'MAX_LEGACY_DATA_DIR not set' };
   }
   const legacyDir = path.resolve(raw);
   const dataDir = path.resolve(options.dataDir);
 
   if (legacyDir === dataDir) {
-    return { status: 'noop', reason: 'OD_LEGACY_DATA_DIR equals OD_DATA_DIR' };
+    return { status: 'noop', reason: 'MAX_LEGACY_DATA_DIR equals MAX_DATA_DIR' };
   }
 
   // Marker check runs before legacyDirHasPayload on purpose: once a
   // migration has succeeded, the marker is the canonical "do not
-  // touch" signal. The user may leave OD_LEGACY_DATA_DIR set and then
+  // touch" signal. The user may leave MAX_LEGACY_DATA_DIR set and then
   // delete or move the old repo `.od/` later; without this ordering
   // the next boot would re-validate a source that is no longer needed
   // and throw legacy_dir_invalid, breaking the marker contract that
@@ -337,7 +337,7 @@ export function migrateLegacyDataDirSync(
     // migration ran when it hadn't (this is the original #710 footgun).
     throw new LegacyMigrationError(
       'legacy_dir_invalid',
-      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Design, fix the path, and relaunch.`,
+      `MAX_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Design, fix the path, and relaunch.`,
     );
   }
 
@@ -348,7 +348,7 @@ export function migrateLegacyDataDirSync(
   if (existing.length > 0) {
     throw new LegacyMigrationError(
       'data_dir_not_empty',
-      `OD_DATA_DIR="${dataDir}" already contains payload entries (${existing.join(', ')}); refusing to merge legacy data on top. Move the existing data aside or pick a fresh data root before re-running with OD_LEGACY_DATA_DIR.`,
+      `MAX_DATA_DIR="${dataDir}" already contains payload entries (${existing.join(', ')}); refusing to merge legacy data on top. Move the existing data aside or pick a fresh data root before re-running with MAX_LEGACY_DATA_DIR.`,
     );
   }
 

@@ -89,7 +89,7 @@ export interface InstallOptions {
   manifestDigest?: string;
   archiveIntegrity?: string;
   // Optional runtime-data lockfile path. Daemon routes pass
-  // `<OD_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
+  // `<MAX_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
   lockfilePath?: string;
 }
 

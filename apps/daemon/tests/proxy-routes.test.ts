@@ -12,7 +12,7 @@ type FetchInit = Parameters<typeof fetch>[1];
 
 describe('API proxy routes', () => {
   const realFetch = globalThis.fetch;
-  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalMediaConfigDir = process.env.MAX_MEDIA_CONFIG_DIR;
   let server: http.Server;
   let baseUrl: string;
 
@@ -30,8 +30,8 @@ describe('API proxy routes', () => {
   });
 
   afterEach(async () => {
-    if (originalMediaConfigDir == null) delete process.env.OD_MEDIA_CONFIG_DIR;
-    else process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    if (originalMediaConfigDir == null) delete process.env.MAX_MEDIA_CONFIG_DIR;
+    else process.env.MAX_MEDIA_CONFIG_DIR = originalMediaConfigDir;
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -177,7 +177,7 @@ describe('API proxy routes', () => {
 
   it('uses the live proxy dispatcher for ElevenLabs voice discovery', async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), 'od-elevenlabs-proxy-route-'));
-    process.env.OD_MEDIA_CONFIG_DIR = configDir;
+    process.env.MAX_MEDIA_CONFIG_DIR = configDir;
     await mkdir(configDir, { recursive: true });
     await writeFile(path.join(configDir, 'media-config.json'), JSON.stringify({
       providers: {
@@ -222,7 +222,7 @@ describe('API proxy routes', () => {
 
   it('uses the live proxy dispatcher for Tavily research search', async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), 'od-tavily-proxy-route-'));
-    process.env.OD_MEDIA_CONFIG_DIR = configDir;
+    process.env.MAX_MEDIA_CONFIG_DIR = configDir;
     await mkdir(configDir, { recursive: true });
     await writeFile(path.join(configDir, 'media-config.json'), JSON.stringify({
       providers: {

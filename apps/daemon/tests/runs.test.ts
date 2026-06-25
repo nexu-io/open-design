@@ -91,7 +91,7 @@ describe('chat run service shutdown', () => {
 
     it('sends SIGTERM immediately and escalates to SIGKILL after the cancel grace window', async () => {
       vi.useFakeTimers();
-      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
+      vi.stubEnv('MAX_CHAT_RUN_CANCEL_GRACE_MS', '25');
       const runs = createRuns();
       const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
       const run = runs.create();
@@ -147,8 +147,8 @@ describe('chat run service shutdown', () => {
 
     it('waits for a real process group to exit before returning canceled status', async () => {
       if (process.platform === 'win32') return;
-      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
-      vi.stubEnv('OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS', '250');
+      vi.stubEnv('MAX_CHAT_RUN_CANCEL_GRACE_MS', '25');
+      vi.stubEnv('MAX_CHAT_RUN_CANCEL_FORCE_WAIT_MS', '250');
       const script = [
         "const { spawn } = require('node:child_process');",
         "process.on('SIGTERM', () => {});",

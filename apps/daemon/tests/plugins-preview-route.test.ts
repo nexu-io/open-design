@@ -25,8 +25,8 @@ type StartedServer = { server: http.Server; url: string };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
-const serverRuntimeDataRoot = process.env.OD_DATA_DIR
-  ? path.resolve(projectRoot, process.env.OD_DATA_DIR)
+const serverRuntimeDataRoot = process.env.MAX_DATA_DIR
+  ? path.resolve(projectRoot, process.env.MAX_DATA_DIR)
   : path.join(projectRoot, '.od');
 
 const PLUGIN_ID = `phase2b-preview-${Date.now()}`;

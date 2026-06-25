@@ -568,7 +568,7 @@ function renderMetadataBlock(
     }
     lines.push('');
     lines.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
+      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
     );
   }
   if (metadata.kind === 'video') {
@@ -586,7 +586,7 @@ function renderMetadataBlock(
     }
     lines.push('');
     lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
+      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
     );
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
@@ -638,7 +638,7 @@ function renderMetadataBlock(
     }
     lines.push('');
     lines.push(
-      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
+      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$MAX_NODE_BIN" "$MAX_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
     );
   }
 
