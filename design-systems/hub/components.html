@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hub Design System — Components</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    padding: 48px;
+  }
+  .container { max-width: 1000px; margin: 0 auto; }
+  h1 { font-family: var(--font-display); font-size: var(--text-display-m); font-weight: 700; margin-bottom: 48px; background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  h2 { font-family: var(--font-display); font-size: var(--text-h2); font-weight: 600; margin: 48px 0 24px; color: var(--fg); }
+  .section { margin-bottom: 40px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--font-body); font-size: 15px; font-weight: 600; padding: 10px 20px; border-radius: var(--radius-md); border: none; cursor: pointer; transition: all var(--motion-base) var(--ease-out); text-decoration: none; }
+  .btn-primary { background: var(--accent); color: var(--accent-on); box-shadow: var(--shadow-button-primary); }
+  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn-secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); font-weight: 500; }
+  .btn-secondary:hover { background: rgba(255,255,255,0.05); }
+  .btn-tertiary { background: var(--accent-2); color: var(--accent-2-on); }
+  .btn-tertiary:hover { background: var(--accent-2-hover); transform: translateY(-1px); }
+  .btn-gradient { background: var(--gradient-primary); color: white; padding: 12px 24px; box-shadow: var(--shadow-button-gradient); }
+  .btn-gradient:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(99,102,241,0.5); }
+
+  /* Cards */
+  .card { background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; transition: all var(--motion-base) var(--ease-out); }
+  .card:hover { box-shadow: var(--elev-raised); }
+  .card-accent { border-top: 2px solid; border-image: var(--gradient-primary) 1; }
+  .card h3 { font-family: var(--font-display); font-size: var(--text-h3); font-weight: 600; margin-bottom: 8px; color: var(--fg); }
+  .card p { font-size: var(--text-sm); color: var(--fg-2); line-height: var(--leading-body); }
+
+  /* Tags */
+  .tag { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: var(--surface-elevated); color: var(--fg-2); }
+  .tag-accent { background: rgba(99,102,241,0.15); color: var(--accent-hover); border: none; font-weight: 600; border-radius: 6px; }
+  .tag-success { background: var(--success); color: white; border: none; }
+  .tag-warn { background: var(--warn); color: #1a1a2e; border: none; }
+  .tag-danger { background: var(--danger); color: white; border: none; }
+
+  /* Input */
+  .input { background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--fg); padding: 12px 16px; border-radius: var(--radius-md); font-family: var(--font-body); font-size: var(--text-base); width: 100%; max-width: 320px; transition: border-color var(--motion-fast) var(--ease-out); }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+  .input::placeholder { color: var(--meta); }
+
+  /* Badge row */
+  .badge-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+  .badge-indigo { background: rgba(99,102,241,0.15); color: var(--accent-hover); }
+  .badge-coral { background: rgba(244,114,182,0.15); color: var(--accent-2-hover); }
+  .badge-cyan { background: rgba(34,211,238,0.15); color: var(--accent-3-hover); }
+
+  /* Glass */
+  .glass { background: var(--surface-glass); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
+
+  /* Stats */
+  .stat { text-align: center; padding: 32px; }
+  .stat-number { font-family: var(--font-display); font-size: var(--text-display-l); font-weight: 700; background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-label { font-size: var(--text-sm); color: var(--muted); margin-top: 4px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+  /* Gradient text */
+  .gradient-text { background: var(--gradient-warm); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+  @media (max-width: 640px) {
+    body { padding: 24px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Hub Design System</h1>
+
+  <h2>Buttons</h2>
+  <div class="section">
+    <div class="row">
+      <button class="btn btn-primary">Primary</button>
+      <button class="btn btn-secondary">Secondary</button>
+      <button class="btn btn-tertiary">Tertiary</button>
+      <button class="btn btn-gradient">Gradient →</button>
+    </div>
+  </div>
+
+  <h2>Cards</h2>
+  <div class="section" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+    <div class="card">
+      <h3>Websites</h3>
+      <p>Landing pages, institucionais, portais — tudo com performance e identidade.</p>
+    </div>
+    <div class="card card-accent">
+      <h3>SaaS Platforms</h3>
+      <p>Painéis, dashboards, assinaturas — escaláveis desde o dia 1.</p>
+    </div>
+    <div class="card">
+      <h3>Automations</h3>
+      <p>Workflows inteligentes que conectam sistemas e economizam tempo.</p>
+    </div>
+  </div>
+
+  <h2>Glass Card</h2>
+  <div class="glass" style="max-width: 400px; margin-bottom: 24px;">
+    <h3 style="font-family: var(--font-display); font-size: var(--text-h3); font-weight: 600; margin-bottom: 8px;">Hub Studio</h3>
+    <p style="font-size: var(--text-sm); color: var(--fg-2);">Technology that connects. Websites, platforms, apps, and beyond.</p>
+  </div>
+
+  <h2>Stats</h2>
+  <div class="stats-grid section">
+    <div class="stat"><div class="stat-number">50+</div><div class="stat-label">Projects Delivered</div></div>
+    <div class="stat"><div class="stat-number">30+</div><div class="stat-label">Happy Clients</div></div>
+    <div class="stat"><div class="stat-number">5+</div><div class="stat-label">Years Building</div></div>
+    <div class="stat"><div class="stat-number">100%</div><div class="stat-label">Commitment</div></div>
+  </div>
+
+  <h2>Tags & Badges</h2>
+  <div class="section">
+    <div class="badge-row" style="margin-bottom: 12px;">
+      <span class="tag">Web</span>
+      <span class="tag">Mobile</span>
+      <span class="tag">SaaS</span>
+      <span class="tag">AI</span>
+      <span class="tag-accent">Featured</span>
+    </div>
+    <div class="badge-row">
+      <span class="badge badge-indigo">Technology</span>
+      <span class="badge badge-coral">Human</span>
+      <span class="badge badge-cyan">Connection</span>
+      <span class="tag tag-success">Active</span>
+      <span class="tag tag-warn">In Progress</span>
+    </div>
+  </div>
+
+  <h2>Typography</h2>
+  <div class="section">
+    <p style="font-family: var(--font-display); font-size: var(--text-h1); font-weight: 700; margin-bottom: 8px;">Plus Jakarta Sans — Bold</p>
+    <p style="font-family: var(--font-body); font-size: var(--text-lg); margin-bottom: 4px;">Inter — Body text for comfortable reading. 18px, 1.55 line height.</p>
+    <p style="font-family: var(--font-body); font-size: var(--text-base); color: var(--fg-2); margin-bottom: 4px;">Inter — Secondary text at 16px with muted lavender color.</p>
+    <p style="font-family: var(--font-mono); font-size: var(--text-mono); color: var(--accent-3);">JetBrains Mono — code =&gt; with =&gt; ligatures != none</p>
+  </div>
+
+  <h2>Input</h2>
+  <div class="section">
+    <input class="input" type="text" placeholder="Tell us about your project...">
+  </div>
+</div>
+</body>
+</html>

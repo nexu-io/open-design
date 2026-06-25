@@ -1,0 +1,21 @@
+{
+  "id": "hub",
+  "name": "Hub",
+  "version": "0.1.0",
+  "category": "Technology & Innovation",
+  "description": "Multi-tenant technology studio brand — websites, platforms, apps, SaaS, automations, chatbots.",
+  "tags": ["tech", "modern", "dark-mode", "gradient", "agency", "saas", "portfolio"],
+  "author": "Hub Studio",
+  "surface": ["web", "mobile", "desktop"],
+  "modes": ["dark", "light"],
+  "features": {
+    "glassmorphism": true,
+    "gradient-text": true,
+    "dark-mode-first": true,
+    "hub-triad": true
+  },
+  "preview": {
+    "thumbnail": "preview/thumbnail.png",
+    "palette": ["#0B0D1A", "#6366F1", "#22D3EE", "#F472B6"]
+  }
+}
