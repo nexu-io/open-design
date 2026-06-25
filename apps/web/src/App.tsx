@@ -1155,11 +1155,12 @@ function AppInner() {
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
-      const next = { ...config, mode };
+      const next = { ...latestPersistedConfigRef.current, mode };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   // Quick theme switch from the settings dropdown in the entry view.
@@ -1188,28 +1189,31 @@ function AppInner() {
 
   const handleAgentChange = useCallback(
     (agentId: string) => {
-      const next = { ...config, agentId };
+      const next = { ...latestPersistedConfigRef.current, agentId };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string }) => {
-      const prev = config.agentModels?.[agentId] ?? {};
+      const current = latestPersistedConfigRef.current;
+      const prev = current.agentModels?.[agentId] ?? {};
       const merged = { ...prev, ...choice };
       const nextAgentModels = {
-        ...(config.agentModels ?? {}),
+        ...(current.agentModels ?? {}),
         [agentId]: merged,
       };
-      const next = { ...config, agentModels: nextAgentModels };
+      const next = { ...current, agentModels: nextAgentModels };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
@@ -1546,6 +1550,21 @@ function AppInner() {
       return true;
     },
     [analytics.track, rememberLocalProject],
+  );
+
+  const handleCreateProjectFromDesignSystem = useCallback(
+    async (designSystemId: string) => {
+      await handleCreateProject({
+        name: t('common.untitled'),
+        skillId: null,
+        designSystemId,
+        metadata: {
+          kind: 'prototype',
+          nameSource: 'generated',
+        },
+      });
+    },
+    [handleCreateProject, t],
   );
 
   const handleCreatePluginShareProject = useCallback(
@@ -2031,10 +2050,15 @@ function AppInner() {
   // a fresh template list. The template store is global — if they just
   // saved a template inside a project, returning home should reflect it
   // immediately in the From-template tab without forcing a page reload.
+  // Same rationale for design systems: a brand extraction (or any in-project
+  // design-system creation) registers a `user:<id>` system out of band, so the
+  // Design systems tab must re-fetch to show it — and the brand-ready prompt
+  // relies on the new system being present so it can preselect it.
   useEffect(() => {
     if (route.kind !== 'home') return;
     void refreshTemplates();
-  }, [route.kind, refreshTemplates]);
+    void refreshDesignSystems();
+  }, [route.kind, refreshTemplates, refreshDesignSystems]);
 
   // Existing card grids (DesignsTab, ProjectView), pickers (NewProjectPanel,
   // ChatComposer mention) all look skills up by id without caring whether
@@ -2105,14 +2129,15 @@ function AppInner() {
     appMain = (
       <DesignSystemCreationFlow
         onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
-        onCreated={(projectId, project) => {
+        designSystems={enabledDS}
+        onCreated={(projectId, project, conversationId) => {
           if (project) {
             setProjects((curr) => [
               project,
               ...curr.filter((p) => p.id !== project.id),
             ]);
           }
-          navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+          navigate({ kind: 'project', projectId, conversationId: conversationId ?? null, fileName: null });
         }}
         onProjectPrepared={(project) => {
           setProjects((curr) => [
@@ -2175,8 +2200,10 @@ function AppInner() {
         onTouchProject={handleTouchProject}
         onProjectChange={handleProjectChange}
         onProjectsRefresh={refreshProjects}
+        onDeleteProject={handleDeleteProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onDesignSystemsRefresh={refreshDesignSystems}
+        onCreateProjectFromDesignSystem={handleCreateProjectFromDesignSystem}
       />
     );
   } else {

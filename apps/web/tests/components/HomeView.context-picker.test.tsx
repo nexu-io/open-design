@@ -9,6 +9,11 @@ import {
   type McpServerConfig,
   type SkillSummary,
 } from '@open-design/contracts';
+
+vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
+  PlaceholderCarousel: () => null,
+}));
+
 import { HomeView } from '../../src/components/HomeView';
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
@@ -332,7 +337,7 @@ describe('HomeView context picker', () => {
 
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
 
     screen.getByTestId('home-hero-input');
@@ -342,7 +347,7 @@ describe('HomeView context picker', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
-      expect(screen.queryByTestId('home-hero-active-type-chip')).toBeNull();
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('None');
     });
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -412,7 +417,7 @@ describe('HomeView context picker', () => {
 
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
       expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
     });
 

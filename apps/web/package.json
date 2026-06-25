@@ -25,7 +25,7 @@
     "build": "next build",
     "build:sidecar": "tsc -p tsconfig.sidecar.json",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run -c vitest.config.ts"
+    "test": "vitest run -c vitest.config.ts --maxWorkers=2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.32.1",
@@ -40,6 +40,7 @@
     "@open-design/sidecar-proto": "workspace:*",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
+    "jspdf": "4.2.1",
     "lexical": "0.36.2",
     "lucide-react": "1.16.0",
     "motion": "12.40.0",

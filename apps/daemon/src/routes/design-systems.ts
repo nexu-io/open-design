@@ -31,6 +31,10 @@ type AvailableDesignSystemSummary = DesignSystemSummary & {
 
 export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths' | 'projectFiles' | 'projectStore'> {
   designSystems: {
+    buildUserDesignSystemArchive: (
+      root: string,
+      id: string,
+    ) => Promise<{ buffer: Buffer; baseName: string; title: string } | null>;
     createUserDesignSystem: (root: string, input: UserDesignSystemInput) => Promise<DesignSystemSummary>;
     deleteUserDesignSystem: (root: string, id: string) => Promise<boolean>;
     ensureUserDesignSystemWorkspaceProject: (db: DbHandle, id: string) => Promise<DesignSystemWorkspaceProject | null>;
@@ -40,6 +44,11 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
     prepareDesignTokenContractRebuild: (root: string, id: string, options?: { force?: boolean }) => Promise<DesignTokenContractRebuildPreparation>;
     readAvailableDesignSystem: (id: string) => Promise<string | null>;
     readAvailableDesignSystemPackageInfo: (id: string) => Promise<DesignSystemPackageInfo | null>;
+    readAvailableDesignSystemStaticFile: (id: string, filePath: string) => Promise<{
+      bytes: Buffer;
+      contentType: string;
+      updatedAt: string;
+    } | null>;
     readDesignSystemWorkspaceTextFile: (db: DbHandle, summary: AvailableDesignSystemSummary | undefined, filePath: string) => Promise<string | null>;
     readUserDesignSystemFile: (root: string, id: string, filePath: string) => Promise<DesignSystemFileDetail | null>;
     renderDesignSystemPreview: (id: string, body: string) => string;
@@ -55,10 +64,22 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
   };
 };
 
+// Strip a brand title down to a safe download filename stem (no path
+// separators, control chars, or trailing dashes; capped so the OS accepts it).
+function sanitizeArchiveFilename(raw: string): string {
+  return String(raw ?? '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
 export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSystemRoutesDeps) {
   const { db } = ctx;
   const { CRAFT_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
   const {
+    buildUserDesignSystemArchive,
     createUserDesignSystem,
     deleteUserDesignSystem,
     ensureUserDesignSystemWorkspaceProject,
@@ -68,6 +89,7 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
     prepareDesignTokenContractRebuild,
     readAvailableDesignSystem,
     readAvailableDesignSystemPackageInfo,
+    readAvailableDesignSystemStaticFile,
     readDesignSystemWorkspaceTextFile,
     readUserDesignSystemFile,
     renderDesignSystemPreview,
@@ -222,6 +244,19 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
     }
   });
 
+  app.get('/api/design-systems/:id/static', async (req, res) => {
+    try {
+      const requestedPath = typeof req.query.path === 'string' ? req.query.path : '';
+      const file = await readAvailableDesignSystemStaticFile(req.params.id, requestedPath);
+      if (!file) return res.status(404).type('text/plain').send('not found');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Last-Modified', file.updatedAt);
+      res.type(file.contentType).send(file.bytes);
+    } catch (err) {
+      res.status(500).type('text/plain').send(String(err));
+    }
+  });
+
   app.post('/api/design-systems/:id/workspace', async (req, res) => {
     try {
       const workspace = await ensureUserDesignSystemWorkspaceProject(db, req.params.id);
@@ -256,6 +291,34 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
       );
       if (!file) return res.status(404).json({ error: 'design system file not found' });
       res.json({ file });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Streams a .zip of the whole user design system directory plus a generated
+  // SKILLS.md usage guide, so the "Download brand" action (and `od
+  // design-systems download`) hand the recipient a self-contained, shareable
+  // brand package. Only user systems have an editable dir; presets resolve to
+  // null and surface as 404.
+  app.get('/api/design-systems/:id/archive', async (req, res) => {
+    try {
+      const archive = await buildUserDesignSystemArchive(USER_DESIGN_SYSTEMS_DIR, req.params.id);
+      if (!archive) {
+        return res.status(404).json({ error: 'downloadable design system not found' });
+      }
+      const fileSlug = sanitizeArchiveFilename(archive.baseName) || 'design-system';
+      const filename = `${fileSlug}.zip`;
+      // RFC 5987: ASCII `filename=` fallback plus UTF-8 `filename*=` so brand
+      // names with non-ASCII characters (CJK, accents) download without mojibake.
+      const asciiFallback =
+        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'design-system.zip';
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(archive.buffer);
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

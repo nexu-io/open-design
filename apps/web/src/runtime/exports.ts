@@ -1,5 +1,5 @@
 // Client-side export helpers used by the Share menu in the HTML viewer.
-// Four of the five formats run entirely in the browser:
+// Export formats run entirely in the browser:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
@@ -9,8 +9,6 @@
 //            windows, vault apps, etc.). No conversion is performed — the
 //            file content is the same source the Source view shows. See
 //            issue #279.
-// PPTX export is fundamentally different — it asks the agent to convert the
-// artifact server-side, so it lives in ProjectView.tsx (not here).
 
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
@@ -731,7 +729,7 @@ export type ProjectPdfExportResult = 'desktop' | 'fallback' | 'cancelled';
 
 export async function exportProjectAsPdf(opts: {
   deck: boolean;
-  fallbackPdf: () => void;
+  fallbackPdf: () => void | Promise<void>;
   filePath: string;
   projectId: string;
   title: string;
@@ -752,8 +750,8 @@ export async function exportProjectAsPdf(opts: {
     if (body && body.ok === false) throw new Error(body.error || 'desktop PDF export failed');
     return 'desktop';
   } catch (err) {
-    console.warn('[exportProjectAsPdf] falling back to browser print:', err);
-    opts.fallbackPdf();
+    console.warn('[exportProjectAsPdf] falling back to programmatic PDF:', err);
+    await opts.fallbackPdf();
     return 'fallback';
   }
 }
@@ -832,6 +830,48 @@ export async function exportProjectAsZip(opts: {
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
     exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+  }
+}
+
+// Design system ZIP export — asks the daemon to bundle the whole brand
+// directory plus a generated SKILLS.md usage guide so the user gets a
+// self-contained, shareable package. Used by the Design Systems detail panel's
+// download button. Returns false on failure so the caller can surface an error.
+export async function downloadDesignSystemArchive(opts: {
+  designSystemId: string;
+  fallbackTitle: string;
+}): Promise<boolean> {
+  const url = `/api/design-systems/${encodeURIComponent(opts.designSystemId)}/archive`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, ''));
+    return true;
+  } catch (err) {
+    console.warn('[downloadDesignSystemArchive] failed:', err);
+    return false;
+  }
+}
+
+export async function downloadProjectArchive(opts: {
+  projectId: string;
+  fallbackTitle: string;
+  root?: string;
+}): Promise<boolean> {
+  const root = opts.root?.replace(/^\/+|\/+$/g, '') ?? '';
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${
+    root ? `?root=${encodeURIComponent(root)}` : ''
+  }`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
+    return true;
+  } catch (err) {
+    console.warn('[downloadProjectArchive] failed:', err);
+    return false;
   }
 }
 
@@ -957,7 +997,7 @@ export function openSandboxedPreviewInNewTab(
 export async function exportAsPdf(
   html: string,
   title: string,
-  opts?: SrcdocOptions & { sandboxedPreview?: boolean },
+  opts?: SrcdocOptions & { sandboxedPreview?: boolean; onProgress?: ExportProgress },
 ): Promise<void> {
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   // Generate a per-export nonce so the print-ready handshake is resistant to
@@ -993,9 +1033,19 @@ export async function exportAsPdf(
     return;
   }
 
-  // Browser fallback: wrap with allow-modals so the injected script can
-  // call window.print(), then inject the self-printing script and open a
-  // popup.
+  // Browser fallback (pure web): assemble the PDF programmatically — capture
+  // each slide (deck) or the full page through the export-capture bridge, then
+  // build it with jsPDF. No print dialog, no agent. The window.print() popup
+  // below is kept only as a last-resort fallback if the capture path throws.
+  try {
+    await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, onProgress: opts?.onProgress });
+    return;
+  } catch (err) {
+    console.warn('[exportAsPdf] programmatic PDF failed, falling back to print popup:', err);
+  }
+
+  // Last-resort: wrap with allow-modals so the injected script can call
+  // window.print(), then inject the self-printing script and open a popup.
   if (sandboxedPreview) {
     doc = buildSandboxedPreviewDocument(doc, title, { allowModals: true });
   }
@@ -1197,4 +1247,222 @@ function injectDeckPrintStylesheet(doc: string): string {
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
   return tag + doc;
+}
+
+// ===========================================================================
+// Programmatic client-side capture + PDF assembly.
+//
+// The in-iframe capture half lives in ./srcdoc.ts (injectExportCaptureBridge).
+// Here we drive it: spin up a hidden, full-resolution export iframe, collect
+// one image per slide, then assemble the output with jsPDF — entirely in the
+// browser, with no print dialog and no agent/model call. The library is
+// dynamically imported so it stays out of the
+// main bundle until an export actually runs.
+// ===========================================================================
+
+export type CapturedSlide = {
+  index: number;
+  dataUrl?: string;
+  w: number;
+  h: number;
+  notes?: string;
+};
+
+/** Progress callback: `(slidesDone, totalSlides)`. */
+export type ExportProgress = (done: number, total: number) => void;
+
+function delayMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForIframeWindow(iframe: HTMLIFrameElement, timeout = 15_000): Promise<Window> {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      const win = iframe.contentWindow;
+      if (win) resolve(win);
+      else reject(new Error('export iframe window unavailable'));
+    };
+    const timer = setTimeout(finish, timeout);
+    iframe.addEventListener('load', finish, { once: true });
+  });
+}
+
+type CaptureRequest = {
+  id: string;
+  mode: 'image';
+  deck: boolean;
+  single?: boolean;
+  delay: number;
+};
+
+/**
+ * Drive the in-iframe export-capture bridge for one window, invoking `onSlide`
+ * for each captured slide. Resolves on the bridge's `done`, rejects on its
+ * `error` or an inactivity timeout (so a wedged capture never hangs forever).
+ */
+function runExportCapture(
+  win: Window,
+  req: CaptureRequest,
+  onSlide: (slide: CapturedSlide, total: number) => void,
+  timeoutMs = 120_000,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    let lastActivity = Date.now();
+    const cleanup = () => {
+      window.removeEventListener('message', onMsg);
+      clearInterval(watchdog);
+    };
+    function onMsg(ev: MessageEvent) {
+      if (ev.source !== win) return;
+      const d = ev.data as {
+        type?: string; id?: string; index?: number; total?: number;
+        dataUrl?: string; w?: number; h?: number;
+        notes?: string; error?: string;
+      } | null;
+      if (!d || d.id !== req.id) return;
+      if (d.type === 'od:export-capture:slide') {
+        lastActivity = Date.now();
+        onSlide(
+          {
+            index: d.index ?? 0,
+            dataUrl: d.dataUrl,
+            w: d.w ?? 0,
+            h: d.h ?? 0,
+            notes: typeof d.notes === 'string' ? d.notes : '',
+          },
+          d.total ?? 1,
+        );
+      } else if (d.type === 'od:export-capture:done') {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve();
+      } else if (d.type === 'od:export-capture:error') {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        reject(new Error(String(d.error || 'export capture failed')));
+      }
+    }
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastActivity > timeoutMs) {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        reject(new Error('export capture timed out'));
+      }
+    }, 2_000);
+    window.addEventListener('message', onMsg);
+    try {
+      win.postMessage({ type: 'od:export-capture', ...req }, '*');
+    } catch (err) {
+      finished = true;
+      cleanup();
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+/**
+ * Capture every slide of a deck (or the full page, for a non-deck artifact) by
+ * rendering the HTML in a hidden, full-resolution export iframe and driving the
+ * export-capture bridge. Returns the slides ordered by index.
+ */
+async function captureArtifactSlides(
+  html: string,
+  opts: {
+    deck: boolean;
+    mode: 'image';
+    width?: number;
+    height?: number;
+    onProgress?: ExportProgress;
+  },
+): Promise<CapturedSlide[]> {
+  const width = opts.width ?? (opts.deck ? 1920 : 1440);
+  const height = opts.height ?? (opts.deck ? 1080 : 900);
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('sandbox', 'allow-scripts');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.setAttribute('tabindex', '-1');
+  iframe.style.cssText = `position:fixed;left:-100000px;top:0;width:${width}px;height:${height}px;border:0;background:#fff;`;
+  iframe.srcdoc = buildSrcdoc(html, { deck: opts.deck });
+  document.body.appendChild(iframe);
+
+  const slides: CapturedSlide[] = [];
+  try {
+    const win = await waitForIframeWindow(iframe);
+    // Give the deck bridge time to fit fixed-canvas (transform: scale) layouts
+    // to the iframe before the first capture.
+    await delayMs(opts.deck ? 600 : 150);
+    await runExportCapture(
+      win,
+      {
+        id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        mode: opts.mode,
+        deck: opts.deck,
+        delay: 350,
+      },
+      (slide, total) => {
+        slides.push(slide);
+        opts.onProgress?.(slides.length, total);
+      },
+      45_000,
+    );
+  } finally {
+    iframe.remove();
+  }
+  slides.sort((a, b) => a.index - b.index);
+  return slides;
+}
+
+/** Programmatic, client-side PDF: image-per-slide (deck) or paginated full page. */
+export async function exportArtifactAsPdf(
+  html: string,
+  title: string,
+  opts: { deck: boolean; onProgress?: ExportProgress },
+): Promise<void> {
+  const slides = await captureArtifactSlides(html, {
+    deck: opts.deck,
+    mode: 'image',
+    onProgress: opts.onProgress,
+  });
+  const images = slides.filter((s) => s.dataUrl && s.w > 0 && s.h > 0);
+  if (!images.length) throw new Error('Nothing was captured for PDF export');
+
+  const { jsPDF } = await import('jspdf');
+  const filename = `${safeFilename(title, 'artifact')}.pdf`;
+
+  if (opts.deck) {
+    const first = images[0]!;
+    const pdf = new jsPDF({
+      orientation: first.w >= first.h ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [first.w, first.h],
+      compress: true,
+    });
+    images.forEach((s, i) => {
+      if (i > 0) pdf.addPage([s.w, s.h], s.w >= s.h ? 'landscape' : 'portrait');
+      pdf.addImage(s.dataUrl!, 'PNG', 0, 0, s.w, s.h);
+    });
+    triggerDownload(pdf.output('blob'), filename);
+    return;
+  }
+
+  // Non-deck: slice the tall full-page capture into A4-proportioned pages.
+  const img = images[0]!;
+  const pageW = img.w;
+  const pageH = Math.max(1, Math.round(pageW * Math.SQRT2)); // A4 portrait ≈ 1:1.414
+  const pages = Math.max(1, Math.ceil(img.h / pageH));
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [pageW, pageH], compress: true });
+  for (let p = 0; p < pages; p++) {
+    if (p > 0) pdf.addPage([pageW, pageH], 'portrait');
+    pdf.addImage(img.dataUrl!, 'PNG', 0, -p * pageH, img.w, img.h);
+  }
+  triggerDownload(pdf.output('blob'), filename);
 }

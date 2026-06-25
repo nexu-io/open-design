@@ -7,6 +7,8 @@ import {
   buildDesignManifestContent,
   downloadImageDataUrl,
   buildSandboxedPreviewDocument,
+  downloadDesignSystemArchive,
+  downloadProjectArchive,
   exportAsImage,
   exportAsMd,
   exportAsPdf,
@@ -467,6 +469,115 @@ describe('exportProjectAsHtml', () => {
 
     expect(capturedFilename).toBe('Fallback.html');
     expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
+  });
+});
+
+describe('downloadDesignSystemArchive', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('fetches the design-system archive endpoint and downloads the daemon-named zip', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('PKzip-bytes', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename=\"Acme.zip\"; filename*=UTF-8''Acme.zip",
+      },
+    })));
+
+    const ok = await downloadDesignSystemArchive({
+      designSystemId: 'user:acme brand',
+      fallbackTitle: 'Acme Brand',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/design-systems/user%3Aacme%20brand/archive');
+    expect(capturedFilename).toBe('Acme.zip');
+    expect(await capturedBlob!.text()).toContain('zip-bytes');
+  });
+
+  it('returns false and does not download when the request fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
+
+    const ok = await downloadDesignSystemArchive({
+      designSystemId: 'user:missing',
+      fallbackTitle: 'Missing',
+    });
+
+    expect(ok).toBe(false);
+    expect(capturedBlob).toBeUndefined();
+  });
+
+  it('downloads the backing project archive with the daemon filename', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('project-zip', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename=\"Project.zip\"; filename*=UTF-8''Project.zip",
+      },
+    })));
+
+    const ok = await downloadProjectArchive({
+      projectId: 'project 123',
+      fallbackTitle: 'Fallback Project',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project%20123/archive');
+    expect(capturedFilename).toBe('Project.zip');
+    expect(await capturedBlob!.text()).toContain('project-zip');
+  });
+
+  it('passes an optional root when downloading a project subfolder archive', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('folder-zip', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+      },
+    })));
+
+    const ok = await downloadProjectArchive({
+      projectId: 'project-1',
+      fallbackTitle: 'Fallback Project',
+      root: '/system/',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=system');
+    expect(capturedFilename).toBe('system.zip');
   });
 });
 

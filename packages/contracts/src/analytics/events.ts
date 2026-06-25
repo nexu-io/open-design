@@ -35,6 +35,11 @@ export type AnalyticsEventName =
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_apply_observed'
+  // Packaged startup failure — emitted by the packaged MAIN process (not the
+  // daemon) when daemon/web sidecars die before reporting status, i.e. the
+  // pre-daemon crash class that produces zero telemetry today (issue #4638).
+  // A `captureSafety`-class stability event; see apps/packaged/src/startup-telemetry.ts.
+  | 'packaged_runtime_failed'
   // File manager
   | 'file_upload_result'
   // Artifact
@@ -231,7 +236,6 @@ export type TrackingArtifactKind =
 // tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).
 export type TrackingExportFormat =
   | 'pdf'
-  | 'pptx'
   | 'zip'
   | 'html'
   | 'image'
@@ -467,8 +471,8 @@ export type TrackingChatPanelPageViewSource =
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
 // welcome flow. The current first-run flow is Connect → About you →
-// Newsletter → Brand extraction; the design-system and generation literals
-// remain in the contract for historical rows and a future reintroduction.
+// Newsletter → Design system CTA. The legacy brand-extraction literal remains
+// in the contract for historical rows only.
 // Each step's `step_index` / `step_name` must match the enum pairs below.
 // `onboarding_session_id` is generated once per session so dashboards can
 // stitch the funnel.
@@ -476,8 +480,9 @@ export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
   | 'newsletter'
-  | 'brand'
   | 'design_system'
+  /** @deprecated legacy onboarding final-step area; use `design_system`. */
+  | 'brand'
   | 'generation_progress';
 
 // Mixed string enum: numeric steps render as the strings `'1' | '2' | '3' | '4'`
@@ -488,8 +493,9 @@ export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
   | 'newsletter'
-  | 'brand_extract'
   | 'design_system'
+  /** @deprecated legacy onboarding final-step name; use `design_system`. */
+  | 'brand_extract'
   | 'generation';
 
 // How the user chose to connect to a model provider. `amr_cloud` is the
@@ -502,7 +508,7 @@ export type TrackingOnboardingStepName =
 export type TrackingOnboardingRuntimeType = TrackingRuntimeType;
 
 // What kind of source material the user pinned in the design-system
-// step. `text` covers the brand description textarea; `mixed` is
+// step. `text` covers the freeform design-system description; `mixed` is
 // reserved for batches that combined more than one type.
 export type TrackingOnboardingSourceType =
   | 'text'
@@ -621,8 +627,8 @@ export type TrackingOnboardingClickAction =
 // ride along on About-you clicks AND on the `about_you_submit` snapshot
 // click. `source_type`/`has_brand_description`/`source_count` only on
 // Design-system source clicks. `runtime_type`/`is_recommended` only on
-// Connect clicks. Doc explicitly forbids brand text, GitHub URL, file
-// name, or path values — all enum + bool + count, no free-text.
+// Connect clicks. Doc explicitly forbids freeform design-system description,
+// GitHub URL, file name, or path values — all enum + bool + count, no free-text.
 export interface OnboardingClickProps {
   page_name: 'onboarding';
   area: TrackingOnboardingArea;
@@ -727,6 +733,7 @@ export type TrackingDesignSystemsEntryFrom =
 export type TrackingDesignSystemOrigin =
   | 'onboarding'
   | 'manual_create'
+  | 'source_url'
   | 'github_repo'
   | 'local_code'
   | 'fig'
@@ -1152,6 +1159,12 @@ export interface HomeChatComposerClickProps {
     // composer's `element: 'attachment'` so the same dashboard counts
     // "user opened the file picker" across both surfaces.
     | 'attachment'
+    // Opening the "Import from library" picker from the home composer's "+"
+    // menu. Mirrors the chat_panel composer's `element: 'library'`.
+    | 'library'
+    // Opening the "Import from Figma" modal from the home composer's "+" menu
+    // (offline .fig decode). Mirrors the chat_panel composer's `figma_import`.
+    | 'figma_import'
     // Local-storage / working-dir picker under the home composer; `task_chip`
     // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
     | 'working_dir'
@@ -1173,6 +1186,11 @@ export interface HomeChatComposerClickProps {
     // task type; for plugin-preset cards `plugin_id` / `plugin_type` identify
     // the preset. The raw prompt text is never sent (free text / PII rule).
     | 'example_prompt'
+    // The "Open as project" action on an example card — one-click remix that
+    // creates and enters a project seeded from the example instead of only
+    // loading it into the composer. Same `chip_id` / `plugin_id` / `plugin_type`
+    // attribution as `example_prompt`.
+    | 'example_open_project'
     // The "+" menu on the home composer (same control as the in-project
     // composer's `plus_*` events): opening it, inserting a
     // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
@@ -1545,7 +1563,8 @@ export interface DesignSystemsCreateClickProps {
   page_name: 'design_systems';
   area: 'design_system_create';
   element:
-    | 'github_repo_add'
+    | 'source_url_add'
+    | 'figma_url_add'
     | 'show_access_methods'
     | 'browse_folder'
     | 'upload_fig'
@@ -1628,6 +1647,10 @@ export interface ChatPanelClickProps {
     | 'chat_input'
     | 'composer_settings'
     | 'attachment'
+    | 'library'
+    // Opening the "Import from Figma" modal from the chat composer's "+" menu
+    // (offline .fig decode). Sits beside `library` as a sibling import source.
+    | 'figma_import'
     | 'send'
     | 'mention_popover_trigger'
     | 'resources_popover_trigger';
@@ -1845,8 +1868,11 @@ export interface FileManagerClickProps {
   area: 'file_manager';
   element:
     | 'new_sketch'
+    | 'new_browser'
+    | 'create_design_system'
     | 'paste'
     | 'upload'
+    | 'library'
     | 'select_all_on_page'
     | 'select_everything'
     | 'download_as_zip'
@@ -2720,6 +2746,18 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   uncached_input_tokens?: number;
   estimated_context_tokens?: number;
   cache_hit_ratio?: number;
+  // Cache-hit of the turn's FIRST model call (vs `cache_hit_ratio`, which is the
+  // last/aggregate call). The first call is the session-reuse signal: within a
+  // turn, later calls re-read the growing cached prefix and inflate the
+  // aggregate regardless of reuse. Per-call-usage agents (claude/opencode/
+  // codebuddy/pi) source this from the stream; codex from its rollout.
+  first_call_input_tokens?: number;
+  first_call_cache_read_input_tokens?: number;
+  first_call_cache_hit_ratio?: number;
+  // Whether this run is a non-first turn (a prior completed assistant turn
+  // exists). Slice first_call_cache_hit_ratio by this to isolate the turns
+  // where session reuse applies.
+  is_followup_turn?: boolean;
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
@@ -3056,9 +3094,44 @@ export interface SettingsConnectorAuthResultProps {
   error_code?: string;
 }
 
+// ---- Packaged startup failure --------------------------------------------
+
+export type PackagedStartupFailureKind =
+  | 'daemon-start'
+  | 'web-start'
+  | 'path-access'
+  | 'unknown';
+
+// Event-specific props for `packaged_runtime_failed`. Emitted by the packaged
+// MAIN process (apps/packaged/src/startup-telemetry.ts) over a direct PostHog
+// capture when daemon/web sidecars die before reporting status — the pre-daemon
+// crash class that otherwise produces no telemetry (issue #4638). The shared
+// safety-event envelope (event_schema_version / env / device_id / client_type /
+// capture_source / $insert_id / $os) is stamped at emit time, mirroring
+// `captureSafety` in apps/daemon/src/analytics.ts; these are the event-specific
+// fields on top of it.
+export interface PackagedRuntimeFailedProps {
+  failure_kind: PackagedStartupFailureKind;
+  exit_code: number | null;
+  signal: string | null;
+  error_name: string;
+  // Pulled from the dead sidecar's log tail (e.g. `ERR_MODULE_NOT_FOUND`).
+  error_code: string | null;
+  // The unresolved module when error_code is a module-resolution failure
+  // (e.g. `better-sqlite3` for #4638).
+  missing_module: string | null;
+  // Scrubbed of the user's home dir before send.
+  log_path: string | null;
+  app_version: string | null;
+  namespace: string;
+  source: string;
+  platform: string;
+}
+
 // ---- Discriminated union of all event payloads ---------------------------
 
 export type AnalyticsEventPayload =
+  | { event: 'packaged_runtime_failed'; props: PackagedRuntimeFailedProps }
   | { event: 'page_view'; props: PageViewProps }
   | { event: 'ui_click'; props: UiClickProps }
   | { event: 'surface_view'; props: SurfaceViewProps }

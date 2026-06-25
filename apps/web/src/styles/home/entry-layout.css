@@ -14,21 +14,18 @@
 }
 
 .entry-shell--onboarding {
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
-  /* 填满标签栏下方的可用区（workspace-shell__body），而非 100vh：
-     onboarding 在标签栏（约 36px）下方，用 100vh 会整体高出一个标签栏的高度，
-     导致底部（含版权 footer）被窗口底边裁掉。 */
-  min-height: 100%;
-  height: 100%;
+  min-height: 100vh;
   padding: 0;
   background: var(--bg);
 }
 
 .entry-onboarding-modal {
   width: 100%;
-  height: 100%;
+  height: 100vh;
   overflow: auto;
   border-radius: 0;
   background: var(--bg);
@@ -753,6 +750,9 @@
   padding: 12px 16px 0;
   background: var(--bg);
   isolation: isolate;
+}
+.entry-main__topbar:has(.entry-settings-menu__popover) {
+  z-index: 1900;
 }
 .entry-main__topbar::before {
   content: '';
@@ -2214,6 +2214,19 @@
   transform: translateY(-1px);
 }
 
+.onboarding-view__primary:disabled,
+.onboarding-view__secondary:disabled,
+.onboarding-view__ghost:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.onboarding-view__primary:hover:disabled,
+.onboarding-view__secondary:hover:disabled,
+.onboarding-view__ghost:hover:disabled {
+  transform: none;
+}
+
 .onboarding-view__primary:hover:not(:disabled) {
   color: var(--accent-contrast, #fff);
   background: var(--accent-hover);
@@ -3256,16 +3269,30 @@
   margin-top: 16px;
 }
 
-.onboarding-view__brand-action-row .onboarding-view__mini-button {
-  grid-column: 2;
-  width: 360px;
-  max-width: 100%;
-  min-height: 44px;
-  padding: 0 28px;
-  font-size: 13px;
+.onboarding-view__brand-action-statuses {
+  display: grid;
+  grid-column: 1;
+  justify-self: start;
+  gap: 4px;
+  min-width: 0;
 }
 
-.onboarding-view__brand-action-row .onboarding-view__secondary {
+.onboarding-view__brand-action-statuses:empty {
+  display: none;
+}
+
+.onboarding-view__brand-action-statuses .onboarding-view__action-status {
+  margin-right: 0;
+}
+
+.onboarding-view__brand-action-group {
+  display: inline-flex;
+  grid-column: 2;
+  justify-self: center;
+  gap: 10px;
+}
+
+.onboarding-view__brand-finish {
   grid-column: 3;
   justify-self: end;
 }
@@ -3512,6 +3539,256 @@
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Final onboarding step: current branch keeps a design-system CTA while the
+   preceding onboarding layout stays aligned with origin/main. */
+.onboarding-view__build {
+  justify-self: center;
+  width: min(980px, 100%);
+  max-width: none;
+  gap: 24px;
+}
+
+.onboarding-view__build-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: center;
+  align-self: center;
+  padding: 5px 11px 5px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.onboarding-view__build-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.onboarding-view__build-copy {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+}
+
+.onboarding-view__build-head {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-view__build-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 42px;
+  line-height: 1.03;
+  letter-spacing: 0;
+}
+
+.onboarding-view__build-head p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-view__build-benefits {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-view__build-benefits > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+}
+
+.onboarding-view__build-benefits svg {
+  grid-row: 1 / span 2;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.onboarding-view__build-benefits strong {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.onboarding-view__build-benefits span {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.onboarding-view__build-preview {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.onboarding-view__build-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.onboarding-view__build-preview-head span {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--red);
+}
+
+.onboarding-view__build-preview-head span:nth-child(2) {
+  background: var(--amber);
+}
+
+.onboarding-view__build-preview-head span:nth-child(3) {
+  background: var(--green);
+}
+
+.onboarding-view__build-preview-head strong {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.onboarding-view__build-preview-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.onboarding-view__build-preview-body small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.onboarding-view__build-preview-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.onboarding-view__build-preview-swatches i {
+  height: 44px;
+  border-radius: 10px;
+  background: var(--accent);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(2) {
+  background: var(--green);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(3) {
+  background: var(--amber);
+}
+
+.onboarding-view__build-preview-swatches i:nth-child(4) {
+  background: var(--red);
+}
+
+.onboarding-view__build-preview-type {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+  color: var(--text-strong);
+}
+
+.onboarding-view__build-preview-type strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.onboarding-view__build-preview-type span {
+  font-size: 26px;
+  font-weight: 760;
+}
+
+.onboarding-view__build-preview-type em {
+  color: var(--text-muted);
+  font-size: 16px;
+  font-style: normal;
+}
+
+.onboarding-view__build-preview-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.onboarding-view__build-preview-lines span {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
+
+.onboarding-view__build-preview-lines span:nth-child(2) {
+  width: 82%;
+}
+
+.onboarding-view__build-preview-lines span:nth-child(3) {
+  width: 58%;
+}
+
+.onboarding-view__build-chips {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-view__build-chips li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  background: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.onboarding-view__build-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.onboarding-view__build-back {
+  margin-inline-end: auto;
+}
+
+
 
 /* ============================================================
    GitHub star pill — sticky top-bar CTA.
@@ -3972,6 +4249,31 @@
   }
 }
 
+@media (max-width: 720px) {
+  .onboarding-view__brand-action-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .onboarding-view__brand-action-statuses,
+  .onboarding-view__brand-action-group,
+  .onboarding-view__brand-finish {
+    grid-column: 1;
+  }
+
+  .onboarding-view__brand-action-statuses {
+    justify-self: stretch;
+  }
+
+  .onboarding-view__brand-action-group {
+    justify-self: center;
+  }
+
+  .onboarding-view__brand-finish {
+    justify-self: stretch;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-view__skeleton-line,
   .onboarding-view__skeleton-model-label,
@@ -3979,5 +4281,48 @@
     animation: none;
     background:
       color-mix(in srgb, var(--bg-muted) 82%, var(--bg-panel));
+  }
+}
+
+@media (max-width: 900px) {
+  .onboarding-view__build {
+    width: min(680px, 100%);
+  }
+
+  .onboarding-view__build-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .onboarding-view__build-head {
+    text-align: center;
+  }
+
+  .onboarding-view__build-head p {
+    margin: 0 auto;
+  }
+
+  .onboarding-view__build-preview {
+    width: min(360px, 100%);
+    justify-self: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .onboarding-view__build-head h2 {
+    font-size: 30px;
+  }
+
+  .onboarding-view__build-actions {
+    justify-content: stretch;
+  }
+
+  .onboarding-view__build-back {
+    width: 100%;
+    margin-inline-end: 0;
+  }
+
+  .onboarding-view__build-actions .onboarding-view__secondary,
+  .onboarding-view__build-actions .onboarding-view__primary {
+    flex: 1 1 180px;
   }
 }

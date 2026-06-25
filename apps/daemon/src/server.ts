@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -116,6 +116,7 @@ export {
   bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
   looksLikeGeminiJsonEventStream,
+  resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
   resolveChatRunInactivityTimeoutMs,
@@ -204,6 +205,7 @@ import {
   resolveSandboxRuntimeConfig,
 } from './sandbox-mode.js';
 import {
+  buildUserDesignSystemArchive,
   createUserDesignSystem,
   deleteUserDesignSystem,
   digestDesignSystemContext,
@@ -214,6 +216,7 @@ import {
   listUserDesignSystemRevisions,
   readDesignSystem,
   readDesignSystemPackageInfo,
+  readDesignSystemStaticFile,
   readUserDesignSystemFile,
   resolveDesignSystemAssets,
   updateUserDesignSystem,
@@ -222,6 +225,7 @@ import {
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
+import { registerBrandRoutes } from './brand-routes.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -259,7 +263,12 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
-import { composeMemoryBody, extractFromMessage } from './memory.js';
+import {
+  composeMemoryBody,
+  extractFromMessage,
+  listActiveRuleEntries,
+  readMemoryConfig,
+} from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -295,6 +304,7 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
+import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
@@ -343,7 +353,7 @@ import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
-import { buildDesktopPdfExportInput } from './pdf-export.js';
+import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
@@ -427,6 +437,7 @@ import {
   resolveProjectDir,
   SandboxImportedProjectError,
   sanitizeName,
+  sanitizePath,
   searchProjectFiles,
   resolveProjectDir,
   resolveProjectFilePath,
@@ -545,7 +556,6 @@ import {
 } from './routes/static-resource.js';
 export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
-import { registerBrandRoutes } from './brand-routes.js';
 import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
@@ -578,7 +588,14 @@ import {
   configuredAllowedOrigins,
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
+  isZeroConfigClipperLibraryRequest,
 } from './origin-validation.js';
+import { registerLibraryRoutes } from './routes/library.js';
+import {
+  libraryExtensionAllowedOrigins,
+  seedLibraryExtensionOrigins,
+} from './library-tokens.js';
+import { listLibraryTokenOrigins } from './library-store.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
@@ -804,9 +821,11 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 // read path so project-membership, size, and CSP guards cannot be bypassed.
 const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
-const BRANDS_DIR = path.join(RUNTIME_DATA_DIR, 'brands');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
+// Brand metadata (brand.json + meta.json per brand) lives here; each brand
+// also registers a `user:<id>` design system under USER_DESIGN_SYSTEMS_DIR.
+const BRANDS_DIR = path.join(RUNTIME_DATA_DIR, 'brands');
 const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
 // Disk cache + same-origin proxy for external preview media (cross-border CDN
 // images/videos referenced by plugin example.html). See plugin-asset-cache.ts.
@@ -831,9 +850,12 @@ const ALL_SKILL_LIKE_ROOTS = [
   SKILLS_DIR,
   DESIGN_TEMPLATES_DIR,
 ];
+// Global OD Library data root — owned, content-addressed assets captured by
+// the clipper / `od library import`. Derived from RUNTIME_DATA_DIR per the
+// daemon data directory contract.
+const LIBRARY_DIR = path.join(RUNTIME_DATA_DIR, 'library');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-fs.mkdirSync(BRANDS_DIR, { recursive: true });
-for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot]) {
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, BRANDS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot, LIBRARY_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
@@ -2978,6 +3000,14 @@ const pluginUpload = multer({
   },
 });
 
+// Figma `.fig` import — memory storage so the offline decoder gets the raw
+// bytes without a temp-file round-trip. The decoder unzips + kiwi-decodes
+// in-process and writes the snapshot under the project cwd.
+const figmaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },  // community kits run large
+});
+
 const pluginShareTaskStore = createPluginShareTaskStore({
   randomUUID,
   execCommandViaLoginShell,
@@ -3266,6 +3296,7 @@ export function createSseResponse(
 }
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
 // `source` from the runtime context when building the diagnostics export.
@@ -3279,6 +3310,7 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
   port?: number;
@@ -3298,6 +3330,7 @@ export async function startServer({
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
+  desktopArtifactExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
@@ -3330,6 +3363,19 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
+  // Clipper page captures are self-contained HTML with inlined images plus a
+  // Figma IR, which for an image-heavy site (The Economist, news front pages)
+  // runs to tens of MB — far past a normal JSON body. Give the ingest route a
+  // dedicated generous limit so a full-page capture doesn't 413; the rest of the
+  // API stays at the conservative 4mb. Registered first so this parser claims
+  // the ingest body before the global one (express.json is a no-op once a body
+  // has already been read).
+  app.use('/api/library/ingest', express.json({ limit: '128mb' }));
+  // Brand extract-from-html carries the full rendered page DOM (+ collected CSS)
+  // the web read out of the in-app browser tab after the user cleared an anti-bot
+  // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
+  // (registered before the global parser so it claims the body first).
+  app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
@@ -3389,6 +3435,7 @@ export async function startServer({
       listDesignSystems,
       readDesignSystem,
       readDesignSystemPackageInfo,
+      readDesignSystemStaticFile,
       listUserDesignSystemFiles,
       readUserDesignSystemFile,
       linkUserDesignSystemProject,
@@ -3414,6 +3461,7 @@ export async function startServer({
     listAllSkills,
     readAvailableDesignSystem,
     readAvailableDesignSystemPackageInfo,
+    readAvailableDesignSystemStaticFile,
     readDesignSystemWorkspaceTextFile,
     validateProjectDesignSystemId,
     validateProjectSkillId,
@@ -3440,6 +3488,18 @@ export async function startServer({
     // the structured error shape and preflight headers for preview embeds.
     if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
 
+    // Zero-config browser extension: the OD Clipper only needs a liveness probe
+    // plus POST /api/library/ingest. A web page cannot forge a
+    // chrome-extension:// (or moz-extension://) origin, and the daemon is
+    // loopback-bound, so these two bootstrap routes are auto-trusted without a
+    // pairing handshake. Library read routes still fall through to the normal
+    // origin guard.
+    // NOTE: `req.path` here is mount-relative (the `/api` prefix is stripped),
+    // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
+    if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
+      return next();
+    }
+
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
@@ -3461,7 +3521,10 @@ export async function startServer({
     }
 
     const ports = allowedBrowserPorts(resolvedPort);
-    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
+    // Paired browser-extension origins are persisted in library_tokens and
+    // seeded into this in-memory allowlist at boot / on pairing.
+    const allowedOrigins = [...extraAllowedOrigins, ...libraryExtensionAllowedOrigins()];
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, allowedOrigins)) {
       if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
       }
@@ -3469,6 +3532,14 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  // Restore paired browser-extension origins into the in-memory allowlist the
+  // /api origin middleware above consults, so a paired clipper survives daemon
+  // restarts without re-pairing.
+  try {
+    seedLibraryExtensionOrigins(listLibraryTokenOrigins(db));
+  } catch {
+    // best-effort: a fresh db with no library_tokens is fine
+  }
   const pluginInstallation = createPluginInstallationHelpers({
     db,
     installFromLocalFolder,
@@ -3779,6 +3850,7 @@ export async function startServer({
     PROJECT_ROOT,
     PROJECTS_DIR,
     ARTIFACTS_DIR,
+    LIBRARY_DIR,
     BRANDS_DIR,
     RUNTIME_DATA_DIR,
     RUNTIME_DATA_DIR_CANONICAL,
@@ -3885,6 +3957,7 @@ export async function startServer({
     deleteProjectFile,
     writeProjectFile,
     sanitizeName,
+    sanitizePath,
     listTabs,
     setTabs,
   };
@@ -3915,7 +3988,9 @@ export async function startServer({
     buildProjectArchive,
     buildBatchArchive,
     buildDesktopPdfExportInput,
+    buildDesktopArtifactExportInput,
     desktopPdfExporter,
+    desktopArtifactExporter,
     daemonUrlRef,
     sanitizeArchiveFilename,
   };
@@ -4056,6 +4131,56 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
   });
+  // OD Library — global asset registry (clipper ingest, grid, pairing, apply).
+  registerLibraryRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+    conversations: conversationDeps,
+    auth: authDeps,
+  });
+  app.post('/api/projects/:id/figma/import', (req, res) => {
+    figmaUpload.single('file')(req, res, async (err) => {
+      if (err) return sendMulterError(res, err);
+      try {
+        const project = getProject(db, req.params.id);
+        if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const figmaUrl = typeof body.figmaUrl === 'string' ? body.figmaUrl.trim() : '';
+        if (!req.file) {
+          if (figmaUrl) {
+            return sendApiError(
+              res,
+              409,
+              'FIGMA_URL_NEEDS_MIGRATION',
+              'Figma URL imports must run through the Figma migration flow.',
+              { details: { figmaUrl } },
+            );
+          }
+          return sendApiError(res, 400, 'BAD_REQUEST', 'file is required');
+        }
+
+        const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+        const notes = typeof body.notes === 'string' ? body.notes : undefined;
+        const result = await importFigmaFromBytes(req.file.buffer, {
+          cwd: projectRoot,
+          label: decodeMultipartFilename(req.file.originalname || 'figma-import.fig'),
+          notes,
+        });
+        return res.json(result);
+      } catch (caught) {
+        return sendApiError(
+          res,
+          400,
+          'FIGMA_IMPORT_FAILED',
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      }
+    });
+  });
   registerSocialShareRoutes(app, { http: httpDeps });
   registerProjectRoutes(app, {
     db,
@@ -4071,6 +4196,7 @@ export async function startServer({
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
     appConfig: appConfigDeps,
+    agents: agentDeps,
     validation: validationDeps,
   });
   registerTerminalRoutes(app, {
@@ -4129,6 +4255,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
     designSystems: {
+      buildUserDesignSystemArchive,
       createUserDesignSystem,
       deleteUserDesignSystem,
       ensureUserDesignSystemWorkspaceProject,
@@ -4138,6 +4265,7 @@ export async function startServer({
       prepareDesignTokenContractRebuild,
       readAvailableDesignSystem,
       readAvailableDesignSystemPackageInfo,
+      readAvailableDesignSystemStaticFile,
       readDesignSystemWorkspaceTextFile,
       readUserDesignSystemFile,
       renderDesignSystemPreview,
@@ -4156,6 +4284,24 @@ export async function startServer({
     db,
     runs: design.runs,
     randomId,
+    resolveTranscriptAgent: async () => {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      let agentId = typeof config.agentId === 'string' && config.agentId
+        ? config.agentId
+        : null;
+      let detectedAgentName: string | null = null;
+      if (!agentId) {
+        const agents = await detectAgents(config.agentCliEnv ?? {}).catch(() => []);
+        const available = agents.find((agent) => agent.available);
+        agentId = available?.id ?? null;
+        detectedAgentName = available?.name ?? null;
+      }
+      if (!agentId) return null;
+      return {
+        agentId,
+        agentName: getAgentDef(agentId)?.name ?? detectedAgentName ?? agentId,
+      };
+    },
   });
   registerProjectArtifactRoutes(app, {
     http: httpDeps,
@@ -4771,6 +4917,24 @@ export async function startServer({
       console.warn('[memory] composeMemoryBody failed', err);
     }
 
+    // Per-hook switches for the two-loop memory feature. Read alongside the
+    // memory body so the composer can gate the PRE intent-gateway brief and
+    // the POST self-verify scorecard on the same config the settings panel
+    // writes. Read failure falls through to undefined hooks, which the
+    // composer treats as on-by-default — matching the config's default-on
+    // semantics.
+    let memoryHooks: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
+    try {
+      const memCfg = await readMemoryConfig(RUNTIME_DATA_DIR);
+      memoryHooks = {
+        profile: memCfg.profileEnabled,
+        rewrite: memCfg.rewriteEnabled,
+        verify: memCfg.verifyEnabled,
+      };
+    } catch (err) {
+      console.warn('[memory] readMemoryConfig failed', err);
+    }
+
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
     if (appConfigForPrompt?.customInstructions) {
@@ -5027,6 +5191,7 @@ export async function startServer({
       craftBody,
       craftSections,
       memoryBody,
+      memoryHooks,
       metadata,
       template,
       audioVoiceOptions,
@@ -7094,21 +7259,41 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      const memoryOptions = {
+        projectRoot: PROJECT_ROOT,
+        chatAgentId: typeof agentId === 'string' ? agentId : null,
+        chatModel: typeof safeModel === 'string' ? safeModel : null,
+      };
       void import('./memory-llm.js')
-        .then(({ extractWithLLM }) =>
-          extractWithLLM(
+        .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+          const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
             {
               userMessage: userMsg,
               assistantMessage: captured,
             },
-              {
-                projectRoot: PROJECT_ROOT,
-                chatAgentId: typeof agentId === 'string' ? agentId : null,
-                chatModel: typeof safeModel === 'string' ? safeModel : null,
-              },
-            ),
-        )
+            memoryOptions,
+          );
+          // Auto-distill any inline preview feedback (comments / highlights /
+          // drawn marks) from this turn into durable feedback + rule memory.
+          // This closes the "interaction → memory" loop automatically: the
+          // agent no longer has to propose a rule and the user no longer has
+          // to click Keep — a review turn that carried annotations mines
+          // itself in the background and writes straight to the store.
+          const annotationPass =
+            safeCommentAttachments.length > 0
+              ? distillAnnotationsToMemory(
+                  RUNTIME_DATA_DIR,
+                  {
+                    annotations: safeCommentAttachments,
+                    userMessage: userMsg,
+                    assistantMessage: captured,
+                  },
+                  memoryOptions,
+                )
+              : Promise.resolve([]);
+          return Promise.allSettled([generalPass, annotationPass]);
+        })
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
 
@@ -7764,7 +7949,7 @@ export async function startServer({
         uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
-      const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
+      const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);
       acpSession = attachAcpSession({
         child,
         prompt: composed,

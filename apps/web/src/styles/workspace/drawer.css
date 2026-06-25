@@ -1396,6 +1396,9 @@
   top: 0;
   z-index: 4;
 }
+.ws-tabs-shell:has(.entry-settings-menu__popover) {
+  z-index: 1900;
+}
 .ws-tabs-bar {
   display: flex;
   align-items: center;
@@ -1568,6 +1571,9 @@
 }
 .ws-tab.has-meta {
   max-width: 320px;
+}
+.ws-tab.browser-tab {
+  width: 110px;
 }
 .ws-tab.has-meta .ws-tab-label {
   flex: 0 1 auto;

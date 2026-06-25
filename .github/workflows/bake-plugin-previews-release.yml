@@ -1,0 +1,92 @@
+name: bake-plugin-previews-release
+
+# Release-cut full bake (spec slice 3). On a push to a release/** branch, render
+# every preview (hash-skip reuses unchanged), publish the immutable clips to R2,
+# and commit the authoritative manifest snapshot onto the release branch. The
+# manifest then flows to main via the normal non-squash release back-merge.
+#
+# Bumping BAKE_VERSION at release time is the explicit lever to refresh shared-
+# input changes (fonts / web CSS / design systems / renderer) that per-file
+# triggers cannot detect — a full sweep alone would reuse, not re-render, them.
+
+on:
+  push:
+    branches: ['release/**']
+    paths-ignore:
+      - 'data/plugin-previews/**' # our own manifest commit must not re-trigger
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # commit the authoritative manifest onto the release branch
+
+concurrency:
+  group: bake-plugin-previews-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bake:
+    name: Bake plugin previews (release cut)
+    # `push` is already limited to release/**, but `workflow_dispatch` can be run
+    # from any ref. The commit step pushes the authoritative manifest to the
+    # triggering ref with contents:write, so a dispatch on `main` would write
+    # straight to main and bypass the release back-merge/review path. Hard-gate
+    # the whole job to release branches.
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.PREVIEW_BAKE_TOKEN || github.token }}
+
+      - name: Loop guard — skip the bake bot's own manifest commit
+        id: guard
+        # Belt-and-suspenders with paths-ignore above: also skip when the head
+        # commit was authored by the bake bot, so the manifest writeback cannot
+        # re-trigger this workflow.
+        run: |
+          AUTHOR="$(git log -1 --format='%ae')"
+          echo "head commit author: $AUTHOR"
+          if [ "$AUTHOR" = "bot@open-design.ai" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "head commit is the bake bot's manifest commit — skipping to break the loop"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup workspace
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        uses: ./.github/actions/setup-workspace
+
+      - name: Render previews + publish clips to R2
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        uses: ./.github/actions/bake-previews
+        with:
+          upload: 'true'
+          r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
+          r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
+          r2-bucket: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
+          r2-endpoint: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
+
+      - name: Commit the authoritative manifest onto the release branch
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        run: |
+          OLD=data/plugin-previews/manifest.json
+          NEW=.tmp/plugin-previews/manifest.json
+          # Capture on its own line so `set -e` surfaces a helper error (exit 2)
+          # rather than command substitution swallowing it into the test.
+          diff_result="$(node scripts/plugin-previews-diff.mjs "$OLD" "$NEW")"
+          case "$diff_result" in
+            changed) ;;
+            unchanged) echo "previews unchanged — nothing to commit"; exit 0 ;;
+            *) echo "unexpected diff result: '$diff_result'" >&2; exit 1 ;;
+          esac
+          cp "$NEW" "$OLD"
+          git config user.name "open-design-bot"
+          git config user.email "bot@open-design.ai"
+          git add "$OLD"
+          git commit -m "chore(plugin-previews): refresh baked preview manifest (release cut)"
+          git push origin "HEAD:${GITHUB_REF#refs/heads/}"
