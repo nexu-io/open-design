@@ -566,15 +566,25 @@ export function InlineModelSwitcher({
   ]);
 
   const suggestedApiModelIds = useMemo(
-    () =>
-      Array.from(
+    () => {
+      if (credentialSource === 'deployment') {
+        const defaultModel = deploymentProviderConfig?.defaultModel?.trim();
+        return defaultModel ? [defaultModel] : [];
+      }
+      return Array.from(
         new Set(
           providerForProtocol?.models?.length
             ? providerForProtocol.models
             : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
         ),
-      ),
-    [apiProtocol, providerForProtocol],
+      );
+    },
+    [
+      apiProtocol,
+      credentialSource,
+      deploymentProviderConfig?.defaultModel,
+      providerForProtocol,
+    ],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),

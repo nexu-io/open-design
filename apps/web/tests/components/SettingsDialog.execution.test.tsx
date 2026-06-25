@@ -96,7 +96,13 @@ import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
-import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
+import type {
+  AgentInfo,
+  AppConfig,
+  AppVersionInfo,
+  DeploymentProviderConfig,
+  ProviderModelOption,
+} from '../../src/types';
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -231,6 +237,8 @@ function renderSettingsDialog(
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
     welcome?: boolean;
+    deploymentProviderConfig?: DeploymentProviderConfig | null;
+    providerModelsCache?: Record<string, ProviderModelOption[]>;
   } = {},
 ) {
   const onPersist = vi.fn();
@@ -246,6 +254,8 @@ function renderSettingsDialog(
       appVersionInfo={options.appVersionInfo ?? null}
       initialSection={options.initialSection ?? 'execution'}
       welcome={options.welcome}
+      deploymentProviderConfig={options.deploymentProviderConfig}
+      providerModelsCache={options.providerModelsCache}
       onPersist={onPersist}
       onPersistComposioKey={onPersistComposioKey}
       onClose={onClose}
@@ -499,6 +509,57 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
     expect(request).not.toHaveProperty('apiKey');
     expect(request).not.toHaveProperty('baseUrl');
+  });
+
+  it('does not add stock OpenAI presets to deployment-sourced model lists', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'tenant-special-a', label: 'Tenant Special A' },
+        { id: 'tenant-special-b', label: 'Tenant Special B' },
+      ],
+    });
+    renderSettingsDialog(
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'tenant-special-a',
+        apiProviderBaseUrl: null,
+      },
+      {
+        deploymentProviderConfig: {
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-default',
+        },
+      },
+    );
+
+    expect(await screen.findByText('✓ Loaded 2 models from your account.')).toBeTruthy();
+    const modelPicker = screen.getByRole('combobox', { name: 'Model' });
+    fireEvent.click(modelPicker);
+
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    const optionText = within(modelPopover)
+      .getAllByRole('option')
+      .map((option) => option.textContent?.trim());
+    expect(optionText).toEqual([
+      'Tenant Special A (tenant-special-a) · From your account',
+      'Tenant Special B (tenant-special-b) · From your account',
+      'tenant-default · Suggested',
+      'Custom (type below)…',
+    ]);
+    expect(optionText.some((text) => text?.includes('gpt-4o'))).toBe(false);
+    expect(optionText.some((text) => text?.includes('o3'))).toBe(false);
   });
 
   it('keeps BYOK file-editing limits discoverable from the provider heading (issue #1106)', () => {

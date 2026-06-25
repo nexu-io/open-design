@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -78,25 +78,13 @@ const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
   'aihubmix',
 ]);
 
-function deploymentProxyOperationDigest(proxyBody: Partial<ProxyStreamRequest>): string {
-  const stableInput = JSON.stringify({
-    model: proxyBody.model,
-    systemPrompt: proxyBody.systemPrompt,
-    messages: proxyBody.messages,
-    maxTokens: proxyBody.maxTokens,
-    apiVersion: proxyBody.apiVersion,
-  });
-  return createHash('sha256').update(stableInput).digest('hex').slice(0, 16);
-}
-
 function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>): Record<string, unknown> {
   const body = proxyBody as Record<string, unknown>;
-  const digest = deploymentProxyOperationDigest(proxyBody);
   return {
     ...body,
     projectId: body.projectId ?? 'proxy',
-    providerRunId: body.providerRunId ?? `proxy:${digest}`,
-    providerOperationId: body.providerOperationId ?? `chat:${digest}`,
+    providerRunId: body.providerRunId ?? `proxy:${randomUUID()}`,
+    providerOperationId: body.providerOperationId ?? `chat:${randomUUID()}`,
     providerRunPurpose: body.providerRunPurpose ?? 'chat-completion',
   };
 }

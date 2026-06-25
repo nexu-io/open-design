@@ -2913,12 +2913,23 @@ export function SettingsDialog({
       )
       : null;
   const suggestedApiModelIds = useMemo(
-    () => Array.from(new Set(
-      selectedProvider?.models?.length
-        ? selectedProvider.models
-        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
-    )),
-    [apiProtocol, selectedProvider],
+    () => {
+      if (isDeploymentCredentialMode) {
+        const defaultModel = deploymentProviderConfig?.defaultModel?.trim();
+        return defaultModel ? [defaultModel] : [];
+      }
+      return Array.from(new Set(
+        selectedProvider?.models?.length
+          ? selectedProvider.models
+          : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+      ));
+    },
+    [
+      apiProtocol,
+      deploymentProviderConfig?.defaultModel,
+      isDeploymentCredentialMode,
+      selectedProvider,
+    ],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(

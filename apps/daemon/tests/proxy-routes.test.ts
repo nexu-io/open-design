@@ -303,6 +303,7 @@ describe('API proxy routes', () => {
     }, async () => {
       const seen: string[] = [];
       const sessionBodies: Array<Record<string, unknown>> = [];
+      const providerBodies: Array<Record<string, unknown>> = [];
       const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
         const url = String(input);
         if (url.startsWith(baseUrl)) return realFetch(input, init);
@@ -313,12 +314,13 @@ describe('API proxy routes', () => {
         }
         expect(url).toBe('https://gateway.example.test/v1/chat/completions');
         const body = JSON.parse(String(init?.body));
-        expect(body.metadata.opendesign_idempotency_key).toMatch(/^chat:[a-f0-9]{16}$/);
+        providerBodies.push(body);
+        expect(body.metadata.opendesign_idempotency_key).toMatch(/^chat:[0-9a-f-]{36}$/);
         return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
       });
       vi.stubGlobal('fetch', fetchMock);
 
-      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      const runRequest = () => realFetch(`${baseUrl}/api/proxy/openai/stream`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -328,18 +330,40 @@ describe('API proxy routes', () => {
         }),
       });
 
+      const res = await runRequest();
+      const secondRes = await runRequest();
+
       expect(res.status).toBe(200);
       await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+      expect(secondRes.status).toBe(200);
+      await expect(secondRes.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
       expect(seen).toEqual([
         'https://authority.example.test/api/runs',
         'https://gateway.example.test/v1/chat/completions',
+        'https://authority.example.test/api/runs',
+        'https://gateway.example.test/v1/chat/completions',
       ]);
-      expect(sessionBodies).toHaveLength(1);
+      expect(sessionBodies).toHaveLength(2);
       expect(sessionBodies[0]).toMatchObject({
         od_project_id: 'proxy',
         purpose: 'chat-completion',
       });
-      expect(sessionBodies[0]?.od_run_id).toMatch(/^proxy:[a-f0-9]{16}$/);
+      expect(sessionBodies[1]).toMatchObject({
+        od_project_id: 'proxy',
+        purpose: 'chat-completion',
+      });
+      expect(sessionBodies[0]?.od_run_id).toMatch(/^proxy:[0-9a-f-]{36}$/);
+      expect(sessionBodies[1]?.od_run_id).toMatch(/^proxy:[0-9a-f-]{36}$/);
+      expect(sessionBodies[0]?.purpose).toBe('chat-completion');
+      expect(sessionBodies[0]?.od_run_id).not.toBe(sessionBodies[1]?.od_run_id);
+      expect(providerBodies).toHaveLength(2);
+      const firstMetadata = providerBodies[0]?.metadata as Record<string, unknown> | undefined;
+      const secondMetadata = providerBodies[1]?.metadata as Record<string, unknown> | undefined;
+      expect(firstMetadata?.opendesign_idempotency_key).toMatch(/^chat:[0-9a-f-]{36}$/);
+      expect(secondMetadata?.opendesign_idempotency_key).toMatch(/^chat:[0-9a-f-]{36}$/);
+      expect(firstMetadata?.opendesign_idempotency_key).not.toBe(
+        secondMetadata?.opendesign_idempotency_key,
+      );
     });
   });
 

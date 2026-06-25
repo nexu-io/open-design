@@ -1582,8 +1582,12 @@ function OnboardingView({
       : [];
   const byokModelOptions = mergeOnboardingProviderModelOptions(
     fetchedProviderModels,
-    SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
-    config.model,
+    providerCredentialSource === 'deployment'
+      ? deploymentProviderConfig?.defaultModel?.trim()
+        ? [deploymentProviderConfig.defaultModel.trim()]
+        : []
+      : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+    providerCredentialSource === 'deployment' ? '' : config.model,
   ).map((model) => ({
     value: model.id,
     label: onboardingProviderModelLabel(model),

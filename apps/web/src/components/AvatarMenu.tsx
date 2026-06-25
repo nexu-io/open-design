@@ -279,9 +279,13 @@ export function AvatarMenu({
 
   const byokModelOptions = mergeProviderModelOptions(
     fetchedByokModels,
-    byokProvider?.models?.length
-      ? byokProvider.models
-      : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
+    credentialSource === 'deployment'
+      ? deploymentProviderConfig?.defaultModel?.trim()
+        ? [deploymentProviderConfig.defaultModel.trim()]
+        : []
+      : byokProvider?.models?.length
+        ? byokProvider.models
+        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
   );
 
   return (

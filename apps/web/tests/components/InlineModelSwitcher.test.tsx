@@ -6,7 +6,12 @@ import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { fetchProviderModels } from '../../src/providers/provider-models';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
-import type { AgentInfo, AppConfig, ProviderModelOption } from '../../src/types';
+import type {
+  AgentInfo,
+  AppConfig,
+  DeploymentProviderConfig,
+  ProviderModelOption,
+} from '../../src/types';
 
 vi.mock('../../src/providers/provider-models', () => ({
   fetchProviderModels: vi.fn(),
@@ -55,13 +60,14 @@ function renderSwitcher(
   config: Partial<AppConfig> = {},
   agents: AgentInfo[] = [amrAgent],
   providerModelsCache: Record<string, ProviderModelOption[]> = {},
-  options: { compact?: boolean } = {},
+  options: { compact?: boolean; deploymentProviderConfig?: DeploymentProviderConfig | null } = {},
 ) {
   const onAgentModelChange = vi.fn();
   const view = render(
     <InlineModelSwitcher
       config={{ ...baseConfig, ...config }}
       agents={agents}
+      deploymentProviderConfig={options.deploymentProviderConfig}
       providerModelsCache={providerModelsCache}
       compact={options.compact}
       daemonLive={true}
@@ -464,6 +470,76 @@ describe('InlineModelSwitcher AMR row', () => {
       'gemini-3.5-flash',
       'minimax-m3',
     ]);
+  });
+
+  it('does not add stock OpenAI presets to deployment-sourced home model lists', async () => {
+    const fetchMock = vi.mocked(fetchProviderModels);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      kind: 'success',
+      latencyMs: 1,
+      models: [
+        { id: 'tenant-special-a', label: 'Tenant Special A' },
+        { id: 'tenant-special-b', label: 'Tenant Special B' },
+      ],
+    });
+
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'openai',
+          apiCredentialSource: 'deployment',
+          apiKey: '',
+          baseUrl: '',
+          model: 'tenant-special-a',
+          apiProviderBaseUrl: null,
+        }}
+        deploymentProviderConfig={{
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-default',
+        }}
+        agents={[amrAgent, codexAgent]}
+        daemonLive={true}
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        providerModelsCache={{}}
+        onProviderModelsCacheChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith({
+        protocol: 'openai',
+        credentialSource: 'deployment',
+      });
+    });
+
+    const modelPicker = screen.getByTestId('inline-model-switcher-api-model');
+    fireEvent.click(modelPicker);
+    const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
+    const optionText = within(modelPopover)
+      .getAllByRole('option')
+      .map((option) => option.textContent?.trim());
+    expect(optionText).toEqual([
+      'Tenant Special A',
+      'Tenant Special B',
+      'tenant-default',
+    ]);
+    expect(optionText.some((text) => text?.includes('gpt-4o'))).toBe(false);
+    expect(optionText.some((text) => text?.includes('o3'))).toBe(false);
   });
 
   it('does not fetch from the home picker for a keyed protocol with no API key', async () => {
