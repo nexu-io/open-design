@@ -1227,6 +1227,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     }) as typeof fetch;
     const props = renderOnboarding();
 
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'test-api-key' } });
     fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.anthropic.com' } });
@@ -1413,7 +1414,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
-  it('restores the saved OpenAI draft when switching from deployment back to BYOK', async () => {
+  it('restores the saved OpenAI draft when switching from deployment provider back to BYOK', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -1462,8 +1463,17 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
 
     await waitFor(() => {
-      expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('openai-key');
+      expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])
+        .toMatchObject({
+          apiProtocol: 'openai',
+          apiCredentialSource: 'user',
+          apiKey: 'openai-key',
+          baseUrl: 'https://openai-proxy.example.com',
+          model: 'openai-model',
+        });
     });
+    expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('openai-key');
+
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'edited-openai-key' },
     });
@@ -1482,7 +1492,6 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
               apiKey: 'edited-openai-key',
               baseUrl: 'https://openai-proxy.example.com',
               model: 'openai-model',
-              apiProviderBaseUrl: null,
             },
           },
         });
