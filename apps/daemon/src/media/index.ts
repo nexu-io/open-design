@@ -873,13 +873,28 @@ async function renderPollinationsImage(
   const url = `${base}/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
   const headers: Record<string, string> = {};
   if (credentials.apiKey) headers.Authorization = `Bearer ${credentials.apiKey}`;
-  const res = await fetch(url, withMediaRequestInit(ctx, { headers }));
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => '')).slice(0, 200);
-    throw new Error(`pollinations ${res.status}: ${detail}`);
+  // Pollinations occasionally answers 200 with an empty body for an otherwise
+  // valid request (we have seen this on the landscape aspects). Returning those
+  // bytes would persist a zero-byte file while reporting success, so retry once
+  // and reject the response if it still comes back empty.
+  let bytes = Buffer.alloc(0);
+  let contentType = '';
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 2 && bytes.length === 0; attempt++) {
+    const res = await fetch(url, withMediaRequestInit(ctx, { headers }));
+    lastStatus = res.status;
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).slice(0, 200);
+      throw new Error(`pollinations ${res.status}: ${detail}`);
+    }
+    bytes = Buffer.from(await res.arrayBuffer());
+    contentType = res.headers.get('content-type') || '';
   }
-  const bytes = Buffer.from(await res.arrayBuffer());
-  const contentType = res.headers.get('content-type') || '';
+  if (bytes.length === 0) {
+    throw new Error(
+      `pollinations ${lastStatus}: empty image response for ${size.width}x${size.height}`,
+    );
+  }
   const suggestedExt = contentType.includes('png') ? '.png' : '.jpg';
   const kb = Math.round(bytes.length / 1024);
   return {
