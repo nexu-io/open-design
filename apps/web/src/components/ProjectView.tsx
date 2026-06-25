@@ -1153,6 +1153,10 @@ export function ProjectView({
   // null-status path so the two transient error classes don't share one budget
   // and cause premature sealing when both fire on the same run.
   const genericDisconnectRetriesRef = useRef<Map<string, number>>(new Map());
+  // Cooldown window for active generic-disconnect retries after the transient
+  // budget is exhausted, so a flapping SSE endpoint does not trigger an
+  // immediate reattach loop while the daemon still reports the run as active.
+  const genericDisconnectBackoffUntilRef = useRef<Map<string, number>>(new Map());
   // Timer handles for pending transient-retry callbacks; cleared on cleanup.
   const transientRetryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [recoveryTick, setRecoveryTick] = useState(0);
@@ -2646,6 +2650,7 @@ export function ProjectView({
   useEffect(() => {
     transientFailedRetriesRef.current = new Map();
     genericDisconnectRetriesRef.current = new Map();
+    genericDisconnectBackoffUntilRef.current = new Map();
   }, [activeConversationId, daemonLive]);
 
   useEffect(() => {
@@ -2730,6 +2735,10 @@ export function ProjectView({
         }
         if (reattachControllersRef.current.has(runId)) continue;
         if (completedReattachRunsRef.current.has(runId)) continue;
+        const genericDisconnectBackoffUntil =
+          genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
+        if (genericDisconnectBackoffUntil > Date.now()) continue;
+        genericDisconnectBackoffUntilRef.current.delete(runId);
 
         if (fallbackRun && !message.runId) {
           updateMessageById(
@@ -2799,6 +2808,7 @@ export function ProjectView({
           // Clear stale retry count — this run is authoritatively done.
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
           completedReattachRunsRef.current.add(runId);
           continue;
         }
@@ -2817,6 +2827,7 @@ export function ProjectView({
           );
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
           scheduleConversationMessageRefresh(reattachConversationId);
           continue;
         }
@@ -3051,12 +3062,14 @@ export function ProjectView({
               // transition).  PR #4651 round 9 (nettee BLOCKING + codex P2).
               transientFailedRetriesRef.current.delete(runId);
               genericDisconnectRetriesRef.current.delete(runId);
+              genericDisconnectBackoffUntilRef.current.delete(runId);
               replayedContent += delta;
               textBuffer.appendContent(delta);
             },
             onAgentEvent: (ev) => {
               transientFailedRetriesRef.current.delete(runId);
               genericDisconnectRetriesRef.current.delete(runId);
+              genericDisconnectBackoffUntilRef.current.delete(runId);
               replayedEvents = [...replayedEvents, ev];
               textBuffer.appendEvent(ev);
             },
@@ -3270,6 +3283,16 @@ export function ProjectView({
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                     genericDisconnectRetriesRef.current.set(runId, attempts);
+                    const backoffUntil = Date.now() + 3000;
+                    genericDisconnectBackoffUntilRef.current.set(runId, backoffUntil);
+                    scheduleProjectTimeout(() => {
+                      const currentBackoffUntil =
+                        genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
+                      if (currentBackoffUntil <= Date.now()) {
+                        genericDisconnectBackoffUntilRef.current.delete(runId);
+                      }
+                      setRecoveryTick((t) => t + 1);
+                    }, 3000);
                   } else if (latestRunStatus.status === 'succeeded') {
                     setError(null);
                     updateMessageById(
@@ -3286,9 +3309,11 @@ export function ProjectView({
                       { telemetryFinalized: true },
                     );
                     genericDisconnectRetriesRef.current.delete(runId);
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
                   } else {
                     completedReattachRunsRef.current.add(runId);
                     genericDisconnectRetriesRef.current.delete(runId);
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
                   }
                 } else {
                   genericDisconnectRetriesRef.current.set(runId, attempts);
@@ -3296,6 +3321,7 @@ export function ProjectView({
               } else {
                 transientFailedRetriesRef.current.delete(runId);
                 genericDisconnectRetriesRef.current.delete(runId);
+                genericDisconnectBackoffUntilRef.current.delete(runId);
                 completedReattachRunsRef.current.add(runId);
               }
               reattachControllersRef.current.delete(runId);
@@ -3322,6 +3348,7 @@ export function ProjectView({
               // Clear stale retry count for canceled run.
               transientFailedRetriesRef.current.delete(runId);
               genericDisconnectRetriesRef.current.delete(runId);
+              genericDisconnectBackoffUntilRef.current.delete(runId);
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
@@ -4083,6 +4110,7 @@ export function ProjectView({
           if (currentRunId) {
             transientFailedRetriesRef.current.delete(currentRunId);
             genericDisconnectRetriesRef.current.delete(currentRunId);
+            genericDisconnectBackoffUntilRef.current.delete(currentRunId);
           }
           streamedText += delta;
           textBuffer.appendContent(delta);
@@ -4091,6 +4119,7 @@ export function ProjectView({
           if (currentRunId) {
             transientFailedRetriesRef.current.delete(currentRunId);
             genericDisconnectRetriesRef.current.delete(currentRunId);
+            genericDisconnectBackoffUntilRef.current.delete(currentRunId);
           }
           if (ev.kind === 'conversation_title') {
             applyAgentGeneratedTitle(ev.title);
@@ -4301,35 +4330,50 @@ export function ProjectView({
           // the daemon explicitly reports a terminal status.
           if (currentRunId) {
             if (isGenericDaemonDisconnect(err)) {
-              const attempts = (genericDisconnectRetriesRef.current.get(currentRunId) ?? 0) + 1;
+              const runIdForGenericDisconnect = currentRunId;
+              const attempts =
+                (genericDisconnectRetriesRef.current.get(runIdForGenericDisconnect) ?? 0) + 1;
               if (attempts >= MAX_TRANSIENT_RETRIES) {
-                const latestRunStatus = await fetchChatRunStatus(currentRunId).catch(() => null);
-                  if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
-                    genericDisconnectRetriesRef.current.set(currentRunId, attempts);
-                  } else if (latestRunStatus.status === 'succeeded') {
-                    if (runMayFinalize) {
-                      setError(null);
-                      updateAssistant((prev) => ({
-                        ...prev,
-                        endedAt: prev.endedAt ?? endedAt,
-                        runStatus: 'succeeded',
-                        ...(latestRunStatus.resumable !== undefined
-                          ? { resumable: latestRunStatus.resumable }
-                          : {}),
-                      }));
+                const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
+                if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                  genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
+                  const backoffUntil = Date.now() + 3000;
+                  genericDisconnectBackoffUntilRef.current.set(runIdForGenericDisconnect, backoffUntil);
+                  scheduleProjectTimeout(() => {
+                    const currentBackoffUntil =
+                      genericDisconnectBackoffUntilRef.current.get(runIdForGenericDisconnect) ?? 0;
+                    if (currentBackoffUntil <= Date.now()) {
+                      genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
                     }
-                    finalRunStatusAfterError = 'succeeded';
-                    refreshConversationAfterError = true;
-                    genericDisconnectRetriesRef.current.delete(currentRunId);
-                  } else {
-                    completedReattachRunsRef.current.add(currentRunId);
-                    genericDisconnectRetriesRef.current.delete(currentRunId);
+                    setRecoveryTick((t) => t + 1);
+                  }, 3000);
+                } else if (latestRunStatus.status === 'succeeded') {
+                  if (runMayFinalize) {
+                    setError(null);
+                    updateAssistant((prev) => ({
+                      ...prev,
+                      endedAt: prev.endedAt ?? endedAt,
+                      runStatus: 'succeeded',
+                      ...(latestRunStatus.resumable !== undefined
+                        ? { resumable: latestRunStatus.resumable }
+                        : {}),
+                    }));
                   }
+                  finalRunStatusAfterError = 'succeeded';
+                  refreshConversationAfterError = true;
+                  genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
+                } else {
+                  completedReattachRunsRef.current.add(runIdForGenericDisconnect);
+                  genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
+                }
               } else {
-                genericDisconnectRetriesRef.current.set(currentRunId, attempts);
+                genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
               }
             } else {
               genericDisconnectRetriesRef.current.delete(currentRunId);
+              genericDisconnectBackoffUntilRef.current.delete(currentRunId);
               completedReattachRunsRef.current.add(currentRunId);
             }
           }

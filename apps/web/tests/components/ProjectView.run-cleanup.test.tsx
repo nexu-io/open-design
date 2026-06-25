@@ -1668,7 +1668,7 @@ afterEach(() => {
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 
-  it('keeps reattaching after two generic disconnects while daemon status stays running', async () => {
+  it('keeps reattaching after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
     const runCreatedAt = Date.now();
     const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
     const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
@@ -1735,12 +1735,15 @@ afterEach(() => {
     await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
       timeout: 2_000,
     });
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
     await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
-      timeout: 2_000,
+      timeout: 4_500,
     });
-  });
+  }, 12_000);
 
-  it('keeps live-stream recovery retryable after two generic disconnects while daemon status stays running', async () => {
+  it('keeps live-stream recovery retryable after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
     const runCreatedAt = Date.now();
     const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
     const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
@@ -1804,12 +1807,15 @@ afterEach(() => {
     await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(1), {
       timeout: 2_000,
     });
+    expect(reattachDaemonRun.mock.calls.length).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reattachDaemonRun.mock.calls.length).toBe(1);
     await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
-      timeout: 2_000,
+      timeout: 4_500,
     });
-  });
+  }, 12_000);
 
-  it('keeps generic-disconnect cap retryable when the follow-up status probe returns null', async () => {
+  it('keeps generic-disconnect cap retryable when the follow-up status probe returns null, but backs off before retrying', async () => {
     const runCreatedAt = Date.now();
     const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
     const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
@@ -1891,10 +1897,16 @@ afterEach(() => {
       />,
     );
 
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
       timeout: 2_000,
     });
-  });
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
+      timeout: 4_500,
+    });
+  }, 12_000);
 
   it('finalizes a reattach generic disconnect as succeeded when the next status poll turns terminal', async () => {
     const runCreatedAt = Date.now();
