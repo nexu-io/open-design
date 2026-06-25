@@ -619,7 +619,7 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
   }
 
   if (missing.length > 0) {
-    lines.push('### New cases without baselines', '', ...renderCaseList(missing.slice(0, inlineCaseLimit), false), '');
+    lines.push('### New cases without baselines', '', ...renderMissingCaseGrid(missing.slice(0, inlineCaseLimit)), '');
     if (missing.length > inlineCaseLimit) {
       lines.push(`_${missing.length - inlineCaseLimit} additional new case(s) omitted from this comment._`, '');
     }
@@ -669,6 +669,20 @@ function renderCaseList(cases: ComparedCase[], includeDiff = true): string[] {
     }
   }
 
+  return lines;
+}
+
+function renderMissingCaseGrid(cases: ComparedCase[]): string[] {
+  const lines: string[] = ['| PR | PR | PR |', '| --- | --- | --- |'];
+  for (let index = 0; index < cases.length; index += 3) {
+    const row = cases.slice(index, index + 3).map((visualCase) => {
+      return `<strong>${escapeHtml(visualCase.name)}</strong><br>${imageCell(visualCase.prUrl, 'pr', comparisonImageWidth)}`;
+    });
+    while (row.length < 3) {
+      row.push('');
+    }
+    lines.push(`| ${row.join(' | ')} |`);
+  }
   return lines;
 }
 
