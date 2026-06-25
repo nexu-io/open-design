@@ -9,5 +9,5 @@ self-hosted-runner:
     - nexu-spark
     - nexu-mac
     - nexu-win
-    - open-design-ci
+    - marketing-ax-ci
     - release-beta

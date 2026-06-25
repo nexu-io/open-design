@@ -1,8 +1,8 @@
 name: landing-page-staging
 
 # Pushes to `main` deploy the landing page to the STAGING Cloudflare Pages
-# project (`open-design-landing-staging`, served at staging.marketing-ax.example).
-# Production (the separate `open-design-landing` project → marketing-ax.example) is
+# project (`marketing-ax-landing-staging`, served at staging.marketing-ax.example).
+# Production (the separate `marketing-ax-landing` project → marketing-ax.example) is
 # never named here — it is reached exclusively through the manual
 # `landing-page-production` workflow. This is the safety gate: project
 # separation means a merge to main can only ever change staging.
@@ -19,7 +19,7 @@ on:
       # Landing page sources
       - apps/landing-page/**
       # Design template source of truth for the homepage.
-      - design-templates/open-design-landing/**
+      - design-templates/marketing-ax-landing/**
       # Content sources — Astro content collections glob these at build
       # time. Adding/removing a SKILL.md, DESIGN.md, craft principle, or
       # live-artifact template MUST trigger a redeploy or the published
@@ -97,10 +97,10 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+        run: pnpm --filter @marketing-ax/landing-page exec playwright install --with-deps chromium
 
       - name: Typecheck landing page
-        run: pnpm --filter @open-design/landing-page typecheck
+        run: pnpm --filter @marketing-ax/landing-page typecheck
 
       # Generate previews before build so they end up in `out/previews/`.
       # Soft vs. hard failure is enforced inside the script itself:
@@ -117,7 +117,7 @@ jobs:
         # deploy skip the slowest step (Playwright screenshotting) while a
         # skill/template change still re-renders.
         if: steps.previews-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @open-design/landing-page previews
+        run: pnpm --filter @marketing-ax/landing-page previews
 
       # No PUBLIC_GA_MEASUREMENT_ID on staging: leaving it unset omits the
       # Google Analytics tag entirely, so test-environment traffic does not
@@ -128,7 +128,7 @@ jobs:
       - name: Build landing page
         env:
           OD_LANDING_NOINDEX: '1'
-        run: pnpm --filter @open-design/landing-page build:static
+        run: pnpm --filter @marketing-ax/landing-page build:static
 
       - name: Verify zero external JavaScript
         run: |
@@ -186,7 +186,7 @@ jobs:
 
       # Deploys to the dedicated STAGING project. `--branch=main` is that
       # project's production branch, so it serves at its custom domain
-      # staging.marketing-ax.example. The production project (open-design-landing)
+      # staging.marketing-ax.example. The production project (marketing-ax-landing)
       # is a different project and is never named here.
       - name: Deploy to Cloudflare Pages (staging)
         uses: cloudflare/wrangler-action@v3
@@ -197,5 +197,5 @@ jobs:
           packageManager: npm
           command: >
             pages deploy out
-            --project-name=open-design-landing-staging
+            --project-name=marketing-ax-landing-staging
             --branch=main

@@ -98,7 +98,7 @@ prepare_mac_signing() {
   required APPLE_SIGNING_CERTIFICATE_BASE64
   required APPLE_SIGNING_CERTIFICATE_PASSWORD
 
-  local cert_path="$RUNNER_TEMP/open-design-signing.p12"
+  local cert_path="$RUNNER_TEMP/marketing-ax-signing.p12"
   if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
     printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
   fi
@@ -119,7 +119,7 @@ install_mac_signing_keychain() {
     return 1
   fi
 
-  local password_path="$RUNNER_TEMP/open-design-signing.p12.password"
+  local password_path="$RUNNER_TEMP/marketing-ax-signing.p12.password"
   printf '%s' "$APPLE_SIGNING_CERTIFICATE_PASSWORD" > "$password_path"
   chmod 600 "$password_path"
 
@@ -134,8 +134,8 @@ install_mac_signing_keychain() {
   fi
   rm -f "$password_path"
 
-  export CSC_KEYCHAIN="${MARKETING_AX_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
-  local wrapper_dir="${MARKETING_AX_MAC_SIGNING_WRAPPER_DIR:-/usr/local/libexec/open-design/wrappers}"
+  export CSC_KEYCHAIN="${MARKETING_AX_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/marketing-ax-release-signing.keychain}"
+  local wrapper_dir="${MARKETING_AX_MAC_SIGNING_WRAPPER_DIR:-/usr/local/libexec/marketing-ax/wrappers}"
   if [ -x "$wrapper_dir/codesign" ]; then
     export PATH="$wrapper_dir:$PATH"
   fi
@@ -171,7 +171,7 @@ capture_framework_diagnostics() {
   local source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
   local source_framework built_framework
   source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-  built_framework="$tools_pack_dir/out/mac/namespaces/$namespace/builder/mac-arm64/Open Design Beta.app/Contents/Frameworks/Electron Framework.framework"
+  built_framework="$tools_pack_dir/out/mac/namespaces/$namespace/builder/mac-arm64/Marketing AX Beta.app/Contents/Frameworks/Electron Framework.framework"
 
   dump_framework() {
     local label="$1"

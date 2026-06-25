@@ -40,7 +40,7 @@ function reportFilesFor(key) {
   if (key === "mac") {
     return [
       "manifest.json",
-      "screenshots/open-design-mac-smoke.png",
+      "screenshots/marketing-ax-mac-smoke.png",
       "suite-result.json",
       "tools-pack.json",
       "tools-pack.log",
@@ -50,14 +50,14 @@ function reportFilesFor(key) {
   if (key === "win") {
     return [
       "manifest.json",
-      "screenshots/open-design-win-smoke.png",
+      "screenshots/marketing-ax-win-smoke.png",
       "suite-result.json",
       "tools-pack.json",
       "vitest.log",
     ];
   }
   if (key === "linux") {
-    return ["manifest.json", "screenshots/open-design-linux-smoke.png", "vitest.log"];
+    return ["manifest.json", "screenshots/marketing-ax-linux-smoke.png", "vitest.log"];
   }
   return [];
 }

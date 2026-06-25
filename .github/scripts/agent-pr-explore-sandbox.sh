@@ -272,7 +272,7 @@ async function uploadFile(name, content) {
   const conversationId = created.conversationId;
   if (!conversationId) throw new Error("project create response did not include conversationId");
 
-  await uploadFile("generated-plugin/open-design.json", JSON.stringify({
+  await uploadFile("generated-plugin/marketing-ax.json", JSON.stringify({
     "$schema": "https://marketing-ax.example/schemas/plugin.v1.json",
     specVersion: "1.0.0",
     name: `agent-fixture-plugin-${prNumber}`,
@@ -305,7 +305,7 @@ async function uploadFile(name, content) {
     `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/u-fixture`,
     {
       role: "user",
-      content: "Create a small Open Design plugin.",
+      content: "Create a small Marketing AX plugin.",
       createdAt: now - 2000,
     },
   );
@@ -314,12 +314,12 @@ async function uploadFile(name, content) {
     `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/a-fixture`,
     {
       role: "assistant",
-      content: "The plugin is ready to add to My plugins: generated-plugin/open-design.json",
+      content: "The plugin is ready to add to My plugins: generated-plugin/marketing-ax.json",
       runStatus: "succeeded",
       producedFiles: [
         {
-          name: "generated-plugin/open-design.json",
-          path: "generated-plugin/open-design.json",
+          name: "generated-plugin/marketing-ax.json",
+          path: "generated-plugin/marketing-ax.json",
           size: 100,
           mtime: now - 1000,
           kind: "code",
@@ -335,7 +335,7 @@ async function uploadFile(name, content) {
         },
       ],
       events: [
-        { kind: "tool_use", id: "write-manifest", name: "Write", input: { path: "generated-plugin/open-design.json" } },
+        { kind: "tool_use", id: "write-manifest", name: "Write", input: { path: "generated-plugin/marketing-ax.json" } },
         { kind: "tool_result", toolUseId: "write-manifest", content: "ok", isError: false },
       ],
       createdAt: now - 1000,
@@ -1020,7 +1020,7 @@ fi
 # PR head is taken from the BASE repo's refs/pull/<n>/head so fork PRs work too,
 # and the read-only deploy key stays on the trusted host -- it is never exposed to
 # the untrusted PR code, which only ever sees the checked-out files inside Docker.
-mirror="${MAX_SANDBOX_REPO_MIRROR:-$HOME/.cache/agent-pr-explore/open-design.git}"
+mirror="${MAX_SANDBOX_REPO_MIRROR:-$HOME/.cache/agent-pr-explore/marketing-ax.git}"
 git_ssh_key="${MAX_SANDBOX_GIT_SSH_KEY:-$HOME/.ssh/od_agent_deploy}"
 pr_src="$root/pr-src"
 export GIT_SSH_COMMAND="ssh -i $git_ssh_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
@@ -1113,8 +1113,8 @@ docker run -d \
       pnpm install --frozen-lockfile
 
       echo "== prebuild =="
-      pnpm --filter @open-design/daemon build
-      pnpm --filter @open-design/tools-dev build
+      pnpm --filter @marketing-ax/daemon build
+      pnpm --filter @marketing-ax/tools-dev build
 
       if [ "${MAX_DETERMINISTIC_VERIFIER}" = "web-static-export" ]; then
         echo "== deterministic verifier: web-static-export =="
@@ -1122,7 +1122,7 @@ docker run -d \
         (
           set -euo pipefail
           rm -rf apps/web/out apps/web/.next
-          MAX_WEB_OUTPUT_MODE=server sh -lc '"'"'MAX_WEB_OUTPUT_MODE= pnpm --filter @open-design/web build && test -d apps/web/out'"'"'
+          MAX_WEB_OUTPUT_MODE=server sh -lc '"'"'MAX_WEB_OUTPUT_MODE= pnpm --filter @marketing-ax/web build && test -d apps/web/out'"'"'
           test -f apps/web/out/index.html
         ) > /artifacts/deterministic-verifier.log 2>&1
         verifier_status=$?
@@ -1212,7 +1212,7 @@ This PR changes the web deployment/static-export path rather than an interactive
 
 \`\`\`bash
 rm -rf apps/web/out apps/web/.next
-MAX_WEB_OUTPUT_MODE=server sh -c 'MAX_WEB_OUTPUT_MODE= pnpm --filter @open-design/web build && test -d apps/web/out'
+MAX_WEB_OUTPUT_MODE=server sh -c 'MAX_WEB_OUTPUT_MODE= pnpm --filter @marketing-ax/web build && test -d apps/web/out'
 test -f apps/web/out/index.html
 \`\`\`
 

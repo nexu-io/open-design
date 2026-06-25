@@ -551,13 +551,13 @@ jobs:
         working-directory: _release-build
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_NOTARY_KEYCHAIN_PROFILE: open-design-release-notary
+          APPLE_NOTARY_KEYCHAIN_PROFILE: marketing-ax-release-notary
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
-          CSC_KEYCHAIN: /Library/Keychains/open-design-release-signing.keychain
+          CSC_KEYCHAIN: /Library/Keychains/marketing-ax-release-signing.keychain
           MAX_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
           MAX_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
           MAX_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
@@ -581,10 +581,10 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$MARKETING_AX_RELEASE_PROFILE"
-          export PATH="/usr/local/libexec/open-design/wrappers:$PATH"
+          export PATH="/usr/local/libexec/marketing-ax/wrappers:$PATH"
           if [ "${{ inputs.mac_arm64_delivery_mode == 'internal-updater' && 'sign-only' || inputs.mac_arm64_sign_mode }}" != "no" ] && [ -n "${MARKETING_AX_MAC_SIGNING_HELPER:-}" ]; then
-            cert_path="${{ runner.temp }}/open-design-signing.p12"
-            password_path="${{ runner.temp }}/open-design-signing.p12.password"
+            cert_path="${{ runner.temp }}/marketing-ax-signing.p12"
+            password_path="${{ runner.temp }}/marketing-ax-signing.p12.password"
             if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
               printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
             fi
@@ -592,7 +592,7 @@ jobs:
             chmod 600 "$password_path"
             sudo -n "$MARKETING_AX_MAC_SIGNING_HELPER" "$cert_path" "$password_path"
             rm -f "$password_path"
-            export CSC_KEYCHAIN="${MARKETING_AX_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
+            export CSC_KEYCHAIN="${MARKETING_AX_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/marketing-ax-release-signing.keychain}"
             security list-keychains -d user -s "$CSC_KEYCHAIN" /Library/Keychains/System.keychain
           fi
           fnm exec --using=24 -- bash .github/workflow/scripts/release/build-platform.sh
@@ -636,7 +636,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
           RELEASE_NAMESPACE: release-beta
-          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
+          RELEASE_NOTES: Marketing AX beta ${{ needs.metadata.outputs.beta_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}

@@ -52,8 +52,8 @@ jobs:
       - name: Build daemon + tools
         run: |
           pnpm --filter "./packages/**" build
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/tools-dev build
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/tools-dev build
 
       - name: Start daemon
         run: |
@@ -122,8 +122,8 @@ jobs:
             echo "manifest unchanged — nothing to review"; exit 0
           fi
           BRANCH="chore/plugin-previews-${{ github.run_id }}"
-          git config user.name "open-design-bot"
-          git config user.email "bot@open-design.ai"
+          git config user.name "marketing-ax-bot"
+          git config user.email "bot@marketing-ax.example"
           git checkout -b "$BRANCH"
           git add data/plugin-previews/manifest.json
           git commit -m "chore(plugin-previews): refresh baked preview manifest"

@@ -141,7 +141,7 @@ function buildCard() {
     config: { wide_screen_mode: true },
     header: {
       template: headerTemplate(),
-      title: { tag: "plain_text", content: `🚀 Open Design ${channelLabel} ${version}` },
+      title: { tag: "plain_text", content: `🚀 Marketing AX ${channelLabel} ${version}` },
     },
     elements,
   };

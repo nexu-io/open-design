@@ -106,7 +106,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: open-design-release-stable-${{ inputs.channel }}-${{ inputs.dry_run && 'dry-run' || 'publish' }}
+  group: marketing-ax-release-stable-${{ inputs.channel }}-${{ inputs.dry_run && 'dry-run' || 'publish' }}
   cancel-in-progress: false
 
 env:
@@ -252,13 +252,13 @@ jobs:
       # (every CI run), workspace typecheck fails because:
       #   - packaged/runtime consumers resolve the daemon package export through
       #     generated `apps/daemon/dist/*.d.ts`
-      #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
+      #   - `apps/packaged/src/index.ts` dynamic-imports `@marketing-ax/desktop/main`
       #     which resolves to `apps/desktop/dist/main/index.d.ts`
       # Build them explicitly here. Keeps the root `typecheck` script untouched.
       - name: Build daemon and desktop (typecheck dependencies)
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
 
       - name: Typecheck workspaces
         run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
@@ -330,7 +330,7 @@ jobs:
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
-          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          cert_path="$RUNNER_TEMP/marketing-ax-signing.p12"
           if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
             printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
           fi
@@ -380,9 +380,9 @@ jobs:
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
           source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          app_name="Open Design.app"
+          app_name="Marketing AX.app"
           if [ "${{ needs.metadata.outputs.channel }}" = "nightly" ]; then
-            app_name="Open Design Nightly.app"
+            app_name="Marketing AX Nightly.app"
           fi
           built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/${{ needs.metadata.outputs.namespace }}/builder/mac-arm64/$app_name/Contents/Frameworks/Electron Framework.framework"
 
@@ -444,7 +444,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-stable-mac-build-diagnostics
+          name: marketing-ax-stable-mac-build-diagnostics
           path: |
             ${{ runner.temp }}/mac-tools-pack-build.log
             ${{ runner.temp }}/mac-tools-pack-build.json
@@ -470,7 +470,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-mac-e2e-report
+          name: marketing-ax-release-mac-e2e-report
           path: ${{ runner.temp }}/release-report/mac
           if-no-files-found: warn
 
@@ -483,7 +483,7 @@ jobs:
           RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
-          RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
+          RELEASE_NOTES: Marketing AX ${{ needs.metadata.outputs.release_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
@@ -516,7 +516,7 @@ jobs:
       - name: Upload mac publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-mac-arm64-publish-manifest
+          name: marketing-ax-release-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
           retention-days: 1
@@ -524,7 +524,7 @@ jobs:
       - name: Upload mac release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-mac-release-assets
+          name: marketing-ax-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
 
@@ -560,7 +560,7 @@ jobs:
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
-          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          cert_path="$RUNNER_TEMP/marketing-ax-signing.p12"
           if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
             printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
           fi
@@ -627,7 +627,7 @@ jobs:
       - name: Upload mac intel publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-mac-x64-publish-manifest
+          name: marketing-ax-release-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
           retention-days: 1
@@ -635,7 +635,7 @@ jobs:
       - name: Upload mac intel release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-mac-intel-release-assets
+          name: marketing-ax-release-mac-intel-release-assets
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
 
@@ -778,7 +778,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-win-e2e-report
+          name: marketing-ax-release-win-e2e-report
           path: ${{ runner.temp }}/release-report/win
           if-no-files-found: warn
 
@@ -823,7 +823,7 @@ jobs:
             -ReleaseAssetSuffix "" `
             -ReleaseChannel "${{ needs.metadata.outputs.channel }}" `
             -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-            -ReleaseNotes "Open Design ${{ needs.metadata.outputs.release_version }}" `
+            -ReleaseNotes "Marketing AX ${{ needs.metadata.outputs.release_version }}" `
             -IncludeZip $true
 
       - name: Publish windows platform
@@ -851,7 +851,7 @@ jobs:
       - name: Upload windows publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-win-x64-publish-manifest
+          name: marketing-ax-release-win-x64-publish-manifest
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
           retention-days: 1
@@ -859,7 +859,7 @@ jobs:
       - name: Upload windows release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-win-release-assets
+          name: marketing-ax-release-win-release-assets
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
 
@@ -931,7 +931,7 @@ jobs:
         env:
           MAX_PACKAGED_E2E_LINUX_APPIMAGE: "1"
           MAX_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-          MAX_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
+          MAX_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/marketing-ax-linux-smoke.png
           MAX_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           set -euo pipefail
@@ -944,7 +944,7 @@ jobs:
             "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
             "spec": "specs/linux.spec.ts",
             "namespace": "${{ needs.metadata.outputs.linux_namespace }}",
-            "screenshot": "screenshots/open-design-linux-smoke.png",
+            "screenshot": "screenshots/marketing-ax-linux-smoke.png",
             "githubRunId": "$GITHUB_RUN_ID",
             "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
             "commit": "$GITHUB_SHA"
@@ -958,7 +958,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-linux-e2e-report
+          name: marketing-ax-release-linux-e2e-report
           path: ${{ runner.temp }}/release-report/linux
           if-no-files-found: warn
 
@@ -999,7 +999,7 @@ jobs:
       - name: Upload linux publish manifest
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-linux-x64-publish-manifest
+          name: marketing-ax-release-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
           if-no-files-found: error
           retention-days: 1
@@ -1007,7 +1007,7 @@ jobs:
       - name: Upload linux release bundle
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-release-linux-release-assets
+          name: marketing-ax-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
 
@@ -1083,26 +1083,26 @@ jobs:
       - name: Download mac publish manifest
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-mac-arm64-publish-manifest
+          name: marketing-ax-release-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download mac intel publish manifest
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-mac-x64-publish-manifest
+          name: marketing-ax-release-mac-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download windows publish manifest
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-win-x64-publish-manifest
+          name: marketing-ax-release-win-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download linux publish manifest
         if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-linux-x64-publish-manifest
+          name: marketing-ax-release-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Pre-flight tag/release check
@@ -1121,45 +1121,45 @@ jobs:
       - name: Download mac release bundle
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-mac-release-assets
+          name: marketing-ax-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets/mac
 
       - name: Download mac intel release bundle
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-mac-intel-release-assets
+          name: marketing-ax-release-mac-intel-release-assets
           path: ${{ runner.temp }}/release-assets/mac-intel
 
       - name: Download windows release bundle
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-win-release-assets
+          name: marketing-ax-release-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
       - name: Download linux release bundle
         if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-linux-release-assets
+          name: marketing-ax-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux
 
       - name: Download linux e2e spec report
         if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-linux-e2e-report
+          name: marketing-ax-release-linux-e2e-report
           path: ${{ runner.temp }}/release-report/linux
 
       - name: Download mac e2e spec report
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-mac-e2e-report
+          name: marketing-ax-release-mac-e2e-report
           path: ${{ runner.temp }}/release-report/mac
 
       - name: Download windows e2e spec report
         uses: actions/download-artifact@v8
         with:
-          name: open-design-release-win-e2e-report
+          name: marketing-ax-release-win-e2e-report
           path: ${{ runner.temp }}/release-report/win
 
       - name: Write stable release notes

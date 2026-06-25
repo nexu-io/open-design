@@ -347,20 +347,20 @@ jobs:
       #   - `apps/daemon/dist/*.d.ts` for packaged/runtime consumers of the daemon
       #     package export
       #   - `apps/desktop/dist/main/index.d.ts` for `apps/packaged` imports of
-      #     `@open-design/desktop/main`
+      #     `@marketing-ax/desktop/main`
       #   - `apps/web/dist/sidecar/index.d.ts` for `apps/packaged` imports of
-      #     `@open-design/web/sidecar`
+      #     `@marketing-ax/web/sidecar`
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Typecheck workspaces
         run: |
-          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+          pnpm -r --filter '!marketing-ax' --filter '!@marketing-ax/landing-page' --workspace-concurrency=4 --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies
@@ -385,16 +385,16 @@ jobs:
 
       - name: Workspace unit tests
         run: |
-          pnpm --filter @open-design/contracts test
-          pnpm --filter @open-design/host test
-          pnpm --filter @open-design/platform test
-          pnpm --filter @open-design/sidecar test
-          pnpm --filter @open-design/sidecar-proto test
+          pnpm --filter @marketing-ax/contracts test
+          pnpm --filter @marketing-ax/host test
+          pnpm --filter @marketing-ax/platform test
+          pnpm --filter @marketing-ax/sidecar test
+          pnpm --filter @marketing-ax/sidecar-proto test
           if [ "${{ needs.change_scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
-            pnpm --filter @open-design/tools-dev test
+            pnpm --filter @marketing-ax/tools-dev test
           fi
           if [ "${{ needs.change_scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
-            pnpm --filter @open-design/tools-pack test
+            pnpm --filter @marketing-ax/tools-pack test
           fi
 
   windows_tools_pack_payload_tests:
@@ -412,7 +412,7 @@ jobs:
         uses: ./.github/actions/setup-workspace
 
       - name: Windows launcher payload archive tests
-        run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
+        run: pnpm --filter @marketing-ax/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   daemon_workspace_tests:
     name: Daemon workspace tests (${{ matrix.shard }})
@@ -433,10 +433,10 @@ jobs:
         uses: ./.github/actions/setup-workspace
 
       - name: Prebuild daemon entrypoint declarations
-        run: pnpm --filter @open-design/daemon build
+        run: pnpm --filter @marketing-ax/daemon build
 
       - name: Daemon workspace tests
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard ${{ matrix.shard }}
+        run: pnpm --filter @marketing-ax/daemon exec vitest run -c vitest.config.ts --shard ${{ matrix.shard }}
 
   daemon_workspace_gate:
     name: Daemon workspace tests
@@ -479,10 +479,10 @@ jobs:
         uses: ./.github/actions/setup-workspace
 
       - name: Prebuild web sidecar declarations
-        run: pnpm --filter @open-design/web build:sidecar
+        run: pnpm --filter @marketing-ax/web build:sidecar
 
       - name: Web workspace tests
-        run: pnpm --filter @open-design/web test
+        run: pnpm --filter @marketing-ax/web test
 
   browser_tests:
     name: Browser tests
@@ -507,12 +507,12 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       - name: E2E vitest
-        run: pnpm --filter @open-design/e2e test
+        run: pnpm --filter @marketing-ax/e2e test
 
       - name: Playwright critical
         if: ${{ github.event_name != 'pull_request' || needs.change_scopes.outputs.ui_p0_pr_required != 'true' }}
@@ -536,9 +536,9 @@ jobs:
 
       - name: Prebuild workspace type declarations
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
+          pnpm --filter @marketing-ax/daemon build
+          pnpm --filter @marketing-ax/desktop build
+          pnpm --filter @marketing-ax/web build:sidecar
 
       # Keep workspace builds serialized so generated dist output and local
       # runtime artifacts are produced in a deterministic order. Parallel
@@ -546,7 +546,7 @@ jobs:
       # current workspace is small enough that safer logs and fewer shared-FS
       # races outweigh the lost parallelism; revisit if the package count grows.
       - name: Build workspaces
-        run: pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
+        run: pnpm -r --filter '!@marketing-ax/landing-page' --workspace-concurrency=1 --if-present run build
 
   validate:
     # Legacy `ci` remains the current factual gate surface. Keep this job on

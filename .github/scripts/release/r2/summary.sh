@@ -29,7 +29,7 @@ const reportUrl = optional("R2_REPORT_URL");
 const reportZipUrl = optional("R2_REPORT_ZIP_URL");
 const platformReport = (platform) => reportUrl == null ? null : {
   manifest: joinUrl(reportUrl, `${platform}/manifest.json`),
-  screenshot: joinUrl(reportUrl, `${platform}/screenshots/open-design-${platform}-smoke.png`),
+  screenshot: joinUrl(reportUrl, `${platform}/screenshots/marketing-ax-${platform}-smoke.png`),
   vitestLog: joinUrl(reportUrl, `${platform}/vitest.log`),
 };
 

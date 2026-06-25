@@ -109,7 +109,7 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate Open Design bot token
+      - name: Generate Marketing AX bot token
         if: ${{ steps.meta.outputs.can_autopush == 'true' && steps.bot-secrets.outputs.present == 'true' }}
         id: bot-token
         continue-on-error: true
@@ -118,7 +118,7 @@ jobs:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
-          repositories: open-design
+          repositories: marketing-ax
           permission-contents: write
 
       - name: Checkout PR branch for auto-apply
@@ -159,8 +159,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'open-design-bot[bot]'
-          git config user.email '282769551+open-design-bot[bot]@users.noreply.github.com'
+          git config user.name 'marketing-ax-bot[bot]'
+          git config user.email '282769551+marketing-ax-bot[bot]@users.noreply.github.com'
           git add nix/pnpm-deps.nix
           git commit -m 'chore(nix): refresh pnpm deps hash'
           git push origin "HEAD:${{ steps.meta.outputs.head_ref }}"

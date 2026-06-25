@@ -47,9 +47,9 @@ if ($IncludeZip -and ([string]::IsNullOrWhiteSpace($sourceZip) -or -not (Test-Pa
   throw "expected portable zip path from build json not found at $sourceZip"
 }
 
-$versionedInstaller = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-setup.exe"
-$versionedPayload = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z"
-$versionedZip = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-portable.zip"
+$versionedInstaller = "marketing-ax-$ReleaseVersion$ReleaseAssetSuffix-win-x64-setup.exe"
+$versionedPayload = "marketing-ax-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z"
+$versionedZip = "marketing-ax-$ReleaseVersion$ReleaseAssetSuffix-win-x64-portable.zip"
 $installerPath = Join-Path $ReleaseAssetsDir $versionedInstaller
 Copy-Item -LiteralPath $sourceInstaller -Destination $installerPath -Force
 $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -79,7 +79,7 @@ $versionPrefix = if ([string]::IsNullOrWhiteSpace($ReleaseVersionPrefix)) {
 $installerUrl = "$publicOrigin/$versionPrefix/$versionedInstaller"
 $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $notes = if ([string]::IsNullOrWhiteSpace($ReleaseNotes)) {
-  "Open Design $ReleaseVersion$ReleaseAssetSuffix"
+  "Marketing AX $ReleaseVersion$ReleaseAssetSuffix"
 } else {
   $ReleaseNotes
 }

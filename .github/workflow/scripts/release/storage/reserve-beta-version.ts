@@ -35,7 +35,7 @@ const { objectKey, reservation, url } = await reserveVersion({
 writeGithubOutputs({
   beta_number: String(reservation.betaNumber),
   beta_version: reservation.releaseVersion,
-  release_name: `Open Design Beta ${reservation.releaseVersion}`,
+  release_name: `Marketing AX Beta ${reservation.releaseVersion}`,
   state_source: `reserved ${objectKey}`,
   version_lock_key: objectKey,
   version_lock_url: url,

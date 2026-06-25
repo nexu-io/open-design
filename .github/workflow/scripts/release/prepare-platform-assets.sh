@@ -43,12 +43,12 @@ case "$RELEASE_TARGET" in
     esac
 
     arch="${RELEASE_TARGET#mac_}"
-    source_dmg="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/dmg/Open Design-$RELEASE_NAMESPACE.dmg"
-    source_zip="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/zip/Open Design-$RELEASE_NAMESPACE.zip"
-    source_payload="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/payload/Open Design-$RELEASE_NAMESPACE-payload.zip"
-    versioned_dmg="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.dmg"
-    versioned_zip="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.zip"
-    versioned_payload="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch-payload.zip"
+    source_dmg="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/dmg/Marketing AX-$RELEASE_NAMESPACE.dmg"
+    source_zip="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/zip/Marketing AX-$RELEASE_NAMESPACE.zip"
+    source_payload="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/payload/Marketing AX-$RELEASE_NAMESPACE-payload.zip"
+    versioned_dmg="marketing-ax-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.dmg"
+    versioned_zip="marketing-ax-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.zip"
+    versioned_payload="marketing-ax-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch-payload.zip"
 
     if [ ! -f "$source_dmg" ]; then
       echo "expected dmg not found at $source_dmg" >&2
@@ -81,7 +81,7 @@ case "$RELEASE_TARGET" in
     version_prefix="${RELEASE_VERSION_PREFIX:-$RELEASE_CHANNEL/versions/$RELEASE_VERSION$RELEASE_ASSET_SUFFIX}"
     zip_url="${RELEASE_PUBLIC_ORIGIN%/}/$version_prefix/$versioned_zip"
     release_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    release_notes="${RELEASE_NOTES:-Open Design $RELEASE_VERSION$RELEASE_ASSET_SUFFIX}"
+    release_notes="${RELEASE_NOTES:-Marketing AX $RELEASE_VERSION$RELEASE_ASSET_SUFFIX}"
     cat > "$RELEASE_ASSETS_DIR/latest-mac.yml" <<EOF
 version: "$RELEASE_VERSION"
 files:
@@ -95,8 +95,8 @@ releaseNotes: "$release_notes"
 EOF
     ;;
   linux_x64)
-    source_appimage="$TOOLS_PACK_DIR/out/linux/namespaces/$RELEASE_NAMESPACE/builder/Open Design-$RELEASE_NAMESPACE.AppImage"
-    versioned_appimage="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-linux-x64.AppImage"
+    source_appimage="$TOOLS_PACK_DIR/out/linux/namespaces/$RELEASE_NAMESPACE/builder/Marketing AX-$RELEASE_NAMESPACE.AppImage"
+    versioned_appimage="marketing-ax-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-linux-x64.AppImage"
     if [ ! -f "$source_appimage" ]; then
       echo "expected AppImage not found at $source_appimage" >&2
       exit 1

@@ -110,4 +110,4 @@ jobs:
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             flags+=(--dry-run)
           fi
-          pnpm --filter @open-design/landing-page exec tsx scripts/seo-daily-report.ts "${flags[@]}"
+          pnpm --filter @marketing-ax/landing-page exec tsx scripts/seo-daily-report.ts "${flags[@]}"
