@@ -1451,8 +1451,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Workspace provider/i }));
     await waitFor(() => {
-      expect(props.onConfigPersist).toHaveBeenCalled();
+      expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])
+        .toMatchObject({
+          apiCredentialSource: 'deployment',
+          model: 'gpt-routed',
+        });
     });
+
     fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
 
@@ -1460,7 +1465,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('openai-key');
     });
     fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'openai-key-edited' },
+      target: { value: 'edited-openai-key' },
     });
 
     await waitFor(() => {
@@ -1468,13 +1473,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
         .toMatchObject({
           apiProtocol: 'openai',
           apiCredentialSource: 'user',
-          apiKey: 'openai-key-edited',
+          apiKey: 'edited-openai-key',
           baseUrl: 'https://openai-proxy.example.com',
           model: 'openai-model',
           apiProtocolConfigs: {
             openai: {
               apiCredentialSource: 'user',
-              apiKey: 'openai-key-edited',
+              apiKey: 'edited-openai-key',
               baseUrl: 'https://openai-proxy.example.com',
               model: 'openai-model',
               apiProviderBaseUrl: null,
