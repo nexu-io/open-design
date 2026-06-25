@@ -491,6 +491,8 @@ export const th: Dict = {
   'entry.discordAriaWithOnline': 'เข้าร่วม Discord ของ Open Design - {online}',
   'entry.discordOnlineLabel': 'ออนไลน์ {count} คน',
   'entry.followXLabel': 'ติดตาม @OpenDesignHQ บน X',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'ปรับขนาดแถบด้านข้าง',
   'entry.loadingWorkspace': 'กำลังโหลดพื้นที่ทำงาน…',
   'entry.useEverywhereTitle': 'ใช้ได้ทุกที่',
