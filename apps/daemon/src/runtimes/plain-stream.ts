@@ -45,6 +45,10 @@ const MAX_ARTIFACTS_PER_RUN = 50;
 const HEADING_RE = /^#{1,4}\s+/;
 const UL_ITEM_RE = /^\s*[-*+]\s+/;
 const OL_ITEM_RE = /^\s*\d+\.\s+/;
+// Mirrors apps/web/src/artifacts/markdown-context.ts so headless plain-stream
+// persistence sees the same fence boundaries as the browser artifact parser.
+const FENCE_OPEN_RE = /^```(\w[\w+-]*)?\s*$/;
+const FENCE_CLOSE_RE = /^```\s*$/;
 
 const TYPE_TO_EXTENSION = new Map<string, SupportedArtifactExtension>([
   ['html', '.html'],
@@ -220,21 +224,29 @@ function computeMarkdownSkipRanges(text: string): Array<[number, number]> {
 
 function computeMarkdownFenceRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
-  const fenceRe = /^ {0,3}(?:```|~~~).*$/gm;
-  let open: { marker: string; start: number } | null = null;
-  let match: RegExpExecArray | null = fenceRe.exec(text);
-  while (match) {
-    const line = match[0] ?? '';
-    const marker = line.trimStart().startsWith('~~~') ? '~~~' : '```';
-    if (!open) {
-      open = { marker, start: match.index };
-    } else if (marker === open.marker) {
-      ranges.push([open.start, fenceRe.lastIndex]);
-      open = null;
+  let pos = 0;
+  let fenceStart = -1;
+  while (pos < text.length) {
+    const eol = text.indexOf('\n', pos);
+    const lineEnd = eol === -1 ? text.length : eol;
+    const line = text.slice(pos, lineEnd);
+    const lineHasNewline = eol !== -1;
+
+    if (fenceStart === -1) {
+      if (lineHasNewline && FENCE_OPEN_RE.test(line)) {
+        fenceStart = pos;
+      }
+    } else if (lineHasNewline && FENCE_CLOSE_RE.test(line)) {
+      ranges.push([fenceStart, eol + 1]);
+      fenceStart = -1;
     }
-    match = fenceRe.exec(text);
+
+    if (!lineHasNewline) {
+      break;
+    }
+    pos = eol + 1;
   }
-  if (open) ranges.push([open.start, text.length]);
+  if (fenceStart !== -1) ranges.push([fenceStart, text.length]);
   return ranges;
 }
 

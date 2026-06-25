@@ -137,18 +137,34 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts[0]?.content).toBe('<!doctype html><html></html>');
   });
 
-  it('ignores artifact tags inside indented markdown code fences', () => {
+  it('extracts artifact tags inside indented backtick examples to match web markdown context', () => {
     const artifacts = extractPlainStreamArtifacts([
       '- Literal example:\n',
       '   ```html\n',
       '   <artifact type="text/html"><!doctype html><html><body>Example</body></html></artifact>\n',
-      '   ```\n',
       '<artifact identifier="real" type="text/html"><!doctype html><html><body>Real</body></html></artifact>',
     ].join(''));
 
-    expect(artifacts).toHaveLength(1);
-    expect(artifacts[0]?.fileName).toBe('real.html');
-    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts[0]?.fileName).toBe('artifact.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Example</body></html>');
+    expect(artifacts[1]?.fileName).toBe('real.html');
+    expect(artifacts[1]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
+
+  it('extracts artifact tags inside tilde fences to match web markdown context', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      '~~~html\n',
+      '<artifact type="text/html"><!doctype html><html><body>Tilde</body></html></artifact>\n',
+      '~~~\n',
+      '<artifact identifier="real" type="text/html"><!doctype html><html><body>Real</body></html></artifact>',
+    ].join(''));
+
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts[0]?.fileName).toBe('artifact.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Tilde</body></html>');
+    expect(artifacts[1]?.fileName).toBe('real.html');
+    expect(artifacts[1]?.content).toBe('<!doctype html><html><body>Real</body></html>');
   });
 
   it('ignores artifact tags inside inline markdown code spans', () => {
