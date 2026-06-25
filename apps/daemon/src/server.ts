@@ -9465,6 +9465,19 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
+        // cursor-agent has no `--session-id` flag: it mints its own chat id
+        // and we cannot force the daemon's `newSessionId`. Persisting that
+        // unusable id here would make the next turn `--resume <unknown>`,
+        // which cursor-agent silently treats as a fresh chat (no error) while
+        // skipTranscript drops the history — silent context loss. So skip the
+        // create-branch for cursor-agent; its real emitted id is stored via
+        // persistCapturedAgentSession in the success path below.
+        if (def.id === 'cursor-agent') {
+          if (agentResumeCtx.isResuming && includeStableInstructions) {
+            updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+          }
+          return;
+        }
         if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
           upsertAgentSession(db, {
             conversationId: run.conversationId,
@@ -9501,6 +9514,12 @@ export async function startServer({
     let artifactRegistered = false;
     // Set when sendAgentEvent sees substantive user-visible output.
     let agentProducedOutput = false;
+    // Last CLI session id captured from the agent's own event stream
+    // (cursor-agent emits `session_id`; surfaced as an `agent_session`
+    // control event by the json-event-stream parser). cursor-agent has no
+    // `--session-id` flag, so the daemon cannot mint the id ahead of time —
+    // it must persist the emitted id to resume the same chat next turn.
+    let capturedAgentCliSessionId: string | null = null;
     // Only daemon-initiated quiet-period termination should be treated
     // as `succeeded` in the close handler. A later unrelated SIGTERM /
     // SIGKILL (external `kill`, OOM, container shutdown) must keep its
@@ -10307,6 +10326,13 @@ export async function startServer({
     }
 
     const sendAgentEvent = (ev) => {
+      // Control event from the cursor-agent parser carrying the CLI's own
+      // chat session id. Capture it for resume persistence; never forward
+      // it to the client (it is not user-visible content).
+      if (ev?.type === 'agent_session' && typeof ev.sessionId === 'string' && ev.sessionId) {
+        capturedAgentCliSessionId = ev.sessionId;
+        return;
+      }
       if (ev?.type === 'error') {
         if (agentStreamError) return;
         flushVisibleAgentStderr();
@@ -11013,6 +11039,25 @@ export async function startServer({
       }
       if (status === 'succeeded') {
         persistDeliveredAgentSessionState();
+      }
+      // cursor-agent resume: store the CLI's own emitted chat id so the next
+      // turn can `--resume <chatId>` and skip resending the transcript. On a
+      // successful run with no captured id, persistCapturedAgentSession CLEARS
+      // the row, so the next turn safely starts fresh with the full transcript
+      // instead of silently resuming nothing.
+      if (
+        def.id === 'cursor-agent' &&
+        def.resumesSessionViaCli === true &&
+        run.conversationId
+      ) {
+        if (status === 'succeeded') {
+          persistCapturedAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: capturedAgentCliSessionId,
+            stablePromptHash: currentStableHash,
+          });
+        }
       }
       finishWithRetryDecision(status, code, signal);
       } finally {

@@ -6,6 +6,12 @@ type ParserKind = string;
 type ParserState = {
   cursorTextSoFar: string;
   cursorTurnStart: number;
+  // Last `session_id` seen on a cursor-agent event. cursor-agent mints its
+  // own chat id (it has no `--session-id` flag, only `--resume <chatId>`),
+  // so the daemon must capture the emitted id to resume the same chat on
+  // follow-up turns. Emitted once per distinct id as an `agent_session`
+  // control event the server stores under (conversationId, agentId).
+  cursorSessionId?: string;
   openCodeToolUses: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
@@ -590,6 +596,18 @@ function reconcileCursorTurnReplay(text: string, onEvent: StreamEventHandler, st
 
 function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
+
+  // cursor-agent stamps every event with its own `session_id`. Surface the
+  // first/changed value as a control event so the server can persist it for
+  // `--resume` on the next turn. Additive: does not consume the event.
+  if (
+    typeof obj.session_id === 'string' &&
+    obj.session_id.length > 0 &&
+    state.cursorSessionId !== obj.session_id
+  ) {
+    state.cursorSessionId = obj.session_id;
+    onEvent({ type: 'agent_session', sessionId: obj.session_id });
+  }
 
   if (obj.type === 'system' && obj.subtype === 'init') {
     onEvent({
