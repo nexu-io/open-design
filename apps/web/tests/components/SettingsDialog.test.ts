@@ -182,6 +182,58 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps deployment model edits out of the saved user OpenAI draft', () => {
+    const deploymentConfig: AppConfig = {
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-one',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'user',
+          apiKey: 'openai-key',
+          baseUrl: 'https://openai-proxy.example.com',
+          model: 'openai-model',
+          apiVersion: '',
+          apiProviderBaseUrl: null,
+        },
+      },
+    };
+
+    const deploymentEdited = updateCurrentApiProtocolConfig(deploymentConfig, {
+      model: 'deployment-two',
+    });
+
+    expect(deploymentEdited).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-two',
+    });
+    expect(deploymentEdited.apiProtocolConfigs?.openai).toMatchObject({
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
+    });
+
+    const restoredOpenai = switchApiProtocolConfig(
+      switchApiProtocolConfig(deploymentEdited, 'google'),
+      'openai',
+    );
+    expect(restoredOpenai).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
+    });
+  });
+
   it('loads the new protocol default on first visit', () => {
     expect(switchApiProtocolConfig(baseConfig, 'openai')).toMatchObject({
       mode: 'api',

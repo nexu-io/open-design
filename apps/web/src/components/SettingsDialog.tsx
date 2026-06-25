@@ -845,13 +845,14 @@ export function updateCurrentApiProtocolConfig(
     ...patch,
     ...(clearedApiKey && defaultModel ? { model: defaultModel } : {}),
   };
+  const nextApiProtocolConfigs = { ...(config.apiProtocolConfigs ?? {}) };
+  if (!(protocol === 'openai' && nextApiConfig.apiCredentialSource === 'deployment')) {
+    nextApiProtocolConfigs[protocol] = nextApiConfig;
+  }
   return applyApiProtocolConfig(
     {
       ...config,
-      apiProtocolConfigs: {
-        ...(config.apiProtocolConfigs ?? {}),
-        [protocol]: nextApiConfig,
-      },
+      apiProtocolConfigs: nextApiProtocolConfigs,
     },
     protocol,
     nextApiConfig,
