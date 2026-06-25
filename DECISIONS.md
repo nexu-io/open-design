@@ -138,3 +138,10 @@
 - 거짓주장 정정(codex 라인 1건): registry.ts fallback 실제 :53(내 플랜 정확, codex :54 오타). landing-page pkg @open-design/landing-page importer 0건 확인 → 비차단 보류 (출처: 코드 grep)
 - shell 검증 PASS: ODDIR_RE 이전누락 5파일 포착·OD_ 보존 perl(LANDING_NOINDEX/MOCKS 보존, 나머지 치환)·PRESERVE 후필터·OPEN_DESIGN_ perl. constraint#3(shell-safe+regex-correct 코드대조) 충족 (출처: scratchpad)
 - 메타교훈: 픽스를 한 곳만 적용하면 동일 버그클래스가 형제 태스크에 잔존 → 공유헬퍼 단일화가 근본해소. 2라운드 적대리뷰서 둘 다 추가버그 포착 — 멀티리뷰+코드대조 가치 재입증 (출처: v4→v5)
+
+## 2026-06-25 — P0 v5 실행 (Task1~5) + git 사고 복구
+- 실행 방법 = subagent-driven-development 스킬. 구현자/리뷰어 sonnet, 메인 컨텍스트는 brief/report/diff 파일핸드오프로 보존. durable ledger `.superpowers/sdd/rebrand/progress.md`가 recovery map (출처: 사용자 "메인 토큰 최소 + TDD SDD + 병렬")
+- 사용자 결정 2건: 실행 브랜치 = 전용 `feat/p0-rebrand` 생성. disjoint Task10~14 병렬 = worktree 격리 (출처: AskUserQuestion)
+- Task1~4 리뷰 Approved. Task1 miss-class 결함 발견·수정: `@open-design/`(슬래시) 패턴이 `path.join(root,"@open-design","web")` 분리인자 + `@open-design\/` regex 리터럴 못 잡음 → 패키징 경로/guard/테스트핀 깨짐. 잔존 grep도 같은 패턴이라 동일 맹점 → broad 패턴 재검증 필수 (출처: Task3 구현자 발견)
+- **git 사고**: Task5 1차 구현자(단일 거대 bash)가 옛 커밋 c54e49aae 위에 작업해 브랜치 orphan. `reset --hard 70a0c8cbf` 복구. 교훈 = 서브에이전트에 git checkout/reset/rebase/worktree 금지 + 커밋 전후 HEAD/부모 검증 명시 필수 (출처: reflog 조사)
+- **메타 갭 발견**: per-task 리뷰가 타깃 테스트핀+typecheck만 돌려 daemon 전체스위트 99-실패 드리프트 미포착. "diff against baseline"(전체스위트 base 대조)을 게이트에 넣어야. 다음 세션 최우선 triage (출처: Task5 구현자 daemon 스위트 보고)
