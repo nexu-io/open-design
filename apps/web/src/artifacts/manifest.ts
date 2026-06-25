@@ -33,7 +33,6 @@ const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
   'html',
   'pdf',
   'zip',
-  'pptx',
   'jsx',
   'md',
   'svg',
@@ -57,7 +56,7 @@ function inferKindFromEntry(entry: string): ArtifactKind | null {
 }
 
 function exportsForKind(kind: ArtifactKind): ArtifactExportKind[] {
-  if (kind === 'deck') return ['html', 'pdf', 'pptx', 'zip'];
+  if (kind === 'deck') return ['html', 'pdf', 'zip'];
   if (kind === 'react-component') return ['jsx', 'html', 'zip'];
   if (kind === 'markdown-document') return ['md', 'html', 'pdf', 'zip'];
   if (kind === 'svg' || kind === 'diagram') return ['svg', 'zip'];

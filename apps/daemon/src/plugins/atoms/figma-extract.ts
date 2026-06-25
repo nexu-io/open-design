@@ -277,7 +277,11 @@ interface FigmaApiFileResponse {
   components?:    Record<string, { name: string }>;
 }
 
-interface FigmaApiNode {
+// Shared with the offline `.fig` decoder (apps/daemon/src/figma/*). The
+// offline decoder rebuilds a `FigmaApiNode` document from the kiwi node-tree
+// so `walkNode` + `liftTokens` apply unchanged — both the REST and offline
+// paths terminate in the same `figma/{tree,tokens,meta}.json` snapshot.
+export interface FigmaApiNode {
   id:        string;
   name:      string;
   type:      string;
@@ -291,7 +295,7 @@ interface FigmaApiNode {
   visible?: boolean;
 }
 
-function walkNode(
+export function walkNode(
   node: FigmaApiNode,
   parent: string | undefined,
   out: FigmaNode[],
@@ -344,7 +348,7 @@ function walkNode(
   }
 }
 
-function pickSolidColor(fills: FigmaApiNode['fills']): string | undefined {
+export function pickSolidColor(fills: FigmaApiNode['fills']): string | undefined {
   if (!Array.isArray(fills) || fills.length === 0) return undefined;
   for (const f of fills) {
     if (f.type !== 'SOLID') continue;
@@ -365,7 +369,7 @@ function pickSolidColor(fills: FigmaApiNode['fills']): string | undefined {
 function clamp255(v: number): number { return Math.max(0, Math.min(255, Math.round(v * 255))); }
 function toHex(v: number): string { return v.toString(16).padStart(2, '0'); }
 
-function liftTokens(tree: FigmaNode[]): DesignExtractReport {
+export function liftTokens(tree: FigmaNode[]): DesignExtractReport {
   const colors:  Map<string, DesignTokenEntry> = new Map();
   const radius:  Map<string, DesignTokenEntry> = new Map();
   const spacing: Map<string, DesignTokenEntry> = new Map();

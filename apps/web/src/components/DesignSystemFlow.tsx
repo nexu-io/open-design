@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Button, Textarea } from '@open-design/components';
-import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type {
+  ConnectorConnectResponse,
+  ConnectorDetail,
+  ConnectorStatusResponse,
+  DesignSystemSummary,
+  LibraryAsset,
+} from '@open-design/contracts';
 import { streamViaDaemon } from '../providers/daemon';
 import {
   connectConnector,
@@ -10,10 +16,12 @@ import {
   fetchDesignSystemGenerationJob,
   fetchDesignSystem,
   fetchConnectorStatuses,
+  fetchLibraryAssetAsFile,
   fetchProjectFileText,
   fetchProjectFiles,
   fetchProjectDesignSystemPackageAudit,
   fetchDesignSystemRevisions,
+  importProjectFigma,
   openFolderDialog,
   startDesignSystemTokenContractRebuildJob,
   updateDesignSystemRevisionStatus,
@@ -33,12 +41,15 @@ import {
   saveTabs,
 } from '../state/projects';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { parseDesignMd } from '../runtime/design-md-parse';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
 } from '../runtime/design-system-package-audit';
 import { deriveFileOps } from '../runtime/file-ops';
 import { latestTodosFromEvents } from '../runtime/todos';
+import { brandFaviconUrl } from '../runtime/brand-references';
+import { useBrandExtract } from '../runtime/useBrandExtract';
 import {
   createFileSystemReadError,
   FILE_SYSTEM_READ_ERROR_MESSAGE,
@@ -62,8 +73,14 @@ import type {
   ProjectFile,
   ProjectMetadata,
 } from '../types';
+import { takeDesignSystemAssetSeed } from '../state/libraryHandoff';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
+import { DesignSystemAssetDropzone } from './DesignSystemAssetDropzone';
+import { BrandPickerModal } from './BrandPickerModal';
+import { DesignSystemCreateHero } from './DesignSystemCreateHero';
+import { DesignSystemPicker } from './DesignSystemPicker';
+import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
 import { connectorAuthSnapshotChanged } from './connectors-state';
 import { FileWorkspace } from './FileWorkspace';
@@ -117,6 +134,8 @@ import { useI18n } from '../i18n';
 export interface DesignSystemGenerateSnapshot {
   sourceCount: number;
   hasBrandDescription: boolean;
+  hasDesignMd: boolean;
+  sourceUrlCount: number;
   githubRepoCount: number;
   localFolderCount: number;
   figFileCount: number;
@@ -125,7 +144,7 @@ export interface DesignSystemGenerateSnapshot {
 
 interface CreationProps {
   onBack: () => void;
-  onCreated: (projectId: string, project?: Project) => void;
+  onCreated: (projectId: string, project?: Project, conversationId?: string | null) => void;
   onProjectPrepared?: (project: Project) => void;
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
@@ -146,6 +165,7 @@ interface CreationProps {
     snapshot: DesignSystemGenerateSnapshot,
     outcome: { result: 'success' } | { result: 'failed'; errorCode: string },
   ) => void;
+  designSystems?: DesignSystemSummary[];
 }
 
 const SOURCE_PROCESSING_MIN_VISIBLE_MS = 900;
@@ -171,6 +191,8 @@ interface DetailProps {
 
 type SetupStep = 'setup' | 'confirm';
 type ReviewTab = 'system' | 'files';
+type DesignMdMode = 'edit' | 'preview';
+type DesignMdPreviewTheme = 'light' | 'dark';
 
 interface ResolvedDesignSystemWorkspaceProject {
   projectId: string;
@@ -179,8 +201,11 @@ interface ResolvedDesignSystemWorkspaceProject {
 
 interface SetupState {
   company: string;
-  githubUrl: string;
-  githubUrls: string[];
+  designMd: string;
+  sourceUrl: string;
+  sourceUrls: string[];
+  figmaUrl: string;
+  figmaUrls: string[];
   codeFiles: string[];
   codeFolders: string[];
   codeFileObjects: File[];
@@ -193,8 +218,11 @@ interface SetupState {
 
 const EMPTY_SETUP: SetupState = {
   company: '',
-  githubUrl: '',
-  githubUrls: [],
+  designMd: '',
+  sourceUrl: '',
+  sourceUrls: [],
+  figmaUrl: '',
+  figmaUrls: [],
   codeFiles: [],
   codeFolders: [],
   codeFileObjects: [],
@@ -210,13 +238,11 @@ const GITHUB_CONNECTOR_ID = 'github';
 const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
 const GITHUB_CONNECTOR_STATUS_TIMEOUT_MS = 5000;
 const LOCAL_CODE_UPLOAD_ROOT = 'context/local-code';
-const FIGMA_CONTEXT_ROOT = 'context/figma';
 const ASSET_UPLOAD_ROOT = 'assets';
 const SOURCE_CONTEXT_MANIFEST_PATH = 'context/source-context.md';
 const MAX_LOCAL_CODE_UPLOAD_FILES = 120;
 const MAX_LOCAL_CODE_FILE_BYTES = 1024 * 1024;
 const MAX_FIGMA_CONTEXT_FILES = 10;
-const MAX_FIGMA_PARSE_BYTES = 512 * 1024;
 const MAX_ASSET_UPLOAD_FILES = 80;
 const MAX_ASSET_FILE_BYTES = 12 * 1024 * 1024;
 
@@ -304,12 +330,41 @@ export function DesignSystemCreationFlow({
   chrome = 'standalone',
   onBeforeGenerate,
   onGenerateSettled,
+  designSystems = [],
 }: CreationProps) {
+  const { t } = useI18n();
   const [step, setStep] = useState<SetupStep>('setup');
-  const [state, setState] = useState<SetupState>(EMPTY_SETUP);
+  // A Library "create design system from selection" hand-off pre-fills the
+  // source material with the chosen assets (single-shot; cleared on read).
+  const [state, setState] = useState<SetupState>(() => {
+    const seed = takeDesignSystemAssetSeed();
+    if (!seed || seed.files.length === 0) return EMPTY_SETUP;
+    return {
+      ...EMPTY_SETUP,
+      assetFiles: seed.files.map((file) => file.name),
+      assetFileObjects: seed.files,
+    };
+  });
   const [error, setError] = useState<string | null>(null);
   const [generationStarting, setGenerationStarting] = useState(false);
   const [sourceProcessingCount, setSourceProcessingCount] = useState(0);
+  const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+  const [designMdMode, setDesignMdMode] = useState<DesignMdMode>('edit');
+  const [designMdPreviewTheme, setDesignMdPreviewTheme] = useState<DesignMdPreviewTheme>('light');
+  const [referenceDesignSystemId, setReferenceDesignSystemId] = useState<string | null>(null);
+  const [referenceDesignSystemLoading, setReferenceDesignSystemLoading] = useState(false);
+  const [referenceDesignSystemError, setReferenceDesignSystemError] = useState<string | null>(null);
+  const referenceDesignSystemRequestRef = useRef(0);
+  const manualDesignMdRef = useRef(state.designMd);
+  // "Start from a brand" reference picker on the URL field + the Advanced
+  // disclosure that hides the lower-frequency source inputs.
+  const [brandPickerOpen, setBrandPickerOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Two-phase brand/design-system extraction kickoff (POST /api/brands):
+  // the daemon creates the project + real transcript immediately, then the
+  // programmatic pass registers a usable user:<id> design system in the
+  // background.
+  const brandExtract = useBrandExtract();
   const composioConfigured = isComposioConfigured(config?.composio);
   const [githubConnector, setGithubConnector] = useState<ConnectorDetail | null>(null);
   const [githubConnectorLoading, setGithubConnectorLoading] = useState(false);
@@ -443,6 +498,32 @@ export function DesignSystemCreationFlow({
     void refreshGithubConnector();
   }, [refreshGithubConnector]);
 
+  // Without this, a `.fig` (or any file) dropped anywhere on the create page
+  // OUTSIDE the small drop zones makes the browser navigate to / open the
+  // file, losing the form — the "can't drag the .fig in" symptom. Mirror
+  // FileWorkspace's window-level guard: swallow file drags that don't land on
+  // a real drop target so misses do nothing instead of opening the file.
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const isAllowedDropTarget = (target: EventTarget | null) =>
+      target instanceof Element && Boolean(target.closest('.ds-drop-zone, [data-testid="ds-asset-dropzone"]'));
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   useEffect(() => {
     if (!composioConfigured) return undefined;
     function handleConnectorMessage(event: MessageEvent) {
@@ -510,22 +591,115 @@ export function DesignSystemCreationFlow({
     }
   }
 
-  function handleAddGithubUrl() {
-    const nextUrl = normalizeGithubUrl(state.githubUrl);
+  function handleAddSourceUrl() {
+    const nextUrl = normalizeSourceUrl(state.sourceUrl);
     if (!nextUrl) return;
-    emitCreateFormClick('github_repo_add');
+    emitCreateFormClick('source_url_add');
     setState((curr) => ({
       ...curr,
-      githubUrl: '',
-      githubUrls: Array.from(new Set([...curr.githubUrls, nextUrl])),
+      sourceUrl: '',
+      sourceUrls: Array.from(new Set([...curr.sourceUrls, nextUrl])),
     }));
   }
 
-  function handleRemoveGithubUrl(url: string) {
+  function handleSourceUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(event)) return;
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleAddSourceUrl();
+  }
+
+  function handleReferenceDesignSystemChange(id: string | null) {
+    const requestId = ++referenceDesignSystemRequestRef.current;
+    setReferenceDesignSystemId(id);
+    setReferenceDesignSystemError(null);
+
+    if (id == null) {
+      setReferenceDesignSystemLoading(false);
+      setDesignMdMode('edit');
+      setState((curr) => ({ ...curr, designMd: manualDesignMdRef.current }));
+      return;
+    }
+
+    setReferenceDesignSystemLoading(true);
+    void fetchDesignSystem(id)
+      .then((detail) => {
+        if (referenceDesignSystemRequestRef.current !== requestId) return;
+        if (!detail) {
+          setReferenceDesignSystemError(t('dsCreate.referenceLoadFailed'));
+          return;
+        }
+        setState((curr) => ({ ...curr, designMd: detail.body }));
+        setDesignMdMode('edit');
+        setDesignMdPreviewTheme('light');
+      })
+      .catch((err) => {
+        if (referenceDesignSystemRequestRef.current !== requestId) return;
+        setReferenceDesignSystemError(
+          err instanceof Error ? err.message : t('dsCreate.referenceLoadFailed'),
+        );
+      })
+      .finally(() => {
+        if (referenceDesignSystemRequestRef.current !== requestId) return;
+        setReferenceDesignSystemLoading(false);
+      });
+  }
+
+  function handleRemoveSourceUrl(url: string) {
     setState((curr) => ({
       ...curr,
-      githubUrls: curr.githubUrls.filter((item) => item !== url),
+      sourceUrls: curr.sourceUrls.filter((item) => item !== url),
     }));
+  }
+
+  // "Start from a brand" — picking a brand from the reference gallery just
+  // fills the website field with its domain; the user then hits Generate to
+  // extract. (It is a reference entry, not an immediate extraction kickoff.)
+  function handlePickBrandReference(domain: string) {
+    const nextUrl = normalizeSourceUrl(`https://${domain}`);
+    if (!nextUrl) return;
+    setError(null);
+    setBrandPickerOpen(false);
+    emitCreateFormClick('source_url_add');
+    setState((curr) => ({
+      ...curr,
+      sourceUrl: '',
+      sourceUrls: Array.from(new Set([...curr.sourceUrls, nextUrl])),
+    }));
+  }
+
+  function handleAddFigmaUrl() {
+    const nextUrl = normalizeFigmaUrl(state.figmaUrl);
+    if (!nextUrl) {
+      setError('Enter a Figma file URL (https://figma.com/file/… or /design/…).');
+      return;
+    }
+    setError(null);
+    emitCreateFormClick('figma_url_add');
+    setState((curr) => ({
+      ...curr,
+      figmaUrl: '',
+      figmaUrls: Array.from(new Set([...curr.figmaUrls, nextUrl])),
+    }));
+  }
+
+  function handleFigmaUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(event)) return;
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleAddFigmaUrl();
+  }
+
+  function handleRemoveFigmaUrl(url: string) {
+    setState((curr) => ({
+      ...curr,
+      figmaUrls: curr.figmaUrls.filter((item) => item !== url),
+    }));
+  }
+
+  function handleDesignMdInput(value: string) {
+    manualDesignMdRef.current = value;
+    setState((curr) => ({ ...curr, designMd: value }));
   }
 
   function beginSourceProcessing() {
@@ -556,12 +730,74 @@ export function DesignSystemCreationFlow({
     }));
   }
 
-  function handleRemoveAssetFile(name: string) {
-    setState((curr) => ({
-      ...curr,
-      assetFiles: curr.assetFiles.filter((item) => item !== name),
-      assetFileObjects: curr.assetFileObjects.filter((file) => resourceRelativePath(file) !== name),
-    }));
+  function handleRemoveAssetFile(target: File) {
+    setState((curr) => {
+      const nextObjects = curr.assetFileObjects.filter((file) => file !== target);
+      return {
+        ...curr,
+        assetFileObjects: nextObjects,
+        assetFiles: nextObjects.map((file) => resourceRelativePath(file)),
+      };
+    });
+  }
+
+  // Filter + dedupe raw files into the staged asset state, keeping the parallel
+  // `assetFiles` (names) and `assetFileObjects` arrays perfectly in lockstep.
+  // Returns the subset that actually survived the size/count filter.
+  function mergeAssetFiles(rawFiles: File[]): File[] {
+    const stagedFiles = selectAssetFiles(rawFiles);
+    if (stagedFiles.length === 0) return stagedFiles;
+    setError(null);
+    setState((curr) => {
+      const nextObjects = dedupeResourceFiles([...curr.assetFileObjects, ...stagedFiles]);
+      return {
+        ...curr,
+        assetFileObjects: nextObjects,
+        assetFiles: nextObjects.map((file) => resourceRelativePath(file)),
+      };
+    });
+    return stagedFiles;
+  }
+
+  // Click + paste land here as a flat File[]; drops route through the
+  // directory-aware reader first (see handleAssetDrop).
+  function handleAssetUpload(rawFiles: File[]) {
+    const staged = mergeAssetFiles(rawFiles);
+    emitDsFileUpload('assets', rawFiles, staged);
+  }
+
+  async function handleAssetDrop(dataTransfer: DataTransfer) {
+    setError(null);
+    const finish = beginSourceProcessing();
+    try {
+      const dropped = await filesFromDataTransfer(dataTransfer);
+      const staged = mergeAssetFiles(dropped);
+      emitDsFileUpload('assets', dropped, staged);
+    } catch (dropError) {
+      if (!isFileSystemReadError(dropError)) throw dropError;
+      setError(FILE_SYSTEM_READ_ERROR_MESSAGE);
+    } finally {
+      finish();
+    }
+  }
+
+  // "Select from library": fetch each chosen OD Library asset's bytes into a
+  // browser File and stage it like any other asset, so generation uploads them
+  // through the same path. No project exists yet at setup time, so we seed File
+  // objects (fetchLibraryAssetAsFile) rather than apply-into-project.
+  async function addAssetsFromLibrary(assets: LibraryAsset[]) {
+    if (assets.length === 0) return;
+    const finish = beginSourceProcessing();
+    try {
+      const fetched = await Promise.all(assets.map((asset) => fetchLibraryAssetAsFile(asset)));
+      const files = fetched.filter((file): file is File => file !== null);
+      mergeAssetFiles(files);
+      if (files.length < assets.length) {
+        setError(`Added ${files.length} of ${assets.length} item(s) from the library.`);
+      }
+    } finally {
+      finish();
+    }
   }
 
   async function generate() {
@@ -573,14 +809,20 @@ export function DesignSystemCreationFlow({
     // sources" → "generate eventually succeeded / failed with the
     // same N". Computed here because OnboardingView can't peek into
     // this flow's setup form.
-    const githubRepoCount = state.githubUrls?.length ?? 0;
+    const sourceUrls = sourceUrlsFromState(state);
+    const githubUrls = githubUrlsFromState(state);
+    const sourceUrlCount = sourceUrls.length;
+    const githubRepoCount = githubUrls.length;
     const localFolderCount = state.codeFolders?.length ?? 0;
-    const figFileCount = state.figFiles?.length ?? 0;
+    const figFileCount = (state.figFiles?.length ?? 0) + figmaUrlsFromState(state).length;
     const assetFileCount = state.assetFiles?.length ?? 0;
+    const hasDesignMd = Boolean(state.designMd.trim());
     const snapshot = {
       sourceCount:
-        githubRepoCount + localFolderCount + figFileCount + assetFileCount,
+        sourceUrlCount + localFolderCount + figFileCount + assetFileCount + (hasDesignMd ? 1 : 0),
       hasBrandDescription: Boolean(state.company?.trim()),
+      hasDesignMd,
+      sourceUrlCount,
       githubRepoCount,
       localFolderCount,
       figFileCount,
@@ -626,57 +868,67 @@ export function DesignSystemCreationFlow({
       });
     }
     try {
-      const title = inferDesignSystemTitle(state);
-      const created = await createDesignSystemDraft({
-        title,
-        summary: state.company,
-        category: 'Custom',
-        surface: 'web',
-        status: 'draft',
-        artifactMode: 'agent-managed',
-        sourceNotes: buildSourceNotes(state),
-        provenance: buildProvenance(state),
+      // Two-phase extraction. The website link (a real site, not a GitHub repo)
+      // drives the kickoff. POST /api/brands creates the backing project and
+      // real transcript immediately, then the programmatic pass registers a
+      // usable user:<id> design system in the background.
+      const extractUrl =
+        nonGithubSourceUrlsFromState(state)[0] ?? sourceUrlsFromState(state)[0] ?? '';
+      const fallbackDesignMd = !extractUrl && !hasDesignMd
+        ? buildFallbackDesignMdFromState(state)
+        : '';
+      const designMdForExtraction = hasDesignMd ? state.designMd : fallbackDesignMd;
+      if (!extractUrl && !designMdForExtraction) {
+        setError(t('dsCreate.missingSourceError'));
+        setStep('setup');
+        emitCreateResult('failed', undefined, 'DS_EXTRACT_NO_SOURCE', undefined);
+        onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_NO_SOURCE' });
+        return;
+      }
+      const result = await brandExtract.run(extractUrl, {
+        description: [state.company.trim(), state.notes.trim()].filter(Boolean).join('\n\n'),
+        designMd: designMdForExtraction,
       });
-      if (!created) {
-        setError('Could not generate this design system.');
+      if (!result) {
+        setError('Could not start the extraction. Check the link and try again.');
         setStep('setup');
-        emitCreateResult('failed', undefined, 'DS_DRAFT_CREATE_FAILED', undefined);
-        onGenerateSettled?.(snapshot, {
-          result: 'failed',
-          errorCode: 'DS_DRAFT_CREATE_FAILED',
-        });
+        emitCreateResult('failed', undefined, 'DS_EXTRACT_START_FAILED', undefined);
+        onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_START_FAILED' });
         return;
       }
-      const workspace = await ensureDesignSystemWorkspace(created.id);
-      if (!workspace) {
-        setError('Could not open the design system workspace.');
-        setStep('setup');
-        emitCreateResult('failed', created.id, 'DS_WORKSPACE_OPEN_FAILED', undefined);
-        onGenerateSettled?.(snapshot, {
-          result: 'failed',
-          errorCode: 'DS_WORKSPACE_OPEN_FAILED',
-        });
-        return;
-      }
-      const project = workspace.project;
-      const setupState = state;
-      const connector = githubConnector;
-      onCreated(project.id, project);
-      emitCreateResult('success', created.id, undefined, project.id);
-      onGenerateSettled?.(snapshot, { result: 'success' });
-      scheduleAfterProjectHandoff(() => {
-        void prepareCreatedDesignSystemProject({
+      // The backing project was just created daemon-side and is not in the local
+      // `projects` list yet — hydrate it so onCreated can prepend it before
+      // navigating into the live extraction.
+      const project = (await getProject(result.projectId).catch(() => undefined)) ?? undefined;
+      let projectForCreated = project;
+      if (project && hasProjectStagingSources(state)) {
+        await prepareCreatedDesignSystemProject({
           project,
-          state: setupState,
+          state,
           composioConfigured,
-          githubConnector: connector,
-          onProjectPrepared,
+          githubConnector,
+          onProjectPrepared: (preparedProject) => {
+            projectForCreated = preparedProject;
+            onProjectPrepared?.(preparedProject);
+          },
           onSystemsRefresh,
           analyticsTrack: analytics.track,
           ingestEntryFrom,
-          designSystemId: created.id,
+          designSystemId: result.designSystemId ?? project.designSystemId ?? `user:${result.id}`,
         });
-      });
+      }
+      if (result.designSystemId && result.status === 'ready') {
+        try {
+          await onSystemsRefresh?.();
+        } catch {
+          // The project is still usable; the picker can refresh again from the destination.
+        }
+      } else {
+        void onSystemsRefresh?.();
+      }
+      onCreated(result.projectId, projectForCreated, result.conversationId);
+      emitCreateResult('success', result.designSystemId, undefined, result.projectId);
+      onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
       setStep('setup');
@@ -694,8 +946,8 @@ export function DesignSystemCreationFlow({
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
         <div className="ds-setup-center-card">
-          <h1>It will take about 5 minutes to generate your design system.</h1>
-          <p>You can step away. Keep the tab open in the background.</p>
+          <h1>Open Design will extract your design system.</h1>
+          <p>You'll land in a project that fills in live — logo, palette, typography, imagery — as it measures your brand. Keep the tab open.</p>
           <div className="ds-setup-actions">
             <Button variant="ghost" onClick={() => setStep('setup')}>
               <Icon name="arrow-left" />
@@ -707,7 +959,7 @@ export function DesignSystemCreationFlow({
               onClick={() => void generate()}
             >
               <Icon name="sparkles" />
-              {generationStarting ? 'Opening project...' : 'Generate'}
+              {generationStarting ? 'Starting extraction...' : 'Extract design system'}
             </Button>
           </div>
         </div>
@@ -716,7 +968,9 @@ export function DesignSystemCreationFlow({
   }
 
   return (
-    <div className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}>
+    <div
+      className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}
+    >
       {sourceProcessingCount > 0 ? (
         <div
           className="ds-source-upload-loading"
@@ -732,179 +986,367 @@ export function DesignSystemCreationFlow({
       ) : null}
       {embedded ? null : (
         <header className="ds-setup-topbar">
-          <Button
-            variant="ghost"
-            onClick={() => {
-              emitCreateFormClick('back');
-              onBack();
-            }}
-          >
-            <Icon name="arrow-left" />
-            Back
-          </Button>
+          <div className="ds-setup-topbar-left">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                emitCreateFormClick('back');
+                onBack();
+              }}
+            >
+              <Icon name="arrow-left" />
+              Back
+            </Button>
+          </div>
           <span className="ds-setup-mark">
             <Icon name="blocks" />
           </span>
           <Button
             variant="primary"
-            disabled={!state.company.trim()}
+            disabled={!hasCreationSource(state)}
             onClick={() => {
               emitCreateFormClick('continue_to_generation');
-              if (!state.company.trim()) {
-                setError('Tell Open Design about the company or design system first.');
+              if (!hasCreationSource(state)) {
+                setError(t('dsCreate.missingSourceError'));
                 return;
               }
               setStep('confirm');
             }}
           >
-            Continue to generation
+            {t('dsCreate.continueToGeneration')}
             <Icon name="chevron-right" />
           </Button>
         </header>
       )}
 
       <main className="ds-setup-form">
-        <h1>Generate from your material</h1>
-        <p>Start with a short description, then add any source files you already have.</p>
+        {embedded ? (
+          <>
+            <h1>{t('dsCreate.embeddedTitle')}</h1>
+            <p>{t('dsCreate.embeddedBody')}</p>
+          </>
+        ) : (
+          <aside className="ds-setup-hero-col">
+            <DesignSystemCreateHero stacked />
+          </aside>
+        )}
 
-        <label className="ds-setup-field">
-          <span>Describe your brand or product</span>
-          <textarea
-            rows={4}
-            value={state.company}
-            onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
-            placeholder="e.g. Mission Impastabowl: fast-casual pasta restaurant with in-store touchscreen kiosk, mobile app and website"
-          />
-        </label>
-
+        <div className="ds-setup-form-col">
         <section className="ds-resource-section">
-          <h2>Add source material <span>(optional)</span></h2>
-          <p>Use anything that shows your current style.</p>
+          <h2>{t('dsCreate.sourceSectionTitle')}</h2>
+          <p>{t('dsCreate.sourceSectionBody')}</p>
           <div className="ds-resource-card">
             <div className="ds-resource-row">
-              <strong>GitHub repo</strong>
+              <strong>{t('dsCreate.githubWebsiteLabel')}</strong>
               <div className="ds-resource-inline">
                 <input
-                  value={state.githubUrl}
-                  onChange={(event) => setState((curr) => ({ ...curr, githubUrl: event.target.value }))}
-                  placeholder="https://github.com/owner/repo"
+                  value={state.sourceUrl}
+                  onChange={(event) => setState((curr) => ({ ...curr, sourceUrl: event.target.value }))}
+                  onKeyDown={handleSourceUrlKeyDown}
+                  placeholder="https://github.com/org/repo"
                 />
                 <button
                   type="button"
                   className="ghost"
-                  disabled={!state.githubUrl.trim()}
-                  onClick={handleAddGithubUrl}
+                  disabled={!state.sourceUrl.trim()}
+                  onClick={handleAddSourceUrl}
                 >
-                  Add
+                  {t('dsCreate.add')}
+                </button>
+                <button
+                  type="button"
+                  className="ghost ds-brand-start-btn"
+                  aria-haspopup="dialog"
+                  aria-expanded={brandPickerOpen}
+                  onClick={() => setBrandPickerOpen(true)}
+                >
+                  <Icon name="sparkles" />
+                  {t('dsCreate.startFromBrand')}
                 </button>
               </div>
-              {state.githubUrls.length > 0 ? (
-                <div className="ds-github-url-list" aria-label="Added GitHub repositories">
-                  {state.githubUrls.map((url) => (
-                    <span key={url}>
-                      <Icon name="github" />
-                      {githubRepoLabel(url)}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${githubRepoLabel(url)}`}
-                        onClick={() => handleRemoveGithubUrl(url)}
-                      >
-                        x
-                      </button>
-                    </span>
-                  ))}
+              <BrandPickerModal
+                open={brandPickerOpen}
+                onClose={() => setBrandPickerOpen(false)}
+                onPick={(brand) => handlePickBrandReference(brand.domain)}
+                title={t('dsCreate.startFromBrand')}
+                subtitle={t('dsCreate.brandPickerSubtitle')}
+                actionLabel={t('dsCreate.add')}
+                quickPicksLabel={t('dsCreate.brandPickerQuickPicks')}
+              />
+              {state.sourceUrls.length > 0 ? (
+                <div className="ds-source-link-list" aria-label={t('dsCreate.addedSourceLinks')}>
+                  {state.sourceUrls.map((url) => {
+                    const label = sourceUrlLabel(url);
+                    const href = sourceUrlHref(url);
+                    return (
+                      <span className="ds-source-link-chip" key={url}>
+                        {href ? (
+                          <a
+                            className="ds-source-link-open"
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={t('dsCreate.openSourceLabel', { label })}
+                            title={t('dsCreate.openSourceLabel', { label })}
+                          >
+                            <SourceLinkFavicon url={url} />
+                            <span className="ds-source-link-label">{label}</span>
+                          </a>
+                        ) : (
+                          <span className="ds-source-link-open ds-source-link-open--static" title={label}>
+                            <SourceLinkFavicon url={url} />
+                            <span className="ds-source-link-label">{label}</span>
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="ds-source-link-remove"
+                          aria-label={t('dsCreate.removeSourceLabel', { label })}
+                          onClick={() => handleRemoveSourceUrl(url)}
+                        >
+                          x
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               ) : null}
-              <GitHubRepositoryAccessPanel
-                composioConfigured={composioConfigured}
-                connector={githubConnector}
-                loading={githubConnectorLoading}
-                action={githubConnectorAction}
-                authorizationPending={githubAuthorizationPending}
-                authorizationUrl={githubAuthorizationUrl}
-                error={githubConnectorError}
-                onOpenConnectorsTab={onOpenConnectorsTab}
-                onToggleMethods={(expanded) => emitCreateFormClick('show_access_methods', expanded)}
-                onConnect={() => void handleConnectGithub()}
-                onOpenAuthorization={() => openConnectorAuthorizationUrl(githubAuthorizationUrl)}
-                onDisconnect={() => void handleDisconnectGithub()}
+            </div>
+            <div className="ds-resource-row ds-resource-row--assets">
+              <strong>{t('dsCreate.addFiles')}</strong>
+              <DesignSystemAssetDropzone
+                files={state.assetFileObjects}
+                onAddFiles={handleAssetUpload}
+                onDrop={(dataTransfer) => void handleAssetDrop(dataTransfer)}
+                onRemove={handleRemoveAssetFile}
+                onSelectFromLibrary={() => {
+                  emitCreateFormClick('add_assets');
+                  setLibraryPickerOpen(true);
+                }}
               />
             </div>
-            <DropZone
-              label="Link local code"
-              helper="Use a folder or selected files from this computer."
-              prompt="Drag a folder here or browse"
-              names={localCodeSourceLabels(state)}
-              directory
-              onZoneClick={() => emitCreateFormClick('browse_folder')}
-              onBrowseFolder={() => void handlePickCodeFolder()}
-              onRemoveName={handleRemoveCodeFolder}
-              onError={setError}
-              onProcessingStart={beginSourceProcessing}
-              onFiles={(_names, files) => {
-                const stagedFiles = selectLocalCodeFiles(files);
-                const stagedNames = stagedFiles.map((file) => localCodeRelativePath(file));
-                emitDsFileUpload('local_code', files, stagedFiles);
-                setState((curr) => ({
-                  ...curr,
-                  codeFiles: Array.from(new Set([...curr.codeFiles, ...stagedNames])),
-                  codeFileObjects: dedupeLocalCodeFiles([...curr.codeFileObjects, ...stagedFiles]),
-                }));
-              }}
-            />
-            <DropZone
-              label="Upload .fig"
-              helper="Parsed locally; only a summary is added."
-              prompt="Drop .fig here or browse"
-              accept=".fig"
-              names={state.figFiles}
-              onZoneClick={() => emitCreateFormClick('upload_fig')}
-              onError={setError}
-              onProcessingStart={beginSourceProcessing}
-              onFiles={(_names, files) => {
-                const stagedFiles = selectFigmaFiles(files);
-                const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
-                emitDsFileUpload('fig', files, stagedFiles);
-                setState((curr) => ({
-                  ...curr,
-                  figFiles: Array.from(new Set([...curr.figFiles, ...stagedNames])),
-                  figFileObjects: dedupeResourceFiles([...curr.figFileObjects, ...stagedFiles]),
-                }));
-              }}
-            />
-            <DropZone
-              label="Add assets"
-              prompt="Drag files here or browse"
-              names={state.assetFiles}
-              onZoneClick={() => emitCreateFormClick('add_assets')}
-              onRemoveName={handleRemoveAssetFile}
-              onError={setError}
-              onProcessingStart={beginSourceProcessing}
-              onFiles={(_names, files) => {
-                const stagedFiles = selectAssetFiles(files);
-                const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
-                emitDsFileUpload('assets', files, stagedFiles);
-                setState((curr) => ({
-                  ...curr,
-                  assetFiles: Array.from(new Set([...curr.assetFiles, ...stagedNames])),
-                  assetFileObjects: dedupeResourceFiles([...curr.assetFileObjects, ...stagedFiles]),
-                }));
-              }}
-            />
+            <div className="ds-resource-row ds-resource-row--description">
+              <strong>{t('dsCreate.describeBrand')} <span>{t('dsCreate.optional')}</span></strong>
+              <label className="ds-resource-description">
+                <span>{t('dsCreate.describeBrandHelp')}</span>
+                <textarea
+                  rows={3}
+                  value={state.company}
+                  onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
+                  placeholder={t('dsCreate.companyPlaceholder')}
+                />
+              </label>
+            </div>
+            <div className="ds-resource-row ds-resource-row--design-md">
+              <strong>{t('dsCreate.pasteDesignMd')} <span>{t('dsCreate.optional')}</span></strong>
+              <div className="ds-design-md-field">
+                <div className="ds-design-md-field-head">
+                  <span>
+                    {t('dsCreate.pasteDesignMdHelp')}
+                    <a
+                      href="https://github.com/VoltAgent/awesome-design-md/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ds-design-md-reference-link"
+                    >
+                      {t('dsCreate.reference')}
+                      <Icon name="external-link" size={12} />
+                    </a>
+                  </span>
+                  <div className="ds-design-md-actions" aria-label={t('dsCreate.designMdViewMode')}>
+                    <button
+                      type="button"
+                      className={designMdMode === 'edit' ? 'active' : ''}
+                      aria-pressed={designMdMode === 'edit'}
+                      onClick={() => setDesignMdMode('edit')}
+                    >
+                      {t('common.edit')}
+                    </button>
+                    <button
+                      type="button"
+                      className={designMdMode === 'preview' ? 'active' : ''}
+                      aria-pressed={designMdMode === 'preview'}
+                      disabled={!state.designMd.trim()}
+                      onClick={() => setDesignMdMode('preview')}
+                    >
+                      {t('common.preview')}
+                    </button>
+                  </div>
+                </div>
+                {designSystems.length > 0 ? (
+                  <div className="ds-design-md-reference-picker">
+                    <span>{t('dsCreate.referenceLabel')}</span>
+                    <DesignSystemPicker
+                      designSystems={designSystems}
+                      selectedId={referenceDesignSystemId}
+                      onChange={handleReferenceDesignSystemChange}
+                      showCreateAction={false}
+                    />
+                    {referenceDesignSystemLoading ? (
+                      <span className="ds-design-md-reference-status">
+                        {t('dsCreate.referenceLoading')}
+                      </span>
+                    ) : null}
+                    {referenceDesignSystemError ? (
+                      <span className="ds-design-md-reference-status is-error">
+                        {referenceDesignSystemError}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {designMdMode === 'preview' && state.designMd.trim() ? (
+                  <DesignMdComponentKitPreview
+                    markdown={state.designMd}
+                    theme={designMdPreviewTheme}
+                    onThemeChange={setDesignMdPreviewTheme}
+                  />
+                ) : (
+                  <textarea
+                    rows={5}
+                    value={state.designMd}
+                    onChange={(event) => handleDesignMdInput(event.target.value)}
+                    placeholder={'---\nname: Heritage\ncolors:\n  primary: "#1A1C1E"\n  tertiary: "#B8422E"\ntypography:\n  h1:\n    fontFamily: Public Sans\n---\n\n## Overview\n...'}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="ds-resource-advanced">
+              <button
+                type="button"
+                className="ghost ds-resource-advanced-toggle"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((open) => !open)}
+              >
+                <Icon name={advancedOpen ? 'chevron-down' : 'chevron-right'} />
+                {t('dsCreate.advancedToggle')}
+              </button>
+              <div className={`accordion-collapsible${advancedOpen ? ' open' : ''}`}>
+                <div className="accordion-collapsible-inner">
+                  <div className="ds-resource-row">
+                    <strong>{t('dsCreate.githubRepo')}</strong>
+                    <GitHubRepositoryAccessPanel
+                      composioConfigured={composioConfigured}
+                      connector={githubConnector}
+                      loading={githubConnectorLoading}
+                      action={githubConnectorAction}
+                      authorizationPending={githubAuthorizationPending}
+                      authorizationUrl={githubAuthorizationUrl}
+                      error={githubConnectorError}
+                      onOpenConnectorsTab={onOpenConnectorsTab}
+                      onToggleMethods={(expanded) => emitCreateFormClick('show_access_methods', expanded)}
+                      onConnect={() => void handleConnectGithub()}
+                      onOpenAuthorization={() => openConnectorAuthorizationUrl(githubAuthorizationUrl)}
+                      onDisconnect={() => void handleDisconnectGithub()}
+                    />
+                  </div>
+                  <DropZone
+                    label={t('dsCreate.localCodeLabel')}
+                    helper={t('dsCreate.localCodeHelper')}
+                    prompt={t('dsCreate.localCodePrompt')}
+                    names={localCodeSourceLabels(state)}
+                    directory
+                    onZoneClick={() => emitCreateFormClick('browse_folder')}
+                    onBrowseFolder={() => void handlePickCodeFolder()}
+                    onRemoveName={handleRemoveCodeFolder}
+                    onError={setError}
+                    onProcessingStart={beginSourceProcessing}
+                    onFiles={(_names, files) => {
+                      const stagedFiles = selectLocalCodeFiles(files);
+                      const stagedNames = stagedFiles.map((file) => localCodeRelativePath(file));
+                      emitDsFileUpload('local_code', files, stagedFiles);
+                      setState((curr) => ({
+                        ...curr,
+                        codeFiles: Array.from(new Set([...curr.codeFiles, ...stagedNames])),
+                        codeFileObjects: dedupeLocalCodeFiles([...curr.codeFileObjects, ...stagedFiles]),
+                      }));
+                    }}
+                  />
+                  <DropZone
+                    label={t('dsCreate.uploadFigLabel')}
+                    helper={t('dsCreate.uploadFigHelper')}
+                    prompt={t('dsCreate.uploadFigPrompt')}
+                    accept=".fig"
+                    names={state.figFiles}
+                    onZoneClick={() => emitCreateFormClick('upload_fig')}
+                    onError={setError}
+                    onProcessingStart={beginSourceProcessing}
+                    onFiles={(_names, files) => {
+                      const stagedFiles = selectFigmaFiles(files);
+                      const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
+                      emitDsFileUpload('fig', files, stagedFiles);
+                      setState((curr) => ({
+                        ...curr,
+                        figFiles: Array.from(new Set([...curr.figFiles, ...stagedNames])),
+                        figFileObjects: dedupeResourceFiles([...curr.figFileObjects, ...stagedFiles]),
+                      }));
+                    }}
+                  />
+                  <div className="ds-resource-row">
+                    <strong>{t('dsCreate.figmaUrl')}</strong>
+                    <div className="ds-resource-inline">
+                      <input
+                        value={state.figmaUrl}
+                        onChange={(event) => setState((curr) => ({ ...curr, figmaUrl: event.target.value }))}
+                        onKeyDown={handleFigmaUrlKeyDown}
+                        placeholder={t('dsCreate.figmaPlaceholder')}
+                      />
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={!state.figmaUrl.trim()}
+                        onClick={handleAddFigmaUrl}
+                      >
+                        {t('dsCreate.add')}
+                      </button>
+                    </div>
+                    {state.figmaUrls.length > 0 ? (
+                      <div className="ds-source-link-list" aria-label={t('dsCreate.addedFigmaUrls')}>
+                        {state.figmaUrls.map((url) => (
+                          <span className="ds-source-link-chip" key={url}>
+                            <a
+                              className="ds-source-link-open"
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label={t('dsCreate.openSourceLabel', { label: figmaUrlLabel(url) })}
+                              title={t('dsCreate.openSourceLabel', { label: figmaUrlLabel(url) })}
+                            >
+                              <span className="ds-source-link-favicon ds-source-link-favicon--glyph" aria-hidden>
+                                <Icon name="import" size={14} />
+                              </span>
+                              <span className="ds-source-link-label">{figmaUrlLabel(url)}</span>
+                            </a>
+                            <button
+                              type="button"
+                              className="ds-source-link-remove"
+                              aria-label={t('dsCreate.removeSourceLabel', { label: figmaUrlLabel(url) })}
+                              onClick={() => handleRemoveFigmaUrl(url)}
+                            >
+                              x
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p>{t('dsCreate.savedFigmaHelp')}</p>
+                  </div>
+                  {embedded ? null : (
+                    <label className="ds-setup-field">
+                      <span>{t('dsCreate.notes')}</span>
+                      <Textarea
+                        rows={4}
+                        value={state.notes}
+                        onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
+                        placeholder={t('dsCreate.notesPlaceholder')}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        {embedded ? null : (
-          <label className="ds-setup-field">
-            <span>Notes</span>
-            <Textarea
-              rows={4}
-              value={state.notes}
-              onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
-              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
-            />
-          </label>
-        )}
         {error ? <div className="ds-editor-error">{error}</div> : null}
         {embedded ? (
           <div className="ds-setup-actions ds-setup-actions--embedded">
@@ -916,27 +1358,188 @@ export function DesignSystemCreationFlow({
               }}
             >
               <Icon name="arrow-left" />
-              Back
+              {t('dsCreate.back')}
             </Button>
             <Button
               variant="primary"
-              disabled={!state.company.trim()}
+              disabled={!hasCreationSource(state)}
               onClick={() => {
                 emitCreateFormClick('continue_to_generation');
-                if (!state.company.trim()) {
-                  setError('Tell Open Design about the company or design system first.');
+                if (!hasCreationSource(state)) {
+                  setError(t('dsCreate.missingSourceError'));
                   return;
                 }
                 setStep('confirm');
               }}
             >
-              Generate
+              {t('dsCreate.generate')}
               <Icon name="chevron-right" />
             </Button>
           </div>
         ) : null}
+        </div>
       </main>
+      {libraryPickerOpen ? (
+        <LibraryPicker
+          title={t('dsCreate.libraryPickerTitle')}
+          confirmLabel={t('dsCreate.libraryPickerConfirm')}
+          onClose={() => setLibraryPickerOpen(false)}
+          onConfirm={addAssetsFromLibrary}
+        />
+      ) : null}
     </div>
+  );
+}
+
+interface DesignMdPreviewColor {
+  label: string;
+  hex: string;
+}
+
+interface DesignMdPreviewModel {
+  name: string;
+  description: string;
+  displayFont: string;
+  bodyFont: string;
+  radius: number;
+  fontSize: number;
+  colors: DesignMdPreviewColor[];
+  colorPrimary: string;
+  colorPrimaryBg: string;
+  colorPrimaryHover: string;
+  colorPrimaryActive: string;
+  light: DesignMdThemeTokens;
+  dark: DesignMdThemeTokens;
+}
+
+interface DesignMdThemeTokens {
+  background: string;
+  surface: string;
+  foreground: string;
+  muted: string;
+  border: string;
+}
+
+function DesignMdComponentKitPreview({
+  markdown,
+  theme,
+  onThemeChange,
+}: {
+  markdown: string;
+  theme: DesignMdPreviewTheme;
+  onThemeChange: (theme: DesignMdPreviewTheme) => void;
+}) {
+  const model = useMemo(() => buildDesignMdPreviewModel(markdown), [markdown]);
+  const themeTokens = theme === 'dark' ? model.dark : model.light;
+  const { t } = useI18n();
+  const style = {
+    '--ds-md-bg': themeTokens.background,
+    '--ds-md-surface': themeTokens.surface,
+    '--ds-md-foreground': themeTokens.foreground,
+    '--ds-md-muted': themeTokens.muted,
+    '--ds-md-border': themeTokens.border,
+    '--ds-md-primary': model.colorPrimary,
+    '--ds-md-primary-bg': model.colorPrimaryBg,
+    '--ds-md-primary-hover': model.colorPrimaryHover,
+    '--ds-md-primary-active': model.colorPrimaryActive,
+    '--ds-md-radius': `${model.radius}px`,
+    '--ds-md-display-font': model.displayFont,
+    '--ds-md-body-font': model.bodyFont,
+    '--ds-md-font-size': `${model.fontSize}px`,
+  } as CSSProperties;
+  const primaryText = readableTextColor(model.colorPrimary);
+
+  return (
+    <div className="ds-design-md-preview" style={style} data-theme={theme}>
+      <div className="ds-design-md-preview-head">
+        <strong>{t('dsCreate.designMdPreviewKicker')}</strong>
+        <span>{t('dsCreate.designMdPreviewTitle')}</span>
+      </div>
+      <div className="ds-design-md-kit">
+        <div className="ds-design-md-kit-tabs">
+          <button
+            type="button"
+            className={theme === 'light' ? 'active' : ''}
+            aria-pressed={theme === 'light'}
+            onClick={() => onThemeChange('light')}
+          >
+            {t('brandDetail.themeLight')}
+          </button>
+          <button
+            type="button"
+            className={theme === 'dark' ? 'active' : ''}
+            aria-pressed={theme === 'dark'}
+            onClick={() => onThemeChange('dark')}
+          >
+            {t('brandDetail.themeDark')}
+          </button>
+          <span>{t('dsCreate.componentKit')}</span>
+        </div>
+        <div className="ds-design-md-kit-stage">
+          <span className="ds-design-md-kit-badge">{model.name} · {t('dsCreate.defaultTheme')}</span>
+          <h3>{t('dsCreate.componentKitTitle', { name: model.name })}</h3>
+          <p>{model.description || t('dsCreate.designMdGeneratedDescription')}</p>
+          <div className="ds-design-md-specimen">
+            <section>
+              <h4>{t('dsCreate.previewButtons')}</h4>
+              <small>{t('dsCreate.previewButtonsHelp')}</small>
+              <div className="ds-design-md-button-row">
+                <button type="button" className="primary" style={{ color: primaryText }}>{t('dsCreate.buttonPrimary')}</button>
+                <button type="button">{t('common.default')}</button>
+                <button type="button" className="dashed">{t('dsCreate.buttonDashed')}</button>
+                <button type="button" className="text">{t('dsCreate.buttonText')}</button>
+                <button type="button" className="link">{t('dsCreate.buttonLink')}</button>
+              </div>
+              <div className="ds-design-md-size-row">
+                <button type="button" className="primary small" style={{ color: primaryText }}>{t('dsCreate.sizeSmall')}</button>
+                <button type="button" className="primary" style={{ color: primaryText }}>{t('dsCreate.sizeMedium')}</button>
+                <button type="button" className="primary large" style={{ color: primaryText }}>{t('dsCreate.sizeLarge')}</button>
+              </div>
+            </section>
+            <section>
+              <h4>{t('dsCreate.previewTypeScale')}</h4>
+              <small>{model.displayFont} · {model.bodyFont}</small>
+              <div className="ds-design-md-type-row">
+                <strong>Aa</strong>
+                <span>Aa</span>
+                <small>Aa</small>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+      <div className="ds-design-md-token-row" aria-label={t('dsCreate.extractedTokens')}>
+        <DesignMdTokenChip label="colorPrimary" hex={model.colorPrimary} />
+        <DesignMdTokenChip label="colorPrimaryBg" hex={model.colorPrimaryBg} />
+        <DesignMdTokenChip label="colorPrimaryHover" hex={model.colorPrimaryHover} />
+        <DesignMdTokenChip label="colorPrimaryActive" hex={model.colorPrimaryActive} />
+        <DesignMdValueChip label="fontSize" value={String(model.fontSize)} />
+        <DesignMdValueChip label="borderRadius" value={String(model.radius)} />
+      </div>
+    </div>
+  );
+}
+
+function DesignMdTokenChip({ label, hex }: { label: string; hex: string }) {
+  return (
+    <span className="ds-design-md-token-chip">
+      <i style={{ background: hex }} aria-hidden />
+      <span>
+        <strong>{label}</strong>
+        <small>{hex}</small>
+      </span>
+    </span>
+  );
+}
+
+function DesignMdValueChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="ds-design-md-token-chip ds-design-md-token-chip--value">
+      <i aria-hidden>{value}</i>
+      <span>
+        <strong>{label}</strong>
+      </span>
+    </span>
   );
 }
 
@@ -1833,12 +2436,21 @@ export function DesignSystemDetailView({
     }
   }
 
-  if (!system) {
+  // This route's only job is to resolve the design system's backing project and
+  // hand off to the full project workspace (ProjectView, via onOpenProject). For
+  // the whole redirect window we render a loading animation instead of the
+  // legacy in-place review UI below, so opening a design-system project never
+  // flashes the old "Review draft design system" scaffold before the workspace
+  // mounts. Only when the workspace genuinely cannot be resolved
+  // (workspaceLoadError) do we fall through to that legacy UI as an escape hatch.
+  const redirectingToWorkspace = Boolean(onOpenProject) && !workspaceLoadError;
+  if (!system || redirectingToWorkspace) {
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
-        <div className="ds-setup-center-card">
-          <h1>Loading design system...</h1>
-          <p>Opening the review workspace.</p>
+        <div className="ds-setup-center-card ds-setup-center-card--loading" role="status" aria-live="polite">
+          <Spinner size={22} />
+          <h1>{system?.title ?? 'Loading design system...'}</h1>
+          <p>Opening the workspace...</p>
         </div>
       </div>
     );
@@ -1869,6 +2481,7 @@ export function DesignSystemDetailView({
             }}
             onStop={stopProjectChat}
             initialDraft={chatSeed?.text}
+            composerPlaceholder="Follow-up action: use AI extraction to refine this system. Longer run; updates land here."
             conversations={conversations}
             activeConversationId={activeConversationId}
             // Intentionally omit `messagesConversationId`: the loader above does
@@ -1938,6 +2551,7 @@ export function DesignSystemDetailView({
                 <Button
                   variant="ghost"
                   className="compact"
+                  title="Preselect this design system for new chats and new projects."
                   onClick={() => {
                     const statusBefore = mapDsStatusToTracking(system.status);
                     onSetDefault(system.id);
@@ -1956,7 +2570,7 @@ export function DesignSystemDetailView({
                     });
                   }}
                 >
-                  Make default
+                  Default for new chats
                 </Button>
               ) : null}
             </div>
@@ -1969,12 +2583,12 @@ export function DesignSystemDetailView({
             <div className="ds-warning-card">
               <Icon name="help-circle" />
               <span>
-                <strong>Missing brand fonts</strong>
-                Open Design is rendering typography with substitute web fonts.
+                <strong>Brand font files missing</strong>
+                Typography previews are using substitute web fonts until brand font files are added.
               </span>
               <Button variant="ghost" className="compact">
                 <Icon name="upload" />
-                Upload fonts
+                Add brand font files
               </Button>
             </div>
             {statusLine ? <div className="ds-status-line">{statusLine}</div> : null}
@@ -3166,8 +3780,8 @@ function GitHubRepositoryAccessPanel({
     >
       <div className="ds-github-access-header">
         <span>
-          <strong>Repository access: Auto</strong>
-          <p>Paste a GitHub URL. Open Design will use the first working access method.</p>
+          <strong>GitHub access: Auto</strong>
+          <p>GitHub repo links use the first working access method; other website links are saved as source references.</p>
         </span>
         <button
           type="button"
@@ -3279,7 +3893,8 @@ function inferDesignSystemTitle(state: SetupState): string {
     ?? githubUrlsFromState(state).map(githubRepoTitleFromUrl).find((title): title is string => Boolean(title));
   if (githubTitle) return designSystemTitle(githubTitle);
 
-  const urlTitle = genericUrlTitleFromText(clean);
+  const urlTitle = genericUrlTitleFromText(clean)
+    ?? sourceUrlsFromState(state).map(genericUrlTitleFromText).find((title): title is string => Boolean(title));
   if (urlTitle) return designSystemTitle(urlTitle);
 
   return designSystemTitle(clean.split(/\s+/).slice(0, 4).join(' ') || 'Product');
@@ -3366,7 +3981,8 @@ async function prepareCreatedDesignSystemProject({
   designSystemId: string;
 }): Promise<void> {
   try {
-    if (state.githubUrls.length > 0) {
+    const githubUrls = githubUrlsFromState(state);
+    if (githubUrls.length > 0) {
       const githubStart = performance.now();
       emitSourceIngestResult(analyticsTrack, {
         sourceType: 'github_repo',
@@ -3378,8 +3994,8 @@ async function prepareCreatedDesignSystemProject({
         fallbackType: composioConfigured && githubConnector?.status === 'connected'
           ? 'native_github_auth'
           : 'none',
-        repoHost: dominantRepoHost(state.githubUrls),
-        fileCount: state.githubUrls.length,
+        repoHost: dominantRepoHost(githubUrls),
+        fileCount: githubUrls.length,
         totalBytes: null,
         durationMs: Math.round(performance.now() - githubStart),
         entryFrom: ingestEntryFrom,
@@ -3528,27 +4144,34 @@ function dominantRepoHost(urls: string[]): TrackingDesignSystemRepoHost {
 
 // Maps a generate-time snapshot to the DS origin enum. The dashboard
 // uses this on `design_system_create_result.design_system_source` to
-// split "user added a GitHub repo" vs "user only typed a description"
-// without inspecting per-source counts.
+// split linked sources, files, and manual-only descriptions without
+// inspecting per-source counts.
 function deriveDesignSystemOrigin(snapshot: {
   sourceCount: number;
   hasBrandDescription: boolean;
+  hasDesignMd?: boolean;
+  sourceUrlCount: number;
   githubRepoCount: number;
   localFolderCount: number;
   figFileCount: number;
   assetFileCount: number;
 }): TrackingDesignSystemOrigin {
+  const nonGithubSourceUrlCount = Math.max(0, snapshot.sourceUrlCount - snapshot.githubRepoCount);
   const filled = [
+    nonGithubSourceUrlCount > 0,
     snapshot.githubRepoCount > 0,
     snapshot.localFolderCount > 0,
     snapshot.figFileCount > 0,
     snapshot.assetFileCount > 0,
+    snapshot.hasDesignMd === true,
   ].filter(Boolean).length;
   if (filled >= 2) return 'mixed';
   if (snapshot.githubRepoCount > 0) return 'github_repo';
+  if (nonGithubSourceUrlCount > 0) return 'source_url';
   if (snapshot.localFolderCount > 0) return 'local_code';
   if (snapshot.figFileCount > 0) return 'fig';
   if (snapshot.assetFileCount > 0) return 'assets';
+  if (snapshot.hasDesignMd) return 'manual_create';
   if (snapshot.hasBrandDescription) return 'manual_create';
   return 'unknown';
 }
@@ -3625,20 +4248,299 @@ function titleCaseRepositoryWord(word: string): string {
   return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
 }
 
-function normalizeGithubUrl(value: string): string {
+const FIGMA_FILE_URL_RE = /^https:\/\/(?:www\.)?figma\.com\/(?:file|design|board)\/[A-Za-z0-9]+/i;
+
+// Accept a Figma file/design URL, tolerating a missing protocol. Returns the
+// normalized https URL, or '' when it isn't a recognizable Figma file link.
+function normalizeFigmaUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed.replace(/^\/+/, '')}`;
+  if (!FIGMA_FILE_URL_RE.test(withProtocol)) return '';
   try {
-    const url = new URL(trimmed);
+    return new URL(withProtocol).toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+// "https://figma.com/design/<key>/My-File-Name" → "Figma · My File Name".
+function figmaUrlLabel(url: string): string {
+  try {
+    const parts = new URL(url).pathname.split('/').filter(Boolean);
+    const name = parts[2] ? decodeURIComponent(parts[2]).replace(/[-_]+/g, ' ').trim() : '';
+    return name ? `Figma · ${name}` : 'Figma file';
+  } catch {
+    return 'Figma file';
+  }
+}
+
+function normalizeSourceUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const withProtocol = shouldAssumeHttps(trimmed) ? `https://${trimmed}` : trimmed;
+  try {
+    const url = new URL(withProtocol);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return trimmed.replace(/\/$/, '');
     return url.toString().replace(/\/$/, '');
   } catch {
     return trimmed.replace(/\/$/, '');
   }
 }
 
+function shouldAssumeHttps(value: string): boolean {
+  if (/^[a-z][a-z0-9+.-]*:/iu.test(value)) return false;
+  if (/^git@github\.com:/iu.test(value)) return false;
+  return /^(?:www\.)?[^/\s]+\.[^/\s]{2,}(?:[/?#].*)?$/u.test(value)
+    || /^github\.com\//iu.test(value);
+}
+
+function sourceUrlLabel(url: string): string {
+  if (isGithubRepositoryUrl(url)) return githubRepoLabel(url);
+  try {
+    const parsed = new URL(sourceUrlHref(url) ?? url);
+    return `${parsed.hostname.replace(/^www\./iu, '')}${parsed.pathname === '/' ? '' : parsed.pathname}`.replace(/\/$/, '');
+  } catch {
+    return url;
+  }
+}
+
+function sourceUrlHref(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  const sshGithub = /^git@github\.com:([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[?#].*)?$/iu.exec(trimmed);
+  if (sshGithub) return `https://github.com/${sshGithub[1]}/${sshGithub[2]}`;
+  const shorthandGithub = /^([^/\s]+)\/([^/\s#?]+?)(?:\.git)?$/u.exec(trimmed);
+  if (shorthandGithub) return `https://github.com/${shorthandGithub[1]}/${shorthandGithub[2]}`;
+  const withProtocol = shouldAssumeHttps(trimmed) ? `https://${trimmed}` : trimmed;
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function sourceUrlIcon(url: string): IconName {
+  if (isGithubRepositoryUrl(url)) return 'github';
+  return sourceUrlHref(url) ? 'external-link' : 'link';
+}
+
+// Favicon for a source-link chip. GitHub repos keep their mark glyph; anything
+// that doesn't resolve to an http(s) origin has no favicon, so the chip falls
+// back to the `sourceUrlIcon` glyph.
+function sourceUrlFaviconUrl(url: string): string | null {
+  if (isGithubRepositoryUrl(url)) return null;
+  const href = sourceUrlHref(url);
+  if (!href) return null;
+  try {
+    return brandFaviconUrl(new URL(href).hostname, 64);
+  } catch {
+    return null;
+  }
+}
+
+function SourceLinkFavicon({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [url]);
+  const faviconUrl = failed ? null : sourceUrlFaviconUrl(url);
+  if (!faviconUrl) {
+    return (
+      <span className="ds-source-link-favicon ds-source-link-favicon--glyph" aria-hidden>
+        <Icon name={sourceUrlIcon(url)} size={14} />
+      </span>
+    );
+  }
+  return (
+    <img
+      className="ds-source-link-favicon"
+      src={faviconUrl}
+      alt=""
+      width={16}
+      height={16}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function buildDesignMdPreviewModel(markdown: string): DesignMdPreviewModel {
+  const parsed = parseDesignMd(markdown);
+  const colors = parsed.colors
+    .map((color) => ({
+      label: color.name || color.role || 'Color',
+      role: color.role,
+      usage: color.usage,
+      hex: normalizePreviewHex(color.hex),
+    }))
+    .filter((color): color is DesignMdPreviewColor & { role: string; usage: string } => Boolean(color.hex))
+    .slice(0, 8);
+  const allColors = colors.length > 0 ? colors : [
+    { label: 'Primary', role: 'accent', usage: 'Primary actions', hex: '#cc6344' },
+    { label: 'Background', role: 'background', usage: 'Page canvas', hex: '#ffffff' },
+    { label: 'Foreground', role: 'foreground', usage: 'Text', hex: '#1f1f22' },
+  ];
+  const colorPrimary =
+    findPreviewColor(allColors, /(accent|primary|brand|cta|tertiary|link)/)
+    ?? firstNonNeutralColor(allColors)
+    ?? allColors[0]!.hex;
+  const lightBackground =
+    findPreviewColor(allColors, /(background|canvas|page|paper|white)/, 'light')
+    ?? '#ffffff';
+  const lightForeground =
+    findPreviewColor(allColors, /(foreground|text|ink|heading|body|black)/, 'dark')
+    ?? '#222326';
+  const lightSurface =
+    findPreviewColor(allColors, /(surface|card|panel|raised)/, 'light')
+    ?? mixPreviewHex(lightBackground, '#f5f4f0', 0.72);
+  const lightBorder =
+    findPreviewColor(allColors, /(border|divider|line|stroke|hairline)/)
+    ?? mixPreviewHex(lightForeground, lightBackground, 0.14);
+  const lightMuted =
+    findPreviewColor(allColors, /(muted|secondary|caption|metadata|slate)/)
+    ?? mixPreviewHex(lightForeground, lightBackground, 0.54);
+  const darkBackground =
+    findPreviewColor(allColors, /(background|canvas|page|paper)/, 'dark')
+    ?? mixPreviewHex(lightForeground, '#000000', 0.72);
+  const darkForeground =
+    findPreviewColor(allColors, /(foreground|text|ink|heading|body)/, 'light')
+    ?? mixPreviewHex(lightBackground, '#ffffff', 0.92);
+  const colorPrimaryBg = mixPreviewHex(colorPrimary, lightBackground, 0.14);
+  return {
+    name: parsed.name || 'Design system',
+    description: parsed.description || parsed.tagline,
+    displayFont: cssFontFamily(parsed.typography.display?.family ?? parsed.typography.body?.family ?? fontFromMarkdown(markdown) ?? 'Inter'),
+    bodyFont: cssFontFamily(parsed.typography.body?.family ?? parsed.typography.display?.family ?? fontFromMarkdown(markdown) ?? 'Inter'),
+    radius: radiusFromDesignMd(parsed.layout.radius || markdown),
+    fontSize: fontSizeFromDesignMd(markdown),
+    colors: allColors.map((color) => ({ label: color.label, hex: color.hex })),
+    colorPrimary,
+    colorPrimaryBg,
+    colorPrimaryHover: mixPreviewHex(colorPrimary, '#ffffff', 0.86),
+    colorPrimaryActive: mixPreviewHex(colorPrimary, '#000000', 0.82),
+    light: {
+      background: lightBackground,
+      surface: lightSurface,
+      foreground: lightForeground,
+      muted: lightMuted,
+      border: lightBorder,
+    },
+    dark: {
+      background: darkBackground,
+      surface: mixPreviewHex(darkBackground, '#ffffff', 0.9),
+      foreground: darkForeground,
+      muted: mixPreviewHex(darkForeground, darkBackground, 0.68),
+      border: mixPreviewHex(darkForeground, darkBackground, 0.2),
+    },
+  };
+}
+
+function normalizePreviewHex(value: string | undefined): string | null {
+  const match = value?.match(/#[0-9a-fA-F]{3}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{8}\b/);
+  if (!match) return null;
+  const raw = match[0].toLowerCase();
+  if (raw.length === 4) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
+  }
+  if (raw.length === 9) return raw.slice(0, 7);
+  return raw;
+}
+
+function findPreviewColor(
+  colors: Array<DesignMdPreviewColor & { role?: string; usage?: string }>,
+  matcher: RegExp,
+  tone?: 'light' | 'dark',
+): string | null {
+  for (const color of colors) {
+    const text = `${color.label} ${color.role ?? ''} ${color.usage ?? ''}`.toLowerCase();
+    if (!matcher.test(text)) continue;
+    if (tone === 'light' && previewLuminance(color.hex) < 0.72) continue;
+    if (tone === 'dark' && previewLuminance(color.hex) > 0.34) continue;
+    return color.hex;
+  }
+  return null;
+}
+
+function firstNonNeutralColor(colors: Array<DesignMdPreviewColor & { role?: string; usage?: string }>): string | null {
+  return colors.find((color) => {
+    const rgb = previewRgb(color.hex);
+    if (!rgb) return false;
+    const spread = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
+    return spread > 18 && previewLuminance(color.hex) > 0.08 && previewLuminance(color.hex) < 0.88;
+  })?.hex ?? null;
+}
+
+function previewRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = normalizePreviewHex(hex);
+  if (!normalized) return null;
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+function previewLuminance(hex: string): number {
+  const rgb = previewRgb(hex);
+  if (!rgb) return 1;
+  return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+}
+
+function mixPreviewHex(hex: string, other: string, hexWeight: number): string {
+  const a = previewRgb(hex) ?? { r: 0, g: 0, b: 0 };
+  const b = previewRgb(other) ?? { r: 255, g: 255, b: 255 };
+  const weight = Math.max(0, Math.min(1, hexWeight));
+  const mixed = {
+    r: Math.round(a.r * weight + b.r * (1 - weight)),
+    g: Math.round(a.g * weight + b.g * (1 - weight)),
+    b: Math.round(a.b * weight + b.b * (1 - weight)),
+  };
+  return `#${toHexByte(mixed.r)}${toHexByte(mixed.g)}${toHexByte(mixed.b)}`;
+}
+
+function toHexByte(value: number): string {
+  return Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0');
+}
+
+function readableTextColor(hex: string): string {
+  return previewLuminance(hex) > 0.56 ? '#111111' : '#ffffff';
+}
+
+function cssFontFamily(family: string): string {
+  const clean = family.replace(/["'`]/g, '').trim();
+  if (!clean) return 'Inter, ui-sans-serif, system-ui, sans-serif';
+  const head = /\s/.test(clean) ? `'${clean}'` : clean;
+  return `${head}, ui-sans-serif, system-ui, sans-serif`;
+}
+
+function fontFromMarkdown(markdown: string): string | null {
+  const match =
+    markdown.match(/fontFamily:\s*["']?([^"'\n]+)/i)
+    ?? markdown.match(/font-family:\s*["']?([^"'\n;]+)/i)
+    ?? markdown.match(/family:\s*["']?([^"'\n]+)/i);
+  return match ? match[1]!.trim() : null;
+}
+
+function radiusFromDesignMd(value: string): number {
+  const match = value.match(/(?:radius|borderRadius)[^0-9]{0,16}(\d+(?:\.\d+)?)/i);
+  if (!match) return 6;
+  return Math.max(0, Math.min(24, Math.round(Number(match[1]))));
+}
+
+function fontSizeFromDesignMd(markdown: string): number {
+  const match = markdown.match(/(?:fontSize|font-size|base font)[^0-9]{0,16}(\d+(?:\.\d+)?)/i);
+  if (!match) return 14;
+  return Math.max(11, Math.min(22, Math.round(Number(match[1]))));
+}
+
 function githubRepoLabel(url: string): string {
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(sourceUrlHref(url) ?? url);
     const parts = parsed.pathname.split('/').filter(Boolean);
     if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
   } catch {
@@ -3647,11 +4549,78 @@ function githubRepoLabel(url: string): string {
   return url;
 }
 
-function githubUrlsFromState(state: SetupState): string[] {
+function sourceUrlsFromState(state: SetupState): string[] {
   return Array.from(new Set([
-    ...state.githubUrls,
-    ...(state.githubUrl.trim() ? [normalizeGithubUrl(state.githubUrl)] : []),
+    ...state.sourceUrls,
+    ...(state.sourceUrl.trim() ? [normalizeSourceUrl(state.sourceUrl)] : []),
   ].filter(Boolean)));
+}
+
+function figmaUrlsFromState(state: SetupState): string[] {
+  return Array.from(new Set([
+    ...state.figmaUrls,
+    ...(state.figmaUrl.trim() ? [state.figmaUrl.trim()] : []),
+  ].filter(Boolean)));
+}
+
+function githubUrlsFromState(state: SetupState): string[] {
+  return sourceUrlsFromState(state).filter(isGithubRepositoryUrl);
+}
+
+function nonGithubSourceUrlsFromState(state: SetupState): string[] {
+  return sourceUrlsFromState(state).filter((url) => !isGithubRepositoryUrl(url));
+}
+
+function hasCreationSource(state: SetupState): boolean {
+  return (
+    sourceUrlsFromState(state).length > 0
+    || figmaUrlsFromState(state).length > 0
+    || state.designMd.trim().length > 0
+    || state.company.trim().length > 0
+    || state.notes.trim().length > 0
+    || state.codeFolders.length > 0
+    || state.codeFiles.length > 0
+    || state.codeFileObjects.length > 0
+    || state.figFiles.length > 0
+    || state.figFileObjects.length > 0
+    || state.assetFiles.length > 0
+    || state.assetFileObjects.length > 0
+  );
+}
+
+function hasProjectStagingSources(state: SetupState): boolean {
+  return (
+    sourceUrlsFromState(state).length > 1
+    || githubUrlsFromState(state).length > 0
+    || figmaUrlsFromState(state).length > 0
+    || state.codeFolders.length > 0
+    || state.codeFiles.length > 0
+    || state.codeFileObjects.length > 0
+    || state.figFiles.length > 0
+    || state.figFileObjects.length > 0
+    || state.assetFiles.length > 0
+    || state.assetFileObjects.length > 0
+  );
+}
+
+function isImeComposing(event: KeyboardEvent<HTMLInputElement>): boolean {
+  const nativeEvent = event.nativeEvent as KeyboardEvent<HTMLInputElement>['nativeEvent'] & {
+    keyCode?: number;
+  };
+  return nativeEvent.isComposing || nativeEvent.keyCode === 229 || event.key === 'Process';
+}
+
+function isGithubRepositoryUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (/^git@github\.com:[^/\s]+\/[^/\s#?]+(?:\.git)?(?:[?#].*)?$/iu.test(trimmed)) return true;
+  try {
+    const parsed = new URL(sourceUrlHref(trimmed) ?? trimmed);
+    if (parsed.hostname.toLowerCase() !== 'github.com') return false;
+    return parsed.pathname.split('/').filter(Boolean).length >= 2;
+  } catch {
+    return /^([^/\s]+)\/([^/\s#?]+?)(?:\.git)?$/u.test(trimmed);
+  }
 }
 
 function isComposioConfigured(composio: AppConfig['composio'] | undefined): boolean {
@@ -3725,20 +4694,9 @@ interface StagedLocalCodeContext {
 }
 
 interface StagedFigmaContext {
+  /** Paths to each `.fig`'s decoded `figma/.../DESIGN-context.md` snapshot. */
   summaryPaths: string[];
   skippedCount: number;
-}
-
-interface FigmaLocalSummary {
-  name: string;
-  size: number;
-  lastModified: number;
-  parseBytes: number;
-  colors: string[];
-  textStyles: string[];
-  namedLayers: string[];
-  componentHints: string[];
-  readableSample: string;
 }
 
 interface StagedAssetContext {
@@ -3880,104 +4838,30 @@ async function stageFigmaFiles(projectId: string, files: File[]): Promise<Staged
   if (files.length === 0) return { summaryPaths: [], skippedCount: 0 };
   const selected = selectFigmaFiles(files);
   const summaryPaths: string[] = [];
+  let failed = 0;
+  let index = 0;
   for (const file of selected) {
-    const summary = await summarizeFigmaFile(file);
-    const desiredName = `${FIGMA_CONTEXT_ROOT}/${safeContextFileName(resourceRelativePath(file), 'figma-file')}`;
-    const written = await writeProjectTextFile(projectId, desiredName, renderFigmaSummary(summary));
-    if (written) {
-      summaryPaths.push(written.name);
+    // Decode each `.fig` on the daemon (offline, no Figma account) into a real
+    // `figma/` snapshot — node tree, tokens, assets, thumbnail, and an
+    // agent-facing DESIGN-context.md. Distinct subdirs keep multiple files
+    // from overwriting each other; a single file uses the default `figma/`.
+    const base = safeContextFileName(resourceRelativePath(file), `figma-${index}`).replace(/\.fig$/i, '');
+    const outcome = await importProjectFigma(
+      projectId,
+      file,
+      selected.length > 1 ? { subdir: `figma-${base}` } : undefined,
+    );
+    if (outcome.ok) {
+      summaryPaths.push(outcome.result.contextPath);
+    } else {
+      failed += 1;
     }
+    index += 1;
   }
   return {
     summaryPaths,
-    skippedCount: Math.max(0, files.length - selected.length),
+    skippedCount: Math.max(0, files.length - selected.length) + failed,
   };
-}
-
-async function summarizeFigmaFile(file: File): Promise<FigmaLocalSummary> {
-  const parseBytes = Math.min(file.size, MAX_FIGMA_PARSE_BYTES);
-  let readable = '';
-  try {
-    readable = await file.slice(0, parseBytes).text();
-  } catch {
-    readable = '';
-  }
-  const normalized = readable
-    .replace(/[^\t\n\r\x20-\x7e]+/g, ' ')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
-  const namedLayers = uniqueMatches(normalized, /"name"\s*:\s*"([^"]{2,80})"/g, 40);
-  const textStyles = uniqueMatches(
-    normalized,
-    /"(?:fontFamily|fontPostScriptName|fontName|family|styleName)"\s*:\s*"([^"]{2,80})"/g,
-    30,
-  );
-  const colors = Array.from(new Set(normalized.match(/#[0-9a-fA-F]{6,8}\b/g) ?? [])).slice(0, 40);
-  const componentHints = namedLayers
-    .filter((name) => /(button|card|modal|dialog|input|nav|tab|menu|toast|badge|avatar|table|list|toolbar|sidebar)/i.test(name))
-    .slice(0, 30);
-  return {
-    name: resourceRelativePath(file),
-    size: file.size,
-    lastModified: file.lastModified,
-    parseBytes,
-    colors,
-    textStyles,
-    namedLayers,
-    componentHints,
-    readableSample: normalized.slice(0, 1600),
-  };
-}
-
-function uniqueMatches(text: string, pattern: RegExp, limit: number): string[] {
-  const values: string[] = [];
-  const seen = new Set<string>();
-  for (const match of text.matchAll(pattern)) {
-    const value = match[1]?.trim();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    values.push(value);
-    if (values.length >= limit) break;
-  }
-  return values;
-}
-
-function renderFigmaSummary(summary: FigmaLocalSummary): string {
-  return [
-    `# Figma Source Summary: ${summary.name}`,
-    '',
-    'The original .fig source was parsed locally in the browser. This markdown summary is the only Figma-derived context copied into the design-system project.',
-    '',
-    '## File',
-    '',
-    `- Name: ${summary.name}`,
-    `- Size: ${formatBytes(summary.size)}`,
-    `- Last modified: ${summary.lastModified ? new Date(summary.lastModified).toISOString() : 'unknown'}`,
-    `- Local parse window: ${formatBytes(summary.parseBytes)}`,
-    '',
-    '## Extracted Signals',
-    '',
-    summary.colors.length ? `Colors:\n${summary.colors.map((color) => `- ${color}`).join('\n')}` : 'Colors: no readable color tokens found.',
-    '',
-    summary.textStyles.length ? `Text styles and font names:\n${summary.textStyles.map((style) => `- ${style}`).join('\n')}` : 'Text styles and font names: no readable text-style tokens found.',
-    '',
-    summary.componentHints.length ? `Component-like layer names:\n${summary.componentHints.map((name) => `- ${name}`).join('\n')}` : 'Component-like layer names: no obvious component names found.',
-    '',
-    summary.namedLayers.length ? `Readable layer names:\n${summary.namedLayers.map((name) => `- ${name}`).join('\n')}` : 'Readable layer names: no readable layer names found.',
-    '',
-    '## Readable Sample',
-    '',
-    summary.readableSample
-      ? `\`\`\`text\n${summary.readableSample}\n\`\`\``
-      : 'No readable text sample was available from the local parse window. Ask for screenshots, exports, or a Figma link if visual evidence is required.',
-    '',
-  ].join('\n');
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
-  return `${Math.round(bytes / (1024 * 102.4)) / 10} MB`;
 }
 
 async function stageAssetFiles(projectId: string, files: File[]): Promise<StagedAssetContext> {
@@ -3998,15 +4882,77 @@ async function stageAssetFiles(projectId: string, files: File[]): Promise<Staged
 }
 
 function buildSourceNotes(state: SetupState): string {
+  const sourceUrls = sourceUrlsFromState(state);
   const githubUrls = githubUrlsFromState(state);
+  const websiteUrls = nonGithubSourceUrlsFromState(state);
+  const figmaUrls = figmaUrlsFromState(state);
   const localCode = localCodeReferences(state);
   return [
-    githubUrls.length ? `GitHub/code: ${githubUrls.join(', ')}` : '',
+    sourceUrls.length ? `Source links: ${sourceUrls.join(', ')}` : '',
+    githubUrls.length ? `GitHub repositories: ${githubUrls.join(', ')}` : '',
+    websiteUrls.length ? `Website/source URLs: ${websiteUrls.join(', ')}` : '',
     localCode.length ? `Local code: ${localCode.join(', ')}` : '',
     state.figFiles.length ? `Figma files: ${state.figFiles.join(', ')}` : '',
+    figmaUrls.length ? `Figma URLs: ${figmaUrls.join(', ')}` : '',
     state.assetFiles.length ? `Fonts, logos and assets: ${state.assetFiles.join(', ')}` : '',
     state.notes.trim() ? `Additional notes: ${state.notes.trim()}` : '',
   ].filter(Boolean).join('\n');
+}
+
+function buildFallbackDesignMdFromState(state: SetupState): string {
+  if (!hasCreationSource(state)) return '';
+  const title = inferDesignSystemTitle(state);
+  const sourceNotes = buildSourceNotes(state);
+  const overview =
+    state.company.trim()
+    || state.notes.trim()
+    || sourceNotes
+    || 'Design system generated from source material supplied in Open Design.';
+  return [
+    '---',
+    `name: ${yamlString(title.replace(/\s+Design System$/iu, ''))}`,
+    `description: ${yamlString(truncateForDesignMd(overview, 320))}`,
+    'colors:',
+    '  background: "#ffffff"',
+    '  foreground: "#111111"',
+    '  accent: "#1677ff"',
+    '  surface: "#f7f8fa"',
+    '  muted: "#6b7280"',
+    '  border: "#d9dee7"',
+    'typography:',
+    '  display: "Inter"',
+    '  body: "Inter"',
+    'radius: "8px"',
+    'spacing: "8px baseline grid"',
+    '---',
+    '',
+    `# ${title}`,
+    '',
+    '## Overview',
+    '',
+    overview,
+    '',
+    '## Source Material',
+    '',
+    sourceNotes || 'No website was linked. Use the provided files, notes, and source context as the design-system basis.',
+    '',
+    '## Components',
+    '',
+    '- Button',
+    '- Card',
+    '- Form field',
+    '- Navigation',
+  ].join('\n');
+}
+
+function yamlString(value: string): string {
+  return JSON.stringify(value.replace(/\s+/g, ' ').trim());
+}
+
+function truncateForDesignMd(value: string, max: number): string {
+  const clean = value.replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1).trim()}...`;
 }
 
 function buildCreationAgentPrompt(
@@ -4018,6 +4964,7 @@ function buildCreationAgentPrompt(
 ): string {
   const sourceNotes = buildSourceNotes(state);
   const githubUrls = githubUrlsFromState(state);
+  const websiteUrls = nonGithubSourceUrlsFromState(state);
   const localCode = localCodeReferences(state);
   const githubRunbook = buildGithubConnectorRunbook(githubUrls);
   const localFolderRunbook = buildLocalFolderRunbook(state.codeFolders);
@@ -4031,7 +4978,7 @@ function buildCreationAgentPrompt(
     '- The setup page already collected the brief. If target surfaces, review priority, or workspace depth are missing, choose sensible defaults and begin generating the design-system artifacts immediately.',
     '',
     'Project boundary:',
-    '- All GitHub extraction, local evidence intake, source reading, design-system construction, package audit, and final artifact writes must happen inside this project workspace and this project chat run.',
+    '- All GitHub extraction, website/source URL review, local evidence intake, source reading, design-system construction, package audit, and final artifact writes must happen inside this project workspace and this project chat run.',
     '- Treat `/design-systems/create` as setup only. Do not depend on that page for progress, review, or generated output; the project is the source of truth.',
     '',
     'Use the files in this project as the design system source for future projects. Update `DESIGN.md` as the canonical rules document, and update supporting files when they make the system easier to review or reuse.',
@@ -4055,10 +5002,11 @@ function buildCreationAgentPrompt(
     '',
     'Core execution order:',
     '1. Read `context/source-context.md` first, then run every intake command it lists for linked GitHub repositories and linked local code folders before editing design-system files.',
-    '2. Do not write `DESIGN.md`, token files, previews, UI-kit examples, or asset notes from URL text alone. When GitHub, local code, Figma, or assets were provided, preserve concrete evidence under `context/` and use it as the basis for the design-system files.',
-    '3. Before writing the design-system files, inventory the local evidence for product identity, real color/theme tokens, font families, brand assets, app shell layout, navigation, chat/input surfaces, and reusable components. Use this inventory to avoid generic tokens.',
-    '4. Copy high-signal source component examples from the snapshots when they explain the design system better than prose alone. Keep these examples outside `context/` as reusable package artifacts, not only as hidden evidence.',
-    '5. After evidence is collected, update the project files directly and keep the `Design System` tab reviewable.',
+    '2. Review linked website/source URLs when they are public and reachable. Treat them as source references, not repository snapshots; if a site cannot be reached, state that limitation and continue from the evidence that is available.',
+    '3. Do not write `DESIGN.md`, token files, previews, UI-kit examples, or asset notes from URL text alone. When GitHub, local code, Figma, or assets were provided, preserve concrete evidence under `context/` and use it as the basis for the design-system files.',
+    '4. Before writing the design-system files, inventory the local evidence for product identity, real color/theme tokens, font families, brand assets, app shell layout, navigation, chat/input surfaces, and reusable components. Use this inventory to avoid generic tokens.',
+    '5. Copy high-signal source component examples from the snapshots when they explain the design system better than prose alone. Keep these examples outside `context/` as reusable package artifacts, not only as hidden evidence.',
+    '6. After evidence is collected, update the project files directly and keep the `Design System` tab reviewable.',
     '',
     'Completion gate:',
     '- For each linked GitHub repository, there must be a `context/github/*.md` evidence note plus command-written snapshots under `context/github/*/files/` before writing final design-system rules or previews. The snapshots should include theme/token/source files and any available binary assets or fonts selected by the intake command.',
@@ -4076,9 +5024,12 @@ function buildCreationAgentPrompt(
     '',
     `Company / design system context:\n${state.company.trim()}`,
     sourceContextManifestPath
-      ? `\nSource context manifest:\n- Read \`${sourceContextManifestPath}\` before drafting. It records GitHub access readiness, local folder links, copied code snapshots, uploaded resources, and the review contract for this design system project.`
+      ? `\nSource context manifest:\n- Read \`${sourceContextManifestPath}\` before drafting. It records source links, GitHub access readiness, local folder links, copied code snapshots, uploaded resources, and the review contract for this design system project.`
       : '',
     sourceNotes ? `\nProvided resources:\n${sourceNotes}` : '',
+    websiteUrls.length
+      ? `Use the linked website/source URLs as public style and product references when they are reachable: ${websiteUrls.join(', ')}. Capture concrete observations in context notes before relying on them for design decisions.`
+      : '',
     githubUrls.length
       ? githubRunbook
       : '',
@@ -4092,10 +5043,13 @@ function buildCreationAgentPrompt(
       ? `${stagedLocalCode.skippedCount} local code files were skipped because they were too large, duplicate, generated, or outside the focused upload limit.`
       : '',
     stagedFigma?.summaryPaths.length
-      ? `Use the locally parsed Figma summaries in \`${FIGMA_CONTEXT_ROOT}/\`: ${stagedFigma.summaryPaths.join(', ')}. Treat these as evidence extracted from .fig files; the original .fig files were not uploaded.`
+      ? `Each .fig was decoded into a real design snapshot — read the context briefs first: ${stagedFigma.summaryPaths.join(', ')}. They sit beside \`figma/tree.json\`, \`figma/tokens.json\`, \`figma/assets/\`, and a \`figma/thumbnail.png\` preview. Bind the system to these real tokens, type, and components.`
       : '',
     stagedFigma?.skippedCount
-      ? `${stagedFigma.skippedCount} .fig files were skipped because they were duplicate or outside the focused parse limit.`
+      ? `${stagedFigma.skippedCount} .fig files were skipped (duplicate or failed to decode).`
+      : '',
+    state.figmaUrls.length
+      ? `Figma file URL(s) provided as the canonical design source: ${state.figmaUrls.join(', ')}. Use them as the reference for layout, tokens, type, and components. If a URL isn't directly reachable, ask the user to export it as a .fig (File → Save local copy) for a full offline decode, or to share a screenshot.`
       : '',
     stagedAssets?.uploadedPaths.length
       ? `Use uploaded brand assets in \`${ASSET_UPLOAD_ROOT}/\`: ${stagedAssets.uploadedPaths.slice(0, 20).join(', ')}${stagedAssets.uploadedPaths.length > 20 ? `, and ${stagedAssets.uploadedPaths.length - 20} more` : ''}.`
@@ -4121,7 +5075,9 @@ function buildSourceContextManifest(
     stagedAssets?: StagedAssetContext;
   },
 ): string {
+  const sourceUrls = sourceUrlsFromState(state);
   const githubUrls = githubUrlsFromState(state);
+  const websiteUrls = nonGithubSourceUrlsFromState(state);
   const linkedFolders = state.codeFolders;
   const copiedSnapshots = options.stagedLocalCode?.uploadedPaths ?? [];
   const skippedCount = options.stagedLocalCode?.skippedCount ?? 0;
@@ -4141,6 +5097,16 @@ function buildSourceContextManifest(
     '',
     state.company.trim() || 'No company or product context provided yet.',
   ];
+
+  sections.push('', '## Source Links', '');
+  if (sourceUrls.length > 0) {
+    sections.push(...sourceUrls.map((url) => `- ${url}`));
+  } else {
+    sections.push('- None linked.');
+  }
+  if (websiteUrls.length > 0) {
+    sections.push('', 'Website/source URLs should be treated as public style and product references when reachable. Record concrete observations before using them as design-system evidence.');
+  }
 
   sections.push('', '## GitHub Repositories', '');
   if (githubUrls.length > 0) {
@@ -4177,13 +5143,17 @@ function buildSourceContextManifest(
   sections.push('', '## Design And Brand Resources', '');
   sections.push(state.figFiles.length ? `Figma files selected:\n${state.figFiles.map((name) => `- ${name}`).join('\n')}` : 'Figma files selected: none.');
   if (figmaSummaries.length > 0) {
-    sections.push('', `Locally parsed Figma summaries under \`${FIGMA_CONTEXT_ROOT}/\`:`);
+    sections.push('', 'Decoded Figma snapshots (tree + tokens + assets + preview); start from each context brief:');
     sections.push(...figmaSummaries.map((filePath) => `- ${filePath}`));
   } else {
-    sections.push('', `Locally parsed Figma summaries under \`${FIGMA_CONTEXT_ROOT}/\`: none.`);
+    sections.push('', 'Decoded Figma snapshots: none.');
   }
   if (skippedFigma > 0) {
-    sections.push(`${skippedFigma} .fig files were skipped because they were duplicate or outside the focused parse limit.`);
+    sections.push(`${skippedFigma} .fig files were skipped (duplicate or failed to decode).`);
+  }
+  if (state.figmaUrls.length > 0) {
+    sections.push('', 'Figma file URLs (canonical design source references):');
+    sections.push(...state.figmaUrls.map((url) => `- ${url}`));
   }
   sections.push(state.assetFiles.length ? `Fonts, logos, and assets selected:\n${state.assetFiles.map((name) => `- ${name}`).join('\n')}` : 'Fonts, logos, and assets selected: none.');
   if (uploadedAssets.length > 0) {
@@ -4205,7 +5175,7 @@ function buildSourceContextManifest(
     '',
     '## Review Contract',
     '',
-    '- `/design-systems/create` only collected setup inputs. All GitHub extraction, local evidence intake, source reading, design-system construction, package audit, and artifact writes should happen inside this project workspace.',
+    '- `/design-systems/create` only collected setup inputs. All GitHub extraction, website/source URL review, local evidence intake, source reading, design-system construction, package audit, and artifact writes should happen inside this project workspace.',
     '- DESIGN.md is the canonical source of truth.',
     '- Use the canonical design-system title above for headings, README/SKILL names, preview labels, and UI-kit copy unless inspected evidence proves a more accurate product name. Never title the system from URL protocol text such as `https`.',
     '- colors_and_type.css should hold concrete reusable tokens when the source evidence supports them; if fonts/ contains preserved font files, colors_and_type.css must bind those files with @font-face, @import, or url(...) references so typography does not fall back to substitute fonts.',
@@ -4303,10 +5273,12 @@ function githubConnectorStatusForManifest(options: {
 }
 
 function buildProvenance(state: SetupState): DesignSystemProvenance {
+  const sourceUrls = sourceUrlsFromState(state);
   const githubUrls = githubUrlsFromState(state);
   const localCode = localCodeReferences(state);
   return {
     companyBlurb: state.company.trim(),
+    ...(sourceUrls.length ? { sourceUrls } : {}),
     ...(githubUrls.length ? { githubUrls } : {}),
     ...(localCode.length ? { localCodeFiles: localCode } : {}),
     ...(state.figFiles.length ? { figFiles: state.figFiles } : {}),
@@ -4320,6 +5292,7 @@ function provenanceRows(provenance: DesignSystemProvenance | undefined): Array<{
   if (!provenance) return [];
   return [
     provenance.companyBlurb ? { label: 'Company', value: truncateContext(provenance.companyBlurb) } : null,
+    provenance.sourceUrls?.length ? { label: 'Source links', value: provenance.sourceUrls.join(', ') } : null,
     provenance.githubUrls?.length ? { label: 'GitHub', value: provenance.githubUrls.join(', ') } : null,
     provenance.localCodeFiles?.length ? { label: 'Code', value: provenance.localCodeFiles.join(', ') } : null,
     provenance.figFiles?.length ? { label: 'Figma', value: provenance.figFiles.join(', ') } : null,

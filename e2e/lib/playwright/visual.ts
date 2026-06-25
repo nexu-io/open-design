@@ -587,6 +587,54 @@ export async function captureVisual(page: Page, name: string): Promise<string> {
   return outputPath;
 }
 
+export async function captureVisualTarget(
+  page: Page,
+  name: string,
+  target: Locator | readonly Locator[],
+  options: { padding?: number } = {},
+): Promise<string> {
+  const outputDir = path.resolve(process.env.OD_VISUAL_OUTPUT_DIR || 'ui/reports/visual-screenshots');
+  const safeName = sanitizeVisualName(name);
+  const outputPath = path.join(outputDir, `${safeName}.png`);
+  const targets = Array.isArray(target) ? target : [target];
+  await mkdir(outputDir, { recursive: true });
+  await waitForVisualStable(page);
+
+  const viewport = page.viewportSize();
+  if (viewport == null) {
+    throw new Error(`Cannot capture visual target ${name}: page has no viewport`);
+  }
+
+  const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+  for (const locator of targets) {
+    await expect(locator).toBeVisible();
+    const box = await locator.boundingBox();
+    if (box == null || box.width <= 0 || box.height <= 0) {
+      throw new Error(`Cannot capture visual target ${name}: locator has no visible bounding box`);
+    }
+    boxes.push(box);
+  }
+
+  const padding = options.padding ?? 12;
+  const minX = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.x)) - padding));
+  const minY = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.y)) - padding));
+  const maxX = Math.min(viewport.width, Math.ceil(Math.max(...boxes.map((box) => box.x + box.width)) + padding));
+  const maxY = Math.min(viewport.height, Math.ceil(Math.max(...boxes.map((box) => box.y + box.height)) + padding));
+  const width = maxX - minX;
+  const height = maxY - minY;
+  if (width <= 0 || height <= 0) {
+    throw new Error(`Cannot capture visual target ${name}: clipped target is outside the viewport`);
+  }
+
+  await page.screenshot({
+    path: outputPath,
+    animations: 'disabled',
+    caret: 'hide',
+    clip: { x: minX, y: minY, width, height },
+  });
+  return outputPath;
+}
+
 export async function scrollVisualLocatorIntoStableView(
   page: Page,
   locator: Locator,

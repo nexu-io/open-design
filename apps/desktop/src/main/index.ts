@@ -13,6 +13,7 @@ import {
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
   type DesktopEvalInput,
+  type DesktopExportArtifactInput,
   type DesktopExportPdfInput,
   type DesktopScreenshotInput,
   type DesktopStatusSnapshot,
@@ -768,6 +769,8 @@ export async function runDesktopMain(
             return await activeDesktop.click(request.input as DesktopClickInput);
           case SIDECAR_MESSAGES.EXPORT_PDF:
             return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
+          case SIDECAR_MESSAGES.EXPORT_ARTIFACT:
+            return await activeDesktop.exportArtifact(request.input as DesktopExportArtifactInput);
           case SIDECAR_MESSAGES.UPDATE:
             return await updater.handle((request.input as DesktopUpdateInput).action);
         }

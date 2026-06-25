@@ -18,8 +18,17 @@ const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
+const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
+const bakePreviewsAutomergeWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "bake-plugin-previews-automerge.yml",
+);
+const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
@@ -31,7 +40,11 @@ const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "
 const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
 const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package.json");
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
+const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
+const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
+const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
+const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   "tools",
@@ -57,6 +70,19 @@ function sectionBetween(content: string, start: string, end: string): string {
   const endIndex = content.indexOf(end, startIndex + start.length);
   expect(endIndex).toBeGreaterThan(startIndex);
   return content.slice(startIndex, endIndex);
+}
+
+async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const child = execFile("git", ["patch-id", mode], { cwd: workspaceRoot, encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) {
+        reject(Object.assign(error, { stdout, stderr }));
+        return;
+      }
+      resolve(stdout.trim().split(/\s+/)[0] ?? "");
+    });
+    child.stdin?.end(diff);
+  });
 }
 
 async function runReleaseStableForFailure(env: Record<string, string>): Promise<string> {
@@ -120,6 +146,44 @@ if (${JSON.stringify(changedFiles.length > 0)}) process.stdout.write("\\n");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function runRunners(mode?: string): Promise<Record<string, string>> {
+  const env = { ...process.env };
+  if (mode === undefined) {
+    delete env.OD_CI_RUNNER_MODE;
+  } else {
+    env.OD_CI_RUNNER_MODE = mode;
+  }
+  delete env.GITHUB_OUTPUT;
+
+  const { stdout } = await execFileAsync("python3", [runnersScriptPath], {
+    cwd: workspaceRoot,
+    env,
+  });
+  return Object.fromEntries(
+    stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const separatorIndex = line.indexOf("=");
+        expect(separatorIndex).toBeGreaterThan(0);
+        return [line.slice(0, separatorIndex), line.slice(separatorIndex + 1)];
+      }),
+  );
+}
+
+function runnerOutput(profiles: Record<string, string>, key: string): string {
+  const value = profiles[key];
+  if (value === undefined) {
+    throw new Error(`Missing runner profile output: ${key}`);
+  }
+  return value;
+}
+
+function runnerLabels(profiles: Record<string, string>, key: string): string[] {
+  return JSON.parse(runnerOutput(profiles, key)) as string[];
 }
 
 async function writeFakeGhBin(binDir: string, releases: unknown[]): Promise<void> {
@@ -227,13 +291,26 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain('startswith("release/v")');
 
     // A human commit pushed on top of the cherry-pick (conflict resolution, CI fix) is never
-    // reviewed, so auto-approve/merge require pristine == 'true': every commit's committer is
-    // github-actions[bot]. The committers are paginated across all commits and any non-bot one
-    // fails the count. Otherwise the PR falls back to human review.
+    // reviewed, so auto-approve/merge require pristine == 'true': the backport cumulative diff
+    // must be patch-equivalent to the source PR's reviewed merge commit on main. Author/committer
+    // identity is a spoofable git header, so the gate must not trust github-actions[bot] metadata.
     expect(workflow).toContain("steps.pr.outputs.pristine == 'true'");
-    expect(workflow).toContain('.[].committer.login // "none"');
-    expect(workflow).toContain("--paginate");
-    expect(workflow).toContain("grep -Fvxc 'github-actions[bot]'");
+    expect(workflow).toContain("Checkout trusted repository history");
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("Backport of #([0-9]+)");
+    expect(workflow).toContain("source_patch_id");
+    expect(workflow).toContain("backport_patch_id");
+    expect(workflow).toContain("git patch-id --verbatim");
+    expect(workflow).not.toContain("git patch-id --stable");
+    expect(workflow).toContain("+refs/heads/$(printf '%s' \"$row\" | jq -r '.baseRefName')");
+    expect(workflow).toContain("+refs/pull/$num/head:refs/remotes/pull/$num/head");
+    expect(workflow).toContain('backport_base="$(git merge-base "$base_oid" "$head_oid" 2>/dev/null || true)"');
+    expect(workflow).toContain('if [ -n "$backport_base" ]; then');
+    expect(workflow).toContain("git diff --binary \"$source_merge^\" \"$source_merge\"");
+    expect(workflow).toContain("git diff --binary \"$backport_base\" \"$head_oid\"");
+    expect(workflow).toContain("source_base\" = \"main");
+    expect(workflow).not.toContain('.[].committer.login // "none"');
+    expect(workflow).not.toContain("grep -Fvxc 'github-actions[bot]'");
 
     // The PR is resolved from the run's authoritative workflow_run.pull_requests association
     // (filtered to the release/* base at exactly the run's SHA), not a branch-name guess, and the
@@ -254,17 +331,173 @@ describe("packaged smoke workflow", () => {
     expect(approveStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
     expect(approveStep).toContain("steps.pr.outputs.pristine == 'true'");
     expect(approveStep).toContain("github.token");
+    expect(approveStep).toContain("github.event.workflow_run.conclusion == 'success'");
 
-    // The Feishu failure path carries the same identity gates, so a fork / non-bot backport-*
-    // PR can't spam the release group.
-    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed backport CI", "FEISHU_WEBHOOK");
+    // The Feishu failure path carries the same identity + SHA gates, so a fork / non-bot
+    // backport-* PR can't spam the release group and stale failed runs do not page after the PR
+    // head advanced. Alert on failure and timed_out, but not routine cancelled runs.
+    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed backport CI", "python3");
     expect(feishuStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
     expect(feishuStep).toContain("steps.pr.outputs.cross == 'false'");
+    expect(feishuStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(feishuStep).toContain(
+      "(github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')",
+    );
+    expect(feishuStep).not.toContain("'cancelled'");
+  });
+
+  it("[P2] keeps the backport patch-equivalence gate whitespace-sensitive", async () => {
+    const compactDiff = [
+      "diff --git a/script.py b/script.py",
+      "--- a/script.py",
+      "+++ b/script.py",
+      "@@ -1 +1 @@",
+      "-print(1)",
+      "+print(2)",
+      "",
+    ].join("\n");
+    const whitespaceDiff = [
+      "diff --git a/script.py b/script.py",
+      "--- a/script.py",
+      "+++ b/script.py",
+      "@@ -1 +1 @@",
+      "-print(1)",
+      "+ print(2)",
+      "",
+    ].join("\n");
+
+    const compactStable = await gitPatchId("--stable", compactDiff);
+    const whitespaceStable = await gitPatchId("--stable", whitespaceDiff);
+    const compactVerbatim = await gitPatchId("--verbatim", compactDiff);
+    const whitespaceVerbatim = await gitPatchId("--verbatim", whitespaceDiff);
+
+    expect(compactStable).toBe(whitespaceStable);
+    expect(compactVerbatim).not.toBe(whitespaceVerbatim);
+  });
+
+  it("[P2] gates the plugin-preview manifest auto-merge as a trusted workflow_run consumer", async () => {
+    const workflow = await readFile(bakePreviewsAutomergeWorkflowPath, "utf8");
+
+    // Triggered only by ci completing, and only for a pull_request run on the rolling
+    // chore/plugin-previews branch — never a push / manual dispatch, so a non-PR run can't reach
+    // the App-token or merge steps.
+    expect(workflow).toContain("workflows: [ci]");
+    expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(workflow).toContain("github.event.workflow_run.head_branch == 'chore/plugin-previews'");
+
+    // It mints the privileged release App token, hence the identity + SHA gates below.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+
+    // Only a non-draft, same-repo PR authored by the release bot, targeting main, is merged.
+    expect(workflow).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(workflow).toContain("steps.pr.outputs.cross == 'false'");
+    expect(workflow).toContain("steps.pr.outputs.draft == 'false'");
+    expect(workflow).toContain('select(.base.ref == "main")');
+
+    // A human commit pushed onto the rolling branch is unreviewed, so auto-approve/merge require
+    // pristine == 'true': the PR's changed files are EXACTLY data/plugin-previews/manifest.json. A
+    // commit's author/committer identity is a spoofable git header and the Git Data API does not
+    // sign commits, so neither identity nor signature can prove bot provenance; instead the diff is
+    // bounded to manifest-only so a pushed code change can never auto-merge. Paginated across all
+    // files; any non-manifest file fails the count.
+    expect(workflow).toContain("steps.pr.outputs.pristine == 'true'");
+    expect(workflow).toContain("/files?per_page=100");
+    expect(workflow).toContain(".[].filename");
+    expect(workflow).toContain("--paginate");
+    expect(workflow).toContain("grep -Fvxc 'data/plugin-previews/manifest.json'");
+
+    // The PR is resolved from the run's authoritative workflow_run.pull_requests association
+    // (filtered to the main base at exactly the run's SHA), not a branch-name guess, and the merge
+    // is bound to that same SHA (no post-green commit merged untested). main has a merge queue, so
+    // the merge is GitHub-native --auto (enqueue), not a direct squash.
+    expect(workflow).toContain("github.event.workflow_run.pull_requests");
+    expect(workflow).toContain("select(.head.sha == $sha)");
+    expect(workflow).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(workflow).toContain("--match-head-commit");
+    expect(workflow).toContain("--squash");
+    expect(workflow).toContain("--auto");
+
+    // To satisfy main's one-approval rule, the bot's own clean manifest PR is auto-approved by
+    // github-actions[bot] (pull-requests: write) — a different identity than the App author.
+    expect(workflow).toContain("pull-requests: write");
+    expect(workflow).toContain("gh pr review");
+    expect(workflow).toContain("--approve");
+    const approveStep = sectionBetween(workflow, "Approve the clean manifest PR", "gh pr review");
+    expect(approveStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(approveStep).toContain("steps.pr.outputs.pristine == 'true'");
+    expect(approveStep).toContain("github.token");
+    // Approve only when the run CI actually succeeded — dropping this predicate would approve a
+    // PR whose CI failed.
+    expect(approveStep).toContain("github.event.workflow_run.conclusion == 'success'");
+
+    // The enqueue step carries the same identity + SHA + pristine + success gates as the approve,
+    // and merges via the native --auto path bound to the validated SHA. Dropping the success
+    // predicate here would enqueue a PR whose CI failed.
+    const enqueueStep = sectionBetween(workflow, "Enqueue the clean manifest PR", "gh pr merge");
+    expect(enqueueStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(enqueueStep).toContain("steps.pr.outputs.pristine == 'true'");
+    expect(enqueueStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(enqueueStep).toContain("github.event.workflow_run.conclusion == 'success'");
+    // Base-freshness: main's merge queue does not require an up-to-date branch, so a bake rendered
+    // against an older main must not be squashed in over a newer manifest. The enqueue requires the
+    // rendered base (the PR head's first parent) to equal current main HEAD; a behind PR waits for
+    // the next bake to refresh.
+    expect(enqueueStep).toContain("steps.pr.outputs.base_fresh == 'true'");
+    expect(workflow).toContain('.parents[0].sha // ""');
+    expect(workflow).toContain("commits/heads/main");
+
+    // The Feishu failure path carries the same identity gates, so a fork / non-bot PR can't spam
+    // the release group, and fires only on a CI *failure* (not success).
+    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed manifest CI", "python3");
+    expect(feishuStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(feishuStep).toContain("steps.pr.outputs.cross == 'false'");
+    // Page on every terminal RED state that strands the PR — failure AND timed_out (ci.yml has
+    // timeout-minutes jobs) — but NOT cancelled, which a routine force-push of the rolling branch
+    // produces and would otherwise page on every refresh.
+    expect(feishuStep).toContain("github.event.workflow_run.conclusion == 'failure'");
+    expect(feishuStep).toContain("github.event.workflow_run.conclusion == 'timed_out'");
+    expect(feishuStep).not.toContain("'cancelled'");
+    // Bind the alert to the exact SHA that failed: the rolling branch is force-pushed, so a stale
+    // failed run that finishes after the head advanced must not page about a SHA that is no longer
+    // the PR head.
+    expect(feishuStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    // Sign the release webhook with the SAME secret the rest of the repo pairs with
+    // FEISHU_RELEASE_WEBHOOK (notify-release-feishu / notify-daily-feishu / backport-automerge),
+    // not a stray secret that resolves empty and sends an unsigned, rejected request.
+    expect(feishuStep).toContain("secrets.FEISHU_RELEASE_WEBHOOK");
+    expect(feishuStep).toContain("secrets.FEISHU_RELEASE_SIGN_SECRET");
+  });
+
+  it("[P2] keeps the bake producer wired so the auto-merge pristine path works", async () => {
+    // The downstream pristine/auto-merge gates only hold if the producer keeps authoring the
+    // rolling manifest PR the right way. Lock the three producer invariants this PR depends on, so
+    // regressing any of them fails here instead of silently breaking auto-merge.
+    const workflow = await readFile(bakePreviewsWorkflowPath, "utf8");
+
+    // 1. The rolling PR is pushed with the release-bot App token, not GITHUB_TOKEN — a
+    //    GITHUB_TOKEN-authored push triggers no CI, so the PR could never clear main's required
+    //    `Validate workspace` check or the merge queue.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+    expect(workflow).toContain("x-access-token:${APP_TOKEN}");
+    // 2. The manifest commit touches ONLY data/plugin-previews/manifest.json. The reactor's
+    //    pristine gate trusts the PR file set (not a forgeable commit identity), so the producer
+    //    must keep committing exactly that one file.
+    expect(workflow).toContain("cp \"$NEW\" \"$OLD\"");
+    expect(workflow).toContain('git add "$OLD"');
+    // 3. The rolling branch is rebuilt from the checked-out HEAD (the revision the manifest was
+    //    rendered against), NOT live main — the bake can run ~90min while main advances, and basing
+    //    it on live main would publish a stale manifest on top of newer commits. Creating the branch
+    //    with `git checkout -B` from HEAD parents the commit on the rendered revision; a regression
+    //    to a live-main base (fetching refs/heads/main as the parent) fails here.
+    expect(workflow).toContain('git checkout -B "$BRANCH"');
+    expect(workflow).not.toContain("git/ref/heads/main");
   });
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const scopes = sectionBetween(workflow, "  scopes:", "  runners:");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
     expect(workflow).toContain("ci_mode:");
@@ -295,16 +528,34 @@ describe("packaged smoke workflow", () => {
     });
   });
 
-  it("[P2] keeps the lightweight unit workspace check on GitHub hosted runners", async () => {
+  it("[P2] routes default CI through cost-sensitive runner tiers", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
+    const scopes = sectionBetween(workflow, "  scopes:", "  runners:");
+    const runners = sectionBetween(workflow, "  runners:", "  static_gate:");
+    const staticGate = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
     const workspaceUnitTests = sectionBetween(workflow, "  workspace_unit_tests:", "  windows_tools_pack_payload_tests:");
     const webWorkspaceTests = sectionBetween(workflow, "  web_workspace_tests:", "  e2e_vitest:");
+    const e2eVitest = sectionBetween(workflow, "  e2e_vitest:", "  playwright_critical:");
+    const nixValidation = sectionBetween(workflow, "  nix_validation:", "  preflight:");
+    const preflight = sectionBetween(workflow, "  preflight:", "  workspace_unit_tests:");
+    const dockerPr = sectionBetween(workflow, "  docker_pr:", "  validate:");
     const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
     const visual = sectionBetween(workflow, "  playwright_visual:", "  docker_pr:");
 
+    expect(scopes).toContain('["self-hosted","Linux","X64","od-persistent-ci","od-ci-hot-poc"]');
+    expect(runners).toContain("runs-on: ubuntu-24.04");
+    expect(runners).toContain("python3 .github/scripts/runners.py");
+    expect(staticGate).toContain("needs: [runners]");
+    expect(staticGate).toContain("needs.runners.outputs.contabo_control");
     expect(workspaceUnitTests).toContain("runs-on: ubuntu-24.04");
-    expect(webWorkspaceTests).toContain("runs-on: blacksmith-4vcpu-ubuntu-2404");
-    expect(uiP0).toContain("runs-on: blacksmith-8vcpu-ubuntu-2404");
+    expect(webWorkspaceTests).toContain("needs.runners.outputs.blacksmith_default");
+    expect(webWorkspaceTests).not.toContain('"od-persistent-ci"');
+    expect(e2eVitest).toContain("needs.runners.outputs.blacksmith_default");
+    expect(e2eVitest).not.toContain('"od-persistent-ci"');
+    expect(nixValidation).toContain("needs.runners.outputs.hosted_or_blacksmith");
+    expect(preflight).toContain("needs.runners.outputs.hosted_or_blacksmith");
+    expect(dockerPr).toContain("needs.runners.outputs.hosted_or_blacksmith");
+    expect(uiP0).toContain("needs.runners.outputs.blacksmith_default");
     expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
@@ -319,7 +570,33 @@ describe("packaged smoke workflow", () => {
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ]);
-    expect(visual).toContain("runs-on: blacksmith-8vcpu-ubuntu-2404");
+    expect(visual).toContain("needs.runners.outputs.blacksmith_default");
+  });
+
+  it("[P2] resolves CI runner profiles by mode", async () => {
+    const defaultProfiles = await runRunners();
+    expect(runnerOutput(defaultProfiles, "mode")).toBe("default");
+    expect(runnerLabels(defaultProfiles, "contabo_control")).toEqual([
+      "self-hosted",
+      "Linux",
+      "X64",
+      "od-persistent-ci",
+      "od-ci-hot-poc",
+    ]);
+    expect(runnerLabels(defaultProfiles, "hosted_or_blacksmith")).toEqual(["ubuntu-24.04"]);
+    expect(runnerLabels(defaultProfiles, "blacksmith_default")).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+
+    const performanceProfiles = await runRunners("performance");
+    expect(runnerOutput(performanceProfiles, "mode")).toBe("performance");
+    expect(runnerLabels(performanceProfiles, "contabo_control")).toEqual(["ubuntu-24.04"]);
+    expect(runnerLabels(performanceProfiles, "hosted_or_blacksmith")).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(runnerLabels(performanceProfiles, "blacksmith_default")).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+
+    const economicProfiles = await runRunners("economic");
+    expect(runnerOutput(economicProfiles, "mode")).toBe("economic");
+    expect(runnerLabels(economicProfiles, "contabo_control")).toEqual(["ubuntu-24.04"]);
+    expect(runnerLabels(economicProfiles, "hosted_or_blacksmith")).toEqual(["ubuntu-24.04"]);
+    expect(runnerLabels(economicProfiles, "blacksmith_default")).toEqual(["ubuntu-24.04"]);
   });
 
   it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
@@ -373,6 +650,31 @@ describe("packaged smoke workflow", () => {
       expect(workflow).not.toContain("--field body=\"$(cat");
       expect(workflow).not.toContain("--field \"body=$(cat");
     }
+  });
+
+  it("[P2] keeps pull-request plugin preview baking secretless and read-only", async () => {
+    const [prWorkflow, postMergeWorkflow] = await Promise.all([
+      readFile(bakePluginPreviewsPrWorkflowPath, "utf8"),
+      readFile(bakePluginPreviewsWorkflowPath, "utf8"),
+    ]);
+
+    expect(prWorkflow).toContain("permissions:\n  contents: read");
+    expect(prWorkflow).toContain("Checkout PR head");
+    expect(prWorkflow).toContain("ref: ${{ github.event.pull_request.head.sha }}");
+    expect(prWorkflow).toContain("upload: 'false'");
+    expect(prWorkflow).toContain("post-merge bake will publish clips and open the rolling manifest PR");
+    expect(prWorkflow).not.toContain("contents: write");
+    expect(prWorkflow).not.toContain("PREVIEW_BAKE_TOKEN");
+    expect(prWorkflow).not.toContain("CLOUDFLARE_R2_REPOSITORY_ASSETS");
+    expect(prWorkflow).not.toContain("git push");
+
+    expect(postMergeWorkflow).toContain("permissions:\n  contents: write");
+    expect(postMergeWorkflow).toContain("CLOUDFLARE_R2_REPOSITORY_ASSETS_AK");
+    // The write-capable credential the PR path lacks lives here post-merge. The rolling manifest PR
+    // is now authored with the release-bot App (so its push triggers CI and the auto-merge reactor
+    // can act), replacing the never-configured PREVIEW_BAKE_TOKEN fallback.
+    expect(postMergeWorkflow).toContain("secrets.RELEASE_BOT_APP_ID");
+    expect(postMergeWorkflow).not.toContain("PREVIEW_BAKE_TOKEN");
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {
@@ -604,6 +906,58 @@ describe("packaged smoke workflow", () => {
     // Default path: an empty input builds main, never a release branch.
     expect(resolveJob).toContain('echo "ref=main" >> "$GITHUB_OUTPUT"');
     expect(resolveJob).not.toContain("refs/heads/release/v*");
+  });
+
+  it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
+    const [workflow, productionWorkflow, script] = await Promise.all([
+      readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
+      readFile(landingPageProductionWorkflowPath, "utf8"),
+      readFile(landingPageDailyFeishuScriptPath, "utf8"),
+    ]);
+    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
+    const productionCheckout = sectionBetween(productionWorkflow, "- name: Checkout", "- name: Setup pnpm");
+
+    expect(trigger).toContain('cron: "0 1 * * *"');
+    expect(trigger).not.toContain("lookback_hours:");
+    expect(workflow).toContain("actions: read");
+    expect(workflow).toContain("contents: read");
+    expect(workflow).toContain("pull-requests: read");
+    expect(workflow).toContain("github.ref == 'refs/heads/main'");
+    expect(workflow).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}");
+    expect(workflow).toContain("FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}");
+    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts self-check");
+    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts");
+    expect(workflow).toContain("ref: main");
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(productionCheckout).toContain("ref: ${{ github.sha }}");
+    expect(productionCheckout).not.toContain("ref: main");
+    expect(productionCheckout).toContain("Verify production checkout commit");
+    expect(productionCheckout).toContain('deployed_sha="$(git rev-parse HEAD)"');
+    expect(productionCheckout).toContain('$deployed_sha" != "$GITHUB_SHA');
+    expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
+    expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
+    expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
+
+    expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
+    expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');
+    expect(script).toContain('const PRODUCTION_WORKFLOW = "landing-page-production.yml"');
+    expect(script).toContain("type StagingSnapshot");
+    expect(script).toContain("createStagingSnapshot");
+    expect(script).toContain("run_started_at");
+    expect(script).toContain("run_attempt");
+    expect(script).toContain("runOperationalTime");
+    expect(script).toContain("staging: StagingSnapshot");
+    expect(script).toContain("historical staging success not to count as current staging deployment");
+    expect(script).toContain("rerun historical staging success to become current staging deployment");
+    expect(script).toContain("rerun staging header to use the rerun historical deployment");
+    expect(script).toContain("No successful ${PRODUCTION_WORKFLOW} run found on main");
+    expect(script).toContain("正式环境基线");
+    expect(script).toContain("待 QA 验收");
+    expect(script).toContain("git\", [\"merge-base\", \"--is-ancestor\"");
+    expect(script).toContain("已自动部署到当前 staging.open-design.ai");
+    expect(script).toContain("正在部署到 staging.open-design.ai");
+    expect(script).toContain("apps/landing-page/");
+    expect(script).toContain(".github/workflows/landing-page-staging.yml");
   });
 
   it("[P2] supports stable dry-run metadata and prepublish boundaries", async () => {

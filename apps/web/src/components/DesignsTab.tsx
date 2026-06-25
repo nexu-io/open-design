@@ -21,7 +21,11 @@ import type {
 } from "../types";
 import { AnimatePresence } from "motion/react";
 import { Icon } from "./Icon";
-import { isDesignSystemProject, isPublishedDesignSystemProject } from "./design-system-project";
+import {
+	isDesignSystemProject,
+	isPublishedDesignSystemProject,
+	resolveProjectDesignSystemId,
+} from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
 
@@ -689,7 +693,7 @@ export function DesignsTab({
 					{filtered.map((item) => {
 						const p = item.project;
 						const skill = skillName(p.skillId);
-						const ds = dsName(p.designSystemId);
+						const ds = dsName(resolveProjectDesignSystemId(p));
 						if (item.type === "live-artifact") {
 							const artifact = item.liveArtifact;
 							const title = liveArtifactCardTitle(p, artifact);
@@ -976,7 +980,7 @@ export function DesignsTab({
 									) : (
 										colProjects.map(({ project: p }) => {
 											const skill = skillName(p.skillId);
-											const ds = dsName(p.designSystemId);
+											const ds = dsName(resolveProjectDesignSystemId(p));
 											const designSystemProject = isDesignSystemProject(p);
 											return (
 												<div

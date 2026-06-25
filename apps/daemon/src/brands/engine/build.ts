@@ -48,6 +48,45 @@ export function slugify(input: string): string {
   return s || "brand";
 }
 
+function normalizeBrandForAssembly(brand: Brand): Brand {
+  const voice = brand.voice ?? {};
+  const imagery = brand.imagery ?? {};
+  const layout = brand.layout ?? {};
+  return {
+    ...brand,
+    logo: {
+      primary: null,
+      alternates: [],
+      notes: "",
+      ...(brand.logo ?? {}),
+    },
+    colors: Array.isArray(brand.colors) ? brand.colors : [],
+    typography: brand.typography ?? {},
+    voice: {
+      adjectives: Array.isArray(voice.adjectives) ? voice.adjectives : [],
+      tone: voice.tone ?? "",
+      messagingPillars: Array.isArray(voice.messagingPillars) ? voice.messagingPillars : [],
+      vocabulary: {
+        use: Array.isArray(voice.vocabulary?.use) ? voice.vocabulary.use : [],
+        avoid: Array.isArray(voice.vocabulary?.avoid) ? voice.vocabulary.avoid : [],
+      },
+    },
+    imagery: {
+      style: imagery.style ?? "",
+      subjects: Array.isArray(imagery.subjects) ? imagery.subjects : [],
+      treatment: imagery.treatment ?? "",
+      avoid: Array.isArray(imagery.avoid) ? imagery.avoid : [],
+      samples: Array.isArray(imagery.samples) ? imagery.samples : [],
+    },
+    layout: {
+      radius: layout.radius ?? "",
+      borderWeight: layout.borderWeight ?? "",
+      spacing: layout.spacing ?? "",
+      postureRules: Array.isArray(layout.postureRules) ? layout.postureRules : [],
+    },
+  };
+}
+
 // ─────────────────────────── artifact kinds shipped by default ──────────────
 
 /** The artifact products written into every bundle's artifacts/ folder. */
@@ -156,6 +195,7 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
   files["variables.css"] =
     tokensToCssVars(themes.default, ":root") + "\n" + tokensToCssVars(themes.dark, ".dark");
   files["variables.dark.css"] = tokensToCssVars(themes.dark, ":root");
+  files["scripts/apply-design-tokens.mjs"] = applyDesignTokensScript();
 
   // ── antd ConfigProvider theme ──
   files["theme.json"] = tokensToThemeJson(seed, "default");
@@ -208,6 +248,27 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
   if (extraFiles) Object.assign(files, extraFiles);
 
   return { slug, seed, themes, files };
+}
+
+function applyDesignTokensScript(): string {
+  return `#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const target = process.argv[2];
+if (!target) {
+  console.error('Usage: node scripts/apply-design-tokens.mjs <target-css-path>');
+  process.exit(1);
+}
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const source = path.resolve(here, '..', 'variables.css');
+const destination = path.resolve(process.cwd(), target);
+fs.mkdirSync(path.dirname(destination), { recursive: true });
+fs.copyFileSync(source, destination);
+console.log(\`Copied design tokens to \${destination}\`);
+`;
 }
 
 // ─────────────────────────── index page (gallery) ───────────────────────────
@@ -279,9 +340,10 @@ export function buildBrandSystem(
   brand: Brand,
   opts?: { slug?: string; fontFiles?: FontFile[] },
 ): BrandSystem {
-  const slug = opts?.slug ? slugify(opts.slug) : slugify(brand.name);
-  const seed = seedFromBrand(brand);
-  return assemble({ slug, brand, seed, fontFiles: opts?.fontFiles });
+  const normalizedBrand = normalizeBrandForAssembly(brand);
+  const slug = opts?.slug ? slugify(opts.slug) : slugify(normalizedBrand.name);
+  const seed = seedFromBrand(normalizedBrand);
+  return assemble({ slug, brand: normalizedBrand, seed, fontFiles: opts?.fontFiles });
 }
 
 // ─────────────────────────── public: from a URL ─────────────────────────────
