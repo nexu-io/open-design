@@ -44,7 +44,7 @@ test("isPendingApprovalRun matches approval-gated fork PR runs from GitHub's cap
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -75,7 +75,7 @@ test("isPendingApprovalRun also accepts action_required runs reported only in st
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -106,7 +106,7 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -175,7 +175,7 @@ test("isPendingApprovalRun approves visual capture only for strict web source ch
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
   const run = {
@@ -225,7 +225,7 @@ test("runTargetsPullRequest accepts empty run.pull_requests only when the head S
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -256,7 +256,7 @@ test("runTargetsPullRequest accepts fork PR runs with no GitHub PR association w
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -289,7 +289,7 @@ test("runTargetsPullRequest rejects ambiguous empty run.pull_requests associatio
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -299,7 +299,7 @@ test("runTargetsPullRequest rejects ambiguous empty run.pull_requests associatio
     base: {
       ref: "release",
       sha: "8db117d728f967d108f6fdd64cb8d921d057f7f6",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -330,7 +330,7 @@ test("runTargetsPullRequest rejects fork PR runs when multiple open PRs share th
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -340,7 +340,7 @@ test("runTargetsPullRequest rejects fork PR runs when multiple open PRs share th
     base: {
       ref: "release",
       sha: "8db117d728f967d108f6fdd64cb8d921d057f7f6",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -373,7 +373,7 @@ test("runTargetsPullRequest rejects empty associations when fork head identity d
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -406,7 +406,7 @@ test("runTargetsPullRequest rejects runs that GitHub already associates to a dif
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -425,7 +425,7 @@ test("runTargetsPullRequest rejects runs that GitHub already associates to a dif
         base: {
           ref: "release",
           sha: "8db117d728f967d108f6fdd64cb8d921d057f7f6",
-          repo: { full_name: "nexu-io/open-design" },
+          repo: { full_name: "marketing-ax/marketing-ax" },
         },
       },
     ],
@@ -447,7 +447,7 @@ test("runTargetsPullRequest approves only the run that GitHub associates to the 
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -457,7 +457,7 @@ test("runTargetsPullRequest approves only the run that GitHub associates to the 
     base: {
       ref: "release",
       sha: "8db117d728f967d108f6fdd64cb8d921d057f7f6",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -495,7 +495,7 @@ test("runTargetsPullRequest ignores base tip churn for the same PR association",
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
@@ -535,12 +535,12 @@ test("listPendingApprovalRuns paginates all pull_request runs for the head SHA a
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 
   const requestedPaths: string[] = [];
-  const pendingRuns = await listPendingApprovalRuns("nexu-io/open-design", pull, {
+  const pendingRuns = await listPendingApprovalRuns("marketing-ax/marketing-ax", pull, {
     loadWorkflowRunsResponsePage: async (path) => {
       requestedPaths.push(path);
       if (path.endsWith("page=1")) {
@@ -594,8 +594,8 @@ test("listPendingApprovalRuns paginates all pull_request runs for the head SHA a
   });
 
   assert.deepEqual(requestedPaths, [
-    "/repos/nexu-io/open-design/actions/runs?event=pull_request&head_sha=734076155c44e569304856590019cea54506fdab&per_page=100&page=1",
-    "/repos/nexu-io/open-design/actions/runs?event=pull_request&head_sha=734076155c44e569304856590019cea54506fdab&per_page=100&page=2",
+    "/repos/marketing-ax/marketing-ax/actions/runs?event=pull_request&head_sha=734076155c44e569304856590019cea54506fdab&per_page=100&page=1",
+    "/repos/marketing-ax/marketing-ax/actions/runs?event=pull_request&head_sha=734076155c44e569304856590019cea54506fdab&per_page=100&page=2",
   ]);
   assert.equal(requestedPaths.some((path) => path.includes("status=action_required")), false);
   assert.deepEqual(
@@ -617,7 +617,7 @@ test("listPendingApprovalRuns applies strict changed-path filtering only to visu
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
   const workflowRuns = [
@@ -652,12 +652,12 @@ test("listPendingApprovalRuns applies strict changed-path filtering only to visu
   };
 
   assert.deepEqual(
-    (await listPendingApprovalRuns("nexu-io/open-design", pull, [{ filename: "README.md", status: "modified" }], deps)).map((run) => run.id),
+    (await listPendingApprovalRuns("marketing-ax/marketing-ax", pull, [{ filename: "README.md", status: "modified" }], deps)).map((run) => run.id),
     [26273463769],
   );
   assert.deepEqual(
     (await listPendingApprovalRuns(
-      "nexu-io/open-design",
+      "marketing-ax/marketing-ax",
       pull,
       [{ filename: "apps/web/src/components/Button.tsx", status: "modified" }],
       deps,
@@ -679,7 +679,7 @@ test("hasPullApprovalStateDrift ignores base tip churn but still rejects base re
     base: {
       ref: "main",
       sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
+      repo: { full_name: "marketing-ax/marketing-ax" },
     },
   };
 

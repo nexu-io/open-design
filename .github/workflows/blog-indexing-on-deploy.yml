@@ -44,7 +44,7 @@ jobs:
   index:
     name: Index newly deployed blog posts
     if: >-
-      github.repository == 'nexu-io/open-design'
+      github.repository == 'marketing-ax/marketing-ax'
       && (
         github.event_name == 'workflow_dispatch'
         || github.event.workflow_run.conclusion == 'success'

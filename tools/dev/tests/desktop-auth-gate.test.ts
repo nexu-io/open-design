@@ -17,7 +17,7 @@
  * intermediate daemon down state).
  *
  * @see tools/dev/src/desktop-auth-gate.ts
- * @see https://github.com/nexu-io/open-design/pull/974
+ * @see https://github.com/marketing-ax/marketing-ax/pull/974
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

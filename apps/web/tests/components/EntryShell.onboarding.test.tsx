@@ -256,7 +256,7 @@ describe('EntryShell settings menu', () => {
       }
       if (url.endsWith('/api/github/open-design')) {
         return jsonResponse({
-          repo: 'nexu-io/open-design',
+          repo: 'marketing-ax/marketing-ax',
           stargazers_count: 56100,
           fetchedAt: Date.now(),
           stale: false,

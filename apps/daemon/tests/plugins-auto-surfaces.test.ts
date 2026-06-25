@@ -28,7 +28,7 @@ const consumer = (od: NonNullable<PluginManifest['od']>): InstalledPluginRecord 
   installedAt: Date.now(),
   updatedAt: Date.now(),
   manifest: {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: 'fixture',
     title: 'Fixture',
     version: '0.1.0',

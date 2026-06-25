@@ -273,7 +273,7 @@ async function uploadFile(name, content) {
   if (!conversationId) throw new Error("project create response did not include conversationId");
 
   await uploadFile("generated-plugin/open-design.json", JSON.stringify({
-    "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+    "$schema": "https://marketing-ax.example/schemas/plugin.v1.json",
     specVersion: "1.0.0",
     name: `agent-fixture-plugin-${prNumber}`,
     title: "Agent Fixture Plugin",
@@ -1287,7 +1287,7 @@ REPORT
 fi
 
 expect_prompt="$(cat <<PROMPT
-You are reviewing nexu-io/open-design PR #${PR_NUMBER}, against the live app at ${base_url}.
+You are reviewing marketing-ax/marketing-ax PR #${PR_NUMBER}, against the live app at ${base_url}.
 
 ## MINDSET -- this is a precious, expensive validation opportunity
 

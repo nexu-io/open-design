@@ -180,7 +180,7 @@ describe('PluginShareMenu', () => {
     await Promise.resolve();
     expect(writes.some((value) => (
       value.includes('Badge Plugin') &&
-      value.includes('https://open-design.ai/plugins/badge-plugin')
+      value.includes('https://marketing-ax.example/plugins/badge-plugin')
     ))).toBe(true);
   });
 
@@ -243,7 +243,7 @@ describe('PluginShareMenu', () => {
     expect(labels.some((label) => label.includes('Copy install command'))).toBe(false);
   });
 
-  it('points Open in marketplace at the public open-design.ai page for bundled plugins', () => {
+  it('points Open in marketplace at the public marketing-ax.example page for bundled plugins', () => {
     renderMenu(make({ id: 'plain' }));
     openPopover();
     const items = Array.from(
@@ -256,19 +256,19 @@ describe('PluginShareMenu', () => {
       container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
     ).find((link) => link.textContent?.includes('Open in marketplace'));
     // Bundled plugins have a public detail page, so the link is the public
-    // open-design.ai URL — not a local /marketplace path.
+    // marketing-ax.example URL — not a local /marketplace path.
     expect(marketplaceLink?.getAttribute('href')).toBe(
-      'https://open-design.ai/plugins/plain/',
+      'https://marketing-ax.example/plugins/plain/',
     );
   });
 
-  it('builds a public open-design.ai share link for bundled plugins', () => {
+  it('builds a public marketing-ax.example share link for bundled plugins', () => {
     expect(buildPluginShareUrl(make({ id: 'simple-deck' }))).toBe(
-      'https://open-design.ai/plugins/simple-deck/',
+      'https://marketing-ax.example/plugins/simple-deck/',
     );
   });
 
-  it('builds a public open-design.ai share link for community marketplace plugins', () => {
+  it('builds a public marketing-ax.example share link for community marketplace plugins', () => {
     // Community manifest names carry a `community-` prefix, but the landing
     // page routes are keyed on the folder name via routeId=`community/<folder>`.
     // buildPluginShareUrl must use sourceMarketplaceEntryName so pluginDetailSlug
@@ -283,7 +283,7 @@ describe('PluginShareMenu', () => {
           marketplaceEntryName: 'community/registry-starter',
         }),
       ),
-    ).toBe('https://open-design.ai/plugins/registry-starter/');
+    ).toBe('https://marketing-ax.example/plugins/registry-starter/');
   });
 
   it('copies a README badge for community marketplace plugins', async () => {
@@ -304,7 +304,7 @@ describe('PluginShareMenu', () => {
       writes.some(
         (value) =>
           value.includes('Community Registry Starter') &&
-          value.includes('https://open-design.ai/plugins/registry-starter/'),
+          value.includes('https://marketing-ax.example/plugins/registry-starter/'),
       ),
     ).toBe(true);
   });
@@ -324,7 +324,7 @@ describe('PluginShareMenu', () => {
       container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
     ).find((link) => link.textContent?.includes('Open in marketplace'));
     expect(marketplaceLink?.getAttribute('href')).toBe(
-      'https://open-design.ai/plugins/registry-starter/',
+      'https://marketing-ax.example/plugins/registry-starter/',
     );
   });
 
@@ -382,7 +382,7 @@ describe('PluginShareMenu', () => {
     openPopover();
     const repoLinks = Array.from(
       container.querySelectorAll<HTMLAnchorElement>(
-        'a.plugin-share-item[href="https://github.com/nexu-io/open-design"]',
+        'a.plugin-share-item[href="https://github.com/marketing-ax/marketing-ax"]',
       ),
     );
     expect(repoLinks.length).toBeGreaterThan(0);

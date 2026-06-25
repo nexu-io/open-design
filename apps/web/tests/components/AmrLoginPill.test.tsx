@@ -229,7 +229,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.queryByText('PROD')).toBeNull();
     expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
-      'https://open-design.ai/amr/wallet?source=open_design',
+      'https://marketing-ax.example/amr/wallet?source=open_design',
     );
   });
 

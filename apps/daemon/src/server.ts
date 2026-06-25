@@ -1366,7 +1366,7 @@ const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
   path.join(PROJECT_ROOT, 'plugins', 'registry'),
 );
 const OFFICIAL_MARKETPLACE_ID = 'official';
-const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:nexu-io/open-design@main';
+const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:marketing-ax/marketing-ax@main';
 
 function defaultMarketplaceSeedConfig(id) {
   return {
@@ -1465,7 +1465,7 @@ const RUNTIME_DATA_DIR_CANONICAL = (() => {
 // new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
 // across before SQLite opens. Synchronous on purpose: openDatabase below
 // would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
-// and https://github.com/nexu-io/open-design/issues/710.
+// and https://github.com/marketing-ax/marketing-ax/issues/710.
 migrateLegacyDataDirSync({
   legacyDir: process.env.MAX_LEGACY_DATA_DIR,
   dataDir: RUNTIME_DATA_DIR,
@@ -3389,8 +3389,8 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
-const MARKETING_AX_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
-const MARKETING_AX_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
+const MARKETING_AX_GITHUB_REPO_API = 'https://api.github.com/repos/marketing-ax/marketing-ax';
+const MARKETING_AX_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/marketing-ax/marketing-ax/releases/latest';
 const MARKETING_AX_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
 const MARKETING_AX_GITHUB_TIMEOUT_MS = 4_000;
 const MARKETING_AX_DISCORD_INVITE_CODE = 'mHAjSMV6gz';
@@ -4894,7 +4894,7 @@ export async function startServer({
       description_i18n: plugin.manifest.description_i18n,
       version:     plugin.version,
       source:      bundledPluginRegistrySource(plugin.source),
-      publisher:   { id: 'open-design', url: 'https://open-design.ai' },
+      publisher:   { id: 'open-design', url: 'https://marketing-ax.example' },
       homepage:    plugin.manifest.homepage,
       license:     plugin.manifest.license,
       tags:        plugin.manifest.tags,
@@ -4999,7 +4999,7 @@ export async function startServer({
     try {
       const stats = await readOpenDesignGithubRepoStats();
       const payload = /** @type {OpenDesignGithubRepoResponse} */ ({
-        repo: 'nexu-io/open-design',
+        repo: 'marketing-ax/marketing-ax',
         stargazers_count: stats.stargazersCount,
         fetchedAt: stats.fetchedAt,
         stale: stats.stale,
@@ -5016,7 +5016,7 @@ export async function startServer({
     try {
       const release = await readOpenDesignLatestReleaseInfo();
       const payload = /** @type {OpenDesignGithubLatestReleaseResponse} */ ({
-        repo: 'nexu-io/open-design',
+        repo: 'marketing-ax/marketing-ax',
         tag_name: release.tagName,
         html_url: release.htmlUrl,
         fetchedAt: release.fetchedAt,
@@ -8828,7 +8828,7 @@ export async function startServer({
       // file descriptors. After a few hundred retries the daemon
       // accumulates 10k+ FDs and posix_spawn returns EBADF.
       //
-      // See: https://github.com/nexu-io/open-design/issues/4100
+      // See: https://github.com/marketing-ax/marketing-ax/issues/4100
       if (!child) return;
       const destroyStream = (stream) => {
         if (!stream || stream.destroyed) return;
@@ -10277,7 +10277,7 @@ export async function startServer({
           'ROLE_MARKER_HALLUCINATION',
           `Run terminated: model emitted fabricated role marker (\`${marker}\`). ` +
             'No further tokens or tool calls accepted from this turn. ' +
-            'See https://github.com/nexu-io/open-design/issues/3247.',
+            'See https://github.com/marketing-ax/marketing-ax/issues/3247.',
           { retryable: true },
         ),
       );

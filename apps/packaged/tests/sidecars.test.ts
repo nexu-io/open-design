@@ -13,7 +13,7 @@
  *
  * @see apps/packaged/src/sidecars.ts
  * @see apps/daemon/src/legacy-data-migrator.ts
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -380,10 +380,10 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       daemonCliEntry: null,
       legacyDataDir: null,
       requireDesktopAuth: true,
-      telemetryRelayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      telemetryRelayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
     });
     expect(env.MARKETING_AX_TELEMETRY_RELAY_URL).toBe(
-      'https://telemetry.open-design.ai/api/langfuse',
+      'https://telemetry.marketing-ax.example/api/langfuse',
     );
   });
 

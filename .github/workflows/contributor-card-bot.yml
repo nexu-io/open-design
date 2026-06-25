@@ -33,7 +33,7 @@ jobs:
   recognize:
     name: Relay contributor event to Cloudflare worker
     if: |
-      github.repository == 'nexu-io/open-design' &&
+      github.repository == 'marketing-ax/marketing-ax' &&
       (
         (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
         (github.event_name == 'issues' && github.event.action == 'opened') ||

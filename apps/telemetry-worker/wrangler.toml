@@ -4,7 +4,7 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 workers_dev = false
 routes = [
-  { pattern = "telemetry.open-design.ai", custom_domain = true }
+  { pattern = "telemetry.marketing-ax.example", custom_domain = true }
 ]
 
 [vars]

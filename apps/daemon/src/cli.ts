@@ -3774,7 +3774,7 @@ async function runPluginOpenDesignPr(rest) {
   od plugin open-design-pr <folder> [--host github.com] [--owner github-login-or-fork-owner] [--dry-run] [--json]
 
 Copies a local plugin folder into plugins/community/<name>/ on the author's
-fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`);
+fork of marketing-ax/marketing-ax, pushes a branch, and opens the PR form with --web.`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
   const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
@@ -3829,7 +3829,7 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
     return result;
   };
 
-  await run('fork', 'gh', ['repo', 'fork', 'nexu-io/open-design'], {
+  await run('fork', 'gh', ['repo', 'fork', 'marketing-ax/marketing-ax'], {
     tolerate: (r) => /already exists|existing fork/i.test(`${r.stdout}\n${r.stderr}`),
   });
   await run('clone fork', 'git', [
@@ -3861,7 +3861,7 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
   ].filter(Boolean).join('\n');
   const pr = await run('open PR form', 'gh', [
     'pr', 'create',
-    '--repo', 'nexu-io/open-design',
+    '--repo', 'marketing-ax/marketing-ax',
     '--head', `${target.owner}:${branch}`,
     '--base', 'main',
     '--title', `Add ${title} plugin`,
@@ -4173,7 +4173,7 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
     name: parsed.name,
     version: parsed.range,
     reason,
-    url: `https://github.com/nexu-io/open-design/issues/new?${params.toString()}`,
+    url: `https://github.com/marketing-ax/marketing-ax/issues/new?${params.toString()}`,
     body,
   };
   if (flags.json) {
@@ -4617,7 +4617,7 @@ function printPluginHelp() {
   od plugin publish-repo <folder>         Create/update the author's public
                                           GitHub repo for a plugin folder.
   od plugin open-design-pr <folder>       Push a community-catalog branch and
-                                          open the nexu-io/open-design PR form.
+                                          open the marketing-ax/marketing-ax PR form.
   od plugin publish <folder> --to open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
                                           Prepare a registry submission link.
   od plugin login [--host github.com]      Authenticate registry publishing via gh.

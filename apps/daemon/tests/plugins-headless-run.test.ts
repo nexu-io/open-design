@@ -342,14 +342,14 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }
   ok('https://github.com/test-user/' + path.basename(process.cwd()));
 }
-if (args[0] === 'repo' && args[1] === 'fork') ok('forked nexu-io/open-design');
+if (args[0] === 'repo' && args[1] === 'fork') ok('forked marketing-ax/marketing-ax');
 if (args[0] === 'repo' && args[1] === 'clone') {
   const dest = args[3] || path.basename(args[2]);
   fs.mkdirSync(dest, { recursive: true });
   const init = spawnSync(process.env.MAX_REAL_GIT, ['init'], { cwd: dest, stdio: 'inherit' });
   process.exit(init.status ?? 0);
 }
-if (args[0] === 'pr' && args[1] === 'create') ok('https://github.com/nexu-io/open-design/pull/123');
+if (args[0] === 'pr' && args[1] === 'create') ok('https://github.com/marketing-ax/marketing-ax/pull/123');
 console.error('unexpected gh command: ' + args.join(' '));
 process.exit(1);
 `,
@@ -421,7 +421,7 @@ process.exit(result.status ?? 0);
                 url?: string;
               };
               expect(contributeEndpointBody.ok).toBe(true);
-              expect(contributeEndpointBody.url).toBe('https://github.com/nexu-io/open-design/pull/123');
+              expect(contributeEndpointBody.url).toBe('https://github.com/marketing-ax/marketing-ax/pull/123');
             },
           );
         },
@@ -463,7 +463,7 @@ process.exit(result.status ?? 0);
     await writeFile(
       path.join(fixture, 'open-design.json'),
       JSON.stringify({
-        $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+        $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
         name: pluginId,
         title: 'Headless CLI Plugin',
         version: '1.0.0',
@@ -600,7 +600,7 @@ process.stdin.on('end', () => {
     await fs.writeFile(
       path.join(fixture, 'open-design.json'),
       JSON.stringify({
-        $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+        $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
         name: 'pipeline-plugin',
         title: 'Pipeline Plugin',
         version: '1.0.0',

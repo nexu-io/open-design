@@ -187,7 +187,7 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 // client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
 // it at a local `wrangler pages dev` instance during development.
 const NEWSLETTER_SUBSCRIBE_URL =
-  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
+  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://marketing-ax.example/subscribe';
 const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [

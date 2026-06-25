@@ -33,7 +33,7 @@ concurrency:
 jobs:
   resolve:
     name: Resolve active release branch
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     outputs:
       ref: ${{ steps.pick.outputs.ref }}

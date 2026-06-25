@@ -9,7 +9,7 @@
  * empty was the original #710 footgun.
  *
  * @see apps/daemon/src/legacy-data-migrator.ts
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 import * as fs from 'node:fs';
 import { mkdtempSync } from 'node:fs';

@@ -1,5 +1,5 @@
 name: 📺 Submit a tutorial
-description: Share an Open Design tutorial video to be featured on open-design.ai/tutorials.
+description: Share an Open Design tutorial video to be featured on marketing-ax.example/tutorials.
 title: "[Tutorial]: "
 labels: ["tutorials"]
 body:
@@ -55,5 +55,5 @@ body:
     attributes:
       label: Before you submit
       options:
-        - label: This video is actually about Open Design (nexu-io/open-design), not a different product.
+        - label: This video is actually about Open Design (marketing-ax/marketing-ax), not a different product.
           required: true

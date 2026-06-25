@@ -416,7 +416,7 @@ describe('inlineRelativeAssets', () => {
   });
 
   it('does not re-replace a tag literal that appears inside an already-inlined asset body', async () => {
-    // Regression for nexu-io/open-design#1312 review feedback (Siri-Ray
+    // Regression for marketing-ax/marketing-ax#1312 review feedback (Siri-Ray
     // looper + codex bot): the previous reduce/split-join approach
     // re-scanned the progressively mutated HTML, so a tag literal that
     // happened to appear inside an inlined asset body got the inner

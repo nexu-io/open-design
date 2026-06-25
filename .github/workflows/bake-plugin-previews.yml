@@ -84,7 +84,7 @@ jobs:
         if: ${{ github.ref == 'refs/heads/main' }} # only publish from main
         # Publishes to the repository-assets R2 bucket; the deployed daemon must
         # set MAX_PLUGIN_PREVIEWS_BASE_URL to
-        # https://repo-assets.open-design.ai/plugin-previews so its bakedPreview
+        # https://repo-assets.marketing-ax.example/plugin-previews so its bakedPreview
         # URLs point here (CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN).
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}

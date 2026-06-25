@@ -11,7 +11,7 @@
  * binary at a fresh, empty data root and watched their chats and designs
  * disappear. The data was never lost (the 0.3.x `.od/` folder is still
  * on disk wherever they used to run from), but the new daemon had no
- * way to know about it. See https://github.com/nexu-io/open-design/issues/710.
+ * way to know about it. See https://github.com/marketing-ax/marketing-ax/issues/710.
  *
  * This module gives operators a recovery path. When `MAX_LEGACY_DATA_DIR`
  * is set on daemon boot, the migrator:
@@ -37,7 +37,7 @@
  * and either silently lose the migration or corrupt the new file.
  *
  * @see specs/current/spec.md (storage section)
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';

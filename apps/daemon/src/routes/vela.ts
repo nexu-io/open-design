@@ -28,7 +28,7 @@ import {
 } from '../runtimes/defs/amr.js';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
-const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
+const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.marketing-ax.example';
 
 type ReadAppConfig = (dataDir: string) => Promise<AppConfigPrefs>;
 type PublicBaseUrlResolver = (req: Request) => string;

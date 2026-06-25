@@ -202,7 +202,7 @@ if (args[0] === 'model' && args[1] === 'list') {
   state.attempts += 1;
   if (stateFile) writeFileSync(stateFile, JSON.stringify(state), 'utf8');
   if (state.attempts < 3) {
-    process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+    process.stderr.write('Get "https://amr-link.marketing-ax.example/v1/models": context deadline exceeded\\n');
     process.exit(1);
   }
 }
@@ -582,7 +582,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(classifyAmrAccountFailure(message)).toMatchObject({
       code: 'AMR_INSUFFICIENT_BALANCE',
       action: 'recharge',
-      actionUrl: 'https://open-design.ai/amr/wallet?source=open_design',
+      actionUrl: 'https://marketing-ax.example/amr/wallet?source=open_design',
     });
   });
 

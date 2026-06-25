@@ -6,7 +6,7 @@ param(
   [string]$Namespace = "release-beta-win",
   [string]$Root = "",
   [string]$ReleaseVersion = "",
-  [string]$MetadataUrl = "https://releases.open-design.ai/beta/latest/metadata.json",
+  [string]$MetadataUrl = "https://releases.marketing-ax.example/beta/latest/metadata.json",
   [ValidateSet("skip", "core", "full")]
   [string]$SmokeMode = "full",
   [ValidateSet("all", "dir", "nsis", "zip")]

@@ -728,7 +728,7 @@ test('[P2] home starters html details modal shows metadata links and supports co
     previewEntry: './example.html',
     tags: ['deck', 'marketing'],
     authorName: 'Open Design',
-    authorUrl: 'https://github.com/nexu-io/open-design',
+    authorUrl: 'https://github.com/marketing-ax/marketing-ax',
     homepage: 'https://example.com/html-metadata-plugin',
     context: {
       skills: [{ path: './SKILL.md' }],
@@ -783,11 +783,11 @@ test('[P2] home starters html details modal shows metadata links and supports co
   await expect(page.getByTestId('plugin-details-author')).toContainText('Open Design');
   await expect(page.getByTestId('plugin-details-author-profile')).toHaveAttribute(
     'href',
-    'https://github.com/nexu-io/open-design',
+    'https://github.com/marketing-ax/marketing-ax',
   );
   await expect(page.getByTestId('plugin-details-author-homepage')).toHaveAttribute(
     'href',
-    'https://github.com/nexu-io/open-design',
+    'https://github.com/marketing-ax/marketing-ax',
   );
   await expect(dialog).toContainText('Context bundles');
   await expect(dialog).toContainText('./SKILL.md');

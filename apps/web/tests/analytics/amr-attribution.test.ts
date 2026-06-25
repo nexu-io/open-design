@@ -180,14 +180,14 @@ describe('AMR attribution helper', () => {
 
   it('adds Open Design attribution params to AMR wallet URLs', () => {
     expect(
-      attributedAmrUrl('https://open-design.ai/amr/wallet?tab=recharge', {
+      attributedAmrUrl('https://marketing-ax.example/amr/wallet?tab=recharge', {
         entryId: 'od-amr-entry-123',
         sourceProduct: 'open_design',
         sourceDetail: 'generation_preview_recharge',
         occurredAt: '2026-06-03T12:00:00.000Z',
       }),
     ).toBe(
-      'https://open-design.ai/amr/wallet?tab=recharge&od_origin=open_design&od_entry_id=od-amr-entry-123&od_entry_source=generation_preview_recharge&od_entry_at=2026-06-03T12%3A00%3A00.000Z',
+      'https://marketing-ax.example/amr/wallet?tab=recharge&od_origin=open_design&od_entry_id=od-amr-entry-123&od_entry_source=generation_preview_recharge&od_entry_at=2026-06-03T12%3A00%3A00.000Z',
     );
   });
 });

@@ -103,7 +103,7 @@ test('[P2] home topbar shows the new entry chips and links', async ({ page }) =>
 
   const star = page.getByTestId('entry-star-badge');
   await expect(star).toBeVisible();
-  await expect(star).toHaveAttribute('href', 'https://github.com/nexu-io/open-design');
+  await expect(star).toHaveAttribute('href', 'https://github.com/marketing-ax/marketing-ax');
   await expect(star).toContainText('Star');
   await expect(star).toContainText('51.6K');
 

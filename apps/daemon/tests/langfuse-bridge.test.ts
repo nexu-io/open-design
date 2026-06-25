@@ -480,7 +480,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
     const priorNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
-    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.marketing-ax.example/api/langfuse';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -527,8 +527,8 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(fetchSpy.mock.calls[0]![0]).toContain('/api/langfuse');
-    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.open-design.ai/api/objects/authorize');
-    expect(fetchSpy.mock.calls[2]![0]).toBe('https://telemetry.open-design.ai/api/objects/batch');
+    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.marketing-ax.example/api/objects/authorize');
+    expect(fetchSpy.mock.calls[2]![0]).toBe('https://telemetry.marketing-ax.example/api/objects/batch');
     expect(fetchSpy.mock.calls[3]![0]).toContain('/api/langfuse');
     const init = fetchSpy.mock.calls[3]![1] as RequestInit;
     const langfuseBody = init.body as string;
@@ -605,7 +605,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       return new Response('{}', { status: 207 });
     });
 
-    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.marketing-ax.example/api/langfuse';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -732,7 +732,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       return new Response('{}', { status: 207 });
     });
 
-    process.env.MARKETING_AX_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
+    process.env.MARKETING_AX_OBJECT_RELAY_URL = 'https://telemetry.marketing-ax.example/api/objects/batch';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
@@ -759,9 +759,9 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     }
 
     expect(fetchSpy).toHaveBeenCalledTimes(4);
-    expect(fetchSpy.mock.calls[0]![0]).toBe('https://telemetry.open-design.ai/api/langfuse');
-    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.open-design.ai/api/objects/authorize');
-    expect(fetchSpy.mock.calls[2]![0]).toBe('https://telemetry.open-design.ai/api/objects/batch');
+    expect(fetchSpy.mock.calls[0]![0]).toBe('https://telemetry.marketing-ax.example/api/langfuse');
+    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.marketing-ax.example/api/objects/authorize');
+    expect(fetchSpy.mock.calls[2]![0]).toBe('https://telemetry.marketing-ax.example/api/objects/batch');
     expect(fetchSpy.mock.calls[3]![0]).toBe('https://us.cloud.langfuse.com/api/public/ingestion');
     const registrationBatch = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
     const finalBatch = JSON.parse(fetchSpy.mock.calls[3]![1]!.body as string).batch as any[];
@@ -814,8 +814,8 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       return new Response('{}', { status: 207 });
     });
 
-    process.env.MARKETING_AX_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
-    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.open-design.ai/api/langfuse';
+    process.env.MARKETING_AX_OBJECT_RELAY_URL = 'https://telemetry.marketing-ax.example/api/objects/batch';
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = 'https://telemetry.marketing-ax.example/api/langfuse';
     process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {

@@ -320,7 +320,7 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
     env:
       MARKETING_AX_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
-      MARKETING_AX_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json
+      MARKETING_AX_STABLE_METADATA_URL: https://releases.marketing-ax.example/stable/latest/metadata.json
     outputs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}

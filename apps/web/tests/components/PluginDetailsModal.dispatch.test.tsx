@@ -383,8 +383,8 @@ describe('PluginDetailsModal common metadata coverage', () => {
       }),
     );
 
-    expect(html).toContain('href="https://github.com/nexu-io/open-design"');
-    expect(html).toContain('nexu-io/open-design');
+    expect(html).toContain('href="https://github.com/marketing-ax/marketing-ax"');
+    expect(html).toContain('marketing-ax/marketing-ax');
     expect(html).toContain('Official');
   });
 });

@@ -42,7 +42,7 @@
 set -uo pipefail
 
 # --- config (override via env) -----------------------------------------------
-BASE_REPO="${BASE_REPO:-nexu-io/open-design}"
+BASE_REPO="${BASE_REPO:-marketing-ax/marketing-ax}"
 CODEX_MODEL="${CODEX_MODEL:-gpt-5.4}"
 ACP_VERSION="${ACP_VERSION:-0.15.0}"
 ACP_ARCH_PKG="${ACP_ARCH_PKG:-@zed-industries/codex-acp-darwin-arm64}"  # match the runner arch

@@ -34,7 +34,7 @@ concurrency:
 jobs:
   notify:
     name: Post tutorial candidates to Feishu
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
 
     steps:

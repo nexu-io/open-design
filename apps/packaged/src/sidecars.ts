@@ -154,7 +154,7 @@ const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
  * not tear the daemon down before the migration can complete.
  *
  * @see apps/daemon/src/legacy-data-migrator.ts
- * @see https://github.com/nexu-io/open-design/issues/710
+ * @see https://github.com/marketing-ax/marketing-ax/issues/710
  */
 export function resolveDaemonStatusTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,

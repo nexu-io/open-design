@@ -96,9 +96,9 @@ describe("resolveToolPackConfig namespace defaults", () => {
 
 describe("resolveToolPackConfig telemetry relay", () => {
   it("reads and normalizes MARKETING_AX_TELEMETRY_RELAY_URL for packaged config", () => {
-    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "https://telemetry.open-design.ai/api/langfuse//";
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "https://telemetry.marketing-ax.example/api/langfuse//";
     const config = resolveToolPackConfig("mac", { namespace: "telemetry-test" });
-    expect(config.telemetryRelayUrl).toBe("https://telemetry.open-design.ai/api/langfuse");
+    expect(config.telemetryRelayUrl).toBe("https://telemetry.marketing-ax.example/api/langfuse");
   });
 
   it("rejects invalid telemetry relay URLs", () => {
@@ -109,7 +109,7 @@ describe("resolveToolPackConfig telemetry relay", () => {
   });
 
   it("rejects plaintext telemetry relay URLs for packaged config", () => {
-    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "http://telemetry.open-design.ai/api/langfuse";
+    process.env.MARKETING_AX_TELEMETRY_RELAY_URL = "http://telemetry.marketing-ax.example/api/langfuse";
     expect(() => resolveToolPackConfig("mac")).toThrow(
       /MARKETING_AX_TELEMETRY_RELAY_URL must use https/,
     );

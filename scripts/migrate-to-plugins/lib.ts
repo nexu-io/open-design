@@ -18,7 +18,7 @@ export const SKILLS_DIR = path.join(REPO_ROOT, 'skills');
 export const DESIGN_SYSTEMS_DIR = path.join(REPO_ROOT, 'design-systems');
 export const PROMPT_TEMPLATES_DIR = path.join(REPO_ROOT, 'prompt-templates');
 
-export const PLUGIN_SCHEMA = 'https://open-design.ai/schemas/plugin.v1.json';
+export const PLUGIN_SCHEMA = 'https://marketing-ax.example/schemas/plugin.v1.json';
 export const PLUGIN_VERSION = '0.1.0';
 
 // Generated plugin tiers; each maps to a subfolder under PLUGINS_ROOT.

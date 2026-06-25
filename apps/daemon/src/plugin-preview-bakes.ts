@@ -20,7 +20,7 @@ export const PLUGIN_PREVIEWS_ROUTE = '/api/plugin-previews';
 // Public R2 (Cloudflare CDN) origin the baked clips are published to. Used as
 // the default so the packaged desktop app and the web deployment both serve
 // previews with zero configuration; MAX_PLUGIN_PREVIEWS_BASE_URL overrides it.
-const DEFAULT_PUBLIC_BASE = 'https://repo-assets.open-design.ai/plugin-previews';
+const DEFAULT_PUBLIC_BASE = 'https://repo-assets.marketing-ax.example/plugin-previews';
 
 interface BakeEntry {
   video: string;

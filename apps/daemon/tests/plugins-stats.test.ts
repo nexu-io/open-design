@@ -31,7 +31,7 @@ const make = (
   installedAt: over.installedAt ?? 1000,
   updatedAt:   over.updatedAt   ?? 1000,
   manifest: {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     version: '0.1.0',
     title: `Title ${id}`,

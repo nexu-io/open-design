@@ -11,7 +11,7 @@
  * filter to "every EINVAL" (which would silently swallow real bugs)
  * trips a test.
  *
- * @see https://github.com/nexu-io/open-design/issues/895
+ * @see https://github.com/marketing-ax/marketing-ax/issues/895
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';

@@ -12,7 +12,7 @@
  * main process" dialog the moment the user did anything that
  * triggered a fetch (e.g. Settings → Pets → Community).
  *
- * @see https://github.com/nexu-io/open-design/issues/895
+ * @see https://github.com/marketing-ax/marketing-ax/issues/895
  */
 
 // `protocol.handle` from the `electron` module is invoked at import

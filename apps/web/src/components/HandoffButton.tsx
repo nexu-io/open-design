@@ -24,7 +24,7 @@ import { AgentIcon } from './AgentIcon';
 
 const PREFERRED_EDITOR_KEY = 'open-design:preferred-editor';
 const PREFERRED_FRAMEWORK_KEY = 'open-design:handoff-framework';
-const AMR_WEBSITE_URL = 'https://open-design.ai/amr';
+const AMR_WEBSITE_URL = 'https://marketing-ax.example/amr';
 const PROJECT_PATH_COPY_ID = 'project-path';
 
 type HandoffTab = 'editor' | 'cli';

@@ -20,7 +20,7 @@ concurrency:
 jobs:
   refresh:
     name: Refresh contributors wall cache bust
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
 
     steps:

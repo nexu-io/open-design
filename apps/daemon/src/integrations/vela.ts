@@ -61,7 +61,7 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
 };
 
 const AMR_ANALYTICS_EVENTS_URL =
-  'https://amr-api.open-design.ai/api/v1/analytics/events';
+  'https://amr-api.marketing-ax.example/api/v1/analytics/events';
 const AMR_ANALYTICS_TIMEOUT_MS = 1500;
 
 type AmrAnalyticsEnv = 'local' | 'test' | 'staging' | 'production';

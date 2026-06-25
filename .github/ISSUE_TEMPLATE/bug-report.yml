@@ -9,7 +9,7 @@ body:
         Thanks for taking the time to report a bug! A clear, reproducible report helps us fix it faster.
 
         Before you submit:
-        - Check whether the issue is already reported in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue).
+        - Check whether the issue is already reported in [open issues](https://github.com/marketing-ax/marketing-ax/issues?q=is%3Aissue).
         - Replace example text with your actual bug details. Placeholder reports like `testing` or `0.0.0` are not actionable.
 
   - type: checkboxes

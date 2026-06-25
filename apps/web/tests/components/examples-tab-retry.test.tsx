@@ -10,7 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SkillSummary } from '../../src/types';
 
-// Regression coverage for nexu-io/open-design#860 (round 3): the modal's
+// Regression coverage for marketing-ax/marketing-ax#860 (round 3): the modal's
 // onView fires with the modal-internal view id ('preview'), not the
 // active skill id. The Retry path must close over the selected skill so
 // re-fires hit /api/skills/{skill-id}/example, not /api/skills/preview/example.

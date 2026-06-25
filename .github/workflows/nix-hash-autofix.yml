@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   autofix:
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'failure' }}
+    if: ${{ github.repository == 'marketing-ax/marketing-ax' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
 
     steps:

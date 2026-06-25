@@ -16,7 +16,7 @@ const make = (id: string, over: Partial<{ title: string; description: string; ta
   installedAt: 1,
   updatedAt: 1,
   manifest: {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     version: '0.1.0',
     title: over.title ?? `Title for ${id}`,

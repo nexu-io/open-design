@@ -159,13 +159,13 @@ describe('readLangfuseConfig', () => {
 describe('readTelemetrySinkConfig', () => {
   it('prefers the Open Design telemetry relay when configured', () => {
     const cfg = readTelemetrySinkConfig({
-      MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
+      MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.marketing-ax.example/api/langfuse//',
       LANGFUSE_PUBLIC_KEY: 'pk',
       LANGFUSE_SECRET_KEY: 'sk',
     });
     expect(cfg).toEqual({
       kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
       timeoutMs: 20_000,
       retries: 1,
     });
@@ -173,7 +173,7 @@ describe('readTelemetrySinkConfig', () => {
 
   it('uses relay-specific timeout and retry tuning when present', () => {
     const cfg = readTelemetrySinkConfig({
-      MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse',
+      MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.marketing-ax.example/api/langfuse',
       MARKETING_AX_TELEMETRY_TIMEOUT_MS: '30000',
       MARKETING_AX_TELEMETRY_RETRIES: '3',
       LANGFUSE_TIMEOUT_MS: '1',
@@ -1678,7 +1678,7 @@ describe('reportRunCompleted', () => {
   it('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
       timeoutMs: 20_000,
       retries: 0,
     };
@@ -1698,7 +1698,7 @@ describe('reportRunCompleted', () => {
     const call = fetchSpy.mock.calls[0]!;
     const url = call[0] as string;
     const init = call[1] as RequestInit & { headers: Record<string, string> };
-    expect(url).toBe('https://telemetry.open-design.ai/api/langfuse');
+    expect(url).toBe('https://telemetry.marketing-ax.example/api/langfuse');
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBeUndefined();
     expect(init.headers['Content-Type']).toBe('application/json');
@@ -1714,7 +1714,7 @@ describe('reportRunCompleted', () => {
   it('warns when the relay returns per-event errors', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
       timeoutMs: 20_000,
       retries: 0,
     };
@@ -1747,7 +1747,7 @@ describe('reportRunCompleted', () => {
   it('classifies relay 413 responses as relay_413', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
       timeoutMs: 20_000,
       retries: 0,
     };
@@ -1773,7 +1773,7 @@ describe('reportRunCompleted', () => {
   it('classifies relay 5xx responses as relay_5xx', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
       timeoutMs: 20_000,
       retries: 0,
     };
@@ -1819,7 +1819,7 @@ describe('reportRunCompleted', () => {
   it('classifies relay per-event 429s separately from generic 4xx', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      relayUrl: 'https://telemetry.marketing-ax.example/api/langfuse',
       timeoutMs: 20_000,
       retries: 0,
     };

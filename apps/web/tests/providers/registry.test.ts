@@ -159,7 +159,7 @@ describe('fetchSkillExample', () => {
     vi.unstubAllGlobals();
   });
 
-  // Regression coverage for nexu-io/open-design#897. Skills declared with
+  // Regression coverage for marketing-ax/marketing-ax#897. Skills declared with
   // a non-html `od.preview.type` ship no fetchable HTML — the daemon's
   // /example endpoint only resolves HTML files and 404s for everything
   // else, which left the gallery stuck on a misleading "Couldn't load

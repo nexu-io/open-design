@@ -4,7 +4,7 @@
 // "functionally correct but feel unfinished" — a primary commerce action
 // renders as a neutral button, two equally-styled CTAs compete for the
 // same conversion slot, or a "Learn more" link is styled like the buy
-// button. See nexu-io/open-design#2251 for the motivating bug report.
+// button. See marketing-ax/marketing-ax#2251 for the motivating bug report.
 //
 // `analyseCtaHierarchy` parses the rendered HTML and returns a small set
 // of conservative findings. It is intentionally precision-biased: when

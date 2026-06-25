@@ -6,7 +6,7 @@
  * hosts the test because `apps/desktop` itself has no vitest setup
  * yet — adding one is more scope than #911 needs.
  *
- * @see https://github.com/nexu-io/open-design/issues/911
+ * @see https://github.com/marketing-ax/marketing-ax/issues/911
  */
 
 // Mock electron at import time — `runtime.ts` pulls `BrowserWindow`,

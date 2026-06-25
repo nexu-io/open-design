@@ -652,7 +652,7 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
       expect(resp.status).toBe(201);
       expect(await resp.json()).toEqual({ ok: true });
       expect(upstreamRequests).toHaveLength(1);
-      expect(upstreamRequests[0]?.href).toBe('https://amr-api.open-design.ai/api/v1/oauth/token');
+      expect(upstreamRequests[0]?.href).toBe('https://amr-api.marketing-ax.example/api/v1/oauth/token');
       expect(upstreamRequests[0]?.method).toBe('POST');
       expect(upstreamRequests[0]?.headers['content-type']).toContain(
         'application/x-www-form-urlencoded',

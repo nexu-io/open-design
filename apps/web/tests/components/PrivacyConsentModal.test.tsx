@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PrivacyConsentModal } from '../../src/components/PrivacyConsentModal';
 import { I18nProvider } from '../../src/i18n';
 
-const PRIVACY_POLICY_HREF = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
+const PRIVACY_POLICY_HREF = 'https://github.com/marketing-ax/marketing-ax/blob/main/PRIVACY.md';
 
 function renderModal(overrides?: { onAccept?: () => void }) {
   const onAccept = overrides?.onAccept ?? vi.fn();

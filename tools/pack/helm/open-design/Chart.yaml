@@ -8,16 +8,16 @@ description: |
 type: application
 version: 0.1.0
 appVersion: "0.5.0"
-icon: https://open-design.ai/favicon.png
+icon: https://marketing-ax.example/favicon.png
 keywords:
   - open-design
   - design-agent
   - generative-ui
   - plugins
   - skills
-home: https://open-design.ai
+home: https://marketing-ax.example
 sources:
-  - https://github.com/nexu-io/open-design
+  - https://github.com/marketing-ax/marketing-ax
 maintainers:
   - name: Open Design
-    url: https://open-design.ai
+    url: https://marketing-ax.example

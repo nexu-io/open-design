@@ -307,7 +307,7 @@ env:
 jobs:
   metadata:
     name: Prepare beta metadata
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     env:
       RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}

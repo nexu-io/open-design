@@ -1367,7 +1367,7 @@ export function SettingsDialog({
     } finally {
       setVersionChecking(false);
     }
-    window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/marketing-ax/marketing-ax/releases', '_blank', 'noopener,noreferrer');
   }, [versionChecking, appVersionInfo, t]);
 
   // Imperative handle for the External MCP section. The dialog footer Save

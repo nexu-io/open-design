@@ -22,7 +22,7 @@
  * no vitest setup yet — same reasoning as the existing
  * `desktop-project-root-gate.test.ts` next to this file.
  *
- * @see https://github.com/nexu-io/open-design/pull/974
+ * @see https://github.com/marketing-ax/marketing-ax/pull/974
  */
 import { describe, expect, it, vi } from "vitest";
 

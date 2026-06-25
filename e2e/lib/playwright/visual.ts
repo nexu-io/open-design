@@ -9,7 +9,7 @@ const GITHUB_STARS_STORAGE_KEY = 'open-design:gh-stars';
 const VISUAL_STABILITY_STORAGE_KEY = 'open-design:visual-stability';
 const VISUAL_STYLE_ID = 'od-visual-stability-style';
 // Keep this exact-route mock narrow so unrelated GitHub UI still behaves normally.
-const VISUAL_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+const VISUAL_GITHUB_REPO_API = 'https://api.github.com/repos/marketing-ax/marketing-ax';
 const VISUAL_GITHUB_STARS = 40_000;
 
 type VisualConfig = {

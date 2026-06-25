@@ -13,7 +13,7 @@ Required on the host:
   docker, gh, jq, node/npm, expect-cli@0.1.3
 
 Optional environment:
-  BASE_REPO=nexu-io/open-design
+  BASE_REPO=marketing-ax/marketing-ax
   RUNNER_TEMP=/tmp/od-agent-pr-explore-local
   MAX_EXPECT_TIMEOUT_SECONDS=1200
   MAX_SANDBOX_CPUS=4
@@ -39,7 +39,7 @@ if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-base_repo="${BASE_REPO:-nexu-io/open-design}"
+base_repo="${BASE_REPO:-marketing-ax/marketing-ax}"
 runner_temp="${RUNNER_TEMP:-/tmp/od-agent-pr-explore-local}"
 
 for command_name in docker gh jq node; do

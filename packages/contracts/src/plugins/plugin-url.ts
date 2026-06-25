@@ -17,7 +17,7 @@
 // this file never reads env.
 
 // Canonical public site origin for shareable plugin links.
-export const MARKETING_AX_SITE_ORIGIN = 'https://open-design.ai';
+export const MARKETING_AX_SITE_ORIGIN = 'https://marketing-ax.example';
 
 // Slugify one path segment: lower-cased, non-url-safe runs collapsed to `-`,
 // leading/trailing `-` trimmed. Must match the landing site byte-for-byte.

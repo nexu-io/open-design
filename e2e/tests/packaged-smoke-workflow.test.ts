@@ -53,7 +53,7 @@ async function runReleaseStableForFailure(env: Record<string, string>): Promise<
       cwd: workspaceRoot,
       env: {
         ...process.env,
-        GITHUB_REPOSITORY: "nexu-io/open-design",
+        GITHUB_REPOSITORY: "marketing-ax/marketing-ax",
         GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
         MARKETING_AX_RELEASE_CHANNEL: "stable",
         ...env,
@@ -277,7 +277,7 @@ describe("packaged smoke workflow", () => {
         env: {
           ...process.env,
           GITHUB_REF_NAME: "main",
-          GITHUB_REPOSITORY: "nexu-io/open-design",
+          GITHUB_REPOSITORY: "marketing-ax/marketing-ax",
           GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
           NODE_TLS_REJECT_UNAUTHORIZED: "0",
           MARKETING_AX_RELEASE_CHANNEL: "stable",
@@ -380,7 +380,7 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toMatch(/^      update_target_version:/m);
     expect(workflow).toContain("name: Prepare beta metadata");
     expect(workflow).toContain("MARKETING_AX_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json");
-    expect(workflow).toContain("MARKETING_AX_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json");
+    expect(workflow).toContain("MARKETING_AX_STABLE_METADATA_URL: https://releases.marketing-ax.example/stable/latest/metadata.json");
     expect(workflow).toContain('repo_dir="$PWD/_release-metadata"');
     expect(workflow).toContain("--filter=blob:none --depth=1");
     expect(workflow).toContain("for attempt in 1 2 3");
@@ -487,7 +487,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.3.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.3.unsigned/Open Design Beta.dmg",
           },
         },
         channel: "beta",
@@ -530,7 +530,7 @@ describe("packaged smoke workflow", () => {
             RELEASE_MANIFEST_DIR: platformManifestRoot,
             RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
             RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-            RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+            RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
             RELEASE_SIGNED: "false",
             RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
             RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -571,7 +571,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
           },
         },
         channel: "beta",
@@ -614,7 +614,7 @@ describe("packaged smoke workflow", () => {
             RELEASE_MANIFEST_DIR: platformManifestRoot,
             RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
             RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-            RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+            RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
             RELEASE_SIGNED: "false",
             RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
             RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -655,7 +655,7 @@ describe("packaged smoke workflow", () => {
           {
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
           },
         },
         channel: "beta",
@@ -695,7 +695,7 @@ describe("packaged smoke workflow", () => {
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
           RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -734,7 +734,7 @@ describe("packaged smoke workflow", () => {
           {
             artifacts: {
               installer: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
               },
             },
             channel: "beta",
@@ -746,7 +746,7 @@ describe("packaged smoke workflow", () => {
             legacyPlatformKey: "win",
             feed: {
               name: "latest.yml",
-              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+              url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
             },
             platform: "win",
             platformKey: "win_x64",
@@ -780,7 +780,7 @@ describe("packaged smoke workflow", () => {
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
           RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -826,11 +826,11 @@ describe("packaged smoke workflow", () => {
           {
             artifacts: {
               dmg: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
               },
               payload: {
-                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
+                sha256Url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
               },
             },
             channel: "beta",
@@ -860,17 +860,17 @@ describe("packaged smoke workflow", () => {
           {
             artifacts: {
               installer: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
               },
               payload: {
-                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
+                sha256Url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
+                url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
               },
             },
             channel: "beta",
             feed: {
               name: "latest.yml",
-              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+              url: "https://releases.marketing-ax.example/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
             },
             github: {
               commit: "current-sha",
@@ -910,7 +910,7 @@ describe("packaged smoke workflow", () => {
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
-          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_PUBLIC_ORIGIN: "https://releases.marketing-ax.example",
           RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
@@ -1077,7 +1077,7 @@ function stableNightlyMetadataFixture(baseVersion: string, nightlyVersion: strin
     github: {
       branch: `release/v${baseVersion}`,
       commit: "0123456789abcdef0123456789abcdef01234567",
-      repository: "nexu-io/open-design",
+      repository: "marketing-ax/marketing-ax",
       workflow: "release-stable",
     },
     nightlyNumber: 12,

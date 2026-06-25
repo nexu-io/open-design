@@ -434,7 +434,7 @@ function installDesktopMenu(
           {
             label: "Documentation",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design#readme");
+              void shell.openExternal("https://github.com/marketing-ax/marketing-ax#readme");
             },
           },
           { type: "separator" },
@@ -447,7 +447,7 @@ function installDesktopMenu(
           {
             label: "Report Issue",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
+              void shell.openExternal("https://github.com/marketing-ax/marketing-ax/issues/new");
             },
           },
           {

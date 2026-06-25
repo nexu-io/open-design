@@ -78,7 +78,7 @@ export const DESKTOP_UPDATE_ENV = Object.freeze({
   PLATFORM: "MAX_UPDATE_PLATFORM",
 } as const);
 
-const DEFAULT_RELEASE_ORIGIN = "https://releases.open-design.ai";
+const DEFAULT_RELEASE_ORIGIN = "https://releases.marketing-ax.example";
 const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
 const RELEASES_DIR = "releases";

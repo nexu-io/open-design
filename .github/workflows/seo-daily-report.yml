@@ -1,6 +1,6 @@
 name: seo-daily-report
 
-# Daily Search Console summary for open-design.ai.
+# Daily Search Console summary for marketing-ax.example.
 # Runs at 09:00 Asia/Shanghai (UTC 01:00) and posts a Feishu group bot card.
 # Search Analytics is reported for T-2 and compared with T-9 because GSC
 # backfills recent data.
@@ -28,7 +28,7 @@ concurrency:
 jobs:
   report:
     name: Post SEO daily report to Feishu
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

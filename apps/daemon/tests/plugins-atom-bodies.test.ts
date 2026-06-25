@@ -19,7 +19,7 @@ import { renderActiveStageBlock } from '@marketing-ax/contracts';
 
 const SAMPLE_MANIFEST = (id: string) =>
   JSON.stringify({
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+    $schema: 'https://marketing-ax.example/schemas/plugin.v1.json',
     name: id,
     title: id,
     version: '0.1.0',

@@ -82,7 +82,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.marketing-ax.example/api/objects/batch',
         MARKETING_AX_OBJECT_MAX_BYTES: '1024',
         MARKETING_AX_OBJECT_BATCH_MAX_BYTES: '2300',
       },
@@ -162,7 +162,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.marketing-ax.example/api/objects/batch',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
@@ -202,7 +202,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: vi.fn() as any,
       env: {
         NODE_ENV: 'test',
-        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.marketing-ax.example/api/objects/batch',
       },
       uploadMode: 'manifest-only',
       now: () => new Date('2026-06-08T00:00:00.000Z'),
@@ -262,7 +262,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.marketing-ax.example/api/objects/batch',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
@@ -285,7 +285,7 @@ describe('buildTraceObjectManifests', () => {
         expect(parsed.objects).toHaveLength(1);
         return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
       }
-      expect(url).toBe('https://telemetry.open-design.ai/api/objects/batch');
+      expect(url).toBe('https://telemetry.marketing-ax.example/api/objects/batch');
       expect((parsed as unknown as { upload_token: string }).upload_token).toBe('upload-token');
       expect(parsed.objects).toHaveLength(1);
       return new Response(
@@ -313,14 +313,14 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'production',
-        MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
+        MARKETING_AX_TELEMETRY_RELAY_URL: 'https://telemetry.marketing-ax.example/api/langfuse//',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(fetchSpy.mock.calls[0]![0]).toBe('https://telemetry.open-design.ai/api/objects/authorize');
-    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.open-design.ai/api/objects/batch');
+    expect(fetchSpy.mock.calls[0]![0]).toBe('https://telemetry.marketing-ax.example/api/objects/authorize');
+    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.marketing-ax.example/api/objects/batch');
     expect(projectFileReadTracker.calls).toBe(1);
     expect(manifests?.completeness).toBe('complete');
     expect(manifests?.artifactManifest?.[0]).toMatchObject({
@@ -350,7 +350,7 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'test',
-        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+        MARKETING_AX_OBJECT_RELAY_URL: 'https://telemetry.marketing-ax.example/api/objects/batch',
         MARKETING_AX_OBJECT_MAX_BYTES: '8',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),

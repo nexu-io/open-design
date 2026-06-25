@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PreviewModal } from '../../src/components/PreviewModal';
 
-// Regression coverage for nexu-io/open-design#141: pressing Esc in fullscreen
+// Regression coverage for marketing-ax/marketing-ax#141: pressing Esc in fullscreen
 // used to require two presses because the browser exits its native fullscreen
 // element on the first press without delivering a keydown to JS, leaving the
 // React `fullscreen` state stuck on. The fix listens to fullscreenchange and

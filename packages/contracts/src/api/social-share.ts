@@ -1,4 +1,4 @@
-export const MARKETING_AX_GITHUB_REPO_URL = 'https://github.com/nexu-io/open-design';
+export const MARKETING_AX_GITHUB_REPO_URL = 'https://github.com/marketing-ax/marketing-ax';
 
 export type SocialShareTargetKind = 'open-design-repo' | 'project-html';
 

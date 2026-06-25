@@ -1,8 +1,8 @@
 name: landing-page-staging
 
 # Pushes to `main` deploy the landing page to the STAGING Cloudflare Pages
-# project (`open-design-landing-staging`, served at staging.open-design.ai).
-# Production (the separate `open-design-landing` project → open-design.ai) is
+# project (`open-design-landing-staging`, served at staging.marketing-ax.example).
+# Production (the separate `open-design-landing` project → marketing-ax.example) is
 # never named here — it is reached exclusively through the manual
 # `landing-page-production` workflow. This is the safety gate: project
 # separation means a merge to main can only ever change staging.
@@ -50,12 +50,12 @@ concurrency:
 jobs:
   deploy:
     name: Deploy landing page to staging
-    if: github.repository == 'nexu-io/open-design'
+    if: github.repository == 'marketing-ax/marketing-ax'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: landing-staging
-      url: https://staging.open-design.ai
+      url: https://staging.marketing-ax.example
 
     steps:
       - name: Checkout
@@ -186,7 +186,7 @@ jobs:
 
       # Deploys to the dedicated STAGING project. `--branch=main` is that
       # project's production branch, so it serves at its custom domain
-      # staging.open-design.ai. The production project (open-design-landing)
+      # staging.marketing-ax.example. The production project (open-design-landing)
       # is a different project and is never named here.
       - name: Deploy to Cloudflare Pages (staging)
         uses: cloudflare/wrangler-action@v3

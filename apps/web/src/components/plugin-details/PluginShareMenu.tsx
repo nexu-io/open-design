@@ -77,7 +77,7 @@ function buildInstallCommand(record: InstalledPluginRecord): string {
 }
 
 export function buildPluginShareUrl(record: InstalledPluginRecord): string | null {
-  // Only plugins with a public detail page on open-design.ai get a shareable
+  // Only plugins with a public detail page on marketing-ax.example get a shareable
   // link: bundled (`_official`) plugins and ones installed from the official
   // or community marketplace. Local/github installs have no public page, so
   // no link — never leak a local tools-dev origin (127.0.0.1:<port>).
@@ -203,7 +203,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
     key: 'marketplace',
     label: t('plugins.actions.openMarketplace'),
     icon: 'eye',
-    // Prefer the public open-design.ai detail page; fall back to the in-app
+    // Prefer the public marketing-ax.example detail page; fall back to the in-app
     // /marketplace route only for local/github installs with no public page.
     href: publicShareUrl ?? buildPluginMarketplacePath(record),
   });

@@ -620,7 +620,7 @@
    * line inside the 920px settings modal while still wrapping cleanly
    * on narrow viewports (the modal width clamps to 100vw - 48px) and
    * for the longest locales (German, French). 50ch was forcing even
-   * the English subtitle onto two lines. See nexu-io/open-design#743. */
+   * the English subtitle onto two lines. See marketing-ax/marketing-ax#743. */
   max-width: 72ch;
 }
 .modal-foot {

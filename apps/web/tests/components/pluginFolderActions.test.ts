@@ -1,7 +1,7 @@
 // Contract test for the prompts the plugin-folder card buttons send to the
 // agent. `install` uses the simple shared template; `contribute` drives the
 // `gh repo fork → branch → commit → gh pr create --web` flow against
-// `nexu-io/open-design`; `publish` drives `gh repo create / push` against the
+// `marketing-ax/marketing-ax`; `publish` drives `gh repo create / push` against the
 // author's own `plugin.repo` URL. The tests below lock the *shape* of each
 // prompt (keywords + folder interpolation) without coupling to exact wording,
 // so prose tweaks don't break the suite but accidental removal of a critical
@@ -77,7 +77,7 @@ describe('buildPluginFolderAgentActionPrompt', () => {
     const prompt = buildPluginFolderAgentActionPrompt(FOLDER, 'contribute');
 
     it('delegates Open Design PR creation to the deterministic plugin CLI helper', () => {
-      expect(prompt).toContain('nexu-io/open-design');
+      expect(prompt).toContain('marketing-ax/marketing-ax');
       expect(prompt).toContain(`"$MAX_NODE_BIN" "$MAX_BIN" plugin open-design-pr ${FOLDER}`);
     });
 

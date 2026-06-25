@@ -4,7 +4,7 @@
 // inlines TOP-LEVEL relative `<link rel=stylesheet>` and
 // `<script src=...>` tags into the response HTML — the viewer itself
 // stays URL-load by default since PR #384 (Part 1 of
-// nexu-io/open-design#368).
+// marketing-ax/marketing-ax#368).
 //
 // Scope: this helper handles two tag families only. The following are
 // NOT rewritten and remain external in the response:
