@@ -784,7 +784,7 @@ export const hu: Dict = {
   'useEverywhere.section.overview.snippet1': 'Indítsd el a daemont (és a webes felületet) helyben',
   'useEverywhere.section.overview.snippet2': 'Erősítsd meg, hogy elérhető',
   'useEverywhere.section.overview.snippet3': 'Szabványos artefaktumok beolvasása indítás előtt',
-  'useEverywhere.section.overview.footer': 'A daemon alapértelmezetten a `./.od/` mappába (projektszintű) ír. Állítsd be az `MAX_DATA_DIR=~/.open-design` értéket, hogy az adatokat megoszd a projektek között.',
+  'useEverywhere.section.overview.footer': 'A daemon alapértelmezetten a `./.max/` mappába (projektszintű) ír. Állítsd be az `MAX_DATA_DIR=~/.open-design` értéket, hogy az adatokat megoszd a projektek között.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Vezéreld az Open Designt bármelyik shellből',
   'useEverywhere.section.cli.intro': 'Az `od` bináris a daemonnal együtt érkezik, és ugyanaz a bináris, amelyet a Claude Code / Codex használ generáláskor. A legtöbb alparancs vékony kliens, amely a helyi daemonnak POST-ol, így ugyanúgy működnek, akár a `pnpm tools-dev` paranccsal, akár csomagolt alkalmazásként indítottad őket.',

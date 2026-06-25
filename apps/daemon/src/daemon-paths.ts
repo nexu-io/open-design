@@ -132,7 +132,7 @@ export function resolveDataDir(
     if (options.requireExplicit) {
       throw new Error('MAX_DATA_DIR is required when MAX_SANDBOX_MODE is enabled');
     }
-    return path.join(projectRoot, '.od');
+    return path.join(projectRoot, '.max');
   }
 
   const resolved = resolveProjectRelativePath(value, projectRoot);

@@ -153,3 +153,12 @@
 - fixture registry-starter/open-design.json repo+homepage = 리브랜드 확정. codex 0.135.0 판정: 권위신호 = 제품 registry/publish 경로(publish.ts+marketplace/installer 테스트가 Marketing AX canonical), example-deck/landing 귀속 아님. nexu-io/open-design는 명시 OSS 귀속 표면만 보존 (출처: codex consult 466k tok)
 - process 갭 = per-task 게이트가 타깃핀+typecheck만 → 누적 드리프트 미포착. 남은 Task6~14 게이트에 full @marketing-ax/daemon test(node@24+natives rebuilt) 추가 의무화 (출처: 456-fail 미발견 분석)
 - chat-route external_directory 1-fail = pre-existing 환경(allowed-dir + /var↔/private/var), rebrand 무관. 별도 후속 (출처: codex 확인)
+
+## 2026-06-25 — P0 v5 실행 세션2 (Task5 review + Wave-1 병렬 + Task6/7 결정)
+- 실행구조 = Task5 review(Approved) + disjoint Task10/11/12/12b/12c/14 worktree 병렬(게이트 grep-0, pnpm 불필요) + 코드체인 Task6~9 순차(main repo). 사용자 지시 "병렬 가능 태스크 병렬". disjoint 6 = 전부 parent==BASE 검증, 미머지(p0/* 브랜치) (출처: 사용자 "병렬로 수행")
+- 사용자 결정 3건(AskUserQuestion):
+  - **od:// MCP/telemetry namespace = 보존**. `od://design-systems|skills|focus`(MCP resource URI) + `od://objects`(langfuse storage_ref). od bin(Q4=유지)과 동일논리 — 내부 프로토콜/임베더빌리티 계약, 사용자 브랜드 아님. migrate 시 저장된 storage_ref 호환+MCP URI 계약 깨짐. Task9/13서 의도잔존 (출처: Task6 scope deviation 37건)
+  - **데이터루트 .od fallback = 최소 리네임**(registry.ts:53/daemon-paths.ts:135/db.ts:34 리터럴 .od→.max만). RUNTIME_DATA_DIR escape 리팩터는 rebrand 이전부터의 아키텍처 부채라 별도 follow-up 분리. rebrand PR = 식별자-only 유지, 동작변경 리스크 회피 (출처: AGENTS.md:152-160 escape 명시)
+  - **.od-data/.od-e2e = .max-data/.max-e2e 리네임**(우리 e2e/툴링 작업디렉터리, 브랜드파생). .od-skills만 보존(agent 프롬프트 계약 리터럴 + AGENTS "not a data root") (출처: alias 성격 grep)
+- 헬퍼 버그(Task11 발견): 공유 ODDIR_RE trailing class가 `;`,`\` 누락 → `.od;`/`.od\"` 맹점. Task7/13 corrected class(`;,:\}` 추가)로 교체 적용 (출처: Task11 nix flake.nix follow-up)
+- Task6 commit c0baa1f85에 resume-work HANDOFF 아카이브 rename(git mv)이 index에 staged돼 동반커밋됨. 무해(bookkeeping) (출처: Task6 report)

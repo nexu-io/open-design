@@ -42,7 +42,7 @@ if (!globalState[TEST_DATA_DIR_SYMBOL]) {
 
 // Server paths are resolved at module import time. Force every daemon test
 // process to use one isolated data directory before any test imports server.ts,
-// so tests can never read or overwrite the developer's real repo `.od` data.
+// so tests can never read or overwrite the developer's real repo `.max` data.
 process.env.MAX_DATA_DIR = globalState[TEST_DATA_DIR_SYMBOL];
 
 // Publish/share endpoints shell out through MAX_NODE_BIN + MAX_BIN (dist/cli.js).

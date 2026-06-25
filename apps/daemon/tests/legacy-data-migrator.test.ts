@@ -221,7 +221,7 @@ describe('migrateLegacyDataDirSync', () => {
     // mrcfps round-6: the marker is the canonical "do not touch"
     // signal once a migration has succeeded. If the user leaves
     // MAX_LEGACY_DATA_DIR set after success and then deletes or moves
-    // the old `.od/` (which is the documented launchctl setenv path),
+    // the old `.max/` (which is the documented launchctl setenv path),
     // the next boot must still no-op via the marker rather than
     // throwing legacy_dir_invalid for re-validating a source the
     // marker contract says is no longer needed.
@@ -233,7 +233,7 @@ describe('migrateLegacyDataDirSync', () => {
     });
     expect(first.status).toBe('migrated');
 
-    // Simulate the user removing the old repo `.od/` after the
+    // Simulate the user removing the old repo `.max/` after the
     // successful migration but leaving MAX_LEGACY_DATA_DIR set.
     await rm(legacyDir, { recursive: true, force: true });
 

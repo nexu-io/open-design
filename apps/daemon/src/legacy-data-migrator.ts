@@ -1,15 +1,15 @@
 /**
- * One-shot legacy `.od/` data migrator.
+ * One-shot legacy `.max/` data migrator.
  *
  * Open Design 0.3.x ran from the repo and wrote runtime state to
- * `<repo>/.od/` (SQLite at `app.sqlite`, agent CWDs under `projects/`,
+ * `<repo>/.max/` (SQLite at `app.sqlite`, agent CWDs under `projects/`,
  * saved renders under `artifacts/`, credentials at `media-config.json`).
  * The 0.4.x packaged Desktop app moved the data root to a per-namespace
  * directory under the OS user-data location (Electron's `userData`).
  *
  * Users upgrading from 0.3.x to the packaged 0.4.x app pointed the new
  * binary at a fresh, empty data root and watched their chats and designs
- * disappear. The data was never lost (the 0.3.x `.od/` folder is still
+ * disappear. The data was never lost (the 0.3.x `.max/` folder is still
  * on disk wherever they used to run from), but the new daemon had no
  * way to know about it. See https://github.com/marketing-ax/marketing-ax/issues/710.
  *
@@ -43,7 +43,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 export interface MigrateLegacyDataDirOptions {
-  /** Path to the legacy `.od/` directory (typically MAX_LEGACY_DATA_DIR). */
+  /** Path to the legacy `.max/` directory (typically MAX_LEGACY_DATA_DIR). */
   legacyDir: string | undefined;
   /** Resolved current data root (RUNTIME_DATA_DIR). */
   dataDir: string;
@@ -136,7 +136,7 @@ export function dataDirIsEmptyOrFresh(dataDir: string): boolean {
 /**
  * Returns true when `legacyDir` contains a payload worth migrating. The
  * presence of `app.sqlite` is treated as proof: every 0.3.x install that
- * shipped chat history wrote one, and a stray empty `.od/` folder won't
+ * shipped chat history wrote one, and a stray empty `.max/` folder won't
  * have it.
  */
 export function legacyDirHasPayload(legacyDir: string): boolean {
@@ -321,7 +321,7 @@ export function migrateLegacyDataDirSync(
   // Marker check runs before legacyDirHasPayload on purpose: once a
   // migration has succeeded, the marker is the canonical "do not
   // touch" signal. The user may leave MAX_LEGACY_DATA_DIR set and then
-  // delete or move the old repo `.od/` later; without this ordering
+  // delete or move the old repo `.max/` later; without this ordering
   // the next boot would re-validate a source that is no longer needed
   // and throw legacy_dir_invalid, breaking the marker contract that
   // says "after success, future boots no-op."

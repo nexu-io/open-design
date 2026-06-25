@@ -784,7 +784,7 @@ export const fa: Dict = {
   'useEverywhere.section.overview.snippet1': 'اجرای daemon (و رابط کاربری وب) به صورت محلی',
   'useEverywhere.section.overview.snippet2': 'از در دسترس بودن آن مطمئن شوید',
   'useEverywhere.section.overview.snippet3': 'دریافت آرتیفکت‌های استاندارد پیش از راه‌اندازی',
-  'useEverywhere.section.overview.footer': 'daemon به صورت پیش‌فرض در `./.od/` (محلی پروژه) می‌نویسد. برای اشتراک‌گذاری داده‌ها میان پروژه‌ها، `MAX_DATA_DIR=~/.open-design` را تنظیم کنید.',
+  'useEverywhere.section.overview.footer': 'daemon به صورت پیش‌فرض در `./.max/` (محلی پروژه) می‌نویسد. برای اشتراک‌گذاری داده‌ها میان پروژه‌ها، `MAX_DATA_DIR=~/.open-design` را تنظیم کنید.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'کنترل Open Design از هر shell',
   'useEverywhere.section.cli.intro': 'باینری `od` همراه با daemon ارائه می‌شود و همان باینری‌ای است که Claude Code / Codex هنگام اجرای یک تولید از آن استفاده می‌کنند. بیشتر زیرفرمان‌ها کلاینت‌های سبکی هستند که به daemon محلی درخواست POST می‌فرستند، بنابراین چه آن را با `pnpm tools-dev` راه‌اندازی کرده باشید و چه به‌عنوان یک اپلیکیشن بسته‌بندی‌شده، یکسان کار می‌کنند.',

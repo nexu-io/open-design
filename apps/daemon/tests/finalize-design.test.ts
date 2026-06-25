@@ -835,7 +835,7 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
     } as any);
 
     // DESIGN.md must land in the user's actual folder, NOT the hidden
-    // `.od/projects/<id>` dir.
+    // `.max/projects/<id>` dir.
     expect(result.designMdPath).toBe(path.join(userFolder, 'DESIGN.md'));
     expect(fs.existsSync(result.designMdPath)).toBe(true);
     expect(fs.readFileSync(result.designMdPath, 'utf8')).toBe(
@@ -1055,7 +1055,7 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
 // pure-dot ids (`.`, `..`, `...`) because `.` is in the character class.
 // `projectDir` and `resolveProjectDir` both delegated to `isSafeId` so they
 // inherited the hole; an id of `..` would resolve to the PARENT of
-// `.od/projects/` via `path.join`. The HTTP layer happens to reject this
+// `.max/projects/` via `path.join`. The HTTP layer happens to reject this
 // today because Express normalizes `%2e%2e` to `..` and collapses the
 // path before the route handler sees it (yielding 404), but a direct CLI
 // or scripted caller would still reach the function and trigger the

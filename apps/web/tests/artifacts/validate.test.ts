@@ -67,7 +67,7 @@ describe('validateHtmlArtifact', () => {
   });
 
   it('rejects unquoted URL attributes that reference reserved storage', () => {
-    const html = '<!doctype html><html><body><img src=./.od/thumb.png alt="Preview"><p>Enough content to look like a real document.</p></body></html>';
+    const html = '<!doctype html><html><body><img src=./.max/thumb.png alt="Preview"><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(false);
   });
@@ -79,7 +79,7 @@ describe('validateHtmlArtifact', () => {
   });
 
   it('rejects CSS import references to reserved storage', () => {
-    const html = '<!doctype html><html><head><style>@import "/.od/foo.css";@import url(./.tmp/theme.css);</style></head><body><p>Enough content to look like a real document.</p></body></html>';
+    const html = '<!doctype html><html><head><style>@import "/.max/foo.css";@import url(./.tmp/theme.css);</style></head><body><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(false);
   });
@@ -103,13 +103,13 @@ describe('validateHtmlArtifact', () => {
   });
 
   it('accepts external URLs with reserved-looking path segments', () => {
-    const html = '<!doctype html><html><body><a href="https://example.test/.od/reference.html">External docs</a><p>Enough content to look like a real document.</p></body></html>';
+    const html = '<!doctype html><html><body><a href="https://example.test/.max/reference.html">External docs</a><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(true);
   });
 
   it('accepts local URLs that only mention reserved paths in query or hash', () => {
-    const html = '<!doctype html><html><head><style>.card{background-image:url("/docs?example=/.od/ref")}</style></head><body><a href="/docs?example=/.od/ref">Query docs</a><a href="/docs#/.tmp/ref">Hash docs</a><p>Enough content to look like a real document.</p></body></html>';
+    const html = '<!doctype html><html><head><style>.card{background-image:url("/docs?example=/.max/ref")}</style></head><body><a href="/docs?example=/.max/ref">Query docs</a><a href="/docs#/.tmp/ref">Hash docs</a><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(true);
   });
@@ -121,19 +121,19 @@ describe('validateHtmlArtifact', () => {
   });
 
   it('accepts text-node mentions of HTML attribute syntax for reserved names', () => {
-    const html = '<!doctype html><html><body><p>Documentation can mention examples like href="/.od/reference.html" without linking to project storage.</p></body></html>';
+    const html = '<!doctype html><html><body><p>Documentation can mention examples like href="/.max/reference.html" without linking to project storage.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(true);
   });
 
   it('accepts data URLs with reserved-looking payload text', () => {
-    const html = '<!doctype html><html><body><img src="data:text/plain,/.od/foo" alt="Inline payload"><p>Enough content to look like a real document.</p></body></html>';
+    const html = '<!doctype html><html><body><img src="data:text/plain,/.max/foo" alt="Inline payload"><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(true);
   });
 
   it('accepts data URLs with reserved-looking payload text in srcset', () => {
-    const html = '<!doctype html><html><body><img srcset="data:text/plain,/.od/foo 1x" alt="Inline payload"><p>Enough content to look like a real document.</p></body></html>';
+    const html = '<!doctype html><html><body><img srcset="data:text/plain,/.max/foo 1x" alt="Inline payload"><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(true);
   });

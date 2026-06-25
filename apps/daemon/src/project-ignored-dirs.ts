@@ -5,7 +5,7 @@ export const IGNORED_PROJECT_DIR_NAMES = new Set([
   '.git',
   'node_modules',
   'vendor',
-  '.od',
+  '.max',
   'debug',
   'dist',
   'build',

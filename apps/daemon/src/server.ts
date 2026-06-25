@@ -2234,7 +2234,7 @@ const PLUGIN_CONTEXT_SKIP_DIRS = new Set([
   '.git',
   '.next',
   '.nuxt',
-  '.od',
+  '.max',
   '.output',
   '.tmp',
   '.turbo',

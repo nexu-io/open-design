@@ -58,7 +58,7 @@ describe('critique persistence', () => {
       id: 'crun_1',
       projectId: 'p1',
       conversationId: 'c1',
-      artifactPath: '.od/artifacts/crun_1/v1.html',
+      artifactPath: '.max/artifacts/crun_1/v1.html',
       status: 'shipped',
       score: 8.6,
       rounds: [
@@ -66,7 +66,7 @@ describe('critique persistence', () => {
         { n: 2, composite: 7.86, mustFix: 3, decision: 'continue' },
         { n: 3, composite: 8.62, mustFix: 0, decision: 'ship' },
       ],
-      transcriptPath: '.od/artifacts/crun_1/transcript.ndjson',
+      transcriptPath: '.max/artifacts/crun_1/transcript.ndjson',
       protocolVersion: 1,
       createdAt: now,
       updatedAt: now,

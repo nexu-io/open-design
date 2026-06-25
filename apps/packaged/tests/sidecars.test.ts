@@ -2,11 +2,11 @@
  * Regression coverage for the MAX_LEGACY_DATA_DIR migration-aware
  * daemon status timeout in apps/packaged/src/sidecars.ts.
  *
- * Background: when the user is recovering 0.3.x `.od/` data via
+ * Background: when the user is recovering 0.3.x `.max/` data via
  * MAX_LEGACY_DATA_DIR, apps/daemon/src/legacy-data-migrator.ts runs a
  * synchronous payload copy at module import time, before the daemon
  * sidecar can answer status. With the default 35-second status budget
- * a multi-GB legacy `.od/projects` or `.od/artifacts` tree can hit the
+ * a multi-GB legacy `.max/projects` or `.max/artifacts` tree can hit the
  * timeout while staging is still copying, after which the parent tears
  * the child down mid-promotion and can leave dataDir half-promoted
  * even with the in-process rollback.
@@ -42,10 +42,10 @@ describe('resolveDaemonStatusTimeoutMs', () => {
 
   it('extends the budget to 30 minutes when MAX_LEGACY_DATA_DIR is set', () => {
     // The packaged sidecar must give the daemon a long-enough window to
-    // sync-copy a multi-GB legacy `.od/` payload. Anything below ~10
+    // sync-copy a multi-GB legacy `.max/` payload. Anything below ~10
     // minutes was historically observed to time out on real installs.
     const value = resolveDaemonStatusTimeoutMs({
-      MAX_LEGACY_DATA_DIR: '/path/to/old/.od',
+      MAX_LEGACY_DATA_DIR: '/path/to/old/.max',
     });
     expect(value).toBeGreaterThanOrEqual(10 * 60 * 1000);
     expect(value).toBe(30 * 60 * 1000);
@@ -348,10 +348,10 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     const withLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
       daemonCliEntry: null,
-      legacyDataDir: '/old/.od',
+      legacyDataDir: '/old/.max',
       requireDesktopAuth: false,
     });
-    expect(withLegacy.MAX_LEGACY_DATA_DIR).toBe('/old/.od');
+    expect(withLegacy.MAX_LEGACY_DATA_DIR).toBe('/old/.max');
 
     const withEmptyLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,

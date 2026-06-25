@@ -16,7 +16,7 @@ export function resolveSeededAppConfigPaths(config: ToolPackConfig): SeededAppCo
   const configuredDataDir = process.env.MAX_DATA_DIR?.trim();
   const sourceDataDir = configuredDataDir
     ? resolveProjectRelativePath(configuredDataDir, config.workspaceRoot)
-    : join(config.workspaceRoot, ".od");
+    : join(config.workspaceRoot, ".max");
   return {
     sourcePath: join(sourceDataDir, "app-config.json"),
     targetPath: join(config.roots.runtime.namespaceRoot, "data", "app-config.json"),

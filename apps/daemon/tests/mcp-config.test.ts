@@ -654,12 +654,12 @@ describe('buildOpenCodeMcpConfigContent', () => {
 });
 
 describe('isManagedProjectCwd', () => {
-  const projectsDir = '/abs/.od/projects';
+  const projectsDir = '/abs/.max/projects';
 
   it('accepts a real per-project subdir', () => {
-    expect(isManagedProjectCwd('/abs/.od/projects/abc', projectsDir)).toBe(true);
+    expect(isManagedProjectCwd('/abs/.max/projects/abc', projectsDir)).toBe(true);
     expect(
-      isManagedProjectCwd('/abs/.od/projects/abc/sub', projectsDir),
+      isManagedProjectCwd('/abs/.max/projects/abc/sub', projectsDir),
     ).toBe(true);
   });
 
@@ -682,11 +682,11 @@ describe('isManagedProjectCwd', () => {
   });
 
   it('rejects path-prefix collisions (different sibling dir)', () => {
-    // `/abs/.od/projects-other` starts with `/abs/.od/projects` as a string,
-    // but is NOT a child of `/abs/.od/projects/`. Strict-separator check
+    // `/abs/.max/projects-other` starts with `/abs/.max/projects` as a string,
+    // but is NOT a child of `/abs/.max/projects/`. Strict-separator check
     // makes sure we don't accidentally write to an unrelated tree.
     expect(
-      isManagedProjectCwd('/abs/.od/projects-other/x', projectsDir),
+      isManagedProjectCwd('/abs/.max/projects-other/x', projectsDir),
     ).toBe(false);
   });
 });

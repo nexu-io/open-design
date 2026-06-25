@@ -131,7 +131,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
     // Use the same path the daemon's `ensureProject` uses.
     const projectsBase = process.env.MAX_DATA_DIR
       ? join(process.env.MAX_DATA_DIR, 'projects')
-      : join(process.cwd(), '.od', 'projects');
+      : join(process.cwd(), '.max', 'projects');
     return { id, dir: join(projectsBase, id), conversationId: body.conversationId };
   }
 
@@ -154,7 +154,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
     projectsToClean.push(body.project.id);
     const projectsBase = process.env.MAX_DATA_DIR
       ? join(process.env.MAX_DATA_DIR, 'projects')
-      : join(process.cwd(), '.od', 'projects');
+      : join(process.cwd(), '.max', 'projects');
     return {
       id: body.project.id,
       dir: join(projectsBase, body.project.id),

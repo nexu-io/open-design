@@ -87,7 +87,7 @@ describe("resolvePackagedNamespacePaths", () => {
 
   it("uses MAX_DATA_DIR as a base for the namespace-scoped packaged daemon dataRoot", () => {
     const config = fakeConfig();
-    const override = join("C:", "Users", "Fred", "MyProject", "design", ".od");
+    const override = join("C:", "Users", "Fred", "MyProject", "design", ".max");
 
     expect(
       resolvePackagedNamespacePaths(config, config.namespace, { MAX_DATA_DIR: override }).dataRoot,
@@ -96,7 +96,7 @@ describe("resolvePackagedNamespacePaths", () => {
 
   it("keeps shared MAX_DATA_DIR overrides isolated across packaged namespaces", () => {
     const config = fakeConfig();
-    const override = join("C:", "Users", "Fred", "MyProject", "design", ".od");
+    const override = join("C:", "Users", "Fred", "MyProject", "design", ".max");
     const stable = resolvePackagedNamespacePaths(config, "release-stable-win", {
       MAX_DATA_DIR: override,
     });
@@ -152,7 +152,7 @@ describe("resolvePackagedNamespacePaths", () => {
 
   it("forwards the MAX_DATA_DIR-resolved dataRoot into sidecar launch paths", () => {
     const config = fakeConfig();
-    const override = join("C:", "Users", "Fred", "MyProject", "design", ".od");
+    const override = join("C:", "Users", "Fred", "MyProject", "design", ".max");
     const paths = resolvePackagedNamespacePaths(config, config.namespace, {
       MAX_DATA_DIR: override,
     });
@@ -166,7 +166,7 @@ describe("resolvePackagedNamespacePaths", () => {
     const config = fakeConfig();
     const original = process.env.MAX_DATA_DIR;
     try {
-      process.env.MAX_DATA_DIR = join("C:", "Users", "Fred", "MyProject", "design", ".od");
+      process.env.MAX_DATA_DIR = join("C:", "Users", "Fred", "MyProject", "design", ".max");
       expect(resolvePackagedNamespacePaths(config).dataRoot).toBe(
         join(config.namespaceBaseRoot, config.namespace, "data"),
       );
@@ -180,7 +180,7 @@ describe("resolvePackagedNamespacePaths", () => {
     const config = fakeConfig();
 
     expect(
-      () => resolvePackagedNamespacePaths(config, config.namespace, { MAX_DATA_DIR: "project/.od" }),
+      () => resolvePackagedNamespacePaths(config, config.namespace, { MAX_DATA_DIR: "project/.max" }),
     ).toThrow(/MAX_DATA_DIR.*absolute path/);
   });
 
@@ -189,7 +189,7 @@ describe("resolvePackagedNamespacePaths", () => {
 
     let captured: unknown;
     try {
-      resolvePackagedNamespacePaths(config, config.namespace, { MAX_DATA_DIR: "project/.od" });
+      resolvePackagedNamespacePaths(config, config.namespace, { MAX_DATA_DIR: "project/.max" });
     } catch (error) {
       captured = error;
     }
@@ -197,7 +197,7 @@ describe("resolvePackagedNamespacePaths", () => {
     expect(captured).toBeInstanceOf(PackagedPathAccessError);
     const err = captured as PackagedPathAccessError;
     expect(err.title).toMatch(/MAX_DATA_DIR/);
-    expect(err.message).toContain("project/.od");
+    expect(err.message).toContain("project/.max");
     expect(err.message).toMatch(/absolute path/);
   });
 

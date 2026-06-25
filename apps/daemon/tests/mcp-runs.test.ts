@@ -324,14 +324,14 @@ describe('public MCP discovery + generation tools', () => {
       id: 'run-99',
       status: 'running',
       projectId: 'project-1',
-      eventsLogPath: '/Users/x/.od/runs/run-99/events.jsonl',
+      eventsLogPath: '/Users/x/.max/runs/run-99/events.jsonl',
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-99' });
     const parsed = JSON.parse(firstText(result));
     expect(parsed.status).toBe('running');
-    expect(parsed.eventsLogPath).toBe('/Users/x/.od/runs/run-99/events.jsonl');
+    expect(parsed.eventsLogPath).toBe('/Users/x/.max/runs/run-99/events.jsonl');
     expect(parsed.hint).toMatch(/tail/i);
     expect(parsed.hint).toContain('events.jsonl');
   });

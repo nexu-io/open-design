@@ -47,8 +47,8 @@ const residualSkippedDirectories = new Set([
   ".codex",
   ".cursor",
   ".git",
-  ".od",
-  ".od-e2e",
+  ".max",
+  ".max-e2e",
   ".opencode",
   ".task",
   ".tmp",
@@ -125,7 +125,7 @@ const residualAllowedPathPrefixes = [
   "e2e/reports/html/",
   "e2e/reports/playwright-html-report/",
   "e2e/reports/test-results/",
-  "e2e/ui/.od-data/",
+  "e2e/ui/.max-data/",
   "e2e/ui/reports/playwright-html-report/",
   "e2e/ui/reports/test-results/",
   "e2e/ui/test-results/",
@@ -416,7 +416,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
 }
 
 const testLayoutScopedDirectories = ["apps", "packages", "tools"];
-const testLayoutSkippedDirectories = new Set([".next", ".od-data", "dist", "node_modules", "out", "reports", "test-results"]);
+const testLayoutSkippedDirectories = new Set([".next", ".max-data", "dist", "node_modules", "out", "reports", "test-results"]);
 
 function isTestFile(fileName: string): boolean {
   return /\.test\.tsx?$/.test(fileName);
@@ -486,7 +486,7 @@ async function checkTestLayout(): Promise<boolean> {
 }
 
 const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
-const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
+const e2eSkippedDirectories = new Set([".max-data", "node_modules", "reports", "test-results"]);
 const e2eAllowedScripts = [
   "test",
   "test:p0",
@@ -522,7 +522,7 @@ async function collectRepositoryFiles(directory: string, skippedDirectoryNames =
 
 const productNeutralitySkippedDirectories = new Set([
   ".git",
-  ".od",
+  ".max",
   ".tmp",
   "dist",
   "node_modules",
@@ -716,7 +716,7 @@ async function checkE2eLayout(): Promise<boolean> {
   return true;
 }
 
-const webTestSkippedDirectories = new Set([".od-data", "reports", "test-results"]);
+const webTestSkippedDirectories = new Set([".max-data", "reports", "test-results"]);
 
 async function checkWebTestLayout(): Promise<boolean> {
   const violations: string[] = [];
@@ -968,7 +968,7 @@ async function checkToolsLayout(): Promise<boolean> {
 
 const stylePolicySkippedDirectories = new Set([
   ".next",
-  ".od-data",
+  ".max-data",
   "dist",
   "node_modules",
   "out",

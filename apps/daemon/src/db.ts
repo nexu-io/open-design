@@ -31,7 +31,7 @@ function rows(value: unknown[]): DbRow[] {
 }
 
 export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: string } = {}): SqliteDb {
-  const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, '.od');
+  const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, '.max');
   const file = path.join(dir, 'app.sqlite');
   if (dbInstance && dbFile === file) return dbInstance;
   if (dbInstance) closeDatabase();

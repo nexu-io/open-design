@@ -86,7 +86,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   }
 
   async function writeStoredMediaConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -585,7 +585,7 @@ describe('media-config Grok / xAI OAuth fallback', () => {
     refreshToken?: string;
     expiresAt?: number;
   }) {
-    const file = path.join(projectRoot, '.od', 'xai-tokens.json');
+    const file = path.join(projectRoot, '.max', 'xai-tokens.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(
       file,
@@ -605,7 +605,7 @@ describe('media-config Grok / xAI OAuth fallback', () => {
   }
 
   async function writeStoredMediaConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -757,7 +757,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
   });
 
   async function writeStoredMediaConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -904,7 +904,7 @@ describe('media-config model alias resolution (issue #1277)', () => {
     });
     const onDisk = JSON.parse(
       await readFile(
-        path.join(projectRoot, '.od', 'media-config.json'),
+        path.join(projectRoot, '.max', 'media-config.json'),
         'utf8',
       ),
     );
@@ -958,13 +958,13 @@ describe('seedProviderIfMissing', () => {
   });
 
   async function writeStored(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
 
   async function readStoredJson(): Promise<unknown> {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     const raw = await readFile(file, 'utf8');
     return JSON.parse(raw);
   }

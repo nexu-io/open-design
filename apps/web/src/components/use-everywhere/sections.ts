@@ -70,14 +70,14 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         label: 'Ingest standard artifacts before boot',
         language: 'bash',
         body:
-          'pnpm seed:test-projects --offline --data-dir ./.od \\\n' +
+          'pnpm seed:test-projects --offline --data-dir ./.max \\\n' +
           '  --decks 2 --webs 2 --default-plugins 3 --community-plugins 3\n' +
           '# Then start Open Design in the shell you normally use for dev:\n' +
           'pnpm tools-dev',
       },
     ],
     footer:
-      'The daemon writes to `./.od/` (project-local) by default. Set ' +
+      'The daemon writes to `./.max/` (project-local) by default. Set ' +
       '`MAX_DATA_DIR=~/.open-design` to share data across projects.',
   },
   {
@@ -347,7 +347,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         label: 'Headless artifact fixture bundle',
         language: 'bash',
         body:
-          'pnpm seed:test-projects --offline --data-dir ./.od \\\n' +
+          'pnpm seed:test-projects --offline --data-dir ./.max \\\n' +
           '  --decks 2 --webs 2 \\\n' +
           '  --default-plugins 3 --community-plugins 3\n' +
           '# Shell 1: start Open Design after ingesting.\n' +

@@ -120,7 +120,7 @@ export function isDeployableAppEligible(args: {
 // handoffKind / exportTargets[] / signals attached. The function is
 // pure relative to its inputs (it reads files, never writes back). The
 // caller decides where to persist the updated manifest (typically
-// `<cwd>/<manifest-path>` or `.od/artifacts/<id>/manifest.json`).
+// `<cwd>/<manifest-path>` or `.max/artifacts/<id>/manifest.json`).
 //
 // Promotion ladder (spec §11.5.1):
 //   1. decision='reject'                              → handoffKind='design-only'

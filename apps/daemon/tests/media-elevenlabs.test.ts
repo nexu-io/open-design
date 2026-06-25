@@ -18,7 +18,7 @@ describe('elevenlabs media generation', () => {
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-elevenlabs-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.MAX_MEDIA_CONFIG_DIR;
     delete process.env.MAX_DATA_DIR;
@@ -44,7 +44,7 @@ describe('elevenlabs media generation', () => {
   });
 
   async function writeConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }

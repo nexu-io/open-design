@@ -23,7 +23,7 @@ describe('OpenAI-compatible media providers', () => {
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openai-compatible-media-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.MAX_IMAGEROUTER_API_KEY;
     delete process.env.MAX_CUSTOM_IMAGE_API_KEY;
@@ -70,7 +70,7 @@ describe('OpenAI-compatible media providers', () => {
   });
 
   async function writeConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
@@ -521,7 +521,7 @@ process.stdin.on('end', () => {
   });
 
   it('uses default app-config Codex CLI env overrides when MAX_DATA_DIR is absent', async () => {
-    const dataDir = path.join(projectRoot, '.od');
+    const dataDir = path.join(projectRoot, '.max');
     const generatedHome = path.join(root, 'default-codex-home');
     const codexBin = path.join(root, 'default-codex.mjs');
     const wrongCodexBin = path.join(root, 'wrong-default-codex.mjs');

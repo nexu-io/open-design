@@ -39,7 +39,7 @@ function makeTempDir(prefix: string) {
 function makeHarness() {
   // openDatabase는 파일 기반 SQLite + 전체 migrate (braze 포함) 수행
   const dbDir = makeTempDir('braze-brief-db-');
-  const db = openDatabase(dbDir, { dataDir: path.join(dbDir, '.od') });
+  const db = openDatabase(dbDir, { dataDir: path.join(dbDir, '.max') });
   const projectsDir = makeTempDir('braze-brief-projects-');
 
   const app = express();

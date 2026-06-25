@@ -10,7 +10,7 @@
 //   pnpm seed:test-projects --decks 2 --webs 2 # cap counts
 //   pnpm seed:test-projects --daemon http://127.0.0.1:17456
 //   pnpm seed:test-projects --namespace work-a     # discover tools-dev namespace
-//   pnpm seed:test-projects --offline          # ingest into ./.od before boot
+//   pnpm seed:test-projects --offline          # ingest into ./.max before boot
 //   pnpm seed:test-projects --clear            # remove previously seeded projects
 //
 // The daemon URL is resolved in this order: --daemon flag > $MAX_DAEMON_URL >
@@ -328,7 +328,7 @@ Options:
                      daemon when one is discoverable; otherwise offline ingest.
   --online           Alias for --mode online.
   --offline          Alias for --mode offline.
-  --data-dir <dir>   Offline target data dir (default: \$MAX_DATA_DIR or ./.od).
+  --data-dir <dir>   Offline target data dir (default: \$MAX_DATA_DIR or ./.max).
   --namespace <name> Tools-dev namespace for online auto-discovery. This does
                      not affect od CLI behavior. Offline mode requires
                      --data-dir or MAX_DATA_DIR when --namespace is set.
@@ -356,7 +356,7 @@ Online daemon URL resolution (first match wins):
      status lookup reads that namespace.
 
 Offline ingest before boot:
-  pnpm seed:test-projects --offline --data-dir ./.od
+  pnpm seed:test-projects --offline --data-dir ./.max
   pnpm tools-dev
 `);
 }
@@ -590,7 +590,7 @@ function expandHomePrefix(raw: string): string {
 }
 
 function resolveDataDir(raw: string | null): string {
-  const value = raw ?? process.env.MAX_DATA_DIR ?? path.join(REPO_ROOT, '.od');
+  const value = raw ?? process.env.MAX_DATA_DIR ?? path.join(REPO_ROOT, '.max');
   const expanded = expandHomePrefix(value);
   return path.isAbsolute(expanded) ? expanded : path.resolve(REPO_ROOT, expanded);
 }

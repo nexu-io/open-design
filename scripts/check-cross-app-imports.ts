@@ -11,7 +11,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 // `apps/daemon/src/**` is the canonical example.
 const crossAppImportSkippedDirectories = new Set([
   ".next",
-  ".od-data",
+  ".max-data",
   "dist",
   "node_modules",
   "out",

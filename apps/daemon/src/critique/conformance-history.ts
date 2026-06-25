@@ -25,7 +25,7 @@ import path from 'node:path';
 import type { ConformanceDay } from './ratchet.js';
 
 /**
- * Where conformance history lives, relative to the daemon's `.od` data
+ * Where conformance history lives, relative to the daemon's `.max` data
  * dir. Wrapped in a function so a future override (env var, test seam)
  * can swap it without rewriting call sites.
  */

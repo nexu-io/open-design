@@ -258,7 +258,7 @@ function RotatingTip() {
 }
 
 /**
- * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
+ * Full-panel browser for a project's `.max/projects/<id>/` folder. Mirrors
  * Claude Design's "Design Files" surface: a single-line toolbar (up / refresh
  * / breadcrumbs + actions), semantic sections (Folders, Stylesheets, Scripts,
  * Documents, Images …), hover-revealed row checkbox + menu, a right-side

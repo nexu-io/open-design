@@ -8,7 +8,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css", ".scss", ".sass"]);
 const GENERATED_OR_RUNTIME_SEGMENTS = new Set([
-  ".od",
+  ".max",
   ".tmp",
   "build",
   "coverage",

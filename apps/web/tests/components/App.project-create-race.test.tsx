@@ -891,7 +891,7 @@ describe('App project creation routing', () => {
     });
     expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledTimes(1);
     // The handoff failed, so the staged attachments must NOT be uploaded into
-    // the managed `.od/projects/<id>` root the user did not pick.
+    // the managed `.max/projects/<id>` root the user did not pick.
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
   });
 });

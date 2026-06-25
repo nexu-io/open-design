@@ -1569,7 +1569,7 @@ export function MemorySection({
             <span>{t('settings.memory')}</span>
             {/*
               Storage path used to render as a permanently-visible
-              <code>/Users/.../.od/memory</code> line in the body. Most
+              <code>/Users/.../.max/memory</code> line in the body. Most
               users only need this once (to peek at the markdown files)
               and then never again, so the line was pure noise after the
               first glance. We tucked it behind an info button next to

@@ -784,7 +784,7 @@ export const ru: Dict = {
   'useEverywhere.section.overview.snippet1': 'Запустите демон (и веб-интерфейс) локально',
   'useEverywhere.section.overview.snippet2': 'Убедитесь, что он доступен',
   'useEverywhere.section.overview.snippet3': 'Загрузите стандартные артефакты перед запуском',
-  'useEverywhere.section.overview.footer': 'По умолчанию демон пишет в `./.od/` (локально для проекта). Установите `MAX_DATA_DIR=~/.open-design`, чтобы использовать общие данные между проектами.',
+  'useEverywhere.section.overview.footer': 'По умолчанию демон пишет в `./.max/` (локально для проекта). Установите `MAX_DATA_DIR=~/.open-design`, чтобы использовать общие данные между проектами.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Управляйте Open Design из любой оболочки',
   'useEverywhere.section.cli.intro': 'Исполняемый файл `od` поставляется вместе с демоном и является тем же бинарником, который используют Claude Code / Codex при запуске генерации. Большинство подкоманд — это лёгкие клиенты, отправляющие POST-запросы локальному демону, поэтому они работают одинаково независимо от того, запустили ли вы его через `pnpm tools-dev` или как упакованное приложение.',

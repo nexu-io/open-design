@@ -784,7 +784,7 @@ export const uk: Dict = {
   'useEverywhere.section.overview.snippet1': 'Запустіть daemon (і веб-інтерфейс) локально',
   'useEverywhere.section.overview.snippet2': 'Переконайтеся, що він доступний',
   'useEverywhere.section.overview.snippet3': 'Завантажте стандартні артефакти перед запуском',
-  'useEverywhere.section.overview.footer': 'За замовчуванням daemon записує дані в `./.od/` (локально в проєкті). Встановіть `MAX_DATA_DIR=~/.open-design`, щоб спільно використовувати дані між проєктами.',
+  'useEverywhere.section.overview.footer': 'За замовчуванням daemon записує дані в `./.max/` (локально в проєкті). Встановіть `MAX_DATA_DIR=~/.open-design`, щоб спільно використовувати дані між проєктами.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Керуйте Open Design з будь-якої оболонки',
   'useEverywhere.section.cli.intro': 'Бінарний файл `od` постачається разом із daemon і є тим самим бінарним файлом, який використовують Claude Code / Codex під час генерації. Більшість підкоманд — це тонкі клієнти, що надсилають POST до локального daemon, тому вони працюють однаково незалежно від того, чи запустили ви його через `pnpm tools-dev`, чи як зібраний застосунок.',

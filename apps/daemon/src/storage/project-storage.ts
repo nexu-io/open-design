@@ -66,7 +66,7 @@ export class StorageError extends Error {
 }
 
 /**
- * v1 default — backed by the daemon's existing `<dataDir>/.od/projects/`
+ * v1 default — backed by the daemon's existing `<dataDir>/.max/projects/`
  * filesystem layout. Pure pass-through to fs/promises with the
  * traversal guard the legacy `projects.ts` helpers already enforce.
  */

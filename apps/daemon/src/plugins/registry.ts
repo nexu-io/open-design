@@ -50,7 +50,7 @@ export function registryRootsForDataDir(dataDir: string): RegistryRoots {
 }
 
 export function defaultRegistryRoots(): RegistryRoots {
-  return registryRootsForDataDir(path.resolve(process.env.MAX_DATA_DIR ?? path.join(process.cwd(), '.od')));
+  return registryRootsForDataDir(path.resolve(process.env.MAX_DATA_DIR ?? path.join(process.cwd(), '.max')));
 }
 
 export interface ScannedPlugin {

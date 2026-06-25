@@ -148,7 +148,7 @@ const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 /**
  * Daemon status wait budget. The default 35s is fine for normal cold
  * boots, but the MAX_LEGACY_DATA_DIR one-shot recovery flow can synch-
- * copy a multi-GB legacy `.od/` payload before SQLite even opens, and
+ * copy a multi-GB legacy `.max/` payload before SQLite even opens, and
  * killing the child mid-migration can leave dataDir half-promoted.
  * When the env var is set, use a 30-minute budget so the parent will
  * not tear the daemon down before the migration can complete.

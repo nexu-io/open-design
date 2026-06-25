@@ -4,7 +4,7 @@ const daemonPort = Number(process.env.MAX_PORT) || 17_456;
 const webPort = Number(process.env.MAX_WEB_PORT) || 17_573;
 const baseURL = `http://127.0.0.1:${webPort}`;
 const namespace = process.env.MAX_E2E_NAMESPACE || `playwright-visual-${process.pid}`;
-const dataDir = process.env.MAX_E2E_DATA_DIR || `e2e/ui/.od-data/${namespace}`;
+const dataDir = process.env.MAX_E2E_DATA_DIR || `e2e/ui/.max-data/${namespace}`;
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;

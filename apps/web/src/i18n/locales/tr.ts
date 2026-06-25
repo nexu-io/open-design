@@ -784,7 +784,7 @@ export const tr: Dict = {
   'useEverywhere.section.overview.snippet1': 'Daemon\'ı (ve web arayüzünü) yerel olarak başlatın',
   'useEverywhere.section.overview.snippet2': 'Erişilebilir olduğunu doğrulayın',
   'useEverywhere.section.overview.snippet3': 'Önyüklemeden önce standart yapıtları içe aktarın',
-  'useEverywhere.section.overview.footer': 'Daemon varsayılan olarak `./.od/` dizinine (proje-yerel) yazar. Verileri projeler arasında paylaşmak için `MAX_DATA_DIR=~/.open-design` ayarlayın.',
+  'useEverywhere.section.overview.footer': 'Daemon varsayılan olarak `./.max/` dizinine (proje-yerel) yazar. Verileri projeler arasında paylaşmak için `MAX_DATA_DIR=~/.open-design` ayarlayın.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Open Design\'ı herhangi bir kabuktan yönetin',
   'useEverywhere.section.cli.intro': '`od` ikili dosyası daemon ile birlikte gelir ve Claude Code / Codex bir üretim çalıştırdığında kullandığı ile aynı ikili dosyadır. Çoğu alt komut, yerel daemon\'a POST gönderen ince istemcilerdir; bu nedenle ister `pnpm tools-dev` ile ister paketlenmiş bir uygulama olarak başlatın aynı şekilde çalışırlar.',

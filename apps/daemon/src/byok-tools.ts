@@ -404,7 +404,7 @@ export interface BYOKToolContext {
   /** Daemon project root — used to look up media-config when the chat
    *  session key is missing. */
   projectRoot: string;
-  /** Daemon's PROJECTS_DIR (the `<projectRoot>/.od/projects/` folder
+  /** Daemon's PROJECTS_DIR (the `<projectRoot>/.max/projects/` folder
    *  that holds per-project file trees). Generated images land in
    *  `<projectsRoot>/<projectId>/byok-<id>.png` so the project's
    *  FileViewer / DesignFilesPanel discover them automatically and

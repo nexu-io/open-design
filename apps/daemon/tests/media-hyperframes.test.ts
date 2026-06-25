@@ -14,7 +14,7 @@ describe('hyperframes-html media renderer preflight', () => {
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-hyperframes-media-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(path.join(projectsRoot, 'project-1'), { recursive: true });
     process.env.MAX_MEDIA_ALLOW_STUBS = '1';
   });

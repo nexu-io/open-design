@@ -77,7 +77,7 @@ describe("resolveSeededAppConfigPaths", () => {
   it("uses workspace .od by default", () => {
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
-      sourcePath: join("/work", ".od", "app-config.json"),
+      sourcePath: join("/work", ".max", "app-config.json"),
       targetPath: join("/work", ".tmp", "tools-pack", "runtime", "mac", "namespaces", "local-test", "data", "app-config.json"),
     });
   });
@@ -92,10 +92,10 @@ describe("resolveSeededAppConfigPaths", () => {
   });
 
   it("resolves relative MAX_DATA_DIR against the workspace root", () => {
-    process.env.MAX_DATA_DIR = "e2e/ui/.od-data";
+    process.env.MAX_DATA_DIR = "e2e/ui/.max-data";
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
-      sourcePath: resolve("/work", "e2e", "ui", ".od-data", "app-config.json"),
+      sourcePath: resolve("/work", "e2e", "ui", ".max-data", "app-config.json"),
       targetPath: join("/work", ".tmp", "tools-pack", "runtime", "mac", "namespaces", "local-test", "data", "app-config.json"),
     });
   });
@@ -115,7 +115,7 @@ describe("seedPackagedAppConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const config = makeConfig(root);
-      const sourceDir = join(root, ".od");
+      const sourceDir = join(root, ".max");
       await mkdir(sourceDir, { recursive: true });
       await writeFile(
         join(sourceDir, "app-config.json"),
@@ -137,7 +137,7 @@ describe("seedPackagedAppConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const config = makeConfig(root, { portable: true });
-      const sourceDir = join(root, ".od");
+      const sourceDir = join(root, ".max");
       await mkdir(sourceDir, { recursive: true });
       await writeFile(join(sourceDir, "app-config.json"), "{\n  \"agentId\": \"codex\"\n}\n", "utf8");
 

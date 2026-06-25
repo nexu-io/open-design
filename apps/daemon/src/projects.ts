@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Project files registry. Each project is a folder under
-// <projectRoot>/.od/projects/<projectId>/. The frontend's project list
+// <projectRoot>/.max/projects/<projectId>/. The frontend's project list
 // (localStorage) carries metadata; this module is the single owner of the
 // on-disk content (HTML artifacts, sketches, uploaded images, pasted text).
 //
@@ -1435,14 +1435,14 @@ function toProjectPath(raw) {
 }
 
 // Validates an id string for use as a path segment under a daemon-managed
-// directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
+// directory (`.max/projects/<id>`, `design-systems/<id>`, etc.). The character
 // class allows dots so ids like `my-project.v2` work, but pure-dot ids
 // (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
 // resolve to the parent directory when fed into `path.join`. Without the
 // pure-dot guard, an attacker could create a project row with id `..` (or
 // reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
 // which Express decodes before the route handler sees it) and steer
-// finalize / write operations outside `.od/projects/`.
+// finalize / write operations outside `.max/projects/`.
 export function isSafeId(id) {
   if (typeof id !== 'string') return false;
   if (id.length === 0 || id.length > 128) return false;

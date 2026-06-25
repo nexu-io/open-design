@@ -39,7 +39,7 @@ interface PersistedComposioCatalogCache {
   definitions: ConnectorCatalogDefinition[];
 }
 
-let composioCatalogCacheFilePath = path.join(process.cwd(), '.od', 'connectors', 'composio-catalog-cache.json');
+let composioCatalogCacheFilePath = path.join(process.cwd(), '.max', 'connectors', 'composio-catalog-cache.json');
 
 const FEATURED_COMPOSIO_CATALOG: ConnectorCatalogDefinition[] = [
   {

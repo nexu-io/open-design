@@ -9,7 +9,7 @@
 // untouched and keep the live-iframe path as the fallback.
 //
 // Files + a `manifest.json` live under `<dir>` (MAX_PLUGIN_PREVIEWS_DIR, default
-// `<project>/.od/plugin-previews`). CI bakes them and uploads to R2; the daemon
+// `<project>/.max/plugin-previews`). CI bakes them and uploads to R2; the daemon
 // serves whatever is present locally at `/api/plugin-previews/<file>`.
 
 import { existsSync, readFileSync, statSync } from 'node:fs';

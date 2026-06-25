@@ -784,7 +784,7 @@ export const de: Dict = {
   'useEverywhere.section.overview.snippet1': 'Den Daemon (und die Web-UI) lokal starten',
   'useEverywhere.section.overview.snippet2': 'Bestätigen, dass er erreichbar ist',
   'useEverywhere.section.overview.snippet3': 'Standard-Artefakte vor dem Start einlesen',
-  'useEverywhere.section.overview.footer': 'Der Daemon schreibt standardmäßig nach `./.od/` (projektlokal). Setze `MAX_DATA_DIR=~/.open-design`, um Daten projektübergreifend zu teilen.',
+  'useEverywhere.section.overview.footer': 'Der Daemon schreibt standardmäßig nach `./.max/` (projektlokal). Setze `MAX_DATA_DIR=~/.open-design`, um Daten projektübergreifend zu teilen.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Open Design über eine beliebige Shell steuern',
   'useEverywhere.section.cli.intro': 'Das `od`-Bin wird mit dem Daemon ausgeliefert und ist dasselbe Binary, das Claude Code / Codex verwenden, wenn sie eine Generierung ausführen. Die meisten Unterbefehle sind schlanke Clients, die per POST an den lokalen Daemon senden, sodass sie gleich funktionieren, egal ob du ihn über `pnpm tools-dev` oder als gepackte App gestartet hast.',

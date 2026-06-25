@@ -32,7 +32,7 @@ function makeTempDir(prefix: string) {
 
 function makeHarness() {
   const dbDir = makeTempDir('braze-plan-db-');
-  const db = openDatabase(dbDir, { dataDir: path.join(dbDir, '.od') });
+  const db = openDatabase(dbDir, { dataDir: path.join(dbDir, '.max') });
   const projectsDir = makeTempDir('braze-plan-projects-');
 
   const app = express();

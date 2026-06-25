@@ -1378,7 +1378,7 @@ function AppInner() {
       // uploading staged Home attachments. `replaceProjectWorkingDir` changes
       // `metadata.baseDir`, so the project starts reading from the external
       // folder. If we uploaded first, the staged files would land in the
-      // temporary managed `.od/projects/<id>` root and then silently vanish
+      // temporary managed `.max/projects/<id>` root and then silently vanish
       // from Design Files and the first auto-send context once the working
       // dir flips. Doing the handoff first means the initial upload lands in
       // the final tree.
@@ -1397,7 +1397,7 @@ function AppInner() {
           // handoff fails AFTER the project already exists. Do NOT swallow
           // this and do NOT proceed: uploading staged attachments or
           // auto-sending the first message would target the managed
-          // `.od/projects/<id>` root the user did not choose. Mark the
+          // `.max/projects/<id>` root the user did not choose. Mark the
           // handoff as failed so the upload + auto-send branches below are
           // skipped, then surface a create-time error so the user can
           // re-pick the working directory from inside the project.

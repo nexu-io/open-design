@@ -784,7 +784,7 @@ export const ar: Dict = {
   'useEverywhere.section.overview.snippet1': 'تشغيل الـ daemon (وواجهة الويب) محليًا',
   'useEverywhere.section.overview.snippet2': 'تأكّد من إمكانية الوصول إليه',
   'useEverywhere.section.overview.snippet3': 'استيراد العناصر القياسية قبل الإقلاع',
-  'useEverywhere.section.overview.footer': 'يكتب الـ daemon إلى `./.od/` (محلي للمشروع) افتراضيًا. عيّن `MAX_DATA_DIR=~/.open-design` لمشاركة البيانات عبر المشاريع.',
+  'useEverywhere.section.overview.footer': 'يكتب الـ daemon إلى `./.max/` (محلي للمشروع) افتراضيًا. عيّن `MAX_DATA_DIR=~/.open-design` لمشاركة البيانات عبر المشاريع.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'تشغيل Open Design من أي shell',
   'useEverywhere.section.cli.intro': 'يُشحن الملف التنفيذي `od` مع الـ daemon وهو نفس الملف الثنائي الذي يستخدمه Claude Code / Codex عند تشغيل عملية توليد. معظم الأوامر الفرعية هي عملاء بسطاء يرسلون POST إلى الـ daemon المحلي، لذا فهي تعمل بالطريقة نفسها سواء شغّلته عبر `pnpm tools-dev` أو كتطبيق مُحزَّم.',

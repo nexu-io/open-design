@@ -397,7 +397,7 @@ export function splitDerivedSkillId(id: unknown): DerivedSkillIdParts | null {
 // Skills that ship side files (e.g. `assets/template.html`, `references/*.md`)
 // need the agent to know where the skill lives on disk — relative paths in the
 // SKILL.md body would otherwise resolve against the agent's CWD, which is the
-// project folder (`.od/projects/<id>/`), not the skill folder.
+// project folder (`.max/projects/<id>/`), not the skill folder.
 //
 // We prepend a short preamble that advertises two paths:
 //

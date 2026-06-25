@@ -611,7 +611,7 @@ export function EntryShell({
       // awareness of a local folder (via `--add-dir`), it does NOT import
       // that folder into Design Files. So the picked path becomes the new
       // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
-      // Design Files stays the managed `.od/projects/<id>` artifact store,
+      // Design Files stays the managed `.max/projects/<id>` artifact store,
       // independent of the user's local files.
       ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
       ...(payload.examplePromptContext ? {

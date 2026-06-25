@@ -784,7 +784,7 @@ export const pl: Dict = {
   'useEverywhere.section.overview.snippet1': 'Uruchom daemona (i interfejs web) lokalnie',
   'useEverywhere.section.overview.snippet2': 'Potwierdź, że jest osiągalny',
   'useEverywhere.section.overview.snippet3': 'Zaczytaj standardowe artefakty przed uruchomieniem',
-  'useEverywhere.section.overview.footer': 'Daemon domyślnie zapisuje do `./.od/` (lokalnie w projekcie). Ustaw `MAX_DATA_DIR=~/.open-design`, aby współdzielić dane między projektami.',
+  'useEverywhere.section.overview.footer': 'Daemon domyślnie zapisuje do `./.max/` (lokalnie w projekcie). Ustaw `MAX_DATA_DIR=~/.open-design`, aby współdzielić dane między projektami.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Steruj Open Design z dowolnej powłoki',
   'useEverywhere.section.cli.intro': 'Plik binarny `od` jest dostarczany razem z daemonem i jest tym samym plikiem binarnym używanym przez Claude Code / Codex, gdy uruchamiają generowanie. Większość podkomend to lekkie klienty, które wysyłają żądania POST do lokalnego daemona, więc działają tak samo, niezależnie od tego, czy uruchomisz je przez `pnpm tools-dev`, czy jako spakowaną aplikację.',

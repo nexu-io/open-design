@@ -41,7 +41,7 @@ describe('ElevenLabs voice options', () => {
   });
 
   async function writeConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const file = path.join(projectRoot, '.max', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }

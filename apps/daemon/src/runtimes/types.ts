@@ -132,7 +132,7 @@ export type RuntimeAgentDef = {
   supportsImagePaths?: boolean;
   maxPromptArgBytes?: number;
   mcpDiscovery?: string;
-  // How the daemon forwards the user's `.od/mcp-config.json` external MCP
+  // How the daemon forwards the user's `.max/mcp-config.json` external MCP
   // servers to this runtime at spawn time. The shape of the injection
   // is one of three strategies, each of which the server.ts spawn
   // pipeline knows how to apply:

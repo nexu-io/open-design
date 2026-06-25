@@ -784,7 +784,7 @@ export const ko: Dict = {
   'useEverywhere.section.overview.snippet1': '데몬(및 웹 UI)을 로컬에서 시작',
   'useEverywhere.section.overview.snippet2': '연결 가능 여부 확인',
   'useEverywhere.section.overview.snippet3': '부팅 전에 표준 아티팩트 수집',
-  'useEverywhere.section.overview.footer': '데몬은 기본적으로 `./.od/`(프로젝트 로컬)에 기록합니다. 프로젝트 간에 데이터를 공유하려면 `MAX_DATA_DIR=~/.open-design`을 설정하세요.',
+  'useEverywhere.section.overview.footer': '데몬은 기본적으로 `./.max/`(프로젝트 로컬)에 기록합니다. 프로젝트 간에 데이터를 공유하려면 `MAX_DATA_DIR=~/.open-design`을 설정하세요.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': '모든 셸에서 Open Design 구동',
   'useEverywhere.section.cli.intro': '`od` 바이너리는 데몬과 함께 제공되며, Claude Code / Codex가 생성을 실행할 때 사용하는 것과 동일한 바이너리입니다. 대부분의 하위 명령은 로컬 데몬에 POST하는 얇은 클라이언트이므로, `pnpm tools-dev`로 실행했든 패키징된 앱으로 실행했든 동일하게 작동합니다.',

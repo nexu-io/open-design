@@ -23,7 +23,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
 const serverRuntimeDataRoot = process.env.MAX_DATA_DIR
   ? path.resolve(projectRoot, process.env.MAX_DATA_DIR)
-  : path.join(projectRoot, '.od');
+  : path.join(projectRoot, '.max');
 
 let server: http.Server | undefined;
 let baseUrl: string;
@@ -107,7 +107,7 @@ afterEach(async () => {
   server = undefined;
 
   // Best-effort cleanup of the plugin row + snapshot rows we created.
-  // The user's real `.od/app.sqlite` is what the daemon talks to, so we
+  // The user's real `.max/app.sqlite` is what the daemon talks to, so we
   // strip our PLUGIN_ID rows after each test to avoid polluting it.
   try {
     const dbPath = path.join(serverRuntimeDataRoot, 'app.sqlite');

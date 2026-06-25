@@ -52,7 +52,7 @@ describe('plugin lockfile', () => {
   it('writes stable .od/od-plugin-lock.json content', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-lock-'));
     try {
-      const filePath = path.join(dir, '.od', 'od-plugin-lock.json');
+      const filePath = path.join(dir, '.max', 'od-plugin-lock.json');
       await upsertPluginLockfileEntry(filePath, plugin, 123);
       expect(await readPluginLockfile(filePath)).toMatchObject({
         schemaVersion: 1,

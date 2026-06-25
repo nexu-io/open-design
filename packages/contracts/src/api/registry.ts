@@ -99,7 +99,7 @@ export interface AgentInfo {
   /** Optional HTTPS URL for configuration / auth / usage docs. */
   docsUrl?: string;
   /**
-   * How the daemon forwards the user's `.od/mcp-config.json` external MCP
+   * How the daemon forwards the user's `.max/mcp-config.json` external MCP
    * servers to this runtime at spawn time. Mirrors the field on
    * `RuntimeAgentDef` in the daemon. Undefined means the runtime has no
    * native MCP transport wired yet, in which case the settings UI surfaces

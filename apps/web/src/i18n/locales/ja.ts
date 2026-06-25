@@ -784,7 +784,7 @@ export const ja: Dict = {
   'useEverywhere.section.overview.snippet1': 'ローカルでデーモン（と web UI）を起動する',
   'useEverywhere.section.overview.snippet2': '到達可能かどうかを確認する',
   'useEverywhere.section.overview.snippet3': '起動前に標準アーティファクトを取り込む',
-  'useEverywhere.section.overview.footer': 'デーモンはデフォルトで `./.od/`（プロジェクトローカル）に書き込みます。プロジェクト間でデータを共有するには `MAX_DATA_DIR=~/.open-design` を設定してください。',
+  'useEverywhere.section.overview.footer': 'デーモンはデフォルトで `./.max/`（プロジェクトローカル）に書き込みます。プロジェクト間でデータを共有するには `MAX_DATA_DIR=~/.open-design` を設定してください。',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': '任意のシェルから Open Design を操作する',
   'useEverywhere.section.cli.intro': '`od` バイナリはデーモンに同梱されており、Claude Code / Codex が生成を実行する際に使用するものと同じバイナリです。ほとんどのサブコマンドはローカルデーモンに POST するシンクライアントなので、`pnpm tools-dev` で起動した場合でもパッケージ化されたアプリとして起動した場合でも同じように動作します。',

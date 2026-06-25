@@ -29,7 +29,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
 const serverRuntimeDataRoot = process.env.MAX_DATA_DIR
   ? path.resolve(projectRoot, process.env.MAX_DATA_DIR)
-  : path.join(projectRoot, '.od');
+  : path.join(projectRoot, '.max');
 
 const PLUGIN_ID = `phase2b-preview-fallback-${Date.now()}`;
 let pluginRoot: string;

@@ -477,7 +477,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
 
   // Folder routes (#3516) must refuse to touch the filesystem for an unknown
   // project id. Without the guard, POST reaches createProjectFolder ->
-  // ensureProject and would materialize a `.od/projects/<id>/...` directory
+  // ensureProject and would materialize a `.max/projects/<id>/...` directory
   // with no DB row, leaving orphaned state and breaking the invariant the
   // neighboring project-file routes rely on.
   it('returns 404 for unknown project folder routes without creating project files', async () => {

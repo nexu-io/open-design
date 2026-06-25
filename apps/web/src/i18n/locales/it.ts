@@ -784,7 +784,7 @@ export const it: Dict = {
   'useEverywhere.section.overview.snippet1': 'Avvia il daemon (e la web UI) in locale',
   'useEverywhere.section.overview.snippet2': 'Conferma che sia raggiungibile',
   'useEverywhere.section.overview.snippet3': 'Importa gli artefatti standard prima dell\'avvio',
-  'useEverywhere.section.overview.footer': 'Per impostazione predefinita, il daemon scrive in `./.od/` (locale al progetto). Imposta `MAX_DATA_DIR=~/.open-design` per condividere i dati tra progetti.',
+  'useEverywhere.section.overview.footer': 'Per impostazione predefinita, il daemon scrive in `./.max/` (locale al progetto). Imposta `MAX_DATA_DIR=~/.open-design` per condividere i dati tra progetti.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Controlla Open Design da qualsiasi shell',
   'useEverywhere.section.cli.intro': 'Il binario `od` è incluso con il daemon ed è lo stesso binario usato da Claude Code / Codex quando eseguono una generazione. La maggior parte dei sottocomandi sono client leggeri che inviano POST al daemon locale, quindi funzionano allo stesso modo sia che tu l\'abbia avviato tramite `pnpm tools-dev` sia come app pacchettizzata.',

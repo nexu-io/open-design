@@ -784,7 +784,7 @@ export const id: Dict = {
   'useEverywhere.section.overview.snippet1': 'Jalankan daemon (dan web UI) secara lokal',
   'useEverywhere.section.overview.snippet2': 'Konfirmasi bahwa daemon dapat dijangkau',
   'useEverywhere.section.overview.snippet3': 'Ingest artefak standar sebelum boot',
-  'useEverywhere.section.overview.footer': 'Daemon menulis ke `./.od/` (lokal proyek) secara default. Atur `MAX_DATA_DIR=~/.open-design` untuk berbagi data lintas proyek.',
+  'useEverywhere.section.overview.footer': 'Daemon menulis ke `./.max/` (lokal proyek) secara default. Atur `MAX_DATA_DIR=~/.open-design` untuk berbagi data lintas proyek.',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'Kendalikan Open Design dari shell apa pun',
   'useEverywhere.section.cli.intro': 'Bin `od` disertakan dengan daemon dan merupakan biner yang sama yang digunakan Claude Code / Codex saat menjalankan generasi. Sebagian besar subperintah adalah klien tipis yang melakukan POST ke daemon lokal, sehingga bekerja sama baik Anda meluncurkannya melalui `pnpm tools-dev` maupun sebagai aplikasi terpaket.',

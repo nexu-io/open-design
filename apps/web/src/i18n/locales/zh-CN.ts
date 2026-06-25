@@ -784,7 +784,7 @@ export const zhCN: Dict = {
   'useEverywhere.section.overview.snippet1': '本地启动 daemon（和 Web UI）',
   'useEverywhere.section.overview.snippet2': '确认服务可访问',
   'useEverywhere.section.overview.snippet3': '启动前导入标准制品',
-  'useEverywhere.section.overview.footer': 'daemon 默认写入项目本地的 `./.od/`。设置 `MAX_DATA_DIR=~/.open-design` 可在多个项目间共享数据。',
+  'useEverywhere.section.overview.footer': 'daemon 默认写入项目本地的 `./.max/`。设置 `MAX_DATA_DIR=~/.open-design` 可在多个项目间共享数据。',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': '从任意 shell 驱动 Open Design',
   'useEverywhere.section.cli.intro': '`od` 命令随 daemon 一起发布，也是 Claude Code / Codex 运行生成时使用的同一个二进制。多数子命令都是向本地 daemon 发送 POST 的轻量客户端，因此无论你通过 `pnpm tools-dev` 启动，还是通过打包应用启动，行为都一致。',

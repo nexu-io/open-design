@@ -123,7 +123,7 @@ describe('aihubmix media generation', () => {
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-aihubmix-'));
     projectRoot = path.join(root, 'project-root');
-    projectsRoot = path.join(projectRoot, '.od', 'projects');
+    projectsRoot = path.join(projectRoot, '.max', 'projects');
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.MAX_MEDIA_CONFIG_DIR;
     delete process.env.MAX_DATA_DIR;

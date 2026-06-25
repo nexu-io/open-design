@@ -28,7 +28,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '../../..');
 const serverRuntimeDataRoot = process.env.MAX_DATA_DIR
   ? path.resolve(projectRoot, process.env.MAX_DATA_DIR)
-  : path.join(projectRoot, '.od');
+  : path.join(projectRoot, '.max');
 
 let server: http.Server | undefined;
 let baseUrl: string;

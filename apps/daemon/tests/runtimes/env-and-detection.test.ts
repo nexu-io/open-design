@@ -150,7 +150,7 @@ test('spawnEnvForAgent keeps sandbox roots pinned to the base MAX_DATA_DIR', () 
       },
       {
         CODEX_HOME: '/Users/test/.codex-host',
-        MAX_DATA_DIR: '/host/path/.od',
+        MAX_DATA_DIR: '/host/path/.max',
       },
     );
 

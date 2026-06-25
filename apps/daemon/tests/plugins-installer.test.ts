@@ -109,7 +109,7 @@ describe('installFromLocalFolder', () => {
   });
 
   it('persists marketplace provenance and inherited trust for resolved installs', async () => {
-    const lockfilePath = path.join(tmpRoot, '.od', 'od-plugin-lock.json');
+    const lockfilePath = path.join(tmpRoot, '.max', 'od-plugin-lock.json');
     const manifest = JSON.stringify({
       specVersion: '1.0.0',
       name: 'fixture-registry',

@@ -9,7 +9,7 @@
 // Storage location (precedence high → low):
 //   1. MAX_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
 //   2. MAX_DATA_DIR=DIR           → <DIR>/media-config.json
-//   3. (default)                 → <projectRoot>/.od/media-config.json
+//   3. (default)                 → <projectRoot>/.max/media-config.json
 // The default is unchanged for workspace-local installs. (1) lets a
 // supervisor relocate just the credentials file. (2) means installs
 // that already set MAX_DATA_DIR for the rest of the daemon's runtime
@@ -24,9 +24,9 @@
 // when systemd or launchd starts the daemon).
 //
 // Migration note: a workspace install that sets a custom MAX_DATA_DIR
-// AND has a pre-existing `<projectRoot>/.od/media-config.json` will
+// AND has a pre-existing `<projectRoot>/.max/media-config.json` will
 // start reading from `<MAX_DATA_DIR>/media-config.json` instead. Move
-// the file once or set MAX_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
+// the file once or set MAX_MEDIA_CONFIG_DIR=<projectRoot>/.max to keep
 // the old location.
 //
 // The file is intentionally simple JSON — no encryption, no schema
@@ -147,7 +147,7 @@ export function mediaConfigDir(projectRoot: string): string {
   return (
     envOverrideDir('MAX_MEDIA_CONFIG_DIR', projectRoot)
     ?? envOverrideDir('MAX_DATA_DIR', projectRoot)
-    ?? path.join(projectRoot, '.od')
+    ?? path.join(projectRoot, '.max')
   );
 }
 

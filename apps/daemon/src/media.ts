@@ -291,7 +291,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  *
  * @param {Object} args
  * @param {string} args.projectRoot   - Repo root (.od/ lives directly under).
- * @param {string} args.projectsRoot  - Absolute path to <repo>/.od/projects.
+ * @param {string} args.projectsRoot  - Absolute path to <repo>/.max/projects.
  * @param {string} args.projectId
  * @param {'image'|'video'|'audio'} args.surface
  * @param {string} args.model

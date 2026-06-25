@@ -784,7 +784,7 @@ export const zhTW: Dict = {
   'useEverywhere.section.overview.snippet1': '在本機啟動 daemon（與 web UI）',
   'useEverywhere.section.overview.snippet2': '確認可正常連線',
   'useEverywhere.section.overview.snippet3': '在啟動前匯入標準成品',
-  'useEverywhere.section.overview.footer': 'daemon 預設會寫入 `./.od/`（專案本機）。設定 `MAX_DATA_DIR=~/.open-design` 即可在多個專案間共用資料。',
+  'useEverywhere.section.overview.footer': 'daemon 預設會寫入 `./.max/`（專案本機）。設定 `MAX_DATA_DIR=~/.open-design` 即可在多個專案間共用資料。',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': '從任何 shell 操作 Open Design',
   'useEverywhere.section.cli.intro': '`od` 執行檔隨 daemon 一起發佈，與 Claude Code / Codex 執行產生作業時所用的是同一個二進位檔。多數子指令都是精簡的用戶端，會 POST 至本機 daemon，因此無論你是透過 `pnpm tools-dev` 啟動，還是以打包後的應用程式執行，運作方式都相同。',

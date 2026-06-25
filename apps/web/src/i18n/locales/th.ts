@@ -784,7 +784,7 @@ export const th: Dict = {
   'useEverywhere.section.overview.snippet1': 'เริ่ม daemon (และ web UI) ในเครื่อง',
   'useEverywhere.section.overview.snippet2': 'ยืนยันว่าเข้าถึงได้',
   'useEverywhere.section.overview.snippet3': 'นำเข้าอาร์ติแฟกต์มาตรฐานก่อนบูต',
-  'useEverywhere.section.overview.footer': 'โดยค่าเริ่มต้น daemon จะเขียนไปที่ `./.od/` (เฉพาะโปรเจกต์) ตั้งค่า `MAX_DATA_DIR=~/.open-design` เพื่อแชร์ข้อมูลข้ามโปรเจกต์',
+  'useEverywhere.section.overview.footer': 'โดยค่าเริ่มต้น daemon จะเขียนไปที่ `./.max/` (เฉพาะโปรเจกต์) ตั้งค่า `MAX_DATA_DIR=~/.open-design` เพื่อแชร์ข้อมูลข้ามโปรเจกต์',
   'useEverywhere.section.cli.tab': 'CLI · od',
   'useEverywhere.section.cli.heading': 'ควบคุม Open Design จาก shell ใดก็ได้',
   'useEverywhere.section.cli.intro': 'ไบนารี `od` มาพร้อมกับ daemon และเป็นไบนารีเดียวกันกับที่ Claude Code / Codex ใช้เมื่อรันการสร้าง ซับคำสั่งส่วนใหญ่เป็นไคลเอนต์ขนาดเล็กที่ POST ไปยัง daemon ในเครื่อง จึงทำงานเหมือนกันไม่ว่าคุณจะเปิดใช้ผ่าน `pnpm tools-dev` หรือในรูปแบบแอปแพ็กเกจ',

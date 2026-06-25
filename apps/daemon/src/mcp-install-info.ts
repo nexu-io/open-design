@@ -70,7 +70,7 @@ export function buildMcpInstallPayload(
   // MCP process writes to the same directory the daemon already uses
   // even when the IDE that launched it (Antigravity, VS Code, etc.)
   // does not inherit the packaged app's environment. Without this,
-  // `od mcp` falls back to `<cwd>/.od/...` which is the read-only
+  // `od mcp` falls back to `<cwd>/.max/...` which is the read-only
   // macOS app bundle for packaged installs and trips EPERM. Issue #848.
   const env: Record<string, string> = {
     MAX_DATA_DIR: inputs.dataDir,

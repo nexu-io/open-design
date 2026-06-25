@@ -15,7 +15,7 @@ import { projectDir, resolveProjectDir } from './projects.js';
 
 // Names we never want to surface as project file changes. Tested per-segment
 // against the path *relative to the watch root* so that ancestor directories
-// (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
+// (e.g. the daemon's own `.max/` runtime dir, which contains every project) do
 // not accidentally match and silence every event in the tree.
 const WATCHER_ONLY_IGNORE_NAMES = new Set(['.ds_store']);
 export type ProjectWatchKind = 'add' | 'change' | 'unlink';
