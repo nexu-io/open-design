@@ -294,6 +294,55 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('backs deployment provider proxy run sessions with route-owned ids for contract-shaped requests', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const seen: string[] = [];
+      const sessionBodies: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          sessionBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return Promise.resolve(Response.json({ run_session_id: 'odrs_123' }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata.opendesign_idempotency_key).toMatch(/^chat:[a-f0-9]{16}$/);
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+      expect(seen).toEqual([
+        'https://authority.example.test/api/runs',
+        'https://gateway.example.test/v1/chat/completions',
+      ]);
+      expect(sessionBodies).toHaveLength(1);
+      expect(sessionBodies[0]).toMatchObject({
+        od_project_id: 'proxy',
+        purpose: 'chat-completion',
+      });
+      expect(sessionBodies[0]?.od_run_id).toMatch(/^proxy:[a-f0-9]{16}$/);
+    });
+  });
+
   it('denies deployment provider proxy egress before creating a run session', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',

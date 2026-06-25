@@ -2553,12 +2553,16 @@ function OnboardingView({
                     onFetchModels={() => void fetchProviderModelsInline()}
                   />
                 ) : null}
-                {connectExpanded === 'deployment' && deploymentProviderConfig ? (
-                  <OnboardingDeploymentProviderPanel
-                    provider={deploymentProviderConfig}
-                    model={config.model}
-                    onModelChange={updateDeploymentProviderModel}
-                  />
+                {connectExpanded === 'deployment' ? (
+                  deploymentProviderConfig ? (
+                    <OnboardingDeploymentProviderPanel
+                      provider={deploymentProviderConfig}
+                      model={config.model}
+                      onModelChange={updateDeploymentProviderModel}
+                    />
+                  ) : (
+                    <OnboardingDeploymentProviderPendingPanel />
+                  )
                 ) : null}
               </div>
             </div>
@@ -2944,6 +2948,20 @@ function OnboardingDeploymentProviderPanel({
           onChange={(event) => onModelChange(event.target.value.trim())}
         />
       </label>
+    </div>
+  );
+}
+
+function OnboardingDeploymentProviderPendingPanel() {
+  const t = useT();
+  return (
+    <div className="onboarding-view__setup-panel" role="status" aria-live="polite">
+      <div className="onboarding-view__setup-head">
+        <div>
+          <strong>{t('settings.modeApi')}</strong>
+          <p>{t('common.loading')}</p>
+        </div>
+      </div>
     </div>
   );
 }

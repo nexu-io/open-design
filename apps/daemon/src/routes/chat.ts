@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -33,6 +34,7 @@ import {
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+import type { ProxyStreamRequest } from '@open-design/contracts';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connectionTest.js';
 import {
   deploymentProviderConfig,
@@ -75,6 +77,29 @@ const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
   'senseaudio',
   'aihubmix',
 ]);
+
+function deploymentProxyOperationDigest(proxyBody: Partial<ProxyStreamRequest>): string {
+  const stableInput = JSON.stringify({
+    model: proxyBody.model,
+    systemPrompt: proxyBody.systemPrompt,
+    messages: proxyBody.messages,
+    maxTokens: proxyBody.maxTokens,
+    apiVersion: proxyBody.apiVersion,
+  });
+  return createHash('sha256').update(stableInput).digest('hex').slice(0, 16);
+}
+
+function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>): Record<string, unknown> {
+  const body = proxyBody as Record<string, unknown>;
+  const digest = deploymentProxyOperationDigest(proxyBody);
+  return {
+    ...body,
+    projectId: body.projectId ?? 'proxy',
+    providerRunId: body.providerRunId ?? `proxy:${digest}`,
+    providerOperationId: body.providerOperationId ?? `chat:${digest}`,
+    providerRunPurpose: body.providerRunPurpose ?? 'chat-completion',
+  };
+}
 
 function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
   return typeof value === 'string' && PROVIDER_PROTOCOLS.has(value as ConnectionTestProtocol);
@@ -1110,7 +1135,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       try {
         metadata = await deploymentProviderRunMetadata(
           deploymentProfile,
-          proxyBody as Record<string, unknown>,
+          deploymentProxyRunMetadataBody(proxyBody),
           runSessionAbort.signal,
         );
       } finally {

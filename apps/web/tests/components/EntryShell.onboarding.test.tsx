@@ -1298,6 +1298,38 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(props.onConfigPersist).not.toHaveBeenCalled();
   });
 
+  it('keeps persisted deployment provider mode visible while provider config is loading', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'gpt-routed',
+      }),
+      deploymentProviderConfig: null,
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole('heading', { name: 'API provider' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Loading');
+    expect(props.onModeChange).not.toHaveBeenCalledWith('daemon');
+    expect(props.onAgentChange).not.toHaveBeenCalledWith('amr');
+    expect(props.onConfigPersist).not.toHaveBeenCalled();
+  });
+
   it('restores the saved OpenAI draft when switching from deployment back to BYOK', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
