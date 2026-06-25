@@ -1,10 +1,10 @@
-# Shared option definitions for the Open Design Home Manager and NixOS
+# Shared option definitions for the Marketing AX Home Manager and NixOS
 # modules. Returns a plain attrset of options (NOT a NixOS module). The
 # consuming module imports this and merges the result into its own
-# `options.<scope>.open-design`.
+# `options.<scope>.marketing-ax`.
 #
 # The two callers differ only in:
-#   - default `dataDir` (HM: $HOME/.od; NixOS: /var/lib/open-design)
+#   - default `dataDir` (HM: $HOME/.max; NixOS: /var/lib/marketing-ax)
 #   - service supervision (HM: systemd --user / launchd agents;
 #     NixOS: system systemd units + dynamic user)
 # Everything else — port, autoStart, environmentFile, agents, webFrontend —
@@ -25,15 +25,15 @@
     then flake.packages.${pkgs.stdenv.hostPlatform.system}
     else {};
 in {
-  enable = lib.mkEnableOption "Open Design — local-first design product daemon";
+  enable = lib.mkEnableOption "Marketing AX — local-first design product daemon";
 
   package = lib.mkOption {
     type = lib.types.package;
     default =
       flakePackages.daemon or (throw
-        "open-design: no daemon package available for ${pkgs.stdenv.hostPlatform.system}; set services.open-design.package explicitly");
-    defaultText = lib.literalExpression "open-design.packages.\${pkgs.stdenv.hostPlatform.system}.daemon";
-    description = "The Open Design daemon package providing the `od` binary.";
+        "marketing-ax: no daemon package available for ${pkgs.stdenv.hostPlatform.system}; set services.marketing-ax.package explicitly");
+    defaultText = lib.literalExpression "marketing-ax.packages.\${pkgs.stdenv.hostPlatform.system}.daemon";
+    description = "The Marketing AX daemon package providing the `od` binary.";
   };
 
   port = lib.mkOption {
@@ -57,9 +57,9 @@ in {
     defaultText =
       lib.literalExpression
       (
-        if defaultDataDir == "/var/lib/open-design"
-        then "\"/var/lib/open-design\""
-        else "\"\${config.home.homeDirectory}/.od\""
+        if defaultDataDir == "/var/lib/marketing-ax"
+        then "\"/var/lib/marketing-ax\""
+        else "\"\${config.home.homeDirectory}/.max\""
       );
     description = ''
       Directory holding the daemon's runtime state: SQLite database
@@ -90,7 +90,7 @@ in {
       with sops-nix (https://github.com/Mic92/sops-nix) or agenix
       (https://github.com/ryantm/agenix).
     '';
-    example = "/run/secrets/open-design.env";
+    example = "/run/secrets/marketing-ax.env";
   };
 
   extraEnv = lib.mkOption {
@@ -130,7 +130,7 @@ in {
   };
 
   webFrontend = {
-    # The Open Design web frontend is a static SPA built by
+    # The Marketing AX web frontend is a static SPA built by
     # `apps/web` → `apps/web/out/`. The daemon is a separate Express
     # process that serves the JSON API at `/api/*`. The SPA is built
     # with `MAX_DAEMON_URL=""`, so the bundled JS issues relative
@@ -186,7 +186,7 @@ in {
         with every external origin the SPA will be loaded from — the
         daemon's same-origin gate is fail-closed and would otherwise
         reject API writes proxied by caddy with a 403. On NixOS you
-        must additionally set `services.open-design.openFirewall =
+        must additionally set `services.marketing-ax.openFirewall =
         true` for inbound traffic to reach the listener.
 
         Note: certain sensitive routes (connector credentials, live
@@ -236,8 +236,8 @@ in {
       type = lib.types.package;
       default =
         flakePackages.web or (throw
-          "open-design: no web package available for ${pkgs.stdenv.hostPlatform.system}; set services.open-design.webFrontend.package explicitly");
-      defaultText = lib.literalExpression "open-design.packages.\${pkgs.stdenv.hostPlatform.system}.web";
+          "marketing-ax: no web package available for ${pkgs.stdenv.hostPlatform.system}; set services.marketing-ax.webFrontend.package explicitly");
+      defaultText = lib.literalExpression "marketing-ax.packages.\${pkgs.stdenv.hostPlatform.system}.web";
       description = "Built static export to serve (Next.js out/ tree).";
     };
   };

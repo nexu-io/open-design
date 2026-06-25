@@ -1,5 +1,5 @@
 {
-  description = "Open Design — local-first design product. Daemon (`od` CLI) + Next.js static web frontend.";
+  description = "Marketing AX — local-first design product. Daemon (`od` CLI) + Next.js static web frontend.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -126,16 +126,16 @@
       # builds the daemon workspace only, not `apps/web/out/`, so the
       # browser would otherwise auto-open onto an empty static dir.
       #
-      # Set OD_DATA_DIR to a writable location when unset. The Nix store
+      # Set MAX_DATA_DIR to a writable location when unset. The Nix store
       # is read-only at runtime, so the daemon cannot write to its default
-      # `<projectRoot>/.od` location under `nix run`.
+      # `<projectRoot>/.max` location under `nix run`.
       apps.default = {
         type = "app";
         program = "${pkgs.writeShellScript "od-nix-run" ''
-          export OD_DATA_DIR="''${OD_DATA_DIR:-$HOME/.od}"
+          export MAX_DATA_DIR="''${MAX_DATA_DIR:-$HOME/.max}"
           exec ${daemon}/bin/od --no-open "$@"
         ''}";
-        meta.description = "Open Design local daemon (`od`)";
+        meta.description = "Marketing AX local daemon (`od`)";
       };
 
       devShells.default = pkgs.mkShell {
@@ -144,7 +144,7 @@
           pnpm_10
         ];
         shellHook = ''
-          echo "🎨 Open Design dev shell loaded!"
+          echo "🎨 Marketing AX dev shell loaded!"
           echo ""
           echo "Language runtimes:"
           echo "  - 🐢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
@@ -170,19 +170,19 @@
     perSystem
     // {
       homeManagerModules = rec {
-        open-design = import ./nix/home-manager.nix {
+        marketing-ax = import ./nix/home-manager.nix {
           inherit moduleCommon;
           flake = self;
         };
-        default = open-design;
+        default = marketing-ax;
       };
 
       nixosModules = rec {
-        open-design = import ./nix/nixos.nix {
+        marketing-ax = import ./nix/nixos.nix {
           inherit moduleCommon;
           flake = self;
         };
-        default = open-design;
+        default = marketing-ax;
       };
     };
 }
