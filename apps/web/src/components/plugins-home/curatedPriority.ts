@@ -40,6 +40,44 @@ const CURATED_PROTOTYPE_PLUGIN_IDS = [
   'example-doc-kami-parchment',
 ] as const;
 
+// Wireframe scenario: lo-fi / sketch explorations across distinct styles —
+// hand-drawn sketch, crisp greybox/blueprint, a multi-screen mobile flow, and
+// an annotated/redline landing wireframe. The chip's tag-matching surfaces any
+// other lo-fi templates behind these.
+const CURATED_WIREFRAME_PLUGIN_IDS = [
+  'example-wireframe-sketch',
+  'example-wireframe-greybox',
+  'example-wireframe-mobile-flow',
+  'example-wireframe-annotated',
+] as const;
+
+// Mobile scenario: real native-app prototype mockups (iOS / Android phone
+// screens), so the carousel reads as "this is what a mobile result looks
+// like" rather than generic web prototypes.
+const CURATED_MOBILE_PLUGIN_IDS = [
+  'example-mobile-app',
+  'example-mobile-onboarding',
+  'example-gamified-app',
+  'example-mockup-device-3d',
+] as const;
+
+// Document scenario: polished, print-ready documents — resumes, reports,
+// invoices, papers, briefs — chosen for visual quality.
+const CURATED_DOCUMENT_PLUGIN_IDS = [
+  'example-resume-modern',
+  'example-doc-kami-parchment',
+  'example-data-report',
+  'example-finance-report',
+  'example-invoice',
+  'example-clinical-case-report',
+  'example-hps-academic-paper',
+  'example-digital-eguide',
+  'example-article-magazine',
+  'example-meeting-notes',
+  'example-design-brief',
+  'example-pm-spec',
+] as const;
+
 export const CURATED_LIVE_ARTIFACT_PLUGIN_IDS = [
   'example-live-dashboard',
   'image-template-notion-team-dashboard-live-artifact',
@@ -115,6 +153,9 @@ const CURATED_HYPERFRAMES_PLUGIN_IDS = [
 
 export const CURATED_PLUGIN_IDS_BY_CHIP = {
   prototype: CURATED_PROTOTYPE_PLUGIN_IDS,
+  wireframe: CURATED_WIREFRAME_PLUGIN_IDS,
+  mobile: CURATED_MOBILE_PLUGIN_IDS,
+  document: CURATED_DOCUMENT_PLUGIN_IDS,
   'live-artifact': CURATED_LIVE_ARTIFACT_PLUGIN_IDS,
   deck: CURATED_DECK_PLUGIN_IDS,
   image: CURATED_IMAGE_PLUGIN_IDS,
@@ -124,6 +165,9 @@ export const CURATED_PLUGIN_IDS_BY_CHIP = {
 
 const CURATED_GLOBAL_IDS = [
   ...CURATED_PROTOTYPE_PLUGIN_IDS,
+  ...CURATED_WIREFRAME_PLUGIN_IDS,
+  ...CURATED_MOBILE_PLUGIN_IDS,
+  ...CURATED_DOCUMENT_PLUGIN_IDS,
   ...CURATED_LIVE_ARTIFACT_PLUGIN_IDS,
   ...CURATED_DECK_PLUGIN_IDS,
   ...CURATED_IMAGE_PLUGIN_IDS,

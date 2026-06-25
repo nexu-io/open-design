@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="__OD_BRAND_LANG__">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Brand Kit</title>
+<title>__OD_BRAND_TITLE__</title>
 <!--
   Self-contained brand-kit page. The daemon's brand-kit renderer replaces the
   payload token in the script tag below with a JSON blob { status, brand,
@@ -73,6 +73,8 @@
 
   /* Logo */
   .logo-stage { display: flex; min-height: 158px; align-items: center; justify-content: center; border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 28px; }
+  .logo-stage[data-light-src] { cursor: zoom-in; }
+  .logo-stage[data-light-src]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .logo-stage img { max-height: 92px; max-width: 100%; object-fit: contain; }
   .logo-empty { display: flex; min-height: 158px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--ink-faint); font-size: 14px; }
   .logo-thumbs { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -155,6 +157,8 @@
 
   /* Hero banner — surfaces the first harvested brand image for visual richness */
   .kit-hero { margin-top: 22px; border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; background: var(--line-soft); aspect-ratio: 16 / 5; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+  .kit-hero[data-light-src] { cursor: zoom-in; }
+  .kit-hero[data-light-src]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .kit-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   /* Font specimen tiles — a big "Ag" glyph per real family, in its own face */
@@ -271,6 +275,10 @@
   }
 
   var data = payload();
+  var copy = data.copy || {};
+  function txt(key, fallback) {
+    return typeof copy[key] === 'string' && copy[key] ? copy[key] : fallback;
+  }
   var brand = data.brand || {};
   var status = data.status || 'extracting';
   var assets = arr(data.assets);
@@ -294,6 +302,9 @@
   });
 
   function sectionTitle(t) { return '<h2 class="sec-title">' + esc(t) + '</h2>'; }
+  function emptyCard(text) {
+    return '<div class="card muted">' + esc(text) + '</div>';
+  }
 
   function logoHtml() {
     // Resilient candidate list: primary first when present, otherwise fall back
@@ -304,16 +315,16 @@
       .filter(Boolean)
       .filter(function (c, i, a) { return a.indexOf(c) === i; });
     if (!cands.length) {
-      return '<div class="logo-empty">' + (extracting
-        ? '<div class="skel" style="width:60%;height:48px"></div><span class="muted">Looking for a logo…</span>'
-        : 'No logo found') + '</div>';
+      return '<div class="logo-empty" data-od-id="brand-logo-empty" data-od-edit="container" data-od-label="Logo empty state">' + (extracting
+        ? '<div class="skel" style="width:60%;height:48px"></div><span class="muted">' + esc(txt('lookingForLogo', 'Looking for a logo...')) + '</span>'
+        : esc(txt('noLogoFound', 'No logo found'))) + '</div>';
     }
     var thumbs = cands.length > 1 ? '<div class="logo-thumbs">' + cands.map(function (c, i) {
-      return '<button class="logo-thumb' + (i===0?' active':'') + '" data-src="' + esc(c) + '" style="background:' + esc(bg) + '"><img src="' + esc(c) + '" alt=""></button>';
+      return '<button class="logo-thumb' + (i===0?' active':'') + '" data-od-id="brand-logo-thumb-' + i + '" data-od-edit="image" data-src="' + esc(c) + '" style="background:' + esc(bg) + '"><img src="' + esc(c) + '" alt=""></button>';
     }).join('') + '</div>' : '';
-    var notes = brand.logo && brand.logo.notes ? '<p class="logo-notes">' + esc(brand.logo.notes) + '</p>' : '';
-    return '<div class="logo-stage" id="logo-stage" style="background:' + esc(bg) + '">' +
-      '<img id="logo-img" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || 'logo') + '"></div>' + thumbs + notes;
+    var notes = brand.logo && brand.logo.notes ? '<p class="logo-notes" data-od-id="brand-logo-notes" data-od-edit="text">' + esc(brand.logo.notes) + '</p>' : '';
+    return '<div class="logo-stage" id="logo-stage" data-od-id="brand-logo-stage" data-od-edit="container" data-od-label="Logo stage" style="background:' + esc(bg) + '" data-light-src="' + esc(cands[0]) + '" data-light-caption="' + esc(brand.name || txt('logo', 'Logo')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewLogoAria', 'Preview logo')) + '">' +
+      '<img id="logo-img" data-od-id="brand-logo-img" data-od-edit="image" src="' + esc(cands[0]) + '" alt="' + esc(brand.name || txt('logoAlt', 'logo')) + '"></div>' + thumbs + notes;
   }
 
   // Big "Ag" specimen tile per real family (display / body / mono), each set in
@@ -321,17 +332,17 @@
   // Lovart 字体 tiles. Empty until at least one family is known.
   function fontTilesHtml() {
     var tiles = [
-      { role: 'Display', spec: typo.display },
-      { role: 'Body', spec: typo.body },
+      { role: txt('display', 'Display'), spec: typo.display },
+      { role: txt('body', 'Body'), spec: typo.body },
     ];
-    if (typo.mono) tiles.push({ role: 'Mono', spec: typo.mono });
+    if (typo.mono) tiles.push({ role: txt('mono', 'Mono'), spec: typo.mono });
     tiles = tiles.filter(function (t) { return t.spec && t.spec.family; });
     if (!tiles.length) return '';
-    return '<div class="fonts">' + tiles.map(function (t) {
-      return '<div class="font-tile">' +
-        '<div class="ag" style="font-family:' + fontStack(t.spec) + '">Ag</div>' +
-        '<div class="ft-meta"><div class="ft-name">' + esc(t.spec.family) + '</div>' +
-        '<div class="ft-role">' + esc(t.role) + '</div></div></div>';
+    return '<div class="fonts" data-od-id="brand-fonts" data-od-edit="container">' + tiles.map(function (t, i) {
+      return '<div class="font-tile" data-od-id="brand-font-tile-' + i + '" data-od-edit="container">' +
+        '<div class="ag" data-od-id="brand-font-sample-' + i + '" data-od-edit="text" style="font-family:' + fontStack(t.spec) + '">Ag</div>' +
+        '<div class="ft-meta"><div class="ft-name" data-od-id="brand-font-name-' + i + '" data-od-edit="text">' + esc(t.spec.family) + '</div>' +
+        '<div class="ft-role" data-od-id="brand-font-role-' + i + '" data-od-edit="text">' + esc(t.role) + '</div></div></div>';
     }).join('') + '</div>';
   }
 
@@ -348,17 +359,17 @@
     var samples = imagerySamples();
     if (!samples.length) return '';
     var viewAll = samples.length > 6
-      ? '<button class="view-all" id="gallery-view-all" type="button">View all (' + samples.length + ') →</button>'
+      ? '<button class="view-all" id="gallery-view-all" type="button">' + esc(txt('viewAll', 'View all')) + ' (' + samples.length + ') →</button>'
       : '';
-    return '<section class="sec">' +
-      '<div class="gallery-head"><h2 class="sec-title" style="margin:0">Images</h2>' + viewAll + '</div>' +
+    return '<section class="sec" data-od-id="brand-images-section" data-od-edit="container">' +
+      '<div class="gallery-head"><h2 class="sec-title" data-od-id="brand-images-title" data-od-edit="text" style="margin:0">' + esc(txt('images', 'Images')) + '</h2>' + viewAll + '</div>' +
       '<div class="gallery">' + samples.map(function (s, i) {
         var cap = s.caption || s.kind || '';
         var sub = (s.caption && s.kind) ? s.kind : '';
-        var meta = cap ? '<div class="shot-meta"><div class="shot-cap">' + esc(cap) + '</div>' +
-          (sub ? '<div class="shot-kind">' + esc(sub) + '</div>' : '') + '</div>' : '';
-        return '<div class="shot" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || 'Image') + '"><div class="shot-frame">' +
-          '<img src="' + esc(s.file) + '" alt="' + esc(cap || brand.name || '') + '" loading="lazy"></div>' + meta + '</div>';
+        var meta = cap ? '<div class="shot-meta"><div class="shot-cap" data-od-id="brand-image-caption-' + i + '" data-od-edit="text">' + esc(cap) + '</div>' +
+          (sub ? '<div class="shot-kind" data-od-id="brand-image-kind-' + i + '" data-od-edit="text">' + esc(sub) + '</div>' : '') + '</div>' : '';
+        return '<div class="shot" data-od-id="brand-image-' + i + '" data-od-edit="container" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(cap || txt('images', 'Image')) + '"><div class="shot-frame">' +
+          '<img data-od-id="brand-image-img-' + i + '" data-od-edit="image" src="' + esc(s.file) + '" alt="' + esc(cap || brand.name || '') + '" loading="lazy"></div>' + meta + '</div>';
       }).join('') + '</div></section>';
   }
 
@@ -366,76 +377,80 @@
   function heroHtml() {
     var samples = imagerySamples();
     if (!samples.length) return '';
-    return '<div class="kit-hero"><img src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
+    return '<div class="kit-hero" data-od-id="brand-hero-image" data-od-edit="container" data-light-src="' + esc(samples[0].file) + '" data-light-caption="' + esc(samples[0].caption || samples[0].kind || brand.name || txt('images', 'Image')) + '" tabindex="0" role="button" aria-label="' + esc(txt('previewHeroImageAria', 'Preview hero image')) + '"><img data-od-id="brand-hero-img" data-od-edit="image" src="' + esc(samples[0].file) + '" alt="' + esc(brand.name || '') + '" loading="lazy"></div>';
   }
 
   function typeHtml() {
     var rows = [
-      { label: 'Display', spec: typo.display, sample: brand.name || 'Aa', size: '40px', weight: 600, color: fg },
-      { label: 'Body', spec: typo.body, sample: brand.tagline || brand.description || 'The quick brown fox jumps over the lazy dog.', size: '17px', weight: 400, color: muted },
+      { label: txt('display', 'Display'), spec: typo.display, sample: brand.name || 'Aa', size: '40px', weight: 600, color: fg },
+      { label: txt('body', 'Body'), spec: typo.body, sample: brand.tagline || brand.description || 'The quick brown fox jumps over the lazy dog.', size: '17px', weight: 400, color: muted },
     ];
-    if (typo.mono) rows.push({ label: 'Mono', spec: typo.mono, sample: 'const brand = await extract(url);', size: '14px', weight: 400, color: fg });
+    if (typo.mono) rows.push({ label: txt('mono', 'Mono'), spec: typo.mono, sample: 'const brand = await extract(url);', size: '14px', weight: 400, color: fg });
     if (!typo.display && !typo.body) {
+      if (!extracting) return emptyCard(txt('noTypographyCaptured', 'No typography captured.'));
       return '<div class="type-row"><div class="skel skel-line" style="width:50%"></div><div class="skel" style="height:34px;margin-top:10px;width:70%"></div></div>';
     }
-    return rows.map(function (r) {
+    return rows.map(function (r, i) {
       var spec = r.spec || {};
-      var note = spec.googleFontsUrl ? '' : ' <span class="dim">· proprietary, shown via fallback</span>';
+      var note = spec.googleFontsUrl ? '' : ' <span class="dim">· ' + esc(txt('typographyFallbackNote', 'proprietary, shown via fallback')) + '</span>';
       var weights = arr(spec.weights).length ? ' · ' + arr(spec.weights).join('/') : '';
-      return '<div class="type-row"><div class="type-meta">' +
-        '<span class="type-label">' + esc(r.label) + '</span>' +
-        '<span class="type-font">' + esc(spec.family || '—') + esc(weights) + note + '</span></div>' +
-        '<p class="type-sample" style="font-family:' + fontStack(spec) + ';font-size:' + r.size + ';font-weight:' + r.weight + ';color:' + esc(r.color) + '">' + esc(r.sample) + '</p></div>';
+      return '<div class="type-row" data-od-id="brand-type-' + i + '" data-od-edit="container"><div class="type-meta">' +
+        '<span class="type-label" data-od-id="brand-type-label-' + i + '" data-od-edit="text">' + esc(r.label) + '</span>' +
+        '<span class="type-font" data-od-id="brand-type-font-' + i + '" data-od-edit="text">' + esc(spec.family || '—') + esc(weights) + note + '</span></div>' +
+        '<p class="type-sample" data-od-id="brand-type-sample-' + i + '" data-od-edit="text" style="font-family:' + fontStack(spec) + ';font-size:' + r.size + ';font-weight:' + r.weight + ';color:' + esc(r.color) + '">' + esc(r.sample) + '</p></div>';
     }).join('');
   }
 
   function paletteHtml() {
     if (!colors.length) {
+      if (!extracting) return emptyCard(txt('noPaletteCaptured', 'No palette captured.'));
       var sk = '';
-      for (var i = 0; i < 7; i++) sk += '<div class="swatch"><div class="skel" style="height:92px"></div><div class="swatch-body"><div class="skel skel-line" style="width:70%"></div></div></div>';
+      for (var i = 0; i < 7; i++) sk += '<div class="swatch" data-od-id="brand-color-skeleton-' + i + '" data-od-edit="container"><div class="skel" style="height:92px"></div><div class="swatch-body"><div class="skel skel-line" style="width:70%"></div></div></div>';
       return '<div class="palette">' + sk + '</div>';
     }
-    return '<div class="palette">' + colors.map(function (c) {
+    return '<div class="palette" data-od-id="brand-palette" data-od-edit="container">' + colors.map(function (c, i) {
       var light = isLight(c.hex);
-      return '<div class="swatch"><div class="swatch-chip" style="background:' + esc(c.hex) + '">' +
-        '<span class="hex" style="color:' + (light ? 'rgba(0,0,0,.65)' : 'rgba(255,255,255,.9)') + '">' + esc(c.hex) + '</span></div>' +
-        '<div class="swatch-body"><div class="swatch-name">' + esc(c.name || c.role) + '</div>' +
-        '<div class="swatch-role">' + esc(c.role || '') + '</div>' +
-        (c.usage ? '<div class="swatch-usage">' + esc(c.usage) + '</div>' : '') + '</div></div>';
+      return '<div class="swatch" data-od-id="brand-color-' + i + '" data-od-edit="container"><div class="swatch-chip" style="background:' + esc(c.hex) + '">' +
+        '<span class="hex" data-od-id="brand-color-hex-' + i + '" data-od-edit="text" style="color:' + (light ? 'rgba(0,0,0,.65)' : 'rgba(255,255,255,.9)') + '">' + esc(c.hex) + '</span></div>' +
+        '<div class="swatch-body"><div class="swatch-name" data-od-id="brand-color-name-' + i + '" data-od-edit="text">' + esc(c.name || c.role) + '</div>' +
+        '<div class="swatch-role" data-od-id="brand-color-role-' + i + '" data-od-edit="text">' + esc(c.role || '') + '</div>' +
+        (c.usage ? '<div class="swatch-usage" data-od-id="brand-color-usage-' + i + '" data-od-edit="text">' + esc(c.usage) + '</div>' : '') + '</div></div>';
     }).join('') + '</div>';
   }
 
   function voiceHtml() {
     var v = brand.voice || {};
     if (!arr(v.adjectives).length && !v.tone) {
+      if (!extracting) return emptyCard(txt('noVoiceNotesCaptured', 'No voice notes captured.'));
       return '<div class="card"><div class="skel skel-line" style="width:40%"></div><div class="skel skel-line" style="width:85%"></div><div class="skel skel-line" style="width:75%"></div></div>';
     }
-    var chips = arr(v.adjectives).map(function (a) {
-      return '<span class="chip" style="background:' + esc(accent) + '1f;color:' + esc(accent) + '">' + esc(a) + '</span>';
+    var chips = arr(v.adjectives).map(function (a, i) {
+      return '<span class="chip" data-od-id="brand-voice-adjective-' + i + '" data-od-edit="text" style="background:' + esc(accent) + '1f;color:' + esc(accent) + '">' + esc(a) + '</span>';
     }).join('');
-    var pillars = arr(v.messagingPillars).length ? '<ul class="pillars">' + arr(v.messagingPillars).map(function (p) {
-      return '<li><span style="color:' + esc(accent) + '">—</span><span>' + esc(p) + '</span></li>';
+    var pillars = arr(v.messagingPillars).length ? '<ul class="pillars">' + arr(v.messagingPillars).map(function (p, i) {
+      return '<li><span style="color:' + esc(accent) + '">—</span><span data-od-id="brand-voice-pillar-' + i + '" data-od-edit="text">' + esc(p) + '</span></li>';
     }).join('') + '</ul>' : '';
     var vocab = (v.vocabulary && (arr(v.vocabulary.use).length || arr(v.vocabulary.avoid).length))
-      ? '<div class="vocab"><div class="use"><div class="k">Use</div><div class="v">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
-        '<div class="avoid"><div class="k">Avoid</div><div class="v">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
-    return '<div class="card"><div class="chips">' + chips + '</div>' +
-      (v.tone ? '<p class="voice-tone">' + esc(v.tone) + '</p>' : '') + pillars + vocab + '</div>';
+      ? '<div class="vocab"><div class="use"><div class="k">' + esc(txt('use', 'Use')) + '</div><div class="v" data-od-id="brand-voice-vocab-use" data-od-edit="text">' + esc(arr(v.vocabulary.use).join(' · ')) + '</div></div>' +
+        '<div class="avoid"><div class="k">' + esc(txt('avoid', 'Avoid')) + '</div><div class="v" data-od-id="brand-voice-vocab-avoid" data-od-edit="text">' + esc(arr(v.vocabulary.avoid).join(' · ')) + '</div></div></div>' : '';
+    return '<div class="card" data-od-id="brand-voice-card" data-od-edit="container"><div class="chips">' + chips + '</div>' +
+      (v.tone ? '<p class="voice-tone" data-od-id="brand-voice-tone" data-od-edit="text">' + esc(v.tone) + '</p>' : '') + pillars + vocab + '</div>';
   }
 
   function imageryHtml() {
     var im = brand.imagery || {};
     var lay = brand.layout || {};
     if (!im.style && !arr(lay.postureRules).length) {
+      if (!extracting) return emptyCard(txt('noImageryOrLayoutCaptured', 'No imagery or layout notes captured.'));
       return '<div class="card"><div class="skel skel-line" style="width:90%"></div><div class="skel skel-line" style="width:70%"></div></div>';
     }
-    var posture = arr(lay.postureRules).length ? '<div class="posture"><div class="type-label">Layout posture</div><ul>' +
+    var posture = arr(lay.postureRules).length ? '<div class="posture"><div class="type-label">' + esc(txt('layoutPosture', 'Layout posture')) + '</div><ul>' +
       arr(lay.postureRules).map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul></div>' : '';
-    return '<div class="card imagery">' +
-      (im.style ? '<p>' + esc(im.style) + '</p>' : '') +
-      (arr(im.subjects).length ? '<p><span class="k">Subjects:</span> ' + esc(arr(im.subjects).join(', ')) + '</p>' : '') +
-      (im.treatment ? '<p><span class="k">Treatment:</span> ' + esc(im.treatment) + '</p>' : '') +
-      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">Avoid:</span> ' + esc(arr(im.avoid).join(', ')) + '</p>' : '') +
+    return '<div class="card imagery" data-od-id="brand-imagery-card" data-od-edit="container">' +
+      (im.style ? '<p data-od-id="brand-imagery-style" data-od-edit="text">' + esc(im.style) + '</p>' : '') +
+      (arr(im.subjects).length ? '<p><span class="k">' + esc(txt('subjects', 'Subjects')) + ':</span> <span data-od-id="brand-imagery-subjects" data-od-edit="text">' + esc(arr(im.subjects).join(', ')) + '</span></p>' : '') +
+      (im.treatment ? '<p><span class="k">' + esc(txt('treatment', 'Treatment')) + ':</span> <span data-od-id="brand-imagery-treatment" data-od-edit="text">' + esc(im.treatment) + '</span></p>' : '') +
+      (arr(im.avoid).length ? '<p><span class="k" style="color:var(--err)">' + esc(txt('avoid', 'Avoid')) + ':</span> <span data-od-id="brand-imagery-avoid" data-od-edit="text">' + esc(arr(im.avoid).join(', ')) + '</span></p>' : '') +
       posture + '</div>';
   }
 
@@ -463,29 +478,28 @@
         '</div>';
     }
     var themes = arr(sys.themes).length ? arr(sys.themes).join(' · ') : 'default · dark · compact';
-    var openLink = sys.indexHref ? '<a class="btn" href="' + esc(sys.indexHref) + '" target="_top">Open full system ↗</a>' : '';
-    return '<section class="sec"><div class="ds-head"><div>' +
-        '<h2 class="sec-title">Design system</h2>' +
-        '<p class="ds-sub">Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.</p>' +
-      '</div>' + openLink + '</div>' +
+    return '<section class="sec" data-od-id="brand-system-section" data-od-edit="container"><div class="ds-head"><div>' +
+        '<h2 class="sec-title" data-od-id="brand-system-title" data-od-edit="text">' + esc(txt('designSystem', 'Design system')) + '</h2>' +
+        '<p class="ds-sub" data-od-id="brand-system-description" data-od-edit="text">' + esc(txt('designSystemDescription', 'Deterministic light / dark / compact tokens and a component kit derived from this one brand seed.')) + '</p>' +
+      '</div></div>' +
       '<div class="ds-frame-wrap"><div class="ds-bar">' +
         '<div class="ds-tabs" id="ds-tabs">' +
-          '<button class="ds-tab active" data-kit="' + esc(sys.kitHref) + '">Light</button>' +
-          (sys.kitDarkHref ? '<button class="ds-tab" data-kit="' + esc(sys.kitDarkHref) + '">Dark</button>' : '') +
+          '<button class="ds-tab active" data-kit="' + esc(sys.kitHref) + '">' + esc(txt('light', 'Light')) + '</button>' +
+          (sys.kitDarkHref ? '<button class="ds-tab" data-kit="' + esc(sys.kitDarkHref) + '">' + esc(txt('dark', 'Dark')) + '</button>' : '') +
         '</div>' +
         '<span class="ds-cap">system/kit.html · themes: ' + esc(themes) + '</span>' +
       '</div>' +
-      '<iframe id="ds-frame" class="ds-frame" src="' + esc(sys.kitHref) + '" loading="lazy" sandbox="" title="Component kit"></iframe></div>' +
+      '<iframe id="ds-frame" class="ds-frame" src="' + esc(sys.kitHref) + '" loading="lazy" sandbox="" title="' + esc(txt('componentKitTitle', 'Component kit')) + '"></iframe></div>' +
       tokens + '</section>';
   }
 
   function assetsHtml() {
     if (!assets.length) return '';
-    return '<section class="sec">' + sectionTitle('Brand assets') +
-      '<p class="muted" style="margin:-6px 0 14px">' + (extracting
-        ? 'Generated once extraction finishes — click any tile to preview the full page.'
-        : 'Click any tile to preview the full page; everything is colored from this one brand.') + '</p>' +
-      '<div class="assets">' + assets.map(function (a) {
+    return '<section class="sec" data-od-id="brand-assets-section" data-od-edit="container"><h2 class="sec-title" data-od-id="brand-assets-title" data-od-edit="text">' + esc(txt('brandAssets', 'Brand assets')) + '</h2>' +
+      '<p class="muted" data-od-id="brand-assets-copy" data-od-edit="text" style="margin:-6px 0 14px">' + (extracting
+        ? esc(txt('assetsExtracting', 'Generated once extraction finishes - click any tile to preview the full page.'))
+        : esc(txt('assetsReady', 'Click any tile to preview the full page; everything is colored from this one brand.'))) + '</p>' +
+      '<div class="assets">' + assets.map(function (a, i) {
         var pending = !a.available;
         var inner = pending
           ? '<div class="asset-frame"><div class="skel" style="position:absolute;inset:0"></div></div>'
@@ -497,42 +511,101 @@
           ? ''
           : ' data-asset-href="' + esc(a.href) + '" data-asset-label="' + esc(a.label) +
             '" data-asset-desc="' + esc(a.desc || '') + '" tabindex="0" role="button"';
-        return '<div class="asset' + (pending ? ' pending' : '') + '"' + attrs + '>' + inner +
-          '<div class="asset-meta"><div class="asset-name">' + esc(a.label) + (pending ? '' : '<span class="open">Preview →</span>') + '</div>' +
-          (a.desc ? '<div class="asset-desc">' + esc(a.desc) + '</div>' : '') + '</div></div>';
+        return '<div class="asset' + (pending ? ' pending' : '') + '" data-od-id="brand-asset-' + i + '" data-od-edit="container"' + attrs + '>' + inner +
+          '<div class="asset-meta"><div class="asset-name" data-od-id="brand-asset-name-' + i + '" data-od-edit="text">' + esc(a.label) + (pending ? '' : '<span class="open">' + esc(txt('preview', 'Preview')) + ' →</span>') + '</div>' +
+          (a.desc ? '<div class="asset-desc" data-od-id="brand-asset-desc-' + i + '" data-od-edit="text">' + esc(a.desc) + '</div>' : '') + '</div></div>';
       }).join('') + '</div></section>';
   }
 
-  var systemHref = (data.system && data.system.indexHref) || null;
-  var brandMdHref = (data.brandMd && data.brandMd.href) || null;
-
   var html = '' +
-    '<header class="kit-head"><div>' +
-      '<h1 class="kit-title" style="font-family:' + fontStack(typo.display || {}) + '">' + esc(brand.name || (data.host || 'Brand')) + '</h1>' +
-      (brand.tagline ? '<p class="kit-tagline">' + esc(brand.tagline) + '</p>' : '') +
-      (brand.sourceUrl ? '<a class="kit-source" href="' + esc(brand.sourceUrl) + '" target="_top">' + esc(brand.sourceUrl) + ' ↗</a>' : '') +
-    '</div><div class="head-actions">' +
-      '<span class="status-pill ' + (extracting ? 'extracting' : 'ready') + '"><span class="dot"></span>' + (extracting ? 'Extracting…' : 'Brand ready') + '</span>' +
-      (brandMdHref ? '<a class="btn" href="' + esc(brandMdHref) + '" target="_top">BRAND.md</a>' : '') +
-      (systemHref ? '<a class="btn" href="' + esc(systemHref) + '" target="_top">Design system ↗</a>' : '') +
+    '<header class="kit-head" data-od-id="brand-header" data-od-edit="container"><div>' +
+      '<h1 class="kit-title" data-od-id="brand-name" data-od-edit="text" style="font-family:' + fontStack(typo.display || {}) + '">' + esc(brand.name || (data.host || 'Brand')) + '</h1>' +
+      (brand.tagline ? '<p class="kit-tagline" data-od-id="brand-tagline" data-od-edit="text">' + esc(brand.tagline) + '</p>' : '') +
+      (brand.sourceUrl ? '<a class="kit-source" data-od-id="brand-source" data-od-edit="link" href="' + esc(brand.sourceUrl) + '" target="_blank" rel="noreferrer noopener">' + esc(brand.sourceUrl) + ' ↗</a>' : '') +
+    '</div><div class="head-actions" data-od-id="brand-header-actions" data-od-edit="container">' +
+      '<span class="status-pill ' + (extracting ? 'extracting' : 'ready') + '"><span class="dot"></span>' + esc(extracting ? txt('extracting', 'Extracting...') : txt('brandReady', 'Brand ready')) + '</span>' +
     '</div></header>' +
     heroHtml() +
-    '<div class="sec grid-top"><section><h2 class="sec-title">Logo</h2>' + logoHtml() + '</section>' +
-      '<section><h2 class="sec-title">Typography</h2>' + fontTilesHtml() + typeHtml() + '</section></div>' +
-    '<section class="sec">' + sectionTitle('Palette') + paletteHtml() + '</section>' +
-    '<div class="sec grid-2"><section><h2 class="sec-title">Voice &amp; tone</h2>' + voiceHtml() + '</section>' +
-      '<section><h2 class="sec-title">Imagery &amp; layout</h2>' + imageryHtml() + '</section></div>' +
+    '<div class="sec grid-top"><section><h2 class="sec-title">' + esc(txt('logo', 'Logo')) + '</h2>' + logoHtml() + '</section>' +
+      '<section><h2 class="sec-title">' + esc(txt('typography', 'Typography')) + '</h2>' + fontTilesHtml() + typeHtml() + '</section></div>' +
+    '<section class="sec">' + sectionTitle(txt('palette', 'Palette')) + paletteHtml() + '</section>' +
+    '<div class="sec grid-2"><section><h2 class="sec-title">' + esc(txt('voiceTone', 'Voice & tone')) + '</h2>' + voiceHtml() + '</section>' +
+      '<section><h2 class="sec-title">' + esc(txt('imageryLayout', 'Imagery & layout')) + '</h2>' + imageryHtml() + '</section></div>' +
     galleryHtml() +
     designSystemHtml() +
     assetsHtml();
 
   document.getElementById('root').innerHTML = html;
 
+  // Resilient images — never leak the browser's broken-image glyph.
+  // Extraction can hand us a logo/imagery URL that 404s, is cross-origin
+  // blocked, or is an SVG that fails to render. Rather than show a broken icon
+  // (and the alt text beside it), a failed logo advances to the next candidate
+  // and finally collapses to the "No logo found" empty state, while a failed
+  // gallery / hero / thumbnail removes its own tile so only loadable assets show.
+  (function wireImageResilience() {
+    // An image that already failed before this listener attached won't re-fire
+    // `error`; `complete && naturalWidth === 0` detects that broken state so we
+    // run the same recovery synchronously.
+    function onBroken(img, handler) {
+      img.addEventListener('error', handler);
+      if (img.complete && img.naturalWidth === 0) handler();
+    }
+    var logoImg = document.getElementById('logo-img');
+    var stage = document.getElementById('logo-stage');
+    if (logoImg && stage) {
+      var pool = Array.prototype.map.call(
+        document.querySelectorAll('.logo-thumb'),
+        function (b) { return b.getAttribute('data-src'); }
+      ).filter(Boolean);
+      if (!pool.length) pool = [logoImg.getAttribute('src')];
+      var logoIdx = 0;
+      var handledLogo = false;
+      onBroken(logoImg, function advance() {
+        if (handledLogo && logoIdx + 1 >= pool.length) return;
+        logoIdx += 1;
+        if (logoIdx < pool.length) {
+          logoImg.src = pool[logoIdx];
+          stage.setAttribute('data-light-src', pool[logoIdx]);
+        } else {
+          handledLogo = true;
+          var empty = document.createElement('div');
+          empty.className = 'logo-empty';
+          empty.textContent = 'No logo found';
+          if (stage.parentNode) stage.parentNode.replaceChild(empty, stage);
+          var th = document.querySelector('.logo-thumbs');
+          if (th && th.parentNode) th.parentNode.removeChild(th);
+        }
+      });
+    }
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.gallery img, .kit-hero img'),
+      function (im) {
+        onBroken(im, function () {
+          var tile = (im.closest && (im.closest('.shot') || im.closest('.kit-hero'))) || im;
+          if (tile && tile.parentNode) tile.parentNode.removeChild(tile);
+        });
+      }
+    );
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.logo-thumb img'),
+      function (im) {
+        onBroken(im, function () {
+          var btn = im.closest && im.closest('.logo-thumb');
+          if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
+        });
+      }
+    );
+  })();
+
   // Logo thumbnail switcher.
   var img = document.getElementById('logo-img');
+  var logoStage = document.getElementById('logo-stage');
   Array.prototype.forEach.call(document.querySelectorAll('.logo-thumb'), function (b) {
     b.addEventListener('click', function () {
-      if (img) img.src = b.getAttribute('data-src');
+      var src = b.getAttribute('data-src');
+      if (img) img.src = src;
+      if (logoStage && src) logoStage.setAttribute('data-light-src', src);
       Array.prototype.forEach.call(document.querySelectorAll('.logo-thumb'), function (x) { x.classList.remove('active'); });
       b.classList.add('active');
     });
@@ -586,7 +659,7 @@
   });
 
   // Lightbox: a single enlarged image with optional prev/next + caption.
-  var lightOv = null, lightImg = null, lightCap = null, lightIdx = 0;
+  var lightOv = null, lightImg = null, lightCap = null, lightIdx = 0, lightPrev = null, lightNext = null;
   function buildLight() {
     if (lightOv) return;
     lightOv = mkOverlay('ov-light');
@@ -606,30 +679,41 @@
     close.addEventListener('click', function () { closeOverlay(lightOv); });
     lightOv.appendChild(close);
     if (SAMPLES.length > 1) {
-      var prev = document.createElement('button');
-      prev.className = 'light-nav light-prev';
-      prev.type = 'button';
-      prev.innerHTML = '\u2039';
-      prev.setAttribute('aria-label', 'Previous image');
-      prev.addEventListener('click', function (e) { e.stopPropagation(); showLight(lightIdx - 1); });
-      var next = document.createElement('button');
-      next.className = 'light-nav light-next';
-      next.type = 'button';
-      next.innerHTML = '\u203a';
-      next.setAttribute('aria-label', 'Next image');
-      next.addEventListener('click', function (e) { e.stopPropagation(); showLight(lightIdx + 1); });
-      lightOv.appendChild(prev);
-      lightOv.appendChild(next);
+      lightPrev = document.createElement('button');
+      lightPrev.className = 'light-nav light-prev';
+      lightPrev.type = 'button';
+      lightPrev.innerHTML = '\u2039';
+      lightPrev.setAttribute('aria-label', 'Previous image');
+      lightPrev.addEventListener('click', function (e) { e.stopPropagation(); showLight(lightIdx - 1); });
+      lightNext = document.createElement('button');
+      lightNext.className = 'light-nav light-next';
+      lightNext.type = 'button';
+      lightNext.innerHTML = '\u203a';
+      lightNext.setAttribute('aria-label', 'Next image');
+      lightNext.addEventListener('click', function (e) { e.stopPropagation(); showLight(lightIdx + 1); });
+      lightOv.appendChild(lightPrev);
+      lightOv.appendChild(lightNext);
     }
+  }
+  function setLightContent(src, alt, caption, showNav) {
+    lightImg.src = src;
+    lightImg.alt = alt || '';
+    lightCap.textContent = caption || '';
+    if (lightPrev) lightPrev.style.display = showNav ? 'flex' : 'none';
+    if (lightNext) lightNext.style.display = showNav ? 'flex' : 'none';
   }
   function showLight(idx) {
     if (!SAMPLES.length) return;
     buildLight();
     lightIdx = (idx % SAMPLES.length + SAMPLES.length) % SAMPLES.length;
     var s = SAMPLES[lightIdx];
-    lightImg.src = s.file;
-    lightImg.alt = s.caption || brand.name || '';
-    lightCap.textContent = s.caption || s.kind || '';
+    setLightContent(s.file, s.caption || brand.name || '', s.caption || s.kind || '', SAMPLES.length > 1);
+    openOverlay(lightOv);
+  }
+  function showStandaloneLight(src, caption) {
+    if (!src) return;
+    buildLight();
+    setLightContent(src, caption || brand.name || txt('images', 'Image'), caption || '', false);
     openOverlay(lightOv);
   }
 
@@ -709,7 +793,7 @@
   function openAsset(href, label, desc) {
     if (!href) return;
     buildAsset();
-    assetTitle.textContent = label || 'Preview';
+    assetTitle.textContent = label || txt('preview', 'Preview');
     assetSub.textContent = desc || '';
     assetFrame.src = href;
     openOverlay(assetOv);
@@ -725,6 +809,17 @@
   });
   var viewAllBtn = document.getElementById('gallery-view-all');
   if (viewAllBtn) viewAllBtn.addEventListener('click', openGrid);
+
+  // Wire standalone image placements (hero / logo) into the same lightbox.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-light-src]'), function (el) {
+    var open = function () {
+      showStandaloneLight(el.getAttribute('data-light-src'), el.getAttribute('data-light-caption'));
+    };
+    el.addEventListener('click', open);
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
 
   // Wire brand-asset tiles → in-page full preview modal (click + keyboard).
   Array.prototype.forEach.call(document.querySelectorAll('.asset[data-asset-href]'), function (el) {

@@ -1,0 +1,8 @@
+{
+  "colorPrimary": "#ffffff",
+  "colorPrimaryBg": "rgba(255, 255, 255, 0.05)",
+  "colorPrimaryHover": "rgba(255, 255, 255, 0.9)",
+  "colorPrimaryActive": "rgba(255, 255, 255, 0.8)",
+  "fontSize": 16,
+  "borderRadius": 0
+}

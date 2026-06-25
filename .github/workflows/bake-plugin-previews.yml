@@ -3,13 +3,13 @@ name: bake-plugin-previews
 # Post-merge + nightly bake of the home gallery's plugin previews.
 #
 # Role after the pipeline rework (specs/change/20260618-plugin-preview-bake-
-# pipeline/spec.md): this workflow is the UPLOADER + FORK PATH + nightly
-# BACKSTOP, no longer the primary way a manifest lands.
-#   - Internal (same-repo) plugin changes refresh their own preview inside the
-#     author's PR via bake-plugin-previews-pr.yml, so by merge time the manifest
-#     is usually already current and this run only ensures the clips are on R2.
-#   - Fork contributions cannot bake in-PR (no secrets), so their manifest is
-#     refreshed here, post-merge.
+# pipeline/spec.md): this workflow is the trusted UPLOADER + manifest review PR
+# writer + nightly BACKSTOP.
+#   - Pull requests validate the bake without secrets in
+#     bake-plugin-previews-pr.yml.
+#   - Manifest refreshes that need R2 credentials or a write-capable token happen
+#     here after merge, from trusted main code.
+#   - Fork contributions follow the same post-merge path.
 #   - Nightly re-runs catch transient bake failures and BAKE_VERSION bumps.
 # When it does need to land a manifest, it opens ONE rolling review PR (it cannot
 # push to protected main directly). Until a plugin is baked the gallery falls

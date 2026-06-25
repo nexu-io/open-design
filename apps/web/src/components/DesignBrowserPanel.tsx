@@ -28,6 +28,7 @@ import {
 } from '../providers/registry';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { registerBrandBrowser, type BrandBrowserHandle } from '../runtime/brand-browser-bridge';
 import { captureHostRegionSnapshot } from '../runtime/exports';
 import { buildBoardCommentAttachments, commentsToAttachments } from '../comments';
 import type {
@@ -217,6 +218,10 @@ interface DesignBrowserPanelProps {
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
   sendDisabled?: boolean;
+  /** Workspace tab id. When set, this panel registers its live webview in the
+   *  brand-browser bridge so the chat can read the rendered DOM (e.g. to
+   *  re-extract a brand after the user clears an anti-bot wall). */
+  browserTabId?: string;
 }
 
 export interface BrowserPageInfo {
@@ -704,6 +709,7 @@ export function DesignBrowserPanel({
   onSendBoardCommentAttachments,
   onRequestBrowserUsePrompt,
   sendDisabled = false,
+  browserTabId,
 }: DesignBrowserPanelProps) {
   const t = useT();
   const desktopHostAvailable = isOpenDesignHostAvailable();
@@ -754,6 +760,21 @@ export function DesignBrowserPanel({
   const pendingLoadTargetRef = useRef<string | null>(null);
   const canGoBack = navigationIndex > 0;
   const canGoForward = navigationIndex >= 0 && navigationIndex < navigationStack.length - 1;
+
+  // Publish a handle to this tab's live webview so the chat can read the rendered
+  // DOM (brand browser-assist re-extraction). The cross-origin <iframe> fallback
+  // can't expose guest DOM, so `isDesktopWebview` gates that path off there.
+  useEffect(() => {
+    if (!browserTabId) return undefined;
+    const handle: BrandBrowserHandle = {
+      isDesktopWebview: desktopHostAvailable && Boolean(webviewNode),
+      getURL: () => webviewNode?.getURL?.() ?? currentUrl,
+      executeJavaScript: (code, gesture) =>
+        webviewNode ? webviewNode.executeJavaScript(code, gesture) : null,
+    };
+    registerBrandBrowser(projectId, browserTabId, handle);
+    return () => registerBrandBrowser(projectId, browserTabId, null);
+  }, [browserTabId, projectId, webviewNode, currentUrl, desktopHostAvailable]);
   const assignWebviewNode = useCallback((node: HTMLWebViewElement | null) => {
     // Set `allowpopups` imperatively rather than as a JSX prop. React's DOM
     // renderer does not treat `allowpopups` as a known boolean attribute, so

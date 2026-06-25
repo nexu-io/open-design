@@ -385,6 +385,7 @@ describe('bootstrap route regressions', () => {
       CRAFT_DIR: path.join(tempRoot, 'craft'),
       DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
       DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
+      LIBRARY_DIR: path.join(tempRoot, 'library'),
       OD_BIN: path.join(tempRoot, 'od'),
       PROJECT_ROOT: tempRoot,
       PROJECTS_DIR: path.join(tempRoot, 'projects'),
@@ -456,6 +457,7 @@ describe('bootstrap route regressions', () => {
       projectFiles: {} as never,
       projectStore: {} as never,
       designSystems: {
+        buildUserDesignSystemArchive: async () => null,
         createUserDesignSystem: async () => designSystemSummary as never,
         deleteUserDesignSystem: async () => false,
         ensureUserDesignSystemWorkspaceProject: async () => null,
@@ -465,6 +467,7 @@ describe('bootstrap route regressions', () => {
         prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
         readAvailableDesignSystem: async (id: string) => id === designSystemId ? designSystemBody : null,
         readAvailableDesignSystemPackageInfo: async () => null,
+        readAvailableDesignSystemStaticFile: async () => null,
         readDesignSystemWorkspaceTextFile: async () => null,
         readUserDesignSystemFile: async () => null,
         renderDesignSystemPreview: (id: string, body: string) =>

@@ -1,0 +1,8 @@
+{
+  "colorPrimary": "#FF6363",
+  "colorPrimaryBg": "var(--surface)",
+  "colorPrimaryHover": "#ff7777",
+  "colorPrimaryActive": "#e85757",
+  "fontSize": 16,
+  "borderRadius": 12
+}

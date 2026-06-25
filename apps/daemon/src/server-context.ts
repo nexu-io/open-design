@@ -25,6 +25,9 @@ export interface PathDeps {
   // Distinct from SKILLS_DIR so the EntryView Templates surface and the
   // Settings → Skills surface stay decoupled.
   DESIGN_TEMPLATES_DIR: string;
+  // Global OD Library data root for owned, content-addressed assets
+  // (derived from RUNTIME_DATA_DIR). See apps/daemon/src/library.ts.
+  LIBRARY_DIR: string;
   OD_BIN: string;
   PROJECT_ROOT: string;
   PROJECTS_DIR: string;
