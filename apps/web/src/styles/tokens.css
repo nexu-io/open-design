@@ -2,6 +2,47 @@
    Open Design — neutral product workspace
    ============================================================ */
 :root {
+  /* Spacing scale — 4px grid. Use these instead of literal px values so
+     any global rhythm change is a one-line token edit, not a grep sweep.
+     --space-1 through --space-10 cover the full range used in the UI. */
+  --space-1:  4px;
+  --space-2:  6px;
+  --space-3:  8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 40px;
+
+  /* Focus ring — single source of truth for keyboard focus affordances.
+     --focus-ring-color: blue (selected) for neutral interactive elements.
+     --focus-ring-color-cta: accent orange for primary CTAs (Create, Send).
+     Using box-shadow keeps the ring inside overflow:hidden containers; the
+     outline fallback below is for high-contrast mode support. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: var(--selected);
+  --focus-ring-color-cta: var(--accent);
+  --focus-ring-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --focus-ring-shadow-cta: 0 0 0 var(--focus-ring-width) var(--focus-ring-color-cta);
+
+  /* Z-index scale — named layers prevent arbitrary stacking conflicts.
+     Any new layer should fit into one of these buckets, not invent a new
+     value. Off-scale literals in legacy code are migration targets. */
+  --z-base:    1;    /* content, card stacking within a surface */
+  --z-sticky:  4;    /* sticky headers (chat-project-header)     */
+  --z-raised:  30;   /* floating action buttons, dropdowns       */
+  --z-popover: 80;   /* avatar popover, workspace actions        */
+  --z-chrome: 120;   /* app tab chrome (workspace-tabs-chrome)   */
+  --z-overlay: 140;  /* tab preview, present-exit-btn            */
+  --z-drawer: 1100;  /* workspace tabs popover                   */
+  --z-modal:  1200;  /* staged-preview-modal, dialogs            */
+  --z-compose: 1502; /* composer session-mode popover            */
+  --z-tooltip: 4000; /* od-tooltip-layer                         */
+  --z-select:  9000; /* od-select-menu (highest — portaled)      */
+
   /* Surface palette — neutral app chrome that does not bias generated artifacts.
      Keep warm/brand colors out of preview backgrounds; generated product UI
      must choose its own palette through the active skill/design brief. */
@@ -95,8 +136,71 @@
   --code-line-height: 1.65;
 }
 
-/* Dark theme variables — shared between explicit [data-theme="dark"] and the
-   OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
+/* Dark theme variables — one declaration covers both explicit [data-theme="dark"]
+   and the OS-level prefers-color-scheme media query (system mode = no data-theme
+   attr). :is() merges both selectors so a single token edit updates both paths.
+   Browsers that don't support :is() fall back to neither selector matching (i.e.
+   they stay in light mode) — acceptable since :is() support covers 96%+ globally. */
+@media (prefers-color-scheme: dark) {
+  :is([data-theme="dark"], html:not([data-theme])) {
+    color-scheme: dark;
+    --bg: #1a1917;
+    --bg-app: #1a1917;
+    --bg-panel: #222120;
+    --bg-subtle: #252321;
+    --bg-muted: #2e2c29;
+    --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+    --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+    --bg-fill: rgba(255, 255, 255, 0.16);
+    --bg-elevated: #2a2825;
+    --border: #333128;
+    --border-strong: #46433c;
+    --border-soft: #2a2825;
+
+    --text: #e8e4dc;
+    --text-strong: #f2ede4;
+    --text-muted: #9a9690;
+    --text-soft: #6e6b65;
+    --text-faint: #4e4b46;
+
+    --accent: #d97a56;
+    --accent-strong: #e8896a;
+    --accent-soft: #3d2318;
+    --accent-tint: #2e1a12;
+    --accent-hover: #e8896a;
+
+    --green: #4caf72;
+    --green-bg: #0f2a18;
+    --green-border: #1a4028;
+    --blue: #6b8fe8;
+    --blue-bg: #0f1a38;
+    --blue-border: #1a2c58;
+    --purple: #a87dd4;
+    --purple-bg: #1e1030;
+    --purple-border: #321a50;
+    --red: #e06b65;
+    --red-bg: #2a0e0c;
+    --red-border: #451714;
+    --amber: #e09a40;
+    --amber-bg: #2a1a04;
+
+    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+    --code-header-bg: #1e1e20;
+    --code-body-bg: #18181b;
+
+    /* Focus ring tokens — dark mode adjusts opacity for contrast. */
+    --focus-ring-shadow: 0 0 0 var(--focus-ring-width) color-mix(in srgb, var(--selected) 80%, transparent);
+    --focus-ring-shadow-cta: 0 0 0 var(--focus-ring-width) color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+}
+
+/* Explicit dark override: when the user has manually set dark theme, apply
+   regardless of OS preference. This must live outside the media query so it
+   takes precedence over a light-OS user who manually switched to dark mode. */
 [data-theme="dark"] {
   color-scheme: dark;
   --bg: #1a1917;
@@ -146,58 +250,7 @@
 
   --code-header-bg: #1e1e20;
   --code-body-bg: #18181b;
-}
 
-/* System mode: follow OS preference when no explicit data-theme is set. */
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) {
-    color-scheme: dark;
-    --bg: #1a1917;
-    --bg-app: #1a1917;
-    --bg-panel: #222120;
-    --bg-subtle: #252321;
-    --bg-muted: #2e2c29;
-    --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
-    --bg-fill-secondary: rgba(255, 255, 255, 0.10);
-    --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #2a2825;
-    --border: #333128;
-    --border-strong: #46433c;
-    --border-soft: #2a2825;
-
-    --text: #e8e4dc;
-    --text-strong: #f2ede4;
-    --text-muted: #9a9690;
-    --text-soft: #6e6b65;
-    --text-faint: #4e4b46;
-
-    --accent: #d97a56;
-    --accent-strong: #e8896a;
-    --accent-soft: #3d2318;
-    --accent-tint: #2e1a12;
-    --accent-hover: #e8896a;
-
-    --green: #4caf72;
-    --green-bg: #0f2a18;
-    --green-border: #1a4028;
-    --blue: #6b8fe8;
-    --blue-bg: #0f1a38;
-    --blue-border: #1a2c58;
-    --purple: #a87dd4;
-    --purple-bg: #1e1030;
-    --purple-border: #321a50;
-    --red: #e06b65;
-    --red-bg: #2a0e0c;
-    --red-border: #451714;
-    --amber: #e09a40;
-    --amber-bg: #2a1a04;
-
-    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
-    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
-
-    --code-header-bg: #1e1e20;
-    --code-body-bg: #18181b;
-  }
+  --focus-ring-shadow: 0 0 0 var(--focus-ring-width) color-mix(in srgb, var(--selected) 80%, transparent);
+  --focus-ring-shadow-cta: 0 0 0 var(--focus-ring-width) color-mix(in srgb, var(--accent) 80%, transparent);
 }
