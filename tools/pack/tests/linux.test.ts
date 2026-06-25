@@ -662,7 +662,7 @@ describe("inspectPackedLinuxApp", () => {
     const requestJsonIpcMock = vi.mocked(requestJsonIpc);
     requestJsonIpcMock.mockReset();
     requestJsonIpcMock
-      .mockResolvedValueOnce({ state: "running", url: "od://app/" })
+      .mockResolvedValueOnce({ state: "running", url: "max://app/" })
       .mockResolvedValueOnce({ ok: true, value: "Open Design" })
       .mockResolvedValueOnce({ path: "/tmp/open-design-linux.png" });
 
@@ -674,7 +674,7 @@ describe("inspectPackedLinuxApp", () => {
     expect(result).toEqual({
       eval: { ok: true, value: "Open Design" },
       screenshot: { path: "/tmp/open-design-linux.png" },
-      status: { state: "running", url: "od://app/" },
+      status: { state: "running", url: "max://app/" },
     });
     expect(requestJsonIpcMock).toHaveBeenCalledTimes(3);
   });

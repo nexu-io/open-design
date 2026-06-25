@@ -87,7 +87,7 @@ type DesktopAppConfigPrefs = {
 };
 
 // Argv prefix the preload uses to recover the OS locale main process
-// read at startup. The renderer wires `__od__.client.osLocale` from it.
+// read at startup. The renderer wires `__max__.client.osLocale` from it.
 export const OS_LOCALE_PRELOAD_ARG_PREFIX = "--od-os-locale=";
 
 /**
@@ -117,7 +117,7 @@ export type DesktopMainOptions = {
   discoverWebUrl?: () => Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
-   * renderer URL (`od://app/`) over `discoverWebUrl`, but Node-side
+   * renderer URL (`max://app/`) over `discoverWebUrl`, but Node-side
    * fetch can't resolve a custom Electron protocol. Optional. When
    * provided, runtime API calls (`/api/import/folder`,
    * `/api/projects/:id`) target this URL instead. tools-dev callers

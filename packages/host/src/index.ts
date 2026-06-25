@@ -1,4 +1,4 @@
-export const MARKETING_AX_HOST_GLOBAL = "__od__";
+export const MARKETING_AX_HOST_GLOBAL = "__max__";
 export const MARKETING_AX_HOST_VERSION = 2;
 
 export const MARKETING_AX_HOST_CLIENT_TYPES = Object.freeze({

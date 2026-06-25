@@ -22,7 +22,7 @@ describe("desktop preload host boundary", () => {
     expect(source).toContain("browser:clear-data");
     expect(source).toContain("updater");
     // OS locale forwarded from main via webPreferences.additionalArguments
-    // is mirrored onto __od__.client.osLocale. Pin the literal prefix
+    // is mirrored onto __max__.client.osLocale. Pin the literal prefix
     // here so it can't drift away from `applyOsLocaleSwitch`/runtime's
     // additionalArguments without the test going red.
     expect(source).toContain("'--od-os-locale='");

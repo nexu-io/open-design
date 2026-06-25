@@ -1261,7 +1261,7 @@ export function LiveArtifactViewer({
   const previewScale = zoom / 100;
 
   // Instrument the live-artifact iframe so failed loads — usually a
-  // missing artifact file or a stuck `od://` resolver — surface in
+  // missing artifact file or a stuck `max://` resolver — surface in
   // PostHog. iframe load errors don't propagate to window.error, so
   // observability/install.ts cannot catch them globally.
   useEffect(() => {

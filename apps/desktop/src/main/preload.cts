@@ -15,7 +15,7 @@ import type {
   OpenDesignHostUpdaterStatusSnapshot,
 } from '@marketing-ax/host';
 
-const MARKETING_AX_HOST_GLOBAL: typeof import('@marketing-ax/host').MARKETING_AX_HOST_GLOBAL = '__od__';
+const MARKETING_AX_HOST_GLOBAL: typeof import('@marketing-ax/host').MARKETING_AX_HOST_GLOBAL = '__max__';
 const MARKETING_AX_HOST_VERSION: typeof import('@marketing-ax/host').MARKETING_AX_HOST_VERSION = 2;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
 const APP_CONFIG_CHANGED_IPC_CHANNEL = 'od:app-config-changed';

@@ -330,7 +330,7 @@ export type DesktopRuntimeOptions = {
   discoverUrl(): Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged desktop loads the
-   * renderer from `od://app/`, which only resolves through Electron's
+   * renderer from `max://app/`, which only resolves through Electron's
    * registered protocol handler in the renderer context. Main-process
    * `globalThis.fetch` (Node/undici) ignores that handler, so any
    * `fetch(webUrl + '/api/...')` from main fails in packaged builds.
@@ -344,7 +344,7 @@ export type DesktopRuntimeOptions = {
   /**
    * BCP-47 locale string read from the OS by main process, forwarded
    * to the preload via `webPreferences.additionalArguments` so the
-   * renderer can mirror it onto `__od__.client.osLocale`. Optional;
+   * renderer can mirror it onto `__max__.client.osLocale`. Optional;
    * when omitted the renderer falls back to navigator/localStorage.
    */
   osLocale?: string;
@@ -418,7 +418,7 @@ export type PickAndImportFolderDeps = {
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): the helper now POSTs to the
    * sidecar daemon's real `http://127.0.0.1:<port>` URL rather than the
-   * renderer-only `od://app/` webUrl. Renamed from `webUrl` to make the
+   * renderer-only `max://app/` webUrl. Renamed from `webUrl` to make the
    * boundary explicit — main-process Node fetch must hit a real http
    * URL, never a custom Electron protocol scheme. tools-dev callers
    * pass the same value they used to pass for `webUrl` (its web URL is
@@ -947,7 +947,7 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     // `od:` is the packaged Electron entry's privileged scheme
     // registered by `apps/packaged/src/protocol.ts` and proxied to the
     // local web sidecar. Without this branch, any in-app
-    // `<a target="_blank" href="/api/...">` resolves to `od://app/...`
+    // `<a target="_blank" href="/api/...">` resolves to `max://app/...`
     // in packaged builds, falls through `setWindowOpenHandler` to
     // `{ action: "deny" }`, and the click is silently dropped — that
     // was the Orbit "Open artifact" no-op reported in #911. Allowing
@@ -963,7 +963,7 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     // and the user sees a "Popup blocked" alert.
     return (
       parsed.protocol === "blob:" ||
-      parsed.protocol === "od:" ||
+      parsed.protocol === "max:" ||
       (parsed.protocol === "about:" && parsed.pathname === "blank")
     );
   } catch {
@@ -1266,7 +1266,7 @@ async function reportRendererCrash(
     // discoverDaemonUrl returns the real http://127.0.0.1:<port> URL the
     // sidecar daemon listens on. In tools-dev callers omit it and fall back
     // to discoverUrl (which is also http in dev). In packaged builds it's
-    // mandatory because the renderer-only `od://app/` scheme isn't
+    // mandatory because the renderer-only `max://app/` scheme isn't
     // reachable from main-process Node fetch.
     const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
     if (!baseUrl) return;
@@ -1365,7 +1365,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         return { ok: false, reason: "desktop auth secret not registered" };
       }
       // Round-7 (lefarcen P2): packaged builds report the renderer URL
-      // (`od://app/`) over `discoverUrl`, but Node-side fetch can't
+      // (`max://app/`) over `discoverUrl`, but Node-side fetch can't
       // resolve a custom Electron protocol scheme. Prefer the daemon
       // sidecar's real http URL when packaged exposes it; tools-dev
       // omits `discoverDaemonUrl` and we fall back to the web URL
@@ -1481,7 +1481,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // openPath(projectId) for projects whose resolvedDir came from that
   // trusted flow."
   ipcMain.handle("shell:open-path", async (_event, projectId: string) => {
-    // Round-7 (lefarcen P2): same packaged od:// → daemon URL pivot as
+    // Round-7 (lefarcen P2): same packaged max:// → daemon URL pivot as
     // the dialog:pick-and-import handler above.
     const apiBaseUrl =
       (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??

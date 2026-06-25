@@ -217,7 +217,7 @@ describe("pickAndImportFolder lazy retry on DESKTOP_AUTH_PENDING", () => {
   });
 
   // Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds load the
-  // renderer from `od://app/`, which the main-process Node fetch cannot
+  // renderer from `max://app/`, which the main-process Node fetch cannot
   // resolve. The helper now POSTs to the daemon sidecar's real http URL
   // — the deps shape was renamed `webUrl` → `apiBaseUrl` to make the
   // boundary explicit. This test pins the URL composition so a

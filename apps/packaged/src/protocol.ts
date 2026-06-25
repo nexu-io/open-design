@@ -1,6 +1,6 @@
 import { protocol } from "electron";
 
-const MAX_SCHEME = "od";
+const MAX_SCHEME = "max";
 const MAX_ENTRY_URL = `${MAX_SCHEME}://app/`;
 
 protocol.registerSchemesAsPrivileged([
@@ -46,7 +46,7 @@ function buildProxyErrorResponse(error: unknown, target: string): Response {
 }
 
 /**
- * Inner request handler for the `od://` Electron protocol — every
+ * Inner request handler for the `max://` Electron protocol — every
  * renderer fetch flows through here and gets proxied to the local web
  * sidecar via Node's global `fetch` (which is undici under the hood).
  *

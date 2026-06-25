@@ -75,7 +75,7 @@ const clickUpdaterRailExpression = `
         text: onboardingSkip.textContent?.trim() ?? '',
       };
     }
-    const host = window.__od__;
+    const host = window.__max__;
     let hostStatus = null;
     if (host?.updater?.status instanceof Function) {
       hostStatus = await host.updater.status({ payload: { source: 'e2e-open-ready-updater-prompt' } });
@@ -402,10 +402,10 @@ winDescribe('packaged windows runtime smoke', () => {
 
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
-      expect(inspect.status?.url).toBe('od://app/');
+      expect(inspect.status?.url).toBe('max://app/');
 
       const value = assertHealthEvalValue(inspect.eval?.value);
-      expect(value.href).toBe('od://app/');
+      expect(value.href).toBe('max://app/');
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
@@ -456,7 +456,7 @@ winDescribe('packaged windows runtime smoke', () => {
           waitForHealthyDesktop(),
         );
         expect(postReinstallInspect.status?.state).toBe('running');
-        expect(postReinstallInspect.status?.url).toBe('od://app/');
+        expect(postReinstallInspect.status?.url).toBe('max://app/');
       }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
@@ -626,9 +626,9 @@ async function runPayloadUpdateAcceptance(options: {
 
   const postUpdateInspect = await waitForHealthyDesktopVersion(targetVersion, previousPid);
   expect(postUpdateInspect.status?.state).toBe('running');
-  expect(postUpdateInspect.status?.url).toBe('od://app/');
+  expect(postUpdateInspect.status?.url).toBe('max://app/');
   const health = assertHealthEvalValue(postUpdateInspect.eval?.value);
-  expect(health.href).toBe('od://app/');
+  expect(health.href).toBe('max://app/');
   expect(health.status).toBe(200);
   expect(health.health.ok).toBe(true);
   expect(health.health.version).toBe(targetVersion);

@@ -22,7 +22,7 @@ describe('host bridge boundary', () => {
       'electronAPI',
       '__odDesktop',
       '__OD_CLIENT_TYPE__',
-      '__od__',
+      '__max__',
       'MARKETING_AX_HOST_GLOBAL',
     ];
     const candidates = [

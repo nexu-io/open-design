@@ -5,7 +5,7 @@
  *
  * Before this fix, every `<a>` rendered from chat markdown carried
  * `target="_blank"` with no `onClick`. In Electron that hits the desktop
- * `setWindowOpenHandler` and creates a new `od://` BrowserWindow; relative
+ * `setWindowOpenHandler` and creates a new `max://` BrowserWindow; relative
  * hrefs like `template.html` have no base so the new window can't resolve
  * them and the user lands on the home screen. The fix detects in-project
  * file paths in chat markdown and routes them through the existing

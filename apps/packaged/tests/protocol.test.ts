@@ -1,8 +1,8 @@
 /**
- * Regression coverage for the `od://` protocol proxy in
+ * Regression coverage for the `max://` protocol proxy in
  * apps/packaged/src/protocol.ts.
  *
- * The packaged Electron entry registers `od://` as the loader for the
+ * The packaged Electron entry registers `max://` as the loader for the
  * web runtime and forwards every renderer request to the local web
  * sidecar through Node's global `fetch` (which is undici under the
  * hood). Without a try/catch in the handler, undici throwing
@@ -36,7 +36,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('od:// protocol proxy', () => {
+describe('max:// protocol proxy', () => {
   it('proxies the request through fetchImpl with the rewritten target URL', async () => {
     const captured: Request[] = [];
     const fetchImpl: typeof fetch = async (input) => {
@@ -44,7 +44,7 @@ describe('od:// protocol proxy', () => {
       return new Response('ok', { status: 200 });
     };
 
-    const request = new Request('od://app/api/codex-pets/sync', { method: 'POST' });
+    const request = new Request('max://app/api/codex-pets/sync', { method: 'POST' });
     const response = await handleOdRequest(request, 'http://127.0.0.1:17579/', fetchImpl);
 
     expect(response.status).toBe(200);
@@ -60,7 +60,7 @@ describe('od:// protocol proxy', () => {
       return new Response('', { status: 204 });
     };
 
-    const request = new Request('od://app/api/projects?limit=5#section', { method: 'GET' });
+    const request = new Request('max://app/api/projects?limit=5#section', { method: 'GET' });
     await handleOdRequest(request, 'http://127.0.0.1:42424/', fetchImpl);
 
     const target = new URL(captured[0]!.url);
@@ -87,7 +87,7 @@ describe('od:// protocol proxy', () => {
       throw error;
     };
 
-    const request = new Request('od://app/api/codex-pets/sync', { method: 'POST' });
+    const request = new Request('max://app/api/codex-pets/sync', { method: 'POST' });
     const response = await handleOdRequest(request, 'http://127.0.0.1:17579/', fetchImpl);
 
     expect(response.status).toBe(502);
@@ -110,7 +110,7 @@ describe('od:// protocol proxy', () => {
 
     // The promise must resolve with a Response, never reject.
     await expect(
-      handleOdRequest(new Request('od://app/'), 'http://127.0.0.1:1/', fetchImpl),
+      handleOdRequest(new Request('max://app/'), 'http://127.0.0.1:1/', fetchImpl),
     ).resolves.toBeInstanceOf(Response);
   });
 
@@ -121,7 +121,7 @@ describe('od:// protocol proxy', () => {
     };
 
     const response = await handleOdRequest(
-      new Request('od://app/api/probe'),
+      new Request('max://app/api/probe'),
       'http://127.0.0.1:1/',
       fetchImpl,
     );
