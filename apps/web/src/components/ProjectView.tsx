@@ -27,6 +27,7 @@ import { useI18n } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
+  GENERIC_DAEMON_DISCONNECT_MESSAGE,
   fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
@@ -380,8 +381,6 @@ const TAB_PERSIST_DEBOUNCE_MS = 400;
 // authoritative terminal failure.  Use isGenericDaemonDisconnect() at both
 // sites so generic disconnects stay eligible for attachRecoverableRuns to
 // re-query daemon authoritative status on the next tick.
-const GENERIC_DAEMON_DISCONNECT_MESSAGE =
-  'daemon stream disconnected before run completed';
 function isGenericDaemonDisconnect(err: unknown): boolean {
   return err instanceof Error && err.message === GENERIC_DAEMON_DISCONNECT_MESSAGE;
 }

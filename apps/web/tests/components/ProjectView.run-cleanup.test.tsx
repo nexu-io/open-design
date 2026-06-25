@@ -96,13 +96,19 @@ vi.mock('../../src/providers/anthropic', () => ({
   streamMessage: vi.fn(),
 }));
 
-vi.mock('../../src/providers/daemon', () => ({
+vi.mock('../../src/providers/daemon', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/daemon')>(
+    '../../src/providers/daemon',
+  );
+  return {
+    ...actual,
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
-}));
+  };
+});
 
 vi.mock('../../src/providers/registry', () => ({
   deletePreviewComment: vi.fn(),
@@ -1664,7 +1670,8 @@ afterEach(() => {
 
   it('keeps reattaching after two generic disconnects while daemon status stays running', async () => {
     const runCreatedAt = Date.now();
-    const genericDisconnect = new Error('daemon stream disconnected before run completed');
+    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
+    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
@@ -1735,7 +1742,8 @@ afterEach(() => {
 
   it('keeps live-stream recovery retryable after two generic disconnects while daemon status stays running', async () => {
     const runCreatedAt = Date.now();
-    const genericDisconnect = new Error('daemon stream disconnected before run completed');
+    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
+    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -1803,7 +1811,8 @@ afterEach(() => {
 
   it('keeps generic-disconnect cap retryable when the follow-up status probe returns null', async () => {
     const runCreatedAt = Date.now();
-    const genericDisconnect = new Error('daemon stream disconnected before run completed');
+    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
+    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([

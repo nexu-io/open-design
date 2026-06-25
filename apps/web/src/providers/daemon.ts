@@ -309,6 +309,8 @@ export interface DaemonReattachOptions {
 }
 
 export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
+export const GENERIC_DAEMON_DISCONNECT_MESSAGE =
+  'daemon stream disconnected before run completed';
 
 function notifyRunsChanged() {
   if (typeof window === 'undefined') return;
@@ -1096,7 +1098,7 @@ async function consumeDaemonRun({
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
-        handlers.onError(new Error('daemon stream disconnected before run completed'));
+        handlers.onError(new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE));
         return;
       }
     }
