@@ -1932,12 +1932,10 @@ export function FileWorkspace({
               const browserTitle = browserUrl
                 ? browserTab.title?.trim() || labelFromUrl(browserUrl)
                 : browserTab.label;
-              const browserMeta = browserUrl ? formatBrowserTabUrl(browserUrl) : undefined;
               return (
                 <Tab
                   key={browserTab.id}
                   label={browserTitle}
-                  meta={browserMeta}
                   title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
                   active={activeTab === browserTab.id}
                   onActivate={() => setPersistedActive(browserTab.id)}

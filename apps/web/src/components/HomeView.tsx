@@ -1547,6 +1547,7 @@ export function HomeView({
   function submitScenario(scenario: PlaceholderScenario) {
     if (sending) return;
     setError(null);
+    if (pluginsLoading) return;
     const chip = scenario.chipId ? findChip(scenario.chipId) : null;
     const action = chip?.action ?? null;
     const record =
@@ -1554,13 +1555,13 @@ export function HomeView({
         ? plugins.find((plugin) => plugin.id === action.pluginId) ?? null
         : null;
     // When the user already picked this template (the carousel-over-a-selected-
-    // template case), its binding is live — reuse it instead of re-applying,
+    // template case), its binding is live -- reuse it instead of re-applying,
     // which would reset the resolved snapshot and re-fire chip analytics.
     const alreadyBound = Boolean(chip && active?.chipId === chip.id && !active.explicitPick);
     if (chip && record && !alreadyBound) {
       pickChip(chip);
     } else if (!chip || !record) {
-      // Template unavailable (bundle missing / catalog still loading) — fall
+      // Template unavailable (bundle missing / catalog still loading) -- fall
       // back to a free-form create from the line alone rather than dead-ending.
       setActive(null);
     }

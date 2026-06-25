@@ -751,6 +751,9 @@
   background: var(--bg);
   isolation: isolate;
 }
+.entry-main__topbar:has(.entry-settings-menu__popover) {
+  z-index: 1900;
+}
 .entry-main__topbar::before {
   content: '';
   position: absolute;

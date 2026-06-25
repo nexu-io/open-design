@@ -190,6 +190,7 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
+import { SessionModeToggle } from './SessionModeToggle';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
 import type { ChatSendMeta } from './ChatComposer';
 import {
@@ -6272,6 +6273,9 @@ export function ProjectView({
     const record = plugins.find((plugin) => plugin.id === normalizedId);
     if (record) setContextPluginDetails(record);
   }, []);
+  const handleOpenContextDesignSystemDetails = useCallback((system: DesignSystemSummary) => {
+    setContextDesignSystemDetails(system);
+  }, []);
   const chatDesignSystemSummary = useMemo(() => {
     if (activeDesignSystemSummary) return activeDesignSystemSummary;
     const designSystemName = activePluginSnapshot?.inputs?.designSystem;
@@ -6395,54 +6399,61 @@ export function ProjectView({
   // CLI / agent selector lives below the chat conversation (composer footer),
   // not in the top-right header.
   const executionControls = (
-    <AvatarMenu
-      config={config}
-      agents={agents}
-      daemonLive={daemonLive}
-      onModeChange={onModeChange}
-      onOpen={() => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_selector_open',
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-      }}
-      onAgentChange={(id) => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_select',
-          agent_id: id,
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-        onAgentChange(id);
-      }}
-      onAgentModelChange={(agentId, choice) => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_model_select',
-          agent_id: agentId,
-          ...(choice?.model ? { model_id: choice.model } : {}),
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-        onAgentModelChange(agentId, choice);
-      }}
-      onApiModelChange={(model) => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_model_select',
-          model_id: model,
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-        onApiModelChange?.(model);
-      }}
-      onOpenSettings={onOpenSettings}
-      onRefreshAgents={onRefreshAgents}
-      placement="up"
-    />
+    <>
+      <SessionModeToggle
+        mode={activeSessionMode}
+        onChange={handleActiveConversationSessionModeChange}
+        disabled={currentConversationControlStreaming}
+      />
+      <AvatarMenu
+        config={config}
+        agents={agents}
+        daemonLive={daemonLive}
+        onModeChange={onModeChange}
+        onOpen={() => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_selector_open',
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+        }}
+        onAgentChange={(id) => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_select',
+            agent_id: id,
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+          onAgentChange(id);
+        }}
+        onAgentModelChange={(agentId, choice) => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_model_select',
+            agent_id: agentId,
+            ...(choice?.model ? { model_id: choice.model } : {}),
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+          onAgentModelChange(agentId, choice);
+        }}
+        onApiModelChange={(model) => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_model_select',
+            model_id: model,
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+          onApiModelChange?.(model);
+        }}
+        onOpenSettings={onOpenSettings}
+        onRefreshAgents={onRefreshAgents}
+        placement="up"
+      />
+    </>
   );
 
   return (
@@ -6508,7 +6519,7 @@ export function ProjectView({
               onSendQueuedNow={sendQueuedChatSendNow}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginDetails={handleOpenContextPluginDetails}
-              onRequestDesignSystemDetails={setContextDesignSystemDetails}
+              onRequestDesignSystemDetails={handleOpenContextDesignSystemDetails}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
