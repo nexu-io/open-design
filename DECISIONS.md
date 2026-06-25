@@ -145,3 +145,11 @@
 - Task1~4 리뷰 Approved. Task1 miss-class 결함 발견·수정: `@open-design/`(슬래시) 패턴이 `path.join(root,"@open-design","web")` 분리인자 + `@open-design\/` regex 리터럴 못 잡음 → 패키징 경로/guard/테스트핀 깨짐. 잔존 grep도 같은 패턴이라 동일 맹점 → broad 패턴 재검증 필수 (출처: Task3 구현자 발견)
 - **git 사고**: Task5 1차 구현자(단일 거대 bash)가 옛 커밋 c54e49aae 위에 작업해 브랜치 orphan. `reset --hard 70a0c8cbf` 복구. 교훈 = 서브에이전트에 git checkout/reset/rebase/worktree 금지 + 커밋 전후 HEAD/부모 검증 명시 필수 (출처: reflog 조사)
 - **메타 갭 발견**: per-task 리뷰가 타깃 테스트핀+typecheck만 돌려 daemon 전체스위트 99-실패 드리프트 미포착. "diff against baseline"(전체스위트 base 대조)을 게이트에 넣어야. 다음 세션 최우선 triage (출처: Task5 구현자 daemon 스위트 보고)
+
+## 2026-06-25 — daemon 99-fail triage (P0 v5 잔여 #1)
+- daemon 456-fail 근본원인 = 3계층: better-sqlite3 ABI 141≠137(448, 환경/네이티브)·plugin-runtime dist stale OPEN_DESIGN_PLUGIN_SPEC_VERSION(2, 빌드위생)·완료 Task2/4 rebrand miss(4). Task5 구현자 "prompt/MAX_NODE_BIN" 진단은 적색청어 (출처: triage, HEAD vs 에러 직접분류)
+- 환경 위생 우선 점검 교훈: 대량 부트스트랩 실패(99파일 서버부팅 테스트 전멸)는 소스 회귀 아닌 네이티브 ABI/dist 정합부터 의심. node@24(ABI137) vs 시스템 node25(ABI141) 충돌이 CONSTRAINT#1의 실제 현상 (출처: connectors-routes 에러 stack openDatabase→startServer)
+- 4 miss = 완료 Task2/4 누락이라 follow-up 커밋(08e1f10b7)으로 즉시 수정. Task1 miss-class(aa2bd2e3c) 선례. SKILL.md env식별자만 MAX_*(제품명/.od-skills 보존), publish 테스트핀, fixture URL (출처: 사용자 "진행해")
+- fixture registry-starter/open-design.json repo+homepage = 리브랜드 확정. codex 0.135.0 판정: 권위신호 = 제품 registry/publish 경로(publish.ts+marketplace/installer 테스트가 Marketing AX canonical), example-deck/landing 귀속 아님. nexu-io/open-design는 명시 OSS 귀속 표면만 보존 (출처: codex consult 466k tok)
+- process 갭 = per-task 게이트가 타깃핀+typecheck만 → 누적 드리프트 미포착. 남은 Task6~14 게이트에 full @marketing-ax/daemon test(node@24+natives rebuilt) 추가 의무화 (출처: 456-fail 미발견 분석)
+- chat-route external_directory 1-fail = pre-existing 환경(allowed-dir + /var↔/private/var), rebrand 무관. 별도 후속 (출처: codex 확인)
