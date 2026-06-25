@@ -2802,6 +2802,24 @@ export function ProjectView({
           completedReattachRunsRef.current.add(runId);
           continue;
         }
+        if (spuriouslyFailedPending && status.status === 'succeeded') {
+          setError(null);
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...prev,
+              runStatus: 'succeeded',
+              endedAt: prev.endedAt ?? Date.now(),
+              ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
+            }),
+            true,
+            { telemetryFinalized: true },
+          );
+          transientFailedRetriesRef.current.delete(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          scheduleConversationMessageRefresh(reattachConversationId);
+          continue;
+        }
         updateMessageById(
           message.id,
           (prev) => ({
@@ -2847,7 +2865,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 content: replayedContent,
-                runStatus: resolveSucceededRunStatus(prev.runStatus),
+                runStatus: 'succeeded',
                 endedAt: prev.endedAt ?? Date.now(),
               }),
               true,
@@ -3084,7 +3102,7 @@ export function ProjectView({
                   ...prev,
                   content: needsFullReplay ? replayedContent : prev.content,
                   events: needsFullReplay ? replayedEvents : prev.events,
-                  runStatus: resolveSucceededRunStatus(prev.runStatus),
+                  runStatus: 'succeeded',
                   endedAt: prev.endedAt ?? Date.now(),
                 }),
                 true,
@@ -3221,10 +3239,7 @@ export function ProjectView({
                         ...prev,
                         content: replayedContent,
                         producedFiles: produced.length > 0 ? produced : prev.producedFiles,
-                        runStatus:
-                          latestRunStatus?.status === 'succeeded'
-                            ? resolveSucceededRunStatus(prev.runStatus)
-                            : prev.runStatus,
+                        runStatus: latestRunStatus?.status === 'succeeded' ? 'succeeded' : prev.runStatus,
                         endedAt: prev.endedAt ?? Date.now(),
                       }),
                       true,
@@ -3255,6 +3270,22 @@ export function ProjectView({
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                     genericDisconnectRetriesRef.current.set(runId, attempts);
+                  } else if (latestRunStatus.status === 'succeeded') {
+                    setError(null);
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        runStatus: 'succeeded',
+                        endedAt: prev.endedAt ?? Date.now(),
+                        ...(latestRunStatus.resumable !== undefined
+                          ? { resumable: latestRunStatus.resumable }
+                          : {}),
+                      }),
+                      true,
+                      { telemetryFinalized: true },
+                    );
+                    genericDisconnectRetriesRef.current.delete(runId);
                   } else {
                     completedReattachRunsRef.current.add(runId);
                     genericDisconnectRetriesRef.current.delete(runId);
@@ -4221,6 +4252,8 @@ export function ProjectView({
           const endedAt = Date.now();
           const errorCode = (err as Error & { code?: string }).code;
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
+          let finalRunStatusAfterError: ChatMessage['runStatus'] = 'failed';
+          let refreshConversationAfterError = false;
           // A run superseded by a "send now" interrupt can still surface a
           // late disconnect error (e.g. a canceled stream that lost its
           // terminal SSE). It must not paint a global failure banner or
@@ -4271,12 +4304,27 @@ export function ProjectView({
               const attempts = (genericDisconnectRetriesRef.current.get(currentRunId) ?? 0) + 1;
               if (attempts >= MAX_TRANSIENT_RETRIES) {
                 const latestRunStatus = await fetchChatRunStatus(currentRunId).catch(() => null);
-                if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
-                  genericDisconnectRetriesRef.current.set(currentRunId, attempts);
-                } else {
-                  completedReattachRunsRef.current.add(currentRunId);
-                  genericDisconnectRetriesRef.current.delete(currentRunId);
-                }
+                  if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                    genericDisconnectRetriesRef.current.set(currentRunId, attempts);
+                  } else if (latestRunStatus.status === 'succeeded') {
+                    if (runMayFinalize) {
+                      setError(null);
+                      updateAssistant((prev) => ({
+                        ...prev,
+                        endedAt: prev.endedAt ?? endedAt,
+                        runStatus: 'succeeded',
+                        ...(latestRunStatus.resumable !== undefined
+                          ? { resumable: latestRunStatus.resumable }
+                          : {}),
+                      }));
+                    }
+                    finalRunStatusAfterError = 'succeeded';
+                    refreshConversationAfterError = true;
+                    genericDisconnectRetriesRef.current.delete(currentRunId);
+                  } else {
+                    completedReattachRunsRef.current.add(currentRunId);
+                    genericDisconnectRetriesRef.current.delete(currentRunId);
+                  }
               } else {
                 genericDisconnectRetriesRef.current.set(currentRunId, attempts);
               }
@@ -4290,12 +4338,15 @@ export function ProjectView({
             controller,
             cancelController,
           );
-          if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
+          if (ownsCurrentRun) updateConversationLatestRun(finalRunStatusAfterError, endedAt);
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
             if (finalized) persistMessage(finalized, { telemetryFinalized: true });
             return curr;
           });
+          if (refreshConversationAfterError) {
+            scheduleConversationMessageRefresh(runConversationId);
+          }
           void refreshProjectFiles();
         },
       };
