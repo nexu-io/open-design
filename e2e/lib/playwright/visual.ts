@@ -634,17 +634,12 @@ export async function resetVisualScroll(page: Page): Promise<void> {
   });
 }
 
-export async function captureVisual(page: Page, name: string, options: { target?: Locator } = {}): Promise<string> {
+export async function captureVisual(page: Page, name: string): Promise<string> {
   const outputDir = path.resolve(process.env.OD_VISUAL_OUTPUT_DIR || 'ui/reports/visual-screenshots');
   const safeName = sanitizeVisualName(name);
   const outputPath = path.join(outputDir, `${safeName}.png`);
   await mkdir(outputDir, { recursive: true });
   await waitForVisualStable(page);
-  if (options.target != null) {
-    await expect(options.target).toBeVisible();
-    await options.target.screenshot({ path: outputPath, animations: 'disabled', caret: 'hide' });
-    return outputPath;
-  }
   await page.screenshot({ path: outputPath, animations: 'disabled', caret: 'hide' });
   return outputPath;
 }

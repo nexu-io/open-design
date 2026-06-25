@@ -6,9 +6,9 @@ import {
   gotoVisualHome,
   gotoVisualWorkspace,
   prepareVisualAvatarMenu,
-  prepareVisualSettingsDialog,
   prepareVisualWorkspaceFileList,
   prepareVisualWorkspacePreview,
+  openSettingsDetailsFromHeader,
   VISUAL_AMR_AGENT,
   VISUAL_CLI_AGENTS,
 } from '@/playwright/visual';
@@ -48,8 +48,9 @@ test('[P1] @critical captures CSS hotspot workspace, preview, and settings surfa
   await prepareVisualWorkspacePreview(page);
   await captureVisual(page, 'visual-critical-workspace-preview');
 
-  const dialog = await prepareVisualSettingsDialog(page);
-  await captureVisual(page, 'visual-critical-settings', { target: dialog });
+  const dialog = await openSettingsDetailsFromHeader(page);
+  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  await captureVisual(page, 'visual-critical-settings');
 });
 
 test('[P2] captures the topbar execution switcher surface', async ({ page }) => {

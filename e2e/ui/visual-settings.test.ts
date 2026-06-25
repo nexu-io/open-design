@@ -19,7 +19,7 @@ test('[P2] captures the settings execution surface', async ({ page }) => {
   await expect(dialog.getByRole('tab', { name: /Local CLI/i })).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-execution', { target: dialog });
+  await captureVisual(page, 'visual-settings-execution');
 });
 
 test('[P2] captures the settings local CLI surface', async ({ page }) => {
@@ -38,7 +38,7 @@ test('[P2] captures the settings local CLI surface', async ({ page }) => {
   await expect(dialog.getByTestId('settings-agent-select-codex')).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-local-cli', { target: dialog });
+  await captureVisual(page, 'visual-settings-local-cli');
 });
 
 test('[P2] captures the settings local CLI model dropdown surface', async ({ page }) => {
@@ -78,7 +78,7 @@ test('[P2] captures the settings BYOK surface', async ({ page }) => {
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-byok', { target: dialog });
+  await captureVisual(page, 'visual-settings-byok');
 });
 
 test('[P2] captures the settings BYOK OpenAI surface', async ({ page }) => {
@@ -101,7 +101,7 @@ test('[P2] captures the settings BYOK OpenAI surface', async ({ page }) => {
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-settings-byok-openai', { target: dialog });
+  await captureVisual(page, 'visual-settings-byok-openai');
 });
 
 test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) => {
