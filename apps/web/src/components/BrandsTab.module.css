@@ -197,11 +197,6 @@
   background: var(--red);
 }
 
-.statusDotNeedsInput {
-  background: var(--accent);
-  animation: dotPulse 1.4s ease-in-out infinite;
-}
-
 @keyframes dotPulse {
   0%,
   100% {

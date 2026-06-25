@@ -7,9 +7,35 @@ import { RecentProjectsStrip } from '../../src/components/RecentProjectsStrip';
 import type { Project } from '../../src/types';
 
 vi.mock('../../src/providers/registry', () => ({
+  fetchProjectFileText: vi.fn(async (projectId: string, name: string) => {
+    if (projectId === 'project-ds' && name === 'brand.json') {
+      return JSON.stringify({
+        logo: { primary: 'logos/favicon-1.png' },
+        imagery: { samples: [{ file: 'imagery/cover-0.png', kind: 'cover' }] },
+      });
+    }
+    if (projectId === 'project-ds-fallback' && name === 'brand.json') {
+      return JSON.stringify({
+        logo: {
+          primary: 'logos/favicon-1.png',
+          alternates: ['logos/wordmark.svg'],
+        },
+      });
+    }
+    return null;
+  }),
   fetchProjectFiles: vi.fn(async (projectId: string) => {
     if (projectId === 'project-ds') {
-      return [{ name: 'logo.svg', path: 'assets/logo.svg', kind: 'image', mtime: 3 }];
+      return [
+        { name: 'favicon-1.png', path: 'logos/favicon-1.png', kind: 'image', mtime: 4 },
+        { name: 'cover-0.png', path: 'imagery/cover-0.png', kind: 'image', mtime: 3 },
+      ];
+    }
+    if (projectId === 'project-ds-fallback') {
+      return [
+        { name: 'favicon-1.png', path: 'logos/favicon-1.png', kind: 'image', mtime: 4 },
+        { name: 'wordmark.svg', path: 'logos/wordmark.svg', kind: 'image', mtime: 3 },
+      ];
     }
     if (projectId === 'project-html') {
       return [{ name: 'index.html', kind: 'html', mtime: 2 }];
@@ -73,8 +99,40 @@ describe('RecentProjectsStrip', () => {
     expect(designSystemCard?.querySelectorAll('.design-card-tag')).toHaveLength(1);
 
     await waitFor(() => {
-      expect(designSystemCard?.querySelector('.recent-projects__card-thumb-logo img')).toBeTruthy();
+      expect(designSystemCard?.querySelector('.recent-projects__card-thumb-image img')).toBeTruthy();
+      expect(designSystemCard?.querySelector('img')?.getAttribute('src')).toBe(
+        '/api/projects/project-ds/files/imagery/cover-0.png',
+      );
       expect(container.querySelector('.recent-projects__card-thumb-html iframe')).toBeTruthy();
+    });
+  });
+
+  it('uses non-favicon design-system logo alternates when no cover exists', async () => {
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[
+          project({
+            id: 'project-ds-fallback',
+            name: 'Acme Design System',
+            updatedAt: 4,
+            metadata: {
+              kind: 'other',
+              importedFrom: 'design-system',
+            },
+          }),
+        ]}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    const designSystemCard = container.querySelector('.recent-projects__card.is-design-system-project');
+
+    await waitFor(() => {
+      expect(designSystemCard?.querySelector('.recent-projects__card-thumb-logo img')).toBeTruthy();
+      expect(designSystemCard?.querySelector('img')?.getAttribute('src')).toBe(
+        '/api/projects/project-ds-fallback/files/logos/wordmark.svg',
+      );
     });
   });
 

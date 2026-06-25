@@ -22,6 +22,7 @@ import {
 } from './db.js';
 import { resolveProjectDir } from './projects.js';
 import {
+  extractBrandFromHtml,
   finalizeBrand,
   listBrandSummaries,
   readBrandDetail,
@@ -64,12 +65,16 @@ export interface BrandRoutesDeps {
   };
   /** Optional id factory; defaults inside the brand engine when omitted. */
   randomId?: () => string;
+  /** Selected agent identity for programmatic transcript rows. */
+  resolveTranscriptAgent?: () => Promise<{ agentId?: string | null; agentName?: string | null } | null>;
 }
 
 const LOGO_EXT_PRIORITY = ['.svg', '.png', '.webp', '.jpg', '.jpeg', '.gif', '.ico'];
+const PROGRAMMATIC_CANCEL_ERROR = 'Programmatic extraction stopped by the user.';
 
 export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): void {
   const { brandsRoot, userDesignSystemsRoot, projectsRoot, skillsRoot, dataDir, db, randomId } = deps;
+  const activeProgrammaticBrandExtractions = new Map<string, AbortController>();
 
   // GET /api/brands — list every stored brand as a summary.
   app.get('/api/brands', (_req: Request, res: Response) => {
@@ -85,37 +90,98 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
     }
   });
 
-  // POST /api/brands { url } — reserve the brand and stand up its extraction
+  // POST /api/brands { url?, description?, designMd? } — reserve the brand and stand up its extraction
   // project (target site open in a browser tab + a seeded prompt that drives an
   // agent through the extraction chain). Returns the ids to navigate into.
   app.post('/api/brands', async (req: Request, res: Response) => {
     const url = typeof req.body?.url === 'string' ? req.body.url : '';
-    if (!url.trim()) {
-      res.status(400).json({ error: 'url is required' });
+    const description = typeof req.body?.description === 'string' ? req.body.description : '';
+    const designMd = typeof req.body?.designMd === 'string' ? req.body.designMd : '';
+    const locale = typeof req.body?.locale === 'string' ? req.body.locale : '';
+    if (!url.trim() && !designMd.trim()) {
+      res.status(400).json({ error: 'url or designMd is required' });
       return;
     }
     try {
+      const programmaticAbortController = new AbortController();
+      const backgroundExtractionRef: { current: Promise<unknown> | null } = { current: null };
       const startOptions: Parameters<typeof startBrandExtraction>[0] = {
-        url,
         brandsRoot,
         projectsRoot,
         skillsRoot,
         db,
         // Passing the registry root + data dir switches on the programmatic-first
-        // extraction: the daemon harvests + synthesizes + finalizes a usable
-        // design system synchronously, so the caller lands on a ready, applyable
-        // design system immediately and the agent run only enriches it.
+        // extraction: the daemon seeds the real transcript and skeleton before
+        // returning, then harvests + synthesizes + finalizes the design system
+        // in the background.
         userDesignSystemsRoot,
         dataDir,
+        programmaticAbortSignal: programmaticAbortController.signal,
+        onBackgroundExtraction: (settled) => {
+          backgroundExtractionRef.current = settled;
+        },
       };
+      if (url.trim()) startOptions.url = url;
+      if (description.trim()) startOptions.description = description;
+      if (designMd.trim()) startOptions.designMd = designMd;
+      if (locale.trim()) startOptions.locale = locale;
       if (randomId) startOptions.randomId = randomId;
+      const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
+      if (transcriptAgent) startOptions.transcriptAgent = transcriptAgent;
       const result = await startBrandExtraction(startOptions);
+      const backgroundExtraction = backgroundExtractionRef.current;
+      if (backgroundExtraction) {
+        activeProgrammaticBrandExtractions.set(result.id, programmaticAbortController);
+        void backgroundExtraction.finally(() => {
+          const latestStatus = readBrandDetail(brandsRoot, result.id)?.meta.status;
+          if (
+            latestStatus !== 'extracting'
+            && activeProgrammaticBrandExtractions.get(result.id) === programmaticAbortController
+          ) {
+            activeProgrammaticBrandExtractions.delete(result.id);
+          }
+        });
+      }
       res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // A bad URL is the only expected throw; everything else is a 500.
       const status = /valid http/i.test(message) ? 400 : 500;
       res.status(status).json({ error: message });
+    }
+  });
+
+  // POST /api/brands/:id/cancel-extraction — stop the daemon-owned
+  // programmatic-first pass. This mirrors chat Stop for the synthetic transcript
+  // row: the web marks the message canceled locally, while the daemon aborts
+  // pending harvest/finalize work and moves the brand out of extracting.
+  app.post('/api/brands/:id/cancel-extraction', (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    try {
+      const detail = readBrandDetail(brandsRoot, id);
+      if (!detail) {
+        res.status(404).json({ error: 'brand not found' });
+        return;
+      }
+      const active = activeProgrammaticBrandExtractions.get(id);
+      if (active) {
+        active.abort();
+        activeProgrammaticBrandExtractions.delete(id);
+      }
+      if (detail.meta.status !== 'ready') {
+        patchMeta(brandsRoot, id, {
+          status: 'failed',
+          error: PROGRAMMATIC_CANCEL_ERROR,
+          blocked: false,
+          blockedReason: undefined,
+          extractionTerminalRunId: undefined,
+          extractionTerminalError: PROGRAMMATIC_CANCEL_ERROR,
+        });
+      }
+      const next = readBrandDetail(brandsRoot, id)?.meta ?? detail.meta;
+      res.json({ ok: true, status: next.status });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 
@@ -128,6 +194,10 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       typeof req.body?.projectId === 'string' && req.body.projectId.trim()
         ? String(req.body.projectId)
         : undefined;
+    const locale =
+      typeof req.body?.locale === 'string' && req.body.locale.trim()
+        ? String(req.body.locale)
+        : undefined;
     try {
       const renderOptions: Parameters<typeof renderBrandPreviewIntoProject>[0] = {
         id,
@@ -136,6 +206,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         projectsRoot,
       };
       if (projectId) renderOptions.projectId = projectId;
+      if (locale) renderOptions.locale = locale;
       const result = await renderBrandPreviewIntoProject(renderOptions);
       res.json(result);
     } catch (err) {
@@ -154,6 +225,10 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       typeof req.body?.projectId === 'string' && req.body.projectId.trim()
         ? String(req.body.projectId)
         : undefined;
+    const locale =
+      typeof req.body?.locale === 'string' && req.body.locale.trim()
+        ? String(req.body.locale)
+        : undefined;
     try {
       const finalizeOptions: Parameters<typeof finalizeBrand>[0] = {
         id,
@@ -165,6 +240,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         db,
       };
       if (projectId) finalizeOptions.projectId = projectId;
+      if (locale) finalizeOptions.locale = locale;
       if (randomId) finalizeOptions.randomId = randomId;
       const result = await finalizeBrand(finalizeOptions);
       res.json(result);
@@ -172,6 +248,52 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const message = err instanceof Error ? err.message : String(err);
       const status = /not found/i.test(message) ? 404 : 422;
       res.status(status).json({ error: message });
+    }
+  });
+
+  // POST /api/brands/:id/extract-from-html { html, css?, baseUrl? } — re-run the
+  // programmatic harvest against HTML the web read out of the in-app browser tab
+  // after the user cleared an anti-bot wall, instead of a fresh (blocked) fetch.
+  // Registers the `user:<id>` design system and marks the brand `ready`.
+  app.post('/api/brands/:id/extract-from-html', async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const html = typeof req.body?.html === 'string' ? req.body.html : '';
+    const css = typeof req.body?.css === 'string' ? req.body.css : '';
+    const baseUrl = typeof req.body?.baseUrl === 'string' ? req.body.baseUrl : '';
+    if (!html.trim()) {
+      res.status(400).json({ error: 'html is required' });
+      return;
+    }
+    try {
+      const meta = readBrandDetail(brandsRoot, id)?.meta;
+      if (!meta) {
+        res.status(404).json({ error: 'brand not found' });
+        return;
+      }
+      const result = await extractBrandFromHtml({
+        id,
+        meta,
+        brandsRoot,
+        userDesignSystemsRoot,
+        projectsRoot,
+        skillsRoot,
+        dataDir,
+        db,
+        hasWebsiteSource: true,
+        html,
+        ...(css.trim() ? { css } : {}),
+        ...(baseUrl.trim() ? { baseUrl } : {}),
+      });
+      if (!result) {
+        res
+          .status(422)
+          .json({ error: 'Could not extract a design system from the provided page.' });
+        return;
+      }
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(/not found/i.test(message) ? 404 : 500).json({ error: message });
     }
   });
 

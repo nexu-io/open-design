@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coinbase - component kit</title>
+  <style>
+:root {
+    --accent: #0052ff;
+    --accent-active: #0667d0;
+    --accent-hover: #578bfa;
+    --accent-on: #ffffff;
+    --bg: #ffffff;
+    --border: rgba(91, 97, 110, 0.2);
+    --border-soft: var(--border);
+    --container-gutter-desktop: 24px;
+    --container-gutter-phone: 16px;
+    --container-gutter-tablet: 16px;
+    --container-max: 1280px;
+    --danger: #dc2626;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --elev-flat: none;
+    --elev-raised: 0 1px 2px color-mix(in oklab, var(--fg), transparent 92%);
+    --elev-ring: 0 0 0 1px var(--border);
+    --fg: #0a0b0d;
+    --fg-2: var(--fg);
+    --focus-ring: 0 0 0 2px var(--fg);
+    --font-body: "CoinbaseText", "CoinbaseSans", "Coinbase Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    --font-display: "CoinbaseDisplay", "Coinbase Display", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+    --leading-body: 1.5;
+    --leading-tight: 1.0;
+    --meta: var(--muted);
+    --motion-base: 200ms;
+    --motion-fast: 150ms;
+    --muted: #5b616e;
+    --radius-lg: 32px;
+    --radius-md: 16px;
+    --radius-pill: 9999px;
+    --radius-sm: 8px;
+    --section-y-desktop: 96px;
+    --section-y-phone: 40px;
+    --section-y-tablet: 64px;
+    --space-1: 4px;
+    --space-12: 48px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --success: #16a34a;
+    --surface: #eef0f3;
+    --surface-warm: var(--surface);
+    --text-2xl: 36px;
+    --text-3xl: 52px;
+    --text-4xl: 80px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-sm: 14px;
+    --text-xl: 32px;
+    --text-xs: 12px;
+    --tracking-display: -0.01em;
+    --warn: #eab308;
+}
+:root {
+  --od-page-bg: #ffffff;
+  --od-surface: #eef0f3;
+  --od-text: #0a0b0d;
+  --od-muted: #5b616e;
+  --od-border: rgba(91, 97, 110, 0.2);
+  --od-accent: #0052ff;
+  --od-radius: 16px;
+  --od-font-body: "CoinbaseText", "CoinbaseSans", "Coinbase Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --od-font-display: "CoinbaseDisplay", "Coinbase Display", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--od-page-bg);
+  color: var(--od-text);
+  font-family: var(--od-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+.page { width: min(1100px, calc(100vw - 48px)); margin: 0 auto; padding: 72px 0; }
+.eyebrow { color: var(--od-accent); font-size: 12px; font-weight: 750; letter-spacing: 0; text-transform: uppercase; }
+.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 32px; align-items: center; }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { font-family: var(--od-font-display); letter-spacing: 0; line-height: 1.05; }
+h1 { margin-top: 12px; font-size: 64px; }
+h2 { font-size: 40px; }
+h3 { font-size: 22px; }
+.lead { margin-top: 18px; color: var(--od-muted); font-size: 20px; line-height: 1.55; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: var(--od-radius); padding: 0 18px; font-weight: 750; text-decoration: none; border: 1px solid var(--od-border); }
+.button.primary { background: var(--od-accent); border-color: var(--od-accent); color: #ffffff; }
+.button.secondary { background: var(--od-surface); }
+.panel, .card, .field, .slide, .email, .poster { border: 1px solid var(--od-border); border-radius: var(--od-radius); background: var(--od-surface); }
+.panel { padding: 24px; box-shadow: 0 24px 80px rgba(15, 17, 23, 0.08); }
+.metric-grid, .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+.metric, .card { padding: 18px; }
+.metric strong { display: block; font-size: 30px; line-height: 1; }
+.metric span, .card p, .field span { color: var(--od-muted); font-size: 14px; line-height: 1.5; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.chip { border: 1px solid var(--od-border); border-radius: 999px; padding: 8px 12px; color: var(--od-muted); }
+input, textarea, select { width: 100%; min-height: 44px; border: 1px solid var(--od-border); border-radius: var(--od-radius); background: var(--od-page-bg); color: var(--od-text); font: inherit; padding: 10px 12px; }
+label { display: grid; gap: 8px; color: var(--od-muted); font-size: 13px; font-weight: 700; }
+@media (max-width: 820px) { .hero, .metric-grid, .card-grid { grid-template-columns: 1fr; } .page { width: min(100vw - 28px, 1100px); padding: 40px 0; } h1 { font-size: 42px; } h2 { font-size: 30px; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Fintech &amp; Crypto system</p>
+        <h1>Coinbase component kit</h1>
+        <p class="lead">Bundled Open Design package for Coinbase, derived from curated DESIGN.md, tokens.css, and components.html fixtures.</p>
+        <div class="actions">
+          <a class="button primary" href="#">Primary</a>
+          <a class="button secondary" href="#">Default</a>
+          <a class="button secondary" href="#">Dashed</a>
+        </div>
+      </div>
+      <article class="panel">
+        <p class="eyebrow">Reference module</p>
+        <h3>Token-driven surface</h3>
+        <div class="metric-grid">
+          <div class="metric"><strong>12</strong><span>Components</span></div>
+          <div class="metric"><strong>4</strong><span>States</span></div>
+          <div class="metric"><strong>1</strong><span>Token contract</span></div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">Hover</span>
+          <span class="chip">Focus</span>
+          <span class="chip">Active</span>
+          <span class="chip">Disabled</span>
+        </div>
+      </article>
+    </section>
+    <section class="card-grid" aria-label="Component examples">
+      <article class="card"><h3>Buttons</h3><p>Primary, secondary, text, and destructive treatments resolve through shared color tokens.</p></article>
+      <article class="card"><h3>Inputs</h3><p>Labels, helper text, and focus state use the same spacing and radius scale.</p></article>
+      <article class="card"><h3>Cards</h3><p>Information modules keep elevation, border, and padding consistent across breakpoints.</p></article>
+    </section>
+  </main>
+</body>
+</html>

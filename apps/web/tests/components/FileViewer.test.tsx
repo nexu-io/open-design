@@ -1207,7 +1207,7 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Exit while editing; the iframe commits new text, but the save fails.
     fireEvent.click(toggle);
@@ -1289,7 +1289,7 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByText('Pricing that scales')).toBeTruthy();
+    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
 
     // Iframe-driven finish (Enter): commit + session-inactive with NO host finish.
     window.dispatchEvent(new MessageEvent('message', {
@@ -1450,7 +1450,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
-  it('allows downloads in the in-tab HTML presentation iframe', async () => {
+  it('allows downloads in the in-tab HTML presentation iframe', { timeout: 10_000 }, async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -2557,6 +2557,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(downloadItems).not.toContain('Copy share link');
     expect(downloadItems).not.toContain('Deploy to Vercel');
     expect(downloadItems).not.toContain('Export as PPTX');
+    expect(downloadItems).not.toContain('Export as PPTX (images)');
+    expect(downloadItems).not.toContain('Export as PPTX (editable)');
     expect(downloadItems).not.toContain('Export as Markdown');
   });
 
