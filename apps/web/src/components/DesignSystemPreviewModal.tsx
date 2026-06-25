@@ -12,13 +12,17 @@ import {
   fetchDesignSystemPreview,
   fetchDesignSystemShowcase,
 } from '../providers/registry';
-import type { DesignSystemSummary } from '../types';
+import type { DesignSystemDetail, DesignSystemSummary } from '../types';
 import { DesignSpecView } from './DesignSpecView';
 import { PreviewModal } from './PreviewModal';
 
 interface Props {
   system: DesignSystemSummary;
   onClose: () => void;
+}
+
+function isDesignSystemDetail(system: DesignSystemSummary): system is DesignSystemDetail {
+  return typeof (system as { body?: unknown }).body === 'string';
 }
 
 // Two-tab DS preview: a complete Showcase webpage rendered from the system's
@@ -43,6 +47,22 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
   const [showcaseHtml, setShowcaseHtml] = useState<string | null | undefined>(undefined);
   const [tokensHtml, setTokensHtml] = useState<string | null | undefined>(undefined);
   const [specBody, setSpecBody] = useState<string | null | undefined>(undefined);
+  const [detail, setDetail] = useState<DesignSystemDetail | null | undefined>(
+    () => (isDesignSystemDetail(system) ? system : undefined),
+  );
+  const detailBody = detail?.body ?? (isDesignSystemDetail(system) ? system.body : undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(isDesignSystemDetail(system) ? system : undefined);
+    void fetchDesignSystem(system.id).then((next) => {
+      if (cancelled) return;
+      if (next) setDetail(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [system]);
 
   // Lazy-load each view on first reveal. Both endpoints are cheap, but this
   // keeps the network panel quiet when the user only opens one tab.
@@ -85,12 +105,16 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
   const handleSidebarToggle = useCallback(
     (open: boolean) => {
       if (!open || specBody !== undefined) return;
+      if (detailBody !== undefined) {
+        setSpecBody(detailBody);
+        return;
+      }
       setSpecBody(null);
       void fetchDesignSystem(system.id).then((detail) =>
         setSpecBody(detail?.body ?? null),
       );
     },
-    [system.id, specBody],
+    [detailBody, system.id, specBody],
   );
 
   // If the system swaps under us (rare but possible), wipe all caches.
@@ -100,7 +124,7 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
     setSpecBody(undefined);
   }, [system.id]);
 
-  const detail = (
+  const modal = (
     <PreviewModal
       title={system.title}
       subtitle={system.summary || system.category}
@@ -165,6 +189,6 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
     />
   );
 
-  if (typeof document === 'undefined') return detail;
-  return createPortal(detail, document.body);
+  if (typeof document === 'undefined') return modal;
+  return createPortal(modal, document.body);
 }
