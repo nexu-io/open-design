@@ -11,7 +11,7 @@
 //                   carries the title.
 
 import { useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import {

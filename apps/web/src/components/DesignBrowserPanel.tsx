@@ -13,8 +13,8 @@ import { createPortal, flushSync } from 'react-dom';
 import {
   clearHostBrowserData,
   isOpenDesignHostAvailable,
-} from '@open-design/host';
-import type { TrackingReferenceBoardCategory } from '@open-design/contracts/analytics';
+} from '@marketing-ax/host';
+import type { TrackingReferenceBoardCategory } from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackReferenceBoardClick,

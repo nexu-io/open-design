@@ -3,8 +3,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { OpenDesignHostUpdaterStatusListener, OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { OpenDesignHostUpdaterStatusListener, OpenDesignHostUpdaterStatusSnapshot } from '@marketing-ax/host';
+import { installMockOpenDesignHost } from '@marketing-ax/host/testing';
 
 import { UpdaterPopup } from '../../src/components/UpdaterPopup';
 import { I18nProvider } from '../../src/i18n';

@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDesignGithubRepoResponse } from '@open-design/contracts';
+import type { OpenDesignGithubRepoResponse } from '@marketing-ax/contracts';
 
 const originalFetch = globalThis.fetch;
 

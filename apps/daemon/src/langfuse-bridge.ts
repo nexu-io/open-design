@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
-import { modelIdForTracking } from '@open-design/contracts/analytics';
+import { modelIdForTracking } from '@marketing-ax/contracts/analytics';
 
 import { readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';

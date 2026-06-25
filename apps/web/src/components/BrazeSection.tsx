@@ -1,6 +1,6 @@
 // Role: Braze IAM 메시지 모니터/관리 패널 (TasksView 내 섹션)
 // Key Features: 메시지 목록, 상태 배지(메시지/변형 분리), 상세 패널(GET :id 신선 fetch), 삭제, FileViewer 연동
-// Dependencies: @open-design/contracts, @open-design/components, braze-helpers
+// Dependencies: @marketing-ax/contracts, @marketing-ax/components, braze-helpers
 // Notes: 인터뷰·계획 확인은 question-form + Questions 탭 전용 — 이 컴포넌트는 읽기/삭제만
 
 import { useCallback, useEffect, useState } from 'react';
@@ -12,8 +12,8 @@ import type {
   BrazePlanVariant,
   BrazeVariant,
   BrazeVariantStatus,
-} from '@open-design/contracts';
-import { Button, VisuallyHidden } from '@open-design/components';
+} from '@marketing-ax/contracts';
+import { Button, VisuallyHidden } from '@marketing-ax/components';
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';

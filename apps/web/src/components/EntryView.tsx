@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { ConnectorDetail } from '@marketing-ax/contracts';
+import type { OpenDesignHostProjectImportSuccess } from '@marketing-ax/host';
 import {
   DEFAULT_AUDIO_MODEL,
   DEFAULT_IMAGE_MODEL,

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
-import * as platform from '@open-design/platform';
+import * as platform from '@marketing-ax/platform';
 import { startServer } from '../src/server.js';
 import { AIHUBMIX_APP_CODE } from '../src/aihubmix.js';
 

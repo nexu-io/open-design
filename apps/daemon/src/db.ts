@@ -8,7 +8,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
+import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@marketing-ax/contracts';
 import { migrateBraze } from './braze/persistence.js';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';

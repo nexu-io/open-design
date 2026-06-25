@@ -15,7 +15,7 @@
 //   - Default values pre-fill the field on mount.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { InputFieldSpec } from '@open-design/contracts';
+import type { InputFieldSpec } from '@marketing-ax/contracts';
 import { useI18n } from '../i18n';
 import {
   localizePluginDisplayValue,

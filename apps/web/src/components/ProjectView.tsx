@@ -35,7 +35,7 @@ import {
   streamViaDaemon,
 } from '../providers/daemon';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { normalizeCustomReason } from '@open-design/contracts/analytics';
+import { normalizeCustomReason } from '@marketing-ax/contracts/analytics';
 import {
   deletePreviewComment,
   fetchConnectorStatuses,
@@ -59,18 +59,18 @@ import {
   type AudioVoiceOption,
   type MemorySystemPromptResponse,
   type ResearchOptions,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
   projectKindToTracking,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import type {
   TrackingArtifactKind,
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackArtifactHeaderClick,
@@ -128,7 +128,7 @@ import {
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
-import type { AppliedPluginSnapshot, ChatAnalyticsEntryFrom, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, ChatAnalyticsEntryFrom, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@marketing-ax/contracts';
 import type {
   AgentEvent,
   AgentInfo,

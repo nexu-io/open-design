@@ -1,9 +1,9 @@
 // Role: Braze IAM 메시지·변형 상태·배지 매핑과 variant 관련 순수 헬퍼
 // Key Features: 상태 → 배지 변형 매핑 (메시지/변형 분리), variant openable 판정, 날짜 포맷
-// Dependencies: @open-design/contracts (BrazeMessageStatus, BrazeVariantStatus, BrazeVariant)
+// Dependencies: @marketing-ax/contracts (BrazeMessageStatus, BrazeVariantStatus, BrazeVariant)
 // Notes: 사이드이펙트 없는 순수 함수들 — 테스트가 import만으로 동작해야 함
 
-import type { BrazeMessageStatus, BrazeVariantStatus, BrazeVariant } from '@open-design/contracts';
+import type { BrazeMessageStatus, BrazeVariantStatus, BrazeVariant } from '@marketing-ax/contracts';
 
 // ── 메시지 상태 배지 ──────────────────────────────────────────────────────────
 // 총 7개 상태: interviewing/plan_draft/plan_confirmed/producing/produced/editing/done

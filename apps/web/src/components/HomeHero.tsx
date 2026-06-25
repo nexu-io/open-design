@@ -29,7 +29,7 @@ import type {
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -38,7 +38,7 @@ import {
   trackComposerSessionModeClick,
   trackHomeChatComposerClick,
 } from '../analytics/events';
-import { sessionModeToTracking } from '@open-design/contracts/analytics';
+import { sessionModeToTracking } from '@marketing-ax/contracts/analytics';
 import {
   chipsForGroup,
   type ChipGroup,

@@ -1,4 +1,4 @@
-import type { CritiqueConfig, PanelEvent, PanelistRole, RoundDecision } from '@open-design/contracts/critique';
+import type { CritiqueConfig, PanelEvent, PanelistRole, RoundDecision } from '@marketing-ax/contracts/critique';
 
 /**
  * Per-round scores indexed by panelist role. Absent roles are undefined.

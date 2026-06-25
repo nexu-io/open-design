@@ -4,11 +4,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HomeView } from '../../src/components/HomeView';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@marketing-ax/host';
 import { openFolderDialog } from '../../src/providers/registry';
 
-vi.mock('@open-design/host', async () => {
-  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+vi.mock('@marketing-ax/host', async () => {
+  const actual = await vi.importActual<typeof import('@marketing-ax/host')>('@marketing-ax/host');
   return {
     ...actual,
     isOpenDesignHostAvailable: vi.fn(),

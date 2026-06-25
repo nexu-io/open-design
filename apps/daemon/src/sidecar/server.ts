@@ -11,14 +11,14 @@ import {
   type DesktopExportPdfResult,
   type MintImportTokenResult,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 import {
   createJsonIpcServer,
   requestJsonIpc,
   resolveAppIpcPath,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
-} from "@open-design/sidecar";
+} from "@marketing-ax/sidecar";
 
 import { startDaemonRuntime, type StartedDaemonRuntime } from "../daemon-startup.js";
 import {

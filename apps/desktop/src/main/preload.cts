@@ -13,17 +13,17 @@ import type {
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterStatusListener,
   OpenDesignHostUpdaterStatusSnapshot,
-} from '@open-design/host';
+} from '@marketing-ax/host';
 
-const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
-const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 2;
+const OPEN_DESIGN_HOST_GLOBAL: typeof import('@marketing-ax/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
+const OPEN_DESIGN_HOST_VERSION: typeof import('@marketing-ax/host').OPEN_DESIGN_HOST_VERSION = 2;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
 const APP_CONFIG_CHANGED_IPC_CHANNEL = 'od:app-config-changed';
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 
 // Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
 // runtime's `additionalArguments`. Duplicated literal on purpose: the
-// preload bundle must not pull in `@open-design/desktop/main` (it
+// preload bundle must not pull in `@marketing-ax/desktop/main` (it
 // transitively requires non-electron node modules that the sandboxed
 // preload can't load).
 const OS_LOCALE_ARG_PREFIX = '--od-os-locale=';

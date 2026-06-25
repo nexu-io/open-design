@@ -754,9 +754,9 @@ const webImportIsolationSkippedDirectories = new Set([
   "test-results",
 ]);
 const webImportIsolationForbiddenPackages = [
-  "@open-design/platform",
-  "@open-design/sidecar",
-  "@open-design/sidecar-proto",
+  "@marketing-ax/platform",
+  "@marketing-ax/sidecar",
+  "@marketing-ax/sidecar-proto",
 ];
 const webImportIsolationForbiddenDaemonRoots = [
   "apps/daemon/src",
@@ -860,7 +860,7 @@ function webImportIsolationViolationReason(fromRepositoryPath: string, specifier
   if (!resolvedPath) return null;
 
   if (webImportIsolationForbiddenDaemonRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
-    return "apps/web must use daemon HTTP APIs or @open-design/contracts instead of daemon private source";
+    return "apps/web must use daemon HTTP APIs or @marketing-ax/contracts instead of daemon private source";
   }
 
   if (webImportIsolationForbiddenPackageRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {

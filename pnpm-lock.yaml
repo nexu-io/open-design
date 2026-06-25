@@ -20,19 +20,19 @@ importers:
 
   .:
     devDependencies:
-      '@open-design/components':
+      '@marketing-ax/components':
         specifier: workspace:*
         version: link:packages/components
-      '@open-design/daemon':
+      '@marketing-ax/daemon':
         specifier: workspace:*
         version: link:apps/daemon
-      '@open-design/tools-dev':
+      '@marketing-ax/tools-dev':
         specifier: workspace:*
         version: link:tools/dev
-      '@open-design/tools-pack':
+      '@marketing-ax/tools-pack':
         specifier: workspace:*
         version: link:tools/pack
-      '@open-design/tools-serve':
+      '@marketing-ax/tools-serve':
         specifier: workspace:*
         version: link:tools/serve
       '@types/node':
@@ -47,33 +47,33 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@marketing-ax/agui-adapter':
+        specifier: workspace:*
+        version: link:../../packages/agui-adapter
+      '@marketing-ax/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@marketing-ax/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
+      '@marketing-ax/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
+      '@marketing-ax/plugin-runtime':
+        specifier: workspace:*
+        version: link:../../packages/plugin-runtime
+      '@marketing-ax/registry-protocol':
+        specifier: workspace:*
+        version: link:../../packages/registry-protocol
+      '@marketing-ax/sidecar':
+        specifier: workspace:*
+        version: link:../../packages/sidecar
+      '@marketing-ax/sidecar-proto':
+        specifier: workspace:*
+        version: link:../../packages/sidecar-proto
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(zod@4.4.2)
-      '@open-design/agui-adapter':
-        specifier: workspace:*
-        version: link:../../packages/agui-adapter
-      '@open-design/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@open-design/diagnostics':
-        specifier: workspace:*
-        version: link:../../packages/diagnostics
-      '@open-design/platform':
-        specifier: workspace:*
-        version: link:../../packages/platform
-      '@open-design/plugin-runtime':
-        specifier: workspace:*
-        version: link:../../packages/plugin-runtime
-      '@open-design/registry-protocol':
-        specifier: workspace:*
-        version: link:../../packages/registry-protocol
-      '@open-design/sidecar':
-        specifier: workspace:*
-        version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
-        specifier: workspace:*
-        version: link:../../packages/sidecar-proto
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -135,25 +135,25 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@open-design/diagnostics':
+      '@marketing-ax/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
-      '@open-design/download':
+      '@marketing-ax/download':
         specifier: workspace:*
         version: link:../../packages/download
-      '@open-design/host':
+      '@marketing-ax/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@open-design/launcher-proto':
+      '@marketing-ax/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
-      '@open-design/platform':
+      '@marketing-ax/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@open-design/sidecar':
+      '@marketing-ax/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
+      '@marketing-ax/sidecar-proto':
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
     devDependencies:
@@ -233,25 +233,25 @@ importers:
 
   apps/packaged:
     dependencies:
-      '@open-design/daemon':
+      '@marketing-ax/daemon':
         specifier: workspace:*
         version: link:../daemon
-      '@open-design/desktop':
+      '@marketing-ax/desktop':
         specifier: workspace:*
         version: link:../desktop
-      '@open-design/launcher-proto':
+      '@marketing-ax/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
-      '@open-design/platform':
+      '@marketing-ax/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@open-design/sidecar':
+      '@marketing-ax/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
+      '@marketing-ax/sidecar-proto':
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
-      '@open-design/web':
+      '@marketing-ax/web':
         specifier: workspace:*
         version: link:../web
     devDependencies:
@@ -294,22 +294,22 @@ importers:
       '@lexical/utils':
         specifier: 0.36.2
         version: 0.36.2
-      '@open-design/components':
+      '@marketing-ax/components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@open-design/contracts':
+      '@marketing-ax/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@open-design/host':
+      '@marketing-ax/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@open-design/platform':
+      '@marketing-ax/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@open-design/sidecar':
+      '@marketing-ax/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
+      '@marketing-ax/sidecar-proto':
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
       '@xterm/addon-fit':
@@ -385,7 +385,7 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1050.0
         version: 3.1050.0
-      '@open-design/contracts':
+      '@marketing-ax/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
       '@playwright/test':
@@ -415,7 +415,7 @@ importers:
 
   packages/agui-adapter:
     dependencies:
-      '@open-design/contracts':
+      '@marketing-ax/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -499,7 +499,7 @@ importers:
 
   packages/download:
     dependencies:
-      '@open-design/platform':
+      '@marketing-ax/platform':
         specifier: workspace:*
         version: link:../platform
     devDependencies:
@@ -533,7 +533,7 @@ importers:
 
   packages/launcher-proto:
     dependencies:
-      '@open-design/sidecar-proto':
+      '@marketing-ax/sidecar-proto':
         specifier: workspace:*
         version: link:../sidecar-proto
     devDependencies:
@@ -586,7 +586,7 @@ importers:
 
   packages/plugin-runtime:
     dependencies:
-      '@open-design/contracts':
+      '@marketing-ax/contracts':
         specifier: workspace:*
         version: link:../contracts
       zod:
@@ -654,13 +654,13 @@ importers:
 
   tools/dev:
     dependencies:
-      '@open-design/platform':
+      '@marketing-ax/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@open-design/sidecar':
+      '@marketing-ax/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
+      '@marketing-ax/sidecar-proto':
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
       cac:
@@ -688,16 +688,16 @@ importers:
       '@electron/rebuild':
         specifier: 4.0.4
         version: 4.0.4
-      '@open-design/launcher-proto':
+      '@marketing-ax/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
-      '@open-design/platform':
+      '@marketing-ax/platform':
         specifier: workspace:*
         version: link:../../packages/platform
-      '@open-design/sidecar':
+      '@marketing-ax/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
+      '@marketing-ax/sidecar-proto':
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
       cac:

@@ -1,22 +1,22 @@
 export const PRODUCT_NAME = "Open Design";
 
 export const INTERNAL_PACKAGES = [
-  { directory: "packages/components", name: "@open-design/components" },
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
-  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "apps/daemon", name: "@open-design/daemon" },
-  { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
+  { directory: "packages/components", name: "@marketing-ax/components" },
+  { directory: "packages/contracts", name: "@marketing-ax/contracts" },
+  { directory: "packages/registry-protocol", name: "@marketing-ax/registry-protocol" },
+  { directory: "packages/sidecar-proto", name: "@marketing-ax/sidecar-proto" },
+  { directory: "packages/launcher-proto", name: "@marketing-ax/launcher-proto" },
+  { directory: "packages/sidecar", name: "@marketing-ax/sidecar" },
+  { directory: "packages/platform", name: "@marketing-ax/platform" },
+  { directory: "packages/download", name: "@marketing-ax/download" },
+  { directory: "packages/host", name: "@marketing-ax/host" },
+  { directory: "packages/agui-adapter", name: "@marketing-ax/agui-adapter" },
+  { directory: "packages/plugin-runtime", name: "@marketing-ax/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@marketing-ax/diagnostics" },
+  { directory: "apps/daemon", name: "@marketing-ax/daemon" },
+  { directory: "apps/web", name: "@marketing-ax/web" },
+  { directory: "apps/desktop", name: "@marketing-ax/desktop" },
+  { directory: "apps/packaged", name: "@marketing-ax/packaged" },
 ] as const;
 
 export const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";

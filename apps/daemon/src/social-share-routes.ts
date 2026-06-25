@@ -3,7 +3,7 @@ import {
   buildSocialSharePayload,
   normalizeSocialShareUrl,
   type SocialShareRequest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterSocialShareRoutesDeps extends RouteDeps<'http'> {}

@@ -14,8 +14,8 @@ import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { buildBrazeInterviewBody } from './braze-cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
-import { requestJsonIpc } from '@open-design/sidecar';
-import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import { requestJsonIpc } from '@marketing-ax/sidecar';
+import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@marketing-ax/sidecar-proto';
 import {
   AGENT_SLUGS,
   isAgentSlug,
@@ -6642,7 +6642,7 @@ diagnostics produces.
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
 
   const { DIAGNOSTICS_EXPORT_PATH, DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } =
-    await import('@open-design/diagnostics');
+    await import('@marketing-ax/diagnostics');
   const fs = await import('node:fs/promises');
   const path = await import('node:path');
 

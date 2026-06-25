@@ -24,14 +24,14 @@ import {
   downloadCopyAndClear,
   type ManagedDownloadChecksum,
   type ManagedDownloadProgress,
-} from "@open-design/download";
+} from "@marketing-ax/download";
 import {
   LAUNCHER_SCHEMA_VERSION,
   buildLauncherAfterQuitArgs,
   resolveLauncherVersionPaths,
   validateLauncherRuntimeDescriptor,
   type LauncherRuntimeDescriptor,
-} from "@open-design/launcher-proto";
+} from "@marketing-ax/launcher-proto";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -50,7 +50,7 @@ import {
   type DesktopUpdateStatusSnapshot,
   type DesktopUpdateState,
   type SidecarSource,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 
 import {
   markInstallerObservationOpenFailed,

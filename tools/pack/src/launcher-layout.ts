@@ -8,8 +8,8 @@ import {
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
-} from "@open-design/launcher-proto";
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+} from "@marketing-ax/launcher-proto";
+import { SIDECAR_DEFAULTS } from "@marketing-ax/sidecar-proto";
 
 import type { ToolPackConfig, ToolPackPlatform } from "./config.js";
 

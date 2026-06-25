@@ -13,8 +13,8 @@
 // needs to commit.
 
 import { useMemo, useState } from 'react';
-import { VisuallyHidden } from '@open-design/components';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import { VisuallyHidden } from '@marketing-ax/components';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { useI18n } from '../../i18n';
 import type { PluginShareAction } from '../../state/projects';
 import { Icon } from '../Icon';

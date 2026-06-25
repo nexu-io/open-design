@@ -8,7 +8,7 @@ import {
   type MediaPolicyDenial,
   type MediaPolicyTarget,
   type MediaSurface,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 const MEDIA_EXECUTION_MODE_SET = new Set<MediaExecutionMode>(MEDIA_EXECUTION_MODES);
 const MEDIA_SURFACE_SET = new Set<MediaSurface>(MEDIA_SURFACES);

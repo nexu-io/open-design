@@ -31,7 +31,7 @@ import {
   classifyAIHubMixModel,
 } from './aihubmix.js';
 import { isSafeId as isSafeProjectId } from './projects.js';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { projectKindToTracking } from '@marketing-ax/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
@@ -97,7 +97,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.get('/api/runs', (req, res) => {
     const { projectId, conversationId, status } = req.query;
     const runs = design.runs.list({ projectId, conversationId, status });
-    /** @type {import('@open-design/contracts').ChatRunListResponse} */
+    /** @type {import('@marketing-ax/contracts').ChatRunListResponse} */
     const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
   });
@@ -118,7 +118,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     const status = await design.runs.cancel(run);
-    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
+    /** @type {import('@marketing-ax/contracts').ChatRunCancelResponse} */
     const body = { ok: true, run: status };
     res.json(body);
   });

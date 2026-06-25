@@ -1,4 +1,4 @@
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+import { SIDECAR_DEFAULTS } from "@marketing-ax/sidecar-proto";
 
 import type { ToolPackConfig } from "../config.js";
 import { PRODUCT_NAME } from "./constants.js";

@@ -3,7 +3,7 @@
 // The trailing TODO is the "blank task slot" the issue body specifies —
 // do NOT pre-fill it.
 
-import type { Project } from '@open-design/contracts';
+import type { Project } from '@marketing-ax/contracts';
 
 export interface DesignMdSummary {
   generatedAt: Date | null;

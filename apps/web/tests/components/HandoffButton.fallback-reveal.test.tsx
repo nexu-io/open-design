@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HandoffButton } from '../../src/components/HandoffButton';
 import { I18nProvider } from '../../src/i18n';
-import type { AgentInfo, HostEditorsResponse } from '@open-design/contracts';
+import type { AgentInfo, HostEditorsResponse } from '@marketing-ax/contracts';
 
 const fetchHostEditors = vi.fn<() => Promise<HostEditorsResponse>>();
 const openProjectInEditor = vi.fn();

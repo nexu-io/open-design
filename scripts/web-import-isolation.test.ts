@@ -28,9 +28,9 @@ test("web import isolation rejects sidecar and platform package imports", () => 
   const violations = collectWebImportIsolationViolationsFromSource(
     "apps/web/app/page.tsx",
     [
-      "import { parseStamp } from '@open-design/platform';",
-      "type SidecarRuntime = import('@open-design/sidecar').Runtime;",
-      "const proto = await import('@open-design/sidecar-proto');",
+      "import { parseStamp } from '@marketing-ax/platform';",
+      "type SidecarRuntime = import('@marketing-ax/sidecar').Runtime;",
+      "const proto = await import('@marketing-ax/sidecar-proto');",
       "const sidecar = await import('@/../../packages/sidecar/src/index');",
     ].join("\n"),
   );
@@ -38,9 +38,9 @@ test("web import isolation rejects sidecar and platform package imports", () => 
   assert.deepEqual(
     violations.map((violation) => violation.specifier),
     [
-      "@open-design/platform",
-      "@open-design/sidecar",
-      "@open-design/sidecar-proto",
+      "@marketing-ax/platform",
+      "@marketing-ax/sidecar",
+      "@marketing-ax/sidecar-proto",
       "@/../../packages/sidecar/src/index",
     ],
   );
@@ -51,7 +51,7 @@ test("web import isolation allows contracts and app-local imports", () => {
     collectWebImportIsolationViolationsFromSource(
       "apps/web/src/providers/example.ts",
       [
-        "import type { ChatRunStatusResponse } from '@open-design/contracts';",
+        "import type { ChatRunStatusResponse } from '@marketing-ax/contracts';",
         "import { requestJson } from './daemon';",
         "import { latestTodoWriteInputFromMessages } from '@/src/runtime/todos';",
       ].join("\n"),

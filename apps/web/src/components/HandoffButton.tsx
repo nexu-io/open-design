@@ -8,11 +8,11 @@ import type {
   HostEditor,
   HostEditorId,
   HostEditorsResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   handoffTargetIdToTracking,
   type TrackingArtifactKind,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import { trackHandoffClick } from '../analytics/events';

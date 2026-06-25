@@ -19,8 +19,8 @@
 //   - `action` — discriminated union the HomeView dispatcher matches
 //     on. The rail component itself stays presentational.
 
-import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
-import type { DefaultScenarioPluginId } from '@open-design/contracts';
+import type { ProjectKind, ProjectMetadata } from '@marketing-ax/contracts';
+import type { DefaultScenarioPluginId } from '@marketing-ax/contracts';
 import type { IconName } from '../Icon';
 
 // Plugin ids the chip rail can dispatch to. Most chips route to a

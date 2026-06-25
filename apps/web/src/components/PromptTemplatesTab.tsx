@@ -1,4 +1,4 @@
-import { Input, Select } from '@open-design/components';
+import { Input, Select } from '@marketing-ax/components';
 import { useMemo, useState } from 'react';
 import { useI18n, useT } from '../i18n';
 import {

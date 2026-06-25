@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
-import { createTabToTracking } from '@open-design/contracts/analytics';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@marketing-ax/components';
+import { createTabToTracking } from '@marketing-ax/contracts/analytics';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@marketing-ax/host';
+import type { OpenDesignHostProjectImportSuccess } from '@marketing-ax/host';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemApplyResult,
@@ -10,12 +10,12 @@ import {
   trackNewProjectModalSurfaceView,
   trackNewProjectModalTabClick,
 } from '../analytics/events';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail } from '@marketing-ax/contracts';
 import type {
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';

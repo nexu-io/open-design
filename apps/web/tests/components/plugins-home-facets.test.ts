@@ -4,7 +4,7 @@
 // user-query taxonomy for the crowded template types.
 
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import {
   applyFacetSelection,
   buildFacetCatalog,

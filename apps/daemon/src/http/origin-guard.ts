@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { createApiError } from '@open-design/contracts';
+import { createApiError } from '@marketing-ax/contracts';
 import { isLocalSameOrigin } from '../origin-validation.js';
 import { err, ok, type Result } from './types.js';
 

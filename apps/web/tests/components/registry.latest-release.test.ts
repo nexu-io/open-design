@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDesignGithubLatestReleaseResponse } from '@open-design/contracts';
+import type { OpenDesignGithubLatestReleaseResponse } from '@marketing-ax/contracts';
 
 import { fetchLatestGithubReleaseInfo } from '../../src/providers/registry';
 

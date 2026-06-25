@@ -27,7 +27,7 @@ import type {
   ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type { StreamHandlers } from './anthropic';
 
 /**

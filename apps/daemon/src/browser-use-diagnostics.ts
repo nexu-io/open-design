@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { BrowserUseDiscoveryFacts, BrowserUseRunState } from '@open-design/contracts';
+import type { BrowserUseDiscoveryFacts, BrowserUseRunState } from '@marketing-ax/contracts';
 
 const BROWSER_USE_REGISTRY_BASENAME = 'codex-browser-use';
 const DEFAULT_STALE_THRESHOLD_MS = 10 * 60 * 1000;

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import * as platform from '@open-design/platform';
+import * as platform from '@marketing-ax/platform';
 import {
   createAgentSink,
   isSmokeOkReply,

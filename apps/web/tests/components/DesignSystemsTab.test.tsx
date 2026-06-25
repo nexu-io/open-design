@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DesignSystemSummary } from '@open-design/contracts';
+import type { DesignSystemSummary } from '@marketing-ax/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
 

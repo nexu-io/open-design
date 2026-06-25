@@ -22,7 +22,7 @@ import type {
   HostEditorId,
   HostEditorsResponse,
   OpenProjectInEditorResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterHostToolsRoutesDeps

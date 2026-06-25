@@ -7,7 +7,7 @@
 // FNV-1a 64-bit was chosen over SHA-256 so the same function can run
 // synchronously in browsers (Web Crypto's digest is async) and inside the
 // daemon without pulling in either Node's crypto or a hashing dependency
-// into @open-design/contracts (which must stay dependency-light). Two
+// into @marketing-ax/contracts (which must stay dependency-light). Two
 // different (projectId, fileName) pairs producing the same id are a
 // dashboard collision, not a security failure — the threat model here is
 // privacy of the filename, which FNV-1a addresses just as well as a

@@ -2,7 +2,7 @@ import {
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   type InputField,
   type PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { parseFrontmatter, type FrontmatterObject, type FrontmatterValue } from '../parsers/frontmatter.js';
 
 // Adapter from a portable SKILL.md (with optional `od:` frontmatter, see

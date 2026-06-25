@@ -1,7 +1,7 @@
 // Phase 7-8 entry slice / spec §11.5.1 — handoff atom helper.
 
 import { describe, expect, it } from 'vitest';
-import type { ArtifactManifest } from '@open-design/contracts';
+import type { ArtifactManifest } from '@marketing-ax/contracts';
 import { isDeployableAppEligible, recordHandoff } from '../src/plugins/atoms/handoff.js';
 
 const baseManifest = (extra: Partial<ArtifactManifest> = {}): ArtifactManifest => ({

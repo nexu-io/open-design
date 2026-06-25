@@ -43,7 +43,7 @@ async function writePnpmLinkedPackage(standaloneRoot: string, packageName: strin
 async function writeRootWebPackage(resourcesRoot: string): Promise<void> {
   const webPackageRoot = join(resourcesRoot, "app", "node_modules", "@open-design", "web");
   await mkdir(join(webPackageRoot, "dist", "sidecar"), { recursive: true });
-  await writeFile(join(webPackageRoot, "package.json"), "{\"name\":\"@open-design/web\"}\n", "utf8");
+  await writeFile(join(webPackageRoot, "package.json"), "{\"name\":\"@marketing-ax/web\"}\n", "utf8");
   await writeFile(join(webPackageRoot, "dist", "sidecar", "index.js"), "module.exports = {};\n", "utf8");
 }
 

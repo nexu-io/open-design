@@ -8,7 +8,7 @@
 // without triggering cli.ts's import-time SUBCOMMAND_MAP dispatch —
 // mirrors artifacts-cli.ts / runArtifactsCli.
 
-import type { HandoffRequest, HandoffResponse } from '@open-design/contracts/api/handoff';
+import type { HandoffRequest, HandoffResponse } from '@marketing-ax/contracts/api/handoff';
 import { resolveDaemonUrl } from './daemon-url.js';
 
 interface HandoffCliResult {

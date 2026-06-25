@@ -10,7 +10,7 @@
 // When the user already has projects, this wrapper is a no-op pass-through —
 // HomeView renders the gallery directly.
 
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
 import { useT } from '../i18n';

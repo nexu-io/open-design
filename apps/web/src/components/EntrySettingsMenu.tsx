@@ -9,7 +9,7 @@ import {
   OPEN_DESIGN_GITHUB_REPO_URL,
   type SocialShareRequest,
   type SocialShareResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   LOCALE_LABEL,
   LOCALES,

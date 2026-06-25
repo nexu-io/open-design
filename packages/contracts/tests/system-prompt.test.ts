@@ -5,7 +5,7 @@ import { DISCOVERY_AND_PHILOSOPHY } from '../src/prompts/discovery.js';
 
 // Guard: the contracts copy of DISCOVERY_AND_PHILOSOPHY must have the same
 // cap removal as apps/daemon/src/prompts/discovery.ts. The web app imports
-// composeSystemPrompt from @open-design/contracts, so only testing the daemon
+// composeSystemPrompt from @marketing-ax/contracts, so only testing the daemon
 // copy leaves the web-originated chat path unguarded.
 describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item count', () => {
   it('does not cap the plan at 10 items via "5–10" wording', () => {

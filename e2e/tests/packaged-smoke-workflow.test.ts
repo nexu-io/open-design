@@ -106,7 +106,7 @@ describe("packaged smoke workflow", () => {
 
     expect(job).toContain("runs-on: windows-latest");
     expect(job).toContain("needs.change_scopes.outputs.tools_pack_tests_required == 'true'");
-    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
+    expect(job).toContain("pnpm --filter @marketing-ax/tools-pack exec vitest run tests/launcher-payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 

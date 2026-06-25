@@ -13,7 +13,7 @@ import { useMemo } from 'react';
 import {
   isOpenDesignHostAvailable,
   openHostProjectPath,
-} from '@open-design/host';
+} from '@marketing-ax/host';
 
 export interface TerminalLaunchResult {
   kind: 'host' | 'web-fallback';

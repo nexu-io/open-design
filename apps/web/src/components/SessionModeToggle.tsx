@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { ChatSessionMode } from '@open-design/contracts';
+import type { ChatSessionMode } from '@marketing-ax/contracts';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 

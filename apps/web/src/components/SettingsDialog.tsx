@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
-import { Button, VisuallyHidden } from '@open-design/components';
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import { Button, VisuallyHidden } from '@marketing-ax/components';
+import { validateBaseUrl } from '@marketing-ax/contracts/api/connectionTest';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
   executionModeToTracking,
   settingsSectionToTracking,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { recordAmrEntry } from '../analytics/amr-attribution';
 import {

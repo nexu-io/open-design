@@ -11,7 +11,7 @@ function resolveToolsPackRoot(startDir: string): string {
     try {
       const raw = readFileSync(join(current, "package.json"), "utf8");
       const parsed = JSON.parse(raw) as { name?: unknown };
-      if (parsed.name === "@open-design/tools-pack") {
+      if (parsed.name === "@marketing-ax/tools-pack") {
         return current;
       }
     } catch {

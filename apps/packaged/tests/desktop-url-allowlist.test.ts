@@ -1,6 +1,6 @@
 /**
  * Regression coverage for the URL-policy helpers re-exported from
- * `@open-design/desktop/main`. The helpers are part of the security
+ * `@marketing-ax/desktop/main`. The helpers are part of the security
  * boundary for child-window navigation (see `setWindowOpenHandler`
  * in `apps/desktop/src/main/runtime.ts`); the packaged workspace
  * hosts the test because `apps/desktop` itself has no vitest setup
@@ -32,7 +32,7 @@ import {
   isAllowedEmbeddedBrowserUrl,
   isHttpUrl,
   resolveDesktopStatusUrl,
-} from '@open-design/desktop/main';
+} from '@marketing-ax/desktop/main';
 
 describe('isHttpUrl', () => {
   it('matches http and https protocols', () => {

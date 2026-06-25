@@ -1,4 +1,4 @@
-import type { ChatRunStatusResponse } from '@open-design/contracts';
+import type { ChatRunStatusResponse } from '@marketing-ax/contracts';
 import type { Project } from '../../types';
 import type { PetRecentTaskSummary, PetTaskCenter, PetTaskSummary } from './PetOverlay';
 

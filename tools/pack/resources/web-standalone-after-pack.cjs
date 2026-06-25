@@ -782,7 +782,7 @@ async function pruneRootNext(appNodeModulesRoot, platformName) {
 
   await removePathAndRecord(
     path.join(appNodeModulesRoot, "@open-design", "web", ".next", "standalone"),
-    "root @open-design/web standalone output",
+    "root @marketing-ax/web standalone output",
     removedPaths,
   );
 
@@ -837,7 +837,7 @@ async function pruneRootWebPackage(appNodeModulesRoot, platformName) {
   for (const entry of [".next", "app", "next.config.ts", "public", "src"]) {
     await removePathAndRecord(
       path.join(webPackageRoot, entry),
-      "root @open-design/web standalone-safe package residue",
+      "root @marketing-ax/web standalone-safe package residue",
       removedPaths,
     );
   }
@@ -850,7 +850,7 @@ async function auditRootWebPackage(appNodeModulesRoot) {
   const sidecarEntryPath = path.join(webPackageRoot, "dist", "sidecar", "index.js");
   for (const requiredPath of [packageJsonPath, sidecarEntryPath]) {
     if (!(await pathExists(requiredPath))) {
-      throw new Error(`[tools-pack web-standalone] root @open-design/web audit missing: ${requiredPath}`);
+      throw new Error(`[tools-pack web-standalone] root @marketing-ax/web audit missing: ${requiredPath}`);
     }
   }
   return {

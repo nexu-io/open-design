@@ -26,7 +26,7 @@ import type {
   ApplyResult,
   InstalledPluginRecord,
   PluginConnectorBinding,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   applyPlugin,
   MissingInputError,
@@ -46,7 +46,7 @@ import { getManifestContextCraft } from './context-craft.js';
 import {
   type ConnectorProbe,
 } from './connector-gate.js';
-import type { RegistryView } from '@open-design/plugin-runtime';
+import type { RegistryView } from '@marketing-ax/plugin-runtime';
 
 type SqliteDb = Database.Database;
 

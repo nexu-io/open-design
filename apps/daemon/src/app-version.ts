@@ -4,7 +4,7 @@ import { dirname, join, parse as parsePath } from 'node:path';
 
 export const APP_VERSION_FALLBACK = '0.0.0';
 
-// Keep this structurally aligned with `@open-design/contracts` AppVersionInfo.
+// Keep this structurally aligned with `@marketing-ax/contracts` AppVersionInfo.
 // Daemon cannot import the package root type directly yet because its NodeNext
 // test typecheck follows the contracts source re-exports and requires explicit
 // `.js` extensions across that package.

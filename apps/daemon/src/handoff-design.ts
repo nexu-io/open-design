@@ -25,7 +25,7 @@ import type Database from 'better-sqlite3';
 import type {
   HandoffRequest,
   HandoffResponse,
-} from '@open-design/contracts/api/handoff';
+} from '@marketing-ax/contracts/api/handoff';
 import fs from 'node:fs';
 import { getProject } from './db.js';
 import {

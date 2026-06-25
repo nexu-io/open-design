@@ -36,8 +36,8 @@ import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
-import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
-import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import { defaultCritiqueConfig, type CritiqueConfig } from '@marketing-ax/contracts/critique';
+import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@marketing-ax/contracts';
 
 // Prepended first in every composed prompt so it wins precedence over all
 // later sections, including skill bodies and user/project instructions.
@@ -555,7 +555,7 @@ export function composeSystemPrompt({
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
-  // `@open-design/contracts`'s composer. The daemon hits this path for
+  // `@marketing-ax/contracts`'s composer. The daemon hits this path for
   // any plain-stream adapter (e.g. DeepSeek), so without pinning the
   // override above DISCOVERY_AND_PHILOSOPHY here too, those daemon
   // agents still emit the `<todo-list>` / `[读取 X]` pseudo-tool

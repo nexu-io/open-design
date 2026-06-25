@@ -14,8 +14,8 @@ import {
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
-import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 import {
   collectProcessTreePids,
   createPackageManagerInvocation,
@@ -24,7 +24,7 @@ import {
   readLogTail,
   spawnBackgroundProcess,
   stopProcesses,
-} from "@open-design/platform";
+} from "@marketing-ax/platform";
 
 import type { ToolPackConfig } from "./config.js";
 import { copyBundledResourceTrees, linuxResources } from "./resources.js";
@@ -47,22 +47,22 @@ const CONTAINER_NODE_VERSION = "24.14.1";
 const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
 
 export const INTERNAL_PACKAGES = [
-  { directory: "packages/components", name: "@open-design/components" },
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
-  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
-  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "apps/daemon", name: "@open-design/daemon" },
-  { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
+  { directory: "packages/components", name: "@marketing-ax/components" },
+  { directory: "packages/contracts", name: "@marketing-ax/contracts" },
+  { directory: "packages/registry-protocol", name: "@marketing-ax/registry-protocol" },
+  { directory: "packages/launcher-proto", name: "@marketing-ax/launcher-proto" },
+  { directory: "packages/sidecar-proto", name: "@marketing-ax/sidecar-proto" },
+  { directory: "packages/sidecar", name: "@marketing-ax/sidecar" },
+  { directory: "packages/platform", name: "@marketing-ax/platform" },
+  { directory: "packages/download", name: "@marketing-ax/download" },
+  { directory: "packages/host", name: "@marketing-ax/host" },
+  { directory: "packages/agui-adapter", name: "@marketing-ax/agui-adapter" },
+  { directory: "packages/plugin-runtime", name: "@marketing-ax/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@marketing-ax/diagnostics" },
+  { directory: "apps/daemon", name: "@marketing-ax/daemon" },
+  { directory: "apps/web", name: "@marketing-ax/web" },
+  { directory: "apps/desktop", name: "@marketing-ax/desktop" },
+  { directory: "apps/packaged", name: "@marketing-ax/packaged" },
 ] as const;
 
 export function sanitizeNamespace(value: string): string {
@@ -130,7 +130,7 @@ export function buildDockerArgs(
   //
   // Shell-interpolation safety for the inner `bash -lc` command:
   //   - config.namespace is sanitized at config-time by resolveNamespace() in
-  //     @open-design/sidecar-proto (restricted to namespace charset)
+  //     @marketing-ax/sidecar-proto (restricted to namespace charset)
   //   - config.to is enum-validated by resolveToolPackBuildOutput() in config.ts
   //     to one of "all" | "appimage" | "dir"
   //   - config.portable is a boolean
@@ -391,24 +391,24 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
-  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/contracts", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/registry-protocol", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/sidecar-proto", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/launcher-proto", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/sidecar", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/platform", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/host", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/download", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/agui-adapter", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/plugin-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/download", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/host", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/diagnostics", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/components", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/daemon", "build"]);
   try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
+    await runPnpm(config, ["--filter", "@marketing-ax/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
+    await runPnpm(config, ["--filter", "@marketing-ax/web", "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files before AppImage packaging. See
     // `tools/pack/src/web-sourcemaps.ts`.
@@ -420,8 +420,8 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
       await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
     }
   }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/desktop", "build"]);
+  await runPnpm(config, ["--filter", "@marketing-ax/packaged", "build"]);
 }
 
 // --- Step 3: Tarball + resource helpers ---
@@ -505,7 +505,7 @@ async function writeAssembledApp(
   };
   await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
-  const mainStub = `"use strict";\nrequire("@open-design/packaged");\n`;
+  const mainStub = `"use strict";\nrequire("@marketing-ax/packaged");\n`;
   await writeFile(paths.assembledMainEntryPath, mainStub, "utf8");
 
   await writeFile(
@@ -1333,7 +1333,7 @@ export type LinuxCleanupResult = {
 
 // Paths resolved relative to the assembled app written during `tools-pack linux build`.
 // The headless entry lives at:
-//   <assembledAppRoot>/node_modules/@open-design/packaged/dist/headless.mjs
+//   <assembledAppRoot>/node_modules/@marketing-ax/packaged/dist/headless.mjs
 // The bundled Node binary lives at:
 //   <namespaceRoot>/resources/open-design/bin/node  (populated by copyResourceTree)
 

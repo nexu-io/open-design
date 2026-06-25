@@ -14,8 +14,8 @@ import {
   type DesktopStatusSnapshot,
   type DesktopUpdateResult,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
-import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 import {
   collectProcessTreePids,
   createProcessStampArgs,
@@ -25,7 +25,7 @@ import {
   readLogTail,
   spawnLoggedProcess,
   stopProcesses,
-} from "@open-design/platform";
+} from "@marketing-ax/platform";
 import type { ToolPackConfig } from "../config.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";

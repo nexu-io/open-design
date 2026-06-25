@@ -9,7 +9,7 @@
 
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PanelEvent } from '@open-design/contracts/critique';
+import type { PanelEvent } from '@marketing-ax/contracts/critique';
 
 import { useCritiqueReplay } from '../../../../src/components/Theater/hooks/useCritiqueReplay';
 import type { CritiqueState } from '../../../../src/components/Theater/state/reducer';

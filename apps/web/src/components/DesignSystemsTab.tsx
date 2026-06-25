@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemsTemplateCardClick,
@@ -10,7 +10,7 @@ import {
 import type {
   TrackingDesignSystemStatusAction,
   TrackingDesignSystemStatusValue,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,

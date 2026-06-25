@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@marketing-ax/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -16,7 +16,7 @@ import {
   type OpenDesignGithubLatestReleaseResponse,
   type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   composeSystemPrompt,
   renderCodexImagegenOverride,
@@ -72,8 +72,8 @@ import {
 } from './browser-use-diagnostics.js';
 
 export { resolveProjectRoot };
-import { createCommandInvocation } from '@open-design/platform';
-import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { createCommandInvocation } from '@marketing-ax/platform';
+import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@marketing-ax/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,
@@ -287,7 +287,7 @@ import {
   projectKindToTracking,
   sessionModeToTracking,
   type ObservabilityEventRequest,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
   redactSecrets,
@@ -371,7 +371,7 @@ import {
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
-import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { DIAGNOSTICS_EXPORT_PATH } from '@marketing-ax/diagnostics';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -538,14 +538,14 @@ import {
   isLocalSameOrigin,
 } from './origin-validation.js';
 
-/** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
-/** @typedef {import('@open-design/contracts').ApiError} ApiError */
-/** @typedef {import('@open-design/contracts').ApiErrorResponse} ApiErrorResponse */
-/** @typedef {import('@open-design/contracts').ChatRequest} ChatRequest */
-/** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
-/** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
-/** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
-/** @typedef {import('@open-design/contracts').ProjectConversationCreatedSsePayload} ProjectConversationCreatedSsePayload */
+/** @typedef {import('@marketing-ax/contracts').ApiErrorCode} ApiErrorCode */
+/** @typedef {import('@marketing-ax/contracts').ApiError} ApiError */
+/** @typedef {import('@marketing-ax/contracts').ApiErrorResponse} ApiErrorResponse */
+/** @typedef {import('@marketing-ax/contracts').ChatRequest} ChatRequest */
+/** @typedef {import('@marketing-ax/contracts').ChatSseEvent} ChatSseEvent */
+/** @typedef {import('@marketing-ax/contracts').ProxyStreamRequest} ProxyStreamRequest */
+/** @typedef {import('@marketing-ax/contracts').ProxySseEvent} ProxySseEvent */
+/** @typedef {import('@marketing-ax/contracts').ProjectConversationCreatedSsePayload} ProjectConversationCreatedSsePayload */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -5963,7 +5963,7 @@ export async function startServer({
     try {
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      /** @type {import('@open-design/contracts').OkResponse} */
+      /** @type {import('@marketing-ax/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err) {
@@ -6741,7 +6741,7 @@ export async function startServer({
     type ScenarioEntry = {
       id: string;
       taskKind: 'new-generation' | 'figma-migration' | 'code-migration' | 'tune-collab';
-      pipeline: NonNullable<NonNullable<import('@open-design/contracts').PluginManifest['od']>['pipeline']>;
+      pipeline: NonNullable<NonNullable<import('@marketing-ax/contracts').PluginManifest['od']>['pipeline']>;
     };
     const byTaskKind = new Map<ScenarioEntry['taskKind'], ScenarioEntry>();
     try {
@@ -7538,7 +7538,7 @@ export async function startServer({
             // skip files that vanished mid-flight
           }
         }
-        /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
+        /** @type {import('@marketing-ax/contracts').UploadProjectFilesResponse} */
         const body = { files: out };
         res.json(body);
       } catch (err) {
@@ -7969,7 +7969,7 @@ export async function startServer({
         const stages = snap?.pipeline?.stages ?? [];
         if (stages.length > 0) {
           const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
-          const { renderActiveStageBlock } = await import('@open-design/contracts');
+          const { renderActiveStageBlock } = await import('@marketing-ax/contracts');
           const blocks = [];
           for (const stage of stages) {
             const bodies = await loadAtomBodies(db, stage.atoms ?? []);
@@ -11438,7 +11438,7 @@ export async function startServer({
         // Linking is best-effort here; in-memory run still carries the id.
       }
     }
-    /** @type {import('@open-design/contracts').ChatRunCreateResponse} */
+    /** @type {import('@marketing-ax/contracts').ChatRunCreateResponse} */
     const body = {
       runId: run.id,
       // Surface the bound conversation/message so MCP / SDK callers
@@ -11918,7 +11918,7 @@ export async function startServer({
   app.get('/api/runs', (req, res) => {
     const { projectId, conversationId, status } = req.query;
     const runs = design.runs.list({ projectId, conversationId, status });
-    /** @type {import('@open-design/contracts').ChatRunListResponse} */
+    /** @type {import('@marketing-ax/contracts').ChatRunListResponse} */
     const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
   });
@@ -11945,7 +11945,7 @@ export async function startServer({
   app.get('/api/runs/:id/agui', async (req, res) => {
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const { encodeOdEventForAgui } = await import('@open-design/agui-adapter');
+    const { encodeOdEventForAgui } = await import('@marketing-ax/agui-adapter');
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
     const emitMapped = (record) => {
@@ -11988,7 +11988,7 @@ export async function startServer({
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     const status = await design.runs.cancel(run);
-    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
+    /** @type {import('@marketing-ax/contracts').ChatRunCancelResponse} */
     const body = { ok: true, run: status };
     res.json(body);
   });

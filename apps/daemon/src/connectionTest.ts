@@ -33,7 +33,7 @@ import {
   createCommandInvocation,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
-} from '@open-design/platform';
+} from '@marketing-ax/platform';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
@@ -71,11 +71,11 @@ import {
   type ConnectionTestResponse,
   type ParsedBaseUrl,
   type ProviderTestRequest,
-} from '@open-design/contracts/api/connectionTest';
+} from '@marketing-ax/contracts/api/connectionTest';
 import { googleGenerateContentUrl } from './google-models.js';
 import { resolveAmrProfile } from './integrations/vela.js';
 
-export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+export { validateBaseUrl } from '@marketing-ax/contracts/api/connectionTest';
 
 // DNS-aware companion to `validateBaseUrl`. The contracts-side check only
 // inspects the literal hostname string, so a public DNS name pointing at

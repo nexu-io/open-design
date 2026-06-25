@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 
-import { isPanelEvent, type PanelEvent } from '@open-design/contracts/critique';
+import { isPanelEvent, type PanelEvent } from '@marketing-ax/contracts/critique';
 
 import {
   initialState,

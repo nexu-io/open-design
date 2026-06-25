@@ -12,7 +12,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { DesignSystemSummary } from '@open-design/contracts';
+import type { DesignSystemSummary } from '@marketing-ax/contracts';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,

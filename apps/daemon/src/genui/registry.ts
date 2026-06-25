@@ -15,7 +15,7 @@
 
 import { createHash } from 'node:crypto';
 import type Database from 'better-sqlite3';
-import type { GenUISurfaceSpec } from '@open-design/contracts';
+import type { GenUISurfaceSpec } from '@marketing-ax/contracts';
 import {
   buildStateSyncedEvent,
   buildSurfaceRequestEvent,

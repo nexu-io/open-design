@@ -29,7 +29,7 @@ import {
   upsertInstalledPlugin,
   type RegistryRoots,
 } from './registry.js';
-import type { InstalledPluginRecord, MarketplaceTrust } from '@open-design/contracts';
+import type { InstalledPluginRecord, MarketplaceTrust } from '@marketing-ax/contracts';
 
 type SqliteDb = Database.Database;
 

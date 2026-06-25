@@ -8,7 +8,7 @@
 // register and inspect catalogs.
 //
 // We intentionally treat the catalog body as opaque JSON in v1 — Zod
-// validation lives in `@open-design/plugin-runtime`'s parser and we only
+// validation lives in `@marketing-ax/plugin-runtime`'s parser and we only
 // store what the parser returns. Trust default mirrors §9: a freshly
 // added user-supplied marketplace is `restricted` (discovery only)
 // unless `--trust` is passed.
@@ -18,11 +18,11 @@ import type Database from 'better-sqlite3';
 import {
   parseMarketplace,
   type MarketplaceParseResult,
-} from '@open-design/plugin-runtime';
+} from '@marketing-ax/plugin-runtime';
 import {
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   type MarketplaceManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   parsePluginSpecifier,
   resolveMarketplaceEntryVersion,

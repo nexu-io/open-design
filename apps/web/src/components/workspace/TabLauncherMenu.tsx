@@ -4,8 +4,8 @@ import { useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
 import { Icon, type IconName } from '../Icon';
 import type { ProjectFile, ProjectFileKind } from '../../types';
-import type { WorkspaceContextItem } from '@open-design/contracts';
-import type { TabLauncherClickProps } from '@open-design/contracts/analytics';
+import type { WorkspaceContextItem } from '@marketing-ax/contracts';
+import type { TabLauncherClickProps } from '@marketing-ax/contracts/analytics';
 import type { LauncherAction, LauncherContext } from './tab-launcher';
 import styles from './TabLauncherMenu.module.css';
 

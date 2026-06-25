@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog } from '@open-design/components';
+import { Dialog } from '@marketing-ax/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   resolveLocalizedText,
   type ApplyResult,
   type InstalledPluginRecord,
   type PluginSourceKind,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackPageView,

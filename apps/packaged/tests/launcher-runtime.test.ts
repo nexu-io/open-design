@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { LAUNCHER_SCHEMA_VERSION, resolveLauncherVersionPaths } from "@open-design/launcher-proto";
+import { LAUNCHER_SCHEMA_VERSION, resolveLauncherVersionPaths } from "@marketing-ax/launcher-proto";
 import { describe, expect, it } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";

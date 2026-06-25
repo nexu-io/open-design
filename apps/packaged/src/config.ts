@@ -1,7 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
+import { SIDECAR_DEFAULTS, normalizeNamespace } from "@marketing-ax/sidecar-proto";
 
 // `electron` is loaded lazily so this module can also be imported from the
 // headless entry, which runs in a plain Node process without the electron

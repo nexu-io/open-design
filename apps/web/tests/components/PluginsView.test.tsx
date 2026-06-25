@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { InstalledPluginRecord, PluginSourceKind, TrustTier } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginSourceKind, TrustTier } from '@marketing-ax/contracts';
 import { PluginsView } from '../../src/components/PluginsView';
 import {
   addPluginMarketplace,

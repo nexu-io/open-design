@@ -19,7 +19,7 @@ import type {
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
   TerminalSession,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { randomUUID } from '../utils/uuid';
 import type {
   ChatMessage,
@@ -30,8 +30,8 @@ import type {
   ProjectTemplate,
 } from '../types';
 
-export type { PluginInstallOutcome } from '@open-design/contracts';
-export type { PluginShareAction } from '@open-design/contracts';
+export type { PluginInstallOutcome } from '@marketing-ax/contracts';
+export type { PluginShareAction } from '@marketing-ax/contracts';
 
 export async function listProjects(): Promise<Project[]> {
   try {

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createGunzip } from 'node:zlib';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import type { PanelEvent } from '@open-design/contracts/critique';
+import type { PanelEvent } from '@marketing-ax/contracts/critique';
 import { writeTranscript, readTranscript } from '../src/critique/transcript.js';
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import {
   authorInitials,
   derivePluginSourceLinks,
 } from '../../src/runtime/plugin-source';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 
 type Record = Parameters<typeof derivePluginSourceLinks>[0];
 

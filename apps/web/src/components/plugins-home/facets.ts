@@ -18,7 +18,7 @@
 // clicks make the row visually noisy and obscure how the overall
 // catalog is shaped.
 
-import { resolveLocalizedText, type InstalledPluginRecord } from '@open-design/contracts';
+import { resolveLocalizedText, type InstalledPluginRecord } from '@marketing-ax/contracts';
 import { CURATED_LIVE_ARTIFACT_PLUGIN_IDS } from './curatedPriority';
 import { localizedText } from './localization';
 

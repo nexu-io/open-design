@@ -9,12 +9,12 @@ import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 import {
   resolveLogFilePath,
   resolveRuntimeNamespaceRoot,
   type SidecarRuntimeContext,
-} from "@open-design/sidecar";
+} from "@marketing-ax/sidecar";
 import {
   DIAGNOSTICS_FILENAME_PREFIX,
   buildAgentCliLogSources,
@@ -22,7 +22,7 @@ import {
   buildRunEventLogSources,
   diagnosticsFileName,
   type LogSource,
-} from "@open-design/diagnostics";
+} from "@marketing-ax/diagnostics";
 
 export const DESKTOP_DIAGNOSTICS_IPC_CHANNEL = "diagnostics:export-to-file";
 

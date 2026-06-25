@@ -16,12 +16,12 @@
 // toast confirms every copy action so the user trusts the click landed.
 
 import { useEffect, useRef, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
 import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import { derivePluginSourceLinks } from '../../runtime/plugin-source';
-import { pluginShareUrl } from '@open-design/contracts';
+import { pluginShareUrl } from '@marketing-ax/contracts';
 
 const PUBLIC_OPEN_DESIGN_MARKETPLACE_ID = 'official';
 const PUBLIC_COMMUNITY_MARKETPLACE_ID = 'community';

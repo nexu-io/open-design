@@ -10,7 +10,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 
 import { PluginDetailsModal } from '../../src/components/PluginDetailsModal';
 import { PluginMetaSections } from '../../src/components/plugin-details/PluginMetaSections';

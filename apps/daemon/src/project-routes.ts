@@ -5,7 +5,7 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { createProjectArtifactFile } from './artifact-create.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
@@ -905,7 +905,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   app.get('/api/project-locations', async (_req, res) => {
     try {
       const locations = await configuredProjectLocations();
-      /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectLocationsResponse} */
       const body = { locations };
       res.json(body);
     } catch (err: any) {
@@ -936,7 +936,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const config = await writeAppConfig(ctx.paths.RUNTIME_DATA_DIR, { projectLocations: prepared });
       const locations = allProjectLocations(PROJECTS_DIR, config.projectLocations);
       const removedProjectIds = unregisterProjectsForRemovedLocations(previousLocations, config.projectLocations ?? []);
-      /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectLocationsResponse} */
       const body = { locations, removedProjectIds };
       res.json(body);
     } catch (err: any) {
@@ -997,7 +997,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
         }
       }
-      /** @type {import('@open-design/contracts').ScanProjectLocationsResponse} */
+      /** @type {import('@marketing-ax/contracts').ScanProjectLocationsResponse} */
       const body = { scanned, imported, existing, skipped };
       res.json(body);
     } catch (err: any) {
@@ -1026,7 +1026,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
         }
       }
-      /** @type {import('@open-design/contracts').ProjectsResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectsResponse} */
       const body = {
         projects: listProjects(db)
           .filter((project: any) => projectVisibleForLocations(project, locations))
@@ -1298,7 +1298,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
         }
       }
-      /** @type {import('@open-design/contracts').CreateProjectResponse} */
+      /** @type {import('@marketing-ax/contracts').CreateProjectResponse} */
       const body = {
         project: resolvedSnapshot?.ok ? getProject(db, id) ?? project : project,
         conversationId: cid,
@@ -1318,7 +1318,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
-    /** @type {import('@open-design/contracts').ProjectResponse} */
+    /** @type {import('@marketing-ax/contracts').ProjectResponse} */
     const body = { project, resolvedDir };
     res.json(body);
   });
@@ -1422,7 +1422,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const project = updateProject(db, req.params.id, patch);
       if (!project)
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-      /** @type {import('@open-design/contracts').ProjectResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectResponse} */
       const body = { project };
       res.json(body);
     } catch (err: any) {
@@ -1434,7 +1434,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     try {
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      /** @type {import('@open-design/contracts').OkResponse} */
+      /** @type {import('@marketing-ax/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err: any) {
@@ -2059,7 +2059,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         since: Number.isFinite(since) ? since : undefined,
         metadata: project?.metadata,
       });
-      /** @type {import('@open-design/contracts').ProjectFilesResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
     } catch (err: any) {
@@ -2097,7 +2097,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const folders = await listProjectFolders(PROJECTS_DIR, req.params.id, {
         metadata: project.metadata,
       });
-      /** @type {import('@open-design/contracts').ProjectFoldersResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectFoldersResponse} */
       const body = { folders };
       res.json(body);
     } catch (err: any) {
@@ -2121,7 +2121,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         name,
         project.metadata,
       );
-      /** @type {import('@open-design/contracts').ProjectFolderResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectFolderResponse} */
       const body = { folder };
       res.json(body);
     } catch (err: any) {
@@ -2145,7 +2145,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         folderPath,
         project.metadata,
       );
-      /** @type {import('@open-design/contracts').DeleteProjectFolderResponse} */
+      /** @type {import('@marketing-ax/contracts').DeleteProjectFolderResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err: any) {
@@ -2184,7 +2184,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project.metadata,
       );
       const scope = projectPreviewScopes.mint(project.id);
-      /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
+      /** @type {import('@marketing-ax/contracts').ProjectPreviewUrlResponse} */
       const body = {
         url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
         file: meta.name,
@@ -2336,7 +2336,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const rawSplat = String(params[1] ?? '');
       const project = getProject(db, projectId);
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
-      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
+      /** @type {import('@marketing-ax/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err: any) {
@@ -2430,7 +2430,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             uploadProject?.metadata,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
-          /** @type {import('@open-design/contracts').ProjectFileResponse} */
+          /** @type {import('@marketing-ax/contracts').ProjectFileResponse} */
           const body = { file: meta };
           return res.json(body);
         }
@@ -2480,7 +2480,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               },
               uploadProject?.metadata,
             );
-        /** @type {import('@open-design/contracts').ProjectFileResponse} */
+        /** @type {import('@marketing-ax/contracts').ProjectFileResponse} */
         const body = { file: meta };
         res.json(body);
       } catch (err: any) {
@@ -2527,7 +2527,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         to,
         project?.metadata,
       );
-      /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
+      /** @type {import('@marketing-ax/contracts').RenameProjectFileResponse} */
       const body = result;
       res.json(body);
     } catch (err: any) {
@@ -2546,7 +2546,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const delProject = getProject(db, req.params.id);
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
-      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
+      /** @type {import('@marketing-ax/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
     } catch (err: any) {
@@ -2595,7 +2595,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
             // skip files that vanished mid-flight
           }
         }
-        /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
+        /** @type {import('@marketing-ax/contracts').UploadProjectFilesResponse} */
         const body = { files: out };
         res.json(body);
       } catch (err: any) {

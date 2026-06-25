@@ -1,7 +1,7 @@
 // Plan §3.EE1 — simulatePipeline + parseSignalKv pure helpers.
 
 import { describe, expect, it } from 'vitest';
-import type { PluginPipeline } from '@open-design/contracts';
+import type { PluginPipeline } from '@marketing-ax/contracts';
 import { parseSignalKv, simulatePipeline } from '../src/plugins/simulate.js';
 
 const pipe = (stages: PluginPipeline['stages']): PluginPipeline => ({ stages });

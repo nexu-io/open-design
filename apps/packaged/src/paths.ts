@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, win32 } from "node:path";
 
-import { APP_KEYS, normalizeNamespace } from "@open-design/sidecar-proto";
+import { APP_KEYS, normalizeNamespace } from "@marketing-ax/sidecar-proto";
 
 import type { PackagedConfig } from "./config.js";
 import { PackagedPathAccessError } from "./errors.js";

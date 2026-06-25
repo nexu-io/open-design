@@ -19,7 +19,7 @@
 // run); this module is the dry-run counterpart with no SQLite
 // or SSE side effects.
 
-import type { PluginPipeline } from '@open-design/contracts';
+import type { PluginPipeline } from '@marketing-ax/contracts';
 import { evaluateUntil, parseUntil, type UntilSignals } from './until.js';
 
 export interface StageSignalProvider {

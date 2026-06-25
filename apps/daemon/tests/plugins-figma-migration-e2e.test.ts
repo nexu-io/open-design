@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { ArtifactManifest } from '@open-design/contracts';
+import type { ArtifactManifest } from '@marketing-ax/contracts';
 import { runFigmaExtract } from '../src/plugins/atoms/figma-extract.js';
 import { runTokenMap, type DesignSystemTokenBag } from '../src/plugins/atoms/token-map.js';
 import { runDiffReview } from '../src/plugins/atoms/diff-review.js';

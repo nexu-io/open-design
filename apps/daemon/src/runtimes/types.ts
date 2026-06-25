@@ -1,7 +1,7 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic } from '@open-design/contracts';
+import type { AgentDiagnostic } from '@marketing-ax/contracts';
 
-export type { AgentDiagnostic } from '@open-design/contracts';
+export type { AgentDiagnostic } from '@marketing-ax/contracts';
 
 export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 

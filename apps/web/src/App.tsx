@@ -12,8 +12,8 @@ import {
   deriveConfigureGlobals,
   projectKindToTracking,
   fidelityToTracking,
-} from '@open-design/contracts/analytics';
-import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
+} from '@marketing-ax/contracts/analytics';
+import type { AmrModelsResponse, ChatSessionMode } from '@marketing-ax/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
@@ -97,7 +97,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from './state/projects';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@marketing-ax/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {

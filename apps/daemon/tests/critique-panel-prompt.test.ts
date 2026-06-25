@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { defaultCritiqueConfig, CRITIQUE_PROTOCOL_VERSION } from '@open-design/contracts/critique';
+import { defaultCritiqueConfig, CRITIQUE_PROTOCOL_VERSION } from '@marketing-ax/contracts/critique';
 import { renderPanelPrompt } from '../src/prompts/panel.js';
 
 const DEFAULT_BRAND = { name: 'editorial-monocle', design_md: '## Palette\n--accent: oklch(58% 0.15 35)' };

@@ -5,7 +5,7 @@ import {
   trackRunFailedToastGoAmrClick,
   trackRunFailedToastSurfaceView,
 } from '../analytics/events';
-import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import type { TrackingProjectKind } from '@marketing-ax/contracts/analytics';
 import { recordAmrEntry, type TrackingAmrEntrySource } from '../analytics/amr-attribution';
 
 export interface AmrGuidanceProps {

@@ -6,7 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 import { Icon, type IconName } from './Icon';
 import { ConnectorLogo, useResolvedTheme } from './ConnectorLogo';
 import { useT } from '../i18n';
@@ -30,7 +30,7 @@ import type {
   MemoryTreeNode,
   MemorySuggestion,
   MemoryType,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   connectConnector,
   fetchConnectorStatuses,

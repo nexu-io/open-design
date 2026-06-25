@@ -50,10 +50,10 @@ describe("open-design host contract", () => {
       ...pkg.devDependencies,
       ...pkg.optionalDependencies,
       ...pkg.peerDependencies,
-    }).not.toHaveProperty("@open-design/contracts");
+    }).not.toHaveProperty("@marketing-ax/contracts");
 
     const offenders = filesUnder(join(hostRoot, "src")).filter((path) =>
-      readFileSync(path, "utf8").includes("@open-design/contracts"),
+      readFileSync(path, "utf8").includes("@marketing-ax/contracts"),
     );
     expect(offenders).toEqual([]);
   });

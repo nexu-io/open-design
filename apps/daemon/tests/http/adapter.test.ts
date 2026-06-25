@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApiError } from '@open-design/contracts';
+import { createApiError } from '@marketing-ax/contracts';
 import { defineJsonRoute, err, mountJsonRoute, ok } from '../../src/http/index.js';
 import { isLocalSameOrigin } from '../../src/origin-validation.js';
 

@@ -1,5 +1,5 @@
-import type { DaemonStatusSnapshot, WebStatusSnapshot } from "@open-design/sidecar-proto";
-import { APP_KEYS } from "@open-design/sidecar-proto";
+import type { DaemonStatusSnapshot, WebStatusSnapshot } from "@marketing-ax/sidecar-proto";
+import { APP_KEYS } from "@marketing-ax/sidecar-proto";
 
 /**
  * PR #974 round 6 (mrcfps): close the split-start dev-flow gap.

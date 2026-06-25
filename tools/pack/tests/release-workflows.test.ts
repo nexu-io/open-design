@@ -116,9 +116,9 @@ describe("release workflows", () => {
     expect(buildWin).toContain('Measure-Step "validate launcher payload update fixture"');
     expect(buildWin).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/Open Design.exe"');
     for (const workspaceBuild of [winApp, macWorkspace, linuxPack]) {
-      const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
-      const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';
-      const sidecarBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar", "build"])';
+      const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@marketing-ax/sidecar-proto", "build"])';
+      const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@marketing-ax/launcher-proto", "build"])';
+      const sidecarBuild = 'await runPnpm(config, ["--filter", "@marketing-ax/sidecar", "build"])';
       expect(workspaceBuild).toContain(launcherProtoBuild);
       expect(workspaceBuild.indexOf(sidecarProtoBuild)).toBeLessThan(workspaceBuild.indexOf(launcherProtoBuild));
       expect(workspaceBuild.indexOf(launcherProtoBuild)).toBeLessThan(workspaceBuild.indexOf(sidecarBuild));

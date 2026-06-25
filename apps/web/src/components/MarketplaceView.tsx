@@ -10,7 +10,7 @@
 // primary daily-driver flow.
 
 import { useEffect, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { listPlugins } from '../state/projects';
 import { navigate } from '../router';
 import { useI18n } from '../i18n';

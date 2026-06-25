@@ -25,7 +25,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import type { AppliedPluginSnapshot, PipelineStage } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, PipelineStage } from '@marketing-ax/contracts';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import {
   PERMISSIVE_DEFAULT_SIGNALS,

@@ -1,7 +1,7 @@
 // Plan §3.DD1 — pluginInventoryStats + snapshotInventoryStats.
 
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginManifest } from '@marketing-ax/contracts';
 import {
   pluginInventoryStats,
   pluginSourceBuckets,

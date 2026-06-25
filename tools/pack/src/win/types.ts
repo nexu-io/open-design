@@ -1,4 +1,4 @@
-import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult } from "@open-design/sidecar-proto";
+import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult } from "@marketing-ax/sidecar-proto";
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import type { CacheReport } from "../cache.js";

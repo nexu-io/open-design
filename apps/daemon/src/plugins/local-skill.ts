@@ -16,7 +16,7 @@
 
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { pickFirstLocalSkillPath } from './apply.js';
 
 export interface PluginLocalSkill {

@@ -24,7 +24,7 @@ import {
   fetchResolvedProjectDir,
   isOpenPathAllowedForProject,
   signDesktopImportToken,
-} from "@open-design/desktop/main";
+} from "@marketing-ax/desktop/main";
 
 let tempRoot = "";
 

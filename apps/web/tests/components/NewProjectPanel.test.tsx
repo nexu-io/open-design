@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@marketing-ax/host';
 import {
   buildDesignSystemCreateSelection,
   defaultDesignSystemSelection,
@@ -13,8 +13,8 @@ import {
 import { openFolderDialog } from '../../src/providers/registry';
 import type { DesignSystemSummary, ProjectTemplate, SkillSummary } from '../../src/types';
 
-vi.mock('@open-design/host', async () => {
-  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+vi.mock('@marketing-ax/host', async () => {
+  const actual = await vi.importActual<typeof import('@marketing-ax/host')>('@marketing-ax/host');
   return {
     ...actual,
     isOpenDesignHostAvailable: vi.fn(),

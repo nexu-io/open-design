@@ -63,7 +63,7 @@ import { resolveProviderConfig } from './media-config.js';
 import { AIHUBMIX_APP_CODE } from './aihubmix.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import { createCommandInvocation } from '@open-design/platform';
+import { createCommandInvocation } from '@marketing-ax/platform';
 import {
   applyAgentLaunchEnv,
   getAgentDef,

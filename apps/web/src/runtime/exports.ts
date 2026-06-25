@@ -20,7 +20,7 @@ import {
   captureHostPage,
   isOpenDesignHostAvailable,
   printHostPdf,
-} from '@open-design/host';
+} from '@marketing-ax/host';
 
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';

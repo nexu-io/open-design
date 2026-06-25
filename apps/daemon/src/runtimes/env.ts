@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@marketing-ax/platform';
 import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';

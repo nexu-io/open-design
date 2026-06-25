@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type {
   InstalledPluginRecord,
   PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { useT } from '../../i18n';
 import { resolvePluginQueryFallback } from '../../state/projects';
 import { Icon } from '../Icon';

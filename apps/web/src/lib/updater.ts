@@ -13,7 +13,7 @@ import {
   type OpenDesignHostUpdaterResult,
   type OpenDesignHostUpdaterStatusListener,
   type OpenDesignHostUpdaterStatusSnapshot,
-} from '@open-design/host';
+} from '@marketing-ax/host';
 
 export type UpdaterEnvironment = 'desktop' | 'web';
 

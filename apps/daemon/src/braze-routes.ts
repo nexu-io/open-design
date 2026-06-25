@@ -16,7 +16,7 @@ import type {
   BrazeVariantProduceRequest,
   BrazeVariantStatus,
   BrazeVariantUpdateRequest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import {
   deleteBrazeMessage,
   getBrazeMessage,

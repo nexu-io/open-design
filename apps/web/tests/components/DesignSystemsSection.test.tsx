@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DesignSystemSummary } from '@open-design/contracts';
+import type { DesignSystemSummary } from '@marketing-ax/contracts';
 
 import { DesignSystemsSection } from '../../src/components/DesignSystemsSection';
 import { fetchDesignSystems, updateDesignSystemDraft } from '../../src/providers/registry';

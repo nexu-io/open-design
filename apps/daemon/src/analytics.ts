@@ -3,7 +3,7 @@
 // is a no-op, so dev builds and third-party forks impose zero overhead.
 //
 // Web-side captures (apps/web/src/analytics) carry the matching identity in
-// HTTP headers (see x-od-analytics-* constants in @open-design/contracts);
+// HTTP headers (see x-od-analytics-* constants in @marketing-ax/contracts);
 // daemon reads those headers off the request and reuses the same
 // device_id as the PostHog distinct_id so events from both sides land on
 // the same person. (v2: renamed from `anonymous_id`.)
@@ -22,7 +22,7 @@ import {
   type AnalyticsClientType,
   type AnalyticsConfigResponse,
   EVENT_SCHEMA_VERSION,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { readAppConfig } from './app-config.js';
 import { readTelemetryEnvironment } from './telemetry-environment.js';
 
@@ -286,7 +286,7 @@ function randomInsertId(): string {
 }
 
 // Re-export so server.ts and route handlers don't need a second import
-// path; the canonical hash lives in @open-design/contracts/analytics so
+// path; the canonical hash lives in @marketing-ax/contracts/analytics so
 // the web bundle produces the same id for the same (projectId, fileName).
 export const anonymizeArtifactId = anonymizeArtifactIdShared;
 

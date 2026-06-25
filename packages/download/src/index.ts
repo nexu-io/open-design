@@ -15,7 +15,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import { atomicCopyFile, isProcessAlive, pathContains, removePathBestEffort } from "@open-design/platform";
+import { atomicCopyFile, isProcessAlive, pathContains, removePathBestEffort } from "@marketing-ax/platform";
 
 const STORE_SENTINEL = ".open-design-download-root.json";
 const STATE_DIR = ".state";

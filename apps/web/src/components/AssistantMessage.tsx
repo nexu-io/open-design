@@ -26,7 +26,7 @@ import {
   type TrackingFeedbackReasonCode,
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
-} from "@open-design/contracts/analytics";
+} from "@marketing-ax/contracts/analytics";
 import {
   splitOnQuestionForms,
   stripTrailingOpenQuestionForm,

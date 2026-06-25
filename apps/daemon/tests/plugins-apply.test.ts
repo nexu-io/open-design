@@ -10,7 +10,7 @@ import path from 'node:path';
 import { applyPlugin, MissingInputError } from '../src/plugins/apply.js';
 import { defaultRegistryRoots } from '../src/plugins/registry.js';
 import { TRUSTED_DEFAULT_CAPABILITIES } from '../src/plugins/trust.js';
-import type { ContextItem, InstalledPluginRecord } from '@open-design/contracts';
+import type { ContextItem, InstalledPluginRecord } from '@marketing-ax/contracts';
 
 function pluginFixture(extra: Partial<InstalledPluginRecord> = {}): InstalledPluginRecord {
   return {

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { Express } from 'express';
-import type { MediaExecutionPolicy } from '@open-design/contracts';
+import type { MediaExecutionPolicy } from '@marketing-ax/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
 import type { RouteDeps } from './server-context.js';
 import { proxyDispatcherRequestInit } from './connectionTest.js';
@@ -408,7 +408,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       if (existing.length !== recents.length) {
         await writeAppConfig(RUNTIME_DATA_DIR, { recentLinkedDirs: existing });
       }
-      /** @type {import('@open-design/contracts').RecentLinkedDirsResponse} */
+      /** @type {import('@marketing-ax/contracts').RecentLinkedDirsResponse} */
       const body = { dirs: existing };
       res.json(body);
     } catch (err: any) {

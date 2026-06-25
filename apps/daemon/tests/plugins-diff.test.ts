@@ -1,7 +1,7 @@
 // Plan §3.AA1 — diffPlugins() pure helper.
 
 import { describe, expect, it } from 'vitest';
-import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
+import type { InstalledPluginRecord, PluginManifest } from '@marketing-ax/contracts';
 import { diffPlugins } from '../src/plugins/diff.js';
 
 const make = (

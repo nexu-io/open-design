@@ -6,7 +6,7 @@ import type {
   AutomationProposalStatus,
   CreateAutomationEvolutionProposalRequest,
   MemoryType,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 import {
   deleteMemoryEntry,

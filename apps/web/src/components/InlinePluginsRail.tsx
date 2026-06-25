@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import type {
   ApplyResult,
   InstalledPluginRecord,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { applyPlugin, listPlugins } from '../state/projects';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';

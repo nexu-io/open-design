@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Routine } from '@open-design/contracts';
+import type { Routine } from '@marketing-ax/contracts';
 
 import { sortRoutinesNewestFirst, TasksView } from '../../src/components/TasksView';
 

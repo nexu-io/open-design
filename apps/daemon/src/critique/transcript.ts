@@ -4,7 +4,7 @@ import { createGzip, createGunzip } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import type { PanelEvent } from '@open-design/contracts/critique';
+import type { PanelEvent } from '@marketing-ax/contracts/critique';
 
 /**
  * Default gzip threshold (256 KiB). Files whose cumulative UTF-8 byte size

@@ -10,7 +10,7 @@
 // This module is pure — no fs, no SQLite, no network — so the daemon's
 // apply path stays pure even when the fallback fires.
 
-import type { PluginManifest, PluginPipeline } from '@open-design/contracts';
+import type { PluginManifest, PluginPipeline } from '@marketing-ax/contracts';
 import type { ScenarioRegistryEntry } from './resolve.js';
 
 export interface ResolvePipelineInput {

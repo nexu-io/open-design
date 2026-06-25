@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail } from '@marketing-ax/contracts';
 
 import {
   buildDesignSystemPackageAuditRepairPrompt,

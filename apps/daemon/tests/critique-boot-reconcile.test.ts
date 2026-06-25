@@ -17,7 +17,7 @@ import {
   getCritiqueRun,
   reconcileStaleRuns,
 } from '../src/critique/persistence.js';
-import { defaultCritiqueConfig } from '@open-design/contracts/critique';
+import { defaultCritiqueConfig } from '@marketing-ax/contracts/critique';
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:');

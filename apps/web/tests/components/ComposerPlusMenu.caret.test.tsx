@@ -8,7 +8,7 @@ import type {
   ConnectorDetail,
   InstalledPluginRecord,
   McpServerConfig,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 // Regression coverage ported from the now-deleted
 // `ChatComposer.tools-menu-caret.test.tsx` (#3195 / #3368). The shared "+"

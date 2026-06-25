@@ -1,7 +1,7 @@
 // Spec §23.3.3 — bundled-scenario pipeline fallback.
 
 import { describe, expect, it } from 'vitest';
-import type { PluginManifest } from '@open-design/contracts';
+import type { PluginManifest } from '@marketing-ax/contracts';
 import { resolveAppliedPipeline, type ScenarioRegistryEntry } from '../src/index.js';
 
 const baseManifest = (od: NonNullable<PluginManifest['od']> | undefined): PluginManifest => ({

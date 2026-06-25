@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergeManifests } from '../src/merge';
-import type { PluginManifest } from '@open-design/contracts';
+import type { PluginManifest } from '@marketing-ax/contracts';
 
 const adapter: PluginManifest = {
   name: 'plugin',

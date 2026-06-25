@@ -1,4 +1,4 @@
-import type { OpenDesignHostProjectImportResult } from '@open-design/host';
+import type { OpenDesignHostProjectImportResult } from '@marketing-ax/host';
 
 /**
  * Best-effort flattening of the `details` field that the

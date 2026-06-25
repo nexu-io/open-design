@@ -9,7 +9,7 @@
  * @see specs/current/critique-theater.md § Wire protocol
  * @see specs/current/critique-theater.md § Convergence rule
  */
-import type { CritiqueConfig } from '@open-design/contracts/critique';
+import type { CritiqueConfig } from '@marketing-ax/contracts/critique';
 
 /** Input for rendering the Critique Theater protocol addendum. */
 export interface PanelPromptInput {

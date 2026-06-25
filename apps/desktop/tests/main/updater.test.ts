@@ -12,12 +12,12 @@ import {
   LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
   LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
   LAUNCHER_SCHEMA_VERSION,
-} from "@open-design/launcher-proto";
+} from "@marketing-ax/launcher-proto";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_STATES,
   SIDECAR_SOURCES,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 
 import {
   compareVersions,

@@ -6,7 +6,7 @@
 // "Use plugin" action that routes through the home applyPlugin flow.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { useI18n } from '../../i18n';
 import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {

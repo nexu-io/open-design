@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DesignSystemSummary } from '@open-design/contracts';
+import type { DesignSystemSummary } from '@marketing-ax/contracts';
 
 import { orderDesignSystemGroups } from '../../src/components/design-system-group-order';
 

@@ -26,7 +26,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { pickAndImportFolder } from "@open-design/desktop/main";
+import { pickAndImportFolder } from "@marketing-ax/desktop/main";
 
 // Test secret bytes — the helper's mint is injected, so the secret
 // value is symbolic; we only assert call-shape and the secret reaching

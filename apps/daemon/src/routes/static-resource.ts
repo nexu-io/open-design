@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
+import type { DesignSystemTokenContractRebuildJobResponse } from '@marketing-ax/contracts';
 import { detectAgents, detectAgentsStream } from '../agents.js';
 import {
   SkillImportError,

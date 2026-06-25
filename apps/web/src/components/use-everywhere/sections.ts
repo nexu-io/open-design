@@ -115,7 +115,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         body:
           'corepack enable\n' +
           'pnpm install\n' +
-          'pnpm --filter @open-design/daemon build\n' +
+          'pnpm --filter @marketing-ax/daemon build\n' +
           '\n' +
           'export OD_NODE_BIN="${OD_NODE_BIN:-/opt/homebrew/opt/node@24/bin/node}"\n' +
           'export OD_BIN="$PWD/apps/daemon/dist/cli.js"\n' +
@@ -248,7 +248,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       'The local daemon serves an HTTP API at `http://127.0.0.1:7456` (port ' +
       'configurable). Every endpoint the web UI calls is also fair game for ' +
       'your scripts. Streaming endpoints (chat turns, project runs) emit ' +
-      'Server-Sent Events with the contract types in `@open-design/contracts`.',
+      'Server-Sent Events with the contract types in `@marketing-ax/contracts`.',
     bullets: [
       '`GET /api/health` — daemon liveness.',
       '`GET /api/skills` and `GET /api/design-systems` — available registries.',
@@ -287,7 +287,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
     footer:
       'Pure TypeScript types for every request/response live in ' +
-      '`@open-design/contracts` — import them in your script for full ' +
+      '`@marketing-ax/contracts` — import them in your script for full ' +
       'autocomplete without wiring a generator.',
   },
   {

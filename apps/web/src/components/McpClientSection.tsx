@@ -13,13 +13,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Button } from '@open-design/components';
+import { Button } from '@marketing-ax/components';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackIntegrationsMcpTabClick,
   trackSettingsExternalMcpClick,
 } from '../analytics/events';
-import type { TrackingExternalMcpElement } from '@open-design/contracts/analytics';
+import type { TrackingExternalMcpElement } from '@marketing-ax/contracts/analytics';
 import {
   disconnectMcpOAuth,
   fetchMcpOAuthStatus,

@@ -1,4 +1,4 @@
-import type { CreateRoutineRequest, Routine, RoutineRun, UpdateRoutineRequest } from '@open-design/contracts';
+import type { CreateRoutineRequest, Routine, RoutineRun, UpdateRoutineRequest } from '@marketing-ax/contracts';
 
 import { requestJson } from './http.ts';
 

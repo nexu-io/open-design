@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Button, Input, Textarea } from '@open-design/components';
+import { Button, Input, Textarea } from '@marketing-ax/components';
 import { useT } from '../i18n';
 import { modalOverlay, modalContent } from '../motion';
 

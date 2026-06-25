@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { ArtifactManifest } from '@open-design/contracts';
+import type { ArtifactManifest } from '@marketing-ax/contracts';
 import { runCodeImport } from '../src/plugins/atoms/code-import.js';
 import { runDesignExtract } from '../src/plugins/atoms/design-extract.js';
 import { runTokenMap, type DesignSystemTokenBag } from '../src/plugins/atoms/token-map.js';

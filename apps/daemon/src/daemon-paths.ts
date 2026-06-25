@@ -20,7 +20,7 @@ export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): stri
   const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
   if (configured) return configured;
 
-  const packageJsonPath = require.resolve('@open-design/daemon/package.json');
+  const packageJsonPath = require.resolve('@marketing-ax/daemon/package.json');
   return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
 }
 

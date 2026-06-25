@@ -1,7 +1,7 @@
 // Role: BrazePlan variant 카피(heading/body) 계약·왕복 회귀 테스트.
 // Key Features: 타입드 BrazePlan 구성으로 heading/body 필드 존재를 컴파일 타임 강제 +
 //   PUT /plan → GET 메시지 왕복으로 카피가 plan_json에 영속·반환되는지 검증.
-// Dependencies: vitest, express, better-sqlite3, db.ts, braze persistence, braze-routes.ts, @open-design/contracts.
+// Dependencies: vitest, express, better-sqlite3, db.ts, braze persistence, braze-routes.ts, @marketing-ax/contracts.
 // Notes: 의도적으로 @ts-nocheck 미사용 — 카피 필드가 사라지면 타입체크가 먼저 깨진다.
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import type { BrazePlan } from '@open-design/contracts';
+import type { BrazePlan } from '@marketing-ax/contracts';
 import { openDatabase, closeDatabase, insertProject, insertConversation } from '../src/db.js';
 import { insertBrazeMessage } from '../src/braze/persistence.js';
 import { registerBrazeRoutes } from '../src/braze-routes.js';

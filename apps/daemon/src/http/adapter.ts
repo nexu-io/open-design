@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from 'express';
-import { createApiError } from '@open-design/contracts';
+import { createApiError } from '@marketing-ax/contracts';
 import { rawInput } from './parse.js';
 import { sendApiError, sendJson, statusForError } from './response.js';
 import { guardSameOrigin, type OriginContext } from './origin-guard.js';

@@ -54,7 +54,7 @@ function resolveWorkspaceRoot(): string {
     // Require the resolved path to be a real pnpm workspace root. Without this,
     // an ancestor like `<repo>/apps` would pass the relative-path check but
     // miss the sibling `packages/*` directory that `apps/web` imports from
-    // (for example `@open-design/contracts`), and Next would later fail deep
+    // (for example `@marketing-ax/contracts`), and Next would later fail deep
     // inside file tracing / Turbopack with a much harder-to-diagnose error.
     if (!existsSync(resolve(canonicalResolved, 'pnpm-workspace.yaml'))) {
       throw new Error(
@@ -164,7 +164,7 @@ const nextConfig: NextConfig = {
   // to inject chunk IDs, upload to PostHog, and ALWAYS delete the .map files
   // before packaging so source never ships inside an installer.
   productionBrowserSourceMaps: true,
-  transpilePackages: ['@open-design/components'],
+  transpilePackages: ['@marketing-ax/components'],
   turbopack: {
     root: WORKSPACE_ROOT,
   },

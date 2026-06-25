@@ -4,7 +4,7 @@
 // Dependencies: vitest, braze-helpers
 
 import { describe, expect, it } from 'vitest';
-import type { BrazeMessageStatus, BrazeVariantStatus } from '@open-design/contracts';
+import type { BrazeMessageStatus, BrazeVariantStatus } from '@marketing-ax/contracts';
 import {
   statusToBadge,
   variantStatusToBadge,

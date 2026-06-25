@@ -7,7 +7,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { listInstalledPlugins, upsertInstalledPlugin } from '../src/plugins/registry.js';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
 
 let db: Database.Database;

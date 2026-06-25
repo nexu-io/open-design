@@ -27,7 +27,7 @@ const CANONICAL = new Map<string, { taskKind: string; pipelineStages: string[] }
 
 // Non-canonical scenarios. These ride on a canonical taskKind but
 // don't win the pipeline-fallback for it. The kind → scenario map in
-// `@open-design/contracts/scenario-defaults` is what routes UX
+// `@marketing-ax/contracts/scenario-defaults` is what routes UX
 // project kinds (image / video / audio) onto these plugins. Export
 // starters sit here too: they are user-facing plugins for downstream
 // handoff, but they must not become the canonical tune-collab fallback.

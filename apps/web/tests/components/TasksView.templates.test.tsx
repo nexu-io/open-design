@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AutomationEvolutionProposal,
   AutomationTemplate as ContractAutomationTemplate,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 import { TasksView } from '../../src/components/TasksView';
 

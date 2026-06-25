@@ -12,7 +12,7 @@ import { migratePlugins } from '../src/plugins/persistence.js';
 import { installFromLocalFolder, installPlugin, uninstallPlugin } from '../src/plugins/installer.js';
 import { listInstalledPlugins } from '../src/plugins/registry.js';
 import { addMarketplace, resolvePluginInMarketplaces } from '../src/plugins/marketplaces.js';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 
 let tmpRoot: string;
 let pluginsRoot: string;

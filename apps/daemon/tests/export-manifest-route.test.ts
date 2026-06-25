@@ -1,5 +1,5 @@
 import type http from 'node:http';
-import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@open-design/contracts';
+import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@marketing-ax/contracts';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { writeFile as writeFsFile } from 'node:fs/promises';

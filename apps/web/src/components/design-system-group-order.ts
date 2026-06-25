@@ -1,4 +1,4 @@
-import type { DesignSystemSummary } from '@open-design/contracts';
+import type { DesignSystemSummary } from '@marketing-ax/contracts';
 
 // Order the Settings -> Design Systems list so editable (user-created) systems
 // come first, both across category groups and within a group. Built-in groups

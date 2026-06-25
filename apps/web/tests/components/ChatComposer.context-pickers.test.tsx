@@ -17,7 +17,7 @@ vi.mock('../../src/analytics/events', async (importOriginal) => {
 import { ChatComposer, type ChatComposerHandle } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
-import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import type { AppliedPluginSnapshot } from '@marketing-ax/contracts';
 import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {

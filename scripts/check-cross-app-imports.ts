@@ -22,7 +22,7 @@ const crossAppImportSkippedDirectories = new Set([
 const crossAppImportSourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 
 export type AppDirectoryRegistry = {
-  // app directory name under apps/ (e.g. "daemon") -> package name (e.g. "@open-design/daemon")
+  // app directory name under apps/ (e.g. "daemon") -> package name (e.g. "@marketing-ax/daemon")
   packageNameByDirectory: Map<string, string>;
 };
 

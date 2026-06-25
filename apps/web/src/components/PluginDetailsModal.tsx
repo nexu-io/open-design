@@ -18,7 +18,7 @@
 // stays identical — every variant reaches `usePlugin` through the
 // same callback wiring.
 
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import { createPortal } from 'react-dom';
 import { inferPluginPreview } from './plugins-home/preview';
 import { PluginScenarioDetail } from './plugin-details/PluginScenarioDetail';

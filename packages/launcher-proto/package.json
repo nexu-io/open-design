@@ -1,5 +1,5 @@
 {
-  "name": "@open-design/launcher-proto",
+  "name": "@marketing-ax/launcher-proto",
   "version": "0.10.0",
   "private": true,
   "type": "module",
@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/sidecar-proto": "workspace:*"
+    "@marketing-ax/sidecar-proto": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

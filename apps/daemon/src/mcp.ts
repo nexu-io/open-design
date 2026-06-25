@@ -18,7 +18,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { buildProjectRawFileUrl } from '@open-design/contracts';
+import { buildProjectRawFileUrl } from '@marketing-ax/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifact-create.js';

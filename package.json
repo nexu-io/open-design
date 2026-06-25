@@ -1,5 +1,5 @@
 {
-  "name": "open-design",
+  "name": "marketing-ax",
   "version": "0.10.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
@@ -27,11 +27,11 @@
     "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@open-design/components": "workspace:*",
-    "@open-design/daemon": "workspace:*",
-    "@open-design/tools-dev": "workspace:*",
-    "@open-design/tools-pack": "workspace:*",
-    "@open-design/tools-serve": "workspace:*",
+    "@marketing-ax/components": "workspace:*",
+    "@marketing-ax/daemon": "workspace:*",
+    "@marketing-ax/tools-dev": "workspace:*",
+    "@marketing-ax/tools-pack": "workspace:*",
+    "@marketing-ax/tools-serve": "workspace:*",
     "@types/node": "20.19.39",
     "tsx": "4.22.3",
     "typescript": "5.9.3"

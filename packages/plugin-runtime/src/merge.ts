@@ -1,4 +1,4 @@
-import type { PluginManifest } from '@open-design/contracts';
+import type { PluginManifest } from '@marketing-ax/contracts';
 
 // Merge a sidecar `open-design.json` PluginManifest with one or more adapter
 // outputs. `open-design.json` always wins (spec §5.4); adapter values fill

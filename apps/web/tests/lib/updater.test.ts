@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { OpenDesignHostUpdaterStatusSnapshot } from '@marketing-ax/host';
+import { installMockOpenDesignHost } from '@marketing-ax/host/testing';
 
 import {
   checkForUpdaterUpdate,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Button, Textarea } from '@open-design/components';
-import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import { Button, Textarea } from '@marketing-ax/components';
+import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@marketing-ax/contracts';
 import { streamViaDaemon } from '../providers/daemon';
 import {
   connectConnector,
@@ -91,7 +91,7 @@ import {
   designSystemModuleType,
   designSystemRepoHostFromUrl,
   designSystemTotalSizeBucket,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import type {
   DesignSystemsCreateClickProps,
   TrackingDesignSystemCreateEntryFrom,
@@ -105,7 +105,7 @@ import type {
   TrackingDesignSystemStatusAction,
   TrackingDesignSystemStatusValue,
   TrackingDesignSystemsEntryFrom,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 import { useI18n } from '../i18n';
 
 // Source counts the embedded DS creation flow can report back to its

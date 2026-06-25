@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PARSER_WARNING_KINDS } from '@open-design/contracts/critique';
+import { PARSER_WARNING_KINDS } from '@marketing-ax/contracts/critique';
 
 import { runAdapterConformance } from '../src/critique/conformance.js';
 import {

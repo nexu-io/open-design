@@ -6,7 +6,7 @@
 // surface first, then the rest of the file list by mtime.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { WorkspaceContextItem } from '@open-design/contracts';
+import type { WorkspaceContextItem } from '@marketing-ax/contracts';
 import { motion } from 'motion/react';
 import { modalOverlay, scaleIn } from '../motion';
 import { useT } from '../i18n';

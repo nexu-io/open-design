@@ -10,7 +10,7 @@
 // ChatComposer uses this to surface the PluginDetailsModal for
 // `kind === 'plugin'` chips.
 
-import type { ContextItem, ContextItemKind } from '@open-design/contracts';
+import type { ContextItem, ContextItemKind } from '@marketing-ax/contracts';
 import { Icon } from './Icon';
 
 interface Props {

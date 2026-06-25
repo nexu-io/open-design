@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   InstalledPluginRecord,
   PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import { applyPlugin } from '../src/plugins/apply.js';
 import { deriveAutoAtomSurfaces } from '../src/plugins/atoms/auto-surfaces.js';
 

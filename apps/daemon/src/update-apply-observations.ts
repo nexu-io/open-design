@@ -6,7 +6,7 @@ import type {
   TrackingUpdateApplyReason,
   TrackingUpdateApplyResult,
   UpdateApplyObservedProps,
-} from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts/analytics';
 
 import type { AnalyticsContext, AnalyticsService } from './analytics.js';
 import { readPosthogConfig } from './analytics.js';

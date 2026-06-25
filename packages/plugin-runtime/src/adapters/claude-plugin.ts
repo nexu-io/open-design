@@ -1,7 +1,7 @@
 import {
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   type PluginManifest,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 // Adapter from a `.claude-plugin/plugin.json` file to a synthesized
 // PluginManifest. Phase 1 keeps the mapping minimal — name / version /

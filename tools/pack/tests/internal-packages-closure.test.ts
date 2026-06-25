@@ -18,25 +18,25 @@ function runtimeWorkspaceDeps(directory: string): string[] {
   const manifest = JSON.parse(
     readFileSync(join(workspaceRoot, directory, "package.json"), "utf8"),
   ) as { dependencies?: Record<string, string> };
-  return Object.keys(manifest.dependencies ?? {}).filter((dep) => dep.startsWith("@open-design/"));
+  return Object.keys(manifest.dependencies ?? {}).filter((dep) => dep.startsWith("@marketing-ax/"));
 }
 
 // Each pack lane assembles its packaged app by `pnpm pack`-ing a subset of
 // INTERNAL_PACKAGES into tarballs, wiring them as `file:` dependencies, and
 // running an npm/pnpm install in the isolated app directory. `pnpm pack`
 // rewrites every `workspace:*` ref to a concrete version, so the install
-// resolves each tarball's runtime `@open-design/*` dependencies. Any such
+// resolves each tarball's runtime `@marketing-ax/*` dependencies. Any such
 // dependency that is NOT also installed as a local tarball is fetched from the
 // public npm registry and 404s — these packages are workspace-only and never
 // published.
 //
 // The invariant: the set a lane actually installs must be closed under its
-// runtime `@open-design/*` dependencies.
+// runtime `@marketing-ax/*` dependencies.
 //
 // The lanes diverge by web output mode:
 //   - linux ships "server" mode and tarball-installs every INTERNAL_PACKAGES
-//     entry, including @open-design/desktop and @open-design/web — so it must
-//     also install their runtime deps (@open-design/download, @open-design/host).
+//     entry, including @marketing-ax/desktop and @marketing-ax/web — so it must
+//     also install their runtime deps (@marketing-ax/download, @marketing-ax/host).
 //   - mac/win default to "standalone", where desktop/web/packaged/daemon are
 //     prebundled with esbuild and excluded from the tarball install. The
 //     packages they do install have no download/host dependency, so those

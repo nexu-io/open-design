@@ -16,7 +16,7 @@ import type {
   ReplaceProjectWorkingDirResponse,
   SocialShareRequest,
   SocialShareResponse,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 import type {
   AgentInfo,
   AppVersionInfo,
@@ -66,7 +66,7 @@ import type { ArtifactManifest } from '../artifacts/types';
 import {
   isOpenDesignHostAvailable,
   openHostExternalUrl,
-} from '@open-design/host';
+} from '@marketing-ax/host';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -2099,17 +2099,17 @@ export async function replaceProjectWorkingDir(
 // editors on demand (PATH probe + macOS bundle scan), and the POST
 // endpoint spawns the chosen app with the project's resolvedDir.
 export async function fetchHostEditors(): Promise<
-  import('@open-design/contracts').HostEditorsResponse
+  import('@marketing-ax/contracts').HostEditorsResponse
 > {
   const resp = await fetch('/api/editors');
   if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
-  return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+  return (await resp.json()) as import('@marketing-ax/contracts').HostEditorsResponse;
 }
 
 export async function openProjectInEditor(
   projectId: string,
-  editorId: import('@open-design/contracts').HostEditorId,
-): Promise<import('@open-design/contracts').OpenProjectInEditorResponse> {
+  editorId: import('@marketing-ax/contracts').HostEditorId,
+): Promise<import('@marketing-ax/contracts').OpenProjectInEditorResponse> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/open-in`,
     {
@@ -2122,7 +2122,7 @@ export async function openProjectInEditor(
     const body = await readApiErrorBody(resp);
     throw new Error(body.message);
   }
-  return (await resp.json()) as import('@open-design/contracts').OpenProjectInEditorResponse;
+  return (await resp.json()) as import('@marketing-ax/contracts').OpenProjectInEditorResponse;
 }
 
 export async function fetchDesignSystemPreview(id: string): Promise<string | null> {

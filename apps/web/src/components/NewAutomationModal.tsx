@@ -14,7 +14,7 @@ import type {
   RoutineProjectTarget,
   RoutineSchedule,
   Weekday,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 import { Icon, type IconName } from './Icon';
 import type { SkillSummary } from '../types';

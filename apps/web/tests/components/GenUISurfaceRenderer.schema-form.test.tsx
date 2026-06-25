@@ -10,7 +10,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { GenUISurfaceSpec } from '@open-design/contracts';
+import type { GenUISurfaceSpec } from '@marketing-ax/contracts';
 
 import { GenUISurfaceRenderer } from '../../src/components/GenUISurfaceRenderer';
 

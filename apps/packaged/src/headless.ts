@@ -12,8 +12,8 @@ import {
   SIDECAR_SOURCES,
   normalizeDesktopSidecarMessage,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
+} from "@marketing-ax/sidecar-proto";
+import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@marketing-ax/sidecar";
 
 import { PACKAGED_NAMESPACE_ENV, type PackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";

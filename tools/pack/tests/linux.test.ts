@@ -5,17 +5,17 @@ import { dirname, join } from "node:path";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+import { requestJsonIpc, resolveAppIpcPath } from "@marketing-ax/sidecar";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
-} from "@open-design/sidecar-proto";
+} from "@marketing-ax/sidecar-proto";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@open-design/sidecar", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@open-design/sidecar")>();
+vi.mock("@marketing-ax/sidecar", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@marketing-ax/sidecar")>();
   return {
     ...actual,
     requestJsonIpc: vi.fn(async () => {

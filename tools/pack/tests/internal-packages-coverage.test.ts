@@ -17,7 +17,7 @@ function readPackageJson(relativePath: string): PackageJson {
 function collectWorkspaceRuntimeDeps(relativePath: string): string[] {
   const pkg = readPackageJson(relativePath);
   if (pkg.dependencies == null) return [];
-  return Object.keys(pkg.dependencies).filter((name) => name.startsWith("@open-design/"));
+  return Object.keys(pkg.dependencies).filter((name) => name.startsWith("@marketing-ax/"));
 }
 
 function loadInternalPackageNames(modulePath: string): string[] {

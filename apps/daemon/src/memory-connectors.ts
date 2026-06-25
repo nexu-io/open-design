@@ -2,7 +2,7 @@ import type {
   ConnectorMemoryExtractionResult,
   MemorySuggestion,
   MemoryEntrySummary,
-} from '@open-design/contracts';
+} from '@marketing-ax/contracts';
 
 import type { BoundedJsonObject, BoundedJsonValue } from './live-artifacts/schema.js';
 import { extractWithLLM, suggestWithLLM } from './memory-llm.js';

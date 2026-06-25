@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { HostEditor, HostEditorsResponse } from '@open-design/contracts';
+import type { HostEditor, HostEditorsResponse } from '@marketing-ax/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HandoffButton } from '../../src/components/HandoffButton';

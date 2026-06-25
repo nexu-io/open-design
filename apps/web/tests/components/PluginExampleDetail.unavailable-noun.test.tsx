@@ -14,7 +14,7 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 
 import { PluginExampleDetail } from '../../src/components/plugin-details/PluginExampleDetail';
 

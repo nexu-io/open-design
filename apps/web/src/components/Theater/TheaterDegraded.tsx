@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
-import type { DegradedReason } from '@open-design/contracts/critique';
+import type { DegradedReason } from '@marketing-ax/contracts/critique';
 
 interface Props {
   reason: DegradedReason;

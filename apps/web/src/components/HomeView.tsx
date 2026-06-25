@@ -8,7 +8,7 @@
 // textarea can live centered in the hero.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
+import { Dialog, DialogFooter, DialogTitle } from '@marketing-ax/components';
 import type {
   ApplyResult,
   ChatSessionMode,
@@ -18,9 +18,9 @@ import type {
   InstalledPluginRecord,
   ProjectKind,
   AudioVoiceOption,
-} from '@open-design/contracts';
-import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+} from '@marketing-ax/contracts';
+import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@marketing-ax/contracts';
+import { projectKindToTracking } from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -53,7 +53,7 @@ import {
   useAIHubMixImageModels,
 } from '../media/aihubmix-image-models';
 import { openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from '../providers/registry';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@marketing-ax/host';
 import type {
   DesignSystemSummary,
   Project,
