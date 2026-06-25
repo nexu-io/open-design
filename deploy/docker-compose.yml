@@ -1,9 +1,9 @@
-name: open-design
+name: marketing-ax
 
 services:
-  open-design:
-    container_name: open-design
-    image: ${MARKETING_AX_IMAGE:-docker.io/vanjayak/open-design:latest}
+  marketing-ax:
+    container_name: marketing-ax
+    image: ${MARKETING_AX_IMAGE:-docker.io/vanjayak/marketing-ax:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -20,7 +20,7 @@ services:
     ports:
       - "127.0.0.1:${MARKETING_AX_PORT:-7456}:7456"
     volumes:
-      - open_design_data:/app/.od
+      - open_design_data:/app/.max
     read_only: true
     tmpfs:
       - /tmp

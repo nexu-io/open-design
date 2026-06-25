@@ -7,12 +7,12 @@ parameters:
 
 variables:
   vmImageName: ubuntu-latest
-  resourceGroupName: open-design-aci
-  deploymentName: open-design-aci
+  resourceGroupName: marketing-ax-aci
+  deploymentName: marketing-ax-aci
   location: eastus
   templateFile: deploy/azure/container-instance.bicep
-  openDesignImage: docker.io/vanjayak/open-design:latest
-  dnsNameLabel: open-design-$(Build.BuildId)
+  openDesignImage: docker.io/vanjayak/marketing-ax:latest
+  dnsNameLabel: marketing-ax-$(Build.BuildId)
   browserOrigin: https://od.example.com
 
 pool:
@@ -22,7 +22,7 @@ steps:
   - checkout: self
 
   - task: AzureCLI@2
-    displayName: Deploy Open Design to Azure Container Instances
+    displayName: Deploy Marketing AX to Azure Container Instances
     inputs:
       azureSubscription: ${{ parameters.azureServiceConnection }}
       scriptType: bash
