@@ -29,5 +29,19 @@
 .changeItem { display: flex; gap: 6px; }
 .dir { width: 1em; text-align: center; }
 .whyGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-top: 6px; }
-.bar { font-family: ui-monospace, monospace; letter-spacing: -1px; }
+.strand { display: flex; align-items: center; gap: 8px; }
+.strandLabel { min-width: 64px; }
+.barTrack {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border, rgba(0, 0, 0, 0.12));
+  overflow: hidden;
+}
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent, currentColor);
+}
 .whyBtn { margin-top: 6px; }

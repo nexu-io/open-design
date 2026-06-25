@@ -11,10 +11,6 @@ function glyph(d: ChangeDirection): string {
   return d === 'increased' ? '↑' : d === 'decreased' ? '↓' : '•';
 }
 
-function bar(score: number): string {
-  const filled = Math.max(0, Math.min(10, Math.round(score / 10)));
-  return '█'.repeat(filled) + '░'.repeat(10 - filled);
-}
 
 export function StripExpanded({
   signature,
@@ -58,11 +54,23 @@ export function StripExpanded({
       <div className={`accordion-collapsible${whyOpen ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
           <div className={styles.whyGrid}>
-            {signature.strands.map((s) => (
-              <span key={s.key}>
-                {s.label} <span className={styles.bar}>{bar(s.score)}</span>
-              </span>
-            ))}
+            {signature.strands.map((s) => {
+              const pct = Math.max(0, Math.min(100, s.score));
+              return (
+                <span key={s.key} className={styles.strand}>
+                  <span className={styles.strandLabel}>{s.label}</span>
+                  <span
+                    className={styles.barTrack}
+                    role="meter"
+                    aria-valuenow={pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <span className={styles.barFill} style={{ width: `${pct}%` }} />
+                  </span>
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
