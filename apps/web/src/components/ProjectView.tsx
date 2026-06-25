@@ -5186,7 +5186,11 @@ export function ProjectView({
               if (artifactToPersist?.html) {
                 const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const sameTurnArtifactWrite =
-                  findExistingNonHtmlArtifactProjectFile(artifactToPersist, producedBeforeFallback);
+                  await findSameTurnNonHtmlWriteForRecoveredArtifact({
+                    artifact: artifactToPersist,
+                    producedFiles: producedBeforeFallback,
+                    readProjectText: readProjectHtml,
+                  });
                 const sameTurnHtmlWrite = sameTurnArtifactWrite
                   ? null
                   : await findSameTurnHtmlWriteForRecoveredArtifact({
@@ -8529,6 +8533,47 @@ export function findExistingNonHtmlArtifactProjectFile(
 ): ProjectFile | null {
   if (artifactExtensionFor(art) === '.html') return null;
   return findExistingArtifactProjectFile(art, projectFiles, options);
+}
+
+export async function findSameTurnNonHtmlWriteForRecoveredArtifact({
+  artifact,
+  producedFiles,
+  readProjectText,
+}: {
+  artifact: Artifact;
+  producedFiles: readonly ProjectFile[];
+  readProjectText: (name: string) => Promise<string | null>;
+}): Promise<ProjectFile | null> {
+  const ext = artifactExtensionFor(artifact);
+  if (ext === '.html') return null;
+
+  const baseName = artifactBaseNameFor(artifact);
+  const candidateFileName = `${baseName}${ext}`;
+  const namePattern = artifactFileNamePattern(baseName, ext);
+  const identifier = artifact.identifier || '';
+  const candidates = producedFiles
+    .filter((file) => {
+      if (identifier && file.artifactManifest?.metadata?.identifier === identifier) {
+        return file.name.toLowerCase().endsWith(ext);
+      }
+      return file.name === candidateFileName || namePattern.test(file.name);
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+
+  const expected = normalizeProjectTextForArtifactComparison(artifact.html);
+  for (const file of candidates) {
+    const text = await readProjectText(file.name);
+    if (text === null) continue;
+    const actual = normalizeProjectTextForArtifactComparison(text);
+    if (actual === expected) return file;
+  }
+  return null;
+}
+
+function normalizeProjectTextForArtifactComparison(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n');
 }
 
 function filterProjectFilesByMinMtime(

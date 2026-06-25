@@ -178,6 +178,32 @@ describe('plain stream artifact extraction', () => {
     expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
   });
 
+  it('resyncs past prose artifact openers before a valid artifact block', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      'Use <artifact type="text/html"> in prose before emitting the real artifact.\n',
+      '<artifact identifier="real" type="text/html">',
+      '<!doctype html><html><body>Real</body></html>',
+      '</artifact>',
+    ].join(''));
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.fileName).toBe('real.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
+
+  it('resyncs past malformed artifact openers before a valid artifact block', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      'Malformed protocol example: <artifact type="text/html"\n',
+      '<artifact identifier="real" type="text/html">',
+      '<!doctype html><html><body>Real</body></html>',
+      '</artifact>',
+    ].join(''));
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.fileName).toBe('real.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
+
   it('does not let unmatched backticks hide artifact tags in later paragraphs', () => {
     const artifacts = extractPlainStreamArtifacts([
       'Intro with a stray ` backtick.',

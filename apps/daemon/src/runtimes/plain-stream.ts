@@ -82,10 +82,25 @@ export function extractPlainStreamArtifacts(stdout: string): PlainStreamArtifact
   while (from < stdout.length && artifacts.length < MAX_ARTIFACTS_PER_RUN) {
     const openStart = findNextArtifactOpen(stdout, from, skipRanges);
     if (openStart === -1) break;
+    const nextOpenStart = findNextArtifactOpen(stdout, openStart + OPEN_TAG.length, skipRanges);
     const openEnd = findOpenTagEnd(stdout, openStart + OPEN_TAG.length);
-    if (openEnd === -1) break;
+    if (openEnd === -1) {
+      from = openStart + OPEN_TAG.length;
+      continue;
+    }
+    if (nextOpenStart !== -1 && nextOpenStart < openEnd) {
+      from = nextOpenStart;
+      continue;
+    }
     const closeStart = stdout.indexOf(CLOSE_TAG, openEnd);
-    if (closeStart === -1) break;
+    if (closeStart === -1) {
+      from = openStart + OPEN_TAG.length;
+      continue;
+    }
+    if (nextOpenStart !== -1 && nextOpenStart < closeStart) {
+      from = nextOpenStart;
+      continue;
+    }
 
     const attrText = stdout.slice(openStart + OPEN_TAG.length, openEnd - 1);
     const attrs = parseAttrs(attrText);

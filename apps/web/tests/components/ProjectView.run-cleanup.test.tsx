@@ -9,6 +9,7 @@ import {
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
   findExistingNonHtmlArtifactProjectFile,
+  findSameTurnNonHtmlWriteForRecoveredArtifact,
   hasRecoverableArtifactMessage,
   resolveRetryTarget,
   resolveSucceededRunStatus,
@@ -273,6 +274,42 @@ describe('terminal replay artifact recovery', () => {
 
     expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
     expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+  });
+
+  it('does not reuse same-turn non-html filename matches when contents differ', async () => {
+    const cssArtifact: Artifact = {
+      identifier: '',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme.css', 'code', 1_000);
+
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: blue; }',
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('reuses same-turn non-html collision suffixes only when contents match', async () => {
+    const cssArtifact: Artifact = {
+      identifier: '',
+      artifactType: 'text/css',
+      title: 'Theme',
+      html: 'body { color: red; }',
+    };
+    const cssFile = projectFile('theme-2.css', 'code', 1_000);
+
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: red; }',
+      }),
+    ).resolves.toBe(cssFile);
   });
 
   it('does not reuse same-turn html files before checking recovered content', () => {
