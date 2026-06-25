@@ -262,7 +262,7 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     const newsletterContinue = await screen.findByRole('button', { name: /^Continue$/i });
     fireEvent.click(newsletterContinue);
 
-    const finishToHome = await screen.findByRole('button', { name: /Finish setup/i });
+    const finishToHome = await screen.findByRole('button', { name: /Build a design system/i });
     fireEvent.click(finishToHome);
 
     // Now on home: the inline model switcher chip must reflect AMR, not the
