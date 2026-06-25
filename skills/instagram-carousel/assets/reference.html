@@ -1,0 +1,207 @@
+<!--
+  Reference: target HTML structure for instagram-carousel skill.
+  Agent should produce this DOM shape. Content and styling come from
+  the user prompt and active DESIGN.md.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080">
+  <title>Carousel Reference</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    .gallery {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      padding: 24px;
+      background: #1a1a1a;
+    }
+
+    .frame-wrap {
+      flex-shrink: 0;
+    }
+
+    .slide-frame {
+      width: 1080px;
+      height: 1350px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .slide {
+      width: 1080px;
+      height: 1350px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* --- Cover slide --- */
+    .slide[data-screen-label="01 Cover"] {
+      justify-content: flex-end;
+      padding: 0 80px 120px;
+    }
+
+    .slide[data-screen-label="01 Cover"] .head {
+      font-size: 56px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      line-height: 1.1;
+    }
+
+    .slide[data-screen-label="01 Cover"] .subcopy {
+      font-size: 18px;
+      margin-top: 20px;
+      opacity: 0.7;
+    }
+
+    .swipe {
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      position: absolute;
+      bottom: 60px;
+      left: 80px;
+      opacity: 0.5;
+    }
+
+    /* --- Content slides --- */
+    .ghost-num {
+      position: absolute;
+      top: 40px;
+      left: 60px;
+      font-size: 200px;
+      opacity: 0.07;
+      line-height: 1;
+      font-weight: 400;
+    }
+
+    .content-mid {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      height: 100%;
+      padding: 0 80px;
+    }
+
+    .step-label {
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 500;
+    }
+
+    .divider {
+      width: 48px;
+      height: 3px;
+      margin: 16px 0;
+      /* accent color from DESIGN.md */
+    }
+
+    .head-content {
+      font-size: 40px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      line-height: 1.15;
+    }
+
+    .body {
+      font-size: 24px;
+      line-height: 1.5;
+      margin-top: 20px;
+      max-width: 880px;
+    }
+
+    /* --- CTA slide --- */
+    .eyebrow {
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .cta-btn {
+      display: inline-block;
+      padding: 16px 48px;
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      margin-top: 24px;
+      border: 2px solid currentColor;
+    }
+
+    .cta-sub {
+      font-size: 16px;
+      margin-top: 16px;
+      opacity: 0.6;
+    }
+
+    /* --- Handle (all slides) --- */
+    .handle {
+      position: absolute;
+      bottom: 30px;
+      right: 40px;
+      font-size: 15px;
+      opacity: 0.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="gallery" id="gallery">
+
+    <!-- Slide 1: Cover -->
+    <div class="frame-wrap">
+      <div class="slide-frame" id="carousel-1-slide-1">
+        <div class="slide" data-screen-label="01 Cover">
+          <div class="content content-bottom">
+            <h2 class="head">COVER HEADLINE GOES HERE</h2>
+            <p class="subcopy">keyword one · keyword two · keyword three</p>
+          </div>
+          <div class="swipe">Swipe <span class="arr">&rarr;</span></div>
+          <div class="handle">@handle</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 2: Content -->
+    <div class="frame-wrap">
+      <div class="slide-frame" id="carousel-1-slide-2">
+        <div class="slide" data-screen-label="02">
+          <div class="ghost-num">01</div>
+          <div class="content content-mid">
+            <div class="step-label">Step Label</div>
+            <div class="divider"></div>
+            <h2 class="head-content">CONTENT HEADLINE</h2>
+            <p class="body">Body text goes here. Keep it educational and direct.</p>
+          </div>
+          <div class="handle">@handle</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slides 3-6: same structure as slide 2, ghost-num 02-05 -->
+
+    <!-- Slide 7: CTA -->
+    <div class="frame-wrap">
+      <div class="slide-frame" id="carousel-1-slide-7">
+        <div class="slide" data-screen-label="07 CTA">
+          <div class="content content-bottom">
+            <div class="eyebrow">CTA Eyebrow</div>
+            <h2 class="head">CTA HEADLINE HERE</h2>
+            <div class="cta-btn">Link in Bio</div>
+            <div class="cta-sub">Book a consultation · brand.com</div>
+          </div>
+          <div class="handle">@handle</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
