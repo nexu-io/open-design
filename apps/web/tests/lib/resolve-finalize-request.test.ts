@@ -59,6 +59,26 @@ describe('resolve-finalize-request', () => {
     })).toBe(true);
   });
 
+  it('allows default provider finalize configs without a base URL', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      mode: 'api' as const,
+      apiProtocol: 'anthropic' as const,
+      apiKey: 'anthropic-key',
+      baseUrl: '',
+      model: 'claude-sonnet-4-5',
+    };
+
+    expect(isFinalizeByokConfigured(config)).toBe(true);
+    expect(buildFinalizeRequest(config)).toMatchObject({
+      protocol: 'anthropic',
+      credentialSource: 'user',
+      apiKey: 'anthropic-key',
+      model: 'claude-sonnet-4-5',
+    });
+    expect(buildFinalizeRequest(config)).not.toHaveProperty('baseUrl');
+  });
+
   it('builds deployment-sourced OpenAI finalize requests without browser credentials', () => {
     const request = buildFinalizeRequest({
       ...DEFAULT_CONFIG,
