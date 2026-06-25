@@ -781,7 +781,7 @@ async function pruneRootNext(appNodeModulesRoot, platformName) {
   }
 
   await removePathAndRecord(
-    path.join(appNodeModulesRoot, "@open-design", "web", ".next", "standalone"),
+    path.join(appNodeModulesRoot, "@marketing-ax", "web", ".next", "standalone"),
     "root @marketing-ax/web standalone output",
     removedPaths,
   );
@@ -832,7 +832,7 @@ async function pruneRootSharp(appNodeModulesRoot) {
 async function pruneRootWebPackage(appNodeModulesRoot, platformName) {
   if (platformName !== "win32") return [];
 
-  const webPackageRoot = path.join(appNodeModulesRoot, "@open-design", "web");
+  const webPackageRoot = path.join(appNodeModulesRoot, "@marketing-ax", "web");
   const removedPaths = [];
   for (const entry of [".next", "app", "next.config.ts", "public", "src"]) {
     await removePathAndRecord(
@@ -845,7 +845,7 @@ async function pruneRootWebPackage(appNodeModulesRoot, platformName) {
 }
 
 async function auditRootWebPackage(appNodeModulesRoot) {
-  const webPackageRoot = path.join(appNodeModulesRoot, "@open-design", "web");
+  const webPackageRoot = path.join(appNodeModulesRoot, "@marketing-ax", "web");
   const packageJsonPath = path.join(webPackageRoot, "package.json");
   const sidecarEntryPath = path.join(webPackageRoot, "dist", "sidecar", "index.js");
   for (const requiredPath of [packageJsonPath, sidecarEntryPath]) {

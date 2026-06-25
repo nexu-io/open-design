@@ -64,7 +64,7 @@ const LANES: { name: string; packages: readonly PackageEntry[]; isInstalled: (pk
 
 describe("pack lane INTERNAL_PACKAGES dependency closure", () => {
   for (const lane of LANES) {
-    it(`${lane.name}: every installed package's runtime @open-design deps are installed`, () => {
+    it(`${lane.name}: every installed package's runtime @marketing-ax deps are installed`, () => {
       const installed = lane.packages.filter((pkg) => lane.isInstalled(pkg));
       const installedNames = new Set(installed.map((pkg) => pkg.name));
       const missing: { dependency: string; dependent: string }[] = [];

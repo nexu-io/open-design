@@ -22,7 +22,7 @@ function collectWorkspaceRuntimeDeps(relativePath: string): string[] {
 
 function loadInternalPackageNames(modulePath: string): string[] {
   const source = readFileSync(join(ROOT, modulePath), "utf8");
-  const matches = source.matchAll(/name:\s*"(@open-design\/[^"]+)"/g);
+  const matches = source.matchAll(/name:\s*"(@marketing-ax\/[^"]+)"/g);
   return [...matches].map((m) => m[1]!);
 }
 
