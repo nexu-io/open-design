@@ -162,3 +162,19 @@
   - **.od-data/.od-e2e = .max-data/.max-e2e 리네임**(우리 e2e/툴링 작업디렉터리, 브랜드파생). .od-skills만 보존(agent 프롬프트 계약 리터럴 + AGENTS "not a data root") (출처: alias 성격 grep)
 - 헬퍼 버그(Task11 발견): 공유 ODDIR_RE trailing class가 `;`,`\` 누락 → `.od;`/`.od\"` 맹점. Task7/13 corrected class(`;,:\}` 추가)로 교체 적용 (출처: Task11 nix flake.nix follow-up)
 - Task6 commit c0baa1f85에 resume-work HANDOFF 아카이브 rename(git mv)이 index에 staged돼 동반커밋됨. 무해(bookkeeping) (출처: Task6 report)
+
+## 2026-06-25 — P0 리브랜드 완료·머지·푸시 (세션2 종료)
+- 최종 whole-branch 리뷰(opus seam-integrity)서 2 seam miss 발견+수정: ①릴리스 태그 open-design-v→marketing-ax-v(.github는 Task10서 이미 marketing-ax-v* → 파이프라인 불일치) ②vercel.json @open-design/web filter(패키지 리네임으로 0매칭 빌드깨짐)+dead OD_WEB_OUTPUT_MODE. 둘 다 config-writer가 코드 sweep서 누락된 동일 클래스 (출처: 최종리뷰)
+- 메타교훈: rebrand의 진짜 리스크는 1:1 swap 아닌 **seam**(config writer ↔ code reader 짝). odgrep/broadgrep이 .ts/.json/.yml 커버해도 vercel.json·release-script 같은 config writer가 코드와 다른 식별자 쓰면 빌드/파이프라인 깨짐. 최종 seam-integrity 리뷰(grep 불변 + 짝 spot-read)가 line-by-line보다 효과적 (출처: 2 miss 전부 seam)
+- PR 방식=main 직푸시 결정(PR 없이). rebrand 이미 로컬 머지+브랜치삭제, origin/main 27 무관커밋 뒤짐 → 깨끗한 rebrand-only PR 불가. 로컬 리뷰 완료라 포크서 PR 리뷰 생략 (출처: 사용자 AskUserQuestion)
+- gh 계정 불일치 = origin Gmin82인데 active evan2942 → 403. `gh auth switch --user Gmin82`로 active 전환 후 푸시 성공. credential helper는 active gh 계정 사용 (출처: 403 디버깅)
+- 후속 3건 의도적 분리(별도 PR): landing-page 전체 리브랜드·RUNTIME_DATA_DIR escape 리팩터(D2 defer)·mcp-spawn conversation-binding red-spec. rebrand 스코프 유지 (출처: 최종리뷰 non-blocking)
+
+## 2026-06-26 — P0 후속 3건 완료 (SDD 병렬, worktree 격리)
+- 사용자 지시 = 후속 3건 전부 진행 + SDD로 disjoint TASK 병렬. 실행: A(landing)·B(data-dir)·C(mcp-bind) 각 worktree(`/private/tmp/fu-wt/*`) 격리, B/C 먼저 병렬 착수 후 A. 메인스레드가 git 전담(서브에이전트 git 조작 금지 — Task5 사고 교훈 재적용) (출처: AskUserQuestion)
+- **B/C 둘 다 현재 main서 이미 fixed 판명** → source 변경 0, regression guard 테스트만 추가:
+  - C(mcp conversation-binding): 상류 `9a3424d68`(sandbox foundation #3242)가 `convs[0]`→createdAt-오름차순 정렬로 이미 수정. seeded(=최古) conv 바인딩 정상. `listConversations`가 createdAt 반환(db.ts:843) 확인 → NaN-fallback 우려 해소. red-spec `mcp-run-conversation-bind.test.ts`로 teeth 증명(revert→RED, restore→GREEN) (출처: git -L blame + 에이전트 재현)
+  - B(RUNTIME_DATA_DIR escape): 실제 escape는 registry.ts:53 `defaultRegistryRoots()` cwd `.max` fallback뿐. 그러나 daemon 호출처 4곳(server.ts:6619/6681, services/plugin-installation.ts:140, routes/plugins/index.ts:154) **전부 이미 `PLUGIN_REGISTRY_ROOTS` 전달** → escape 도달불가. daemon-paths.ts/db.ts는 escape 아님(부트스트랩/이미전달). guard `plugins-registry-roots-escape.test.ts`(mutation→RED 증명) (출처: 에이전트 호출처 추적)
+- **A(landing-page) = 협소 슬라이스 결정**: 사용자 결정 3건 — ①도메인 `open-design.ai` 보존(인프라/이메일) ②슬러그·blog/tutorial 파일명·에셋명 보존(SEO) ③blog/tutorial 본문/제목=편집결정이라 기본 제외. 결과 = 사용자노출 표시텍스트 `Open Design`→`Marketing AX`만(118파일, 5110줄). preserve존(od://·kebab open-design·도메인·env·@open-design/) byte-identical 검증. astro build 3304페이지 PASS (출처: AskUserQuestion + 에이전트 검증)
+- 에이전트 판단 deviation 보존(합리적): PascalCase `OpenDesign`(41)·`Open Design AI`(29)는 JSON-LD `alternateName` SEO 검색별칭 배열 → 파괴적 추측 대신 보존+플래그. 리브랜드 시 별칭도 바꿀지는 별도 SEO 결정 (출처: A 에이전트 report)
+- 후속 잔여(미착수, 별도 결정): ①landing 패키지명 `@open-design/landing-page`→`@marketing-ax/*` ②landing `OD_LANDING_*` env ③blog/tutorial 본문 브랜드(1987 mention) ④B 타입약화(routes/plugins `string[]` vs `RegistryRoots`) 컴파일강제화
