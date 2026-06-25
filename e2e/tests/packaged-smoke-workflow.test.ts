@@ -68,6 +68,19 @@ function sectionBetween(content: string, start: string, end: string): string {
   return content.slice(startIndex, endIndex);
 }
 
+async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const child = execFile("git", ["patch-id", mode], { cwd: workspaceRoot, encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) {
+        reject(Object.assign(error, { stdout, stderr }));
+        return;
+      }
+      resolve(stdout.trim().split(/\s+/)[0] ?? "");
+    });
+    child.stdin?.end(diff);
+  });
+}
+
 async function runReleaseStableForFailure(env: Record<string, string>): Promise<string> {
   try {
     await execFileAsync(process.execPath, ["--experimental-strip-types", releaseStableScriptPath], {
@@ -236,13 +249,26 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain('startswith("release/v")');
 
     // A human commit pushed on top of the cherry-pick (conflict resolution, CI fix) is never
-    // reviewed, so auto-approve/merge require pristine == 'true': every commit's committer is
-    // github-actions[bot]. The committers are paginated across all commits and any non-bot one
-    // fails the count. Otherwise the PR falls back to human review.
+    // reviewed, so auto-approve/merge require pristine == 'true': the backport cumulative diff
+    // must be patch-equivalent to the source PR's reviewed merge commit on main. Author/committer
+    // identity is a spoofable git header, so the gate must not trust github-actions[bot] metadata.
     expect(workflow).toContain("steps.pr.outputs.pristine == 'true'");
-    expect(workflow).toContain('.[].committer.login // "none"');
-    expect(workflow).toContain("--paginate");
-    expect(workflow).toContain("grep -Fvxc 'github-actions[bot]'");
+    expect(workflow).toContain("Checkout trusted repository history");
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("Backport of #([0-9]+)");
+    expect(workflow).toContain("source_patch_id");
+    expect(workflow).toContain("backport_patch_id");
+    expect(workflow).toContain("git patch-id --verbatim");
+    expect(workflow).not.toContain("git patch-id --stable");
+    expect(workflow).toContain("+refs/heads/$(printf '%s' \"$row\" | jq -r '.baseRefName')");
+    expect(workflow).toContain("+refs/pull/$num/head:refs/remotes/pull/$num/head");
+    expect(workflow).toContain('backport_base="$(git merge-base "$base_oid" "$head_oid" 2>/dev/null || true)"');
+    expect(workflow).toContain('if [ -n "$backport_base" ]; then');
+    expect(workflow).toContain("git diff --binary \"$source_merge^\" \"$source_merge\"");
+    expect(workflow).toContain("git diff --binary \"$backport_base\" \"$head_oid\"");
+    expect(workflow).toContain("source_base\" = \"main");
+    expect(workflow).not.toContain('.[].committer.login // "none"');
+    expect(workflow).not.toContain("grep -Fvxc 'github-actions[bot]'");
 
     // The PR is resolved from the run's authoritative workflow_run.pull_requests association
     // (filtered to the release/* base at exactly the run's SHA), not a branch-name guess, and the
@@ -263,12 +289,48 @@ describe("packaged smoke workflow", () => {
     expect(approveStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
     expect(approveStep).toContain("steps.pr.outputs.pristine == 'true'");
     expect(approveStep).toContain("github.token");
+    expect(approveStep).toContain("github.event.workflow_run.conclusion == 'success'");
 
-    // The Feishu failure path carries the same identity gates, so a fork / non-bot backport-*
-    // PR can't spam the release group.
-    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed backport CI", "FEISHU_WEBHOOK");
+    // The Feishu failure path carries the same identity + SHA gates, so a fork / non-bot
+    // backport-* PR can't spam the release group and stale failed runs do not page after the PR
+    // head advanced. Alert on failure and timed_out, but not routine cancelled runs.
+    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed backport CI", "python3");
     expect(feishuStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
     expect(feishuStep).toContain("steps.pr.outputs.cross == 'false'");
+    expect(feishuStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(feishuStep).toContain(
+      "(github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')",
+    );
+    expect(feishuStep).not.toContain("'cancelled'");
+  });
+
+  it("[P2] keeps the backport patch-equivalence gate whitespace-sensitive", async () => {
+    const compactDiff = [
+      "diff --git a/script.py b/script.py",
+      "--- a/script.py",
+      "+++ b/script.py",
+      "@@ -1 +1 @@",
+      "-print(1)",
+      "+print(2)",
+      "",
+    ].join("\n");
+    const whitespaceDiff = [
+      "diff --git a/script.py b/script.py",
+      "--- a/script.py",
+      "+++ b/script.py",
+      "@@ -1 +1 @@",
+      "-print(1)",
+      "+ print(2)",
+      "",
+    ].join("\n");
+
+    const compactStable = await gitPatchId("--stable", compactDiff);
+    const whitespaceStable = await gitPatchId("--stable", whitespaceDiff);
+    const compactVerbatim = await gitPatchId("--verbatim", compactDiff);
+    const whitespaceVerbatim = await gitPatchId("--verbatim", whitespaceDiff);
+
+    expect(compactStable).toBe(whitespaceStable);
+    expect(compactVerbatim).not.toBe(whitespaceVerbatim);
   });
 
   it("[P2] gates the plugin-preview manifest auto-merge as a trusted workflow_run consumer", async () => {
