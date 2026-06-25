@@ -15,7 +15,7 @@ function makeRequest(body: unknown): Request {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
+      'X-Marketing-AX-Telemetry': 'langfuse-ingestion-v1',
     },
     body: JSON.stringify(body),
   });
@@ -40,7 +40,7 @@ function makeScopeKv(seed: Record<string, string> = {}) {
 function objectRelayHeaders(): Record<string, string> {
   return {
     'Content-Type': 'application/json',
-    'X-Open-Design-Telemetry': 'object-ingestion-v1',
+    'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
   };
 }
 
@@ -110,7 +110,7 @@ function makeUnsignedObjectRequest(body: unknown): Request {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Open-Design-Telemetry': 'object-ingestion-v1',
+      'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
     },
     body: JSON.stringify(body),
   });
@@ -305,7 +305,7 @@ describe('telemetry worker', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'object-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
           'CF-Connecting-IP': '203.0.113.10',
         },
         body: JSON.stringify({
@@ -383,7 +383,7 @@ describe('telemetry worker', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'object-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
           'CF-Connecting-IP': '203.0.113.10',
         },
         body: JSON.stringify({
@@ -575,7 +575,7 @@ describe('telemetry worker', () => {
         headers: {
           'Content-Type': 'application/json',
           'CF-Connecting-IP': '203.0.113.10',
-          'X-Open-Design-Telemetry': 'object-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
         },
         body: unreadableBody,
         duplex: 'half',
@@ -627,7 +627,7 @@ describe('telemetry worker', () => {
     const request = new Request('https://telemetry.marketing-ax.example/api/objects/batch', {
       method: 'POST',
       headers: {
-        'X-Open-Design-Telemetry': 'object-ingestion-v1',
+        'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
       },
       body: 'object body should not be read',
     });

@@ -46,7 +46,7 @@ describe('buildTraceObjectManifests', () => {
         return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
       }
       expect(init.headers).toMatchObject({
-        'X-Open-Design-Telemetry': 'object-ingestion-v1',
+        'X-Marketing-AX-Telemetry': 'object-ingestion-v1',
       });
       expect(Buffer.byteLength(body, 'utf8')).toBeLessThanOrEqual(2300);
       const parsed = JSON.parse(body) as {

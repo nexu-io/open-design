@@ -35,7 +35,7 @@ import { processWebSourcemaps } from "./web-sourcemaps.js";
 const execFileAsync = promisify(execFile);
 
 const PRODUCT_NAME = "Marketing AX";
-const APP_IMAGE_PRODUCT_NAME = "Open-Design";
+const APP_IMAGE_PRODUCT_NAME = "Marketing-AX";
 const DESKTOP_LOG_ECHO_ENV = "MAX_DESKTOP_LOG_ECHO";
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside

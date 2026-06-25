@@ -1702,7 +1702,7 @@ describe('reportRunCompleted', () => {
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBeUndefined();
     expect(init.headers['Content-Type']).toBe('application/json');
-    expect(init.headers['X-Open-Design-Telemetry']).toBe('langfuse-ingestion-v1');
+    expect(init.headers['X-Marketing-AX-Telemetry']).toBe('langfuse-ingestion-v1');
     const body = JSON.parse(init.body as string);
     expect(Array.isArray(body.batch)).toBe(true);
     expect(result).toEqual({

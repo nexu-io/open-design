@@ -1650,7 +1650,7 @@ async function postRelayBatch(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
+          'X-Marketing-AX-Telemetry': 'langfuse-ingestion-v1',
         },
         signal: AbortSignal.timeout(config.timeoutMs),
         body,

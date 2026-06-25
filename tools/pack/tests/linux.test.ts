@@ -339,7 +339,7 @@ describe("stopPackedLinuxHeadless", () => {
       await writeFile(
         markerPath,
         `${JSON.stringify({
-          appPath: "/tmp/Open-Design.AppImage",
+          appPath: "/tmp/Marketing-AX.AppImage",
           executablePath: "/tmp/.mount_od/AppRun",
           logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
           namespaceRoot,
@@ -400,7 +400,7 @@ describe("stopPackedLinuxHeadless", () => {
       await writeFile(
         markerPath,
         `${JSON.stringify({
-          appPath: "/tmp/Open-Design.AppImage",
+          appPath: "/tmp/Marketing-AX.AppImage",
           executablePath: "/tmp/.mount_od/AppRun",
           logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
           namespaceRoot,
@@ -469,7 +469,7 @@ describe("stopPackedLinuxHeadless", () => {
       await writeFile(
         markerPath,
         `${JSON.stringify({
-          appPath: "/tmp/Open-Design.AppImage",
+          appPath: "/tmp/Marketing-AX.AppImage",
           executablePath: "/tmp/.mount_od/AppRun",
           logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
           namespaceRoot,
@@ -555,12 +555,12 @@ MimeType=x-scheme-handler/od;
   it("substitutes all @@TOKEN@@ placeholders", () => {
     const out = renderDesktopTemplate(template, {
       namespace: "default",
-      execPath: "/home/u/.local/bin/Open-Design.default.AppImage",
+      execPath: "/home/u/.local/bin/Marketing-AX.default.AppImage",
       iconName: "open-design-default",
     });
     expect(out).toContain("Name=Marketing AX (default)");
     expect(out).toContain(
-      "Exec=env MAX_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
+      "Exec=env MAX_PACKAGED_NAMESPACE=default /home/u/.local/bin/Marketing-AX.default.AppImage --appimage-extract-and-run %U",
     );
     expect(out).toContain("Icon=open-design-default");
   });
@@ -681,7 +681,7 @@ describe("inspectPackedLinuxApp", () => {
 });
 
 describe("matchesAppImageProcess", () => {
-  const installPath = "/home/u/.local/bin/Open-Design.default.AppImage";
+  const installPath = "/home/u/.local/bin/Marketing-AX.default.AppImage";
 
   it("matches FUSE-mode (executable === installPath)", () => {
     const ok = matchesAppImageProcess(
