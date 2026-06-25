@@ -9,9 +9,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "open-design.fullname" . }}
+  name: {{ include "marketing-ax.fullname" . }}
   labels:
-    {{- include "open-design.labels" . | nindent 4 }}
+    {{- include "marketing-ax.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -40,7 +40,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "open-design.fullname" $ }}
+                name: {{ include "marketing-ax.fullname" $ }}
                 port:
                   name: http
           {{- end }}

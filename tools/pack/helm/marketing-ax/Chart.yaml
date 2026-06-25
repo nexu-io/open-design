@@ -1,7 +1,7 @@
 apiVersion: v2
-name: open-design
+name: marketing-ax
 description: |
-  Open Design daemon Helm chart. Spec §15.5 reference deployment for
+  Marketing AX daemon Helm chart. Spec §15.5 reference deployment for
   AWS / GCP / Azure / Aliyun / Tencent / Huawei / self-hosted Kubernetes.
   Pairs with `tools/pack/docker-compose.yml` as the docker-only entry
   point.
@@ -10,7 +10,7 @@ version: 0.1.0
 appVersion: "0.5.0"
 icon: https://marketing-ax.example/favicon.png
 keywords:
-  - open-design
+  - marketing-ax
   - design-agent
   - generative-ui
   - plugins
@@ -19,5 +19,5 @@ home: https://marketing-ax.example
 sources:
   - https://github.com/marketing-ax/marketing-ax
 maintainers:
-  - name: Open Design
+  - name: Marketing AX
     url: https://marketing-ax.example

@@ -1,4 +1,4 @@
-# Open Design daemon — Helm chart values. Spec §15.5.
+# Marketing AX daemon — Helm chart values. Spec §15.5.
 #
 # Override the image / persistence / secret pattern per cloud:
 #   AWS:    persistence.backend=efs    secrets.backend=secrets-manager
@@ -15,7 +15,7 @@
 # revisiting the deployment shape.
 
 image:
-  repository: ghcr.io/open-design/od
+  repository: ghcr.io/marketing-ax/od
   tag: edge
   pullPolicy: IfNotPresent
 

@@ -5,7 +5,7 @@ commonLabels:
   app.kubernetes.io/environment: "production"
 
 image:
-  repository: vanjayak/open-design
+  repository: vanjayak/marketing-ax
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -40,15 +40,15 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
   hosts:
-    - host: open-design.local
+    - host: marketing-ax.local
       paths:
         - path: /
           pathType: ImplementationSpecific
   tls: []
   ## example for tls configuration:
-  #  - secretName: open-design-tls
+  #  - secretName: marketing-ax-tls
   #    hosts:
-  #      - open-design.local
+  #      - marketing-ax.local
 
 resources:
   limits:

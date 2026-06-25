@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "open-design.fullname" . }}-data
+  name: {{ include "marketing-ax.fullname" . }}-data
   labels:
-    {{- include "open-design.labels" . | nindent 4 }}
+    {{- include "marketing-ax.labels" . | nindent 4 }}
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -17,9 +17,9 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "open-design.fullname" . }}-config
+  name: {{ include "marketing-ax.fullname" . }}-config
   labels:
-    {{- include "open-design.labels" . | nindent 4 }}
+    {{- include "marketing-ax.labels" . | nindent 4 }}
 spec:
   accessModes: [ReadWriteOnce]
   resources:
