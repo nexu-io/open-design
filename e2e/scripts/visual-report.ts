@@ -590,9 +590,9 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
 
   lines.push(`Head: \`${shortSha(headSha)}\` · Base: \`${shortSha(baseSha)}\``);
   if (missing.length === compared.length) {
-    lines.push('', '> Baseline unavailable; PR screenshots captured, no diff computed.');
+    lines.push('', '> Baseline unavailable; PR screenshots are new visual cases and need baseline review.');
   } else if (missing.length > 0) {
-    lines.push('', `> ${missing.length} case(s) have no baseline; PR screenshots are shown without a diff.`);
+    lines.push('', `> ${missing.length} new visual case(s) have no baseline yet; review these screenshots before accepting their baselines.`);
   }
   if (hasFallbackBaseline) {
     lines.push('', '> Some cases used the nearest available ancestor baseline instead of the exact base SHA.');
@@ -619,7 +619,10 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
   }
 
   if (missing.length > 0) {
-    lines.push('<details><summary>PR screenshots without baselines</summary>', '', ...renderCaseList(missing.slice(0, inlineCaseLimit), false), '</details>', '');
+    lines.push('### New cases without baselines', '', ...renderCaseList(missing.slice(0, inlineCaseLimit), false), '');
+    if (missing.length > inlineCaseLimit) {
+      lines.push(`_${missing.length - inlineCaseLimit} additional new case(s) omitted from this comment._`, '');
+    }
   }
 
   if (unchanged.length > 0) {
@@ -634,7 +637,7 @@ function summaryLine(groups: { changed: ComparedCase[]; unchanged: ComparedCase[
   return [
     `**${groups.changed.length} changed**`,
     `${groups.unchanged.length} unchanged`,
-    `${groups.missing.length} missing baseline`,
+    `${groups.missing.length} new without baseline`,
     `${groups.failed.length} failed`,
   ].join(' · ');
 }
