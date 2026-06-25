@@ -3148,7 +3148,7 @@ export function ProjectView({
               })();
               onProjectsRefresh();
             },
-            onError: (err) => {
+            onError: async (err) => {
               const errorCode = (err as Error & { code?: string }).code;
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               // A superseded reattached run must not paint a global failure
@@ -3243,14 +3243,23 @@ export function ProjectView({
               // Only seal completedReattachRunsRef for real terminal errors so
               // generic disconnects stay eligible for re-query.
               // Generic disconnects share the transient-retry budget with the
-              // null-status path: after MAX_TRANSIENT_RETRIES consecutive generic
-              // disconnects we promote to an authoritative seal so a flapping
-              // daemon can't trigger an unbounded reattach loop.
+              // null-status path. Even once the generic-disconnect retry budget
+              // is exhausted, we must not seal on a transient status-probe miss:
+              // fetchChatRunStatus() returns null for any network/non-OK failure,
+              // not only when the daemon has truly forgotten the run. Treat
+              // null the same as an active retryable state and keep the row
+              // eligible for future refresh/reattach. Only authoritative
+              // terminal statuses seal completedReattachRunsRef.
               if (isGenericDaemonDisconnect(err)) {
                 const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
                 if (attempts >= MAX_TRANSIENT_RETRIES) {
-                  completedReattachRunsRef.current.add(runId);
-                  genericDisconnectRetriesRef.current.delete(runId);
+                  const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+                  if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                    genericDisconnectRetriesRef.current.set(runId, attempts);
+                  } else {
+                    completedReattachRunsRef.current.add(runId);
+                    genericDisconnectRetriesRef.current.delete(runId);
+                  }
                 } else {
                   genericDisconnectRetriesRef.current.set(runId, attempts);
                 }
@@ -4209,7 +4218,7 @@ export function ProjectView({
           })();
           onProjectsRefresh();
         },
-        onError: (err: Error) => {
+        onError: async (err: Error) => {
           const endedAt = Date.now();
           const errorCode = (err as Error & { code?: string }).code;
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
@@ -4254,14 +4263,21 @@ export function ProjectView({
           // the registry entry on authoritative terminal failures (any error
           // that is NOT the generic disconnect message).
           // Generic disconnects share the transient-retry budget with the
-          // reattach null-status path: after MAX_TRANSIENT_RETRIES we seal so
-          // a flapping daemon can't trigger an unbounded live-stream reconnect loop.
+          // reattach null-status path. As with the reattach path above, a null
+          // status probe is not authoritative — it may be a transient fetch or
+          // daemon hiccup — so keep the run eligible for future re-query unless
+          // the daemon explicitly reports a terminal status.
           if (currentRunId) {
             if (isGenericDaemonDisconnect(err)) {
               const attempts = (genericDisconnectRetriesRef.current.get(currentRunId) ?? 0) + 1;
               if (attempts >= MAX_TRANSIENT_RETRIES) {
-                completedReattachRunsRef.current.add(currentRunId);
-                genericDisconnectRetriesRef.current.delete(currentRunId);
+                const latestRunStatus = await fetchChatRunStatus(currentRunId).catch(() => null);
+                if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                  genericDisconnectRetriesRef.current.set(currentRunId, attempts);
+                } else {
+                  completedReattachRunsRef.current.add(currentRunId);
+                  genericDisconnectRetriesRef.current.delete(currentRunId);
+                }
               } else {
                 genericDisconnectRetriesRef.current.set(currentRunId, attempts);
               }
