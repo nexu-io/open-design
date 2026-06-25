@@ -551,7 +551,7 @@ function printRootHelp() {
   od agent-inventory <agent> [--json]
       Inspect an external CLI's MCP servers and skills through
       the same read-only inventory endpoint used by Settings → Execution mode.
-      
+
   od export <file> --project <id> --format <pdf|image> [--out <path>]
       Programmatically export an HTML/deck artifact to PDF or image
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
