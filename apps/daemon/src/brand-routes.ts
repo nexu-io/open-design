@@ -70,9 +70,11 @@ export interface BrandRoutesDeps {
 }
 
 const LOGO_EXT_PRIORITY = ['.svg', '.png', '.webp', '.jpg', '.jpeg', '.gif', '.ico'];
+const PROGRAMMATIC_CANCEL_ERROR = 'Programmatic extraction stopped by the user.';
 
 export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): void {
   const { brandsRoot, userDesignSystemsRoot, projectsRoot, skillsRoot, dataDir, db, randomId } = deps;
+  const activeProgrammaticBrandExtractions = new Map<string, AbortController>();
 
   // GET /api/brands — list every stored brand as a summary.
   app.get('/api/brands', (_req: Request, res: Response) => {
@@ -101,6 +103,8 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       return;
     }
     try {
+      const programmaticAbortController = new AbortController();
+      const backgroundExtractionRef: { current: Promise<unknown> | null } = { current: null };
       const startOptions: Parameters<typeof startBrandExtraction>[0] = {
         brandsRoot,
         projectsRoot,
@@ -112,6 +116,10 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         // in the background.
         userDesignSystemsRoot,
         dataDir,
+        programmaticAbortSignal: programmaticAbortController.signal,
+        onBackgroundExtraction: (settled) => {
+          backgroundExtractionRef.current = settled;
+        },
       };
       if (url.trim()) startOptions.url = url;
       if (description.trim()) startOptions.description = description;
@@ -121,12 +129,59 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
       if (transcriptAgent) startOptions.transcriptAgent = transcriptAgent;
       const result = await startBrandExtraction(startOptions);
+      const backgroundExtraction = backgroundExtractionRef.current;
+      if (backgroundExtraction) {
+        activeProgrammaticBrandExtractions.set(result.id, programmaticAbortController);
+        void backgroundExtraction.finally(() => {
+          const latestStatus = readBrandDetail(brandsRoot, result.id)?.meta.status;
+          if (
+            latestStatus !== 'extracting'
+            && activeProgrammaticBrandExtractions.get(result.id) === programmaticAbortController
+          ) {
+            activeProgrammaticBrandExtractions.delete(result.id);
+          }
+        });
+      }
       res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // A bad URL is the only expected throw; everything else is a 500.
       const status = /valid http/i.test(message) ? 400 : 500;
       res.status(status).json({ error: message });
+    }
+  });
+
+  // POST /api/brands/:id/cancel-extraction — stop the daemon-owned
+  // programmatic-first pass. This mirrors chat Stop for the synthetic transcript
+  // row: the web marks the message canceled locally, while the daemon aborts
+  // pending harvest/finalize work and moves the brand out of extracting.
+  app.post('/api/brands/:id/cancel-extraction', (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    try {
+      const detail = readBrandDetail(brandsRoot, id);
+      if (!detail) {
+        res.status(404).json({ error: 'brand not found' });
+        return;
+      }
+      const active = activeProgrammaticBrandExtractions.get(id);
+      if (active) {
+        active.abort();
+        activeProgrammaticBrandExtractions.delete(id);
+      }
+      if (detail.meta.status !== 'ready') {
+        patchMeta(brandsRoot, id, {
+          status: 'failed',
+          error: PROGRAMMATIC_CANCEL_ERROR,
+          blocked: false,
+          blockedReason: undefined,
+          extractionTerminalRunId: undefined,
+          extractionTerminalError: PROGRAMMATIC_CANCEL_ERROR,
+        });
+      }
+      const next = readBrandDetail(brandsRoot, id)?.meta ?? detail.meta;
+      res.json({ ok: true, status: next.status });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 

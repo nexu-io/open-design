@@ -3178,7 +3178,7 @@ function DesignSystemProjectPanel({
     },
     {
       id: 'download',
-      label: t('ds.download'),
+      label: t('dsManager.downloadTitle'),
       icon: 'download',
       onClick: () => void downloadKit(),
       disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,

@@ -115,6 +115,39 @@ export async function extractBrandFromHtml(
   }
 }
 
+export type CancelBrandExtractionOutcome =
+  | { ok: true; status?: string }
+  | { ok: false; error: string };
+
+export async function cancelBrandExtraction(
+  brandId: string,
+): Promise<CancelBrandExtractionOutcome> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/cancel-extraction`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) {
+      let error = `Extraction stop failed (${resp.status})`;
+      try {
+        const data = (await resp.json()) as { error?: string };
+        if (data?.error) error = data.error;
+      } catch {
+        // Non-JSON error body — keep the status-based message.
+      }
+      return { ok: false, error };
+    }
+    const result = (await resp.json()) as { status?: string };
+    return { ok: true, status: result.status };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not reach the daemon',
+    };
+  }
+}
+
 export async function fetchBrands(): Promise<BrandSummary[]> {
   try {
     const resp = await fetch('/api/brands', { cache: 'no-store' });

@@ -120,6 +120,9 @@ export interface StartBrandExtractionOptions {
   /** Runtime data dir so the programmatically-built design system is sedimented
    *  into memory. Optional. */
   dataDir?: string;
+  /** Abort signal owned by the HTTP route Stop control for the programmatic
+   *  first pass. Agent-driven finalize paths do not use it. */
+  programmaticAbortSignal?: AbortSignal;
   /** Override the deterministic site harvester used by the programmatic-first
    *  extraction (tests inject a stub to stay offline). Defaults to the live
    *  network prefetch. */
@@ -245,8 +248,15 @@ export async function startBrandExtraction(
   };
   const name = `${host} Design System`;
   const runProgrammatic = Boolean(opts.userDesignSystemsRoot);
+  const fallbackPrompt = brandExtractionFallbackPrompt({
+    url,
+    brandId: id,
+    host,
+    hasWebsiteSource,
+    hasDesignMdSource,
+  });
   const pendingPrompt = runProgrammatic
-    ? brandExtractionFallbackPrompt({ url, brandId: id, host, hasWebsiteSource, hasDesignMdSource })
+    ? null
     : brandExtractionPrompt({ url, brandId: id, host, hasWebsiteSource, hasDesignMdSource });
   insertProject(db, {
     id: projectId,
@@ -365,6 +375,7 @@ export async function startBrandExtraction(
     if (opts.prefetch) programmaticOptions.prefetch = opts.prefetch;
     if (opts.description) programmaticOptions.description = opts.description;
     if (designMd) programmaticOptions.designMd = designMd;
+    if (opts.programmaticAbortSignal) programmaticOptions.abortSignal = opts.programmaticAbortSignal;
 
     // Run the full programmatic finalize (harvest + synthesize + register) out
     // of band. The timer defers even synchronous work inside
@@ -380,13 +391,19 @@ export async function startBrandExtraction(
       }),
       PROGRAMMATIC_EXTRACT_TIMEOUT_MS,
     ).catch((err) => {
+      if (isProgrammaticExtractionAbortError(err) || opts.programmaticAbortSignal?.aborted) {
+        return null;
+      }
       console.warn(`[brand] programmatic extraction failed for ${id} — falling back to agent`, err);
       return null;
     });
     opts.onBackgroundExtraction?.(settled);
     void settled
-      .then(() =>
-        seedReadyProgrammaticExtractionTranscript({
+      .then((result) => {
+        if (!result && !programmaticOptions.abortSignal?.aborted) {
+          updateProject(db, projectId, { pendingPrompt: fallbackPrompt });
+        }
+        return seedReadyProgrammaticExtractionTranscript({
           db,
           conversationId,
           randomId,
@@ -403,8 +420,8 @@ export async function startBrandExtraction(
             ...metadata,
             entryFile: BRAND_KIT_FILE,
           },
-        }),
-      )
+        });
+      })
       .catch((err) => {
         if (isClosedDatabaseError(err)) return;
         console.warn(`[brand] failed to seed programmatic extraction transcript for ${id}`, err);
@@ -711,6 +728,21 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+class ProgrammaticExtractionAbortError extends Error {
+  constructor() {
+    super('programmatic brand extraction aborted');
+    this.name = 'ProgrammaticExtractionAbortError';
+  }
+}
+
+function throwIfProgrammaticExtractionAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) throw new ProgrammaticExtractionAbortError();
+}
+
+function isProgrammaticExtractionAbortError(err: unknown): boolean {
+  return err instanceof ProgrammaticExtractionAbortError;
+}
+
 export interface FinalizeBrandOptions {
   id: string;
   brandsRoot: string;
@@ -797,6 +829,8 @@ interface FinalizeBrandCoreOptions extends FinalizeBrandOptions {
   brand: Brand;
   /** Prose guide markdown to persist alongside the design system. */
   guideMd: string;
+  /** Optional cancellation hook for the background programmatic pass only. */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -821,6 +855,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     imageryFallback = ensureImageryFallback,
   } = opts;
 
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
   writeBrand(brandsRoot, id, brand);
   writeBrandGuide(brandsRoot, id, guideMd);
 
@@ -838,6 +873,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   } catch {
     // Offline / unreachable origin — keep the (empty) logo and continue.
   }
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   // Deterministic imagery safety net: if the agent captured too few
   // representative images, harvest the site's real cover/hero images
@@ -855,6 +891,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   } catch {
     // Offline / unreachable origin — keep whatever imagery the agent saved.
   }
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   // Self-host any Google Fonts the agent declared (typography.*.googleFontsUrl)
   // into the brand's fonts/ + manifest.json so the component kit, the exported
@@ -866,8 +903,10 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   } catch {
     // Offline / unreachable font CSS — keep going with whatever the agent saved.
   }
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   const systemBuild = await rebuildSystem(brandsRoot, id);
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   const body = brandToDesignMd(brand);
   const summary = await registerBrandDesignSystem(userDesignSystemsRoot, meta.designSystemId, {
@@ -884,6 +923,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   });
   const designSystemId = summary.id;
   syncBrandSystemToUserDesignSystem(userDesignSystemsRoot, designSystemId, brandsRoot, id, body);
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   const finalizeMetadata: ProjectMetadata = {
     kind: 'brand',
@@ -904,6 +944,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     brand,
     metadata: finalizeMetadata,
   });
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   // Re-render the kit page now that the brand is complete and the six system
   // artifacts exist in the project, so the Brand Assets tiles light up with
@@ -917,8 +958,10 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     metadata: finalizeMetadata,
     locale: opts.locale ?? meta.locale,
   });
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   await linkUserDesignSystemProject(userDesignSystemsRoot, designSystemId, projectId);
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   const existing = getProject(db, projectId);
   if (existing) {
@@ -932,6 +975,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
       updatedAt: Date.now(),
     });
   }
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
 
   patchMeta(brandsRoot, id, {
     status: 'ready',
@@ -984,6 +1028,7 @@ export interface RunProgrammaticExtractionOptions {
   logoFallback?: LogoFallbackFn;
   imageryFallback?: ImageryFallbackFn;
   locale?: string;
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -1001,10 +1046,12 @@ export async function runProgrammaticExtraction(
   opts: RunProgrammaticExtractionOptions,
 ): Promise<BrandFinalizeResponse | null> {
   const { id, meta, brandsRoot, prefetch = prefetchBrand } = opts;
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
   const brandDir = resolveBrandFile(brandsRoot, id, []);
   if (!brandDir) return null;
 
   if (opts.designMd?.trim()) {
+    throwIfProgrammaticExtractionAborted(opts.abortSignal);
     const brand = brandFromDesignMd({
       markdown: opts.designMd,
       sourceUrl: meta.sourceUrl,
@@ -1013,7 +1060,9 @@ export async function runProgrammaticExtraction(
     });
     if (brand) {
       const guideMd = brandGuideMd(brand);
+      throwIfProgrammaticExtractionAborted(opts.abortSignal);
       const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
+      throwIfProgrammaticExtractionAborted(opts.abortSignal);
       updateProject(opts.db, opts.projectId, {
         pendingPrompt: brandExtractionPrompt({
           url: meta.sourceUrl,
@@ -1029,7 +1078,9 @@ export async function runProgrammaticExtraction(
 
   if (opts.hasWebsiteSource === false) return null;
 
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
   const material = await prefetch(meta.sourceUrl, brandDir);
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
   if (!material) return null;
   if (material.blocked) {
     // Anti-bot wall: persist the signal so the web can prompt the user to clear
@@ -1042,7 +1093,9 @@ export async function runProgrammaticExtraction(
 
   const brand = brandFromMaterial(material, meta.sourceUrl);
   const guideMd = brandGuideMd(brand);
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
   const finalized = await finalizeBrandCore({ ...opts, brand, guideMd });
+  throwIfProgrammaticExtractionAborted(opts.abortSignal);
   updateProject(opts.db, opts.projectId, {
     pendingPrompt: brandExtractionPrompt({
       url: meta.sourceUrl,

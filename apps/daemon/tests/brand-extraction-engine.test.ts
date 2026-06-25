@@ -214,6 +214,10 @@ describe('agent-driven brand extraction engine', () => {
     expect(system.themes.default.colorText).toBe('#1f1f1f');
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
     expect(system.themes.dark.colorText).toBe('#dcdcdc');
+    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #ffffff;');
+    expect(system.files['kit.html']).toContain('--brand-color-text: #1f1f1f;');
+    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #141414;');
   });
 
   it('keeps programmatic dark-site material on a light default seed', () => {
@@ -428,6 +432,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(initialMessages[0]?.createdAt).toBe(initialMessages[1]?.startedAt);
     expect(initialMessages[1]?.startedAt).toBeGreaterThanOrEqual(startedBeforeRequest);
     expect(initialMessages[1]?.endedAt).toBeUndefined();
+    expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
 
     await backgroundExtraction;
     for (let i = 0; i < 20; i += 1) {
@@ -521,6 +526,51 @@ describe('agent-driven brand extraction engine', () => {
     expect(assistant?.producedFiles?.length).toBeGreaterThan(1);
   });
 
+  it('stops the programmatic pass without finalizing or seeding a fallback run prompt', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const controller = new AbortController();
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      programmaticAbortSignal: controller.signal,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
+    controller.abort();
+    releasePrefetch();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const detail = readBrandDetail(brandsRoot, result.id);
+    expect(detail?.meta.status).toBe('extracting');
+    expect(detail?.meta.designSystemId).toBeUndefined();
+    expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(messages[1]?.runStatus).toBe('running');
+    expect(messages[1]?.content).toContain('Programmatic design-system extraction started');
+  });
+
   it('backfills a programmatic transcript for empty legacy brand conversations', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const result = await startOfflineBrandExtraction({
@@ -588,6 +638,7 @@ describe('agent-driven brand extraction engine', () => {
 
   it('website EXTRACTION fallback prompt never tells the agent to invoke a brand-extract skill', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
     // userDesignSystemsRoot + a fully blocked origin → the programmatic pass
     // bails and the agent drives from the scaffold on the fallback prompt.
     const result = await startOfflineBrandExtraction({
@@ -600,7 +651,12 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: async () => null,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
     const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
     expect(prompt).toContain('DESIGN SYSTEM EXTRACTION');
     expect(prompt).toContain('agent-browser');
@@ -610,6 +666,7 @@ describe('agent-driven brand extraction engine', () => {
 
   it('DESIGN.md enrichment prompt never tells the agent to invoke a brand-extract skill', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
     // Pasted DESIGN.md (no website) → the programmatic parser registers a system
     // and seeds the DESIGN.md enrichment prompt. This branch never used the skill
     // phrasing, but the guard keeps it that way as the prompts evolve.
@@ -626,7 +683,12 @@ describe('agent-driven brand extraction engine', () => {
       },
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
     const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
     expect(prompt).toContain('context/input-DESIGN.md');
     expectNoPhantomSkillCall(prompt);
@@ -1433,6 +1495,7 @@ describe('agent-driven brand extraction engine', () => {
       ['blocked.example', { blocked: true, thin: true }],
       ['thin.example', { blocked: false, thin: true }],
     ] as const) {
+      let backgroundExtraction: Promise<unknown> | null = null;
       const result = await startOfflineBrandExtraction({
         url: host,
         brandsRoot,
@@ -1465,7 +1528,12 @@ describe('agent-driven brand extraction engine', () => {
         }),
         logoFallback: NO_LOGO_FALLBACK,
         imageryFallback: NO_IMAGERY_FALLBACK,
+        onBackgroundExtraction: (settled) => {
+          backgroundExtraction = settled;
+        },
       });
+      if (!backgroundExtraction) throw new Error('expected background extraction promise');
+      await backgroundExtraction;
 
       const detail = readBrandDetail(brandsRoot, result.id);
       expect(detail?.meta.status).toBe('extracting');

@@ -107,7 +107,7 @@ import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
-import { extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
+import { cancelBrandExtraction, extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
 import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
 import {
   BROWSER_SERIALIZE_HTML_SCRIPT,
@@ -1247,6 +1247,10 @@ export function ProjectView({
   // allowed to apply its result.
   const conversationsRefreshTokenRef = useRef(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const currentConversationHasProgrammaticBrandExtractionRun = useMemo(
+    () => messages.some((m) => isProgrammaticBrandExtractionStatusMessage(m, currentProject.metadata)),
+    [messages, currentProject.metadata],
+  );
   const currentConversationHasActiveRun = useMemo(
     () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
     [messages],
@@ -1261,11 +1265,15 @@ export function ProjectView({
       && failedMessagesConversationId !== activeConversationId,
   );
   const currentConversationStreaming = streaming && streamingConversationId === activeConversationId;
+  const currentConversationControlStreaming =
+    currentConversationStreaming || currentConversationHasProgrammaticBrandExtractionRun;
   const currentConversationBusy = currentConversationLoading
     || currentConversationStreaming
     || currentConversationHasActiveRun;
   const currentConversationAwaitingActiveRunAttach =
-    currentConversationHasActiveRun && !currentConversationStreaming;
+    currentConversationHasActiveRun
+    && !currentConversationStreaming
+    && !currentConversationHasProgrammaticBrandExtractionRun;
   const currentConversationSendDisabled = currentConversationLoading
     || failedMessagesConversationId === activeConversationId
     || currentConversationAwaitingActiveRunAttach;
@@ -4642,6 +4650,19 @@ export function ProjectView({
   // make room for the prioritized send.
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
+    const shouldCancelProgrammaticBrandExtraction = messagesRef.current.some((message) =>
+      isProgrammaticBrandExtractionStatusMessage(message, currentProject.metadata)
+    );
+    const programmaticBrandId = shouldCancelProgrammaticBrandExtraction
+      ? currentProject.metadata?.brandId?.trim() || ''
+      : '';
+    if (programmaticBrandId) {
+      void Promise.resolve(cancelBrandExtraction(programmaticBrandId))
+        .finally(() => {
+          void projectDetail.refresh();
+          void onProjectsRefresh();
+        });
+    }
     cancelSendTextBuffer(true);
     cancelReattachTextBuffers(true);
     cancelRef.current?.abort();
@@ -4664,7 +4685,14 @@ export function ProjectView({
       for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
       return next;
     });
-  }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
+  }, [
+    cancelSendTextBuffer,
+    cancelReattachTextBuffers,
+    currentProject.metadata,
+    onProjectsRefresh,
+    persistMessage,
+    projectDetail.refresh,
+  ]);
 
   // Flip the deck preview to the slide a queued send's marked element lives on
   // the moment that send starts processing. No-op for plain prompts or marks
@@ -5605,7 +5633,7 @@ export function ProjectView({
         ? {
 	            conversationId: activeConversationId,
 	            messages,
-	            streaming: currentConversationStreaming,
+	            streaming: currentConversationControlStreaming,
 	            loading: currentConversationLoading,
 	            sendDisabled: currentConversationSendDisabled,
             queuedItems: currentConversationQueuedItems,
@@ -5628,7 +5656,7 @@ export function ProjectView({
 	      currentConversationQueuedItems,
 	      currentConversationSendDisabled,
 	      currentConversationLoading,
-	      currentConversationStreaming,
+	      currentConversationControlStreaming,
       error,
       handleAssistantFeedback,
       handleRetry,
@@ -6448,7 +6476,7 @@ export function ProjectView({
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
               messages={messages}
-              streaming={currentConversationStreaming}
+              streaming={currentConversationControlStreaming}
               liveToolInput={liveToolInput}
               loading={currentConversationLoading}
               sendDisabled={currentConversationSendDisabled}

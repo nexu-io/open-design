@@ -37,6 +37,7 @@ const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const cancelBrandExtraction = vi.fn();
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -121,6 +122,14 @@ vi.mock('../../src/providers/registry', () => ({
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
+
+vi.mock('../../src/runtime/brands', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/brands')>('../../src/runtime/brands');
+  return {
+    ...actual,
+    cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
+  };
+});
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -334,6 +343,7 @@ describe('retry target resolution', () => {
 describe('ProjectView daemon cleanup', () => {
   beforeEach(() => {
     listProjectRuns.mockResolvedValue([]);
+    cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
   afterEach(() => {
@@ -783,6 +793,24 @@ describe('ProjectView daemon cleanup', () => {
     await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
     await waitFor(() => {
       expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.messages).toEqual(programmaticMessages);
+    });
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    const latestChatPaneProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onStop?: () => void;
+    };
+    latestChatPaneProps.onStop?.();
+    await waitFor(() => expect(cancelBrandExtraction).toHaveBeenCalledWith('refly-ai'));
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'brand-project',
+        'conv-brand',
+        expect.objectContaining({
+          id: 'brand-assistant-1',
+          runStatus: 'canceled',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
     });
     expect(streamViaDaemon).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();

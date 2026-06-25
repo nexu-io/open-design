@@ -248,6 +248,32 @@ describe('DesignKitView iframe sandboxing', () => {
     expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
   });
 
+  it('opens the component kit on the light file before explicit dark selection', () => {
+    const baseKit = previewKit();
+    const kit = {
+      ...baseKit,
+      system: {
+        kitUrl: baseKit.system!.kitUrl,
+        kitDarkUrl: '/raw/projects/preview/system/kit.dark.html',
+      },
+    };
+
+    const { container } = render(
+      <I18nProvider initial="en">
+        <DesignKitView kit={kit} />
+      </I18nProvider>,
+    );
+
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.dark.html"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.dark.html"]')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+  });
+
   it('scrolls to Logo and reveals edit controls for edit focus requests', () => {
     vi.useFakeTimers();
     const scrollIntoView = vi.fn();

@@ -137,6 +137,20 @@ describe('NextStepActions', () => {
     expect(create.disabled).toBe(true);
   });
 
+  it('explains brand-extraction actions in hover detail', () => {
+    renderActions({
+      variant: 'brand-extraction',
+      onAiOptimize: vi.fn(),
+      onCreateDesign: vi.fn(),
+    });
+
+    fireEvent.mouseEnter(screen.getByTestId('next-step-brand-action-brand-ai-optimize'));
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(within(tooltip).getByText(en['nextStep.brandAiOptimizeTitle'])).toBeTruthy();
+    expect(within(tooltip).getByText(en['nextStep.brandAiOptimizeBody'])).toBeTruthy();
+  });
+
   it('reveals the matched @skill in the featured-row hover detail', () => {
     renderActions();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-action-auto-match'));
