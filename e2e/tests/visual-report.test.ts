@@ -269,7 +269,7 @@ describe('visual report PNG sizing', () => {
   test('requires both absolute and relative visual diff thresholds', async () => {
     expect(isChangedVisualDiff(499, 0.5)).toBe(false);
     expect(isChangedVisualDiff(25_000, 0.0267)).toBe(false);
-    expect(isChangedVisualDiff(25_000, 0.03)).toBe(true);
+    expect(isChangedVisualDiff(25_000, 0.0275)).toBe(true);
   });
 
   test('huge-dimension PNG headers fail before decode and upload', async () => {
