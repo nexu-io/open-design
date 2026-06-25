@@ -15,8 +15,7 @@ const inlineCaseLimit = 20;
 const pixelThreshold = 0.1;
 const changedPixelFloor = 500;
 const changedPixelRatioFloor = 0.0275;
-const comparisonImageWidth = 260;
-const singleImageWidth = 640;
+const comparisonImageWidth = 220;
 const diffBoxPadding = 6;
 const diffBoxMergeDistance = 12;
 const diffBoxStrokeWidth = 3;
@@ -604,7 +603,7 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
   lines.push('', summaryLine({ changed, unchanged, missing, failed }), '');
 
   if (changed.length > 0) {
-    lines.push('### Changed cases', '', ...renderCaseList(changed.slice(0, inlineCaseLimit)), '');
+    lines.push('### Changed cases', '', ...renderComparisonCaseTable(changed.slice(0, inlineCaseLimit)), '');
     if (changed.length > inlineCaseLimit) {
       lines.push(`_${changed.length - inlineCaseLimit} additional changed case(s) omitted from this comment._`, '');
     }
@@ -626,7 +625,7 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
   }
 
   if (unchanged.length > 0) {
-    lines.push('<details><summary>Unchanged cases</summary>', '', ...renderCaseList(unchanged.slice(0, inlineCaseLimit)), '</details>', '');
+    lines.push('<details><summary>Unchanged cases</summary>', '', ...renderComparisonCaseTable(unchanged.slice(0, inlineCaseLimit)), '</details>', '');
   }
 
   lines.push('_Visual diff is advisory only and does not block merging._', '');
@@ -642,34 +641,26 @@ function summaryLine(groups: { changed: ComparedCase[]; unchanged: ComparedCase[
   ].join(' · ');
 }
 
-function renderCaseList(cases: ComparedCase[], includeDiff = true): string[] {
-  const lines: string[] = [];
+function renderComparisonCaseTable(cases: ComparedCase[]): string[] {
+  const lines: string[] = ['| Case | Main | PR | Diff |', '| --- | --- | --- | --- |'];
   for (const visualCase of cases) {
+    lines.push(`| ${caseSummaryCell(visualCase)} | ${imageCell(visualCase.mainUrl, 'main', comparisonImageWidth)} | ${imageCell(visualCase.prUrl, 'pr', comparisonImageWidth)} | ${imageCell(visualCase.diffUrl, 'diff', comparisonImageWidth)} |`);
+  }
+
+  return lines;
+}
+
+function caseSummaryCell(visualCase: ComparedCase): string {
     const baselineNote = visualCase.baselineBehindBy != null && visualCase.baselineBehindBy > 0
       ? ` · baseline ${visualCase.baselineBehindBy} commit(s) behind`
       : '';
     const diffNote = visualCase.diffPixels == null
       ? ''
       : ` · ${visualCase.diffPixels.toLocaleString('en-US')} px${visualCase.diffPixelRatio == null ? '' : ` (${formatPercent(visualCase.diffPixelRatio)})`}`;
-    lines.push(`#### ${escapeMarkdown(visualCase.name)}`);
     const notes = `${diffNote}${baselineNote}`.replace(/^ · /u, '');
-    if (notes.length > 0) {
-      lines.push(`<sub>${escapeHtml(notes)}</sub>`);
-    }
-    if (includeDiff) {
-      lines.push(
-        '',
-        '| Main | PR | Diff |',
-        '| --- | --- | --- |',
-        `| ${imageCell(visualCase.mainUrl, 'main', comparisonImageWidth)} | ${imageCell(visualCase.prUrl, 'pr', comparisonImageWidth)} | ${imageCell(visualCase.diffUrl, 'diff', comparisonImageWidth)} |`,
-        '',
-      );
-    } else {
-      lines.push('', `<strong>PR</strong><br>${imageCell(visualCase.prUrl, 'pr', singleImageWidth)}`, '');
-    }
-  }
-
-  return lines;
+    return notes.length > 0
+      ? `<strong>${escapeHtml(visualCase.name)}</strong><br><sub>${escapeHtml(notes)}</sub>`
+      : `<strong>${escapeHtml(visualCase.name)}</strong>`;
 }
 
 function renderMissingCaseGrid(cases: ComparedCase[]): string[] {
