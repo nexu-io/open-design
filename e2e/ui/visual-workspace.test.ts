@@ -89,7 +89,9 @@ test('[P2] captures the topbar local CLI model dropdown surface', async ({ page 
   await expect(page.getByTestId('inline-model-switcher-agent-model-search')).toBeVisible();
 
   await captureVisual(page, 'visual-topbar-local-cli-model-dropdown');
-  await captureVisualTarget(page, 'visual-topbar-local-cli-model-dropdown-popover', [trigger, popover]);
+  await captureVisualTarget(page, 'visual-topbar-local-cli-model-dropdown-popover', popover, {
+    padding: 4,
+  });
 });
 
 test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }) => {
@@ -139,7 +141,9 @@ test('[P2] captures the topbar BYOK model dropdown surface', async ({ page }) =>
   await expect(popover).toBeVisible();
 
   await captureVisual(page, 'visual-topbar-byok-model-dropdown');
-  await captureVisualTarget(page, 'visual-topbar-byok-model-dropdown-popover', [trigger, popover]);
+  await captureVisualTarget(page, 'visual-topbar-byok-model-dropdown-popover', popover, {
+    padding: 4,
+  });
 });
 
 test('[P2] captures the avatar menu surface', async ({ page }) => {
@@ -215,5 +219,7 @@ test('[P2] captures the avatar local agent model dropdown surface', async ({ pag
   await expect(page.getByTestId('avatar-model-search')).toBeVisible();
 
   await captureVisual(page, 'visual-project-avatar-model-dropdown');
-  await captureVisualTarget(page, 'visual-project-avatar-model-dropdown-popover', [modelSelect, popover]);
+  await captureVisualTarget(page, 'visual-project-avatar-model-dropdown-popover', popover, {
+    padding: 4,
+  });
 });

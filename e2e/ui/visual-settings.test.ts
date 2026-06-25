@@ -64,7 +64,9 @@ test('[P2] captures the settings local CLI model dropdown surface', async ({ pag
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-settings-local-cli-model-dropdown');
-  await captureVisualTarget(page, 'visual-settings-local-cli-model-dropdown-popover', [modelSelect, popover]);
+  await captureVisualTarget(page, 'visual-settings-local-cli-model-dropdown-popover', popover, {
+    padding: 4,
+  });
 });
 
 test('[P2] captures the settings BYOK surface', async ({ page }) => {
@@ -129,5 +131,7 @@ test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) 
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-settings-byok-model-dropdown');
-  await captureVisualTarget(page, 'visual-settings-byok-model-dropdown-popover', [modelSelect, popover]);
+  await captureVisualTarget(page, 'visual-settings-byok-model-dropdown-popover', popover, {
+    padding: 4,
+  });
 });
