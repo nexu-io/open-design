@@ -24,7 +24,7 @@ import {
 
 const validStamp = {
   app: APP_KEYS.WEB,
-  ipc: "/tmp/open-design/ipc/contract-check/web.sock",
+  ipc: "/tmp/marketing-ax/ipc/contract-check/web.sock",
   mode: "dev" as const,
   namespace: "contract-check",
   source: SIDECAR_SOURCES.TOOLS_DEV,

@@ -226,7 +226,7 @@ export interface BrowserPageInfo {
 }
 
 const EMPTY_URL = 'about:blank';
-const DESIGN_BROWSER_PARTITION = 'persist:open-design-design-browser';
+const DESIGN_BROWSER_PARTITION = 'persist:marketing-ax-design-browser';
 const HISTORY_LIMIT = 80;
 const HISTORY_SUGGESTION_LIMIT = 20;
 const EMPTY_PREVIEW_COMMENTS: PreviewComment[] = [];

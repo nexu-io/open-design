@@ -102,17 +102,17 @@ describe('agent runtime tool environment', () => {
 
   it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
     const env = createAgentRuntimeEnv(
-      { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },
+      { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/daemon.sock' },
       'http://127.0.0.1:7456',
       null,
       '/opt/open-design/bin/node',
     );
 
-    expect(env[SIDECAR_ENV.IPC_PATH]).toBe('/tmp/open-design/ipc/daemon.sock');
+    expect(env[SIDECAR_ENV.IPC_PATH]).toBe('/tmp/marketing-ax/ipc/daemon.sock');
   });
 
   it('does not pull the daemon sidecar IPC path from ambient process state', () => {
-    vi.stubEnv(SIDECAR_ENV.IPC_PATH, '/tmp/open-design/ipc/stale.sock');
+    vi.stubEnv(SIDECAR_ENV.IPC_PATH, '/tmp/marketing-ax/ipc/stale.sock');
     try {
       const env = createAgentRuntimeEnv(
         { PATH: '/bin' },

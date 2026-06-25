@@ -246,7 +246,7 @@ describe('GET /api/mcp/install-info', () => {
     const { port, server } = await startHarness(
       cliPath,
       {
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/default/daemon.sock',
       },
       dataDir,
     );
@@ -256,7 +256,7 @@ describe('GET /api/mcp/install-info', () => {
       expect(body.args).toEqual([cliPath, 'mcp']);
       expect(body.env).toEqual({
         MAX_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/default/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
@@ -267,7 +267,7 @@ describe('GET /api/mcp/install-info', () => {
     const { port, server } = await startHarness(
       cliPath,
       {
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/foo/daemon.sock',
       },
       dataDir,
     );
@@ -277,7 +277,7 @@ describe('GET /api/mcp/install-info', () => {
       expect(body.args).toEqual([cliPath, 'mcp']);
       expect(body.env).toEqual({
         MAX_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/marketing-ax/ipc/foo/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));

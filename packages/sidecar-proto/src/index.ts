@@ -61,10 +61,10 @@ export const SIDECAR_STAMP_FIELDS = ["app", "mode", "namespace", "ipc", "source"
 
 export const SIDECAR_DEFAULTS = Object.freeze({
   host: "127.0.0.1",
-  ipcBase: "/tmp/open-design/ipc",
+  ipcBase: "/tmp/marketing-ax/ipc",
   namespace: "default",
   projectTmpDirName: ".tmp",
-  windowsPipePrefix: "open-design",
+  windowsPipePrefix: "marketing-ax",
 } as const);
 
 export const MARKETING_AX_PRODUCT_NAME = "Open Design";

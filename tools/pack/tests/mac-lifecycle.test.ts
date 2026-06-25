@@ -10,7 +10,7 @@ import type { ToolPackConfig } from "../src/config.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 
 const requestJsonIpc = vi.fn(async () => ({ state: "running" }));
-const resolveAppIpcPath = vi.fn(() => "/tmp/open-design/ipc/test/desktop.sock");
+const resolveAppIpcPath = vi.fn(() => "/tmp/marketing-ax/ipc/test/desktop.sock");
 const createSidecarLaunchEnv = vi.fn(({ extraEnv }: { extraEnv: NodeJS.ProcessEnv }) => extraEnv);
 const spawnLoggedProcess = vi.fn(async ({ env }: { env: NodeJS.ProcessEnv }) => {
   return Object.assign(new EventEmitter(), {

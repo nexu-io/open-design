@@ -242,7 +242,7 @@ const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
-const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
+const DESIGN_BROWSER_PARTITION = "persist:marketing-ax-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
