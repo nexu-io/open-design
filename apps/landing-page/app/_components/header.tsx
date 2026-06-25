@@ -94,6 +94,7 @@ export interface HeaderProps {
     | 'craft'
     | 'resources'
     | 'blog'
+    | 'stories'
     | 'tutorials'
     | 'download'
     | 'community';
@@ -343,6 +344,7 @@ export function Header({
                 className={
                   active === 'resources' ||
                   active === 'blog' ||
+                  active === 'stories' ||
                   active === 'tutorials' ||
                   active === 'download'
                     ? 'is-active'
@@ -357,6 +359,13 @@ export function Header({
                   <a href={href('/blog/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.resourceItems.blog}
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a href={href('/stories/')}>
+                    <span className='dropdown-name'>
+                      {productMenuCopy.resourceItems.stories}
                     </span>
                   </a>
                 </li>

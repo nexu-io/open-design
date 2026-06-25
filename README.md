@@ -302,10 +302,14 @@ You can use Open Design without ever opening the GUI — call it as a skill, plu
 
 ```bash
 # One-line install into the agent you're using:
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
+
+> **WSL2 users:** If your coding-agent CLIs run inside WSL2, follow the
+> [`WSL2 setup guide`](docs/wsl-setup.md) first. Linux's `/usr/bin/od` can
+> shadow Open Design's `od` command.
 
 Then, inside the agent:
 
@@ -343,7 +347,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Node `~24`, pnpm `10.33.x`. Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, Nix flake, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup.md); native Windows users, see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). Full quickstart, env vars, Nix flake, and packaged build flow → [`QUICKSTART.md`](QUICKSTART.md).
 
 ### A full workflow — from brief to artifact
 
@@ -363,7 +367,7 @@ Open Design ships a **stdio MCP server** and per-agent **install scripts**. Any 
 
 ```bash
 # One-line install (16+ CLIs supported):
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 
 # Then the agent can:
 od search-files "primary button"      # search files across projects
@@ -687,7 +691,7 @@ Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md
 Thanks to everyone who has taken part — code, docs, feedback, a sharp issue, a new skill, a new design system.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-22" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-23" alt="Open Design contributors" />
 </a>
 
 ---
@@ -712,9 +716,9 @@ If this saved you thirty minutes, give it a ★. Stars don't pay rent — but th
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-22" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-23" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-23" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-23" />
   </picture>
 </a>
 

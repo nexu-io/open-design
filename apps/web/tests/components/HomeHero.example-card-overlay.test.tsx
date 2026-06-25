@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HomeHero } from '../../src/components/HomeHero';
+
+vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
+  PlaceholderCarousel: () => null,
+}));
 
 // Regression coverage for #3203. The example template card on the Home
 // page used to render a small icon overlay in the bottom-right grid

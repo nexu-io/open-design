@@ -76,11 +76,11 @@ export interface AmrAccountControlProps {
   consoleUrl?: string;
   iconOnlySignOut?: boolean;
   showCancelSignInAction?: boolean;
-  // Device-authorization details surfaced while signing in, so the user can
-  // complete login manually when the browser did not auto-open (see
-  // parseVelaLoginActivation in the daemon's vela.ts).
+  // Activation URL surfaced while signing in, so the user can re-open the
+  // sign-in page when the browser did not auto-open. The URL already carries
+  // the device code (see parseVelaLoginActivation in the daemon's vela.ts), so
+  // no separate code needs to be shown.
   activationUrl?: string;
-  userCode?: string;
   browserOpenFailed?: boolean;
   onSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
   onSignOut?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -125,7 +125,6 @@ export function AmrAccountControl({
   iconOnlySignOut = false,
   showCancelSignInAction = false,
   activationUrl,
-  userCode,
   browserOpenFailed = false,
   onSignIn,
   onSignOut,
@@ -136,10 +135,6 @@ export function AmrAccountControl({
   cancelSignInDisabled = false,
 }: AmrAccountControlProps) {
   const { t } = useI18n();
-  const [codeCopied, setCodeCopied] = useState(false);
-  useEffect(() => {
-    setCodeCopied(false);
-  }, [activationUrl, userCode]);
   const isSignedIn = status === 'signed-in';
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
@@ -259,31 +254,6 @@ export function AmrAccountControl({
             >
               {t('settings.amrActivationOpen')}
             </a>
-            {userCode ? (
-              <button
-                type="button"
-                className="amr-login-activation__code"
-                onClick={() => {
-                  // Guard explicitly: in runtimes without the async clipboard
-                  // API, copying is a no-op rather than a thrown click handler.
-                  const clipboard = navigator.clipboard;
-                  if (!clipboard) return;
-                  void clipboard.writeText(userCode).then(
-                    () => setCodeCopied(true),
-                    () => {},
-                  );
-                }}
-                aria-label={t('settings.amrActivationCopyCode')}
-                title={t('settings.amrActivationCopyCode')}
-              >
-                <span className="amr-login-activation__code-value">{userCode}</span>
-                <span className="amr-login-activation__code-action">
-                  {codeCopied
-                    ? t('settings.amrActivationCopied')
-                    : t('settings.amrActivationCopy')}
-                </span>
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -638,7 +608,6 @@ export function AmrLoginPill({
         showCancelSignInAction={revealPendingCancelAction && loginInFlight}
         cancelSignInDisabled={cancelInFlight}
         activationUrl={activeLoginActivationStatus?.activationUrl}
-        userCode={activeLoginActivationStatus?.userCode}
         browserOpenFailed={activeLoginActivationStatus?.browserOpenFailed}
         onSignIn={handleLogin}
         onSignOut={handleLogout}

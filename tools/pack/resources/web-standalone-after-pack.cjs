@@ -650,7 +650,7 @@ async function signMacAdhocBundle(appPath) {
   await normalizeMacVersionedFrameworks(appPath);
   const targets = await collectMacAdhocSignTargets(appPath);
   for (const target of targets) {
-    await execFileAsync("codesign", ["--force", "--sign", "-", "--timestamp=none", target], {
+    await execFileAsync("codesign", ["--force", "--deep", "--sign", "-", "--timestamp=none", target], {
       maxBuffer: 20 * 1024 * 1024,
     });
   }

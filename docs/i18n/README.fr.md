@@ -302,7 +302,7 @@ Vous pouvez utiliser Open Design sans jamais ouvrir l'interface graphique — ap
 
 ```bash
 # One-line install into the agent you're using:
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
@@ -361,7 +361,7 @@ Open Design livre un **serveur MCP en stdio** et des **scripts d'installation** 
 
 ```bash
 # One-line install (16+ CLIs supported):
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+od mcp install <agent>
 
 # Then the agent can:
 od search-files "primary button"      # search files across projects
@@ -678,7 +678,7 @@ Règles des mainteneurs, critères de promotion et protocole de départ → [`MA
 Merci à toutes les personnes qui ont pris part — code, documentation, retours, une issue pertinente, un nouveau skill, un nouveau système de design.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-22" alt="Contributeurs d'Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-23" alt="Contributeurs d'Open Design" />
 </a>
 
 ---
@@ -703,9 +703,9 @@ Si cela vous a fait gagner trente minutes, mettez-lui une ★. Les étoiles ne p
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-22" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
-    <img alt="Historique des étoiles d'Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-22" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-23" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-23" />
+    <img alt="Historique des étoiles d'Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-23" />
   </picture>
 </a>
 

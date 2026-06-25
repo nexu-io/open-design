@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import JSZip from 'jszip';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
@@ -283,6 +284,33 @@ describe('project design system route gates', () => {
     expect(readme).not.toContain('preview/typography-scale.html');
     expect(skill).not.toContain('ui_kits/generated_interface');
     expect(skill).not.toContain('preview/colors-ui-palette.html');
+  });
+
+  it('downloads a user design system as a .zip carrying an injected SKILLS.md', async () => {
+    const published = await createUserDesignSystem('published');
+
+    const resp = await fetch(
+      `${baseUrl}/api/design-systems/${encodeURIComponent(published.id)}/archive`,
+    );
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toContain('application/zip');
+    expect(resp.headers.get('content-disposition')).toMatch(/attachment/i);
+
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    const zip = await JSZip.loadAsync(buffer);
+    const names = Object.values(zip.files)
+      .filter((entry) => !entry.dir)
+      .map((entry) => entry.name);
+    expect(names).toContain('DESIGN.md');
+    expect(names).toContain('SKILLS.md');
+
+    const skills = await zip.file('SKILLS.md')!.async('string');
+    expect(skills).toContain('https://github.com/nexu-io/open-design');
+  });
+
+  it('returns 404 when downloading a non-user design system archive', async () => {
+    const resp = await fetch(`${baseUrl}/api/design-systems/airbnb/archive`);
+    expect(resp.status).toBe(404);
   });
 
   it('rejects patching an existing project to a draft design system', async () => {

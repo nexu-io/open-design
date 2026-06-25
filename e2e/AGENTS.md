@@ -8,6 +8,7 @@ For the current coverage posture, recent hardening work, grouped-run status, and
 
 - `specs/`: highest-ROI, long-running core business capability regressions suitable for PR or release gating. Each spec should describe one nearly orthogonal product capability chain, such as main dialog generation, Pet, Orbit, or packaged runtime. Keep this layer small and expand it only when a core capability deserves always-on signal.
 - `tests/`: broader user-level end-to-end coverage and local hotspot checks that intentionally span app/package/resource boundaries. Prefer adding tests here when a repeated or high-risk local capability naturally falls out of a core spec. Do not build a speculative coverage matrix before the core spec needs it.
+- `tests/scripts/`: behavior-contract coverage for root operational scripts whose regressions affect install, CI, or release flows. Keep fixtures hermetic and runnable through e2e Vitest; do not put `*.test.ts` siblings directly under root `scripts/`.
 - `ui/`: flat Playwright UI automation test files only. Keep helpers, resources, and non-Playwright harnesses out of this directory.
 - `resources/`: declarative resources for e2e suites, such as Playwright UI scenario lists.
 - `lib/fake-agents.ts`: shared fake local agent CLI harness used by UI and pure-inspect daemon specs.

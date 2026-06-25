@@ -550,7 +550,7 @@ child.on('exit', (code, signal) => {
   });
 
   it('proceeds with the AMR run via the cached/preset catalog when the live model list is unavailable', async () => {
-    // Red spec for the packaged-nightly "AMR model the selected model is not
+    // Red spec for the packaged-prerelease "AMR model the selected model is not
     // available from Vela" report: the run preflight used to do a fresh,
     // blocking `vela model list` (authoritative remote catalog) on EVERY run
     // and fail-close the run whenever that single call timed out / errored —

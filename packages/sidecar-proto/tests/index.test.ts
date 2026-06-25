@@ -42,7 +42,7 @@ describe("open-design sidecar contract", () => {
     });
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateActions).toBe(DESKTOP_UPDATE_ACTIONS);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateChannels).toBe(DESKTOP_UPDATE_CHANNELS);
-    expect(Object.values(DESKTOP_UPDATE_CHANNELS)).toEqual(["beta", "nightly", "preview", "stable"]);
+    expect(Object.values(DESKTOP_UPDATE_CHANNELS)).toEqual(["beta", "betas", "prerelease", "preview", "stable"]);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateModes).toBe(DESKTOP_UPDATE_MODES);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.updateStates).toBe(DESKTOP_UPDATE_STATES);
   });
@@ -193,6 +193,28 @@ describe("open-design sidecar contract", () => {
         type: SIDECAR_MESSAGES.EXPORT_PDF,
       }),
     ).toThrow();
+  });
+
+  it("accepts PNG/JPEG artifact image export and rejects WebP up front", () => {
+    // The off-screen Electron renderer (nativeImage) can only encode PNG/JPEG.
+    for (const imageFormat of ["png", "jpeg"] as const) {
+      expect(
+        normalizeDesktopSidecarMessage({
+          input: { deck: false, format: "image", html: "<p>x</p>", imageFormat, title: "Shot" },
+          type: SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+        }),
+      ).toEqual({
+        input: { deck: false, format: "image", html: "<p>x</p>", imageFormat, title: "Shot" },
+        type: "export-artifact",
+      });
+    }
+    // WebP must fail fast with a clear error rather than silently downgrade to PNG.
+    expect(() =>
+      normalizeDesktopSidecarMessage({
+        input: { deck: false, format: "image", html: "<p>x</p>", imageFormat: "webp", title: "Shot" },
+        type: SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+      }),
+    ).toThrow(/unsupported artifact export image format/);
   });
 
   it("validates desktop update IPC message inputs", () => {

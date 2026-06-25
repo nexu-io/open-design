@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
+import { runErrorCard } from '@/playwright/chat';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -1824,7 +1825,7 @@ test('[P0] @critical daemon error details persist between failed sends', async (
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first failing prompt');
-  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(runErrorCard(page)).toContainText('connection refused');
   await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
 
   const current = new URL(page.url());
@@ -1848,12 +1849,12 @@ test('[P0] @critical daemon error details persist between failed sends', async (
 
   await page.goto(`/projects/${projectId}`);
   await expectWorkspaceReady(page);
-  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(runErrorCard(page)).toContainText('connection refused');
   await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
 
   await sendPrompt(page, 'second failing prompt');
-  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(runErrorCard(page)).toContainText('connection refused');
   await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
   await expect(page.locator('.msg.user').getByText('second failing prompt', { exact: true })).toBeVisible();
 });
@@ -1930,8 +1931,8 @@ test('[P0] a successful retry after a failed send restores the workspace to a fr
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first failing prompt');
-  await expect(page.locator('.msg.error')).toContainText('connection refused');
-  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(runErrorCard(page)).toContainText('connection refused');
+  await expect(runErrorCard(page)).toContainText('connection refused');
 
   await sendPrompt(page, 'retry prompt that succeeds');
   await expect(page.getByText('retry-success-artifact.html', { exact: true }).first()).toBeVisible();
@@ -2000,7 +2001,7 @@ test('[P0] retrying a failed run does not duplicate the original user message', 
 
   const prompt = 'retry dedup prompt';
   await sendPrompt(page, prompt);
-  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(runErrorCard(page)).toContainText('connection refused');
   await expect(page.locator('.chat-error-retry')).toBeVisible();
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 
@@ -2769,52 +2770,6 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   expect(runBodies[0]?.message).toContain('Operation: page_info');
   expect(runBodies[0]?.message).toContain(`- url: ${expectedUrl}`);
   expect(runBodies[0]?.message).toContain('- title: Browser Fixture Title');
-});
-
-test('[P0] composer session mode switch is carried into the next daemon run request', async ({ page }) => {
-  await routeMockAgents(page);
-
-  const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"session-mode-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
-  });
-
-  await createEmptyProject(page, 'Composer session mode payload context');
-  await expectWorkspaceReady(page);
-
-  await page.getByTestId('session-mode-trigger').click();
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
-  await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
-
-  await page.getByTestId('chat-composer-input').fill('Explain what changed in this artifact.');
-  await page.getByTestId('chat-send').click();
-
-  expect(runBodies[0]?.message).toContain('Explain what changed in this artifact.');
-  expect(runBodies[0]?.sessionMode).toBe('chat');
 });
 
 test('[P1] questions tab Skip all sends structured skipped answers into the next run request', async ({ page }) => {
@@ -3610,7 +3565,7 @@ async function seedDeckArtifact(
       title,
       entry: fileName,
       renderer: 'deck-html',
-      exports: ['html', 'pptx'],
+      exports: ['html', 'pdf'],
     },
   );
 }

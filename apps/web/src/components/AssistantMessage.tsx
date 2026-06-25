@@ -37,7 +37,7 @@ import {
   stripTrailingOpenOdCard,
   type OdCard,
 } from "@open-design/contracts";
-import { OdCardView } from "./OdCard";
+import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
@@ -46,7 +46,7 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
-import { NextStepActions } from "./NextStepActions";
+import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
@@ -277,6 +277,10 @@ interface Props {
   projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  // Client-side confirm for a <od-card type="brand-browser-assist"> button: read
+  // the unblocked browser DOM and re-extract the brand. Excluded from the memo
+  // comparison (routed through ChatPane's stable callbacks ref).
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -316,10 +320,16 @@ interface Props {
   // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
+  onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
   toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
+  nextStepVariant?: NextStepActionsVariant;
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
@@ -358,6 +368,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   // More → Design toolbox global resources.
   'toolboxSkillNames',
   'nextStepSkills',
+  'nextStepVariant',
   // Live streaming tool input changes identity on every `tool_input_delta`.
   // ChatPane passes it only to the streaming row (undefined elsewhere), so
   // comparing it re-renders just that row as the card grows — without it the
@@ -400,6 +411,7 @@ function AssistantMessageImpl({
   projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
@@ -417,10 +429,16 @@ function AssistantMessageImpl({
   hasDesignSystemContext = false,
   onArtifactShare,
   onToolboxAction,
+  onNextStepPromptAction,
+  onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
+  onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
   toolboxSkillNames,
+  nextStepVariant = 'default',
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -621,14 +639,6 @@ function AssistantMessageImpl({
         <span className="role-name">{roleName}</span>
       </div>
       <div className="assistant-flow">
-        {fileOps.length > 0 ? (
-          <FileOpsSummary
-            entries={fileOps}
-            streaming={streaming}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
@@ -644,8 +654,11 @@ function AssistantMessageImpl({
                 suppressDirectionForms={suppressDirectionForms}
                 onOpenQuestions={onOpenQuestions}
                 projectId={projectId}
+                conversationId={conversationId}
+                runId={message.runId ?? null}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               />
             );
           if (b.kind === "thinking")
@@ -698,6 +711,14 @@ function AssistantMessageImpl({
           }
           return null;
         })}
+        {fileOps.length > 0 ? (
+          <FileOpsSummary
+            entries={fileOps}
+            streaming={streaming}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
         {!streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
@@ -799,12 +820,18 @@ function AssistantMessageImpl({
             fileName={isLast ? nextStepArtifactName : null}
             onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
             onToolboxAction={isLast ? onToolboxAction : undefined}
+            onPromptAction={isLast ? onNextStepPromptAction : undefined}
+            onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
+            aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
+            onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
+            createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
             onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}
             toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
+            variant={nextStepVariant}
           />
         ) : null}
       </div>
@@ -1900,8 +1927,11 @@ function ProseBlock({
   suppressDirectionForms,
   onOpenQuestions,
   projectId,
+  conversationId,
+  runId,
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
 }: {
   text: string;
   hideRecoveredHtmlFallback?: boolean;
@@ -1912,9 +1942,12 @@ function ProseBlock({
   nextUserContent?: string;
   suppressDirectionForms: boolean;
   projectId?: string | null;
+  conversationId?: string | null;
+  runId?: string | null;
   projectFileNames?: Set<string>;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onRequestOpenFile?: (name: string) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
@@ -2002,7 +2035,20 @@ function ProseBlock({
           );
         }
         if (seg.kind === "od-card") {
-          return <OdCardView key={seg.key} card={seg.card} />;
+          return (
+            <OdCardView
+              key={seg.key}
+              card={seg.card}
+              onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
+              instanceScope={[
+                projectId ?? "no-project",
+                conversationId ?? "no-conversation",
+                runId ?? "no-run",
+                assistantMessageId,
+                seg.key,
+              ].join(":")}
+            />
+          );
         }
         if (seg.kind === "suppressed-direction") {
           return (

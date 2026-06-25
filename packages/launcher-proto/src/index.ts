@@ -1,5 +1,6 @@
 import { isAbsolute, join, resolve, sep } from "node:path";
 
+import { RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
 import { normalizeNamespace } from "@open-design/sidecar-proto";
 
 export const LAUNCHER_SCHEMA_VERSION = 1 as const;
@@ -8,13 +9,14 @@ export const LAUNCHER_AFTER_QUIT_TARGET_PID_ARG = "--od-launcher-target-pid" as 
 export const LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG = "--od-launcher-timeout-ms" as const;
 
 export const LAUNCHER_CHANNELS = Object.freeze({
-  BETA: "beta",
-  NIGHTLY: "nightly",
-  PREVIEW: "preview",
-  STABLE: "stable",
+  BETA: RELEASE_CHANNELS.BETA,
+  BETAS: RELEASE_CHANNELS.BETAS,
+  PRERELEASE: RELEASE_CHANNELS.PRERELEASE,
+  PREVIEW: RELEASE_CHANNELS.PREVIEW,
+  STABLE: RELEASE_CHANNELS.STABLE,
 } as const);
 
-export type LauncherChannel = (typeof LAUNCHER_CHANNELS)[keyof typeof LAUNCHER_CHANNELS];
+export type LauncherChannel = ReleaseChannel;
 
 const LAUNCHER_CHANNEL_VALUES = new Set<string>(Object.values(LAUNCHER_CHANNELS));
 
@@ -183,12 +185,6 @@ export function compareLauncherVersions(a: string, b: string): number {
     if (delta !== 0) return delta;
   }
   return 0;
-}
-
-export function hasCountedLauncherPrerelease(version: string): boolean {
-  const parsed = parseComparableLauncherVersion(version);
-  const last = parsed.pre.at(-1);
-  return parsed.pre.length >= 2 && last != null && /^[0-9]+$/.test(last);
 }
 
 export function normalizeLauncherChannel(value: unknown): LauncherChannel {

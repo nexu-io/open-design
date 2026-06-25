@@ -7,7 +7,7 @@
  *
  * Pair with `synthetic-good.ts` so any future change to the orchestrator
  * is forced to maintain the good ⇒ shipped / bad ⇒ degraded contract
- * the nightly matrix relies on.
+ * the prerelease matrix relies on.
  */
 
 import { readFileSync } from 'node:fs';

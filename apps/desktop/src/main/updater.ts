@@ -29,7 +29,6 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   buildLauncherAfterQuitArgs,
   compareLauncherVersions,
-  hasCountedLauncherPrerelease,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   validateLauncherCleanupDescriptor,
@@ -57,6 +56,7 @@ import {
   type DesktopUpdateState,
   type SidecarSource,
 } from "@open-design/sidecar-proto";
+import { releaseChannelFromVersion } from "@open-design/release";
 
 import {
   markInstallerObservationOpenFailed,
@@ -808,10 +808,8 @@ async function ensureOwnedUpdateRoot(
 }
 
 function defaultChannelForVersion(version: string): DesktopUpdateChannel {
-  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return DESKTOP_UPDATE_CHANNELS.BETA;
-  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(version)) return DESKTOP_UPDATE_CHANNELS.PREVIEW;
-  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(version)) return DESKTOP_UPDATE_CHANNELS.NIGHTLY;
-  return hasCountedLauncherPrerelease(version) ? DESKTOP_UPDATE_CHANNELS.BETA : DESKTOP_UPDATE_CHANNELS.STABLE;
+  const channel = releaseChannelFromVersion(version);
+  return channel ?? DESKTOP_UPDATE_CHANNELS.STABLE;
 }
 
 export function compareVersions(a: string, b: string): number {
@@ -824,9 +822,10 @@ function metadataChannel(metadata: Record<string, unknown>): DesktopUpdateChanne
 }
 
 function releaseVersionForChannel(metadata: Record<string, unknown>, channel: DesktopUpdateChannel): string | null {
-  if (channel === DESKTOP_UPDATE_CHANNELS.BETA) return stringField(metadata, "betaVersion");
-  if (channel === DESKTOP_UPDATE_CHANNELS.NIGHTLY) return stringField(metadata, "nightlyVersion") ?? stringField(metadata, "releaseVersion");
-  if (channel === DESKTOP_UPDATE_CHANNELS.PREVIEW) return stringField(metadata, "previewVersion") ?? stringField(metadata, "releaseVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.BETA) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "betaVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.BETAS) return stringField(metadata, "releaseVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.PRERELEASE) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "prereleaseVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.PREVIEW) return stringField(metadata, "releaseVersion") ?? stringField(metadata, "previewVersion");
   return stringField(metadata, "releaseVersion") ?? stringField(metadata, "stableVersion");
 }
 

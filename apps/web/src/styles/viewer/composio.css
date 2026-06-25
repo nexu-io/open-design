@@ -1568,6 +1568,16 @@
   overflow: auto;
   min-height: 0;
 }
+.ds-modal-rich-kit {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+.ds-modal-rich-kit .design-kit {
+  max-width: none;
+}
 .plugin-media-stage__empty {
   color: var(--text-muted);
   font-size: 13px;

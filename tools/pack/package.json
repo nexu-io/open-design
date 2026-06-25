@@ -17,6 +17,7 @@
     "@electron/rebuild": "4.0.4",
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
+    "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
@@ -24,7 +25,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.0.16"
+    "@powerformer/vela-cli": "0.0.18"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

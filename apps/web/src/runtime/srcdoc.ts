@@ -285,7 +285,9 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+  return injectSrcdocTransportActivationBridge(
+    injectExportCaptureBridge(injectSnapshotBridge(withTweaks)),
+  );
 }
 
 /**
@@ -499,66 +501,182 @@ function injectSnapshotBridge(doc: string): string {
       return samples > 8;
     } catch (_) { return false; }
   }
-  function renderSnapshot(id){
-    var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
-    var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
-    var dpr = window.devicePixelRatio || 1;
-    var bgColor = snapshotBackgroundColor();
-    var docW = Math.max(w, document.documentElement.scrollWidth || 0, document.body ? document.body.scrollWidth : 0);
-    var docH = Math.max(h, document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0);
-    var clone = document.documentElement.cloneNode(true);
-    clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    inlineSnapshotStyles(document.documentElement, clone);
-    pruneHiddenSnapshotNodes(document.documentElement, clone);
-    var scroll = scrollOffset();
-    var cloneBody = clone.querySelector('body');
-    var rootStyle = clone.getAttribute('style') || '';
-    var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
-    var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
-    var wrapperStyle = rootStyle + bodyStyle +
-      'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
-      'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
-    var html = '<div xmlns="http://www.w3.org/1999/xhtml" style="' + escapeAttribute(wrapperStyle) + '">' + bodyContent + '</div>';
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-      '<foreignObject x="0" y="0" width="' + docW + '" height="' + docH + '">' +
-      html +
-      '</foreignObject></svg>';
-    var img = new Image();
-    img.onload = function(){
-      try {
-        var canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.floor(w * dpr));
-        canvas.height = Math.max(1, Math.floor(h * dpr));
-        var ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no 2d context');
-        ctx.scale(dpr, dpr);
-        // Opaque base so a transparent (un-painted) raster never flattens to
-        // pure black in clipboards / PNG viewers.
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        if (canvasLooksBlank(ctx, canvas.width, canvas.height)) {
-          window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: 'empty-render' }, '*');
-          return;
+  // Rasterize the current view (or the whole document, when opts.full) via an
+  // SVG <foreignObject>. Returns a Promise so it can be reused by both the
+  // od:snapshot message handler AND the export-capture bridge (image export /
+  // PDF) — the foreignObject path is fast and never blocks on external
+  // image network loads the way a DOM-cloning rasterizer does.
+  function captureSnapshot(opts){
+    opts = opts || {};
+    return new Promise(function(resolve, reject){
+      var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+      var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+      var dpr = window.devicePixelRatio || 1;
+      var bgColor = snapshotBackgroundColor();
+      var docW = Math.max(w, document.documentElement.scrollWidth || 0, document.body ? document.body.scrollWidth : 0);
+      var docH = Math.max(h, document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0);
+      var full = !!opts.full;
+      var capW = full ? docW : w;
+      var capH = full ? docH : h;
+      var clone = document.documentElement.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+      inlineSnapshotStyles(document.documentElement, clone);
+      pruneHiddenSnapshotNodes(document.documentElement, clone);
+      var scroll = full ? { x: 0, y: 0 } : scrollOffset();
+      var cloneBody = clone.querySelector('body');
+      var rootStyle = clone.getAttribute('style') || '';
+      var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
+      var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
+      var wrapperStyle = rootStyle + bodyStyle +
+        'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
+        'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
+      var html = '<div xmlns="http://www.w3.org/1999/xhtml" style="' + escapeAttribute(wrapperStyle) + '">' + bodyContent + '</div>';
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + capW + '" height="' + capH + '" viewBox="0 0 ' + capW + ' ' + capH + '">' +
+        '<foreignObject x="0" y="0" width="' + docW + '" height="' + docH + '">' +
+        html +
+        '</foreignObject></svg>';
+      var img = new Image();
+      img.onload = function(){
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.floor(capW * dpr));
+          canvas.height = Math.max(1, Math.floor(capH * dpr));
+          var ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('no 2d context');
+          ctx.scale(dpr, dpr);
+          // Opaque base so a transparent (un-painted) raster never flattens to
+          // pure black in clipboards / PNG viewers.
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(0, 0, capW, capH);
+          ctx.drawImage(img, 0, 0, capW, capH);
+          if (canvasLooksBlank(ctx, canvas.width, canvas.height)) {
+            reject(new Error('empty-render'));
+            return;
+          }
+          resolve({ dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height });
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err && err.message || err)));
         }
-        window.parent.postMessage({ type: 'od:snapshot:result', id: id, dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height }, '*');
-      } catch (err) {
-        window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: String(err && err.message || err) }, '*');
-      }
-    };
-    function encodedSvgDataUrl(){
-      var encoded = encodeURIComponent(svg);
-      return 'data:image/svg+xml;charset=utf-8,' + encoded;
-    }
-    img.onerror = function(){
-      window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: 'snapshot image failed' }, '*');
-    };
-    img.src = encodedSvgDataUrl();
+      };
+      img.onerror = function(){ reject(new Error('snapshot image failed')); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
   }
+  // Exposed so the export-capture bridge (same document) can reuse this renderer.
+  window.__odCaptureSnapshot = function(opts){
+    return waitForImages().then(function(){ return captureSnapshot(opts || {}); });
+  };
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:snapshot' || !data.id) return;
-    waitForImages().then(function(){ renderSnapshot(String(data.id)); });
+    window.__odCaptureSnapshot({ full: !!data.full }).then(function(res){
+      window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), dataUrl: res.dataUrl, w: res.w, h: res.h }, '*');
+    }, function(err){
+      window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), error: String(err && err.message || err) }, '*');
+    });
+  });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+// Export-capture bridge: the in-iframe half of the programmatic PDF /
+// image exporters (apps/web/src/runtime/exports.ts). The preview iframe is
+// sandbox="allow-scripts" WITHOUT allow-same-origin, so the host cannot read
+// iframe.contentDocument — capture must run inside the frame, exactly like the
+// snapshot bridge above. The orchestrator (host) creates a hidden, full-
+// resolution export iframe, posts `od:export-capture`, and assembles the
+// returned per-slide images with jsPDF.
+//
+// Protocol:
+//   in:  { type:'od:export-capture', id, mode:'image', deck:boolean,
+//          single?:boolean, delay:number }
+//   out: { type:'od:export-capture:slide', id, index, total,
+//          dataUrl, w, h, notes }   (one per slide)
+//   out: { type:'od:export-capture:done',  id, total }
+//   out: { type:'od:export-capture:error', id, error }
+//
+// Slides are enumerated/navigated through the existing deck bridge
+// (window.__odDeckSlideState + an `od:slide` self-postMessage), so any deck the
+// on-screen preview can drive, the exporter can too. Image capture reuses the
+// shared SVG-foreignObject renderer (window.__odCaptureSnapshot from the
+// snapshot bridge) — fast and free of any external script load or network wait.
+function injectExportCaptureBridge(doc: string): string {
+  const script = `<script data-od-export-capture-bridge>(function(){
+  function raf(){ return new Promise(function(r){ requestAnimationFrame(function(){ r(); }); }); }
+  function settle(){
+    var fonts = (document.fonts && document.fonts.ready) ? document.fonts.ready.catch(function(){}) : Promise.resolve();
+    var imgs = Promise.all(Array.prototype.slice.call(document.images||[]).map(function(img){
+      if (img.complete) return Promise.resolve();
+      return new Promise(function(r){ img.addEventListener('load', r, {once:true}); img.addEventListener('error', r, {once:true}); });
+    }));
+    return Promise.all([fonts, imgs]).then(raf).then(raf);
+  }
+  function deckState(){
+    try { if (typeof window.__odDeckSlideState === 'function') return window.__odDeckSlideState(); } catch(_){}
+    return { active: 0, count: 1 };
+  }
+  function navTo(index, delay){
+    return new Promise(function(resolve){
+      try { window.postMessage({ type:'od:slide', action:'go', index: index }, '*'); } catch(_){}
+      var tries = 0;
+      function check(){
+        tries++;
+        if (deckState().active === index || tries > 14) { resolve(); return; }
+        setTimeout(check, 80);
+      }
+      setTimeout(check, Math.max(60, delay||0));
+    });
+  }
+  function captureImage(deck){
+    // Reuse the shared SVG-foreignObject renderer (injectSnapshotBridge). For a
+    // deck the active slide fills the viewport, so a viewport capture IS the
+    // slide; a non-deck page captures the full document.
+    if (typeof window.__odCaptureSnapshot !== 'function') {
+      return Promise.reject(new Error('snapshot renderer unavailable'));
+    }
+    return window.__odCaptureSnapshot({ full: !deck });
+  }
+  function notes(){
+    var el = document.getElementById('speaker-notes');
+    if (!el) return '';
+    var t = el.textContent || '';
+    try { var j = JSON.parse(t); if (Array.isArray(j)) return j; } catch(_){}
+    return t.replace(/\\s+/g,' ').trim();
+  }
+  function send(msg){ try { window.parent.postMessage(msg, '*'); } catch(_){} }
+  function run(req){
+    var id = req.id;
+    var deck = !!req.deck;
+    var single = !!req.single;
+    var delay = req.delay || 350;
+    Promise.resolve().then(function(){
+      var st = deckState();
+      var total = (!single && deck && st.count > 1) ? st.count : 1;
+      var notesAll = notes();
+      function noteFor(i){ return Array.isArray(notesAll) ? (notesAll[i]||'') : (i===0 ? notesAll : ''); }
+      var idx = 0;
+      function step(){
+        if (idx >= total){ send({ type:'od:export-capture:done', id:id, total: total }); return; }
+        var i = idx;
+        var navP = (!single && deck && total > 1) ? navTo(i, delay) : Promise.resolve();
+        navP.then(settle).then(function(){
+          try {
+            captureImage(deck).then(function(img){
+              send({ type:'od:export-capture:slide', id:id, index:i, total:total, dataUrl: img.dataUrl, w: img.w, h: img.h, notes: noteFor(i) });
+              idx++; setTimeout(step, 0);
+            }).catch(function(err){ send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) }); });
+          } catch(err){ send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) }); }
+        });
+      }
+      step();
+    }).catch(function(err){
+      send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) });
+    });
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:export-capture' || !data.id) return;
+    run(data);
   });
 })();</script>`;
   return injectBeforeBodyEnd(doc, script);

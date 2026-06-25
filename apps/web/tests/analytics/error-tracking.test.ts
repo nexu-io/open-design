@@ -262,4 +262,160 @@ describe('error-tracking', () => {
     reportHandledException(new Error('no context'));
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  // Regression: 100% of our hand-built `$exception` events were failing to
+  // ingest with "missing field platform" because the frames omitted the
+  // `platform` key PostHog's exception pipeline requires. posthog-js stamps
+  // `web:javascript` on every frame; we must too.
+  it('stamps platform on every stack frame so PostHog ingestion accepts the event', () => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-platform',
+    });
+
+    const error = new Error('needs-platform');
+    error.stack = [
+      'Error: needs-platform',
+      '    at handleClick (app://apps/web/src/FileViewer.tsx:147:23)',
+      '    at app://apps/web/src/index.tsx:12:1',
+    ].join('\n');
+    reportHandledException(error);
+
+    const body = lastFetchedBody();
+    const list = (body.properties as Record<string, unknown>).$exception_list as Array<{
+      stacktrace?: { frames?: Array<Record<string, unknown>> };
+    }>;
+    const frames = list[0]?.stacktrace?.frames;
+    expect(frames).toBeTruthy();
+    expect(frames!.length).toBeGreaterThanOrEqual(2);
+    for (const frame of frames!) {
+      expect(frame.platform).toBe('web:javascript');
+    }
+  });
+
+  // Regression: `TypeError: Failed to fetch` from the packaged renderer's
+  // daemon connection dropping (restart, boot race, navigation abort,
+  // offline) was ~90% of all captured exceptions — environmental noise.
+  // Drop it, but ONLY when it originates in packaged app code (od:// scheme).
+  it('drops packaged-app fetch noise but keeps the same error from the web app', () => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-noise',
+    });
+
+    // Packaged: the failing fetch ran in od:// app code → dropped.
+    const packaged = new TypeError('Failed to fetch');
+    packaged.stack = [
+      'TypeError: Failed to fetch',
+      '    at window.fetch (od://app/_next/static/chunks/abc.js:1:100)',
+      '    at poll (od://app/_next/static/chunks/abc.js:1:200)',
+    ].join('\n');
+    reportHandledException(packaged);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Web app: SAME message, but the fetch failed in non-packaged code. In a
+    // browser this can be the only signal of a broken /api/* deploy or a
+    // CORS/TLS regression, so it must stay captured.
+    const web = new TypeError('Failed to fetch');
+    web.stack = [
+      'TypeError: Failed to fetch',
+      '    at loadProjects (https://app.example.com/_next/static/chunks/x.js:1:50)',
+    ].join('\n');
+    reportHandledException(web);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((lastFetchedBody().properties as Record<string, unknown>).$exception_message).toBe(
+      'Failed to fetch',
+    );
+  });
+
+  // Packaged exceptions don't only arrive as od:// frames — source-mapped
+  // frames surface as `file:///…/<Channel>.app/Contents/Resources/…` (the
+  // shape scrub.ts rewrites). Those packaged fetch failures must be dropped
+  // too, otherwise part of the noise path leaks through.
+  it('drops packaged fetch noise from file:// app-bundle stack frames', () => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-bundle',
+    });
+
+    const bundled = new TypeError('Failed to fetch');
+    bundled.stack = [
+      'TypeError: Failed to fetch',
+      '    at fetchProjects (file:///Applications/Open Design.app/Contents/Resources/apps/web/src/state/projects.ts:88:14)',
+    ].join('\n');
+    reportHandledException(bundled);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Beta/preview channels use a different app-bundle name — still dropped.
+    const beta = new TypeError('Failed to fetch');
+    beta.stack = [
+      'TypeError: Failed to fetch',
+      '    at fetchProjects (file:///Applications/Open Design Beta.app/Contents/Resources/apps/web/src/state/projects.ts:88:14)',
+    ].join('\n');
+    reportHandledException(beta);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // AbortError is NOT blanket-dropped: it isn't necessarily fetch-lifecycle
+  // cancellation and was never a measured noise source. It flows through.
+  it('does not drop AbortError', () => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-abort',
+    });
+    const aborted = new Error('the operation was aborted.');
+    aborted.name = 'AbortError';
+    aborted.stack = 'AbortError: the operation was aborted.\n    at x (od://app/_next/static/chunks/y.js:1:1)';
+    reportHandledException(aborted);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((lastFetchedBody().properties as Record<string, unknown>).$exception_type).toBe(
+      'AbortError',
+    );
+  });
+
+  // Regression: a failed telemetry beacon (PostHog unreachable) must not
+  // manufacture another exception. In the real browser the beacon's own
+  // `fetch` rejection is swallowed by the `.catch()` in dispatch(); if it
+  // ever surfaces anyway — as an unhandledrejection whose TypeError
+  // originates in our od:// transport code — the packaged noise filter is the
+  // backstop that stops it re-entering as a second `$exception`/beacon. This
+  // exercises that backstop (the part observable under jsdom — Node routes
+  // promise rejections to `process`, not `window.onunhandledrejection`, so
+  // the `.catch()` itself isn't unit-observable here).
+  it('a failed beacon surfacing as an unhandledrejection does not spawn a second beacon', () => {
+    installErrorHandlers();
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-loop',
+    });
+
+    // A genuine exception dispatches exactly one beacon.
+    reportHandledException(new Error('real-bug'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockClear();
+
+    // Now simulate that beacon's own request failing and surfacing as an
+    // unhandledrejection from our od:// transport code.
+    const beaconFailure = new TypeError('Failed to fetch');
+    beaconFailure.stack = [
+      'TypeError: Failed to fetch',
+      '    at dispatch (od://app/_next/static/chunks/error-tracking.js:1:42)',
+    ].join('\n');
+    const rejection = new Event('unhandledrejection') as Event & {
+      reason?: unknown;
+      promise?: Promise<unknown>;
+    };
+    rejection.reason = beaconFailure;
+    rejection.promise = Promise.reject(beaconFailure);
+    rejection.promise.catch(() => undefined);
+    window.dispatchEvent(rejection);
+
+    // No second beacon — the loop is broken.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

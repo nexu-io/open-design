@@ -24,6 +24,7 @@
     "@open-design/host": "workspace:*",
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
+    "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*"
   },

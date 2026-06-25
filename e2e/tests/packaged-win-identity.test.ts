@@ -3,15 +3,15 @@ import { describe, expect, it } from "vitest";
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from "@/vitest/packaged-win-identity";
 
 describe("packaged windows smoke identity", () => {
-  it("[P2] lets a nightly release version override the stable release namespace", () => {
+  it("[P2] lets a prerelease version override the stable release namespace", () => {
     expect(resolvePackagedWinInstallIdentity({
       namespace: "release-stable-win",
-      releaseVersion: "0.8.0.nightly.2",
+      releaseVersion: "0.8.0-prerelease.2",
     })).toEqual({
-      displayName: "Open Design Nightly",
+      displayName: "Open Design Prerelease",
       namespaceToken: "release-stable-win",
     });
-    expect(releaseAppVersionArgs("0.8.0.nightly.2")).toEqual(["--app-version", "0.8.0.nightly.2"]);
+    expect(releaseAppVersionArgs("0.8.0-prerelease.2")).toEqual(["--app-version", "0.8.0-prerelease.2"]);
   });
 
   it("[P2] keeps stable release namespaces on the canonical display identity", () => {

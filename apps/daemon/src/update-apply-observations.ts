@@ -7,6 +7,11 @@ import type {
   TrackingUpdateApplyResult,
   UpdateApplyObservedProps,
 } from '@open-design/contracts/analytics';
+import {
+  isReleaseChannel,
+  releaseChannelFromVersion,
+  type ReleaseChannel,
+} from '@open-design/release';
 
 import type { AnalyticsContext, AnalyticsService } from './analytics.js';
 import { readPosthogConfig } from './analytics.js';
@@ -17,7 +22,7 @@ const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';
 const INSTALLER_OBSERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type InstallerObservationArtifactType = 'dmg' | 'installer';
-type InstallerObservationChannel = 'stable' | 'beta' | 'nightly' | 'preview';
+type InstallerObservationChannel = ReleaseChannel;
 type InstallerObservationDeliveryStatus =
   | 'submitted'
   | 'skipped_analytics_disabled'
@@ -96,7 +101,7 @@ function isInstallerObservationSummary(value: unknown): value is InstallerObserv
     typeof value.flowId === 'string' &&
     isSafeFlowId(value.flowId) &&
     typeof value.namespace === 'string' &&
-    (channel === 'stable' || channel === 'beta' || channel === 'nightly' || channel === 'preview') &&
+    isReleaseChannel(channel) &&
     typeof value.platform === 'string' &&
     typeof value.arch === 'string' &&
     (artifactType === 'dmg' || artifactType === 'installer') &&
@@ -134,15 +139,14 @@ async function writeSummary(filePath: string, summary: InstallerObservationSumma
 }
 
 export function normalizeUpdateObservationChannel(version: string, explicit?: string | null): InstallerObservationChannel {
-  if (explicit === 'stable' || explicit === 'beta' || explicit === 'nightly' || explicit === 'preview') return explicit;
+  if (isReleaseChannel(explicit)) return explicit;
   if (explicit != null && explicit.startsWith('beta')) return 'beta';
   if (explicit != null && explicit.startsWith('preview')) return 'preview';
-  if (explicit != null && explicit.startsWith('nightly')) return 'nightly';
+  if (explicit != null && explicit.startsWith('prerelease')) return 'prerelease';
   const cleaned = version.trim().replace(/^v/i, '');
   const prerelease = cleaned.split('-', 2)[1] ?? '';
-  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return 'beta';
-  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(version)) return 'preview';
-  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(version)) return 'nightly';
+  const channel = releaseChannelFromVersion(version);
+  if (channel != null) return channel;
   if (prerelease.length > 0 && /\.[0-9]+$/.test(prerelease)) return 'beta';
   return 'stable';
 }

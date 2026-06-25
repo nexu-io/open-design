@@ -22,6 +22,7 @@ import { aiderAgentDef } from './defs/aider.js';
 import { antigravityAgentDef } from './defs/antigravity.js';
 import { codebuddyAgentDef } from './defs/codebuddy.js';
 import { reasonixAgentDef } from './defs/reasonix.js';
+import { mimoAgentDef } from './defs/mimo.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
 
@@ -50,6 +51,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   antigravityAgentDef,
   reasonixAgentDef,
   codebuddyAgentDef,
+  mimoAgentDef,
 ];
 
 export function readLocalAgentProfileDefs(
