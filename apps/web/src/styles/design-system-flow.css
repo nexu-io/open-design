@@ -98,15 +98,6 @@
   gap: 10px;
   min-width: 0;
 }
-.ds-setup-hero-toggle {
-  min-height: 34px;
-  color: var(--text-muted);
-}
-.ds-setup-hero-toggle:hover,
-.ds-setup-hero-toggle:focus-visible {
-  color: var(--text-strong);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-}
 .ds-setup-mark {
   display: inline-grid;
   place-items: center;
@@ -137,18 +128,6 @@
   top: 84px;
   align-self: start;
 }
-.ds-setup-shell.ds-setup-shell--hero-collapsed:not(.ds-setup-shell--embedded) .ds-setup-form {
-  width: auto;
-  max-width: none;
-  margin: 0 40px;
-  display: block;
-  grid-template-columns: none;
-  gap: 0;
-}
-.ds-setup-shell.ds-setup-shell--hero-collapsed:not(.ds-setup-shell--embedded) .ds-setup-form-col {
-  width: 100%;
-  max-width: none;
-}
 .ds-setup-form-col {
   min-width: 0;
 }
@@ -160,19 +139,10 @@
   .ds-setup-hero-col {
     position: static;
   }
-  .ds-setup-shell.ds-setup-shell--hero-collapsed:not(.ds-setup-shell--embedded) .ds-setup-form {
-    width: min(720px, calc(100vw - 40px));
-    margin: 0 auto;
-    display: block;
-    grid-template-columns: none;
-  }
   .ds-setup-topbar {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .ds-setup-mark {
-    display: none;
-  }
-  .ds-setup-hero-toggle span {
     display: none;
   }
 }
@@ -1099,6 +1069,14 @@ a.ds-source-link-open:focus-visible {
 .ds-setup-center-card {
   width: min(560px, calc(100vw - 40px));
   text-align: center;
+}
+/* Redirect/loading variant: stack the spinner above the title so the route that
+   hands off to the project workspace reads as a clean loading state. */
+.ds-setup-center-card--loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
 .ds-setup-actions {
   display: flex;
@@ -2958,6 +2936,14 @@ a.ds-source-link-open:focus-visible {
   width: 13px;
   height: 13px;
   flex: none;
+}
+.ds-project-publish-trigger > button[aria-busy='true'] svg {
+  animation: ds-project-action-spin 0.8s linear infinite;
+}
+@keyframes ds-project-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 /* A disabled button does not fire the hover or focus that shows its own `title`,
    so the publish guidance lives on this wrapper. Make the disabled button

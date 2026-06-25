@@ -1156,11 +1156,12 @@ function AppInner() {
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
-      const next = { ...config, mode };
+      const next = { ...latestPersistedConfigRef.current, mode };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   // Quick theme switch from the settings dropdown in the entry view.
@@ -1189,28 +1190,31 @@ function AppInner() {
 
   const handleAgentChange = useCallback(
     (agentId: string) => {
-      const next = { ...config, agentId };
+      const next = { ...latestPersistedConfigRef.current, agentId };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string }) => {
-      const prev = config.agentModels?.[agentId] ?? {};
+      const current = latestPersistedConfigRef.current;
+      const prev = current.agentModels?.[agentId] ?? {};
       const merged = { ...prev, ...choice };
       const nextAgentModels = {
-        ...(config.agentModels ?? {}),
+        ...(current.agentModels ?? {}),
         [agentId]: merged,
       };
-      const next = { ...config, agentModels: nextAgentModels };
+      const next = { ...current, agentModels: nextAgentModels };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
@@ -2127,14 +2131,14 @@ function AppInner() {
       <DesignSystemCreationFlow
         onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
         designSystems={enabledDS}
-        onCreated={(projectId, project) => {
+        onCreated={(projectId, project, conversationId) => {
           if (project) {
             setProjects((curr) => [
               project,
               ...curr.filter((p) => p.id !== project.id),
             ]);
           }
-          navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+          navigate({ kind: 'project', projectId, conversationId: conversationId ?? null, fileName: null });
         }}
         onProjectPrepared={(project) => {
           setProjects((curr) => [
@@ -2197,6 +2201,7 @@ function AppInner() {
         onTouchProject={handleTouchProject}
         onProjectChange={handleProjectChange}
         onProjectsRefresh={refreshProjects}
+        onDeleteProject={handleDeleteProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onDesignSystemsRefresh={refreshDesignSystems}
         onCreateProjectFromDesignSystem={handleCreateProjectFromDesignSystem}

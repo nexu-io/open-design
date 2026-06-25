@@ -27,6 +27,7 @@ import {
   projectRawUrl,
   applyLibraryAsset,
   createProjectFolder,
+  deleteDesignSystemDraft,
   deleteProjectFolder,
   renameProjectFile,
   startDesignSystemTokenContractRebuildJob,
@@ -35,7 +36,9 @@ import {
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../providers/registry';
+import type { Dict } from '../i18n/types';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
+import { finalizeBrandProject } from '../runtime/brands';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { parseDesignMd } from '../runtime/design-md-parse';
 import {
@@ -50,7 +53,12 @@ import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../r
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
-import { DesignKitView, type HeaderMenuAction } from './DesignKitView';
+import {
+  DesignKitView,
+  type DesignKitActionFeedbackTone,
+  type DesignKitEditFocusRequest,
+  type HeaderMenuAction,
+} from './DesignKitView';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -108,6 +116,8 @@ import {
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
 
+type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -161,9 +171,13 @@ interface Props {
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
+  designSystemBrandId?: string | null;
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
+  // Delete the backing project (and navigate away) for the design-system project
+  // tab's "..." menu. Resolves to handleDeleteProject in App.
+  onDeleteDesignSystemProject?: (id: string) => Promise<boolean> | boolean;
   onDesignSystemNeedsWork?: (
     sectionTitle: string,
     feedback: string,
@@ -176,6 +190,7 @@ interface Props {
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => Promise<void> | void;
+  designSystemEditRequest?: DesignKitEditFocusRequest | null;
   onConnectRepo?: () => void;
   githubConnected?: boolean;
   commentPortalId?: string;
@@ -414,13 +429,16 @@ export function FileWorkspace({
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
+  designSystemBrandId = null,
   defaultDesignSystemId = null,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
+  onDeleteDesignSystemProject,
   onDesignSystemNeedsWork,
   designSystemReview,
   onDesignSystemReviewDecision,
   onUseDesignSystem,
+  designSystemEditRequest,
   onConnectRepo,
   githubConnected,
   commentPortalId,
@@ -750,6 +768,13 @@ export function FileWorkspace({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedTabs, activeTab]);
+
+  useEffect(() => {
+    if (!designSystemEditRequest) return;
+    setUploadError(null);
+    setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [designSystemEditRequest?.nonce]);
 
   // External open requests from chat (tool cards, produced-file chips,
   // deep-linked URL, or the parent's auto-open after an agent Write) —
@@ -1497,7 +1522,7 @@ export function FileWorkspace({
       return {
         id: 'workspace:design-system',
         kind: 'design-system',
-        label: 'Design System',
+        label: t('dsManager.tabDesignSystem'),
         tabId: activeTab,
       };
     }
@@ -1630,7 +1655,7 @@ export function FileWorkspace({
       push({
         id: 'workspace:design-system',
         kind: 'design-system',
-        label: 'Design System',
+        label: t('dsManager.tabDesignSystem'),
         tabId: DESIGN_SYSTEM_TAB,
       });
     }
@@ -1861,12 +1886,12 @@ export function FileWorkspace({
               tabIndex={0}
               data-testid="design-system-project-tab"
               onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
-              title="Design System"
+              title={t('dsManager.tabDesignSystem')}
             >
               <span className="tab-icon" aria-hidden>
                 <Icon name="blocks" size={13} />
               </span>
-              <span className="ws-tab-label">Design System</span>
+              <span className="ws-tab-label">{t('dsManager.tabDesignSystem')}</span>
             </button>
           ) : null}
           <button
@@ -2095,6 +2120,7 @@ export function FileWorkspace({
           >
             <DesignBrowserPanel
               projectId={projectId}
+              browserTabId={browserTab.id}
               resolvedDir={resolvedDir}
               initialIconUrl={browserTab.iconUrl}
               initialTitle={browserTab.title}
@@ -2127,18 +2153,22 @@ export function FileWorkspace({
           <DesignSystemProjectPanel
             projectId={projectId}
             system={designSystemProject}
+            brandId={designSystemBrandId}
             files={visibleFiles}
             streaming={Boolean(streaming)}
             activityEvents={designSystemActivityEvents}
             onOpenFile={openFile}
             onUploadAssets={() => fileInputRef.current?.click()}
+            onRefreshFiles={onRefreshFiles}
             defaultDesignSystemId={defaultDesignSystemId}
             onSetDefaultDesignSystem={onSetDefaultDesignSystem}
             onDesignSystemsRefresh={onDesignSystemsRefresh}
+            onDeleteDesignSystemProject={onDeleteDesignSystemProject}
             onNeedsWork={onDesignSystemNeedsWork}
             designSystemReview={designSystemReview}
             onReviewDecision={onDesignSystemReviewDecision}
             onUseDesignSystem={onUseDesignSystem}
+            editFocusRequest={designSystemEditRequest}
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
@@ -2411,31 +2441,38 @@ export function FileWorkspace({
 function DesignSystemProjectPanel({
   projectId,
   system,
+  brandId,
   files,
   streaming,
   activityEvents,
   onOpenFile,
   onUploadAssets,
+  onRefreshFiles,
   defaultDesignSystemId,
   onSetDefaultDesignSystem,
   onDesignSystemsRefresh,
+  onDeleteDesignSystemProject,
   onNeedsWork,
   designSystemReview,
   onReviewDecision,
   onUseDesignSystem,
+  editFocusRequest,
   onConnectRepo,
   githubConnected,
 }: {
   projectId: string;
   system: DesignSystemSummary;
+  brandId?: string | null;
   files: ProjectFile[];
   streaming: boolean;
   activityEvents: AgentEvent[];
   onOpenFile: (name: string) => void;
   onUploadAssets: () => void;
+  onRefreshFiles: () => Promise<void> | void;
   defaultDesignSystemId?: string | null;
   onSetDefaultDesignSystem?: (id: string | null) => Promise<void> | void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
+  onDeleteDesignSystemProject?: (id: string) => Promise<boolean> | boolean;
   onNeedsWork?: (
     sectionTitle: string,
     feedback: string,
@@ -2448,6 +2485,7 @@ function DesignSystemProjectPanel({
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => Promise<void> | void;
+  editFocusRequest?: DesignKitEditFocusRequest | null;
   onConnectRepo?: () => void;
   githubConnected?: boolean;
 }) {
@@ -2479,15 +2517,32 @@ function DesignSystemProjectPanel({
   const [kitActionBusy, setKitActionBusy] = useState<string | null>(null);
   // Transient feedback for kit edits (upload / refresh / reset / delete) so an
   // action that previously fired-and-forgot now reports success or failure.
-  const [kitToast, setKitToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+  const [kitToast, setKitToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);
   const notifyKit = useCallback(
-    (tone: 'success' | 'error', message: string) => setKitToast({ tone, message }),
+    (tone: DesignKitActionFeedbackTone, message: string) => setKitToast({ tone, message }),
     [],
+  );
+  const notifyKitLoading = useCallback(
+    (label: string) => notifyKit('loading', label.endsWith('…') || label.endsWith('...') ? label : `${label}...`),
+    [notifyKit],
   );
   const [kitReloadKey, setKitReloadKey] = useState(0);
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
+
+  const refreshKitDependencies = useCallback(async (options?: { finalizeBrand?: boolean }) => {
+    if (options?.finalizeBrand && brandId) {
+      const outcome = await finalizeBrandProject(brandId, projectId);
+      if (!outcome.ok) throw new Error(outcome.error);
+    }
+    setKitReloadKey((k) => k + 1);
+    await Promise.all([
+      Promise.resolve(onRefreshFiles()),
+      Promise.resolve(onDesignSystemsRefresh?.()),
+    ]);
+  }, [brandId, onDesignSystemsRefresh, onRefreshFiles, projectId]);
+
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
@@ -2512,12 +2567,18 @@ function DesignSystemProjectPanel({
   const { uploading: kitUploading, uploadModule: kitUploadModule } = useKitModuleUpload({
     projectId,
     title: system.title,
-    onUploaded: () => {
-      setKitReloadKey((k) => k + 1);
-      void onDesignSystemsRefresh?.();
-      notifyKit('success', t('ds.uploadDone'));
+    onUploaded: (module) => {
+      setKitActionBusy(`upload:${module}`);
+      notifyKit('loading', t('ds.uploading'));
+      void refreshKitDependencies({ finalizeBrand: true })
+        .then(() => notifyKit('success', t('ds.uploadDone')))
+        .catch(() => notifyKit('error', t('ds.actionFailed')))
+        .finally(() => setKitActionBusy(null));
     },
-    onError: () => notifyKit('error', t('ds.uploadFailed')),
+    onError: () => {
+      setKitActionBusy(null);
+      notifyKit('error', t('ds.uploadFailed'));
+    },
   });
   const { kit } = useDesignKit({
     designSystemId: system.id,
@@ -2529,26 +2590,44 @@ function DesignSystemProjectPanel({
     host: kitHost,
     reloadKey: kitReloadKey,
   });
+  async function persistDesignMd(nextBody: string) {
+    const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
+    if (!updated) throw new Error(t('ds.actionFailed'));
+    const file = await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
+    if (!file) throw new Error(t('ds.actionFailed'));
+    setDesignMdBody(nextBody);
+    await refreshKitDependencies();
+  }
+
   async function saveDesignMd(nextBody: string) {
+    if (kitActionBusy) throw new Error(t('ds.actionFailed'));
     setSavingDesignMd(true);
+    setKitActionBusy('design-md-save');
+    notifyKit('loading', t('ds.saving'));
     try {
-      await updateDesignSystemDraft(system.id, { body: nextBody });
-      await writeProjectTextFile(projectId, 'DESIGN.md', nextBody);
-      setDesignMdBody(nextBody);
-      setKitReloadKey((k) => k + 1);
-      await onDesignSystemsRefresh?.();
+      await persistDesignMd(nextBody);
+      notifyKit('success', t('ds.actionDone'));
+    } catch (err) {
+      notifyKit('error', t('ds.actionFailed'));
+      throw err;
     } finally {
       setSavingDesignMd(false);
+      setKitActionBusy(null);
     }
   }
 
   async function refreshKit() {
     if (kitActionBusy) return;
     setKitActionBusy('refresh');
+    notifyKitLoading(t('ds.refresh'));
     try {
-      await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
-      setKitReloadKey((k) => k + 1);
-      await onDesignSystemsRefresh?.();
+      if (brandId) {
+        await refreshKitDependencies({ finalizeBrand: true });
+      } else {
+        const job = await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
+        if (!job) throw new Error(t('ds.actionFailed'));
+        await refreshKitDependencies();
+      }
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2560,34 +2639,13 @@ function DesignSystemProjectPanel({
   async function downloadKit() {
     if (kitActionBusy) return;
     setKitActionBusy('download');
+    notifyKitLoading(t('ds.download'));
     try {
+      await refreshKitDependencies({ finalizeBrand: true });
       const ok =
-        await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title }) ||
-        await downloadProjectArchive({ projectId, fallbackTitle: system.title });
-      if (!ok) notifyKit('error', t('ds.actionFailed'));
-    } catch {
-      notifyKit('error', t('ds.actionFailed'));
-    } finally {
-      setKitActionBusy(null);
-    }
-  }
-
-  async function resetKitEdits() {
-    if (kitActionBusy) return;
-    setKitActionBusy('reset');
-    try {
-      const originalMd = initialDesignMdRef.current ?? designMdBody;
-      const originalBrand = initialBrandJsonRef.current;
-      await updateDesignSystemDraft(system.id, { body: originalMd });
-      await writeProjectTextFile(projectId, 'DESIGN.md', originalMd);
-      if (originalBrand !== null) {
-        await writeProjectTextFile(projectId, 'brand.json', originalBrand);
-      } else if (initialBrandJsonLoadedRef.current) {
-        await deleteProjectFile(projectId, 'brand.json');
-      }
-      setDesignMdBody(originalMd);
-      setKitReloadKey((k) => k + 1);
-      await onDesignSystemsRefresh?.();
+        await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
+        await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title });
+      if (!ok) throw new Error(t('ds.actionFailed'));
       notifyKit('success', t('ds.actionDone'));
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -2596,17 +2654,62 @@ function DesignSystemProjectPanel({
     }
   }
 
-  async function changeKitColor(index: number, hex: string) {
-    const nextHex = normalizeDesignKitHex(hex);
-    if (!nextHex) throw new Error('Enter a valid hex color.');
-    const ok = await updateBrandColor(projectId, index, nextHex);
-    if (!ok) {
-      const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
-      await saveDesignMd(nextBody);
-      return;
+  // Delete the whole design system from the project tab's "..." menu: remove the
+  // registered design system (so it leaves the Design Systems list) AND its
+  // backing project, then exit the tab. onDeleteDesignSystemProject is App's
+  // handleDeleteProject, which deletes the project, clears local state and
+  // navigates home — so the panel unmounts on success and there's no busy reset
+  // to do in the happy path.
+  async function deleteDesignSystemProject() {
+    if (kitActionBusy || !onDeleteDesignSystemProject) return;
+    const ok = window.confirm(
+      t('ds.deleteProjectConfirm', { title: system.title }),
+    );
+    if (!ok) return;
+    setKitActionBusy('delete');
+    notifyKitLoading(t('ds.deleteProjectAction', { title: system.title }));
+    try {
+      // Delete the backing project first: this navigates home and unmounts the
+      // panel, so the tab exits cleanly instead of briefly rendering an empty
+      // design-system view. Only on success do we drop the registered design
+      // system (so the Design Systems list keeps no ghost row) and refresh that
+      // list. deleteDesignSystemDraft is a no-op (404 → false) for systems that
+      // aren't user-editable; that's fine.
+      const deleted = await onDeleteDesignSystemProject(projectId);
+      if (!deleted) {
+        notifyKit('error', t('ds.actionFailed'));
+        setKitActionBusy(null);
+        return;
+      }
+      await deleteDesignSystemDraft(system.id);
+      await onDesignSystemsRefresh?.();
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
+      setKitActionBusy(null);
     }
-    setKitReloadKey((k) => k + 1);
-    await onDesignSystemsRefresh?.();
+  }
+
+  async function changeKitColor(index: number, hex: string) {
+    if (kitActionBusy) throw new Error(t('ds.actionFailed'));
+    const nextHex = normalizeDesignKitHex(hex);
+    if (!nextHex) throw new Error(t('ds.invalidHexColor'));
+    setKitActionBusy('color');
+    notifyKit('loading', t('ds.saving'));
+    try {
+      const ok = await updateBrandColor(projectId, index, nextHex);
+      if (!ok) {
+        const nextBody = designMdBodyWithColor(designMdBody, kit?.colors ?? [], index, nextHex);
+        await persistDesignMd(nextBody);
+      } else {
+        await refreshKitDependencies({ finalizeBrand: true });
+      }
+      notifyKit('success', t('ds.actionDone'));
+    } catch (err) {
+      notifyKit('error', t('ds.actionFailed'));
+      throw err;
+    } finally {
+      setKitActionBusy(null);
+    }
   }
 
   async function resetKitColor(index: number) {
@@ -2616,30 +2719,40 @@ function DesignSystemProjectPanel({
       swatches: system.swatches,
       currentColors: kit?.colors ?? [],
     });
-    if (!originalHex) throw new Error('No original color is available for this swatch.');
+    if (!originalHex) throw new Error(t('ds.noOriginalColor'));
     await changeKitColor(index, originalHex);
   }
 
   async function removeKitLogo(index: number) {
-    const ok = await deleteBrandLogo(projectId, index);
-    if (!ok) {
+    if (kitActionBusy) return;
+    setKitActionBusy(`delete-logo:${index}`);
+    notifyKitLoading(t('ds.deleteLogo'));
+    try {
+      const ok = await deleteBrandLogo(projectId, index);
+      if (!ok) throw new Error(t('ds.actionFailed'));
+      await refreshKitDependencies({ finalizeBrand: true });
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
       notifyKit('error', t('ds.actionFailed'));
-      return;
+    } finally {
+      setKitActionBusy(null);
     }
-    setKitReloadKey((k) => k + 1);
-    await onDesignSystemsRefresh?.();
-    notifyKit('success', t('ds.actionDone'));
   }
 
   async function removeKitImage(index: number) {
-    const ok = await deleteBrandImage(projectId, index);
-    if (!ok) {
+    if (kitActionBusy) return;
+    setKitActionBusy(`delete-image:${index}`);
+    notifyKitLoading(t('ds.deleteImage', { caption: '' }).trim());
+    try {
+      const ok = await deleteBrandImage(projectId, index);
+      if (!ok) throw new Error(t('ds.actionFailed'));
+      await refreshKitDependencies({ finalizeBrand: true });
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
       notifyKit('error', t('ds.actionFailed'));
-      return;
+    } finally {
+      setKitActionBusy(null);
     }
-    setKitReloadKey((k) => k + 1);
-    await onDesignSystemsRefresh?.();
-    notifyKit('success', t('ds.actionDone'));
   }
 
   const allFileNames = files.map((file) => file.name);
@@ -2647,10 +2760,11 @@ function DesignSystemProjectPanel({
   const manifestFile = files.find((file) => normalizeDesignSystemPath(file.name) === '_ds_manifest.json');
   const manifestFileName = manifestFile?.name ?? null;
   const manifestCacheBustKey = manifestFile ? Math.round(manifestFile.mtime) : null;
+  const manifestReadFailedLabel = t('ds.manifestReadFailed');
   useEffect(() => {
     if (!system.id || !manifestFileName || manifestCacheBustKey === null) {
-      setCardManifest(new Map());
-      setCardManifestError(null);
+      setCardManifest((current) => (current.size === 0 ? current : new Map()));
+      setCardManifestError((current) => (current === null ? current : null));
       return undefined;
     }
     let cancelled = false;
@@ -2664,12 +2778,12 @@ function DesignSystemProjectPanel({
     }).catch((err: unknown) => {
       if (cancelled) return;
       setCardManifest(new Map());
-      setCardManifestError(err instanceof Error ? err.message : 'Unable to read _ds_manifest.json.');
+      setCardManifestError(err instanceof Error ? err.message : manifestReadFailedLabel);
     });
     return () => {
       cancelled = true;
     };
-  }, [manifestCacheBustKey, manifestFileName, projectId, system.id]);
+  }, [manifestCacheBustKey, manifestFileName, manifestReadFailedLabel, projectId, system.id]);
   const fontFiles = allFileNames.filter((name) =>
     /\.(otf|ttf|woff|woff2)$/i.test(name) || name.toLowerCase().includes('/fonts/'),
   );
@@ -2707,9 +2821,9 @@ function DesignSystemProjectPanel({
       sectionActivity,
       changedAfterFeedback,
       sectionStatus,
-      sectionStatusLabel: designSystemSectionStatusLabel(section, sectionStatus, sectionActivity),
+      sectionStatusLabel: designSystemSectionStatusLabel(t, section, sectionStatus, sectionActivity),
       reviewTimeLabel: reviewEntry?.updatedAt
-        ? designSystemReviewTimeLabel(reviewEntry.updatedAt)
+        ? designSystemReviewTimeLabel(t, reviewEntry.updatedAt)
         : null,
     };
   });
@@ -2734,17 +2848,23 @@ function DesignSystemProjectPanel({
     files,
     sectionReviews,
     system,
+    t,
   });
   const generationProgress = designSystemGenerationProgress(generationSteps);
 
   async function togglePublished(nextPublished: boolean) {
     if (nextPublished && !githubEvidence.ready) return;
     setStatusBusy(true);
+    notifyKitLoading(publishActionLabel);
     try {
       const nextStatus = nextPublished ? 'published' : 'draft';
       const updated = await updateDesignSystemDraft(system.id, { status: nextStatus });
-      if (updated) setStatus(updated.status ?? nextStatus);
+      if (!updated) throw new Error(t('ds.actionFailed'));
+      setStatus(updated.status ?? nextStatus);
       await onDesignSystemsRefresh?.();
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setStatusBusy(false);
     }
@@ -2753,8 +2873,12 @@ function DesignSystemProjectPanel({
   async function toggleDefault(nextDefault: boolean) {
     if (!onSetDefaultDesignSystem) return;
     setDefaultBusy(true);
+    notifyKitLoading(nextDefault ? t('dsManager.makeDefault') : t('dsManager.badgeDefault'));
     try {
       await onSetDefaultDesignSystem(nextDefault ? system.id : null);
+      notifyKit('success', t('ds.actionDone'));
+    } catch {
+      notifyKit('error', t('ds.actionFailed'));
     } finally {
       setDefaultBusy(false);
     }
@@ -2851,7 +2975,7 @@ function DesignSystemProjectPanel({
             type="button"
             className="ds-project-section-head-trigger"
             aria-expanded={expanded}
-            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${section.title}`}
+            aria-label={t(expanded ? 'ds.reviewCollapseSection' : 'ds.reviewExpandSection', { title: section.title })}
             onClick={() => toggleSection(instanceId)}
           />
           <span className="ds-project-section-title">
@@ -2870,11 +2994,11 @@ function DesignSystemProjectPanel({
                 aria-label={sectionStatusLabel}
                 title={sectionStatusLabel}
               >
-                {needsAttention ? 'Needs review' : 'Looks good'}
+                {needsAttention ? t('ds.reviewNeedsReview') : t('ds.reviewLooksGood')}
               </span>
             ) : null}
           </span>
-          <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
+          <div className="ds-project-review-actions" aria-label={t('ds.reviewActionsLabel', { title: section.title })}>
             <button
               type="button"
               className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
@@ -2887,7 +3011,7 @@ function DesignSystemProjectPanel({
               }}
             >
               <Icon name="check" size={13} />
-              Looks good
+              {t('ds.reviewLooksGood')}
             </button>
             <button
               type="button"
@@ -2896,18 +3020,18 @@ function DesignSystemProjectPanel({
               onClick={() => openNeedsWorkFeedback(section.title, instanceId)}
             >
               <Icon name="comment" size={13} />
-              Needs work...
+              {t('ds.reviewNeedsWorkEllipsis')}
             </button>
             {editableFile ? (
               <button
                 type="button"
                 className="ghost compact"
                 data-testid={`design-system-review-edit-${sectionSlug}`}
-                title={`Edit ${editableFile.name}`}
+                title={t('ds.reviewEditFile', { file: editableFile.name })}
                 onClick={() => onOpenFile(editableFile.name)}
               >
                 <Icon name="edit" size={13} />
-                Edit
+                {t('common.edit')}
               </button>
             ) : null}
             {feedbackSection === section.title ? (
@@ -2919,13 +3043,13 @@ function DesignSystemProjectPanel({
                 }}
               >
                 <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
-                  Tell the agent what to change
+                  {t('ds.reviewFeedbackLabel')}
                 </label>
                 <textarea
                   id={`ds-feedback-${slugForTestId(section.title)}`}
                   value={feedbackText}
                   rows={3}
-                  placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
+                  placeholder={t('ds.reviewFeedbackPlaceholder', { title: section.title })}
                   onChange={(event) => setFeedbackText(event.target.value)}
                   autoFocus
                 />
@@ -2938,14 +3062,14 @@ function DesignSystemProjectPanel({
                       setFeedbackText('');
                     }}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="submit"
                     className="primary compact"
                     disabled={!feedbackText.trim()}
                   >
-                    Send
+                    {t('chat.send')}
                   </button>
                 </div>
               </form>
@@ -2957,15 +3081,15 @@ function DesignSystemProjectPanel({
             {sectionActivity.running ? (
               <div className="ds-project-review-notice is-running">
                 <Icon name="sparkles" size={14} />
-                <span>{designSystemSectionRunningNotice(section, sectionActivity)}</span>
+                <span>{designSystemSectionRunningNotice(t, section, sectionActivity)}</span>
               </div>
             ) : changedAfterFeedback || sectionActivity.mutated ? (
               <div className="ds-project-review-notice">
                 <Icon name="check" size={14} />
                 <span>
                   {changedAfterFeedback
-                    ? 'This section changed after your feedback. Review it again before publishing.'
-                    : 'This section changed during the latest run. Review it before publishing.'}
+                    ? t('ds.reviewChangedAfterFeedback')
+                    : t('ds.reviewChangedDuringRun')}
                 </span>
               </div>
             ) : null}
@@ -2973,10 +3097,10 @@ function DesignSystemProjectPanel({
               <div className="ds-project-last-feedback">
                 <Icon name="comment" size={14} />
                 <span>
-                  <strong>Last feedback</strong>
+                  <strong>{t('ds.reviewLastFeedback')}</strong>
                   <small>{reviewEntry.feedback}</small>
                   {reviewEntry.agentTask ? (
-                    <small>{designSystemReviewAgentTaskLabel(reviewEntry.agentTask)}</small>
+                    <small>{designSystemReviewAgentTaskLabel(t, reviewEntry.agentTask)}</small>
                   ) : null}
                 </span>
               </div>
@@ -2988,7 +3112,7 @@ function DesignSystemProjectPanel({
             ) : (
               <div className="ds-project-preview-placeholder">
                 <Icon name="sparkles" size={16} />
-                <span>Generating preview...</span>
+                <span>{t('ds.previewGenerating')}</span>
               </div>
             )}
           </div>
@@ -3001,10 +3125,11 @@ function DesignSystemProjectPanel({
     return (
       <div className="ds-project-panel ds-project-panel--generating">
         <DesignSystemProjectLoading
-          title="Creating your design system..."
-          subtitle="Keep this tab open. You can come back in a few minutes."
+          kicker={t('dsManager.tabDesignSystem')}
+          title={t('ds.creatingProjectTitle')}
+          subtitle={t('ds.creatingProjectSubtitle')}
           progress={generationProgress}
-          progressLabel={`Design system generation progress ${generationProgress}%`}
+          progressLabel={t('ds.generationProgressLabel', { progress: generationProgress })}
         />
       </div>
     );
@@ -3017,12 +3142,14 @@ function DesignSystemProjectPanel({
   // The publish lifecycle button stays a visible primary; everything else
   // (asset refresh/download/reset and the chat-default toggle) folds into the
   // header's "More" dropdown so the sticky row reads as one clear action.
+  const repoCopy = repoConnectCopy(t, githubConnected);
+  const publishActionLabel = published ? t('ds.unpublishDesignSystem') : t('ds.publishDesignSystem');
   const actionsSlot = (
     <span
       className="ds-project-publish-trigger"
       title={
         !published && !githubEvidence.ready
-          ? 'Finish importing your GitHub repo before you can publish.'
+          ? t('ds.publishRepoRequiredTitle')
           : undefined
       }
     >
@@ -3030,13 +3157,14 @@ function DesignSystemProjectPanel({
         type="button"
         className={published ? 'ghost compact' : 'primary'}
         data-testid="design-system-publish"
-        aria-label={published ? 'Unpublish design system' : 'Publish design system'}
-        title={published ? 'Unpublish design system' : 'Publish design system'}
+        aria-label={publishActionLabel}
+        title={publishActionLabel}
         disabled={statusBusy || (!published && !githubEvidence.ready)}
+        aria-busy={statusBusy || undefined}
         onClick={() => void togglePublished(!published)}
       >
-        <Icon name={published ? 'check' : 'arrow-up'} size={14} />
-        {published ? 'Published' : 'Publish'}
+        <Icon name={statusBusy ? 'spinner' : published ? 'check' : 'arrow-up'} size={14} />
+        {published ? t('ds.published') : t('ds.publish')}
       </button>
     </span>
   );
@@ -3044,34 +3172,42 @@ function DesignSystemProjectPanel({
   const headerMenuActions: HeaderMenuAction[] = [
     {
       id: 'refresh',
-      label: 'Refresh',
+      label: t('ds.refresh'),
       icon: 'refresh',
       onClick: () => void refreshKit(),
-      disabled: Boolean(kitActionBusy),
+      disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+      loading: kitActionBusy === 'refresh',
     },
     {
       id: 'download',
-      label: 'Download',
+      label: t('dsManager.downloadTitle'),
       icon: 'download',
       onClick: () => void downloadKit(),
-      disabled: Boolean(kitActionBusy),
-    },
-    {
-      id: 'reset',
-      label: 'Reset',
-      icon: 'reload',
-      onClick: () => void resetKitEdits(),
-      disabled: Boolean(kitActionBusy),
+      disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+      loading: kitActionBusy === 'download',
     },
     ...(published && onSetDefaultDesignSystem
       ? [
           {
             id: 'default',
-            label: isDefault ? 'Chat default' : 'Default for new chats',
+            label: isDefault ? t('dsManager.badgeDefault') : t('dsManager.makeDefault'),
             icon: (isDefault ? 'check' : 'star') as IconName,
             onClick: () => void toggleDefault(!isDefault),
-            disabled: statusBusy || defaultBusy,
+            disabled: statusBusy || defaultBusy || Boolean(kitActionBusy),
+            loading: defaultBusy,
             active: isDefault,
+          } satisfies HeaderMenuAction,
+        ]
+      : []),
+    ...(onDeleteDesignSystemProject
+      ? [
+          {
+            id: 'delete',
+            label: t('ds.deleteProjectAction', { title: system.title }),
+            icon: 'trash' as IconName,
+            onClick: () => void deleteDesignSystemProject(),
+            disabled: Boolean(kitActionBusy) || statusBusy || defaultBusy,
+            loading: kitActionBusy === 'delete',
           } satisfies HeaderMenuAction,
         ]
       : []),
@@ -3086,11 +3222,11 @@ function DesignSystemProjectPanel({
       >
         <Icon name={streaming ? 'sparkles' : 'check'} size={15} />
         <span>
-          <strong>{streaming ? 'Extracting design system' : 'Extraction complete'}</strong>
+          <strong>{streaming ? t('ds.extractionRunningTitle') : t('ds.extractionCompleteTitle')}</strong>
           <small>
             {streaming
-              ? 'Open Design is updating this system in place.'
-              : 'All extracted modules are shown below; empty sections are intentionally blank.'}
+              ? t('ds.extractionRunningBody')
+              : t('ds.extractionCompleteBody')}
           </small>
         </span>
       </div>
@@ -3098,16 +3234,15 @@ function DesignSystemProjectPanel({
       <div className="ds-project-publish-card ds-project-publish-card--review">
         <p>
           {published
-            ? "Your team's new projects can use this design system as context by default."
-            : 'Your design system is ready, but your feedback will improve it. Publish it when it is ready to use in future projects.'}
+            ? t('ds.publishCardPublished')
+            : t('ds.publishCardDraft')}
         </p>
         {published ? (
           <div className="ds-project-use-row">
             <span>
-              <strong>Use this system</strong>
+              <strong>{t('ds.useSystemTitle')}</strong>
               <small>
-                Start a new design that inherits this system&apos;s colors, type, and
-                components — kept on-brand automatically.
+                {t('ds.useSystemBody')}
               </small>
             </span>
             <Button
@@ -3116,7 +3251,7 @@ function DesignSystemProjectPanel({
               disabled={!onUseDesignSystem}
             >
               <Icon name="plus" size={14} />
-              Create new design
+              {t('ds.createNewDesign')}
             </Button>
           </div>
         ) : null}
@@ -3126,8 +3261,8 @@ function DesignSystemProjectPanel({
         <div className="ds-project-warning-card">
           <Icon name="github" size={16} />
           <span>
-            <strong>{repoConnectCopy(githubConnected).bannerTitle}</strong>
-            <small>{repoConnectCopy(githubConnected).bannerBody}</small>
+            <strong>{repoCopy.bannerTitle}</strong>
+            <small>{repoCopy.bannerBody}</small>
           </span>
           {onConnectRepo ? (
             <Button
@@ -3137,12 +3272,12 @@ function DesignSystemProjectPanel({
               onClick={onConnectRepo}
             >
               <Icon name="github" size={13} />
-              {repoConnectCopy(githubConnected).buttonLabel}
+              {repoCopy.buttonLabel}
             </Button>
           ) : githubEvidence.hasSourceManifest ? (
             <Button variant="ghost" className="compact" onClick={() => onOpenFile('context/source-context.md')}>
               <Icon name="file" size={13} />
-              Open source context
+              {t('ds.openSourceContext')}
             </Button>
           ) : null}
         </div>
@@ -3160,13 +3295,13 @@ function DesignSystemProjectPanel({
         >
           <Icon name="alert-triangle" size={16} />
           <span>
-            <strong>Design manifest needs attention</strong>
+            <strong>{t('ds.manifestNeedsAttention')}</strong>
             <small>{cardManifestError}</small>
           </span>
           {manifestFileName ? (
             <Button variant="ghost" className="compact" onClick={() => onOpenFile(manifestFileName)}>
               <Icon name="file" size={13} />
-              Open manifest
+              {t('ds.openManifest')}
             </Button>
           ) : null}
         </div>
@@ -3180,6 +3315,7 @@ function DesignSystemProjectPanel({
         <Toast
           message={kitToast.message}
           tone={kitToast.tone}
+          ttlMs={kitToast.tone === 'loading' ? 60000 : 2600}
           role={kitToast.tone === 'error' ? 'alert' : 'status'}
           onDismiss={() => setKitToast(null)}
         />
@@ -3205,15 +3341,18 @@ function DesignSystemProjectPanel({
           onDeleteImage={(index) => void removeKitImage(index)}
           onRefresh={() => void refreshKit()}
           onDownload={() => void downloadKit()}
-          onReset={() => void resetKitEdits()}
           uploading={kitUploading}
+          actionBusy={kitActionBusy}
+          onActionFeedback={notifyKit}
+          editFocusRequest={editFocusRequest}
           dataTestId="design-system-project-kit"
         />
       ) : (
         <DesignSystemProjectLoading
+          kicker={t('dsManager.tabDesignSystem')}
           title={systemDisplayName}
-          subtitle="Preparing the design system workspace."
-          progressLabel="Design system workspace is loading"
+          subtitle={t('ds.workspacePreparing')}
+          progressLabel={t('ds.workspaceLoadingLabel')}
         />
       )}
     </div>
@@ -3221,11 +3360,13 @@ function DesignSystemProjectPanel({
 }
 
 function DesignSystemProjectLoading({
+  kicker,
   title,
   subtitle,
   progress,
   progressLabel,
 }: {
+  kicker: string;
   title: string;
   subtitle: string;
   progress?: number;
@@ -3244,7 +3385,7 @@ function DesignSystemProjectLoading({
         </span>
       </div>
       <div className="ds-project-loading-copy">
-        <span className="ds-project-loading-kicker">Design System</span>
+        <span className="ds-project-loading-kicker">{kicker}</span>
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
@@ -3807,25 +3948,28 @@ function designSystemSectionStatus(
 }
 
 function designSystemSectionStatusLabel(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   status: DesignSystemSectionStatus,
   activity: DesignSystemSectionActivity,
 ): string {
   switch (status) {
     case 'running':
-      return designSystemSectionPhaseLabel(section, activity);
+      return designSystemSectionPhaseLabel(t, section, activity);
     case 'planned':
-      return 'Queued';
+      return t('ds.sectionQueued');
     case 'updated':
-      return 'Review updated files';
+      return t('ds.sectionReviewUpdatedFiles');
     case 'approved':
-      return 'Looks good';
+      return t('ds.reviewLooksGood');
     case 'needs-work':
-      return 'Needs work';
+      return t('ds.reviewNeedsWork');
     case 'needs-review':
-      return 'Needs review';
+      return t('ds.reviewNeedsReview');
     case 'missing':
-      return section.requiredFile ? `${section.requiredFile} missing` : 'No files yet';
+      return section.requiredFile
+        ? t('ds.sectionRequiredFileMissing', { file: section.requiredFile })
+        : t('ds.sectionNoFilesYet');
   }
 }
 
@@ -3852,10 +3996,12 @@ function designSystemInitialGenerationSteps({
   files,
   sectionReviews,
   system,
+  t,
 }: {
   files: ProjectFile[];
   sectionReviews: DesignSystemProjectSectionReview[];
   system: DesignSystemSummary;
+  t: TranslateFn;
 }): DesignSystemGenerationStep[] {
   const hasSourceContext =
     designSystemGithubEvidenceState(system, files.map((file) => file.name)).ready
@@ -3875,14 +4021,14 @@ function designSystemInitialGenerationSteps({
   const steps: DesignSystemGenerationStep[] = [
     {
       id: 'source-context',
-      title: 'Explore provided resources',
-      detail: 'Company context, GitHub repositories, local code folders, Figma files, fonts, logos, and notes.',
+      title: t('ds.generationSourceTitle'),
+      detail: t('ds.generationSourceDetail'),
       status: hasSourceContext ? 'succeeded' : 'running',
     },
     {
       id: 'guidance',
-      title: 'Create DESIGN.md',
-      detail: 'Canonical guidance used as project context.',
+      title: t('ds.generationGuidanceTitle'),
+      detail: t('ds.generationGuidanceDetail'),
       status: fileNames.some(isDesignSystemGuidanceFile)
         ? 'succeeded'
         : guidanceRunning
@@ -3891,8 +4037,8 @@ function designSystemInitialGenerationSteps({
     },
     {
       id: 'tokens',
-      title: 'Create tokens',
-      detail: 'Color, type, spacing, and radius evidence.',
+      title: t('ds.generationTokensTitle'),
+      detail: t('ds.generationTokensDetail'),
       status: fileNames.some(isDesignSystemTokenFile)
         ? 'succeeded'
         : (categoryIsRunning('Type') || categoryIsRunning('Colors') || categoryIsRunning('Spacing'))
@@ -3901,8 +4047,8 @@ function designSystemInitialGenerationSteps({
     },
     {
       id: 'previews',
-      title: 'Create preview cards',
-      detail: 'HTML review cards for the Design System tab.',
+      title: t('ds.generationPreviewsTitle'),
+      detail: t('ds.generationPreviewsDetail'),
       status: sectionReviews.some((review) => review.previewFile)
         ? 'succeeded'
         : (categoryIsRunning('Type') || categoryIsRunning('Colors') || categoryIsRunning('Spacing') || categoryIsRunning('Brand'))
@@ -3911,8 +4057,8 @@ function designSystemInitialGenerationSteps({
     },
     {
       id: 'ui-kit',
-      title: 'Create UI kit',
-      detail: 'Reusable interface examples.',
+      title: t('ds.generationUiKitTitle'),
+      detail: t('ds.generationUiKitDetail'),
       status: categoryHasReview('Components') || fileNames.some(isDesignSystemUiKitFile)
         ? 'succeeded'
         : categoryIsRunning('Components')
@@ -3921,8 +4067,8 @@ function designSystemInitialGenerationSteps({
     },
     {
       id: 'assets',
-      title: 'Register assets',
-      detail: 'Logos, icons, fonts, and brand files.',
+      title: t('ds.generationAssetsTitle'),
+      detail: t('ds.generationAssetsDetail'),
       status: categoryHasReview('Brand') || fileNames.some(isDesignSystemAssetFile)
         ? 'succeeded'
         : categoryIsRunning('Brand')
@@ -4142,69 +4288,79 @@ function designSystemBasename(path: string): string {
 }
 
 function designSystemSectionPhaseLabel(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,
 ): string {
   if (activity.phase === 'planned') {
     switch (section.category) {
       case 'Type':
-        return 'Queued typography';
+        return t('ds.phaseQueuedTypography');
       case 'Colors':
-        return 'Queued tokens';
+        return t('ds.phaseQueuedTokens');
       case 'Spacing':
-        return 'Queued spacing';
+        return t('ds.phaseQueuedSpacing');
       case 'Components':
-        return 'Queued UI kit';
+        return t('ds.phaseQueuedUiKit');
       case 'Brand':
-        return 'Queued assets';
+        return t('ds.phaseQueuedAssets');
     }
   }
   if (activity.phase === 'reading') {
     switch (section.category) {
       case 'Type':
-        return 'Reading typography';
+        return t('ds.phaseReadingTypography');
       case 'Colors':
-        return 'Reading tokens';
+        return t('ds.phaseReadingTokens');
       case 'Spacing':
-        return 'Reading spacing';
+        return t('ds.phaseReadingSpacing');
       case 'Components':
-        return 'Reading UI kit';
+        return t('ds.phaseReadingUiKit');
       case 'Brand':
-        return 'Reading assets';
+        return t('ds.phaseReadingAssets');
     }
   }
   if (activity.phase === 'writing') {
     switch (section.category) {
       case 'Type':
-        return 'Writing typography';
+        return t('ds.phaseWritingTypography');
       case 'Colors':
-        return 'Writing tokens';
+        return t('ds.phaseWritingTokens');
       case 'Spacing':
-        return 'Writing spacing';
+        return t('ds.phaseWritingSpacing');
       case 'Components':
-        return 'Building UI kit';
+        return t('ds.phaseBuildingUiKit');
       case 'Brand':
-        return 'Updating assets';
+        return t('ds.phaseUpdatingAssets');
     }
   }
-  if (activity.phase === 'error') return 'Needs attention';
-  if (activity.phase === 'updated') return 'Updated';
-  return 'Needs review';
+  if (activity.phase === 'error') return t('ds.phaseNeedsAttention');
+  if (activity.phase === 'updated') return t('ds.phaseUpdated');
+  return t('ds.reviewNeedsReview');
 }
 
 function designSystemSectionActivityLabel(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,
 ): string {
   if (activity.touchedFiles.length === 0) {
+    const phaseLabel = designSystemSectionPhaseLabel(t, section, activity);
     return activity.todoText
-      ? `${designSystemSectionPhaseLabel(section, activity)} from todo: ${truncateDesignSystemActivityText(activity.todoText)}`
-      : designSystemSectionPhaseLabel(section, activity);
+      ? t('ds.sectionActivityFromTodo', {
+          phase: phaseLabel,
+          todo: truncateDesignSystemActivityText(activity.todoText),
+        })
+      : phaseLabel;
   }
   const label = activity.touchedFiles.slice(0, 3).join(', ');
   const suffix = activity.touchedFiles.length > 3 ? ` +${activity.touchedFiles.length - 3}` : '';
-  if (activity.phase === 'idle') return `Read ${label}${suffix}`;
-  return `${designSystemSectionPhaseLabel(section, activity)} ${label}${suffix}`;
+  const files = `${label}${suffix}`;
+  if (activity.phase === 'idle') return t('ds.sectionActivityReadFiles', { files });
+  return t('ds.sectionActivityPhaseFiles', {
+    phase: designSystemSectionPhaseLabel(t, section, activity),
+    files,
+  });
 }
 
 function truncateDesignSystemActivityText(value: string): string {
@@ -4213,40 +4369,51 @@ function truncateDesignSystemActivityText(value: string): string {
 }
 
 function designSystemSectionRunningNotice(
+  t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,
 ): string {
   if (activity.phase === 'reading') {
-    return `Open Design is reading ${section.title} context for this section.`;
+    return t('ds.sectionRunningReadingContext', { title: section.title });
   }
-  return `${designSystemSectionPhaseLabel(section, activity)} now.`;
+  return t('ds.sectionRunningNow', { phase: designSystemSectionPhaseLabel(t, section, activity) });
 }
 
-function designSystemReviewTimeLabel(value: string): string | null {
+function designSystemReviewTimeLabel(t: TranslateFn, value: string): string | null {
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return null;
-  return `Last reviewed ${new Intl.DateTimeFormat('en', {
+  const formatted = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date(time))}`;
+  }).format(new Date(time));
+  return t('ds.reviewLastReviewed', { time: formatted });
 }
 
-function designSystemReviewAgentTaskLabel(task: DesignSystemReviewAgentTask): string {
+function designSystemReviewAgentTaskLabel(t: TranslateFn, task: DesignSystemReviewAgentTask): string {
   switch (task.status) {
     case 'queued':
-      return 'Feedback saved. The agent will pick it up when the current run finishes.';
+      return t('ds.agentFeedbackQueued');
     case 'sent':
-      if (!task.sentAt) return 'Sent to agent.';
+      if (!task.sentAt) return t('ds.agentFeedbackSent');
       {
-        const label = designSystemReviewTimeLabel(task.sentAt)?.replace('Last reviewed', '').trim();
-        return label ? `Sent to agent ${label}.` : 'Sent to agent.';
+        const time = Date.parse(task.sentAt);
+        if (!Number.isFinite(time)) return t('ds.agentFeedbackSent');
+        const formatted = new Intl.DateTimeFormat(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        }).format(new Date(time));
+        return t('ds.agentFeedbackSentAt', { time: formatted });
       }
     case 'failed':
-      return task.error ? `Agent task failed: ${task.error}` : 'Agent task failed.';
+      return task.error
+        ? t('ds.agentFeedbackFailedWithError', { error: task.error })
+        : t('ds.agentFeedbackFailed');
   }
-  return 'Agent task status unknown.';
+  return t('ds.agentFeedbackUnknown');
 }
 
 function designSystemSectionChangedAfterReview(
@@ -4566,6 +4733,7 @@ function Tab({
         'od-tooltip',
         meta ? 'has-meta' : '',
         kind === 'live-artifact' ? 'live-artifact-tab' : '',
+        kind === 'browser' ? 'browser-tab' : '',
         active ? 'active' : '',
         draggable ? 'draggable' : '',
         dragging ? 'dragging' : '',

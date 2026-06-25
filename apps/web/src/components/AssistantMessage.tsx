@@ -37,7 +37,7 @@ import {
   stripTrailingOpenOdCard,
   type OdCard,
 } from "@open-design/contracts";
-import { OdCardView } from "./OdCard";
+import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
@@ -277,6 +277,10 @@ interface Props {
   projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  // Client-side confirm for a <od-card type="brand-browser-assist"> button: read
+  // the unblocked browser DOM and re-extract the brand. Excluded from the memo
+  // comparison (routed through ChatPane's stable callbacks ref).
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -317,6 +321,10 @@ interface Props {
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
+  onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -403,6 +411,7 @@ function AssistantMessageImpl({
   projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
@@ -421,6 +430,10 @@ function AssistantMessageImpl({
   onArtifactShare,
   onToolboxAction,
   onNextStepPromptAction,
+  onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
+  onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
@@ -626,14 +639,6 @@ function AssistantMessageImpl({
         <span className="role-name">{roleName}</span>
       </div>
       <div className="assistant-flow">
-        {fileOps.length > 0 ? (
-          <FileOpsSummary
-            entries={fileOps}
-            streaming={streaming}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
@@ -653,6 +658,7 @@ function AssistantMessageImpl({
                 runId={message.runId ?? null}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               />
             );
           if (b.kind === "thinking")
@@ -705,6 +711,14 @@ function AssistantMessageImpl({
           }
           return null;
         })}
+        {fileOps.length > 0 ? (
+          <FileOpsSummary
+            entries={fileOps}
+            streaming={streaming}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
         {!streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
@@ -807,6 +821,10 @@ function AssistantMessageImpl({
             onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
             onToolboxAction={isLast ? onToolboxAction : undefined}
             onPromptAction={isLast ? onNextStepPromptAction : undefined}
+            onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
+            aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
+            onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
+            createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
             onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}
@@ -1913,6 +1931,7 @@ function ProseBlock({
   runId,
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
 }: {
   text: string;
   hideRecoveredHtmlFallback?: boolean;
@@ -1928,6 +1947,7 @@ function ProseBlock({
   projectFileNames?: Set<string>;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onRequestOpenFile?: (name: string) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
@@ -2019,6 +2039,7 @@ function ProseBlock({
             <OdCardView
               key={seg.key}
               card={seg.card}
+              onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               instanceScope={[
                 projectId ?? "no-project",
                 conversationId ?? "no-conversation",

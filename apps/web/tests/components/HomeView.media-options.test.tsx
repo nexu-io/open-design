@@ -58,6 +58,21 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
+  it('shows the Home composer session-mode switcher and defaults to Design', async () => {
+    stubFetch();
+    renderHome();
+
+    await screen.findByTestId('home-hero-input');
+
+    const modeTrigger = screen.getByTestId('session-mode-trigger');
+    expect(modeTrigger.textContent).toContain('Design');
+
+    fireEvent.click(modeTrigger);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Ask mode/i }));
+
+    expect(screen.getByTestId('session-mode-trigger').textContent).toContain('Ask');
+  });
+
   it('renders the design-system popover outside the prompt editor (not clipped by it)', async () => {
     stubFetch();
     renderHome();

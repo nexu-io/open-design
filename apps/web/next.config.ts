@@ -168,30 +168,6 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: WORKSPACE_ROOT,
   },
-  // pptxgenjs (loaded client-side for PPTX export in src/runtime/exports.ts)
-  // dynamically imports `node:fs` / `node:https` inside Node-only save paths
-  // that never execute in the browser. Next stubs the bare `fs`/`https`
-  // specifiers for the client bundle but leaves the `node:`-scheme forms
-  // unresolved, so webpack aborts the build with UnhandledSchemeError. Strip
-  // the `node:` prefix for those builtins on the client build and stub them to
-  // an empty module via resolve.fallback so the dead Node code path drops out.
-  webpack: (config, { isServer, webpack }) => {
-    if (!isServer) {
-      config.plugins.push(
-        new webpack.NormalModuleReplacementPlugin(/^node:(fs|https|http)$/, (resource: { request: string }) => {
-          resource.request = resource.request.replace(/^node:/, '');
-        }),
-      );
-      config.resolve = config.resolve ?? {};
-      config.resolve.fallback = {
-        ...(config.resolve.fallback ?? {}),
-        fs: false,
-        https: false,
-        http: false,
-      };
-    }
-    return config;
-  },
   ...(DEV_TSCONFIG_PATH ? { typescript: { tsconfigPath: DEV_TSCONFIG_PATH } } : {}),
   // Static exports keep Next.js's default `out/` output directory so static
   // hosts like Vercel can publish the generated site directly. Server runtimes

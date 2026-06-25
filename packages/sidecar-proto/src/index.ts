@@ -246,7 +246,7 @@ export type DesktopExportPdfResult = {
   path?: string;
 };
 
-export type DesktopExportArtifactFormat = "pdf" | "pptx" | "pptx-editable" | "image";
+export type DesktopExportArtifactFormat = "pdf" | "image";
 // Electron's `nativeImage` (the off-screen renderer the programmatic exporter
 // uses) can only encode PNG and JPEG. WebP is deliberately excluded so a caller
 // asking for it gets a clear validation error instead of a silent PNG downgrade.
@@ -254,7 +254,7 @@ export type DesktopExportArtifactFormat = "pdf" | "pptx" | "pptx-editable" | "im
 // is unaffected by this list.)
 export type DesktopExportArtifactImageFormat = "png" | "jpeg";
 
-// Generic programmatic export (PDF / PPTX / image). The desktop renderer writes
+// Generic programmatic export (PDF / image). The desktop renderer writes
 // the result to a temporary file and returns its path; the daemon streams those
 // bytes to the HTTP caller (the `od export` CLI), then removes the temp file.
 export type DesktopExportArtifactInput = {
@@ -684,7 +684,7 @@ function normalizeOptionalPositiveNumber(value: unknown, label: string): number 
   return value;
 }
 
-const DESKTOP_EXPORT_ARTIFACT_FORMATS: readonly DesktopExportArtifactFormat[] = ["pdf", "pptx", "pptx-editable", "image"];
+const DESKTOP_EXPORT_ARTIFACT_FORMATS: readonly DesktopExportArtifactFormat[] = ["pdf", "image"];
 const DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS: readonly DesktopExportArtifactImageFormat[] = ["png", "jpeg"];
 
 function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtifactInput {

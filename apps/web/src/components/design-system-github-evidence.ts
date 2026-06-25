@@ -1,4 +1,7 @@
+import type { Dict } from '../i18n/types';
 import type { DesignSystemSummary } from '../types';
+
+type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 export interface DesignSystemGithubEvidence {
   /** The design system references at least one GitHub repo in its provenance. */
@@ -112,31 +115,30 @@ export interface RepoConnectCopy {
  * the review banner and the chat empty-state card share this so they never
  * drift.
  */
-export function repoConnectCopy(githubConnected: boolean | undefined): RepoConnectCopy {
+export function repoConnectCopy(t: TranslateFn, githubConnected: boolean | undefined): RepoConnectCopy {
   if (githubConnected === undefined) {
     return {
-      bannerTitle: 'Connect your repo to pull aspects of your design system',
-      cardTitle: 'Connect your repo',
-      bannerBody: 'Checking your GitHub connection...',
-      cardBody: 'Checking your GitHub connection...',
-      buttonLabel: 'Checking GitHub...',
+      bannerTitle: t('ds.repoConnectBannerTitle'),
+      cardTitle: t('ds.repoConnectCardTitle'),
+      bannerBody: t('ds.repoConnectPendingBody'),
+      cardBody: t('ds.repoConnectPendingBody'),
+      buttonLabel: t('ds.repoConnectPendingButton'),
     };
   }
   if (githubConnected) {
     return {
-      bannerTitle: 'GitHub is connected',
-      cardTitle: 'GitHub is connected',
-      bannerBody: 'Re-import this repo to pull its files into your design system.',
-      cardBody: 'Re-import this repo to pull its files into your design system.',
-      buttonLabel: 'Import repo',
+      bannerTitle: t('ds.repoConnectedTitle'),
+      cardTitle: t('ds.repoConnectedTitle'),
+      bannerBody: t('ds.repoConnectedBody'),
+      cardBody: t('ds.repoConnectedBody'),
+      buttonLabel: t('ds.repoImportButton'),
     };
   }
   return {
-    bannerTitle: 'Connect your repo to pull aspects of your design system',
-    cardTitle: 'Connect your repo',
-    bannerBody:
-      'Connect GitHub so Open Design can read your repository and pull colors, type, and components into this design system.',
-    cardBody: 'Pull colors, type, and components from your repository into this design system.',
-    buttonLabel: 'Connect GitHub',
+    bannerTitle: t('ds.repoConnectBannerTitle'),
+    cardTitle: t('ds.repoConnectCardTitle'),
+    bannerBody: t('ds.repoConnectBannerBody'),
+    cardBody: t('ds.repoConnectCardBody'),
+    buttonLabel: t('ds.repoConnectButton'),
   };
 }

@@ -108,7 +108,13 @@ import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
-import { setDesignSystemFocus } from '../runtime/brands';
+import { cancelBrandExtraction, extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
+import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
+import {
+  BROWSER_SERIALIZE_HTML_SCRIPT,
+  BROWSER_SERIALIZE_STYLES_SCRIPT,
+} from './design-browser-tools';
+import type { BrandBrowserAssistConfirm, BrandBrowserAssistResult } from './OdCard';
 import {
   buildBrandEnrichmentPrompt,
   installedBrandEnrichmentSkillIds,
@@ -197,13 +203,9 @@ import {
   selectAutoOpenProducedHtml,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
-import {
-  designSystemExtractionSource,
-  isDesignSystemProject,
-  resolveProjectDesignSystemId,
-} from './design-system-project';
+import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { FileWorkspace } from './FileWorkspace';
+import { DESIGN_SYSTEM_TAB, FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
@@ -355,6 +357,7 @@ interface Props {
   onTouchProject: () => void;
   onProjectChange: (next: Project) => void;
   onProjectsRefresh: () => void;
+  onDeleteProject?: (id: string) => Promise<boolean> | boolean;
   onChangeDefaultDesignSystem?: (designSystemId: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
@@ -378,6 +381,11 @@ interface QueuedChatSendUpdate {
 }
 
 let liveArtifactEventSequence = 0;
+// The brand-extraction project's design-system (brand kit) preview tab. Mirrors
+// the daemon `BRAND_KIT_FILE` (apps/daemon/src/brands/kit-render.ts); kept as a
+// local literal to respect the web↔daemon boundary.
+const BRAND_KIT_FILE = 'brand.html';
+const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
 const MIN_CHAT_PANEL_WIDTH = 345;
@@ -870,6 +878,7 @@ export function ProjectView({
   onTouchProject,
   onProjectChange,
   onProjectsRefresh,
+  onDeleteProject,
   onChangeDefaultDesignSystem,
   onDesignSystemsRefresh,
   onCreateProjectFromDesignSystem,
@@ -878,8 +887,17 @@ export function ProjectView({
   const analytics = useAnalytics();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const handleThemeChange = onThemeChange ?? (() => {});
-  const projectDesignSystemId = resolveProjectDesignSystemId(project);
-  const projectIsDesignSystemProject = isDesignSystemProject(project);
+  const projectDetail = useProjectDetail(project.id);
+  const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
+  const currentProject =
+    detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
+  const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
+  const designSystemBrandId = projectIsDesignSystemProject
+    ? currentProject.metadata?.brandId?.trim() || null
+    : null;
+  const projectIsProgrammaticBrandExtraction =
+    isProgrammaticBrandExtractionProject(currentProject.metadata);
   // P0 page_view page_name=chat_panel — fire once per project mount.
   // ProjectView outlives conversation switches (ChatPane is keyed by
   // activeConversationId so it remounts when the user switches chats,
@@ -1056,7 +1074,6 @@ export function ProjectView({
   // ----- Continue in CLI / Finalize design package wiring (#451) -----
   // The toast surface is shared between Finalize errors and the
   // success/fallback toasts emitted from handleContinueInCli.
-  const projectDetail = useProjectDetail(project.id);
   const designMdState = useDesignMdState(project.id, designMdRefreshKey);
   const finalize = useFinalizeProject(project.id);
   const terminalLauncher = useTerminalLaunch();
@@ -1064,13 +1081,23 @@ export function ProjectView({
     message: string;
     details: string | null;
     code?: string | null;
+    tone?: 'default' | 'success' | 'error' | 'loading';
+    ttlMs?: number;
   } | null>(null);
   // Brand extraction has no SSE; this polls the brand's status and, once the
   // backing extraction finalizes a `user:<id>` design system, surfaces a
   // one-shot "ready — preview it" prompt so the user knows to open the Design
   // systems tab. A no-op for every non-brand-extraction project.
-  const { prompt: brandReadyPrompt, dismiss: dismissBrandReady } =
-    useBrandReadyPrompt(project.metadata);
+  const {
+    ready: brandReady,
+    prompt: brandReadyPrompt,
+    dismiss: dismissBrandReady,
+    browserAssist: brandBrowserAssist,
+    dismissBrowserAssist: dismissBrandBrowserAssist,
+  } = useBrandReadyPrompt(currentProject.metadata);
+  const pendingBrandDesignSystemOpenRef = useRef<string | null>(null);
+  const handledBrandReadyDesignSystemRef = useRef<string | null>(null);
+  const brandEmptyTranscriptRetriesRef = useRef<Map<string, number>>(new Map());
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
@@ -1136,6 +1163,8 @@ export function ProjectView({
   const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
   // Parallel to shareRequest, but opens the workspace's Download/Export menu.
   const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [designSystemEditRequest, setDesignSystemEditRequest] =
+    useState<{ module: 'logo'; nonce: number } | null>(null);
   // When a queued chat send starts processing, ask the workspace to flip the
   // deck preview to the slide its marked element lives on, so the user watches
   // the edit land in context instead of staying parked on slide 1. Mirrors the
@@ -1223,6 +1252,10 @@ export function ProjectView({
   // allowed to apply its result.
   const conversationsRefreshTokenRef = useRef(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const currentConversationHasProgrammaticBrandExtractionRun = useMemo(
+    () => messages.some((m) => isProgrammaticBrandExtractionStatusMessage(m, currentProject.metadata)),
+    [messages, currentProject.metadata],
+  );
   const currentConversationHasActiveRun = useMemo(
     () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
     [messages],
@@ -1237,11 +1270,15 @@ export function ProjectView({
       && failedMessagesConversationId !== activeConversationId,
   );
   const currentConversationStreaming = streaming && streamingConversationId === activeConversationId;
+  const currentConversationControlStreaming =
+    currentConversationStreaming || currentConversationHasProgrammaticBrandExtractionRun;
   const currentConversationBusy = currentConversationLoading
     || currentConversationStreaming
     || currentConversationHasActiveRun;
   const currentConversationAwaitingActiveRunAttach =
-    currentConversationHasActiveRun && !currentConversationStreaming;
+    currentConversationHasActiveRun
+    && !currentConversationStreaming
+    && !currentConversationHasProgrammaticBrandExtractionRun;
   const currentConversationSendDisabled = currentConversationLoading
     || failedMessagesConversationId === activeConversationId
     || currentConversationAwaitingActiveRunAttach;
@@ -1575,6 +1612,31 @@ export function ProjectView({
   }, [project.id, activeConversationId, messageLoadRetryNonce]);
 
   useEffect(() => {
+    if (!projectIsProgrammaticBrandExtraction) return undefined;
+    if (!activeConversationId || !messagesInitialized || messages.length > 0) return undefined;
+    if (streaming || currentConversationStreaming) return undefined;
+    const key = `${project.id}:${activeConversationId}`;
+    const retries = brandEmptyTranscriptRetriesRef.current.get(key) ?? 0;
+    const delay = BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS[retries];
+    if (delay === undefined) return undefined;
+    brandEmptyTranscriptRetriesRef.current.set(key, retries + 1);
+    const timer = window.setTimeout(() => {
+      void projectDetail.refresh();
+      setMessageLoadRetryNonce((nonce) => nonce + 1);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeConversationId,
+    currentConversationStreaming,
+    messages.length,
+    messagesInitialized,
+    project.id,
+    projectDetail.refresh,
+    projectIsProgrammaticBrandExtraction,
+    streaming,
+  ]);
+
+  useEffect(() => {
     return () => {
       sendTextBufferRef.current?.cancel();
       sendTextBufferRef.current = null;
@@ -1839,6 +1901,37 @@ export function ProjectView({
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
   }, []);
+
+  useEffect(() => {
+    const designSystemId = brandReady?.designSystemId;
+    if (!designSystemId) return;
+    if (handledBrandReadyDesignSystemRef.current === designSystemId) return;
+    handledBrandReadyDesignSystemRef.current = designSystemId;
+    pendingBrandDesignSystemOpenRef.current = designSystemId;
+    void (async () => {
+      try {
+        await Promise.all([
+          projectDetail.refresh(),
+          Promise.resolve(onDesignSystemsRefresh?.()),
+          refreshWorkspaceItems(),
+        ]);
+        onProjectsRefresh();
+        if (activeConversationId) {
+          setMessageLoadRetryNonce((nonce) => nonce + 1);
+        }
+      } catch (err) {
+        handledBrandReadyDesignSystemRef.current = null;
+        console.warn('[brand] failed to refresh ready design system state', err);
+      }
+    })();
+  }, [
+    activeConversationId,
+    brandReady?.designSystemId,
+    onDesignSystemsRefresh,
+    onProjectsRefresh,
+    projectDetail.refresh,
+    refreshWorkspaceItems,
+  ]);
 
   const persistArtifact = useCallback(
     async (
@@ -2363,6 +2456,73 @@ export function ProjectView({
     [activeConversationId, project.id],
   );
 
+  // Client-side handler for the brand-browser-assist od-card's Confirm button:
+  // read the now-unblocked page DOM out of the in-app browser webview and re-run
+  // extraction against it. Desktop-only — the web-only <iframe> fallback can't
+  // read cross-origin guest DOM, so it returns a graceful refusal instead.
+  const handleBrandBrowserAssistConfirm = useCallback<BrandBrowserAssistConfirm>(
+    async (card): Promise<BrandBrowserAssistResult> => {
+      const tabId = card.browserTabId || BRAND_BROWSER_TAB_ID;
+      const handle = getBrandBrowser(project.id, tabId);
+      if (!handle || !handle.isDesktopWebview) {
+        return { ok: false, message: t('chat.brandBrowserAssistDesktopOnly') };
+      }
+      let html = '';
+      let css = '';
+      try {
+        const htmlPromise = handle.executeJavaScript<string>(BROWSER_SERIALIZE_HTML_SCRIPT, true);
+        html = htmlPromise ? await htmlPromise : '';
+        const cssPromise = handle.executeJavaScript<string>(BROWSER_SERIALIZE_STYLES_SCRIPT, true);
+        css = cssPromise ? await cssPromise : '';
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : t('chat.brandBrowserAssistReadFailed'),
+        };
+      }
+      if (!html.trim()) {
+        return { ok: false, message: t('chat.brandBrowserAssistReadFailed') };
+      }
+      const baseUrl = handle.getURL() || card.url || '';
+      const outcome = await extractBrandFromHtml(card.brandId, { html, css, baseUrl });
+      if (!outcome.ok) return { ok: false, message: outcome.error };
+      return { ok: true };
+    },
+    [project.id, t],
+  );
+
+  // One-shot: when extraction is blocked by an anti-bot wall (or has stalled past
+  // the timeout), drop the assist card into the conversation so the user can
+  // clear the wall in the Browser tab and Confirm. Keyed per conversation+brand
+  // so it can't double-post.
+  const injectedAssistRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!brandBrowserAssist || !activeConversationId) return;
+    const { brandId, sourceUrl, reason } = brandBrowserAssist;
+    const dedupeKey = `${activeConversationId}:${brandId}`;
+    if (injectedAssistRef.current === dedupeKey) return;
+    injectedAssistRef.current = dedupeKey;
+    const payload = JSON.stringify({
+      brandId,
+      browserTabId: BRAND_BROWSER_TAB_ID,
+      ...(sourceUrl ? { url: sourceUrl } : {}),
+      reason,
+    });
+    appendConversationMessage(activeConversationId, {
+      id: randomUUID(),
+      role: 'assistant',
+      content: `${t('chat.brandBrowserAssistMessage')}\n\n<od-card type="brand-browser-assist">${payload}</od-card>`,
+      createdAt: Date.now(),
+    });
+    dismissBrandBrowserAssist();
+  }, [
+    brandBrowserAssist,
+    activeConversationId,
+    appendConversationMessage,
+    dismissBrandBrowserAssist,
+    t,
+  ]);
+
   const replaceConversationMessage = useCallback(
     (
       conversationId: string,
@@ -2515,8 +2675,55 @@ export function ProjectView({
 
   const auditDesignSystemWorkspaceAfterRun = useCallback(
     async (assistantMessageId: string) => {
-      if (!isDesignSystemWorkspaceMetadata(project.metadata)) return;
+      const isDesignSystemWorkspace =
+        isDesignSystemWorkspaceMetadata(currentProject.metadata) || projectIsDesignSystemProject;
+      if (!isDesignSystemWorkspace) return;
       try {
+        if (designSystemBrandId) {
+          const outcome = await finalizeBrandProject(designSystemBrandId, project.id);
+          if (outcome.ok) {
+            await Promise.all([
+              projectDetail.refresh(),
+              Promise.resolve(onDesignSystemsRefresh?.()),
+              refreshWorkspaceItems(),
+            ]);
+            onProjectsRefresh();
+            setDesignMdRefreshKey((n) => n + 1);
+            updateMessageById(
+              assistantMessageId,
+              (prev) => ({
+                ...prev,
+                events: [
+                  ...(prev.events ?? []),
+                  {
+                    kind: 'status',
+                    label: 'design_system',
+                    detail: 'Rebuilt derived kit, assets, and registered design system from brand.json.',
+                  },
+                ],
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+          } else {
+            updateMessageById(
+              assistantMessageId,
+              (prev) => ({
+                ...prev,
+                events: [
+                  ...(prev.events ?? []),
+                  {
+                    kind: 'status',
+                    label: 'design_system',
+                    detail: `Design system sync could not run: ${outcome.error}`,
+                  },
+                ],
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+          }
+        }
         const audit = await fetchProjectDesignSystemPackageAudit(project.id);
         if (!audit) return;
         const auditSummary = summarizeDesignSystemPackageAudit(audit);
@@ -2555,7 +2762,17 @@ export function ProjectView({
         );
       }
     },
-    [project.id, project.metadata, updateMessageById],
+    [
+      currentProject.metadata,
+      designSystemBrandId,
+      onDesignSystemsRefresh,
+      onProjectsRefresh,
+      project.id,
+      projectDetail.refresh,
+      projectIsDesignSystemProject,
+      refreshWorkspaceItems,
+      updateMessageById,
+    ],
   );
 
   const refreshPreviewComments = useCallback(async () => {
@@ -2651,6 +2868,7 @@ export function ProjectView({
     const attachRecoverableRuns = async () => {
       const missingRunIdMessages = messages.filter((m) => {
         if (m.role !== 'assistant' || m.runId) return false;
+        if (isProgrammaticBrandExtractionStatusMessage(m, currentProject.metadata)) return false;
         return isActiveRunStatus(m.runStatus);
       });
       const activeRuns = missingRunIdMessages.length > 0
@@ -2692,6 +2910,9 @@ export function ProjectView({
         // output — Working 24m+" UI the user reported. Mark it failed so
         // the composer is interactive again and the user can re-send.
         if (!runId) {
+          if (isProgrammaticBrandExtractionStatusMessage(message, currentProject.metadata)) {
+            continue;
+          }
           updateMessageById(
             message.id,
             (prev) => ({
@@ -3193,6 +3414,7 @@ export function ProjectView({
     daemonLive,
     config.mode,
     activeConversationId,
+    currentProject.metadata,
     streaming,
     messages,
     project.id,
@@ -4434,6 +4656,19 @@ export function ProjectView({
   // make room for the prioritized send.
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
+    const shouldCancelProgrammaticBrandExtraction = messagesRef.current.some((message) =>
+      isProgrammaticBrandExtractionStatusMessage(message, currentProject.metadata)
+    );
+    const programmaticBrandId = shouldCancelProgrammaticBrandExtraction
+      ? currentProject.metadata?.brandId?.trim() || ''
+      : '';
+    if (programmaticBrandId) {
+      void Promise.resolve(cancelBrandExtraction(programmaticBrandId))
+        .finally(() => {
+          void projectDetail.refresh();
+          void onProjectsRefresh();
+        });
+    }
     cancelSendTextBuffer(true);
     cancelReattachTextBuffers(true);
     cancelRef.current?.abort();
@@ -4456,7 +4691,14 @@ export function ProjectView({
       for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
       return next;
     });
-  }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
+  }, [
+    cancelSendTextBuffer,
+    cancelReattachTextBuffers,
+    currentProject.metadata,
+    onProjectsRefresh,
+    persistMessage,
+    projectDetail.refresh,
+  ]);
 
   // Flip the deck preview to the slide a queued send's marked element lives on
   // the moment that send starts processing. No-op for plain prompts or marks
@@ -5397,7 +5639,7 @@ export function ProjectView({
         ? {
 	            conversationId: activeConversationId,
 	            messages,
-	            streaming: currentConversationStreaming,
+	            streaming: currentConversationControlStreaming,
 	            loading: currentConversationLoading,
 	            sendDisabled: currentConversationSendDisabled,
             queuedItems: currentConversationQueuedItems,
@@ -5420,7 +5662,7 @@ export function ProjectView({
 	      currentConversationQueuedItems,
 	      currentConversationSendDisabled,
 	      currentConversationLoading,
-	      currentConversationStreaming,
+	      currentConversationControlStreaming,
       error,
       handleAssistantFeedback,
       handleRetry,
@@ -5525,6 +5767,12 @@ export function ProjectView({
     if (!projectIsDesignSystemProject || !projectDesignSystemId) return null;
     return designSystems.find((d) => d.id === projectDesignSystemId) ?? null;
   }, [designSystems, projectDesignSystemId, projectIsDesignSystemProject]);
+  useEffect(() => {
+    const pending = pendingBrandDesignSystemOpenRef.current;
+    if (!pending || designSystemProject?.id !== pending) return;
+    pendingBrandDesignSystemOpenRef.current = null;
+    requestOpenFile(DESIGN_SYSTEM_TAB);
+  }, [designSystemProject?.id, requestOpenFile]);
   const designSystemActivityEvents = useMemo(
     () => designSystemProject ? latestDesignSystemActivityEvents(messages) : [],
     [designSystemProject, messages],
@@ -5830,7 +6078,7 @@ export function ProjectView({
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
   }
   const brandEnrichmentEligibleForProject =
-    isProgrammaticBrandExtractionProject(project.metadata) && !autoSendFirstMessageRef.current;
+    projectIsProgrammaticBrandExtraction && !autoSendFirstMessageRef.current;
   const [initialDraft, setInitialDraft] = useState<
     { projectId: string; value: string } | undefined
   >(
@@ -5863,6 +6111,74 @@ export function ProjectView({
   const brandEnrichmentPromptSeed =
     project.pendingPrompt?.trim() ||
     (initialDraft?.projectId === project.id ? initialDraft.value.trim() : '');
+  const [brandEnrichmentPromptSeedCache, setBrandEnrichmentPromptSeedCache] = useState(
+    () => brandEnrichmentPromptSeed,
+  );
+  const [brandEnrichmentStarting, setBrandEnrichmentStarting] = useState(false);
+  const [brandCreateDesignStarting, setBrandCreateDesignStarting] = useState(false);
+  useEffect(() => {
+    if (brandEnrichmentPromptSeed) {
+      setBrandEnrichmentPromptSeedCache(brandEnrichmentPromptSeed);
+    }
+  }, [brandEnrichmentPromptSeed]);
+
+  // Run the deeper "AI Optimize" enrichment pass on a programmatically-extracted
+  // brand: send the hidden seeded enrichment prompt + the default design-system
+  // skill bundle, refining the SAME registered design system in place. Shared by
+  // the chat "Continue" affordance and the ready-toast "AI Optimize" nudge.
+  const handleBrandEnrichment = useCallback(() => {
+    if (brandEnrichmentStarting) return;
+    const system = designSystemProject ?? activeDesignSystemSummary;
+    // C13 (tracking spec §3.3): record the AI-optimize click here so the
+    // conversion rate (clicked ÷ programmatic creates) is visible. The seeded
+    // enrichment prompt refines the SAME registered design system in place.
+    trackDesignSystemEnrichClick(analytics.track, {
+      page_name: 'design_system_project',
+      area: 'design_system_enrich',
+      element: 'ai_optimize',
+      design_system_id: system?.id ?? undefined,
+      project_kind: 'design_system',
+    });
+    const skillIds = installedBrandEnrichmentSkillIds(skills);
+    setBrandEnrichmentStarting(true);
+    void handleSend(
+      buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache, {
+        metadata: currentProject.metadata,
+        designSystemId: system?.id,
+        designSystemTitle: system?.title,
+        projectFiles,
+      }),
+      [],
+      [],
+      { ...(skillIds.length > 0 ? { skillIds } : {}), dsEnrichment: true },
+    ).finally(() => setBrandEnrichmentStarting(false));
+  }, [
+    activeDesignSystemSummary,
+    analytics.track,
+    brandEnrichmentPromptSeed,
+    brandEnrichmentPromptSeedCache,
+    brandEnrichmentStarting,
+    designSystemProject,
+    handleSend,
+    currentProject.metadata,
+    projectFiles,
+    skills,
+  ]);
+
+  const handleCreateDesignFromActiveDesignSystem = useCallback(() => {
+    if (brandCreateDesignStarting) return;
+    const system = designSystemProject ?? activeDesignSystemSummary;
+    if (!system || !onCreateProjectFromDesignSystem) return;
+    setBrandCreateDesignStarting(true);
+    void Promise.resolve(onCreateProjectFromDesignSystem(system.id, system.title)).finally(() => {
+      setBrandCreateDesignStarting(false);
+    });
+  }, [
+    activeDesignSystemSummary,
+    brandCreateDesignStarting,
+    designSystemProject,
+    onCreateProjectFromDesignSystem,
+  ]);
 
   // Continue in CLI / Finalize design package handlers + keyboard
   // shortcut wiring. Close to the JSX so the data flow is easy to
@@ -6031,6 +6347,12 @@ export function ProjectView({
     // with no in-memory message to attach the runId to.
     if (!messagesInitialized) return;
     if (streaming) return;
+    if (projectIsProgrammaticBrandExtraction) {
+      clearAutoSendSession(project.id);
+      autoSendAttachmentsRef.current = [];
+      autoSentRef.current = true;
+      return;
+    }
     if (messages.length > 0) return;
     let flag: string | null = null;
     try {
@@ -6066,6 +6388,7 @@ export function ProjectView({
     streaming,
     messages.length,
     project.id,
+    projectIsProgrammaticBrandExtraction,
     project.metadata,
     initialDraft,
     project.pendingPrompt,
@@ -6170,7 +6493,7 @@ export function ProjectView({
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
               messages={messages}
-              streaming={currentConversationStreaming}
+              streaming={currentConversationControlStreaming}
               liveToolInput={liveToolInput}
               loading={currentConversationLoading}
               sendDisabled={currentConversationSendDisabled}
@@ -6179,20 +6502,11 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel)}
+              projectKindForTracking={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!projectDesignSystemId}
               activeDesignSystem={chatDesignSystemSummary}
-              onCreateDesignFromActiveSystem={
-                designSystemProject && onCreateProjectFromDesignSystem
-                  ? () =>
-                      void onCreateProjectFromDesignSystem(
-                        designSystemProject.id,
-                        designSystemProject.title,
-                      )
-                  : undefined
-              }
               projectFileNames={projectFileNames}
               skills={skills}
               onEnsureProject={handleEnsureProject}
@@ -6258,28 +6572,11 @@ export function ProjectView({
               githubConnected={githubConnected}
               onConnectRepo={handleConnectRepo}
               brandEnrichmentEligible={brandEnrichmentEligibleForProject}
-              onContinueBrandEnrichment={() => {
-                // Programmatically-extracted brand projects open with a finished
-                // design system but no agent run. This sends the hidden seeded
-                // enrichment prompt plus the default design-system skill bundle,
-                // refining the SAME registered design system in place.
-                // C13 (tracking spec §3.3): record the AI-optimize click here so
-                // the conversion rate (clicked ÷ programmatic creates) is visible.
-                trackDesignSystemEnrichClick(analytics.track, {
-                  page_name: 'design_system_project',
-                  area: 'design_system_enrich',
-                  element: 'ai_optimize',
-                  design_system_id: projectDesignSystemId ?? undefined,
-                  project_kind: 'design_system',
-                });
-                const skillIds = installedBrandEnrichmentSkillIds(skills);
-                void handleSend(
-                  buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed),
-                  [],
-                  [],
-                  { ...(skillIds.length > 0 ? { skillIds } : {}), dsEnrichment: true },
-                );
-              }}
+              onContinueBrandEnrichment={handleBrandEnrichment}
+              brandEnrichmentBusy={brandEnrichmentStarting}
+              onCreateDesignFromActiveDesignSystem={handleCreateDesignFromActiveDesignSystem}
+              createDesignFromActiveDesignSystemBusy={brandCreateDesignStarting}
+              onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
@@ -6295,7 +6592,7 @@ export function ProjectView({
               onChangeByokSpeechModel={setByokSpeechModelOverride}
               byokSpeechVoice={byokSpeechVoiceOverride}
               onChangeByokSpeechVoice={setByokSpeechVoiceOverride}
-              projectMetadata={project.metadata}
+              projectMetadata={currentProject.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
               }}
@@ -6377,10 +6674,9 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel) ?? 'prototype'}
+          projectKind={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel) ?? 'prototype'}
           rootDirName={(() => {
-            const baseDir =
-              projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;
+            const baseDir = currentProject.metadata?.baseDir;
             return typeof baseDir === 'string'
               ? baseDir.split(/[/\\]/).filter(Boolean).pop()
               : undefined;
@@ -6391,7 +6687,7 @@ export function ProjectView({
           liveArtifacts={liveArtifacts}
           filesRefreshKey={filesRefresh}
           onRefreshFiles={() => {
-            void refreshWorkspaceItems();
+            return refreshWorkspaceItems().then(() => undefined);
           }}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
@@ -6412,18 +6708,21 @@ export function ProjectView({
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
-          preferredPreviewFile={project.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
+          preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
+          autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
+          designSystemBrandId={designSystemBrandId}
           defaultDesignSystemId={config.designSystemId}
           onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
           onDesignSystemsRefresh={onDesignSystemsRefresh}
+          onDeleteDesignSystemProject={onDeleteProject}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
-          designSystemReview={project.metadata?.designSystemReview}
+          designSystemReview={currentProject.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
           onUseDesignSystem={onCreateProjectFromDesignSystem}
+          designSystemEditRequest={designSystemEditRequest}
           onConnectRepo={handleConnectRepo}
           githubConnected={githubConnected}
           commentPortalId={commentInspectorPortalId}
@@ -6516,6 +6815,8 @@ export function ProjectView({
             message={projectActionsToast.message}
             details={projectActionsToast.details}
             code={projectActionsToast.code}
+            tone={projectActionsToast.tone}
+            ttlMs={projectActionsToast.ttlMs}
             onDismiss={() => setProjectActionsToast(null)}
           />
         ) : null}
@@ -6523,12 +6824,26 @@ export function ProjectView({
           <BrandReadyPrompt
             key="brand-ready-prompt"
             brandName={brandReadyPrompt.brandName}
+            workspaceOffsetPx={workspaceFocused ? 0 : splitLeftPanelWidth + SPLIT_RESIZE_HANDLE_WIDTH}
             onPreview={() => {
-              // Hand the new design system to the tab, then switch to it. The
-              // tab consumes the focus on mount and preselects the row.
-              setDesignSystemFocus(brandReadyPrompt.designSystemId);
+              requestOpenFile(DESIGN_SYSTEM_TAB);
+              setProjectActionsToast({
+                message: t('project.brandReadyPreviewOpened'),
+                details: null,
+                tone: 'success',
+                ttlMs: 3000,
+              });
               dismissBrandReady();
-              navigate({ kind: 'home', view: 'design-systems' });
+            }}
+            // Programmatic extraction can miss details — nudge toward refining it.
+            showRefinement={projectIsProgrammaticBrandExtraction}
+            onAiOptimize={() => {
+              handleBrandEnrichment();
+              dismissBrandReady();
+            }}
+            onEditManually={() => {
+              setDesignSystemEditRequest({ module: 'logo', nonce: Date.now() });
+              dismissBrandReady();
             }}
             onDismiss={dismissBrandReady}
           />
@@ -6675,6 +6990,21 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+function isProgrammaticBrandExtractionStatusMessage(
+  message: ChatMessage,
+  metadata: ProjectMetadata | null | undefined,
+): boolean {
+  if (!isProgrammaticBrandExtractionProject(metadata)) return false;
+  if (message.role !== 'assistant' || message.runId) return false;
+  if (!isActiveRunStatus(message.runStatus)) return false;
+  const text = `${message.content}\n${textContentFromAgentEvents(message.events)}`;
+  return (
+    text.includes('Programmatic design-system extraction started') ||
+    text.includes('程序化设计系统抽取') ||
+    text.includes('程式化設計系統抽取')
+  );
 }
 
 export function hasRecoverableArtifactMessage(message: ChatMessage): boolean {

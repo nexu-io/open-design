@@ -4,13 +4,15 @@ import { act } from 'react';
 import { fireEvent, waitFor } from '@testing-library/react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
 
 const registryMocks = vi.hoisted(() => ({
+  deleteProjectFile: vi.fn(),
   fetchProjectFileText: vi.fn(),
+  fetchProjectFolders: vi.fn(async () => []),
   updateDesignSystemDraft: vi.fn(),
   writeProjectTextFile: vi.fn(),
 }));
@@ -21,16 +23,37 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    deleteProjectFile: registryMocks.deleteProjectFile,
     fetchProjectFileText: registryMocks.fetchProjectFileText,
+    fetchProjectFolders: registryMocks.fetchProjectFolders,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
     writeProjectTextFile: registryMocks.writeProjectTextFile,
   };
 });
 
+vi.mock('../../src/components/DesignBrowserPanel', () => ({
+  DesignBrowserPanel: () => <div data-testid="design-browser-panel" />,
+  labelFromUrl: (url: string) => url,
+}));
+
+vi.mock('../../src/components/workspace/TerminalViewer', () => ({
+  TerminalViewer: ({ terminalId }: { terminalId: string }) => (
+    <div data-testid="terminal-viewer">{terminalId}</div>
+  ),
+}));
+
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+  };
+});
 
 afterEach(() => {
   if (root) {
@@ -153,6 +176,9 @@ describe('FileWorkspace design-system project surface', () => {
       await Promise.resolve();
     });
     expect(container.textContent).toContain('Edit DESIGN.md');
+    expect(container.textContent).toContain('Refresh');
+    expect(container.textContent).toContain('Download');
+    expect(container.textContent).not.toContain('Reset');
   });
 
   it('edits and resets palette colors through the color editor dialog', async () => {
@@ -239,6 +265,280 @@ describe('FileWorkspace design-system project surface', () => {
       'DESIGN.md',
       expect.stringContaining('`#10B981`'),
     ));
+  });
+
+  it('finalizes brand-backed palette edits before refreshing project files and design-system lists', async () => {
+    let brandJson = JSON.stringify({
+      name: 'Acme',
+      sourceUrl: 'https://acme.test',
+      logo: { primary: null, alternates: [] },
+      colors: [{ role: 'accent', name: 'Emerald', hex: '#10B981', usage: 'links and CTAs' }],
+      typography: {},
+      imagery: { style: '', subjects: [], treatment: '', avoid: [], samples: [] },
+      voice: {
+        adjectives: [],
+        tone: '',
+        messagingPillars: [],
+        vocabulary: { use: [], avoid: [] },
+      },
+      layout: { radius: '', borderWeight: '', spacing: '', postureRules: [] },
+    });
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve('# Acme');
+      if (name === 'brand.json') return Promise.resolve(brandJson);
+      return Promise.resolve(null);
+    });
+    registryMocks.writeProjectTextFile.mockImplementation((_projectId: string, name: string, body: string) => {
+      if (name === 'brand.json') brandJson = body;
+      return Promise.resolve(workspaceFile(name));
+    });
+    const events: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/raw/fonts/') || url.includes('/raw/system/tokens.')) {
+        return new Response(null, { status: 404 });
+      }
+      events.push(url);
+      return new Response(JSON.stringify({ id: 'brand-acme' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onRefreshFiles = vi.fn(() => {
+      events.push('refresh-files');
+    });
+    const onDesignSystemsRefresh = vi.fn(() => {
+      events.push('refresh-design-systems');
+    });
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md'), workspaceFile('brand.json')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        designSystemBrandId="brand-acme"
+        onDesignSystemsRefresh={onDesignSystemsRefresh}
+      />,
+    );
+
+    await flushKit();
+
+    const editEmerald = container.querySelector<HTMLButtonElement>('button[aria-label="Edit Emerald"]');
+    expect(editEmerald).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(editEmerald!);
+    });
+    const dialog = document.body.querySelector<HTMLElement>('[data-testid="design-kit-color-editor"]');
+    const hexInput = dialog?.querySelector<HTMLInputElement>('input[aria-label="Hex value"]');
+    expect(hexInput).toBeTruthy();
+    await act(async () => {
+      fireEvent.change(hexInput!, { target: { value: '#FF6A3D' } });
+    });
+    const save = Array.from(dialog!.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.includes('Save color'));
+    expect(save).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(save!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(registryMocks.writeProjectTextFile).toHaveBeenCalledWith(
+      'ds-acme',
+      'brand.json',
+      expect.stringContaining('"hex": "#FF6A3D"'),
+    ));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/brands/brand-acme/finalize',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ projectId: 'ds-acme' }),
+      }),
+    ));
+    expect(events).toEqual([
+      '/api/brands/brand-acme/finalize',
+      'refresh-files',
+      'refresh-design-systems',
+    ]);
+  });
+
+  it('deletes image module assets from the project and refreshes dependents', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve('# Acme');
+      if (name === 'brand.json') {
+        return Promise.resolve(JSON.stringify({
+          name: 'Acme',
+          sourceUrl: 'https://acme.test',
+          logo: { primary: null, alternates: [] },
+          colors: [],
+          typography: {},
+          imagery: {
+            style: 'Product imagery',
+            subjects: [],
+            treatment: '',
+            avoid: [],
+            samples: [{ file: 'imagery/hero.png', caption: 'Hero', kind: 'hero' }],
+          },
+          voice: {
+            adjectives: [],
+            tone: '',
+            messagingPillars: [],
+            vocabulary: { use: [], avoid: [] },
+          },
+          layout: { radius: '', borderWeight: '', spacing: '', postureRules: [] },
+        }));
+      }
+      return Promise.resolve(null);
+    });
+    registryMocks.writeProjectTextFile.mockResolvedValue(workspaceFile('brand.json'));
+    registryMocks.deleteProjectFile.mockResolvedValue(true);
+    const events: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/raw/fonts/') || url.includes('/raw/system/tokens.')) {
+        return new Response(null, { status: 404 });
+      }
+      events.push(url);
+      return new Response(JSON.stringify({ id: 'brand-acme' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onRefreshFiles = vi.fn(() => {
+      events.push('refresh-files');
+    });
+    const onDesignSystemsRefresh = vi.fn(() => {
+      events.push('refresh-design-systems');
+    });
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md'), workspaceFile('brand.json'), workspaceFile('imagery/hero.png')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        designSystemBrandId="brand-acme"
+        onDesignSystemsRefresh={onDesignSystemsRefresh}
+      />,
+    );
+
+    await flushKit();
+
+    const deleteImage = container.querySelector<HTMLButtonElement>('button[aria-label="Delete Hero"]');
+    expect(deleteImage).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(deleteImage!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(registryMocks.writeProjectTextFile).toHaveBeenCalledWith(
+      'ds-acme',
+      'brand.json',
+      expect.not.stringContaining('imagery/hero.png'),
+    ));
+    expect(registryMocks.deleteProjectFile).toHaveBeenCalledWith('ds-acme', 'imagery/hero.png');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/brands/brand-acme/finalize',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ projectId: 'ds-acme' }),
+      }),
+    );
+    expect(events).toEqual([
+      '/api/brands/brand-acme/finalize',
+      'refresh-files',
+      'refresh-design-systems',
+    ]);
+  });
+
+  it('refreshes before downloading the current project archive', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') return Promise.resolve('# Acme');
+      return Promise.resolve(null);
+    });
+    const events: string[] = [];
+    const onRefreshFiles = vi.fn(async () => {
+      events.push('refresh-files');
+    });
+    const onDesignSystemsRefresh = vi.fn(() => {
+      events.push('refresh-design-systems');
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/raw/fonts/') || url.includes('/raw/system/tokens.')) {
+        return new Response(null, { status: 404 });
+      }
+      events.push(url);
+      if (url === '/api/brands/brand-acme/finalize') {
+        return new Response(JSON.stringify({ id: 'brand-acme' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(new Blob(['zip']), {
+        status: 200,
+        headers: { 'Content-Disposition': 'attachment; filename="acme.zip"' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const NativeUrl = URL;
+    class MockUrl extends NativeUrl {
+      static createObjectURL = vi.fn(() => 'blob:archive');
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal('URL', MockUrl);
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        designSystemBrandId="brand-acme"
+        onDesignSystemsRefresh={onDesignSystemsRefresh}
+      />,
+    );
+
+    await flushKit();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="design-kit-more-actions"]')?.click();
+      await Promise.resolve();
+    });
+    const downloadItem = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ).find((button) => button.textContent?.includes('Download'));
+    expect(downloadItem).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(downloadItem!);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(events).toEqual([
+      '/api/brands/brand-acme/finalize',
+      'refresh-files',
+      'refresh-design-systems',
+      '/api/projects/ds-acme/archive',
+    ]);
   });
 
   it('reports malformed design-system card manifests instead of silently falling back', async () => {

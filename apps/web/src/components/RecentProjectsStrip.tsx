@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { useT } from '../i18n';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { fetchProjectFiles, fetchProjectFileText, projectFileUrl } from '../providers/registry';
 import type { DesignSystemSummary, Project, ProjectDisplayStatus, ProjectFile } from '../types';
 import { Icon } from './Icon';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
@@ -95,11 +95,11 @@ export function RecentProjectsStrip({
           return [project.id, null] as const;
         }
         if (designSystemProject) {
-          const logo = findDesignSystemLogoFile(files);
-          if (logo) {
+          const cover = await findDesignSystemCover(project.id, files);
+          if (cover) {
             return [
               project.id,
-              { kind: 'logo' as const, name: logo.path ?? logo.name },
+              cover,
             ] as const;
           }
           return [project.id, null] as const;
@@ -674,4 +674,73 @@ function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
     logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
     null
   );
+}
+
+async function findDesignSystemCover(
+  projectId: string,
+  files: ProjectFile[],
+): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
+  const knownFiles = new Set(files.map((file) => file.path ?? file.name));
+  const brandCover = await designSystemCoverFromBrandJson(projectId, knownFiles);
+  if (brandCover) return brandCover;
+
+  const logo = findDesignSystemLogoFile(files);
+  if (!logo) return null;
+  return { kind: 'logo', name: logo.path ?? logo.name };
+}
+
+async function designSystemCoverFromBrandJson(
+  projectId: string,
+  knownFiles: ReadonlySet<string>,
+): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
+  const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
+  if (!raw) return null;
+  let brand: unknown;
+  try {
+    brand = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!brand || typeof brand !== 'object') return null;
+  const root = brand as Record<string, unknown>;
+  const imagery = root.imagery && typeof root.imagery === 'object'
+    ? root.imagery as Record<string, unknown>
+    : null;
+  const samples = Array.isArray(imagery?.samples) ? imagery.samples : [];
+  const samplePaths = samples
+    .filter((sample): sample is Record<string, unknown> => Boolean(sample && typeof sample === 'object'))
+    .sort((a, b) => imageSampleRank(a.kind) - imageSampleRank(b.kind))
+    .map((sample) => typeof sample.file === 'string' ? sample.file : null)
+    .filter((file): file is string => Boolean(file));
+  const image = samplePaths.find((file) => knownFiles.has(file) && isRasterOrSvgImage(file));
+  if (image) return { kind: 'image', name: image };
+
+  const logo = root.logo && typeof root.logo === 'object' ? root.logo as Record<string, unknown> : null;
+  const alternates = Array.isArray(logo?.alternates) ? logo.alternates : [];
+  const logoCandidates = [
+    typeof logo?.primary === 'string' ? logo.primary : null,
+    ...alternates,
+  ];
+  const nonFaviconLogo = logoCandidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' &&
+      knownFiles.has(candidate) &&
+      isRasterOrSvgImage(candidate) &&
+      !/(^|\/)favicon[-.]/iu.test(candidate),
+  );
+  if (nonFaviconLogo) return { kind: 'logo', name: nonFaviconLogo };
+  if (typeof logo?.primary === 'string' && knownFiles.has(logo.primary) && isRasterOrSvgImage(logo.primary)) {
+    return { kind: 'logo', name: logo.primary };
+  }
+  return null;
+}
+
+function imageSampleRank(kind: unknown): number {
+  if (kind === 'cover') return 0;
+  if (kind === 'hero') return 1;
+  return 2;
+}
+
+function isRasterOrSvgImage(path: string): boolean {
+  return /\.(svg|png|jpe?g|webp|gif)$/iu.test(path);
 }

@@ -547,7 +547,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     }
   });
 
-  // Generic programmatic export (PDF / PPTX / image) for the `od export` CLI.
+  // Generic programmatic export (PDF / image) for the `od export` CLI.
   // The web Download menu rasterizes client-side; this is the daemon → desktop
   // Electron path. The desktop renderer writes the result to a temp file and
   // returns its path; we stream those bytes back and remove the temp file.
@@ -591,7 +591,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           mime === 'image/jpeg' ? 'jpg'
           : mime === 'image/png' ? 'png'
           : mime === 'application/pdf' ? 'pdf'
-          : 'pptx';
+          : 'bin';
         const slug = sanitizeArchiveFilename(input.title) || 'artifact';
         const filename = `${slug}.${ext}`;
         const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || `artifact.${ext}`;

@@ -23,6 +23,7 @@ import type {
   RefObject,
 } from 'react';
 import type {
+  ChatSessionMode,
   ConnectorDetail,
   DesignSystemSummary,
   InputFieldSpec,
@@ -33,9 +34,7 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import {
-  trackHomeChatComposerClick,
-} from '../analytics/events';
+import { trackHomeChatComposerClick } from '../analytics/events';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -76,6 +75,7 @@ import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { SessionModeToggle } from './SessionModeToggle';
 import { TemplatePicker } from './home-hero/TemplatePicker';
 import { LibraryPicker } from './LibraryPicker';
 import { assetTitle } from './LibraryAssetMeta';
@@ -131,6 +131,8 @@ interface Props {
   // showing: the host seeds the prompt with `scenario.text`, binds the
   // scenario's template, and creates the project — one-click "just start".
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
+  sessionMode?: ChatSessionMode;
+  onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
   // True when the active plugin chip shows a user-picked plugin (Community card
   // or example-prompt preset) rather than a task-type chip's default plugin —
@@ -263,6 +265,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onSubmit,
     onSubmitScenario = () => undefined,
     firstRunGuide,
+    sessionMode = 'design',
+    onSessionModeChange,
     activePluginTitle,
     activePluginIsExplicit = false,
     activePluginRecord = null,
@@ -1620,6 +1624,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
           </div>
           <div className="home-hero__foot-right">
+            {onSessionModeChange ? (
+              <SessionModeToggle
+                mode={sessionMode}
+                onChange={onSessionModeChange}
+                disabled={submitting}
+              />
+            ) : null}
             {executionSwitcher ? (
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}

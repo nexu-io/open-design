@@ -11,7 +11,7 @@ import {
   waitForVisualProjects,
 } from '@/playwright/visual';
 
-test('[P2] captures the onboarding runtime selection surface', async ({ page }) => {
+test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   await configureVisualPage(page, {
     projects: [],
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
@@ -21,18 +21,14 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  // The connect step opens on the runtime picker, with AMR selected by default
-  // when the mocked agent list exposes it.
+  // The connect step opens on the cloud sign-in landing. Local CLI and BYOK
+  // remain available as secondary paths from the same first screen.
   await expect(
-    page.getByRole('heading', { name: /Choose a runtime|选择运行方式/i }),
+    page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: /Open Design AMR/i })).toBeVisible();
-  // vela/status is mocked signed-out, so the primary CTA resolves to the AMR
-  // authorization copy after the mount-time status probe.
   await expect(
-    page.getByRole('button', { name: /Sign in to continue|授权后继续/i }),
+    page.getByRole('button', { name: /Sign in to Open Design Cloud|登录 Open Design 云端/i }),
   ).toBeVisible();
-  // Alternate runtime choices remain available beneath the AMR card.
   await expect(
     page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),
   ).toBeVisible();

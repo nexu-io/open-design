@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignKitView } from '../../src/components/DesignKitView';
 import { I18nProvider } from '../../src/i18n';
@@ -32,6 +32,11 @@ function previewKit(): DesignKit {
     showcaseHtml: '<main><a target="_blank" href="/">Open</a></main>',
   };
 }
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('DesignKitView iframe sandboxing', () => {
   it('does not let generated kit previews escape the iframe sandbox', () => {
@@ -105,7 +110,7 @@ describe('DesignKitView iframe sandboxing', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(screen.getByTitle('Edit Palette'));
+    fireEvent.click(screen.getByTitle('Edit Palette section'));
 
     const textarea = screen.getByRole('textbox', { name: 'Palette DESIGN.md section' }) as HTMLTextAreaElement;
     expect(textarea.value).toContain('## Color Palette');
@@ -132,10 +137,11 @@ describe('DesignKitView iframe sandboxing', () => {
     expect(saved).not.toContain('`#123456`');
   });
 
-  it('opens the full system in a dismissible preview dialog', async () => {
+  it('keeps upload, full-system preview, and shortcut help out of the sticky more menu', () => {
     const baseKit = previewKit();
     const kit = {
       ...baseKit,
+      canUpload: true,
       system: {
         kitUrl: baseKit.system!.kitUrl,
         kitDarkUrl: baseKit.system?.kitDarkUrl,
@@ -146,20 +152,164 @@ describe('DesignKitView iframe sandboxing', () => {
 
     render(
       <I18nProvider initial="en">
-        <DesignKitView kit={kit} stickyHeader />
+        <DesignKitView
+          kit={kit}
+          stickyHeader
+          designMd={{
+            body: '# Preview Kit',
+            onSave: async () => {},
+            saving: false,
+          }}
+          onUploadModule={() => {}}
+          onRefresh={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByTestId('design-kit-shortcuts-hint')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('design-kit-more-actions'));
+
+    expect(screen.getByRole('menuitem', { name: 'Edit DESIGN.md' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Copy DESIGN.md' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Upload MD' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Open full system' })).toBeNull();
+  });
+
+  it('renders sticky header action loading state in the overflow menu', () => {
+    render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          stickyHeader
+          headerMenuActions={[
+            {
+              id: 'refresh',
+              label: 'Refresh',
+              icon: 'refresh',
+              onClick: () => {},
+              disabled: true,
+              loading: true,
+            },
+          ]}
+        />
       </I18nProvider>,
     );
 
     fireEvent.click(screen.getByTestId('design-kit-more-actions'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open full system' }));
+    const refresh = screen.getByRole('menuitem', { name: 'Refresh' });
+    expect(refresh.getAttribute('aria-busy')).toBe('true');
+    expect((refresh as HTMLButtonElement).disabled).toBe(true);
+  });
 
-    expect(screen.getByRole('dialog', { name: 'Preview Kit full system' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Preview Kit full system' })).toBeNull();
+  it('reports clipboard success for DESIGN.md copy actions', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
     });
+    const onActionFeedback = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          stickyHeader
+          designMd={{ body: '# Preview Kit' }}
+          onActionFeedback={onActionFeedback}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('design-kit-more-actions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy DESIGN.md' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('# Preview Kit'));
+    expect(onActionFeedback).toHaveBeenCalledWith('loading', 'Copy DESIGN.md...');
+    expect(onActionFeedback).toHaveBeenCalledWith('success', 'Copied!');
+  });
+
+  it('renders the embedded component kit without an Open full system action', () => {
+    const baseKit = previewKit();
+    const kit = {
+      ...baseKit,
+      system: {
+        kitUrl: baseKit.system!.kitUrl,
+        indexUrl: '/raw/projects/preview/system/index.html',
+      },
+    };
+
+    const { container } = render(
+      <I18nProvider initial="en">
+        <DesignKitView kit={kit} />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Open full system' })).toBeNull();
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+  });
+
+  it('opens the component kit on the light file before explicit dark selection', () => {
+    const baseKit = previewKit();
+    const kit = {
+      ...baseKit,
+      system: {
+        kitUrl: baseKit.system!.kitUrl,
+        kitDarkUrl: '/raw/projects/preview/system/kit.dark.html',
+      },
+    };
+
+    const { container } = render(
+      <I18nProvider initial="en">
+        <DesignKitView kit={kit} />
+      </I18nProvider>,
+    );
+
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.dark.html"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.dark.html"]')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+    expect(container.querySelector('iframe[src="/raw/projects/preview/system/kit.html"]')).toBeTruthy();
+  });
+
+  it('scrolls to Logo and reveals edit controls for edit focus requests', () => {
+    vi.useFakeTimers();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const { container, unmount } = render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          editFocusRequest={{ module: 'logo', nonce: 1 }}
+        />
+      </I18nProvider>,
+    );
+
+    try {
+      const logoSection = container.querySelector<HTMLElement>('[data-testid="design-kit-logo-section"]');
+      if (!logoSection) throw new Error('Expected Logo section to render');
+      expect(logoSection.textContent).toContain(
+        'Edit Logo here. Hover this section to reveal controls.',
+      );
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+    } finally {
+      unmount();
+      vi.useRealTimers();
+      if (originalScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: originalScrollIntoView,
+        });
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
   });
 });

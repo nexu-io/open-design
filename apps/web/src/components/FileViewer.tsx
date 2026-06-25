@@ -68,8 +68,6 @@ import {
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
-  exportArtifactAsPptx,
-  exportArtifactAsPptxEditable,
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsZip,
@@ -4466,7 +4464,6 @@ function HtmlViewer({
   const fireShareExport = (
     format:
       | 'pdf'
-      | 'pptx'
       | 'zip'
       | 'html'
       | 'image'
@@ -4512,7 +4509,7 @@ function HtmlViewer({
         { requestId },
       );
     };
-    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
+    const toastFormats = new Set(['pdf', 'zip', 'html', 'image', 'markdown']);
     // Programmatic exports compute in-browser and can take a while (one render
     // per deck slide), so the loading toast ticks every second with elapsed time
     // and — once at least one slide is captured — a live ETA derived from the
@@ -4590,7 +4587,7 @@ function HtmlViewer({
     }
   };
   // Feeds per-slide capture progress into the ref the loading-toast ticker reads
-  // (apps/web/src/runtime/exports.ts drives this for the PDF / PPTX exporters).
+  // (apps/web/src/runtime/exports.ts drives this for the PDF exporter).
   const onExportProgress: ExportProgress = (done, total) => {
     exportProgressRef.current = { done, total };
   };
@@ -4928,7 +4925,9 @@ function HtmlViewer({
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
+  const [manualEditDraftDirty, setManualEditDraftDirty] = useState(false);
   const selectedManualEditTargetIdRef = useRef<string | null>(null);
+  const manualEditSelectionDraftRef = useRef<{ id: string; draft: ManualEditDraft } | null>(null);
   // Tracks the iframe's in-flight inline text edit. `finishManualEditTextSession`
   // posts the explicit finish and resolves only after the iframe acks AND the
   // resulting commit has been applied, so exit/dismiss/cancel never tear down
@@ -5341,7 +5340,7 @@ function HtmlViewer({
       : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
-  const manualEditRequiresSrcDoc = manualEditSrcDocActive && !urlModeBridge;
+  const manualEditRequiresSrcDoc = manualEditMode || manualEditSrcDocActive;
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
@@ -5892,6 +5891,7 @@ function HtmlViewer({
     setManualEditPanelPosition(null);
     selectedManualEditTargetIdRef.current = null;
     setManualEditDraft(emptyManualEditDraft());
+    setManualEditDraftDirty(false);
     setManualEditHistory([]);
     setManualEditUndone([]);
     setManualEditError(null);
@@ -6142,7 +6142,9 @@ function HtmlViewer({
       setManualEditHoverTarget(null);
       setManualEditPageStylesOpen(false);
       setManualEditPanelPosition(null);
+      setManualEditDraftDirty(false);
       selectedManualEditTargetIdRef.current = null;
+      manualEditSelectionDraftRef.current = null;
       manualEditTextSessionIdRef.current = null;
       manualEditTextFinishRef.current = null;
       manualEditTextCommitInFlightRef.current = null;
@@ -6445,10 +6447,18 @@ function HtmlViewer({
     setManualEditPageStylesOpen(false);
     if (manualEditPendingStyleRef.current?.id !== target.id) cancelManualEditStyleDraft();
     const base = sourceRef.current ?? '';
-    const fields = readManualEditFields(base, target.id);
+    const nextDraft = manualEditDraftForTarget(target, base);
     selectedManualEditTargetIdRef.current = target.id;
+    manualEditSelectionDraftRef.current = { id: target.id, draft: nextDraft };
     setSelectedManualEditTarget(target);
-    setManualEditDraft({
+    setManualEditDraft(nextDraft);
+    setManualEditDraftDirty(false);
+    setManualEditError(null);
+  }
+
+  function manualEditDraftForTarget(target: ManualEditTarget, base: string): ManualEditDraft {
+    const fields = readManualEditFields(base, target.id);
+    return {
       text: fields.text ?? target.fields.text ?? target.text,
       href: fields.href ?? target.fields.href ?? '',
       src: fields.src ?? target.fields.src ?? '',
@@ -6457,8 +6467,7 @@ function HtmlViewer({
       attributesText: JSON.stringify(readManualEditAttributes(base, target.id), null, 2),
       outerHtml: readManualEditOuterHtml(base, target.id) || target.outerHtml,
       fullSource: base,
-    });
-    setManualEditError(null);
+    };
   }
 
   async function clearManualEditTargetSelection() {
@@ -6470,10 +6479,12 @@ function HtmlViewer({
     }
     cancelManualEditStyleDraft();
     selectedManualEditTargetIdRef.current = null;
+    manualEditSelectionDraftRef.current = null;
     manualEditTextSessionIdRef.current = null;
     setSelectedManualEditTarget(null);
     setManualEditPanelPosition(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
+    setManualEditDraftDirty(false);
     setManualEditError(null);
   }
 
@@ -6491,6 +6502,87 @@ function HtmlViewer({
     if (!ok) return;
     if (selectedManualEditTarget) void clearManualEditTargetSelection();
     else setManualEditPageStylesOpen(false);
+  }
+
+  function manualEditContentPatchForDraft(
+    target: ManualEditTarget,
+    draft: ManualEditDraft,
+    base: string,
+  ): { patch: ManualEditPatch; label: string } | null {
+    const fields = readManualEditFields(base, target.id);
+    if (target.kind === 'text' || target.kind === 'token') {
+      const currentText = fields.text ?? target.fields.text ?? target.text;
+      if (draft.text !== currentText) {
+        return { patch: { id: target.id, kind: 'set-text', value: draft.text }, label: t('manualEdit.applyContent') };
+      }
+      return null;
+    }
+    if (target.kind === 'link') {
+      const currentText = fields.text ?? target.fields.text ?? target.text;
+      const currentHref = fields.href ?? target.fields.href ?? '';
+      if (draft.text !== currentText || draft.href !== currentHref) {
+        return { patch: { id: target.id, kind: 'set-link', text: draft.text, href: draft.href }, label: t('manualEdit.applyContent') };
+      }
+      return null;
+    }
+    if (target.kind === 'image') {
+      const currentSrc = fields.src ?? target.fields.src ?? '';
+      const currentAlt = fields.alt ?? target.fields.alt ?? '';
+      if (draft.src !== currentSrc || draft.alt !== currentAlt) {
+        return { patch: { id: target.id, kind: 'set-image', src: draft.src, alt: draft.alt }, label: t('manualEdit.applyContent') };
+      }
+      return null;
+    }
+    const currentOuterHtml = readManualEditOuterHtml(base, target.id) || target.outerHtml;
+    if (draft.outerHtml !== currentOuterHtml) {
+      return { patch: { id: target.id, kind: 'set-outer-html', html: draft.outerHtml }, label: t('manualEdit.applyHtml') };
+    }
+    return null;
+  }
+
+  async function saveManualEditPanelDraft() {
+    const hadTextSession = Boolean(manualEditTextSessionIdRef.current || manualEditTextCommitInFlightRef.current);
+    if (!(await settlePendingManualEditCommit())) return;
+    if (selectedManualEditTarget && !hadTextSession) {
+      const base = sourceRef.current ?? '';
+      const contentPatch = manualEditContentPatchForDraft(selectedManualEditTarget, manualEditDraft, base);
+      if (contentPatch && !(await applyManualEdit(contentPatch.patch, contentPatch.label))) return;
+    }
+    const ok = await flushManualEditStyleSave();
+    if (!ok) return;
+    if (selectedManualEditTarget) void clearManualEditTargetSelection();
+    else setManualEditPageStylesOpen(false);
+  }
+
+  async function resetManualEditPanelDraft() {
+    if (manualEditTextSessionIdRef.current) await finishManualEditTextSession(false);
+    cancelManualEditStyleDraft();
+    if (!selectedManualEditTarget) {
+      setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
+      setManualEditError(null);
+      return;
+    }
+    const snapshot = manualEditSelectionDraftRef.current?.id === selectedManualEditTarget.id
+      ? manualEditSelectionDraftRef.current.draft
+      : manualEditDraftForTarget(selectedManualEditTarget, sourceRef.current ?? '');
+    const base = sourceRef.current ?? '';
+    const currentOuterHtml = readManualEditOuterHtml(base, selectedManualEditTarget.id);
+    if (snapshot.outerHtml && currentOuterHtml && snapshot.outerHtml !== currentOuterHtml) {
+      const ok = await applyManualEdit(
+        { id: selectedManualEditTarget.id, kind: 'set-outer-html', html: snapshot.outerHtml },
+        'Reset element',
+      );
+      if (!ok) return;
+    }
+    const refreshedBase = sourceRef.current ?? base;
+    setManualEditDraft({
+      ...snapshot,
+      fullSource: refreshedBase,
+      styles: inspectorManualEditStyles(selectedManualEditTarget, refreshedBase),
+    });
+    setManualEditDraftDirty(false);
+    setManualEditError(null);
+    postSelectedManualEditTargetToIframe(selectedManualEditTarget.id);
   }
 
   async function cancelManualEditPanel() {
@@ -6553,18 +6645,39 @@ function HtmlViewer({
         setSelectedManualEditTarget((current) => current?.id === patch.id
           ? { ...current, text: patch.value, fields: { ...current.fields, text: patch.value } }
           : current);
+        setManualEditDraft((current) => ({ ...current, text: patch.value, fullSource: result.source }));
+      } else if (patch.kind === 'set-link') {
+        setSelectedManualEditTarget((current) => current?.id === patch.id
+          ? { ...current, text: patch.text, fields: { ...current.fields, text: patch.text, href: patch.href } }
+          : current);
+        setManualEditDraft((current) => ({ ...current, text: patch.text, href: patch.href, fullSource: result.source }));
+      } else if (patch.kind === 'set-image') {
+        setSelectedManualEditTarget((current) => current?.id === patch.id
+          ? { ...current, fields: { ...current.fields, src: patch.src, alt: patch.alt } }
+          : current);
+        setManualEditDraft((current) => ({ ...current, src: patch.src, alt: patch.alt, fullSource: result.source }));
       } else if (patch.kind === 'remove-element') {
         if (manualEditPendingStyleRef.current?.id === patch.id) {
           manualEditPendingStyleRef.current = null;
           clearManualEditStyleTimer();
         }
         selectedManualEditTargetIdRef.current = null;
+        manualEditSelectionDraftRef.current = null;
         setSelectedManualEditTarget(null);
         setManualEditTargets((current) => current.filter((target) => target.id !== patch.id));
         setManualEditDraft(emptyManualEditDraft(result.source));
+        setManualEditDraftDirty(false);
         postSelectedManualEditTargetToIframe(null);
       } else {
         setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      }
+      if (
+        patch.kind !== 'remove-element' &&
+        patch.kind !== 'set-token' &&
+        patch.kind !== 'set-full-source' &&
+        selectedManualEditTargetIdRef.current === patch.id
+      ) {
+        setManualEditDraftDirty(true);
       }
       if (patch.kind === 'set-style') {
         reconcileManualEditStyleSave(patch.id, patch.styles, result.source);
@@ -7627,9 +7740,6 @@ function HtmlViewer({
     rendererId === 'html';
   const canShare = source !== null && isShareableArtifact;
   const canDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
-  // PPTX export is offered for any shareable artifact: decks export one slide
-  // per slide; a single page exports as a one-slide PPTX sized to its aspect.
-  const showPptxExport = canShare;
   const showMarkdownExport = source !== null && isMarkdownArtifact;
   const showImageExport = canShare;
 
@@ -8229,6 +8339,7 @@ function HtmlViewer({
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
   const manualEditPanelActive =
     manualEditMode && (!!selectedManualEditTarget || manualEditPageCardActive);
+  const manualEditResetAvailable = selectedManualEditTarget ? manualEditDraftDirty : false;
   const manualEditPanel = manualEditPanelActive ? (
     <ManualEditPanel
       targets={manualEditTargets}
@@ -8239,11 +8350,15 @@ function HtmlViewer({
       canUndo={manualEditHistory.length > 0}
       canRedo={manualEditUndone.length > 0}
       busy={manualEditSaving}
+      resetAvailable={manualEditResetAvailable}
       pageStylesEnabled={manualEditPageStylesEnabled}
       onSelectTarget={(target) => {
         void selectManualEditTarget(target);
       }}
-      onDraftChange={setManualEditDraft}
+      onDraftChange={(draft) => {
+        setManualEditDraft(draft);
+        setManualEditDraftDirty(Boolean(selectedManualEditTarget));
+      }}
       onStyleChange={(id, styles, label) => {
         void handleManualEditStyleChange(id, styles, label);
       }}
@@ -8262,7 +8377,10 @@ function HtmlViewer({
         void cancelManualEditPanel();
       }}
       onSaveDraft={() => {
-        void dismissManualEditPanel();
+        void saveManualEditPanelDraft();
+      }}
+      onResetDraft={() => {
+        void resetManualEditPanelDraft();
       }}
       onUndo={() => {
         void undoManualEdit();
@@ -8920,40 +9038,6 @@ function HtmlViewer({
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
                     <span>{t('fileViewer.exportPdf')}</span>
                   </button>
-                  {showPptxExport ? (
-                    <>
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setDownloadMenuOpen(false);
-                          fireShareExport('pptx', () => exportArtifactAsPptx(source ?? '', exportTitle, {
-                            deck: effectiveDeck,
-                            onProgress: onExportProgress,
-                          }));
-                        }}
-                      >
-                        <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                        <span>{t('fileViewer.exportPptxImages')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setDownloadMenuOpen(false);
-                          fireShareExport('pptx', () => exportArtifactAsPptxEditable(source ?? '', exportTitle, {
-                            deck: effectiveDeck,
-                            onProgress: onExportProgress,
-                          }));
-                        }}
-                      >
-                        <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                        <span>{t('fileViewer.exportPptxEditable')}</span>
-                      </button>
-                    </>
-                  ) : null}
                   {showImageExport ? (
                     <button
                       type="button"

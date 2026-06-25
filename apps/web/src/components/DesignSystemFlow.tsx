@@ -147,7 +147,7 @@ export interface DesignSystemGenerateSnapshot {
 
 interface CreationProps {
   onBack: () => void;
-  onCreated: (projectId: string, project?: Project) => void;
+  onCreated: (projectId: string, project?: Project, conversationId?: string | null) => void;
   onProjectPrepared?: (project: Project) => void;
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
@@ -363,10 +363,10 @@ export function DesignSystemCreationFlow({
   // disclosure that hides the lower-frequency source inputs.
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [heroCollapsed, setHeroCollapsed] = useState(false);
   // Two-phase brand/design-system extraction kickoff (POST /api/brands):
-  // a fast programmatic pass registers a usable user:<id> design system
-  // synchronously, then the brand-extract skill enriches it in the project.
+  // the daemon creates the project + real transcript immediately, then the
+  // programmatic pass registers a usable user:<id> design system in the
+  // background.
   const brandExtract = useBrandExtract();
   const composioConfigured = isComposioConfigured(config?.composio);
   const [githubConnector, setGithubConnector] = useState<ConnectorDetail | null>(null);
@@ -894,9 +894,9 @@ export function DesignSystemCreationFlow({
     }
     try {
       // Two-phase extraction. The website link (a real site, not a GitHub repo)
-      // drives the kickoff. POST /api/brands runs a fast programmatic pass that
-      // registers a usable user:<id> design system synchronously, then stands up
-      // a backing project where the brand-extract skill enriches it live.
+      // drives the kickoff. POST /api/brands creates the backing project and
+      // real transcript immediately, then the programmatic pass registers a
+      // usable user:<id> design system in the background.
       const extractUrl =
         nonGithubSourceUrlsFromState(state)[0] ?? sourceUrlsFromState(state)[0] ?? '';
       const fallbackDesignMd = !extractUrl && !hasDesignMd
@@ -951,7 +951,7 @@ export function DesignSystemCreationFlow({
       } else {
         void onSystemsRefresh?.();
       }
-      onCreated(result.projectId, projectForCreated);
+      onCreated(result.projectId, projectForCreated, result.conversationId);
       emitCreateResult('success', result.designSystemId, undefined, result.projectId);
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
@@ -994,7 +994,7 @@ export function DesignSystemCreationFlow({
 
   return (
     <div
-      className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}${!embedded && heroCollapsed ? ' ds-setup-shell--hero-collapsed' : ''}`}
+      className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}
     >
       {sourceProcessingCount > 0 ? (
         <div
@@ -1021,24 +1021,6 @@ export function DesignSystemCreationFlow({
             >
               <Icon name="arrow-left" />
               Back
-            </Button>
-            <Button
-              variant="ghost"
-              className="ds-setup-hero-toggle"
-              aria-label={
-                heroCollapsed
-                  ? t('dsCreate.heroShowGuideAria')
-                  : t('dsCreate.heroHideGuideAria')
-              }
-              title={
-                heroCollapsed
-                  ? t('dsCreate.heroShowGuideTitle')
-                  : t('dsCreate.heroHideGuideTitle')
-              }
-              onClick={() => setHeroCollapsed((collapsed) => !collapsed)}
-            >
-              <Icon name={heroCollapsed ? 'chevron-right' : 'chevron-left'} />
-              <span>{t('dsCreate.heroGuide')}</span>
             </Button>
           </div>
           <span className="ds-setup-mark">
@@ -1068,7 +1050,7 @@ export function DesignSystemCreationFlow({
             <h1>{t('dsCreate.embeddedTitle')}</h1>
             <p>{t('dsCreate.embeddedBody')}</p>
           </>
-        ) : heroCollapsed ? null : (
+        ) : (
           <aside className="ds-setup-hero-col">
             <DesignSystemCreateHero stacked />
           </aside>
@@ -2492,12 +2474,21 @@ export function DesignSystemDetailView({
     }
   }
 
-  if (!system) {
+  // This route's only job is to resolve the design system's backing project and
+  // hand off to the full project workspace (ProjectView, via onOpenProject). For
+  // the whole redirect window we render a loading animation instead of the
+  // legacy in-place review UI below, so opening a design-system project never
+  // flashes the old "Review draft design system" scaffold before the workspace
+  // mounts. Only when the workspace genuinely cannot be resolved
+  // (workspaceLoadError) do we fall through to that legacy UI as an escape hatch.
+  const redirectingToWorkspace = Boolean(onOpenProject) && !workspaceLoadError;
+  if (!system || redirectingToWorkspace) {
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
-        <div className="ds-setup-center-card">
-          <h1>Loading design system...</h1>
-          <p>Opening the review workspace.</p>
+        <div className="ds-setup-center-card ds-setup-center-card--loading" role="status" aria-live="polite">
+          <Spinner size={22} />
+          <h1>{system?.title ?? 'Loading design system...'}</h1>
+          <p>Opening the workspace...</p>
         </div>
       </div>
     );

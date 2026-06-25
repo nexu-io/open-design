@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@open-design/components';
+import { Button, VisuallyHidden } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemsTemplateCardClick,
@@ -24,16 +24,16 @@ import { takeDesignSystemFocus } from '../runtime/brands';
 import {
   deleteDesignSystemDraft,
   fetchDesignSystem,
-  fetchDesignSystemShowcase,
   fetchProjectFileText,
   projectRawUrl,
   updateDesignSystemDraft,
 } from '../providers/registry';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
 import { useDesignKit } from '../runtime/design-kit';
-import { DesignKitView, HeaderActionsMenu, type HeaderMenuAction } from './DesignKitView';
+import { DesignKitView, HeaderActionsMenu, type DesignKitActionFeedbackTone, type HeaderMenuAction } from './DesignKitView';
 import { hostnameOf } from './BrandPreviewCard';
 import { Icon } from './Icon';
+import { Toast } from './Toast';
 import type { DesignSystemDetail, DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 import styles from './DesignSystemsTab.module.css';
 
@@ -41,7 +41,7 @@ interface Props {
   systems: DesignSystemSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onPreview: (id: string) => void;
+  loading?: boolean;
   onCreate?: () => void;
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
@@ -63,6 +63,7 @@ const CATEGORY_ORDER = [
 
 type SurfaceFilter = 'all' | Surface;
 type DesignSystemCollection = 'mine' | 'official' | 'enterprise';
+type DesignSystemActionKind = 'edit' | 'publish' | 'default' | 'delete';
 
 const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
@@ -228,7 +229,7 @@ export function DesignSystemsTab({
   systems,
   selectedId,
   onSelect,
-  onPreview,
+  loading = false,
   onCreate,
   onOpenSystem,
   onSystemsRefresh,
@@ -237,6 +238,7 @@ export function DesignSystemsTab({
   const analytics = useAnalytics();
   const designSystemsPageViewFiredRef = useRef(false);
   useEffect(() => {
+    if (loading) return;
     if (designSystemsPageViewFiredRef.current) return;
     designSystemsPageViewFiredRef.current = true;
     // v2 doc: the DS list page also carries `area` / `view_type` /
@@ -251,11 +253,22 @@ export function DesignSystemsTab({
       entry_from: 'unknown',
       available_design_system_count: systems.length,
     });
-  }, [analytics.track, systems.length]);
+  }, [analytics.track, systems.length, loading]);
   const searchTrackedRef = useRef(false);
   const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<{ systemId: string; action: DesignSystemActionKind } | null>(null);
+  const busyId = busyAction?.systemId ?? null;
+  const [actionToast, setActionToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);
+  const notifyAction = (tone: DesignKitActionFeedbackTone, message: string) => {
+    setActionToast({ tone, message });
+  };
+  const notifyActionLoading = (label?: string) => {
+    const message = label
+      ? label.endsWith('…') || label.endsWith('...') ? label : `${label}...`
+      : t('common.loading');
+    notifyAction('loading', message);
+  };
   const [designSystemCollection, setDesignSystemCollection] = useState<DesignSystemCollection>('mine');
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [category, setCategory] = useState<string>('All');
@@ -267,10 +280,6 @@ export function DesignSystemsTab({
   // sessionStorage exactly once; applied by the effect below once the system
   // actually shows up in the loaded list (which may arrive after a refresh).
   const [pendingFocus, setPendingFocus] = useState<string | null>(() => takeDesignSystemFocus());
-  // Cache fetched showcase HTML so the preview never re-flickers when the user
-  // re-selects a row. null = "in flight"; undefined = "not yet requested".
-  const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
-
   const q = filter.trim().toLowerCase();
 
   const librarySystems = useMemo(
@@ -391,20 +400,6 @@ export function DesignSystemsTab({
     return activeSystems.find((s) => s.id === previewId) ?? null;
   }, [previewId, activeSystems]);
 
-  // Lazily fetch the showcase HTML for the previewed design system. Only one
-  // iframe is ever mounted (the selected detail), so unlike the old card grid
-  // there is no need for an IntersectionObserver gate.
-  useEffect(() => {
-    if (!previewId) return;
-    setThumbs((prev) => {
-      if (prev[previewId] !== undefined) return prev;
-      void fetchDesignSystemShowcase(previewId).then((html) => {
-        setThumbs((p) => ({ ...p, [previewId]: html }));
-      });
-      return { ...prev, [previewId]: null };
-    });
-  }, [previewId]);
-
   // Category metadata is authored in English; keep raw values in state for
   // filtering while localizing the visible labels for the current UI locale.
   const renderCategory = (c: string) => {
@@ -418,7 +413,9 @@ export function DesignSystemsTab({
   }
 
   async function togglePublished(system: DesignSystemSummary) {
-    setBusyId(system.id);
+    if (busyAction) return;
+    setBusyAction({ systemId: system.id, action: 'publish' });
+    notifyActionLoading();
     const startedAt = performance.now();
     const willPublish = system.status !== 'published';
     const action: TrackingDesignSystemStatusAction = willPublish
@@ -434,14 +431,19 @@ export function DesignSystemsTab({
       });
       succeeded = Boolean(updated);
       if (!succeeded) errorCode = 'DS_STATUS_UPDATE_RETURNED_NULL';
-      await refreshSystems();
+      if (succeeded) {
+        await refreshSystems();
+        notifyAction('success', t('ds.actionDone'));
+      } else {
+        notifyAction('error', t('ds.actionFailed'));
+      }
     } catch (err) {
       errorCode = err instanceof Error
         ? `DS_STATUS_UPDATE_THREW:${err.message.slice(0, 80)}`
         : 'DS_STATUS_UPDATE_THREW';
-      throw err;
+      notifyAction('error', t('ds.actionFailed'));
     } finally {
-      setBusyId(null);
+      setBusyAction(null);
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
         area: 'design_system_status',
@@ -463,7 +465,8 @@ export function DesignSystemsTab({
   }
 
   async function deleteSystem(system: DesignSystemSummary) {
-    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
+    if (busyAction) return;
+    const ok = window.confirm(t('dsManager.deleteConfirm', { title: system.title }));
     if (!ok) {
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
@@ -479,7 +482,8 @@ export function DesignSystemsTab({
       });
       return;
     }
-    setBusyId(system.id);
+    setBusyAction({ systemId: system.id, action: 'delete' });
+    notifyActionLoading(t('dsManager.deleteSystemAria', { title: system.title }));
     const startedAt = performance.now();
     const statusBefore = mapStatusToTracking(system.status);
     const wasDefault = system.id === selectedId;
@@ -495,14 +499,19 @@ export function DesignSystemsTab({
         );
         if (fallback) onSelect(fallback.id);
       }
-      await refreshSystems();
+      if (succeeded) {
+        await refreshSystems();
+        notifyAction('success', t('ds.actionDone'));
+      } else {
+        notifyAction('error', t('ds.actionFailed'));
+      }
     } catch (err) {
       errorCode = err instanceof Error
         ? `DS_DELETE_THREW:${err.message.slice(0, 80)}`
         : 'DS_DELETE_THREW';
-      throw err;
+      notifyAction('error', t('ds.actionFailed'));
     } finally {
-      setBusyId(null);
+      setBusyAction(null);
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
         area: 'design_system_status',
@@ -523,21 +532,58 @@ export function DesignSystemsTab({
   }
 
   function handleMakeDefaultClick(system: DesignSystemSummary): void {
+    if (busyAction) return;
+    setBusyAction({ systemId: system.id, action: 'default' });
+    notifyActionLoading(t('dsManager.makeDefault'));
     const wasDefault = system.id === selectedId;
     const statusBefore = mapStatusToTracking(system.status);
-    onSelect(system.id);
-    trackDesignSystemStatusResult(analytics.track, {
-      page_name: 'design_systems',
-      area: 'design_system_status',
-      action: wasDefault ? 'unset_default' : 'set_default',
-      result: 'success',
-      design_system_id: system.id,
-      status_before: statusBefore,
-      status_after: statusBefore,
-      is_default_before: wasDefault,
-      is_default_after: !wasDefault,
-      duration_ms: 0,
-    });
+    try {
+      onSelect(system.id);
+      notifyAction('success', t('ds.actionDone'));
+      trackDesignSystemStatusResult(analytics.track, {
+        page_name: 'design_systems',
+        area: 'design_system_status',
+        action: wasDefault ? 'unset_default' : 'set_default',
+        result: 'success',
+        design_system_id: system.id,
+        status_before: statusBefore,
+        status_after: statusBefore,
+        is_default_before: wasDefault,
+        is_default_after: !wasDefault,
+        duration_ms: 0,
+      });
+    } catch {
+      notifyAction('error', t('ds.actionFailed'));
+      trackDesignSystemStatusResult(analytics.track, {
+        page_name: 'design_systems',
+        area: 'design_system_status',
+        action: wasDefault ? 'unset_default' : 'set_default',
+        result: 'failed',
+        design_system_id: system.id,
+        status_before: statusBefore,
+        status_after: statusBefore,
+        is_default_before: wasDefault,
+        is_default_after: wasDefault,
+        error_code: 'DS_DEFAULT_SELECT_THREW',
+        duration_ms: 0,
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function handleEditSystem(system: DesignSystemSummary): void {
+    if (!onOpenSystem || busyAction) return;
+    setBusyAction({ systemId: system.id, action: 'edit' });
+    notifyActionLoading(t('dsManager.editWithAgent'));
+    try {
+      onOpenSystem(system.id);
+      notifyAction('success', t('ds.actionDone'));
+    } catch {
+      notifyAction('error', t('ds.actionFailed'));
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   function trackCardClick(system: DesignSystemSummary): void {
@@ -555,11 +601,6 @@ export function DesignSystemsTab({
     trackCardClick(system);
   }
 
-  function handlePreviewSystem(system: DesignSystemSummary): void {
-    trackCardClick(system);
-    onPreview(system.id);
-  }
-
   const scopeTabs = [
     { value: 'mine' as const, label: t('dsManager.yourSystems'), count: userSearched.length },
     { value: 'official' as const, label: t('dsManager.officialPresets'), count: queryScoped.length },
@@ -568,8 +609,83 @@ export function DesignSystemsTab({
 
   const showPresetFilters = designSystemCollection === 'official';
 
+  if (loading) {
+    return (
+      <div
+        className={styles.root}
+        data-testid="design-systems-tab"
+        data-loading="true"
+        aria-busy="true"
+      >
+        <VisuallyHidden role="status">{t('designSystemPicker.loading')}</VisuallyHidden>
+        <aside className={styles.sidebar} data-testid="design-systems-sidebar-skeleton">
+          {onCreate ? (
+            <Button
+              variant="primary"
+              className={styles.newBtn}
+              onClick={onCreate}
+              data-testid="design-systems-create"
+            >
+              <Icon name="plus" />
+              {t('dsManager.createAction')}
+            </Button>
+          ) : (
+            <SkeletonBlock className={styles.skeletonCreateButton} />
+          )}
+
+          <div className={styles.searchWrap} aria-hidden>
+            <SearchGlyph className={styles.searchIcon} />
+            <SkeletonBlock className={`${styles.search} ${styles.skeletonSearchField}`} />
+          </div>
+
+          <div className={styles.scopes} aria-hidden>
+            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChipWide}`} />
+            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChip}`} />
+            <SkeletonBlock className={`${styles.scopeChip} ${styles.skeletonScopeChipWide}`} />
+          </div>
+
+          <div className={styles.list} data-testid="design-systems-list" aria-hidden>
+            {Array.from({ length: 7 }, (_, index) => (
+              <div
+                key={index}
+                className={`${styles.item} ${index === 0 ? styles.skeletonRowActive : styles.skeletonRow}`}
+                data-testid={`design-systems-loading-row-${index}`}
+              >
+                <span className={styles.itemThumb}>
+                  <SkeletonBlock className={styles.skeletonThumb} />
+                </span>
+                <span className={styles.itemMeta}>
+                  <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLineTitle}`} />
+                  <SkeletonBlock className={`${styles.skeletonLine} ${index % 3 === 0 ? styles.skeletonLineShort : styles.skeletonLineMedium}`} />
+                </span>
+                <SkeletonBlock className={styles.skeletonStatusDot} />
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className={styles.preview} data-testid="design-systems-preview">
+          <DesignSystemDetailSkeleton
+            label={t('designSystemPicker.loadingPreview')}
+            dataTestId="design-systems-preview-skeleton"
+          />
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.root} data-testid="design-systems-tab">
+    <>
+      {actionToast ? (
+        <Toast
+          message={actionToast.message}
+          tone={actionToast.tone}
+          ttlMs={actionToast.tone === 'loading' ? 60000 : 2600}
+          role={actionToast.tone === 'error' ? 'alert' : 'status'}
+          onDismiss={() => setActionToast(null)}
+        />
+      ) : null}
+      <div className={styles.root} data-testid="design-systems-tab">
       <aside className={styles.sidebar}>
         {onCreate ? (
           <Button
@@ -693,7 +809,8 @@ export function DesignSystemsTab({
       <section className={styles.preview} data-testid="design-systems-preview">
         {renderPreview()}
       </section>
-    </div>
+      </div>
+    </>
   );
 
   function renderSidebarList() {
@@ -754,17 +871,18 @@ export function DesignSystemsTab({
     if (selectedSystem) {
       return (
         <DesignSystemDetail
+          key={selectedSystem.id}
           system={selectedSystem}
           isDefault={selectedSystem.id === selectedId}
-          showcaseHtml={thumbs[selectedSystem.id]}
           busy={busyId === selectedSystem.id}
+          actionBusy={busyAction?.systemId === selectedSystem.id ? busyAction.action : null}
           t={t}
-          onEdit={onOpenSystem}
+          onEdit={handleEditSystem}
           onMakeDefault={handleMakeDefaultClick}
           onTogglePublished={togglePublished}
           onDelete={deleteSystem}
-          onPreviewFull={handlePreviewSystem}
           onSystemsRefresh={onSystemsRefresh}
+          onActionFeedback={notifyAction}
         />
       );
     }
@@ -786,6 +904,14 @@ export function DesignSystemsTab({
       </div>
     );
   }
+}
+
+function SkeletonBlock({
+  className,
+}: {
+  className?: string;
+}) {
+  return <span className={`${styles.skeletonBlock}${className ? ` ${className}` : ''}`} aria-hidden />;
 }
 
 interface SystemRowProps {
@@ -915,7 +1041,7 @@ function SystemRow({ system, active, isDefault, subtitle, statusLabel, onSelect 
           <span className={styles.itemName}>{system.title}</span>
           {isDefault ? <span className={styles.badgeDefault}>{t('dsManager.badgeDefault')}</span> : null}
         </span>
-        <span className={styles.itemSub}>{categoryLabel}</span>
+        <span className={styles.itemSub}>{subtitle}</span>
       </span>
       {isUser ? (
         <span
@@ -931,29 +1057,29 @@ function SystemRow({ system, active, isDefault, subtitle, statusLabel, onSelect 
 interface DetailProps {
   system: DesignSystemSummary;
   isDefault: boolean;
-  showcaseHtml: string | null | undefined;
   busy: boolean;
+  actionBusy: DesignSystemActionKind | null;
   t: ReturnType<typeof useI18n>['t'];
-  onEdit?: (id: string) => void;
+  onEdit?: (system: DesignSystemSummary) => void;
   onMakeDefault: (system: DesignSystemSummary) => void;
   onTogglePublished: (system: DesignSystemSummary) => void | Promise<void>;
   onDelete: (system: DesignSystemSummary) => void | Promise<void>;
-  onPreviewFull: (system: DesignSystemSummary) => void;
   onSystemsRefresh?: () => Promise<void> | void;
+  onActionFeedback: (tone: DesignKitActionFeedbackTone, message: string) => void;
 }
 
 function DesignSystemDetail({
   system,
   isDefault,
-  showcaseHtml,
   busy,
+  actionBusy,
   t,
   onEdit,
   onMakeDefault,
   onTogglePublished,
   onDelete,
-  onPreviewFull,
   onSystemsRefresh,
+  onActionFeedback,
 }: DetailProps) {
   const analytics = useAnalytics();
   const isUser = isUserSystem(system);
@@ -967,6 +1093,7 @@ function DesignSystemDetail({
   // the full detail. The kit view derives every module from brand.json (when a
   // backing project carries one) or the parsed DESIGN.md (presets).
   const [detail, setDetail] = useState<DesignSystemDetail | null>(null);
+  const [detailResolved, setDetailResolved] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
@@ -985,12 +1112,17 @@ function DesignSystemDetail({
     lastSystemIdRef.current = system.id;
     if (isNewSelection) {
       setDetail(null);
+      setDetailResolved(false);
       setDownloadFailed(false);
     } else {
       setReloadKey((k) => k + 1);
     }
     void fetchDesignSystem(system.id).then((d) => {
-      if (!cancelled && d) setDetail(d);
+      if (cancelled) return;
+      if (d) setDetail(d);
+      setDetailResolved(true);
+    }).catch(() => {
+      if (!cancelled) setDetailResolved(true);
     });
     return () => {
       cancelled = true;
@@ -1027,7 +1159,7 @@ function DesignSystemDetail({
     body: detail?.body,
     packageInfo: detail?.packageInfo,
     swatches: system.swatches,
-    showcaseHtml: showcaseHtml ?? null,
+    showcaseHtml: null,
     // Read-only is enforced by withholding the edit handlers below — not by
     // this flag. Keep user systems "editable" so their kit renders live from
     // the project (the SSOT / latest) rather than a stale published snapshot.
@@ -1041,6 +1173,7 @@ function DesignSystemDetail({
     emitEditClick('download', 'general');
     setDownloading(true);
     setDownloadFailed(false);
+    onActionFeedback('loading', t('dsManager.downloadTitle'));
     try {
       const ok =
         await downloadDesignSystemArchive({
@@ -1050,6 +1183,10 @@ function DesignSystemDetail({
           ? await downloadProjectArchive({ projectId, fallbackTitle: system.title })
           : false);
       setDownloadFailed(!ok);
+      onActionFeedback(ok ? 'success' : 'error', ok ? t('ds.actionDone') : t('dsManager.downloadFailed'));
+    } catch {
+      setDownloadFailed(true);
+      onActionFeedback('error', t('dsManager.downloadFailed'));
     } finally {
       setDownloading(false);
     }
@@ -1070,6 +1207,7 @@ function DesignSystemDetail({
           icon: 'download' as const,
           onClick: () => void handleDownload(),
           disabled: busy || downloading,
+          loading: downloading,
         }]
       : []),
     ...(canBeDefault && !isDefault
@@ -1079,6 +1217,7 @@ function DesignSystemDetail({
           icon: 'star' as const,
           onClick: () => onMakeDefault(system),
           disabled: busy,
+          loading: actionBusy === 'default',
         }]
       : []),
     ...(isUser
@@ -1088,6 +1227,7 @@ function DesignSystemDetail({
           icon: 'trash' as const,
           onClick: () => void onDelete(system),
           disabled: busy,
+          loading: actionBusy === 'delete',
         }]
       : []),
   ];
@@ -1100,12 +1240,13 @@ function DesignSystemDetail({
           className={styles.actionButton}
           onClick={() => {
             emitEditClick('edit_with_agent', 'general');
-            onEdit(system.id);
+            onEdit(system);
           }}
           disabled={busy}
+          aria-busy={actionBusy === 'edit' || undefined}
           title={t('dsManager.openSystemAria', { title: system.title })}
         >
-          <Icon name="sparkles" />
+          <Icon name={actionBusy === 'edit' ? 'spinner' : 'sparkles'} />
           {t('dsManager.editWithAgent')}
         </Button>
       ) : null}
@@ -1114,9 +1255,11 @@ function DesignSystemDetail({
           type="button"
           className={`${styles.statusToggle} ${published ? styles.statusToggleOn : ''}`}
           aria-pressed={published}
+          aria-busy={actionBusy === 'publish' || undefined}
           onClick={() => void onTogglePublished(system)}
           disabled={busy}
         >
+          {actionBusy === 'publish' ? <Icon name="spinner" size={13} className={styles.statusToggleSpinner} /> : null}
           <span>{published ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
           <span className={styles.statusToggleTrack} aria-hidden />
         </button>
@@ -1143,8 +1286,71 @@ function DesignSystemDetail({
           dataTestId={`design-kit-view-${system.id}`}
         />
       ) : (
-        <div className={styles.cover} aria-hidden />
+        <DesignSystemDetailSkeleton
+          label={detailResolved ? t('common.loading') : t('designSystemPicker.loadingPreview')}
+          dataTestId={`design-system-detail-loading-${system.id}`}
+        />
       )}
+    </div>
+  );
+}
+
+function DesignSystemDetailSkeleton({
+  label,
+  dataTestId,
+}: {
+  label: string;
+  dataTestId: string;
+}) {
+  return (
+    <div
+      className={`${styles.detail} ${styles.detailSkeleton}`}
+      role="status"
+      aria-label={label}
+      aria-busy="true"
+      data-testid={dataTestId}
+    >
+      <header className={styles.skeletonHeader}>
+        <div className={styles.skeletonHeaderCopy}>
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonHeroTitle}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonHeroSub}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonHeroMeta}`} />
+        </div>
+        <div className={styles.skeletonActions} aria-hidden>
+          <SkeletonBlock className={styles.skeletonActionPrimary} />
+          <SkeletonBlock className={styles.skeletonActionToggle} />
+          <SkeletonBlock className={styles.skeletonActionIcon} />
+        </div>
+      </header>
+
+      <section className={styles.skeletonModule}>
+        <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonModuleKicker}`} />
+        <div className={styles.skeletonParagraph}>
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLine}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLine}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLineShort}`} />
+          <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonParagraphLine}`} />
+        </div>
+      </section>
+
+      <section className={styles.skeletonLogoModule}>
+        <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonModuleKicker}`} />
+        <div className={styles.skeletonLogoStage}>
+          <SkeletonBlock className={styles.skeletonLogoMark} />
+          <div className={styles.skeletonLogoText}>
+            <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLogoWord}`} />
+            <SkeletonBlock className={`${styles.skeletonLine} ${styles.skeletonLogoCaption}`} />
+          </div>
+        </div>
+        <div className={styles.skeletonThumbRow} aria-hidden>
+          {Array.from({ length: 6 }, (_, index) => (
+            <SkeletonBlock
+              key={index}
+              className={`${styles.skeletonLogoThumb} ${index === 0 ? styles.skeletonLogoThumbActive : ''}`}
+            />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

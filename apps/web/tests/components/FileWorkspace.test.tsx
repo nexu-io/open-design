@@ -392,7 +392,7 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('Project');
     expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
   });
 

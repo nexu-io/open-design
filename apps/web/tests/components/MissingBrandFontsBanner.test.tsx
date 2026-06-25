@@ -47,7 +47,7 @@ describe('MissingBrandFontsBanner (issue #2814)', () => {
     // FileWorkspace renders the banner without a per-project key, so one
     // instance is reused as the user moves between projects.
     const { rerender, container } = render(<MissingBrandFontsBanner projectId="p1" />);
-    fireEvent.click(screen.getByRole('button', { name: /use system fonts/i }));
+    fireEvent.click(screen.getByRole('button', { name: /keep substitutes/i }));
     expect(container.querySelector('.ds-project-warning-card')).toBeNull();
     expect(window.localStorage.getItem('od:font-banner-dismissed:p1')).toBe('1');
 

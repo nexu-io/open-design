@@ -15,7 +15,7 @@ function renderImageBody(): string {
   const source = artifactExportSource();
   const start = source.indexOf("async function renderImage");
   expect(start, "renderImage not found in artifact-export.ts").toBeGreaterThanOrEqual(0);
-  const end = source.indexOf("\nasync function renderPptx", start);
+  const end = source.indexOf("\nfunction buildDocument", start);
   expect(end, "end of renderImage not found").toBeGreaterThan(start);
   return source.slice(start, end);
 }

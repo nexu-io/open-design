@@ -185,6 +185,8 @@ const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const AMR_STRING_FLAGS = new Set(['daemon-url']);
+const AMR_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'refresh']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
@@ -256,7 +258,8 @@ const FIGMA_BOOLEAN_FLAGS = new Set([
 // reachable through the top-of-file SUBCOMMAND_MAP dispatch, which runs during
 // module evaluation — a const declared further down would still be in TDZ.
 const BRAND_STRING_FLAGS = new Set([
-  'daemon-url', 'prompt-file', 'project',
+  'daemon-url', 'prompt-file', 'project', 'locale',
+  'html-file', 'css-file', 'base-url',
 ]);
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
@@ -298,6 +301,7 @@ const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
+  amr: runAmr,
   research: runResearch,
   plugin: runPlugin,
   ui: runUi,
@@ -333,7 +337,7 @@ const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'image-format', 'title', 'file',
 ]);
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck']);
-const EXPORT_FORMATS = ['pdf', 'pptx', 'pptx-editable', 'image'];
+const EXPORT_FORMATS = ['pdf', 'image'];
 // Mirrors EXPORT_IMAGE_FORMATS in packages/contracts. The desktop renderer
 // (Electron nativeImage) can only encode PNG/JPEG, so WebP is rejected here
 // with a clear error instead of silently downgrading to PNG.
@@ -343,7 +347,7 @@ function printExportHelp() {
   console.log(`Usage:
   od export <file> --project <id> --format <fmt> [options]
 
-Programmatic export of an HTML/deck artifact to PDF, PPTX, or image. Runs
+Programmatic export of an HTML/deck artifact to PDF or image. Runs
 entirely from the rendered design (no model/agent calls). Rasterization uses
 the desktop runtime's bundled Chromium, so a desktop/packaged runtime must be
 reachable; otherwise the command reports that the renderer is unavailable.
@@ -361,7 +365,6 @@ Options:
   --daemon-url <url>       Override daemon URL
 
 Examples:
-  od export deck.html --project p1 --format pptx --out deck.pptx
   od export index.html --project p1 --format pdf --out page.pdf
   od export slide.html --project p1 --format image --image-format png --out slide.png`);
 }
@@ -421,7 +424,7 @@ async function runExport(args) {
     if (!out) {
       const ext = format === 'image'
         ? (flags['image-format'] === 'jpeg' ? 'jpg' : 'png')
-        : format === 'pdf' ? 'pdf' : 'pptx';
+        : 'pdf';
       out = `artifact.${ext}`;
     }
   }
@@ -542,8 +545,8 @@ function printRootHelp() {
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
-  od export <file> --project <id> --format <pdf|pptx|pptx-editable|image> [--out <path>]
-      Programmatically export an HTML/deck artifact to PDF, PPTX, or image
+  od export <file> --project <id> --format <pdf|image> [--out <path>]
+      Programmatically export an HTML/deck artifact to PDF or image
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
       the desktop runtime's bundled Chromium.
 
@@ -575,6 +578,51 @@ What the daemon does:
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
      dispatcher that the agent calls via \`od media generate\`.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od amr …
+// ---------------------------------------------------------------------------
+
+async function runAmr(args) {
+  const sub = args[0];
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od amr status [--refresh] [--json]
+
+Options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --refresh            Bypass the daemon's short wallet display cache.
+  --json               Emit raw JSON.`);
+    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: AMR_STRING_FLAGS, boolean: AMR_BOOLEAN_FLAGS });
+  const base = await cliDaemonBaseUrl(flags);
+  switch (sub) {
+    case 'status': {
+      const query = flags.refresh ? '?refresh=1' : '';
+      const resp = await fetch(`${base}/api/integrations/vela/wallet${query}`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const snapshot = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(snapshot, null, 2) + '\n');
+      const account = snapshot?.user?.email ?? snapshot?.user?.id ?? '-';
+      console.log(`AMR account\t${account}`);
+      if (snapshot?.status === 'available') {
+        console.log(`Wallet balance\t$${snapshot.balanceUsd}`);
+        console.log(`Updated\t${snapshot.updatedAt ?? snapshot.fetchedAt ?? '-'}`);
+        console.log(`Source\t${snapshot.source ?? '-'}`);
+        return;
+      }
+      console.log(`Wallet balance\tunavailable`);
+      console.log(`Status\t${snapshot?.status ?? 'unknown'}`);
+      if (snapshot?.error?.message) console.log(`Reason\t${snapshot.error.message}`);
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od amr ${sub}`);
+      process.exit(2);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -5044,6 +5092,7 @@ async function runBrand(args) {
     case 'extract':  return runBrandCreate(rest);
     case 'preview':  return runBrandPreview(rest);
     case 'finalize': return runBrandFinalize(rest);
+    case 'extract-from-html': return runBrandExtractFromHtml(rest);
     case 'get':      return runBrandGet(rest);
     case 'show':     return runBrandGet(rest);
     case 'delete':   return runBrandDelete(rest);
@@ -5115,7 +5164,12 @@ async function runBrandCreate(rest) {
     resp = await fetch(`${base}/api/brands`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        ...(typeof flags.locale === 'string' && flags.locale.trim()
+          ? { locale: flags.locale.trim() }
+          : {}),
+      }),
     });
   } catch (err) {
     surfaceFetchError(err, base);
@@ -5157,6 +5211,7 @@ async function runBrandFinalize(rest) {
   const base = await cliDaemonBaseUrl(flags);
   const body = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
+  if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
   try {
     resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/finalize`, {
@@ -5183,6 +5238,98 @@ async function runBrandFinalize(rest) {
   if (data?.designSystemId) process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
 }
 
+// Read a flag value as file content (or stdin when the value is "-"). Returns
+// null when the flag is unset. Mirrors readPromptFromFlags' file/stdin handling
+// but for an arbitrary flag name (--html-file / --css-file).
+async function readFileFlagOrStdin(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (value === '-') {
+    return await new Promise((resolve, reject) => {
+      let buf = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', (chunk) => { buf += chunk; });
+      process.stdin.on('end', () => resolve(buf));
+      process.stdin.on('error', reject);
+    });
+  }
+  const { readFile } = await import('node:fs/promises');
+  return await readFile(value, 'utf8');
+}
+
+// od brand extract-from-html <id> --html-file <path|-> [--css-file <path>]
+//   [--base-url <url>] [--json]
+// Re-runs extraction against pre-captured rendered HTML (e.g. a page an external
+// agent already loaded past an anti-bot wall), mirroring the UI's browser-assist
+// confirm path so the capability is reachable from the CLI too.
+async function runBrandExtractFromHtml(rest) {
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od brand extract-from-html <id> --html-file <path|-> '
+      + '[--css-file <path>] [--base-url <url>] [--json]');
+    process.exit(2);
+  }
+  let html;
+  try {
+    html = await readFileFlagOrStdin(flags['html-file']);
+  } catch (err) {
+    console.error(`could not read --html-file: ${err.message}`);
+    process.exit(2);
+  }
+  if (!html || !html.trim()) {
+    console.error('--html-file <path|-> is required (the rendered page HTML)');
+    process.exit(2);
+  }
+  let css = '';
+  if (typeof flags['css-file'] === 'string' && flags['css-file'].length > 0) {
+    try {
+      css = (await readFileFlagOrStdin(flags['css-file'])) ?? '';
+    } catch (err) {
+      console.error(`could not read --css-file: ${err.message}`);
+      process.exit(2);
+    }
+  }
+  const body = { html };
+  if (css.trim()) body.css = css;
+  if (typeof flags['base-url'] === 'string' && flags['base-url'].trim()) {
+    body.baseUrl = flags['base-url'].trim();
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/extract-from-html`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (resp.status === 404) {
+    console.error(`brand not found: ${id}`);
+    process.exit(4);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
+    return;
+  }
+  const name = data?.brand?.name ?? data?.id ?? id;
+  console.log(`${data?.id ?? id}\t${name}`);
+  if (data?.designSystemId) {
+    process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
+  }
+}
+
 async function runBrandPreview(rest) {
   let flags;
   try {
@@ -5199,6 +5346,7 @@ async function runBrandPreview(rest) {
   const base = await cliDaemonBaseUrl(flags);
   const body = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
+  if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
   try {
     resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/preview`, {

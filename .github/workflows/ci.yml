@@ -890,45 +890,71 @@ jobs:
           fi
 
       - name: Block merge while the needs-validation label is present
-        # Hard gate: a PR that still carries `needs-validation` must not merge. Fails closed —
-        # any label-lookup error blocks rather than silently waving the merge through. Respects
-        # the skip-validation override implicitly (that override means needs-validation is never
-        # added). On pull_request the labels come straight from the event payload (no API call);
-        # on merge_group we resolve every PR in the queued group.
+        # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
+        # the merge_group (merge-queue) context — never on pull_request. main requires the merge
+        # queue, so every merge passes through merge_group; a needs-validation entry fails this
+        # step there and is ejected from the queue, so it can never land.
+        #
+        # Why not also fail on pull_request: that turns the PR's own required `Validate workspace`
+        # check red, and a deliberately-red required check is indistinguishable from a real CI
+        # failure to everything downstream — it flips the PR's mergeStateStatus to BLOCKED and
+        # reads as ci_status=failure to the review bot, which deadlocks the very QA/validation that
+        # is supposed to clear the label (QA never gets requested → label never removed → blocked
+        # forever). The merge_group run executes on the queue's transient ref, so this failure does
+        # NOT appear in the PR head's status rollup; the PR stays green until the label is cleared.
+        # Fails closed: any label-lookup error blocks rather than silently waving the merge through.
+        # Respects skip-validation implicitly (that override means needs-validation is never added).
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          # Resolving the queued PR via commits/<sha>/pulls is unreliable: the merge queue squashes,
+          # so the queued commits are NEW synthetic SHAs GitHub does not associate back to the PR —
+          # that found nothing and waved a needs-validation PR through (#4736). Enumerate the group's
+          # PRs from three sources and take the union (see below).
+          MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            if printf '%s' "$PR_LABELS" | jq -e 'index("needs-validation")' >/dev/null; then
-              echo "::error::PR still has 'needs-validation' — validate (/explore Pass or manual QA) and remove the label before merging."
+          if [ "$EVENT_NAME" != "merge_group" ]; then
+            echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
+          else
+            # Enumerate EVERY PR in the group from the union of three independent sources, so a
+            # batched group (more than one PR) cannot hide an unchecked PR behind the ref tip:
+            #   1. ref `.../pr-<N>-<sha>` — names the (tip) entry; squash-safe.
+            #   2. each commit subject's trailing `(#N)` — the queue's per-entry squash commit
+            #      carries its own PR number, so this recovers the NON-tip PRs of a batched group.
+            #   3. commits/<sha>/pulls — covers a non-squash queue where commits map back directly.
+            # Sources 2/3 depend on the compare API. Capture it in a REQUIRED assignment (no
+            # `|| true`) so an API failure trips set -e and blocks — otherwise an empty result would
+            # silently fall back to the ref tip and merge a batched needs-validation PR unchecked.
+            # Only grep no-match (an empty set within a SUCCESSFUL response) is tolerated.
+            compare_json="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA")"
+            ref_prs="$(printf '%s\n' "$MERGE_GROUP_REF" | grep -oE 'pr-[0-9]+' | grep -oE '[0-9]+' || true)"
+            msg_prs="$(printf '%s' "$compare_json" | jq -r '.commits[].commit.message | split("\n")[0]' | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' || true)"
+            assoc_prs=""
+            for s in $(printf '%s' "$compare_json" | jq -r '.commits[].sha'); do
+              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"   # required; failure blocks
+              assoc_prs="$(printf '%s\n%s\n' "$assoc_prs" "$pulls")"
+            done
+            prs="$(printf '%s\n%s\n%s\n' "$ref_prs" "$msg_prs" "$assoc_prs" | grep -E '^[0-9]+$' | sort -u || true)"
+            if [ -z "$prs" ]; then
+              echo "::error::could not resolve any PR from merge_group ref '$MERGE_GROUP_REF' / commits — blocking merge (fail closed)."
               exit 1
             fi
-          elif [ "$EVENT_NAME" = "merge_group" ]; then
-            # Fail closed: capture each gh result into a plain assignment so a failed lookup
-            # trips set -e / pipefail and blocks the merge. Do NOT put the gh call in an `if`
-            # condition — a nonzero exit there is swallowed (read as "no label") and waves the
-            # merge through.
-            shas="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" --jq '.commits[].sha')"
-            prs=""
-            for s in $shas; do
-              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"
-              prs="$(printf '%s\n%s\n' "$prs" "$pulls")"
-            done
-            for pr in $(printf '%s\n' "$prs" | sort -u | grep -E '^[0-9]+$'); do
+            for pr in $prs; do
+              # Plain assignment (not in an `if`) so a failed lookup trips set -e / pipefail and
+              # blocks rather than being read as "no label" and waving the merge through.
               labels="$(gh pr view "$pr" --repo "$REPO" --json labels --jq '.labels[].name')"
               if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
                 echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
                 exit 1
               fi
+              echo "PR #$pr: no needs-validation label."
             done
+            echo "No 'needs-validation' label in the queued group ($prs) — clear to merge."
           fi
-          echo "No 'needs-validation' label in scope — clear to merge."
 
   runtime_summary:
     name: Runtime summary

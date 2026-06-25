@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
 import type {
   ApplyResult,
+  ChatSessionMode,
   ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
@@ -283,6 +284,7 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
@@ -1699,10 +1701,15 @@ export function HomeView({
             submittedActive?.inputs ?? null,
             submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
           );
-      // Picked scenario plugins own the skill slot; otherwise the fixed design
-      // router handles the home composer by default.
+      // Scenario plugins (chips / preset cards) and explicit skill picks are
+      // mutually exclusive routing sources. In Design mode, free-form prompts
+      // route through the default design router; in Ask mode they stay plain
+      // chat conversations with no hidden router plugin.
       const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
-      const routedPluginId = submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID;
+      const routedPluginId =
+        sessionMode === 'design'
+          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          : submittedActive?.record.id ?? null;
       // The example-prompt override is a one-shot marker. Decide whether to
       // send it now, but defer spending the marker until the create is
       // accepted — a rejected attempt stays retryable and must resend it.
@@ -1729,7 +1736,7 @@ export function HomeView({
         attachments: stagedFiles,
         ...(workingDir ? { workingDir } : {}),
         ...(workingDirToken ? { workingDirToken } : {}),
-        conversationMode: 'design',
+        conversationMode: sessionMode,
         ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
       });
       if (accepted === false) {
@@ -1840,6 +1847,8 @@ export function HomeView({
         }}
         onExamplePromptStatusChange={handleExamplePromptStatusChange}
         onStartBlankProject={startBlankProject}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         executionSwitcher={executionSwitcher}
       />
 
