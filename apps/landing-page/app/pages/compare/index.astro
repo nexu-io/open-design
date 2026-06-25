@@ -66,7 +66,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 1, name: 'Marketing AX', item: SITE },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}compare/` },
     ],
   },
@@ -93,7 +93,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="resources" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>Marketing AX</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -117,7 +117,7 @@ const jsonLd = [
           const isInternal = c.href.startsWith('/');
           return (
             <li class="compare-card" id={c.slug}>
-              <h3>Open Design vs <em>{c.competitor}</em></h3>
+              <h3>Marketing AX vs <em>{c.competitor}</em></h3>
               <p>{c.summary}</p>
               <a
                 href={c.href}

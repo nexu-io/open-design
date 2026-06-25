@@ -38,7 +38,7 @@ export type SolutionFeature = {
 export type SolutionTableRow = {
   /** Row label — the capability or task. */
   capability: string;
-  /** What Open Design does. */
+  /** What Marketing AX does. */
   withOd: string;
   /** The old / manual / tool-bound way. */
   without: string;

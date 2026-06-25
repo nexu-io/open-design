@@ -1,5 +1,5 @@
 /*
- * Open Design — Atelier Zero landing page.
+ * Marketing AX — Atelier Zero landing page.
  *
  * Mirrors `design-templates/open-design-landing/example.html` 1:1. When the canonical
  * example.html changes, mirror the diff here and into `app/globals.css`.
@@ -418,7 +418,7 @@ export default function Page({
                 <span className='hero-title-corner bl' aria-hidden='true' />
                 <span className='hero-title-corner br' aria-hidden='true' />
                 <span className='hero-title-brand'>
-                  <BlurText text='Open Design' by='words' start={0} />
+                  <BlurText text='Marketing AX' by='words' start={0} />
                 </span>
                 <span className='hero-title-sub'>
                   <BlurText text={t.heroTitleSub} by={cjk ? 'letters' : 'words'} start={2} />
@@ -462,7 +462,7 @@ export default function Page({
                   sizes='(max-width: 768px) 100vw, 60vw'
                   width={2508}
                   height={1450}
-                  alt='Open Design desktop — design files & index.html preview'
+                  alt='Marketing AX desktop — design files & index.html preview'
                   decoding='async'
                   className='hero-shot-img'
                 />
@@ -477,7 +477,7 @@ export default function Page({
             <div className='about-grid'>
               <div className='about-copy' data-reveal>
                 <p className='about-kicker'>
-                  {locale === 'zh' ? '为什么选择 Open Design？' : 'Why Open Design?'}
+                  {locale === 'zh' ? '为什么选择 Marketing AX？' : 'Why Marketing AX?'}
                 </p>
                 {/*
                   Text Scroll Reveal (Magic UI / Inspira port): a tall track
@@ -682,7 +682,7 @@ export default function Page({
               <div data-reveal>
                 <h2 className='display'>
                   {t.labsPre}
-                  <em>Open Design</em>
+                  <em>Marketing AX</em>
                   {t.labsPost}
                 </h2>
               </div>
@@ -833,7 +833,7 @@ export default function Page({
               </div>
               <div className='testimonial-globe' data-reveal='right' data-testimonial-globe>
                 <canvas
-                  aria-label='Open Design global contributor map'
+                  aria-label='Marketing AX global contributor map'
                   className='testimonial-globe-canvas'
                   height={720}
                   width={720}
@@ -909,7 +909,7 @@ export default function Page({
         <section className='cta' id='contact' data-od-id='cta'>
           <div className='container'>
             <div className='cta-dance'>
-              {/* Open Design Home window floating over the mural — sits above the
+              {/* Marketing AX Home window floating over the mural — sits above the
                   painting (::before) but below the CTA copy. Bottom is clipped by
                   the block's overflow:hidden, matching the reference comp.
                   `data-reveal` slides it up from below when the module enters view
@@ -917,7 +917,7 @@ export default function Page({
               <img
                 className='cta-window'
                 src='/cta-window.webp'
-                alt='Open Design 桌面端首页'
+                alt='Marketing AX 桌面端首页'
                 width={2996}
                 height={1870}
                 decoding='async'
@@ -1027,7 +1027,7 @@ export default function Page({
                 <h5>{ui.footer.products}</h5>
                 <ul>
                   <li>
-                    <a href={href('/')}>Open Design</a>
+                    <a href={href('/')}>Marketing AX</a>
                   </li>
                   <li>
                     <a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a>

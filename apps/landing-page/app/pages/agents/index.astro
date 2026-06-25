@@ -4,7 +4,7 @@
  *
  * Captures "claude code design", "codex design", "cursor agent design",
  * "gemini cli design", "opencode design", "qwen design" queries. Each
- * agent gets a short card explaining how it plugs into Open Design.
+ * agent gets a short card explaining how it plugs into Marketing AX.
  * Agents with a dedicated long-form page link into `/agents/<agent>-design/`
  * (see DETAIL_ROUTES below); this hub is the SEO entry point.
  */
@@ -185,14 +185,14 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'Marketing AX', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: hubUrl },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: 'Open Design supported agents',
+    name: 'Marketing AX supported agents',
     numberOfItems: allAgents.length,
     itemListElement: allAgents.map((a, idx) => ({
       '@type': 'ListItem',
@@ -206,7 +206,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>Marketing AX</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -253,7 +253,7 @@ const jsonLd = [
       </ul>
     </section>
 
-    <section class="info-cta" aria-label="Open Design call to action">
+    <section class="info-cta" aria-label="Marketing AX call to action">
       <div>
         <h2>{page.ctaTitle(allAgents.length)}</h2>
         <p>{page.ctaBody}</p>

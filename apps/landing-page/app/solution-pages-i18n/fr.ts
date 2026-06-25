@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const FR: SolutionLocaleCopy = {
   prototype: {
-    title: 'Créer des prototypes interactifs avec Open Design + Claude Code',
+    title: 'Créer des prototypes interactifs avec Marketing AX + Claude Code',
     description:
-      'Transformez une invite en un prototype cliquable et multi-écrans sans quitter votre terminal. Open Design donne à votre agent de code les compétences de design, les modèles et le système de design pour livrer de vrais prototypes que vous pouvez ouvrir dans un navigateur.',
+      'Transformez une invite en un prototype cliquable et multi-écrans sans quitter votre terminal. Marketing AX donne à votre agent de code les compétences de design, les modèles et le système de design pour livrer de vrais prototypes que vous pouvez ouvrir dans un navigateur.',
     breadcrumb: 'Prototype',
     label: 'Cas d’usage · Prototype',
     heading: 'Prototyper à la vitesse d’une invite',
@@ -13,18 +13,18 @@ export const FR: SolutionLocaleCopy = {
       'Illustration éditoriale d’une main esquissant un wireframe qui se transforme en prototype d’application cliquable multi-écrans',
     tldrTitle: 'En une ligne',
     tldrBody:
-      'Open Design est la couche de design de l’agent de code que vous utilisez déjà. Pour le prototypage, cela signifie passer d’une idée d’un paragraphe à un prototype navigable et stylé en une seule session — sans outil de design, sans étape d’export, sans rupture de transmission.',
-    stepsTitle: 'Comment fonctionne le prototypage avec Open Design',
+      'Marketing AX est la couche de design de l’agent de code que vous utilisez déjà. Pour le prototypage, cela signifie passer d’une idée d’un paragraphe à un prototype navigable et stylé en une seule session — sans outil de design, sans étape d’export, sans rupture de transmission.',
+    stepsTitle: 'Comment fonctionne le prototypage avec Marketing AX',
     steps: [
       {
         title: 'Décrivez le parcours',
-        body: 'Dites à votre agent ce que vous construisez en langage clair — "un parcours d’onboarding avec un écran de bienvenue, un sélecteur de forfait et une confirmation." Open Design charge la compétence de prototype pour que l’agent sache produire des écrans, pas une seule page.',
+        body: 'Dites à votre agent ce que vous construisez en langage clair — "un parcours d’onboarding avec un écran de bienvenue, un sélecteur de forfait et une confirmation." Marketing AX charge la compétence de prototype pour que l’agent sache produire des écrans, pas une seule page.',
         imageAlt:
           'Illustration d’une personne tapant dans un terminal une description en langage clair d’un parcours d’application',
       },
       {
         title: 'Générez des écrans stylés',
-        body: 'L’agent applique un système de design et des modèles de prototype d’Open Design, si bien que chaque écran partage typographie, espacements et composants au lieu de ressembler à un brouillon. Vous obtenez un ensemble d’écrans cohérent, pas des maquettes disparates.',
+        body: 'L’agent applique un système de design et des modèles de prototype d’Marketing AX, si bien que chaque écran partage typographie, espacements et composants au lieu de ressembler à un brouillon. Vous obtenez un ensemble d’écrans cohérent, pas des maquettes disparates.',
         imageAlt:
           'Illustration de plusieurs écrans d’application apparaissant en séquence, tous partageant un style visuel cohérent',
       },
@@ -41,9 +41,9 @@ export const FR: SolutionLocaleCopy = {
           'Illustration d’un prototype révisé puis transmis à un ingénieur, design et code fusionnant en un seul fichier',
       },
     ],
-    tableTitle: 'Le prototypage avec Open Design vs l’ancienne méthode',
+    tableTitle: 'Le prototypage avec Marketing AX vs l’ancienne méthode',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Outils de prototypage classiques',
     tableRows: [
       {
@@ -110,7 +110,7 @@ export const FR: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Des prototypes créés avec Open Design',
+    galleryTitle: 'Des prototypes créés avec Marketing AX',
     galleryLead:
       'Chacun a commencé par une invite et a été rendu en artefact cliquable. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent l’adapte.',
     gallery: [
@@ -124,8 +124,8 @@ export const FR: SolutionLocaleCopy = {
     faqTitle: 'FAQ prototypage',
     faq: [
       {
-        q: 'Ai-je besoin d’un outil de design comme Figma pour prototyper avec Open Design ?',
-        a: 'Non. Open Design fonctionne à l’intérieur de votre agent de code et rend les prototypes en HTML. Vous décrivez le parcours en langage ; l’agent produit les écrans. Il n’y a aucun outil de canevas distinct à apprendre ou à payer.',
+        q: 'Ai-je besoin d’un outil de design comme Figma pour prototyper avec Marketing AX ?',
+        a: 'Non. Marketing AX fonctionne à l’intérieur de votre agent de code et rend les prototypes en HTML. Vous décrivez le parcours en langage ; l’agent produit les écrans. Il n’y a aucun outil de canevas distinct à apprendre ou à payer.',
       },
       {
         q: 'Les prototypes sont-ils interactifs ou juste des maquettes statiques ?',
@@ -133,7 +133,7 @@ export const FR: SolutionLocaleCopy = {
       },
       {
         q: 'Quels agents puis-je utiliser ?',
-        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs maison. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+        a: 'Marketing AX fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs maison. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
       },
       {
         q: 'Un prototype peut-il devenir le vrai produit ?',
@@ -142,22 +142,22 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Prototypez votre prochaine idée ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez votre prochain "et si" en quelque chose de cliquable — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez votre prochain "et si" en quelque chose de cliquable — dans l’agent que vous utilisez déjà.',
   },
   dashboard: {
-    title: 'Générer des tableaux de bord de données avec Open Design + Claude Code',
+    title: 'Générer des tableaux de bord de données avec Marketing AX + Claude Code',
     description:
       'Décrivez les indicateurs que vous suivez et laissez votre agent de code construire un tableau de bord stylé et responsive — graphiques, cartes KPI et tableaux rendus en HTML que vous pouvez héberger partout. Pas de siège d’outil BI, pas de constructeur glisser-déposer.',
     breadcrumb: 'Tableau de bord',
     label: 'Cas d’usage · Tableau de bord',
     heading: 'Des tableaux de bord à partir d’une description, pas d’un constructeur glisser-déposer',
-    lead: 'Dites à votre agent quoi montrer et quelle impression donner. Open Design fournit les motifs de graphiques, le système de mise en page et le langage visuel pour obtenir un tableau de bord cohérent et présentable — pas un mur de widgets au style par défaut.',
+    lead: 'Dites à votre agent quoi montrer et quelle impression donner. Marketing AX fournit les motifs de graphiques, le système de mise en page et le langage visuel pour obtenir un tableau de bord cohérent et présentable — pas un mur de widgets au style par défaut.',
     heroImageAlt:
       'Illustration éditoriale de chiffres bruts à gauche qui se transforment en un tableau de bord épuré de graphiques et de cartes KPI à droite',
     tldrTitle: 'En une ligne',
     tldrBody:
-      'Open Design transforme une spécification en langage clair de vos indicateurs en un tableau de bord stylé que votre agent rend en HTML — versionné dans votre dépôt, hébergeable partout, sans abonnement BI par siège.',
-    stepsTitle: 'Comment fonctionnent les tableaux de bord avec Open Design',
+      'Marketing AX transforme une spécification en langage clair de vos indicateurs en un tableau de bord stylé que votre agent rend en HTML — versionné dans votre dépôt, hébergeable partout, sans abonnement BI par siège.',
+    stepsTitle: 'Comment fonctionnent les tableaux de bord avec Marketing AX',
     steps: [
       {
         title: 'Décrivez les indicateurs',
@@ -166,7 +166,7 @@ export const FR: SolutionLocaleCopy = {
       },
       {
         title: 'Choisissez les motifs de graphiques',
-        body: 'Open Design livre des modèles de graphiques et de mise en page, si bien que les tendances deviennent des courbes, les répartitions des barres et les ratios la bonne visualisation — typographie et espacements cohérents partout au lieu de réglages par défaut disparates.',
+        body: 'Marketing AX livre des modèles de graphiques et de mise en page, si bien que les tendances deviennent des courbes, les répartitions des barres et les ratios la bonne visualisation — typographie et espacements cohérents partout au lieu de réglages par défaut disparates.',
         imageAlt: 'Illustration de plusieurs types de graphiques disposés dans une grille cohérente',
       },
       {
@@ -180,9 +180,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un tableau de bord en cours d’affinage puis déployé',
       },
     ],
-    tableTitle: 'Les tableaux de bord avec Open Design vs l’ancienne méthode',
+    tableTitle: 'Les tableaux de bord avec Marketing AX vs l’ancienne méthode',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Outils BI / codé à la main',
     tableRows: [
       {
@@ -225,7 +225,7 @@ export const FR: SolutionLocaleCopy = {
       { title: "Social et marketing", body: "Performance des canaux et suivi des campagnes en une seule vue.", thumb: "example-social-media-dashboard" },
       { title: "Rapports métier", body: "Des rapports structurés pour tout domaine — du clinique au trading.", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Des tableaux de bord créés avec Open Design',
+    galleryTitle: 'Des tableaux de bord créés avec Marketing AX',
     galleryLead:
       'De vrais tableaux de bord rendus à partir d’une invite et d’une source de données. Partez d’un proche du vôtre et décrivez les indicateurs que vous suivez.',
     gallery: [
@@ -240,7 +240,7 @@ export const FR: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Ai-je besoin d’un outil BI comme Tableau ou Looker ?',
-        a: 'Non. Open Design rend les tableaux de bord en HTML à l’intérieur de votre agent de code. Vous décrivez les indicateurs et le pointez vers vos données ; il n’y a aucune plateforme BI distincte à licencier ou à apprendre.',
+        a: 'Non. Marketing AX rend les tableaux de bord en HTML à l’intérieur de votre agent de code. Vous décrivez les indicateurs et le pointez vers vos données ; il n’y a aucune plateforme BI distincte à licencier ou à apprendre.',
       },
       {
         q: 'D’où viennent les données ?',
@@ -257,22 +257,22 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Construisez votre tableau de bord ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez vos indicateurs en un tableau de bord que vous pouvez héberger partout — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez vos indicateurs en un tableau de bord que vous pouvez héberger partout — dans l’agent que vous utilisez déjà.',
   },
   slides: {
-    title: 'Générer des présentations avec Open Design + Claude Code',
+    title: 'Générer des présentations avec Marketing AX + Claude Code',
     description:
-      'Transformez un plan en une présentation conçue et fidèle à la marque sans ouvrir d’application de présentation. Open Design donne à votre agent de code des modèles de présentation et un système visuel, rendant les diapositives en HTML que vous pouvez présenter, exporter ou partager.',
+      'Transformez un plan en une présentation conçue et fidèle à la marque sans ouvrir d’application de présentation. Marketing AX donne à votre agent de code des modèles de présentation et un système visuel, rendant les diapositives en HTML que vous pouvez présenter, exporter ou partager.',
     breadcrumb: 'Diapositives',
     label: 'Cas d’usage · Diapositives',
     heading: 'Des présentations qui semblent conçues, écrites par une invite',
-    lead: 'Confiez à votre agent un plan et un ton. Open Design applique un modèle de présentation et un système visuel pour que chaque diapositive soit disposée, composée et fidèle à la marque — pas une liste à puces sur un fond vide.',
+    lead: 'Confiez à votre agent un plan et un ton. Marketing AX applique un modèle de présentation et un système visuel pour que chaque diapositive soit disposée, composée et fidèle à la marque — pas une liste à puces sur un fond vide.',
     heroImageAlt:
       'Illustration éditoriale d’un plan à gauche se transformant en une séquence de diapositives de présentation conçues à droite',
     tldrTitle: 'En une ligne',
     tldrBody:
-      'Open Design transforme un plan en une présentation HTML conçue que votre agent rend en une session — présentez-la dans le navigateur, exportez en PDF ou PPTX et gardez la source dans votre dépôt.',
-    stepsTitle: 'Comment fonctionnent les présentations avec Open Design',
+      'Marketing AX transforme un plan en une présentation HTML conçue que votre agent rend en une session — présentez-la dans le navigateur, exportez en PDF ou PPTX et gardez la source dans votre dépôt.',
+    stepsTitle: 'Comment fonctionnent les présentations avec Marketing AX',
     steps: [
       {
         title: 'Donnez-lui le plan',
@@ -281,7 +281,7 @@ export const FR: SolutionLocaleCopy = {
       },
       {
         title: 'Choisissez un style de présentation',
-        body: 'Open Design livre des modèles de présentation — éditorial, suisse-international, technique sombre, et plus. L’agent en applique un pour que typographie, grille et accents restent cohérents sur chaque diapositive.',
+        body: 'Marketing AX livre des modèles de présentation — éditorial, suisse-international, technique sombre, et plus. L’agent en applique un pour que typographie, grille et accents restent cohérents sur chaque diapositive.',
         imageAlt: 'Illustration de plusieurs options de style de présentation posées côte à côte',
       },
       {
@@ -295,9 +295,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’une présentation présentée et exportée vers plusieurs formats',
       },
     ],
-    tableTitle: 'Les présentations avec Open Design vs l’ancienne méthode',
+    tableTitle: 'Les présentations avec Marketing AX vs l’ancienne méthode',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'PowerPoint / Keynote / outils de diapositives IA',
     tableRows: [
       {
@@ -340,7 +340,7 @@ export const FR: SolutionLocaleCopy = {
       { title: "Mode présentateur", body: "Des présentations de style Reveal conçues pour présenter en direct dans le navigateur.", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "Schémas techniques", body: "Des présentations d’architecture et de connaissances qui cartographient des systèmes complexes.", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Des présentations créées avec Open Design',
+    galleryTitle: 'Des présentations créées avec Marketing AX',
     galleryLead:
       'De vraies présentations rendues à partir d’un plan. Choisissez un style proche de votre exposé et décrivez le contenu.',
     gallery: [
@@ -355,7 +355,7 @@ export const FR: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Ai-je besoin de PowerPoint ou Keynote ?',
-        a: 'Non. Open Design rend les présentations en HTML à l’intérieur de votre agent de code et peut exporter en PDF ou PPTX. Vous présentez depuis le navigateur ou transmettez un fichier — aucune application de présentation requise pour la construire.',
+        a: 'Non. Marketing AX rend les présentations en HTML à l’intérieur de votre agent de code et peut exporter en PDF ou PPTX. Vous présentez depuis le navigateur ou transmettez un fichier — aucune application de présentation requise pour la construire.',
       },
       {
         q: 'Ne sont-ce que des puces générées par IA ?',
@@ -372,22 +372,22 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Construisez votre prochaine présentation ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez votre plan en une présentation conçue — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez votre plan en une présentation conçue — dans l’agent que vous utilisez déjà.',
   },
   image: {
-    title: 'Générer des visuels fidèles à la marque avec Open Design + Claude Code',
+    title: 'Générer des visuels fidèles à la marque avec Marketing AX + Claude Code',
     description:
       'Produisez des cartes sociales, des couvertures d’articles et des visuels marketing à partir d’une invite — disposés avec une vraie typographie et votre système de marque, rendus en HTML net que vous pouvez exporter en PNG. Pas d’application de design, pas d’abonnement à des modèles.',
     breadcrumb: 'Image',
     label: 'Cas d’usage · Image',
     heading: 'Des visuels fidèles à la marque, générés et mis en page pour vous',
-    lead: 'Décrivez la carte ou la couverture dont vous avez besoin. Open Design la compose avec une vraie typographie, une grille et vos couleurs de marque — puis la rend en HTML que vous exportez en image, au lieu de batailler avec une application de design ou un modèle générique.',
+    lead: 'Décrivez la carte ou la couverture dont vous avez besoin. Marketing AX la compose avec une vraie typographie, une grille et vos couleurs de marque — puis la rend en HTML que vous exportez en image, au lieu de batailler avec une application de design ou un modèle générique.',
     heroImageAlt:
       'Illustration éditoriale d’une invite se transformant en un ensemble de cartes sociales et de couvertures d’articles mises en page',
     tldrTitle: 'En une ligne',
     tldrBody:
-      'Open Design transforme une invite en un visuel composé et fidèle à la marque que votre agent rend en HTML et exporte en PNG — reproductible, versionné et libéré des outils de design par siège.',
-    stepsTitle: 'Comment fonctionnent les visuels avec Open Design',
+      'Marketing AX transforme une invite en un visuel composé et fidèle à la marque que votre agent rend en HTML et exporte en PNG — reproductible, versionné et libéré des outils de design par siège.',
+    stepsTitle: 'Comment fonctionnent les visuels avec Marketing AX',
     steps: [
       {
         title: 'Décrivez le visuel',
@@ -396,7 +396,7 @@ export const FR: SolutionLocaleCopy = {
       },
       {
         title: 'Appliquez le système de marque',
-        body: 'Open Design tire vos couleurs, votre typographie et vos espacements d’un système de design réutilisable, si bien que chaque carte s’accorde au reste de votre marque au lieu d’avoir l’air d’un coup unique.',
+        body: 'Marketing AX tire vos couleurs, votre typographie et vos espacements d’un système de design réutilisable, si bien que chaque carte s’accorde au reste de votre marque au lieu d’avoir l’air d’un coup unique.',
         imageAlt: 'Illustration de couleurs et de typographie de marque appliquées à une mise en page de carte',
       },
       {
@@ -410,9 +410,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un modèle de carte produisant une série de visuels cohérente',
       },
     ],
-    tableTitle: 'Les visuels avec Open Design vs l’ancienne méthode',
+    tableTitle: 'Les visuels avec Marketing AX vs l’ancienne méthode',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Applications de design / modèles génériques',
     tableRows: [
       {
@@ -455,7 +455,7 @@ export const FR: SolutionLocaleCopy = {
       { title: "Carrousels", body: "Des carrousels sociaux multi-diapositives qui restent cohérents d’un cadre à l’autre.", thumb: "example-social-carousel" },
       { title: "Cadres de maquette UI", body: "Des cadres de notification et d’appareil pour le storytelling produit.", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Des visuels créés avec Open Design',
+    galleryTitle: 'Des visuels créés avec Marketing AX',
     galleryLead:
       'De vraies cartes et couvertures rendues à partir d’une invite. Choisissez-en une proche de votre besoin et remplacez par votre texte.',
     gallery: [
@@ -470,7 +470,7 @@ export const FR: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Est-ce un générateur d’images IA comme Midjourney ?',
-        a: 'Non. Open Design compose des visuels avec une vraie mise en page et une vraie typographie — votre titre, votre marque, des dimensions exactes — et les rend en HTML que vous exportez en PNG. C’est de la composition de design, pas de la génération de pixels.',
+        a: 'Non. Marketing AX compose des visuels avec une vraie mise en page et une vraie typographie — votre titre, votre marque, des dimensions exactes — et les rend en HTML que vous exportez en PNG. C’est de la composition de design, pas de la génération de pixels.',
       },
       {
         q: 'Puis-je créer une série de cartes cohérente ?',
@@ -487,22 +487,22 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Créez votre prochain visuel ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez une invite en un visuel fidèle à la marque — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez une invite en un visuel fidèle à la marque — dans l’agent que vous utilisez déjà.',
   },
   video: {
-    title: 'Générer des motion graphics et des vidéos courtes avec Open Design + Claude Code',
+    title: 'Générer des motion graphics et des vidéos courtes avec Marketing AX + Claude Code',
     description:
       'Transformez un script en cadres animés et vidéos courtes — cartons-titres, fonds animés et outros composés avec votre système de marque et rendus à partir de HTML. Pas de suite de motion graphics, pas de défilement sur une timeline.',
     breadcrumb: 'Vidéo',
     label: 'Cas d’usage · Vidéo',
     heading: 'Des motion graphics à partir d’un script, pas d’une timeline',
-    lead: 'Décrivez le moment que vous voulez — une apparition de titre, une animation de données, un outro de logo. Open Design compose des cadres animés avec votre système de marque et les rend en vidéo, sans suite de motion graphics requise.',
+    lead: 'Décrivez le moment que vous voulez — une apparition de titre, une animation de données, un outro de logo. Marketing AX compose des cadres animés avec votre système de marque et les rend en vidéo, sans suite de motion graphics requise.',
     heroImageAlt:
       'Illustration éditoriale d’un script se transformant en une séquence de cadres vidéo animés',
     tldrTitle: 'En une ligne',
     tldrBody:
-      'Open Design transforme un script en cadres animés et fidèles à la marque que votre agent rend en vidéo courte — composés à partir de HTML, versionnés dans votre dépôt, sans éditeur de timeline à apprendre.',
-    stepsTitle: 'Comment fonctionne le motion avec Open Design',
+      'Marketing AX transforme un script en cadres animés et fidèles à la marque que votre agent rend en vidéo courte — composés à partir de HTML, versionnés dans votre dépôt, sans éditeur de timeline à apprendre.',
+    stepsTitle: 'Comment fonctionne le motion avec Marketing AX',
     steps: [
       {
         title: 'Décrivez le moment',
@@ -511,7 +511,7 @@ export const FR: SolutionLocaleCopy = {
       },
       {
         title: 'Appliquez le style de marque et de motion',
-        body: 'Open Design fournit des modèles de cadres — fuites de lumière cinématiques, titres glitch, outros de logo — et applique vos couleurs et votre typographie, pour que le mouvement semble intentionnel et fidèle à la marque.',
+        body: 'Marketing AX fournit des modèles de cadres — fuites de lumière cinématiques, titres glitch, outros de logo — et applique vos couleurs et votre typographie, pour que le mouvement semble intentionnel et fidèle à la marque.',
         imageAlt: 'Illustration d’un style de marque appliqué à des cadres animés',
       },
       {
@@ -525,9 +525,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un clip vidéo affiné et exporté pour le social',
       },
     ],
-    tableTitle: 'Le motion avec Open Design vs l’ancienne méthode',
+    tableTitle: 'Le motion avec Marketing AX vs l’ancienne méthode',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'After Effects / suites de motion',
     tableRows: [
       {
@@ -570,7 +570,7 @@ export const FR: SolutionLocaleCopy = {
       { title: "Titres glitch", body: "Des apparitions de titre avec mouvement et texture.", thumb: "example-frame-glitch-title" },
       { title: "Outros de logo", body: "Des animations de clôture aux couleurs de la marque pour tout clip.", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Du motion créé avec Open Design',
+    galleryTitle: 'Du motion créé avec Marketing AX',
     galleryLead:
       'De vrais cadres animés et clips rendus à partir d’une invite. Choisissez-en un proche de votre idée et décrivez le mouvement.',
     gallery: [
@@ -585,7 +585,7 @@ export const FR: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Ai-je besoin d’After Effects ou d’une suite de motion graphics ?',
-        a: 'Non. Open Design compose des cadres animés en HTML et les rend en vidéo à l’intérieur de votre agent de code. Il n’y a aucun éditeur de timeline à apprendre ou à licencier.',
+        a: 'Non. Marketing AX compose des cadres animés en HTML et les rend en vidéo à l’intérieur de votre agent de code. Il n’y a aucun éditeur de timeline à apprendre ou à licencier.',
       },
       {
         q: 'Pour quel type de vidéo est-ce adapté ?',
@@ -602,31 +602,31 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Animez votre prochaine idée ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez un script en motion — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez un script en motion — dans l’agent que vous utilisez déjà.',
   },
   designSystem: {
-    title: 'Construire et appliquer un système de design avec Open Design + Claude Code',
+    title: 'Construire et appliquer un système de design avec Marketing AX + Claude Code',
     description:
       'Capturez votre marque comme un système de design réutilisable que votre agent de code applique à chaque artefact — couleurs, typographie, composants et ton dans un seul DESIGN.md. Définissez-le une fois ; chaque prototype, présentation et tableau de bord reste fidèle à la marque.',
     breadcrumb: 'Système de design',
     label: 'Cas d’usage · Système de design',
     heading: 'Un système de design, appliqué à tout ce que crée votre agent',
-    lead: 'Définissez votre marque une fois et Open Design la porte dans chaque sortie — prototypes, présentations, tableaux de bord, visuels. Le système vit dans votre dépôt sous forme de DESIGN.md que l’agent lit, donc la cohérence est automatique, pas manuelle.',
+    lead: 'Définissez votre marque une fois et Marketing AX la porte dans chaque sortie — prototypes, présentations, tableaux de bord, visuels. Le système vit dans votre dépôt sous forme de DESIGN.md que l’agent lit, donc la cohérence est automatique, pas manuelle.',
     heroImageAlt:
       'Illustration éditoriale d’un seul système de design rayonnant vers de nombreux artefacts fidèles à la marque',
     tldrTitle: 'En une ligne',
     tldrBody:
-      'Open Design capture votre marque comme un système de design portable que votre agent applique à chaque artefact — défini une fois dans votre dépôt, imposé partout, sans outil de design central qui en garde l’accès.',
-    stepsTitle: 'Comment fonctionnent les systèmes de design avec Open Design',
+      'Marketing AX capture votre marque comme un système de design portable que votre agent applique à chaque artefact — défini une fois dans votre dépôt, imposé partout, sans outil de design central qui en garde l’accès.',
+    stepsTitle: 'Comment fonctionnent les systèmes de design avec Marketing AX',
     steps: [
       {
         title: 'Capturez le système',
-        body: 'Décrivez votre marque — couleurs, typographie, espacements, voix — ou pointez l’agent vers un site existant pour l’extraire. Open Design l’écrit dans un DESIGN.md qui vit dans votre projet.',
+        body: 'Décrivez votre marque — couleurs, typographie, espacements, voix — ou pointez l’agent vers un site existant pour l’extraire. Marketing AX l’écrit dans un DESIGN.md qui vit dans votre projet.',
         imageAlt: 'Illustration d’une marque capturée dans un seul fichier de système de design',
       },
       {
         title: 'Partez d’une base éprouvée',
-        body: 'Open Design livre plus de 140 systèmes de design de référence — d’Apple et Linear à l’éditorial et au brutaliste. Forkez-en un proche de votre marque au lieu de partir d’une page blanche.',
+        body: 'Marketing AX livre plus de 140 systèmes de design de référence — d’Apple et Linear à l’éditorial et au brutaliste. Forkez-en un proche de votre marque au lieu de partir d’une page blanche.',
         imageAlt: 'Illustration d’une galerie de systèmes de design de référence que l’on parcourt',
       },
       {
@@ -640,9 +640,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un système de design mis à jour et se propageant à toutes les sorties',
       },
     ],
-    tableTitle: 'Les systèmes de design avec Open Design vs l’ancienne méthode',
+    tableTitle: 'Les systèmes de design avec Marketing AX vs l’ancienne méthode',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Bibliothèques d’outils de design / chartes graphiques',
     tableRows: [
       {
@@ -685,7 +685,7 @@ export const FR: SolutionLocaleCopy = {
       { title: "OpenAI", body: "Minimal, neutre, de qualité recherche.", thumb: "design-system-openai" },
       { title: "GitHub", body: "Dense, technique, natif pour les développeurs.", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Les systèmes de design dans Open Design',
+    galleryTitle: 'Les systèmes de design dans Marketing AX',
     galleryLead:
       'Quelques-uns des plus de 140 systèmes de référence que vous pouvez forker comme point de départ. Choisissez-en un proche de votre marque et adaptez-le.',
     gallery: [
@@ -700,11 +700,11 @@ export const FR: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Qu’est-ce exactement que le système de design ici ?',
-        a: 'Un fichier DESIGN.md dans votre dépôt qui capture couleurs, typographie, espacements, composants et voix. Chaque compétence Open Design le lit, donc votre marque est appliquée automatiquement à tout ce que l’agent produit.',
+        a: 'Un fichier DESIGN.md dans votre dépôt qui capture couleurs, typographie, espacements, composants et voix. Chaque compétence Marketing AX le lit, donc votre marque est appliquée automatiquement à tout ce que l’agent produit.',
       },
       {
         q: 'Dois-je partir de zéro ?',
-        a: 'Non. Open Design livre plus de 140 systèmes de design de référence que vous pouvez forker — d’Apple et Linear à l’éditorial et au brutaliste — puis adapter à votre marque.',
+        a: 'Non. Marketing AX livre plus de 140 systèmes de design de référence que vous pouvez forker — d’Apple et Linear à l’éditorial et au brutaliste — puis adapter à votre marque.',
       },
       {
         q: 'Comment reste-t-il cohérent entre présentations, tableaux de bord et prototypes ?',
@@ -717,12 +717,12 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Définissez votre système de design ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et donnez à votre agent une marque à appliquer partout — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et donnez à votre agent une marque à appliquer partout — dans l’agent que vous utilisez déjà.',
   },
   roleSoloBuilder: {
-    title: 'Open Design pour les créateurs solo et indie hackers',
+    title: 'Marketing AX pour les créateurs solo et indie hackers',
     description:
-      'Livrez comme une équipe à vous tout seul. Open Design transforme votre agent de code en la moitié design de votre startup — prototypes, landing pages, tableaux de bord et visuels de marque, le tout à partir d’un prompt, le tout dans votre charte, le tout dans votre dépôt.',
+      'Livrez comme une équipe à vous tout seul. Marketing AX transforme votre agent de code en la moitié design de votre startup — prototypes, landing pages, tableaux de bord et visuels de marque, le tout à partir d’un prompt, le tout dans votre charte, le tout dans votre dépôt.',
     breadcrumb: 'Créateur solo',
     label: 'Pour · Créateurs solo',
     heading: 'Votre équipe design, c’est l’agent que vous utilisez déjà',
@@ -731,8 +731,8 @@ export const FR: SolutionLocaleCopy = {
       'Illustration éditoriale d’une personne à un bureau entourée d’une landing page, d’une application, d’un tableau de bord et de cartes sociales, le tout dans un style cohérent',
     tldrTitle: 'En une phrase',
     tldrBody:
-      'Open Design est le département design qu’un fondateur solo n’a jamais eu : du prompt à l’artefact sur chaque surface dont votre produit a besoin, dans une seule marque, sans transmission ni outil supplémentaire.',
-    stepsTitle: 'Comment un créateur solo utilise Open Design',
+      'Marketing AX est le département design qu’un fondateur solo n’a jamais eu : du prompt à l’artefact sur chaque surface dont votre produit a besoin, dans une seule marque, sans transmission ni outil supplémentaire.',
+    stepsTitle: 'Comment un créateur solo utilise Marketing AX',
     steps: [
       {
         title: 'Définissez votre marque une fois',
@@ -750,9 +750,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un artefact passant directement du prompt à la mise en ligne',
       },
     ],
-    tableTitle: 'Construire en solo avec Open Design vs. le faire à la dure',
+    tableTitle: 'Construire en solo avec Marketing AX vs. le faire à la dure',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Y aller seul aujourd’hui',
     tableRows: [
       { capability: 'Couvrir chaque surface de design', withOd: 'Un agent fait prototype, landing, tableau de bord, marque', without: 'Assembler cinq outils SaaS et des tutoriels' },
@@ -770,7 +770,7 @@ export const FR: SolutionLocaleCopy = {
       { title: 'Parcours mobiles', body: 'Écrans d’app quand vous allez au-delà du web.', thumb: 'example-mobile-app' },
       { title: 'Cartes sociales', body: 'Cartes de lancement et de mise à jour pour chaque canal.', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Construit en solo avec Open Design',
+    galleryTitle: 'Construit en solo avec Marketing AX',
     galleryLead:
       'Chaque surface dont une startup d’une personne a besoin, à partir d’un prompt. Choisissez-en une proche de votre prochain coup et décrivez-la.',
     gallery: [
@@ -790,12 +790,12 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Construisez votre projet entier ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et laissez un seul agent être votre équipe design — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et laissez un seul agent être votre équipe design — dans l’agent que vous utilisez déjà.',
   },
   roleDesigner: {
-    title: 'Open Design pour les designers',
+    title: 'Marketing AX pour les designers',
     description:
-      'Passez votre temps sur le goût, pas sur la corvée. Open Design laisse votre agent gérer le travail de production répétitif — variantes, états, systèmes de design complets — pendant que vous dirigez le look et gardez le dernier mot.',
+      'Passez votre temps sur le goût, pas sur la corvée. Marketing AX laisse votre agent gérer le travail de production répétitif — variantes, états, systèmes de design complets — pendant que vous dirigez le look et gardez le dernier mot.',
     breadcrumb: 'Designer',
     label: 'Pour · Designers',
     heading: 'Dirigez le design — laissez l’agent faire la production',
@@ -804,8 +804,8 @@ export const FR: SolutionLocaleCopy = {
       'Illustration éditoriale d’un designer qui dirige pendant qu’un agent remplit écrans, variantes et système de design',
     tldrTitle: 'En une phrase',
     tldrBody:
-      'Open Design est l’assistant de production qui ne se fatigue jamais : vous définissez le système de design et tranchez sur le goût ; l’agent génère le reste, dans le système, dans votre dépôt.',
-    stepsTitle: 'Comment un designer utilise Open Design',
+      'Marketing AX est l’assistant de production qui ne se fatigue jamais : vous définissez le système de design et tranchez sur le goût ; l’agent génère le reste, dans le système, dans votre dépôt.',
+    stepsTitle: 'Comment un designer utilise Marketing AX',
     steps: [
       {
         title: 'Encodez votre système',
@@ -823,9 +823,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un designer donnant une direction et du design qui se met à jour',
       },
     ],
-    tableTitle: 'Concevoir avec Open Design vs. la méthode manuelle',
+    tableTitle: 'Concevoir avec Marketing AX vs. la méthode manuelle',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Outillage de design manuel',
     tableRows: [
       { capability: 'Construire un système de design', withOd: 'Un DESIGN.md que l’agent applique partout', without: 'Une bibliothèque maintenue à la main par outil' },
@@ -843,7 +843,7 @@ export const FR: SolutionLocaleCopy = {
       { title: 'Écrans d’app', body: 'Écrans mobiles et web haute fidélité.', thumb: 'example-mobile-app' },
       { title: 'Tableaux de bord', body: 'UI de données qui respecte votre système.', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Dirigé avec Open Design',
+    galleryTitle: 'Dirigé avec Marketing AX',
     galleryLead:
       'Du travail haute fidélité, conforme au système, produit par l’agent à partir d’une direction. Choisissez-en un proche de votre style et affinez-le.',
     gallery: [
@@ -863,12 +863,12 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Dirigez votre prochain design ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et laissez l’agent gérer la production pendant que vous tranchez sur le goût — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et laissez l’agent gérer la production pendant que vous tranchez sur le goût — dans l’agent que vous utilisez déjà.',
   },
   roleEngineering: {
-    title: 'Open Design pour les ingénieurs',
+    title: 'Marketing AX pour les ingénieurs',
     description:
-      'Sautez la transmission du design. Open Design transforme un DESIGN.md en vrai front-end que votre agent de code écrit directement — UI conforme au système, prototypes et tableaux de bord, dans le dépôt, sans aller-retour Figma.',
+      'Sautez la transmission du design. Marketing AX transforme un DESIGN.md en vrai front-end que votre agent de code écrit directement — UI conforme au système, prototypes et tableaux de bord, dans le dépôt, sans aller-retour Figma.',
     breadcrumb: 'Ingénierie',
     label: 'Pour · Ingénierie',
     heading: 'De la spec au front-end, aucune transmission entre les deux',
@@ -877,8 +877,8 @@ export const FR: SolutionLocaleCopy = {
       'Illustration éditoriale d’un DESIGN.md s’écoulant directement dans du code front-end et une UI rendue, en sautant une étape de transmission',
     tldrTitle: 'En une phrase',
     tldrBody:
-      'Open Design comble l’écart designer-ingénieur en rendant le système de design lisible par la machine : le même agent qui écrit votre code applique le système et rend une vraie UI.',
-    stepsTitle: 'Comment un ingénieur utilise Open Design',
+      'Marketing AX comble l’écart designer-ingénieur en rendant le système de design lisible par la machine : le même agent qui écrit votre code applique le système et rend une vraie UI.',
+    stepsTitle: 'Comment un ingénieur utilise Marketing AX',
     steps: [
       {
         title: 'Lisez le système, pas une redline',
@@ -896,9 +896,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’une UI générée arrivant comme une PR relisible',
       },
     ],
-    tableTitle: 'Front-end avec Open Design vs. la méthode de transmission',
+    tableTitle: 'Front-end avec Marketing AX vs. la méthode de transmission',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Transmission design-vers-dev',
     tableRows: [
       { capability: 'Obtenir un design à construire', withOd: 'Un DESIGN.md que votre agent lit directement', without: 'Un fichier Figma que vous réinterprétez à la main' },
@@ -916,7 +916,7 @@ export const FR: SolutionLocaleCopy = {
       { title: 'Landing pages', body: 'Pages marketing sans attendre le design.', thumb: 'example-saas-landing' },
       { title: 'Kanban / tableaux', body: 'UI de workflow internes.', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'Construit par des ingénieurs avec Open Design',
+    galleryTitle: 'Construit par des ingénieurs avec Marketing AX',
     galleryLead:
       'Du vrai front-end conforme au système, généré directement dans le dépôt. Choisissez-en un proche de ce que vous construisez et décrivez-le.',
     gallery: [
@@ -936,12 +936,12 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Générez votre prochaine UI ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez un DESIGN.md en front-end — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez un DESIGN.md en front-end — dans l’agent que vous utilisez déjà.',
   },
   roleProductManagers: {
-    title: 'Open Design pour les product managers',
+    title: 'Marketing AX pour les product managers',
     description:
-      'Cessez d’attendre la disponibilité du design pour communiquer une idée. Open Design laisse un PM transformer un prompt en prototype cliquable ou wireframe — pour aligner les parties prenantes et briefer l’équipe, sans ticket de design.',
+      'Cessez d’attendre la disponibilité du design pour communiquer une idée. Marketing AX laisse un PM transformer un prompt en prototype cliquable ou wireframe — pour aligner les parties prenantes et briefer l’équipe, sans ticket de design.',
     breadcrumb: 'Product managers',
     label: 'Pour · Product managers',
     heading: 'Rendez l’idée cliquable avant le lancement',
@@ -950,8 +950,8 @@ export const FR: SolutionLocaleCopy = {
       'Illustration éditoriale d’un PM transformant une idée écrite en un prototype cliquable montré aux parties prenantes',
     tldrTitle: 'En une phrase',
     tldrBody:
-      'Open Design donne au PM un moyen sans design de rendre les idées tangibles : du prompt au prototype pour l’alignement et les briefs, sans dépenser le budget design de l’équipe.',
-    stepsTitle: 'Comment un PM utilise Open Design',
+      'Marketing AX donne au PM un moyen sans design de rendre les idées tangibles : du prompt au prototype pour l’alignement et les briefs, sans dépenser le budget design de l’équipe.',
+    stepsTitle: 'Comment un PM utilise Marketing AX',
     steps: [
       {
         title: 'Décrivez le parcours',
@@ -969,9 +969,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’un prototype partagé pour l’alignement puis transmis à l’équipe',
       },
     ],
-    tableTitle: 'Le travail de PM avec Open Design vs. attendre le design',
+    tableTitle: 'Le travail de PM avec Marketing AX vs. attendre le design',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Sans, aujourd’hui',
     tableRows: [
       { capability: 'Rendre une idée tangible', withOd: 'Prompt → prototype cliquable, par vous-même', without: 'Déposer un ticket de design et attendre la dispo' },
@@ -989,7 +989,7 @@ export const FR: SolutionLocaleCopy = {
       { title: 'Prototypes web', body: 'Parcours web multi-écrans à relire.', thumb: 'example-web-prototype' },
       { title: 'Vues de tendances', body: 'Instantanés sur 30 jours et de tendance pour le contexte.', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'Prototypé par des PM avec Open Design',
+    galleryTitle: 'Prototypé par des PM avec Marketing AX',
     galleryLead:
       'Des parcours cliquables rendus à partir d’une description, prêts pour une revue de parties prenantes. Choisissez-en un proche de votre idée et décrivez-le.',
     gallery: [
@@ -1009,12 +1009,12 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Rendez votre idée cliquable ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez votre prochaine spec en quelque chose que les gens peuvent cliquer — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez votre prochaine spec en quelque chose que les gens peuvent cliquer — dans l’agent que vous utilisez déjà.',
   },
   roleMarketing: {
-    title: 'Open Design pour les équipes marketing',
+    title: 'Marketing AX pour les équipes marketing',
     description:
-      'Livrez des campagnes à la vitesse du contenu. Open Design laisse votre agent produire landing pages, cartes sociales et visuels de campagne à partir d’un prompt — dans la charte, à la demande, sans faire la queue au design.',
+      'Livrez des campagnes à la vitesse du contenu. Marketing AX laisse votre agent produire landing pages, cartes sociales et visuels de campagne à partir d’un prompt — dans la charte, à la demande, sans faire la queue au design.',
     breadcrumb: 'Marketing',
     label: 'Pour · Marketing',
     heading: 'Des visuels de campagne à la vitesse d’un prompt',
@@ -1023,8 +1023,8 @@ export const FR: SolutionLocaleCopy = {
       'Illustration éditoriale d’une marketeuse transformant un brief en une landing page et un jeu de cartes sociales dans la charte',
     tldrTitle: 'En une phrase',
     tldrBody:
-      'Open Design est la ressource design toujours active du marketing : du prompt à l’asset pour landing pages et social, dans la charte, pour que les campagnes soient livrées à la vitesse où vous écrivez le texte.',
-    stepsTitle: 'Comment une équipe marketing utilise Open Design',
+      'Marketing AX est la ressource design toujours active du marketing : du prompt à l’asset pour landing pages et social, dans la charte, pour que les campagnes soient livrées à la vitesse où vous écrivez le texte.',
+    stepsTitle: 'Comment une équipe marketing utilise Marketing AX',
     steps: [
       {
         title: 'Verrouillez la marque',
@@ -1042,9 +1042,9 @@ export const FR: SolutionLocaleCopy = {
         imageAlt: 'Illustration d’assets de campagne livrés et itérés rapidement',
       },
     ],
-    tableTitle: 'Le marketing avec Open Design vs. la course habituelle',
+    tableTitle: 'Le marketing avec Marketing AX vs. la course habituelle',
     tableColCapability: 'Ce dont vous avez besoin',
-    tableColWithOd: 'Avec Open Design',
+    tableColWithOd: 'Avec Marketing AX',
     tableColWithout: 'Sans, aujourd’hui',
     tableRows: [
       { capability: 'Lancer une landing page', withOd: 'Prompt → page dans la charte, déployable', without: 'Briefer le design ou se battre avec un constructeur de site' },
@@ -1062,7 +1062,7 @@ export const FR: SolutionLocaleCopy = {
       { title: 'Couvertures d’articles', body: 'Couvertures de blog et de newsletter.', thumb: 'example-article-magazine' },
       { title: 'Pages web', body: 'Microsites et pages de campagne.', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'Livré par le marketing avec Open Design',
+    galleryTitle: 'Livré par le marketing avec Marketing AX',
     galleryLead:
       'Des assets de campagne dans la charte, rendus à partir d’un prompt. Choisissez-en un proche de votre campagne et remplacez-y votre texte.',
     gallery: [
@@ -1082,6 +1082,6 @@ export const FR: SolutionLocaleCopy = {
     ],
     ctaTitle: 'Livrez votre prochaine campagne ce soir',
     ctaBody:
-      'Mettez une étoile au dépôt, installez Open Design et transformez les briefs en assets dans la charte — dans l’agent que vous utilisez déjà.',
+      'Mettez une étoile au dépôt, installez Marketing AX et transformez les briefs en assets dans la charte — dans l’agent que vous utilisez déjà.',
   },
 };
