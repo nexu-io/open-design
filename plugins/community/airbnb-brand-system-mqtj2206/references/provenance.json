@@ -1,0 +1,19 @@
+{
+  "candidateId": "f2f84edb-17e3-4573-ac84-8a7372b490ef",
+  "projectId": "brand-airbnb-75b75f",
+  "runId": "b14674dd-1e43-4be6-a14a-579b951058d9",
+  "conversationId": "da62b529-660e-4a92-8ad5-a4d85c677f1e",
+  "provenance": {
+    "summary": "Detected from BRAND.md after a successful run.",
+    "detectedAt": 1782393355858
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "BRAND.md",
+      "label": "BRAND.md",
+      "size": 7967,
+      "copied": true
+    }
+  ]
+}
