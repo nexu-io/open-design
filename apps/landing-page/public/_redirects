@@ -23,8 +23,6 @@
 /en/wallet/      /amr/wallet  302
 /zh/wallet       /amr/wallet  302
 /zh/wallet/      /amr/wallet  302
-/zh-tw/wallet    /amr/wallet  302
-/zh-tw/wallet/   /amr/wallet  302
 /ja/wallet       /amr/wallet  302
 /ja/wallet/      /amr/wallet  302
 /ko/wallet       /amr/wallet  302
@@ -41,20 +39,8 @@
 /pt-br/wallet/   /amr/wallet  302
 /it/wallet       /amr/wallet  302
 /it/wallet/      /amr/wallet  302
-/vi/wallet       /amr/wallet  302
-/vi/wallet/      /amr/wallet  302
-/pl/wallet       /amr/wallet  302
-/pl/wallet/      /amr/wallet  302
-/id/wallet       /amr/wallet  302
-/id/wallet/      /amr/wallet  302
-/nl/wallet       /amr/wallet  302
-/nl/wallet/      /amr/wallet  302
-/ar/wallet       /amr/wallet  302
-/ar/wallet/      /amr/wallet  302
 /tr/wallet       /amr/wallet  302
 /tr/wallet/      /amr/wallet  302
-/uk/wallet       /amr/wallet  302
-/uk/wallet/      /amr/wallet  302
 
 # Locale-code migration: the previous OD landing-page stack used BCP-47
 # region-qualified codes (zh-CN, zh-TW, pt-BR, es-ES) whereas the
@@ -77,9 +63,6 @@
 # those URLs would 404 without a redirect. Send them to the canonical
 # (English) `/plugins/...` until the legacy locale set is retired
 # entirely.
-/fa/plugins/*  /plugins/:splat  301
-/hu/plugins/*  /plugins/:splat  301
-/th/plugins/*  /plugins/:splat  301
 
 # ─────────────────────────────────────────────────────────────────────
 # Catalog migration: legacy /skills /systems /templates -> /plugins/*
@@ -148,84 +131,6 @@
 /systems/    /plugins/systems/    301
 /templates/  /plugins/templates/  301
 
-# Locale-prefixed variants for ALL prefixed LANDING_LOCALES (every code
-# except the unprefixed default `en`). The localized skills/systems/
-# templates generators were removed (they 18x-exploded the static file
-# count past Cloudflare Pages' 20k-file deploy limit); these 301s degrade
-# each localized catalog path to that locale's plugins section. Non-en
-# pages are sitemap-excluded, so no detail-level precision is needed.
-/zh/skills/*     /zh/plugins/skills/     301
-/zh/systems/*    /zh/plugins/systems/    301
-/zh/templates/*  /zh/plugins/templates/  301
-/zh-tw/skills/*     /zh-tw/plugins/skills/     301
-/zh-tw/systems/*    /zh-tw/plugins/systems/    301
-/zh-tw/templates/*  /zh-tw/plugins/templates/  301
-/ja/skills/*     /ja/plugins/skills/     301
-/ja/systems/*    /ja/plugins/systems/    301
-/ja/templates/*  /ja/plugins/templates/  301
-/ko/skills/*     /ko/plugins/skills/     301
-/ko/systems/*    /ko/plugins/systems/    301
-/ko/templates/*  /ko/plugins/templates/  301
-/de/skills/*     /de/plugins/skills/     301
-/de/systems/*    /de/plugins/systems/    301
-/de/templates/*  /de/plugins/templates/  301
-/fr/skills/*     /fr/plugins/skills/     301
-/fr/systems/*    /fr/plugins/systems/    301
-/fr/templates/*  /fr/plugins/templates/  301
-/ru/skills/*     /ru/plugins/skills/     301
-/ru/systems/*    /ru/plugins/systems/    301
-/ru/templates/*  /ru/plugins/templates/  301
-/es/skills/*     /es/plugins/skills/     301
-/es/systems/*    /es/plugins/systems/    301
-/es/templates/*  /es/plugins/templates/  301
-/pt-br/skills/*     /pt-br/plugins/skills/     301
-/pt-br/systems/*    /pt-br/plugins/systems/    301
-/pt-br/templates/*  /pt-br/plugins/templates/  301
-/it/skills/*     /it/plugins/skills/     301
-/it/systems/*    /it/plugins/systems/    301
-/it/templates/*  /it/plugins/templates/  301
-/vi/skills/*     /vi/plugins/skills/     301
-/vi/systems/*    /vi/plugins/systems/    301
-/vi/templates/*  /vi/plugins/templates/  301
-/pl/skills/*     /pl/plugins/skills/     301
-/pl/systems/*    /pl/plugins/systems/    301
-/pl/templates/*  /pl/plugins/templates/  301
-/id/skills/*     /id/plugins/skills/     301
-/id/systems/*    /id/plugins/systems/    301
-/id/templates/*  /id/plugins/templates/  301
-/nl/skills/*     /nl/plugins/skills/     301
-/nl/systems/*    /nl/plugins/systems/    301
-/nl/templates/*  /nl/plugins/templates/  301
-/ar/skills/*     /ar/plugins/skills/     301
-/ar/systems/*    /ar/plugins/systems/    301
-/ar/templates/*  /ar/plugins/templates/  301
-/tr/skills/*     /tr/plugins/skills/     301
-/tr/systems/*    /tr/plugins/systems/    301
-/tr/templates/*  /tr/plugins/templates/  301
-/uk/skills/*     /uk/plugins/skills/     301
-/uk/systems/*    /uk/plugins/systems/    301
-/uk/templates/*  /uk/plugins/templates/  301
-
-# Localized plugin previews were de-duplicated to the canonical English
-# build (previews are language-agnostic visual assets); fall back to them.
-/zh/plugins/previews/*  /plugins/previews/:splat  301
-/zh-tw/plugins/previews/*  /plugins/previews/:splat  301
-/ja/plugins/previews/*  /plugins/previews/:splat  301
-/ko/plugins/previews/*  /plugins/previews/:splat  301
-/de/plugins/previews/*  /plugins/previews/:splat  301
-/fr/plugins/previews/*  /plugins/previews/:splat  301
-/ru/plugins/previews/*  /plugins/previews/:splat  301
-/es/plugins/previews/*  /plugins/previews/:splat  301
-/pt-br/plugins/previews/*  /plugins/previews/:splat  301
-/it/plugins/previews/*  /plugins/previews/:splat  301
-/vi/plugins/previews/*  /plugins/previews/:splat  301
-/pl/plugins/previews/*  /plugins/previews/:splat  301
-/id/plugins/previews/*  /plugins/previews/:splat  301
-/nl/plugins/previews/*  /plugins/previews/:splat  301
-/ar/plugins/previews/*  /plugins/previews/:splat  301
-/tr/plugins/previews/*  /plugins/previews/:splat  301
-/uk/plugins/previews/*  /plugins/previews/:splat  301
-
 # Agent detail route migration: the per-agent pages moved from
 # `/agents/<slug>/` to `/agents/<slug>-design/` (design keyword in the URL) and
 # the old Astro generators were removed. These 301s preserve any inbound links
@@ -240,26 +145,54 @@
 /:locale/agents/claude-code/  /:locale/agents/claude-code-design/  301
 /:locale/agents/opencode/     /:locale/agents/opencode-design/     301
 
-# Localized plugin DETAIL pages are not generated (they multiplied the full
-# catalog across every locale and pushed the build toward Cloudflare Pages'
-# 20k-file deploy cap). Plugin detail is canonical (English); 301 any locale-
-# prefixed plugin URL with no static page to its canonical path. Kept localized
-# hub pages (/<loc>/plugins/, /<loc>/plugins/{skills,systems,templates}/) have
-# static files and are served directly (static assets win over _redirects).
-/zh/plugins/*  /plugins/:splat  301
-/zh-tw/plugins/*  /plugins/:splat  301
-/ja/plugins/*  /plugins/:splat  301
-/ko/plugins/*  /plugins/:splat  301
-/de/plugins/*  /plugins/:splat  301
-/fr/plugins/*  /plugins/:splat  301
-/ru/plugins/*  /plugins/:splat  301
-/es/plugins/*  /plugins/:splat  301
-/pt-br/plugins/*  /plugins/:splat  301
-/it/plugins/*  /plugins/:splat  301
-/vi/plugins/*  /plugins/:splat  301
-/pl/plugins/*  /plugins/:splat  301
-/id/plugins/*  /plugins/:splat  301
-/nl/plugins/*  /plugins/:splat  301
-/ar/plugins/*  /plugins/:splat  301
-/tr/plugins/*  /plugins/:splat  301
-/uk/plugins/*  /plugins/:splat  301
+# ---------------------------------------------------------------------------
+# Retired marketing locales (2026-06 GSC review) -> fold to English (or /zh for
+# Chinese variants). MUST precede the generic /:loc/* catalog rules below so a
+# retired locale folds to English, not to its own (now non-existent) /plugins/
+# pages. Their /wallet callbacks fold via /:splat -> /wallet -> /amr/wallet, so
+# no per-locale wallet rule is needed.
+# ---------------------------------------------------------------------------
+/zh-tw/* /zh/:splat 301
+/zh-tw   /zh/       301
+/zh-cn/* /zh/:splat 301
+/zh-cn   /zh/       301
+/vi/* /:splat 301
+/vi   /      301
+/pl/* /:splat 301
+/pl   /      301
+/id/* /:splat 301
+/id   /      301
+/nl/* /:splat 301
+/nl   /      301
+/ar/* /:splat 301
+/ar   /      301
+/uk/* /:splat 301
+/uk   /      301
+/fa/* /:splat 301
+/fa   /      301
+/hu/* /:splat 301
+/hu   /      301
+/th/* /:splat 301
+/th   /      301
+
+# ---------------------------------------------------------------------------
+# Kept-locale legacy catalog redirects, consolidated with a :loc placeholder.
+# The per-locale expansion (11 locales x several paths) pushed the file past
+# Cloudflare Pages' total-rule cap, silently dropping the tail -- the retired
+# catch-alls above 404'd instead of redirecting. One placeholder rule per path
+# keeps the file well under the cap. Retired locales are handled above (first
+# match wins), so these only ever match a kept locale.
+#
+# IMPORTANT: do NOT add a generic `/:loc/plugins/*` fold here. On this project
+# `_redirects` takes precedence over static assets, and the localized plugin
+# hub pages (`/<loc>/plugins/`, `/<loc>/plugins/{skills,systems,templates}/`)
+# are real static files that must keep serving 200. A `/:loc/plugins/*` rule
+# would shadow them and 301 the hubs to English. Localized plugin DETAIL pages
+# are not generated and 404 (unchanged from production); retired-locale plugin
+# paths still fold to English via the `/<retired>/* -> /:splat` rules above.
+# The /skills /systems /templates legacy listings below are NOT static (their
+# generators were removed), so folding them is safe.
+# ---------------------------------------------------------------------------
+/:loc/skills/*     /:loc/plugins/skills/     301
+/:loc/systems/*    /:loc/plugins/systems/    301
+/:loc/templates/*  /:loc/plugins/templates/  301

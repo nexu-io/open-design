@@ -3,7 +3,7 @@ import { EXTRA_LOCALIZED_LANDING_UI_COPY } from './landing-ui-i18n';
 
 export const DEFAULT_LOCALE = 'en';
 
-export const LANDING_LOCALES = [
+const ALL_LANDING_LOCALES = [
   {
     code: 'en',
     htmlLang: 'en',
@@ -150,8 +150,31 @@ export const LANDING_LOCALES = [
   },
 ] as const;
 
-export type LandingLocaleCode = (typeof LANDING_LOCALES)[number]['code'];
-export type LandingLocale = (typeof LANDING_LOCALES)[number];
+// Full historical locale set — retained ONLY so existing per-locale translation
+// data stays type-valid. Do NOT use this for routing / sitemap / hreflang; use
+// LANDING_LOCALES below.
+export type LandingLocaleCode = (typeof ALL_LANDING_LOCALES)[number]['code'];
+export type LandingLocale = (typeof ALL_LANDING_LOCALES)[number];
+
+// Locales retired 2026-06 after a GSC review (near-zero Google return). Pages
+// are no longer generated for them and incoming URLs are 301'd to the English
+// page in public/_redirects. Any NEW page automatically ships only the active
+// set below, so the retired languages cannot silently reappear.
+const RETIRED_LOCALE_CODES = new Set<LandingLocaleCode>([
+  'zh-tw',
+  'vi',
+  'pl',
+  'id',
+  'nl',
+  'ar',
+  'uk',
+]);
+
+// Single source of truth for the locales we actually ship: routing, the
+// language switcher, hreflang, and the sitemap all consume this filtered list.
+export const LANDING_LOCALES: readonly LandingLocale[] = ALL_LANDING_LOCALES.filter(
+  (locale) => !RETIRED_LOCALE_CODES.has(locale.code),
+);
 
 export interface HeaderCopy {
   brandMetaTitle: string;
@@ -2272,94 +2295,94 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
 
 const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   en: {
-    title: 'Open Design — Official open-source Claude Design alternative',
+    title: 'Open Design — Best open-source Claude Design alternative',
     description:
-      'Open Design is the official open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
+      'Open Design is the best open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
   },
   zh: {
-    title: 'Open Design —— 官方 Claude Design 开源替代',
+    title: 'Open Design —— 最佳 Claude Design 开源替代',
     description:
-      'Open Design 是官方的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
+      'Open Design 是最佳的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
   },
   'zh-tw': {
-    title: 'Open Design —— 官方 Claude Design 開源替代',
+    title: 'Open Design —— 最佳 Claude Design 開源替代',
     description:
-      'Open Design 是官方的開源、本地優先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成簡報、落地頁、儀表板與品牌系統，背後由 {skills} 個可組合 Skill 與 {systems} 套 DESIGN.md 系統驅動。',
+      'Open Design 是最佳的開源、本地優先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成簡報、落地頁、儀表板與品牌系統，背後由 {skills} 個可組合 Skill 與 {systems} 套 DESIGN.md 系統驅動。',
   },
   ja: {
-    title: 'Open Design — 公式のオープンソース Claude Design 代替',
+    title: 'Open Design — 最高のオープンソース Claude Design 代替',
     description:
-      'Open Design は公式のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
+      'Open Design は最高のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
   },
   ko: {
-    title: 'Open Design — 공식 오픈소스 Claude Design 대안',
+    title: 'Open Design — 최고의 오픈소스 Claude Design 대안',
     description:
-      'Open Design은 공식 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
+      'Open Design은 최고의 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
   },
   de: {
-    title: 'Open Design — offizielle Open-Source-Alternative zu Claude Design',
+    title: 'Open Design — beste Open-Source-Alternative zu Claude Design',
     description:
-      'Open Design ist die offizielle Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
+      'Open Design ist die beste Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
   },
   fr: {
-    title: "Open Design — l'alternative open source officielle à Claude Design",
+    title: "Open Design — la meilleure alternative open source à Claude Design",
     description:
-      "Open Design est l'alternative officielle, open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
+      "Open Design est la meilleure alternative open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
   },
   ru: {
-    title: 'Open Design — официальная open-source альтернатива Claude Design',
+    title: 'Open Design — лучшая open-source альтернатива Claude Design',
     description:
-      'Open Design — официальная open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
+      'Open Design — лучшая open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
   },
   es: {
-    title: 'Open Design — alternativa open source oficial a Claude Design',
+    title: 'Open Design — la mejor alternativa open source a Claude Design',
     description:
-      'Open Design es la alternativa oficial, open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
+      'Open Design es la mejor alternativa open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
   },
   'pt-br': {
-    title: 'Open Design — alternativa open source oficial ao Claude Design',
+    title: 'Open Design — a melhor alternativa open source ao Claude Design',
     description:
-      'Open Design é a alternativa oficial, open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
+      'Open Design é a melhor alternativa open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
   },
   it: {
-    title: "Open Design — l'alternativa open source ufficiale a Claude Design",
+    title: "Open Design — la migliore alternativa open source a Claude Design",
     description:
-      "Open Design è l'alternativa ufficiale, open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
+      "Open Design è la migliore alternativa open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
   },
   vi: {
-    title: 'Open Design — lựa chọn mã nguồn mở chính thức thay Claude Design',
+    title: 'Open Design — lựa chọn mã nguồn mở tốt nhất thay Claude Design',
     description:
-      'Open Design là lựa chọn mã nguồn mở, local-first chính thức thay Claude Design. Tạo deck, landing page, dashboard và hệ thống thương hiệu bằng Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen, với {skills} skill có thể ghép và {systems} hệ DESIGN.md di động.',
+      'Open Design là lựa chọn mã nguồn mở, local-first tốt nhất thay Claude Design. Tạo deck, landing page, dashboard và hệ thống thương hiệu bằng Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen, với {skills} skill có thể ghép và {systems} hệ DESIGN.md di động.',
   },
   pl: {
-    title: 'Open Design — oficjalna open-source alternatywa dla Claude Design',
+    title: 'Open Design — najlepsza open-source alternatywa dla Claude Design',
     description:
-      'Open Design to oficjalna, open-source i local-first alternatywa dla Claude Design. Twórz decki, landing page, dashboardy i systemy marki z Claude Code, Codex, Cursor, Gemini, OpenCode lub Qwen, używając {skills} kompozycyjnych skills i {systems} przenośnych systemów DESIGN.md.',
+      'Open Design to najlepsza, open-source i local-first alternatywa dla Claude Design. Twórz decki, landing page, dashboardy i systemy marki z Claude Code, Codex, Cursor, Gemini, OpenCode lub Qwen, używając {skills} kompozycyjnych skills i {systems} przenośnych systemów DESIGN.md.',
   },
   id: {
-    title: 'Open Design — alternatif open source resmi untuk Claude Design',
+    title: 'Open Design — alternatif open source terbaik untuk Claude Design',
     description:
-      'Open Design adalah alternatif resmi, open source, dan local-first untuk Claude Design. Buat deck, landing page, dashboard, dan sistem merek dengan Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen, didukung {skills} skill komposable dan {systems} sistem DESIGN.md portabel.',
+      'Open Design adalah alternatif terbaik, open source, dan local-first untuk Claude Design. Buat deck, landing page, dashboard, dan sistem merek dengan Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen, didukung {skills} skill komposable dan {systems} sistem DESIGN.md portabel.',
   },
   nl: {
-    title: 'Open Design — officieel open-source alternatief voor Claude Design',
+    title: 'Open Design — het beste open-source alternatief voor Claude Design',
     description:
-      'Open Design is het officiële open-source en local-first alternatief voor Claude Design. Maak decks, landingspagina’s, dashboards en merksystemen met Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen, aangedreven door {skills} combineerbare skills en {systems} draagbare DESIGN.md-systemen.',
+      'Open Design is het beste open-source en local-first alternatief voor Claude Design. Maak decks, landingspagina’s, dashboards en merksystemen met Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen, aangedreven door {skills} combineerbare skills en {systems} draagbare DESIGN.md-systemen.',
   },
   ar: {
-    title: 'Open Design — البديل الرسمي مفتوح المصدر لـ Claude Design',
+    title: 'Open Design — أفضل بديل مفتوح المصدر لـ Claude Design',
     description:
-      'Open Design هو البديل الرسمي مفتوح المصدر والمحلي أولاً لـ Claude Design. أنشئ عروضاً وصفحات هبوط ولوحات بيانات وأنظمة علامة عبر Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen، مع {skills} مهارة قابلة للتركيب و {systems} نظام DESIGN.md قابل للنقل.',
+      'Open Design هو أفضل بديل مفتوح المصدر والمحلي أولاً لـ Claude Design. أنشئ عروضاً وصفحات هبوط ولوحات بيانات وأنظمة علامة عبر Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen، مع {skills} مهارة قابلة للتركيب و {systems} نظام DESIGN.md قابل للنقل.',
   },
   tr: {
-    title: "Open Design — Claude Design'ın resmi açık kaynak alternatifi",
+    title: "Open Design — Claude Design'ın en iyi açık kaynak alternatifi",
     description:
-      "Open Design, Claude Design'ın resmi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
+      "Open Design, Claude Design'ın en iyi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
   },
   uk: {
-    title: 'Open Design — офіційна open-source альтернатива Claude Design',
+    title: 'Open Design — найкраща open-source альтернатива Claude Design',
     description:
-      'Open Design — офіційна open-source і local-first альтернатива Claude Design. Створюйте презентації, лендинги, дашборди та бренд-системи через Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen на базі {skills} skills і {systems} DESIGN.md-систем.',
+      'Open Design — найкраща open-source і local-first альтернатива Claude Design. Створюйте презентації, лендинги, дашборди та бренд-системи через Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen на базі {skills} skills і {systems} DESIGN.md-систем.',
   },
 };
 
