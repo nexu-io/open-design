@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "open-design.fullname" . }}
+  name: {{ include "marketing-ax.fullname" . }}
   labels:
-    {{- include "open-design.labels" . | nindent 4 }}
+    {{- include "marketing-ax.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "open-design.selectorLabels" . | nindent 6 }}
+      {{- include "marketing-ax.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "open-design.selectorLabels" . | nindent 8 }}
+        {{- include "marketing-ax.selectorLabels" . | nindent 8 }}
       annotations:
         # Force a re-roll when the configmap or secret change.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
@@ -32,9 +32,9 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "open-design.fullname" . }}-config
+                name: {{ include "marketing-ax.fullname" . }}-config
             - secretRef:
-                name: {{ include "open-design.fullname" . }}-secrets
+                name: {{ include "marketing-ax.fullname" . }}-secrets
           # /api/daemon/status is the canonical lifecycle probe (Phase 1.5).
           # We keep it open without a bearer (server.ts excludes it from
           # the bearer middleware) so kubelet probes never need a secret.
@@ -63,10 +63,10 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "open-design.fullname" . }}-data
+            claimName: {{ include "marketing-ax.fullname" . }}-data
         - name: config
           persistentVolumeClaim:
-            claimName: {{ include "open-design.fullname" . }}-config
+            claimName: {{ include "marketing-ax.fullname" . }}-config
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

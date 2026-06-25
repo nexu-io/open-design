@@ -1,14 +1,14 @@
-Open Design has been deployed.
+Marketing AX has been deployed.
 
   Image:    {{ .Values.image.repository }}:{{ .Values.image.tag }}
   Replicas: {{ .Values.replicaCount }}
-  Service:  {{ include "open-design.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
+  Service:  {{ include "marketing-ax.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
 
 {{- if eq .Values.service.type "ClusterIP" }}
 
 To reach the daemon from your laptop:
 
-  kubectl port-forward svc/{{ include "open-design.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  kubectl port-forward svc/{{ include "marketing-ax.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
   open http://127.0.0.1:{{ .Values.service.port }}
 {{- end }}
 

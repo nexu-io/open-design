@@ -1,7 +1,7 @@
-<!--- app-name: Open Design -->
+<!--- app-name: Marketing AX -->
 
 ## Introduction
-This chart bootstraps an [Open Design](https://github.com/nexu-io/open-design) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+This chart bootstraps an [Marketing AX](https://github.com/marketing-ax/marketing-ax) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
 ## Prerequisites
 - Kubernetes 1.23+
@@ -12,17 +12,17 @@ This chart bootstraps an [Open Design](https://github.com/nexu-io/open-design) d
 To install the chart with the release name `my-release`:
 
 ```console
-helm install my-release ./charts/open-design
+helm install my-release ./charts/marketing-ax
 ```
 
-These commands deploy an Open Design application on the Kubernetes cluster in the default configuration.
+These commands deploy an Marketing AX application on the Kubernetes cluster in the default configuration.
 
 > **Tip**: List all releases using `helm list`
 
 ### Architecture and Configuration Notes
 
 #### SQLite State & Concurrency Limitations
-The current Open Design runtime stores state in local files and SQLite. Before
+The current Marketing AX runtime stores state in local files and SQLite. Before
 documenting or changing persistent daemon storage, you MUST read root
 [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. This chart
 README MUST NOT restate it. Because SQLite does not support concurrent writes
@@ -31,7 +31,7 @@ from multiple network replicas, **this chart is strictly limited to 1 replica**.
 Horizontal Pod Autoscaling (HPA) is disabled by default. Do not enable HPA or scale the deployment beyond `replicas: 1` unless you have modified the application to externalize the state to a standalone database.
 
 #### Server-Sent Events (SSE) and Ingress
-Open Design relies on Server-Sent Events (SSE) for real-time streaming. If you enable the Ingress resource, it is critical to disable reverse-proxy buffering. If you are using the NGINX Ingress Controller, this chart automatically applies the required annotations by default:
+Marketing AX relies on Server-Sent Events (SSE) for real-time streaming. If you enable the Ingress resource, it is critical to disable reverse-proxy buffering. If you are using the NGINX Ingress Controller, this chart automatically applies the required annotations by default:
 
 ```yaml
 nginx.ingress.kubernetes.io/proxy-buffering: "off"
@@ -58,7 +58,7 @@ This chart adheres to strict security defaults:
 | Name               | Description                               | Value                        |
 | ------------------ | ----------------------------------------- | ---------------------------- |
 | `commonLabels`     | Custom labels injected into all resources | `{app.kubernetes.io/environment: production}`  |
-| `image.repository` | Open Design image repository              | `vanjayak/open-design`       |
+| `image.repository` | Marketing AX image repository              | `vanjayak/marketing-ax`       |
 | `image.pullPolicy` | Image pull policy                         | `IfNotPresent`               |
 | `image.tag`        | Image tag (overrides AppVersion)          | `latest`                     |
 
@@ -106,7 +106,7 @@ This chart adheres to strict security defaults:
 | `ingress.enabled`                       | Enable ingress record generation                             | `false`                    |
 | `ingress.className`                     | Ingress class name                                           | `nginx`                    |
 | `ingress.annotations`                   | Additional custom annotations for Ingress (e.g., SSE fixes)  | `{...}`                    |
-| `ingress.hosts[0].host`                 | Hostname for the ingress record                              | `open-design.local`        |
+| `ingress.hosts[0].host`                 | Hostname for the ingress record                              | `marketing-ax.local`        |
 | `ingress.tls`                           | TLS configuration for ingress records                        | `[]`                       |
 
 ### Persistence Parameters
@@ -155,15 +155,15 @@ This chart adheres to strict security defaults:
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
 ```console
-helm install my-release --set config.nodeEnv=development ./charts/open-design
+helm install my-release --set config.nodeEnv=development ./charts/marketing-ax
 ```
 
-The above command sets the Open Design node environment to `development`.
+The above command sets the Marketing AX node environment to `development`.
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```console
-helm install my-release -f values.yaml ./charts/open-design
+helm install my-release -f values.yaml ./charts/marketing-ax
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)

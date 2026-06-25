@@ -1,7 +1,7 @@
 # Spec §15.5 — AWS override.
 #
-# `helm install od ./tools/pack/helm/open-design \
-#    -f tools/pack/helm/open-design/values-aws.yaml \
+# `helm install od ./tools/pack/helm/marketing-ax \
+#    -f tools/pack/helm/marketing-ax/values-aws.yaml \
 #    --set secrets.apiToken=$(openssl rand -hex 32)`
 #
 # Persistence:

@@ -1,17 +1,17 @@
 # Phase 5 / spec §15.4 — reference Docker Compose manifest.
 #
-# Brings up the Open Design daemon container alongside the persistent
+# Brings up the Marketing AX daemon container alongside the persistent
 # volumes and the env vars hosted deployments need. Drop this file into
 # any directory and run `docker compose up -d` — the only required
 # customisation is the MAX_API_TOKEN secret and the provider keys.
 #
 # Build the image first (from the repo root):
 #
-#   docker build -f deploy/Dockerfile -t open-design/od:dev .
+#   docker build -f deploy/Dockerfile -t marketing-ax/od:dev .
 #
 # Or pull a published tag:
 #
-#   docker pull ghcr.io/open-design/od:edge
+#   docker pull ghcr.io/marketing-ax/od:edge
 #
 # Then `docker compose -f tools/pack/docker-compose.yml up -d`.
 
@@ -20,9 +20,9 @@ version: "3.9"
 services:
   od:
     # The image tag the operator wants. Spec §15.5 expects multi-arch
-    # ghcr.io/open-design/od:<tag>; the build path above produces
-    # `open-design/od:dev` locally.
-    image: ${MAX_IMAGE:-ghcr.io/open-design/od:edge}
+    # ghcr.io/marketing-ax/od:<tag>; the build path above produces
+    # `marketing-ax/od:dev` locally.
+    image: ${MAX_IMAGE:-ghcr.io/marketing-ax/od:edge}
     container_name: od
 
     # Spec §15.3 — every dimension the daemon respects in headless

@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "open-design.fullname" . }}
+  name: {{ include "marketing-ax.fullname" . }}
   labels:
-    {{- include "open-design.labels" . | nindent 4 }}
+    {{- include "marketing-ax.labels" . | nindent 4 }}
 
 spec:
   {{- if not .Values.hpa.enabled }}
@@ -13,7 +13,7 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "open-design.selectorLabels" . | nindent 6 }}
+      {{- include "marketing-ax.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -21,7 +21,7 @@ spec:
           checksum/proxy-config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
           checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
       labels:
-        {{- include "open-design.selectorLabels" . | nindent 8 }}
+        {{- include "marketing-ax.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.podSecurityContext }}
       securityContext:
@@ -40,12 +40,12 @@ spec:
             - envsubst '$PROXY_PORT $MAX_BIND_HOST $MAX_WEB_PORT $PROXY_API_TOKEN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
           envFrom:
             - configMapRef:
-                name: {{ include "open-design.fullname" . }}
+                name: {{ include "marketing-ax.fullname" . }}
           env:
             - name: PROXY_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
+                  name: {{ include "marketing-ax.fullname" . }}
                   key: MAX_API_TOKEN
           volumeMounts:
             - name: proxy-template
@@ -66,12 +66,12 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "open-design.fullname" . }}
+                name: {{ include "marketing-ax.fullname" . }}
           env:
             - name: MAX_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
+                  name: {{ include "marketing-ax.fullname" . }}
                   key: MAX_API_TOKEN
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
@@ -95,7 +95,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: storage
-              mountPath: /app/.od
+              mountPath: /app/.max
             - name: tmp
               mountPath: /tmp
         - name: auth-proxy
@@ -135,7 +135,7 @@ spec:
         - name: storage
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "open-design.fullname" . }}
+            claimName: {{ include "marketing-ax.fullname" . }}
           {{- else }}
           emptyDir: {}
           {{- end }}
@@ -143,7 +143,7 @@ spec:
           emptyDir: {}
         - name: proxy-template
           configMap:
-            name: {{ include "open-design.fullname" . }}-proxy
+            name: {{ include "marketing-ax.fullname" . }}-proxy
         - name: proxy-config
           emptyDir: {}
         - name: proxy-tmp
