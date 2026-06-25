@@ -8,7 +8,7 @@
  * Templates, instruction-only skills under Skills, brand systems under
  * Systems, craft principles under Craft. Visitors who land here can
  * mentally map the catalogue to what they will see when they open
- * Open Design itself.
+ * Marketing AX itself.
  *
  * Anyone who already knows the slug they want skips the hub entirely
  * via `/skills/<slug>/`, `/templates/<slug>/` etc. Detail-page URLs
@@ -54,7 +54,7 @@ const systemsCount = systems.length;
 const craftCount = craft.length;
 const totalCount = templatesCount + skillsCount + systemsCount + craftCount;
 
-const title = `${pcopy.hubLabel} · Open Design`;
+const title = `${pcopy.hubLabel} · Marketing AX`;
 const description = pcopy.hubLead;
 
 const jsonLd = {
@@ -65,7 +65,7 @@ const jsonLd = {
   url: new URL('/plugins/', Astro.site).toString(),
   isPartOf: {
     '@type': 'WebSite',
-    name: 'Open Design',
+    name: 'Marketing AX',
     url: Astro.site?.toString(),
   },
   numberOfItems: totalCount,

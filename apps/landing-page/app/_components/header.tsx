@@ -152,7 +152,7 @@ export function Header({
           <img
             className='brand-logo'
             src='/logo-lockup.svg'
-            alt='Open Design'
+            alt='Marketing AX'
             width={225}
             height={83}
           />
@@ -176,7 +176,7 @@ export function Header({
         </button>
         <nav id='primary-nav' data-nav-primary>
           <ul className='nav-links'>
-            {/* Product — the Open Design products. The trigger lights up only
+            {/* Product — the Marketing AX products. The trigger lights up only
                 for its own family; every other section maps to its own
                 trigger below, so a sub-page never marks Product by accident. */}
             <li className='has-dropdown'>

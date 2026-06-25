@@ -396,7 +396,7 @@ const entryFromMarketplace = (
     explicitLocalizedString(
       rawEntry.description as Parameters<typeof explicitLocalizedString>[0],
       locale,
-    ) ?? 'Agent-native Open Design workflow packaged as a portable plugin.';
+    ) ?? 'Agent-native Marketing AX workflow packaged as a portable plugin.';
   const localized = localizePluginText({
     id,
     title: rawTitle,
@@ -545,7 +545,7 @@ const officialEntryFromManifest = (
     explicitLocalizedString(
       manifest?.description as Parameters<typeof explicitLocalizedString>[0],
       locale,
-    ) ?? 'First-party Open Design workflow packaged as a portable plugin.';
+    ) ?? 'First-party Marketing AX workflow packaged as a portable plugin.';
   const localized = localizePluginText({
     id,
     title: rawTitle,

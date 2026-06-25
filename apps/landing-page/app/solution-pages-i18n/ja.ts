@@ -2,9 +2,9 @@ import type { SolutionLocaleCopy } from './types';
 
 export const JA: SolutionLocaleCopy = {
   prototype: {
-    title: 'Open Design + Claude Code でインタラクティブなプロトタイプを作る',
+    title: 'Marketing AX + Claude Code でインタラクティブなプロトタイプを作る',
     description:
-      'プロンプトを、ターミナルから離れることなくクリック可能なマルチスクリーンのプロトタイプに変えます。Open Design はコーディングエージェントに、デザインスキル、テンプレート、デザインシステムを与え、ブラウザで開ける本物のプロトタイプを出力します。',
+      'プロンプトを、ターミナルから離れることなくクリック可能なマルチスクリーンのプロトタイプに変えます。Marketing AX はコーディングエージェントに、デザインスキル、テンプレート、デザインシステムを与え、ブラウザで開ける本物のプロトタイプを出力します。',
     breadcrumb: 'プロトタイプ',
     label: 'ユースケース · プロトタイプ',
     heading: 'プロンプトの速さでプロトタイピング',
@@ -13,18 +13,18 @@ export const JA: SolutionLocaleCopy = {
       '手がワイヤーフレームをスケッチし、それがクリック可能なマルチスクリーンのアプリプロトタイプに変わる様子を描いたエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design は、あなたがすでに使っているコーディングエージェントのためのデザインレイヤーです。プロトタイピングにおいては、一段落のアイデアから、操作可能でスタイルの整ったプロトタイプを一度のセッションで生み出せるということ。デザインツールも、エクスポート工程も、引き継ぎの断絶もありません。',
-    stepsTitle: 'Open Design でのプロトタイピングの流れ',
+      'Marketing AX は、あなたがすでに使っているコーディングエージェントのためのデザインレイヤーです。プロトタイピングにおいては、一段落のアイデアから、操作可能でスタイルの整ったプロトタイプを一度のセッションで生み出せるということ。デザインツールも、エクスポート工程も、引き継ぎの断絶もありません。',
+    stepsTitle: 'Marketing AX でのプロトタイピングの流れ',
     steps: [
       {
         title: 'フローを説明する',
-        body: '作りたいものを普通の言葉で伝えます。「ウェルカム画面、プラン選択、確認画面のあるオンボーディングフロー」のように。Open Design がプロトタイプスキルを読み込み、エージェントは単一ページではなく複数の画面を生み出すべきだと理解します。',
+        body: '作りたいものを普通の言葉で伝えます。「ウェルカム画面、プラン選択、確認画面のあるオンボーディングフロー」のように。Marketing AX がプロトタイプスキルを読み込み、エージェントは単一ページではなく複数の画面を生み出すべきだと理解します。',
         imageAlt:
           'アプリフローの説明を普通の言葉でターミナルに打ち込む人物のイラスト',
       },
       {
         title: 'スタイル付きの画面を生成する',
-        body: 'エージェントは Open Design のデザインシステムとプロトタイプテンプレートを適用するため、どの画面もタイポグラフィ、余白、コンポーネントを共有し、ラフな下書きには見えません。バラバラのモックアップではなく、まとまりのある画面群が手に入ります。',
+        body: 'エージェントは Marketing AX のデザインシステムとプロトタイプテンプレートを適用するため、どの画面もタイポグラフィ、余白、コンポーネントを共有し、ラフな下書きには見えません。バラバラのモックアップではなく、まとまりのある画面群が手に入ります。',
         imageAlt:
           '複数のアプリ画面が順番に現れ、すべてが一貫したビジュアルスタイルを共有しているイラスト',
       },
@@ -41,9 +41,9 @@ export const JA: SolutionLocaleCopy = {
           'プロトタイプが修正され、その後エンジニアに渡され、デザインとコードが一つのファイルに統合されるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのプロトタイピング vs これまでのやり方',
+    tableTitle: 'Marketing AX でのプロトタイピング vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: '従来のプロトタイピングツール',
     tableRows: [
       {
@@ -110,7 +110,7 @@ export const JA: SolutionLocaleCopy = {
         thumb: 'example-gamified-app',
       },
     ],
-    galleryTitle: 'Open Design で作られたプロトタイプ',
+    galleryTitle: 'Marketing AX で作られたプロトタイプ',
     galleryLead:
       'どれもプロンプトから始まり、クリック可能な成果物へとレンダリングされました。アイデアに近いテンプレートを選び、あなたのバリエーションを説明すれば、エージェントがそれを適応させます。',
     gallery: [
@@ -124,8 +124,8 @@ export const JA: SolutionLocaleCopy = {
     faqTitle: 'プロトタイピング FAQ',
     faq: [
       {
-        q: 'Open Design でプロトタイプを作るのに Figma のようなデザインツールは必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中で動き、プロトタイプを HTML にレンダリングします。フローを言葉で説明すれば、エージェントが画面を生み出します。学んだり料金を払ったりする別のキャンバスツールはありません。',
+        q: 'Marketing AX でプロトタイプを作るのに Figma のようなデザインツールは必要ですか？',
+        a: 'いいえ。Marketing AX はコーディングエージェントの中で動き、プロトタイプを HTML にレンダリングします。フローを言葉で説明すれば、エージェントが画面を生み出します。学んだり料金を払ったりする別のキャンバスツールはありません。',
       },
       {
         q: 'プロトタイプはインタラクティブですか、それともただの静的なモックアップですか？',
@@ -133,7 +133,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         q: 'どのエージェントを使えますか？',
-        a: 'Open Design は Claude Code、Codex、Cursor Agent、Gemini CLI、その他10種以上のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
+        a: 'Marketing AX は Claude Code、Codex、Cursor Agent、Gemini CLI、その他10種以上のファーストパーティアダプターで動作します。プロバイダーの鍵は自分で持ち込み、何もホストされません。',
       },
       {
         q: 'プロトタイプは本物のプロダクトになれますか？',
@@ -142,22 +142,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次のアイデアを今夜プロトタイプに',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次の「もし〜だったら」を、すでに使っているエージェントの中で、クリックできる形に変えましょう。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、次の「もし〜だったら」を、すでに使っているエージェントの中で、クリックできる形に変えましょう。',
   },
   dashboard: {
-    title: 'Open Design + Claude Code でデータダッシュボードを生成する',
+    title: 'Marketing AX + Claude Code でデータダッシュボードを生成する',
     description:
       '追跡している指標を説明するだけで、コーディングエージェントがスタイルの整ったレスポンシブなダッシュボードを構築します。チャート、KPI カード、テーブルがどこにでもホストできる HTML にレンダリングされます。BI ツールのシートも、ドラッグ&ドロップのビルダーも不要です。',
     breadcrumb: 'ダッシュボード',
     label: 'ユースケース · ダッシュボード',
     heading: 'ドラッグ&ドロップのビルダーではなく、説明からダッシュボードを',
-    lead: '何を見せたいか、どう感じさせたいかをエージェントに伝えます。Open Design がチャートのパターン、レイアウトシステム、ビジュアル言語を供給するので、デフォルトスタイルのウィジェットの壁ではなく、まとまりのある見栄えの良いダッシュボードが手に入ります。',
+    lead: '何を見せたいか、どう感じさせたいかをエージェントに伝えます。Marketing AX がチャートのパターン、レイアウトシステム、ビジュアル言語を供給するので、デフォルトスタイルのウィジェットの壁ではなく、まとまりのある見栄えの良いダッシュボードが手に入ります。',
     heroImageAlt:
       '左側の生の数値が、右側のチャートと KPI カードのきれいなダッシュボードへと流れ込むエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design は指標を普通の言葉で書いた仕様を、エージェントが HTML にレンダリングするスタイルの整ったダッシュボードに変えます。リポジトリでバージョン管理され、どこにでもホストでき、シート単位の BI サブスクは不要です。',
-    stepsTitle: 'Open Design でのダッシュボードの流れ',
+      'Marketing AX は指標を普通の言葉で書いた仕様を、エージェントが HTML にレンダリングするスタイルの整ったダッシュボードに変えます。リポジトリでバージョン管理され、どこにでもホストでき、シート単位の BI サブスクは不要です。',
+    stepsTitle: 'Marketing AX でのダッシュボードの流れ',
     steps: [
       {
         title: '指標を説明する',
@@ -166,7 +166,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: 'チャートのパターンを選ぶ',
-        body: 'Open Design はチャートとレイアウトのテンプレートを備えているので、トレンドは折れ線グラフに、内訳は棒グラフに、比率は適切なビジュアルになります。ちぐはぐなデフォルトではなく、一貫したタイポグラフィと余白が全体を通ります。',
+        body: 'Marketing AX はチャートとレイアウトのテンプレートを備えているので、トレンドは折れ線グラフに、内訳は棒グラフに、比率は適切なビジュアルになります。ちぐはぐなデフォルトではなく、一貫したタイポグラフィと余白が全体を通ります。',
         imageAlt: 'いくつかのチャートタイプがまとまりのあるグリッドに配置されたイラスト',
       },
       {
@@ -180,9 +180,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'ダッシュボードが磨かれ、その後デプロイされるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのダッシュボード vs これまでのやり方',
+    tableTitle: 'Marketing AX でのダッシュボード vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: 'BI ツール / 手書きコード',
     tableRows: [
       {
@@ -225,7 +225,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "ソーシャルとマーケティング", body: "チャネルのパフォーマンスとキャンペーンのトラッキングを一つのビューに。", thumb: "example-social-media-dashboard" },
       { title: "ドメインレポート", body: "あらゆる分野の構造化されたレポート — 臨床からトレーディングまで。", thumb: "example-clinical-case-report" },
     ],
-    galleryTitle: 'Open Design で作られたダッシュボード',
+    galleryTitle: 'Marketing AX で作られたダッシュボード',
     galleryLead:
       'プロンプトとデータソースからレンダリングされた本物のダッシュボード。自分に近いものから始め、追跡している指標を説明してください。',
     gallery: [
@@ -240,7 +240,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'Tableau や Looker のような BI ツールは必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中でダッシュボードを HTML にレンダリングします。指標を説明してデータに向けるだけで、ライセンスや習得が必要な別の BI プラットフォームはありません。',
+        a: 'いいえ。Marketing AX はコーディングエージェントの中でダッシュボードを HTML にレンダリングします。指標を説明してデータに向けるだけで、ライセンスや習得が必要な別の BI プラットフォームはありません。',
       },
       {
         q: 'データはどこから来ますか？',
@@ -257,22 +257,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜あなたのダッシュボードを構築',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、あなたの指標を、すでに使っているエージェントの中で、どこにでもホストできるダッシュボードに変えましょう。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、あなたの指標を、すでに使っているエージェントの中で、どこにでもホストできるダッシュボードに変えましょう。',
   },
   slides: {
-    title: 'Open Design + Claude Code でプレゼンテーション資料を生成する',
+    title: 'Marketing AX + Claude Code でプレゼンテーション資料を生成する',
     description:
-      'アウトラインを、プレゼンアプリを開かずにデザインされたブランドに沿ったスライド資料に変えます。Open Design はコーディングエージェントに資料テンプレートとビジュアルシステムを与え、プレゼン・エクスポート・共有できる HTML にスライドをレンダリングします。',
+      'アウトラインを、プレゼンアプリを開かずにデザインされたブランドに沿ったスライド資料に変えます。Marketing AX はコーディングエージェントに資料テンプレートとビジュアルシステムを与え、プレゼン・エクスポート・共有できる HTML にスライドをレンダリングします。',
     breadcrumb: 'スライド',
     label: 'ユースケース · スライド',
     heading: 'デザインされて見える資料を、プロンプトで書く',
-    lead: 'エージェントにアウトラインとトーンを渡します。Open Design が資料テンプレートとビジュアルシステムを適用するので、どのスライドもレイアウトされ、組版され、ブランドに沿います。空白の背景に箇条書きが並ぶだけではありません。',
+    lead: 'エージェントにアウトラインとトーンを渡します。Marketing AX が資料テンプレートとビジュアルシステムを適用するので、どのスライドもレイアウトされ、組版され、ブランドに沿います。空白の背景に箇条書きが並ぶだけではありません。',
     heroImageAlt:
       '左側のアウトラインが、右側のデザインされたプレゼンスライドの連なりに変わるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はアウトラインを、エージェントが一度のセッションでレンダリングするデザインされた HTML 資料に変えます。ブラウザでプレゼンし、PDF や PPTX にエクスポートし、ソースはリポジトリに保持できます。',
-    stepsTitle: 'Open Design での資料作成の流れ',
+      'Marketing AX はアウトラインを、エージェントが一度のセッションでレンダリングするデザインされた HTML 資料に変えます。ブラウザでプレゼンし、PDF や PPTX にエクスポートし、ソースはリポジトリに保持できます。',
+    stepsTitle: 'Marketing AX での資料作成の流れ',
     steps: [
       {
         title: 'アウトラインを渡す',
@@ -281,7 +281,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: '資料のスタイルを選ぶ',
-        body: 'Open Design は資料テンプレートを備えています — エディトリアル、スイス・インターナショナル、ダークなテクニカルなど。エージェントが一つを適用し、タイポグラフィ、グリッド、アクセントがすべてのスライドで一貫します。',
+        body: 'Marketing AX は資料テンプレートを備えています — エディトリアル、スイス・インターナショナル、ダークなテクニカルなど。エージェントが一つを適用し、タイポグラフィ、グリッド、アクセントがすべてのスライドで一貫します。',
         imageAlt: 'いくつかの資料スタイルの選択肢が横並びに配置されたイラスト',
       },
       {
@@ -295,9 +295,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '資料がプレゼンされ、複数の形式にエクスポートされるイラスト',
       },
     ],
-    tableTitle: 'Open Design での資料 vs これまでのやり方',
+    tableTitle: 'Marketing AX での資料 vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: 'PowerPoint / Keynote / AI スライドツール',
     tableRows: [
       {
@@ -340,7 +340,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "プレゼンターモード", body: "ブラウザでライブにプレゼンするために作られた Reveal 風の資料。", thumb: "example-html-ppt-presenter-mode-reveal" },
       { title: "技術ブループリント", body: "複雑なシステムを図解する、アーキテクチャと知識の資料。", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: 'Open Design で作られた資料',
+    galleryTitle: 'Marketing AX で作られた資料',
     galleryLead:
       'アウトラインからレンダリングされた本物の資料。あなたの話に近いスタイルを選び、内容を説明してください。',
     gallery: [
@@ -355,7 +355,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'PowerPoint や Keynote は必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中で資料を HTML にレンダリングし、PDF や PPTX にエクスポートできます。ブラウザからプレゼンするかファイルを渡すだけで、作るためにプレゼンアプリは要りません。',
+        a: 'いいえ。Marketing AX はコーディングエージェントの中で資料を HTML にレンダリングし、PDF や PPTX にエクスポートできます。ブラウザからプレゼンするかファイルを渡すだけで、作るためにプレゼンアプリは要りません。',
       },
       {
         q: 'これは単なる AI 生成の箇条書きですか？',
@@ -372,22 +372,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次の資料を今夜作る',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、あなたのアウトラインを、すでに使っているエージェントの中で、デザインされた資料に変えましょう。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、あなたのアウトラインを、すでに使っているエージェントの中で、デザインされた資料に変えましょう。',
   },
   image: {
-    title: 'Open Design + Claude Code でブランドに沿ったグラフィックを生成する',
+    title: 'Marketing AX + Claude Code でブランドに沿ったグラフィックを生成する',
     description:
       'ソーシャルカード、記事のカバー、マーケティンググラフィックをプロンプトから生み出します。本物のタイポグラフィとブランドシステムでレイアウトされ、PNG にエクスポートできる鮮明な HTML にレンダリングされます。デザインアプリも、テンプレートのサブスクも不要です。',
     breadcrumb: '画像',
     label: 'ユースケース · 画像',
     heading: 'ブランドに沿ったグラフィックを、生成しレイアウトまで',
-    lead: '必要なカードやカバーを説明します。Open Design が本物の文字組み、グリッド、ブランドカラーで構成し、画像としてエクスポートできる HTML にレンダリングします。デザインアプリと格闘したり、ありきたりなテンプレートを使ったりする必要はありません。',
+    lead: '必要なカードやカバーを説明します。Marketing AX が本物の文字組み、グリッド、ブランドカラーで構成し、画像としてエクスポートできる HTML にレンダリングします。デザインアプリと格闘したり、ありきたりなテンプレートを使ったりする必要はありません。',
     heroImageAlt:
       'プロンプトが、レイアウトされたソーシャルカードと記事カバーの一式に変わるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はプロンプトを、エージェントが HTML にレンダリングして PNG にエクスポートする、組版されたブランドに沿ったグラフィックに変えます。繰り返し可能で、バージョン管理され、シート単位のデザインツールから解放されます。',
-    stepsTitle: 'Open Design でのグラフィック作成の流れ',
+      'Marketing AX はプロンプトを、エージェントが HTML にレンダリングして PNG にエクスポートする、組版されたブランドに沿ったグラフィックに変えます。繰り返し可能で、バージョン管理され、シート単位のデザインツールから解放されます。',
+    stepsTitle: 'Marketing AX でのグラフィック作成の流れ',
     steps: [
       {
         title: 'グラフィックを説明する',
@@ -396,7 +396,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: 'ブランドシステムを適用する',
-        body: 'Open Design があなたの色、文字組み、余白を再利用可能なデザインシステムから引き出すので、どのカードも一度きりのものに見えるのではなく、ブランドの他の部分と揃います。',
+        body: 'Marketing AX があなたの色、文字組み、余白を再利用可能なデザインシステムから引き出すので、どのカードも一度きりのものに見えるのではなく、ブランドの他の部分と揃います。',
         imageAlt: 'ブランドカラーと文字組みがカードレイアウトに適用されるイラスト',
       },
       {
@@ -410,9 +410,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '一つのカードテンプレートが一貫した一連のグラフィックを生み出すイラスト',
       },
     ],
-    tableTitle: 'Open Design でのグラフィック vs これまでのやり方',
+    tableTitle: 'Marketing AX でのグラフィック vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: 'デザインアプリ / ありきたりなテンプレート',
     tableRows: [
       {
@@ -455,7 +455,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "カルーセル", body: "フレーム間で一貫性を保つ、複数スライドのソーシャルカルーセル。", thumb: "example-social-carousel" },
       { title: "UI モックフレーム", body: "プロダクトのストーリーテリング向けの通知・デバイスフレーム。", thumb: "example-frame-macos-notification" },
     ],
-    galleryTitle: 'Open Design で作られたグラフィック',
+    galleryTitle: 'Marketing AX で作られたグラフィック',
     galleryLead:
       'プロンプトからレンダリングされた本物のカードとカバー。必要なものに近いものを選び、あなたのコピーに差し替えてください。',
     gallery: [
@@ -470,7 +470,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'これは Midjourney のような AI 画像ジェネレーターですか？',
-        a: 'いいえ。Open Design は本物のレイアウトとタイポグラフィでグラフィックを構成します — あなたの見出し、あなたのブランド、ちょうどの寸法で — そして PNG としてエクスポートする HTML にレンダリングします。ピクセル生成ではなく、デザインの構成です。',
+        a: 'いいえ。Marketing AX は本物のレイアウトとタイポグラフィでグラフィックを構成します — あなたの見出し、あなたのブランド、ちょうどの寸法で — そして PNG としてエクスポートする HTML にレンダリングします。ピクセル生成ではなく、デザインの構成です。',
       },
       {
         q: '一貫した一連のカードを作れますか？',
@@ -487,22 +487,22 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次のグラフィックを今夜作る',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、プロンプトを、すでに使っているエージェントの中で、ブランドに沿ったグラフィックに変えましょう。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、プロンプトを、すでに使っているエージェントの中で、ブランドに沿ったグラフィックに変えましょう。',
   },
   video: {
-    title: 'Open Design + Claude Code でモーショングラフィックとショート動画を生成する',
+    title: 'Marketing AX + Claude Code でモーショングラフィックとショート動画を生成する',
     description:
       'スクリプトを、アニメーションフレームとショート動画に変えます — タイトルカード、モーション背景、アウトロが、あなたのブランドシステムで構成され、HTML からレンダリングされます。モーショングラフィックスイートも、タイムラインのスクラブも不要です。',
     breadcrumb: '動画',
     label: 'ユースケース · 動画',
     heading: 'タイムラインではなく、スクリプトからモーショングラフィックを',
-    lead: '欲しい瞬間を説明します — タイトルの登場、データのアニメーション、ロゴのアウトロ。Open Design があなたのブランドシステムでアニメーションフレームを構成し、動画にレンダリングします。モーショングラフィックスイートは要りません。',
+    lead: '欲しい瞬間を説明します — タイトルの登場、データのアニメーション、ロゴのアウトロ。Marketing AX があなたのブランドシステムでアニメーションフレームを構成し、動画にレンダリングします。モーショングラフィックスイートは要りません。',
     heroImageAlt:
       'スクリプトが、アニメーションする動画フレームの連なりに変わるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はスクリプトを、エージェントがショート動画にレンダリングする、アニメーションするブランドに沿ったフレームに変えます。HTML から構成され、リポジトリでバージョン管理され、習得すべきタイムラインエディターはありません。',
-    stepsTitle: 'Open Design でのモーションの流れ',
+      'Marketing AX はスクリプトを、エージェントがショート動画にレンダリングする、アニメーションするブランドに沿ったフレームに変えます。HTML から構成され、リポジトリでバージョン管理され、習得すべきタイムラインエディターはありません。',
+    stepsTitle: 'Marketing AX でのモーションの流れ',
     steps: [
       {
         title: '瞬間を説明する',
@@ -511,7 +511,7 @@ export const JA: SolutionLocaleCopy = {
       },
       {
         title: 'ブランドとモーションのスタイルを適用する',
-        body: 'Open Design がフレームテンプレートを供給します — 映画的なライトリーク、グリッチのタイトル、ロゴのアウトロ — そしてあなたの色と文字組みを適用するので、モーションは意図的でブランドに沿って見えます。',
+        body: 'Marketing AX がフレームテンプレートを供給します — 映画的なライトリーク、グリッチのタイトル、ロゴのアウトロ — そしてあなたの色と文字組みを適用するので、モーションは意図的でブランドに沿って見えます。',
         imageAlt: 'ブランドのスタイリングがアニメーションフレームに適用されるイラスト',
       },
       {
@@ -525,9 +525,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '動画クリップが磨かれ、ソーシャル向けにエクスポートされるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのモーション vs これまでのやり方',
+    tableTitle: 'Marketing AX でのモーション vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: 'After Effects / モーションスイート',
     tableRows: [
       {
@@ -570,7 +570,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "グリッチタイトル", body: "モーションとテクスチャを伴うタイトルの登場。", thumb: "example-frame-glitch-title" },
       { title: "ロゴアウトロ", body: "どんなクリップにも合うブランドの締めアニメーション。", thumb: "example-frame-logo-outro" },
     ],
-    galleryTitle: 'Open Design で作られたモーション',
+    galleryTitle: 'Marketing AX で作られたモーション',
     galleryLead:
       'プロンプトからレンダリングされた本物のアニメーションフレームとクリップ。アイデアに近いものを選び、モーションを説明してください。',
     gallery: [
@@ -585,7 +585,7 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'After Effects やモーショングラフィックスイートは必要ですか？',
-        a: 'いいえ。Open Design はコーディングエージェントの中でアニメーションフレームを HTML で構成し、動画にレンダリングします。習得やライセンスが必要なタイムラインエディターはありません。',
+        a: 'いいえ。Marketing AX はコーディングエージェントの中でアニメーションフレームを HTML で構成し、動画にレンダリングします。習得やライセンスが必要なタイムラインエディターはありません。',
       },
       {
         q: 'これはどんな種類の動画に向いていますか？',
@@ -602,31 +602,31 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '次のアイデアを今夜アニメーションに',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、スクリプトを、すでに使っているエージェントの中で、モーションに変えましょう。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、スクリプトを、すでに使っているエージェントの中で、モーションに変えましょう。',
   },
   designSystem: {
-    title: 'Open Design + Claude Code でデザインシステムを構築し適用する',
+    title: 'Marketing AX + Claude Code でデザインシステムを構築し適用する',
     description:
       'ブランドを、コーディングエージェントがあらゆる成果物に適用する再利用可能なデザインシステムとして捉えます — 色、文字組み、コンポーネント、トーンを一つの DESIGN.md に。一度定義すれば、どのプロトタイプ、資料、ダッシュボードもブランドに沿ったままです。',
     breadcrumb: 'デザインシステム',
     label: 'ユースケース · デザインシステム',
     heading: '一つのデザインシステムを、エージェントが作るすべてに適用',
-    lead: 'ブランドを一度定義すれば、Open Design がそれをすべての出力に持ち込みます — プロトタイプ、資料、ダッシュボード、グラフィック。システムはエージェントが読む DESIGN.md としてリポジトリ内にあるので、一貫性は手作業ではなく自動です。',
+    lead: 'ブランドを一度定義すれば、Marketing AX がそれをすべての出力に持ち込みます — プロトタイプ、資料、ダッシュボード、グラフィック。システムはエージェントが読む DESIGN.md としてリポジトリ内にあるので、一貫性は手作業ではなく自動です。',
     heroImageAlt:
       '一つのデザインシステムが、多くのブランドに沿った成果物へと放射状に広がるエディトリアルなイラスト',
     tldrTitle: '一言で言うと',
     tldrBody:
-      'Open Design はブランドを、エージェントがあらゆる成果物に適用する持ち運び可能なデザインシステムとして捉えます — リポジトリ内で一度定義し、どこでも強制され、それを管理する中央のデザインツールはありません。',
-    stepsTitle: 'Open Design でのデザインシステムの流れ',
+      'Marketing AX はブランドを、エージェントがあらゆる成果物に適用する持ち運び可能なデザインシステムとして捉えます — リポジトリ内で一度定義し、どこでも強制され、それを管理する中央のデザインツールはありません。',
+    stepsTitle: 'Marketing AX でのデザインシステムの流れ',
     steps: [
       {
         title: 'システムを捉える',
-        body: 'ブランドを説明します — 色、文字組み、余白、声 — または既存のサイトをエージェントに指して抽出させます。Open Design がそれをプロジェクト内にある DESIGN.md に書き込みます。',
+        body: 'ブランドを説明します — 色、文字組み、余白、声 — または既存のサイトをエージェントに指して抽出させます。Marketing AX がそれをプロジェクト内にある DESIGN.md に書き込みます。',
         imageAlt: 'ブランドが一つのデザインシステムファイルに捉えられるイラスト',
       },
       {
         title: '実証済みのベースから始める',
-        body: 'Open Design は140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで。白紙から始めるのではなく、自分のブランドに近いものをフォークしましょう。',
+        body: 'Marketing AX は140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで。白紙から始めるのではなく、自分のブランドに近いものをフォークしましょう。',
         imageAlt: '参照デザインシステムのギャラリーが閲覧されるイラスト',
       },
       {
@@ -640,9 +640,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'デザインシステムが更新され、すべての出力に伝播するイラスト',
       },
     ],
-    tableTitle: 'Open Design でのデザインシステム vs これまでのやり方',
+    tableTitle: 'Marketing AX でのデザインシステム vs これまでのやり方',
     tableColCapability: '必要なこと',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: 'デザインツールのライブラリ / スタイルガイド',
     tableRows: [
       {
@@ -685,7 +685,7 @@ export const JA: SolutionLocaleCopy = {
       { title: "OpenAI", body: "ミニマルで、ニュートラルで、研究グレード。", thumb: "design-system-openai" },
       { title: "GitHub", body: "密度が高く、テクニカルで、開発者ネイティブ。", thumb: "design-system-github" },
     ],
-    galleryTitle: 'Open Design のデザインシステム',
+    galleryTitle: 'Marketing AX のデザインシステム',
     galleryLead:
       '出発点としてフォークできる140以上の参照システムのほんの一部。自分のブランドに近いものを選び、適応させてください。',
     gallery: [
@@ -700,11 +700,11 @@ export const JA: SolutionLocaleCopy = {
     faq: [
       {
         q: 'ここで言うデザインシステムとは正確には何ですか？',
-        a: '色、文字組み、余白、コンポーネント、声を捉えた、リポジトリ内の DESIGN.md ファイルです。Open Design のすべてのスキルがそれを読むので、あなたのブランドがエージェントの生み出すものに自動的に適用されます。',
+        a: '色、文字組み、余白、コンポーネント、声を捉えた、リポジトリ内の DESIGN.md ファイルです。Marketing AX のすべてのスキルがそれを読むので、あなたのブランドがエージェントの生み出すものに自動的に適用されます。',
       },
       {
         q: 'ゼロから始めなければなりませんか？',
-        a: 'いいえ。Open Design はフォークできる140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで — そこから自分のブランドに適応させます。',
+        a: 'いいえ。Marketing AX はフォークできる140以上の参照デザインシステムを備えています — Apple や Linear からエディトリアル、ブルータリストまで — そこから自分のブランドに適応させます。',
       },
       {
         q: '資料、ダッシュボード、プロトタイプをまたいでどう一貫性を保つのですか？',
@@ -717,12 +717,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: 'あなたのデザインシステムを今夜定義する',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、すでに使っているエージェントに、どこにでも適用できる一つのブランドを与えましょう。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、すでに使っているエージェントに、どこにでも適用できる一つのブランドを与えましょう。',
   },
   roleSoloBuilder: {
-    title: 'ソロビルダーとインディーハッカーのための Open Design',
+    title: 'ソロビルダーとインディーハッカーのための Marketing AX',
     description:
-      '一人でもチームのように出荷しよう。Open Design はあなたのコーディングエージェントを、スタートアップのデザイン担当に変えます。プロトタイプ、ランディングページ、ダッシュボード、ブランドビジュアルまで、すべてプロンプトから、すべてブランドに沿って、すべてあなたのリポジトリの中で。',
+      '一人でもチームのように出荷しよう。Marketing AX はあなたのコーディングエージェントを、スタートアップのデザイン担当に変えます。プロトタイプ、ランディングページ、ダッシュボード、ブランドビジュアルまで、すべてプロンプトから、すべてブランドに沿って、すべてあなたのリポジトリの中で。',
     breadcrumb: 'ソロビルダー',
     label: '対象 · ソロビルダー',
     heading: 'あなたのデザインチームは、すでに動かしているエージェントだ',
@@ -731,8 +731,8 @@ export const JA: SolutionLocaleCopy = {
       '一貫したスタイルのランディングページ、アプリ、ダッシュボード、ソーシャルカードに囲まれて机に向かう一人の人物を描いたエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design は、ソロ創業者がこれまで持てなかったデザイン部門です。プロダクトに必要なあらゆる面で、プロンプトから成果物へ。ひとつのブランドで、引き継ぎゼロ、追加ツールなし。',
-    stepsTitle: 'ソロビルダーは Open Design をこう使う',
+      'Marketing AX は、ソロ創業者がこれまで持てなかったデザイン部門です。プロダクトに必要なあらゆる面で、プロンプトから成果物へ。ひとつのブランドで、引き継ぎゼロ、追加ツールなし。',
+    stepsTitle: 'ソロビルダーは Marketing AX をこう使う',
     steps: [
       {
         title: 'ブランドを一度だけ定義する',
@@ -750,9 +750,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '成果物がプロンプトから公開まで一直線に進むイラスト',
       },
     ],
-    tableTitle: 'Open Design でのソロ開発 vs. 手作業でやり抜く道',
+    tableTitle: 'Marketing AX でのソロ開発 vs. 手作業でやり抜く道',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: '今、一人でやると',
     tableRows: [
       { capability: 'あらゆるデザイン面をカバー', withOd: '一つのエージェントがプロトタイプ、ランディング、ダッシュボード、ブランドを担当', without: '五つの SaaS ツールとチュートリアルを継ぎ接ぎ' },
@@ -770,7 +770,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'モバイルフロー', body: 'Web を超えるときのアプリ画面。', thumb: 'example-mobile-app' },
       { title: 'ソーシャルカード', body: 'あらゆるチャネル向けのローンチ・更新カード。', thumb: 'example-card-twitter' },
     ],
-    galleryTitle: 'Open Design で一人で作った',
+    galleryTitle: 'Marketing AX で一人で作った',
     galleryLead:
       '一人のスタートアップに必要なあらゆる面を、プロンプトから。次の一手に近いものを選んで、それを説明してください。',
     gallery: [
@@ -790,12 +790,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、すべてを作り上げよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、一つのエージェントをあなたのデザインチームにしよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、一つのエージェントをあなたのデザインチームにしよう。すでに使っているそのエージェントの中で。',
   },
   roleDesigner: {
-    title: 'デザイナーのための Open Design',
+    title: 'デザイナーのための Marketing AX',
     description:
-      '時間をセンスに使い、雑務には使わない。Open Design は、繰り返しの制作作業（バリエーション、状態、デザインシステム全体）をエージェントに任せ、あなたは見た目をディレクションし、最終判断を握ります。',
+      '時間をセンスに使い、雑務には使わない。Marketing AX は、繰り返しの制作作業（バリエーション、状態、デザインシステム全体）をエージェントに任せ、あなたは見た目をディレクションし、最終判断を握ります。',
     breadcrumb: 'デザイナー',
     label: '対象 · デザイナー',
     heading: 'デザインをディレクションし、制作はエージェントに任せる',
@@ -804,8 +804,8 @@ export const JA: SolutionLocaleCopy = {
       'デザイナーがディレクションし、エージェントが画面、バリエーション、デザインシステムを埋めていくエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design は決して疲れない制作アシスタントです。あなたがデザインシステムを定義しセンスを判断し、エージェントが残りをシステムに沿って、あなたのリポジトリの中で生成します。',
-    stepsTitle: 'デザイナーは Open Design をこう使う',
+      'Marketing AX は決して疲れない制作アシスタントです。あなたがデザインシステムを定義しセンスを判断し、エージェントが残りをシステムに沿って、あなたのリポジトリの中で生成します。',
+    stepsTitle: 'デザイナーは Marketing AX をこう使う',
     steps: [
       {
         title: 'システムをコード化する',
@@ -823,9 +823,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'デザイナーが指示を出し、デザインが更新されるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのデザイン vs. 手作業のやり方',
+    tableTitle: 'Marketing AX でのデザイン vs. 手作業のやり方',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: '手作業のデザインツール',
     tableRows: [
       { capability: 'デザインシステムを構築', withOd: 'エージェントがどこにでも適用する DESIGN.md', without: 'ツールごとに手で保守するライブラリ' },
@@ -843,7 +843,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'アプリ画面', body: 'ハイフィデリティのモバイル・Web 画面。', thumb: 'example-mobile-app' },
       { title: 'ダッシュボード', body: 'あなたのシステムを尊重するデータ UI。', thumb: 'example-dashboard' },
     ],
-    galleryTitle: 'Open Design でディレクションした',
+    galleryTitle: 'Marketing AX でディレクションした',
     galleryLead:
       'ディレクションからエージェントが生み出した、システムに沿ったハイフィデリティの作品。あなたのスタイルに近いものを選んで磨きましょう。',
     gallery: [
@@ -863,12 +863,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、次のデザインをディレクションしよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、制作はエージェントに任せ、センスはあなたが判断しよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、制作はエージェントに任せ、センスはあなたが判断しよう。すでに使っているそのエージェントの中で。',
   },
   roleEngineering: {
-    title: 'エンジニアのための Open Design',
+    title: 'エンジニアのための Marketing AX',
     description:
-      'デザインの引き継ぎを飛ばそう。Open Design は DESIGN.md を、あなたのコーディングエージェントが直接書く本物のフロントエンドに変えます。システムに沿った UI、プロトタイプ、ダッシュボードを、リポジトリの中で、Figma の往復なしに。',
+      'デザインの引き継ぎを飛ばそう。Marketing AX は DESIGN.md を、あなたのコーディングエージェントが直接書く本物のフロントエンドに変えます。システムに沿った UI、プロトタイプ、ダッシュボードを、リポジトリの中で、Figma の往復なしに。',
     breadcrumb: 'エンジニアリング',
     label: '対象 · エンジニアリング',
     heading: '仕様からフロントエンドへ、間に引き継ぎなし',
@@ -877,8 +877,8 @@ export const JA: SolutionLocaleCopy = {
       'DESIGN.md が引き継ぎ工程を飛ばして、直接フロントエンドコードとレンダリングされた UI に流れ込むエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design はデザインシステムを機械可読にすることで、デザイナーからエンジニアへのギャップを埋めます。あなたのコードを書く同じエージェントが、システムを適用し本物の UI をレンダリングします。',
-    stepsTitle: 'エンジニアは Open Design をこう使う',
+      'Marketing AX はデザインシステムを機械可読にすることで、デザイナーからエンジニアへのギャップを埋めます。あなたのコードを書く同じエージェントが、システムを適用し本物の UI をレンダリングします。',
+    stepsTitle: 'エンジニアは Marketing AX をこう使う',
     steps: [
       {
         title: 'レッドラインではなく、システムを読む',
@@ -896,9 +896,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: '生成された UI がレビュー可能な PR として着地するイラスト',
       },
     ],
-    tableTitle: 'Open Design でのフロントエンド vs. 引き継ぎのやり方',
+    tableTitle: 'Marketing AX でのフロントエンド vs. 引き継ぎのやり方',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: 'デザインから開発への引き継ぎ',
     tableRows: [
       { capability: '実装の元になるデザインを得る', withOd: 'エージェントが直接読む DESIGN.md', without: '手で再解釈する Figma ファイル' },
@@ -916,7 +916,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'ランディングページ', body: 'デザイン待ちなしのマーケティングページ。', thumb: 'example-saas-landing' },
       { title: 'Kanban / ボード', body: '社内ワークフロー UI。', thumb: 'example-kanban-board' },
     ],
-    galleryTitle: 'エンジニアが Open Design で作った',
+    galleryTitle: 'エンジニアが Marketing AX で作った',
     galleryLead:
       'リポジトリの中で直接生成された、システムに沿った本物のフロントエンド。作っているものに近いものを選んで説明してください。',
     gallery: [
@@ -936,12 +936,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、次の UI を生成しよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、DESIGN.md をフロントエンドに変えよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、DESIGN.md をフロントエンドに変えよう。すでに使っているそのエージェントの中で。',
   },
   roleProductManagers: {
-    title: 'プロダクトマネージャーのための Open Design',
+    title: 'プロダクトマネージャーのための Marketing AX',
     description:
-      'アイデアを伝えるために、デザインのリソースを待つのはもう終わり。Open Design は PM がプロンプトを、クリック可能なプロトタイプやワイヤーフレームに変えられるようにします。ステークホルダーの足並みを揃え、チームにブリーフィングするために、デザインチケットなしで。',
+      'アイデアを伝えるために、デザインのリソースを待つのはもう終わり。Marketing AX は PM がプロンプトを、クリック可能なプロトタイプやワイヤーフレームに変えられるようにします。ステークホルダーの足並みを揃え、チームにブリーフィングするために、デザインチケットなしで。',
     breadcrumb: 'プロダクトマネージャー',
     label: '対象 · プロダクトマネージャー',
     heading: 'キックオフの前に、アイデアをクリック可能にする',
@@ -950,8 +950,8 @@ export const JA: SolutionLocaleCopy = {
       'PM が書かれたアイデアを、ステークホルダーに見せるクリック可能なプロトタイプに変えるエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design は PM にデザイン不要の方法でアイデアを形にする手段を与えます。足並みを揃えるためのブリーフのための、プロンプトからプロトタイプへ。チームのデザイン予算を使わずに。',
-    stepsTitle: 'PM は Open Design をこう使う',
+      'Marketing AX は PM にデザイン不要の方法でアイデアを形にする手段を与えます。足並みを揃えるためのブリーフのための、プロンプトからプロトタイプへ。チームのデザイン予算を使わずに。',
+    stepsTitle: 'PM は Marketing AX をこう使う',
     steps: [
       {
         title: 'フローを説明する',
@@ -969,9 +969,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'プロトタイプが足並みを揃えるために共有され、それからチームに渡されるイラスト',
       },
     ],
-    tableTitle: 'Open Design での PM 業務 vs. デザイン待ち',
+    tableTitle: 'Marketing AX での PM 業務 vs. デザイン待ち',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: '今、それなしだと',
     tableRows: [
       { capability: 'アイデアを形にする', withOd: 'プロンプト → 自分でクリック可能なプロトタイプ', without: 'デザインチケットを起票してリソースを待つ' },
@@ -989,7 +989,7 @@ export const JA: SolutionLocaleCopy = {
       { title: 'Web プロトタイプ', body: 'レビュー用のマルチスクリーン Web フロー。', thumb: 'example-web-prototype' },
       { title: 'トレンドビュー', body: '文脈のための 30 日間・トレンドのスナップショット。', thumb: 'example-last30days' },
     ],
-    galleryTitle: 'PM が Open Design でプロトタイプ化した',
+    galleryTitle: 'PM が Marketing AX でプロトタイプ化した',
     galleryLead:
       '説明からレンダリングされた、ステークホルダーレビューに使えるクリック可能なフロー。あなたのアイデアに近いものを選んで説明してください。',
     gallery: [
@@ -1009,12 +1009,12 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、あなたのアイデアをクリック可能にしよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、次の仕様を人がクリックできるものに変えよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、次の仕様を人がクリックできるものに変えよう。すでに使っているそのエージェントの中で。',
   },
   roleMarketing: {
-    title: 'マーケティングチームのための Open Design',
+    title: 'マーケティングチームのための Marketing AX',
     description:
-      'コンテンツのスピードでキャンペーンを出荷しよう。Open Design はあなたのエージェントが、ランディングページ、ソーシャルカード、キャンペーンビジュアルをプロンプトから作れるようにします。ブランドに沿って、オンデマンドで、デザインの順番待ちなしに。',
+      'コンテンツのスピードでキャンペーンを出荷しよう。Marketing AX はあなたのエージェントが、ランディングページ、ソーシャルカード、キャンペーンビジュアルをプロンプトから作れるようにします。ブランドに沿って、オンデマンドで、デザインの順番待ちなしに。',
     breadcrumb: 'マーケティング',
     label: '対象 · マーケティング',
     heading: 'プロンプトのスピードのキャンペーンビジュアル',
@@ -1023,8 +1023,8 @@ export const JA: SolutionLocaleCopy = {
       'マーケターがブリーフを、ランディングページとブランドに沿った一連のソーシャルカードに変えるエディトリアルイラスト',
     tldrTitle: 'ひと言で言うと',
     tldrBody:
-      'Open Design はマーケティングの常時稼働のデザインリソースです。ランディングページとソーシャルのための、プロンプトからアセットへ。ブランドに沿って。だからキャンペーンはコピーを書くスピードで出荷されます。',
-    stepsTitle: 'マーケティングチームは Open Design をこう使う',
+      'Marketing AX はマーケティングの常時稼働のデザインリソースです。ランディングページとソーシャルのための、プロンプトからアセットへ。ブランドに沿って。だからキャンペーンはコピーを書くスピードで出荷されます。',
+    stepsTitle: 'マーケティングチームは Marketing AX をこう使う',
     steps: [
       {
         title: 'ブランドを固める',
@@ -1042,9 +1042,9 @@ export const JA: SolutionLocaleCopy = {
         imageAlt: 'キャンペーンアセットが素早く出荷され反復されるイラスト',
       },
     ],
-    tableTitle: 'Open Design でのマーケティング vs. いつものドタバタ',
+    tableTitle: 'Marketing AX でのマーケティング vs. いつものドタバタ',
     tableColCapability: '必要なもの',
-    tableColWithOd: 'Open Design なら',
+    tableColWithOd: 'Marketing AX なら',
     tableColWithout: '今、それなしだと',
     tableRows: [
       { capability: 'ランディングページを公開', withOd: 'プロンプト → ブランドに沿ったページ、デプロイ可能', without: 'デザインに依頼するか、サイトビルダーと格闘' },
@@ -1062,7 +1062,7 @@ export const JA: SolutionLocaleCopy = {
       { title: '記事カバー', body: 'ブログとニュースレターのカバー。', thumb: 'example-article-magazine' },
       { title: 'Web ページ', body: 'マイクロサイトとキャンペーンページ。', thumb: 'example-web-prototype' },
     ],
-    galleryTitle: 'マーケティングが Open Design で出荷した',
+    galleryTitle: 'マーケティングが Marketing AX で出荷した',
     galleryLead:
       'プロンプトからレンダリングされた、ブランドに沿ったキャンペーンアセット。あなたのキャンペーンに近いものを選んで、コピーを差し替えてください。',
     gallery: [
@@ -1082,6 +1082,6 @@ export const JA: SolutionLocaleCopy = {
     ],
     ctaTitle: '今夜、次のキャンペーンを出荷しよう',
     ctaBody:
-      'リポジトリにスターを付け、Open Design をインストールして、ブリーフをブランドに沿ったアセットに変えよう。すでに使っているそのエージェントの中で。',
+      'リポジトリにスターを付け、Marketing AX をインストールして、ブリーフをブランドに沿ったアセットに変えよう。すでに使っているそのエージェントの中で。',
   },
 };

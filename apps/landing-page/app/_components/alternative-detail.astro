@@ -49,7 +49,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'Marketing AX', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: 'Compare', item: compareUrl },
       { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
@@ -76,7 +76,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="home" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>Marketing AX</a>
     <span>/</span>
     <a href={href('/compare/')}>Compare</a>
     <span>/</span>
@@ -181,7 +181,7 @@ const jsonLd = [
           </ol>
         </section>
 
-        <section class="info-cta" aria-label="Open Design call to action">
+        <section class="info-cta" aria-label="Marketing AX call to action">
           <div>
             <h2>{rich.ctaTitle}</h2>
             <p>{rich.ctaBody}</p>
@@ -245,7 +245,7 @@ const jsonLd = [
           <div class="compare-table-wrap">
             <table class="compare-table">
               <thead>
-                <tr><th>Feature</th><th>Open Design</th><th>{competitorName}</th></tr>
+                <tr><th>Feature</th><th>Marketing AX</th><th>{competitorName}</th></tr>
               </thead>
               <tbody>
                 {features.map((f) => (
@@ -293,7 +293,7 @@ const jsonLd = [
           </ol>
         </section>
 
-        <section class="info-cta" aria-label="Open Design call to action">
+        <section class="info-cta" aria-label="Marketing AX call to action">
           <div>
             <h2>{page.ctaTitle}</h2>
             <p>{page.ctaBody}</p>

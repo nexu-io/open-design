@@ -265,13 +265,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   en: {
     toggleNavigationMenu: 'Toggle navigation menu',
     product: 'Product',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'The agentic design surface: skills, systems, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data to ship-ready HTML, by your local agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'A prompt, article, or repo to a real MP4 — by your local agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Design Agent',
     amrBlurb: 'Professional design Agent, zero-config use, built-in SOTA models & Harness',
     tutorialsName: 'Tutorials',
@@ -303,13 +303,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   zh: {
     toggleNavigationMenu: '切换导航菜单',
     product: '产品',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agent 原生设计工作台：围绕 SKILL.md 工作流组织。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一个 prompt、文章或仓库，变成真实 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: '设计 Agent',
     amrBlurb: '专业设计Agent、零配置使用、自带SOTA模型与Harness',
     tutorialsName: '教程',
@@ -341,13 +341,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   'zh-tw': {
     toggleNavigationMenu: '切換導覽選單',
     product: '產品',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agent 原生設計工作台：Skill、設計系統、模板。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 資料變成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一個 prompt、文章或倉庫，變成真實 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: '設計 Agent',
     amrBlurb: '專業設計 Agent、零配置使用、內建 SOTA 模型與 Harness',
     tutorialsName: '教學',
@@ -379,13 +379,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   ja: {
     toggleNavigationMenu: 'ナビゲーションメニューを切り替え',
     product: 'プロダクト',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agent ネイティブのデザイン面: Skill、システム、テンプレート。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / データをローカル Agent で納品可能な HTML へ。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'プロンプト、記事、リポジトリを本物のMP4に — あなたのローカルエージェントで。',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'デザイン Agent',
     amrBlurb: 'プロ向けデザイン Agent、ゼロ設定で利用、SOTA モデルと Harness 内蔵',
     tutorialsName: 'チュートリアル',
@@ -417,13 +417,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   ko: {
     toggleNavigationMenu: '내비게이션 메뉴 전환',
     product: '제품',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agent 네이티브 디자인 작업면: Skill, 시스템, 템플릿.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 데이터를 로컬 Agent로 배포 가능한 HTML로 변환.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '프롬프트, 글, 레포만 있으면 — 로컬 에이전트가 진짜 MP4로.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: '디자인 Agent',
     amrBlurb: '전문 디자인 Agent, 무설정 사용, SOTA 모델과 Harness 내장',
     tutorialsName: '튜토리얼',
@@ -455,13 +455,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   de: {
     toggleNavigationMenu: 'Navigationsmenu umschalten',
     product: 'Produkt',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agentische Designoberfläche: Skills, Systeme, Vorlagen.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / Daten werden durch deinen lokalen Agent zu fertigem HTML.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Eine Idee, ein Artikel oder ein Repo – per lokalem Agent zu einem echten MP4.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professioneller Design-Agent, null Konfiguration, integrierte SOTA-Modelle & Harness',
     tutorialsName: 'Tutorials',
@@ -493,13 +493,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   fr: {
     toggleNavigationMenu: 'Basculer le menu de navigation',
     product: 'Produit',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Surface de design agentique : skills, systèmes, modèles.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / données vers du HTML prêt à livrer via votre agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Une consigne, un article ou un repo vers une vraie vidéo MP4 — par votre agent local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design professionnel, zéro configuration, modèles SOTA et Harness intégrés',
     tutorialsName: 'Tutoriels',
@@ -531,13 +531,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   ru: {
     toggleNavigationMenu: 'Переключить меню навигации',
     product: 'Продукт',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agent-native дизайн-среда: skills, системы, шаблоны.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / данные в готовый HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Промпт, статья или репозиторий — в настоящий MP4 с помощью локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Профессиональный дизайн-Agent, без настройки, со встроенными SOTA-моделями и Harness',
     tutorialsName: 'Руководства',
@@ -569,13 +569,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   es: {
     toggleNavigationMenu: 'Alternar menú de navegación',
     product: 'Producto',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Superficie de diseño agentic: skills, sistemas, plantillas.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / datos a HTML listo para entregar con tu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una idea, artículo o repo a un MP4 real — con tu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent diseño',
     amrBlurb: 'Agent de diseño profesional, uso sin configuración, modelos SOTA y Harness integrados',
     tutorialsName: 'Tutoriales',
@@ -607,13 +607,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   'pt-br': {
     toggleNavigationMenu: 'Alternar menu de navegação',
     product: 'Produto',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Superfície de design agentic: skills, sistemas, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dados viram HTML pronto com seu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Uma ideia, artigo ou repo vira um MP4 de verdade — pelo seu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design profissional, uso sem configuração, modelos SOTA e Harness integrados',
     tutorialsName: 'Tutoriais',
@@ -645,13 +645,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   it: {
     toggleNavigationMenu: 'Apri o chiudi il menu di navigazione',
     product: 'Prodotto',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Superficie di design agentic: skill, sistemi, template.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dati in HTML pronto alla consegna con il tuo Agent locale.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una richiesta, un articolo o un repo in un vero MP4 — dal tuo agente locale.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent di design professionale, uso senza configurazione, modelli SOTA e Harness integrati',
     tutorialsName: 'Tutorial',
@@ -683,13 +683,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   vi: {
     toggleNavigationMenu: 'Chuyển menu điều hướng',
     product: 'Sản phẩm',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Bề mặt thiết kế agentic: skill, hệ thống, mẫu.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dữ liệu thành HTML sẵn sàng giao bằng Agent cục bộ.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Một prompt, bài viết hay repo thành video MP4 thật — bằng agent của bạn.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent thiết kế',
     amrBlurb: 'Agent thiết kế chuyên nghiệp, dùng không cần cấu hình, tích hợp mô hình SOTA và Harness',
     tutorialsName: 'Hướng dẫn',
@@ -721,13 +721,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   pl: {
     toggleNavigationMenu: 'Przełącz menu nawigacji',
     product: 'Produkt',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agentic powierzchnia projektowa: skills, systemy, szablony.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dane do gotowego HTML przez lokalnego Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artykuł lub repo w prawdziwe MP4 — dzięki Twojemu lokalnemu agentowi.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent designu',
     amrBlurb: 'Profesjonalny Agent do projektowania, zero konfiguracji, wbudowane modele SOTA i Harness',
     tutorialsName: 'Poradniki',
@@ -759,13 +759,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   id: {
     toggleNavigationMenu: 'Alihkan menu navigasi',
     product: 'Produk',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Ruang desain agentic: skill, sistem, template.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data menjadi HTML siap kirim lewat Agent lokal.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artikel, atau repo jadi MP4 sungguhan — lewat agent lokalmu.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent desain',
     amrBlurb: 'Agent desain profesional, tanpa konfigurasi, model SOTA dan Harness bawaan',
     tutorialsName: 'Tutorial',
@@ -797,13 +797,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   nl: {
     toggleNavigationMenu: 'Navigatiemenu wisselen',
     product: 'Product',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agentic designoppervlak: skills, systemen, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data naar opleverklare HTML via je lokale Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Een prompt, artikel of repo naar een echte MP4 — door je lokale agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professionele design-Agent, nul configuratie, ingebouwde SOTA-modellen en Harness',
     tutorialsName: 'Tutorials',
@@ -835,13 +835,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   ar: {
     toggleNavigationMenu: 'تبديل قائمة التنقل',
     product: 'المنتج',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'مساحة تصميم وكيلة: المهارات والأنظمة والقوالب.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / البيانات إلى HTML جاهز عبر Agent المحلي.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'موجِّه أو مقال أو مستودع إلى فيديو MP4 حقيقي — بواسطة وكيلك المحلي.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Agent تصميم',
     amrBlurb: 'Agent تصميم احترافي، استخدام بلا إعداد، نماذج SOTA و Harness مدمجة',
     tutorialsName: 'الدروس',
@@ -873,13 +873,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   tr: {
     toggleNavigationMenu: 'Gezinme menüsünü aç/kapat',
     product: 'Ürün',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agentic tasarım yüzeyi: skill, sistemler, şablonlar.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / veriler yerel Agent ile teslim edilebilir HTML olur.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Bir prompt, makale ya da repo\'dan gerçek bir MP4\'e — yerel ajanınla.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Tasarım Agent',
     amrBlurb: 'Profesyonel tasarım Agent, sıfır yapılandırma, yerleşik SOTA modelleri ve Harness',
     tutorialsName: 'Eğitimler',
@@ -911,13 +911,13 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
   uk: {
     toggleNavigationMenu: 'Перемкнути меню навігації',
     product: 'Продукт',
-    openDesignName: 'Open Design',
+    openDesignName: 'Marketing AX',
     openDesignBlurb: 'Agent-native дизайн-поверхня: skills, системи, шаблони.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / дані у готовий HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Підказка, стаття чи репозиторій — у справжнє MP4 від вашого локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Marketing AX AMR',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Професійний дизайн-Agent, без налаштувань, із вбудованими SOTA-моделями та Harness',
     tutorialsName: 'Навчальні матеріали',
@@ -1547,9 +1547,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Roles',
       },
       download: 'Download',
-      downloadAria: 'Download Open Design desktop',
+      downloadAria: 'Download Marketing AX desktop',
       downloadTitle: 'Download the desktop app',
-      starAria: 'Star Open Design on GitHub',
+      starAria: 'Star Marketing AX on GitHub',
       starTitle: 'Click to star us on GitHub',
       starPrefix: 'Star',
     },
@@ -1589,9 +1589,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: '角色',
       },
       download: '下载',
-      downloadAria: '下载 Open Design 桌面端',
+      downloadAria: '下载 Marketing AX 桌面端',
       downloadTitle: '下载桌面应用',
-      starAria: '在 GitHub 为 Open Design 点 Star',
+      starAria: '在 GitHub 为 Marketing AX 点 Star',
       starTitle: '去 GitHub 点 Star',
       starPrefix: 'Star',
     },
@@ -1631,9 +1631,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: '角色',
       },
       download: '下載',
-      downloadAria: '下載 Open Design 桌面端',
+      downloadAria: '下載 Marketing AX 桌面端',
       downloadTitle: '下載桌面應用',
-      starAria: '在 GitHub 為 Open Design 按 Star',
+      starAria: '在 GitHub 為 Marketing AX 按 Star',
       starTitle: '去 GitHub 按 Star',
       starPrefix: '點星',
     },
@@ -1673,9 +1673,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'ロール',
       },
       download: 'ダウンロード',
-      downloadAria: 'Open Design デスクトップをダウンロード',
+      downloadAria: 'Marketing AX デスクトップをダウンロード',
       downloadTitle: 'デスクトップアプリをダウンロード',
-      starAria: 'GitHub で Open Design にスター',
+      starAria: 'GitHub で Marketing AX にスター',
       starTitle: 'GitHub でスターする',
       starPrefix: 'スター',
     },
@@ -1715,9 +1715,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: '역할',
       },
       download: '다운로드',
-      downloadAria: 'Open Design 데스크톱 다운로드',
+      downloadAria: 'Marketing AX 데스크톱 다운로드',
       downloadTitle: '데스크톱 앱 다운로드',
-      starAria: 'GitHub에서 Open Design에 스타 주기',
+      starAria: 'GitHub에서 Marketing AX에 스타 주기',
       starTitle: 'GitHub에서 스타 주기',
       starPrefix: '스타',
     },
@@ -1757,9 +1757,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Rollen',
       },
       download: 'Download',
-      downloadAria: 'Open Design Desktop herunterladen',
+      downloadAria: 'Marketing AX Desktop herunterladen',
       downloadTitle: 'Desktop-App herunterladen',
-      starAria: 'Open Design auf GitHub mit Stern markieren',
+      starAria: 'Marketing AX auf GitHub mit Stern markieren',
       starTitle: 'Auf GitHub sternen',
       starPrefix: 'Stern',
     },
@@ -1799,9 +1799,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Rôles',
       },
       download: 'Télécharger',
-      downloadAria: 'Télécharger Open Design Desktop',
+      downloadAria: 'Télécharger Marketing AX Desktop',
       downloadTitle: "Télécharger l'application desktop",
-      starAria: 'Ajouter une étoile à Open Design sur GitHub',
+      starAria: 'Ajouter une étoile à Marketing AX sur GitHub',
       starTitle: 'Mettre une étoile sur GitHub',
       starPrefix: 'Étoile',
     },
@@ -1841,9 +1841,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Роли',
       },
       download: 'Скачать',
-      downloadAria: 'Скачать Open Design Desktop',
+      downloadAria: 'Скачать Marketing AX Desktop',
       downloadTitle: 'Скачать desktop-приложение',
-      starAria: 'Поставить звезду Open Design на GitHub',
+      starAria: 'Поставить звезду Marketing AX на GitHub',
       starTitle: 'Поставить звезду на GitHub',
       starPrefix: 'Звезда',
     },
@@ -1883,9 +1883,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Roles',
       },
       download: 'Descargar',
-      downloadAria: 'Descargar Open Design Desktop',
+      downloadAria: 'Descargar Marketing AX Desktop',
       downloadTitle: 'Descargar la app de escritorio',
-      starAria: 'Dar Star a Open Design en GitHub',
+      starAria: 'Dar Star a Marketing AX en GitHub',
       starTitle: 'Dar Star en GitHub',
       starPrefix: 'Estrella',
     },
@@ -1925,9 +1925,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Funções',
       },
       download: 'Baixar',
-      downloadAria: 'Baixar Open Design Desktop',
+      downloadAria: 'Baixar Marketing AX Desktop',
       downloadTitle: 'Baixar o app desktop',
-      starAria: 'Dar Star no Open Design no GitHub',
+      starAria: 'Dar Star no Marketing AX no GitHub',
       starTitle: 'Dar Star no GitHub',
       starPrefix: 'Estrela',
     },
@@ -1967,9 +1967,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Ruoli',
       },
       download: 'Scarica',
-      downloadAria: 'Scarica Open Design Desktop',
+      downloadAria: 'Scarica Marketing AX Desktop',
       downloadTitle: "Scarica l'app desktop",
-      starAria: 'Metti una Star a Open Design su GitHub',
+      starAria: 'Metti una Star a Marketing AX su GitHub',
       starTitle: 'Metti una Star su GitHub',
       starPrefix: 'Stella',
     },
@@ -2009,9 +2009,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Vai trò',
       },
       download: 'Tải xuống',
-      downloadAria: 'Tải Open Design Desktop',
+      downloadAria: 'Tải Marketing AX Desktop',
       downloadTitle: 'Tải ứng dụng desktop',
-      starAria: 'Star Open Design trên GitHub',
+      starAria: 'Star Marketing AX trên GitHub',
       starTitle: 'Star trên GitHub',
       starPrefix: 'Sao',
     },
@@ -2051,9 +2051,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Role',
       },
       download: 'Pobierz',
-      downloadAria: 'Pobierz Open Design Desktop',
+      downloadAria: 'Pobierz Marketing AX Desktop',
       downloadTitle: 'Pobierz aplikację desktop',
-      starAria: 'Daj gwiazdkę Open Design na GitHubie',
+      starAria: 'Daj gwiazdkę Marketing AX na GitHubie',
       starTitle: 'Daj gwiazdkę na GitHubie',
       starPrefix: 'Gwiazdka',
     },
@@ -2093,9 +2093,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Peran',
       },
       download: 'Unduh',
-      downloadAria: 'Unduh Open Design Desktop',
+      downloadAria: 'Unduh Marketing AX Desktop',
       downloadTitle: 'Unduh aplikasi desktop',
-      starAria: 'Beri Star Open Design di GitHub',
+      starAria: 'Beri Star Marketing AX di GitHub',
       starTitle: 'Beri Star di GitHub',
       starPrefix: 'Bintang',
     },
@@ -2135,9 +2135,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Rollen',
       },
       download: 'Download',
-      downloadAria: 'Open Design Desktop downloaden',
+      downloadAria: 'Marketing AX Desktop downloaden',
       downloadTitle: 'Desktop-app downloaden',
-      starAria: 'Geef Open Design een Star op GitHub',
+      starAria: 'Geef Marketing AX een Star op GitHub',
       starTitle: 'Star op GitHub',
       starPrefix: 'Ster',
     },
@@ -2177,9 +2177,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'الأدوار',
       },
       download: 'تنزيل',
-      downloadAria: 'تنزيل Open Design Desktop',
+      downloadAria: 'تنزيل Marketing AX Desktop',
       downloadTitle: 'تنزيل تطبيق سطح المكتب',
-      starAria: 'ضع نجمة لـ Open Design على GitHub',
+      starAria: 'ضع نجمة لـ Marketing AX على GitHub',
       starTitle: 'ضع نجمة على GitHub',
       starPrefix: 'نجمة',
     },
@@ -2219,9 +2219,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Roller',
       },
       download: 'İndir',
-      downloadAria: 'Open Design Desktop indir',
+      downloadAria: 'Marketing AX Desktop indir',
       downloadTitle: 'Desktop uygulamasını indir',
-      starAria: "GitHub'da Open Design'a Star ver",
+      starAria: "GitHub'da Marketing AX'a Star ver",
       starTitle: "GitHub'da Star ver",
       starPrefix: 'Yıldız',
     },
@@ -2261,9 +2261,9 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         roles: 'Ролі',
       },
       download: 'Завантажити',
-      downloadAria: 'Завантажити Open Design Desktop',
+      downloadAria: 'Завантажити Marketing AX Desktop',
       downloadTitle: 'Завантажити desktop-застосунок',
-      starAria: 'Поставити зірку Open Design на GitHub',
+      starAria: 'Поставити зірку Marketing AX на GitHub',
       starTitle: 'Поставити зірку на GitHub',
       starPrefix: 'Зірка',
     },
@@ -2272,119 +2272,119 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
 
 const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   en: {
-    title: 'Open Design — Official open-source Claude Design alternative',
+    title: 'Marketing AX — Official open-source Claude Design alternative',
     description:
-      'Open Design is the official open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
+      'Marketing AX is the official open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
   },
   zh: {
-    title: 'Open Design —— 官方 Claude Design 开源替代',
+    title: 'Marketing AX —— 官方 Claude Design 开源替代',
     description:
-      'Open Design 是官方的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
+      'Marketing AX 是官方的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
   },
   'zh-tw': {
-    title: 'Open Design —— 官方 Claude Design 開源替代',
+    title: 'Marketing AX —— 官方 Claude Design 開源替代',
     description:
-      'Open Design 是官方的開源、本地優先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成簡報、落地頁、儀表板與品牌系統，背後由 {skills} 個可組合 Skill 與 {systems} 套 DESIGN.md 系統驅動。',
+      'Marketing AX 是官方的開源、本地優先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成簡報、落地頁、儀表板與品牌系統，背後由 {skills} 個可組合 Skill 與 {systems} 套 DESIGN.md 系統驅動。',
   },
   ja: {
-    title: 'Open Design — 公式のオープンソース Claude Design 代替',
+    title: 'Marketing AX — 公式のオープンソース Claude Design 代替',
     description:
-      'Open Design は公式のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
+      'Marketing AX は公式のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
   },
   ko: {
-    title: 'Open Design — 공식 오픈소스 Claude Design 대안',
+    title: 'Marketing AX — 공식 오픈소스 Claude Design 대안',
     description:
-      'Open Design은 공식 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
+      'Marketing AX은 공식 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
   },
   de: {
-    title: 'Open Design — offizielle Open-Source-Alternative zu Claude Design',
+    title: 'Marketing AX — offizielle Open-Source-Alternative zu Claude Design',
     description:
-      'Open Design ist die offizielle Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
+      'Marketing AX ist die offizielle Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
   },
   fr: {
-    title: "Open Design — l'alternative open source officielle à Claude Design",
+    title: "Marketing AX — l'alternative open source officielle à Claude Design",
     description:
-      "Open Design est l'alternative officielle, open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
+      "Marketing AX est l'alternative officielle, open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
   },
   ru: {
-    title: 'Open Design — официальная open-source альтернатива Claude Design',
+    title: 'Marketing AX — официальная open-source альтернатива Claude Design',
     description:
-      'Open Design — официальная open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
+      'Marketing AX — официальная open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
   },
   es: {
-    title: 'Open Design — alternativa open source oficial a Claude Design',
+    title: 'Marketing AX — alternativa open source oficial a Claude Design',
     description:
-      'Open Design es la alternativa oficial, open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
+      'Marketing AX es la alternativa oficial, open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
   },
   'pt-br': {
-    title: 'Open Design — alternativa open source oficial ao Claude Design',
+    title: 'Marketing AX — alternativa open source oficial ao Claude Design',
     description:
-      'Open Design é a alternativa oficial, open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
+      'Marketing AX é a alternativa oficial, open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
   },
   it: {
-    title: "Open Design — l'alternativa open source ufficiale a Claude Design",
+    title: "Marketing AX — l'alternativa open source ufficiale a Claude Design",
     description:
-      "Open Design è l'alternativa ufficiale, open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
+      "Marketing AX è l'alternativa ufficiale, open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
   },
   vi: {
-    title: 'Open Design — lựa chọn mã nguồn mở chính thức thay Claude Design',
+    title: 'Marketing AX — lựa chọn mã nguồn mở chính thức thay Claude Design',
     description:
-      'Open Design là lựa chọn mã nguồn mở, local-first chính thức thay Claude Design. Tạo deck, landing page, dashboard và hệ thống thương hiệu bằng Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen, với {skills} skill có thể ghép và {systems} hệ DESIGN.md di động.',
+      'Marketing AX là lựa chọn mã nguồn mở, local-first chính thức thay Claude Design. Tạo deck, landing page, dashboard và hệ thống thương hiệu bằng Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen, với {skills} skill có thể ghép và {systems} hệ DESIGN.md di động.',
   },
   pl: {
-    title: 'Open Design — oficjalna open-source alternatywa dla Claude Design',
+    title: 'Marketing AX — oficjalna open-source alternatywa dla Claude Design',
     description:
-      'Open Design to oficjalna, open-source i local-first alternatywa dla Claude Design. Twórz decki, landing page, dashboardy i systemy marki z Claude Code, Codex, Cursor, Gemini, OpenCode lub Qwen, używając {skills} kompozycyjnych skills i {systems} przenośnych systemów DESIGN.md.',
+      'Marketing AX to oficjalna, open-source i local-first alternatywa dla Claude Design. Twórz decki, landing page, dashboardy i systemy marki z Claude Code, Codex, Cursor, Gemini, OpenCode lub Qwen, używając {skills} kompozycyjnych skills i {systems} przenośnych systemów DESIGN.md.',
   },
   id: {
-    title: 'Open Design — alternatif open source resmi untuk Claude Design',
+    title: 'Marketing AX — alternatif open source resmi untuk Claude Design',
     description:
-      'Open Design adalah alternatif resmi, open source, dan local-first untuk Claude Design. Buat deck, landing page, dashboard, dan sistem merek dengan Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen, didukung {skills} skill komposable dan {systems} sistem DESIGN.md portabel.',
+      'Marketing AX adalah alternatif resmi, open source, dan local-first untuk Claude Design. Buat deck, landing page, dashboard, dan sistem merek dengan Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen, didukung {skills} skill komposable dan {systems} sistem DESIGN.md portabel.',
   },
   nl: {
-    title: 'Open Design — officieel open-source alternatief voor Claude Design',
+    title: 'Marketing AX — officieel open-source alternatief voor Claude Design',
     description:
-      'Open Design is het officiële open-source en local-first alternatief voor Claude Design. Maak decks, landingspagina’s, dashboards en merksystemen met Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen, aangedreven door {skills} combineerbare skills en {systems} draagbare DESIGN.md-systemen.',
+      'Marketing AX is het officiële open-source en local-first alternatief voor Claude Design. Maak decks, landingspagina’s, dashboards en merksystemen met Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen, aangedreven door {skills} combineerbare skills en {systems} draagbare DESIGN.md-systemen.',
   },
   ar: {
-    title: 'Open Design — البديل الرسمي مفتوح المصدر لـ Claude Design',
+    title: 'Marketing AX — البديل الرسمي مفتوح المصدر لـ Claude Design',
     description:
-      'Open Design هو البديل الرسمي مفتوح المصدر والمحلي أولاً لـ Claude Design. أنشئ عروضاً وصفحات هبوط ولوحات بيانات وأنظمة علامة عبر Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen، مع {skills} مهارة قابلة للتركيب و {systems} نظام DESIGN.md قابل للنقل.',
+      'Marketing AX هو البديل الرسمي مفتوح المصدر والمحلي أولاً لـ Claude Design. أنشئ عروضاً وصفحات هبوط ولوحات بيانات وأنظمة علامة عبر Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen، مع {skills} مهارة قابلة للتركيب و {systems} نظام DESIGN.md قابل للنقل.',
   },
   tr: {
-    title: "Open Design — Claude Design'ın resmi açık kaynak alternatifi",
+    title: "Marketing AX — Claude Design'ın resmi açık kaynak alternatifi",
     description:
-      "Open Design, Claude Design'ın resmi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
+      "Marketing AX, Claude Design'ın resmi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
   },
   uk: {
-    title: 'Open Design — офіційна open-source альтернатива Claude Design',
+    title: 'Marketing AX — офіційна open-source альтернатива Claude Design',
     description:
-      'Open Design — офіційна open-source і local-first альтернатива Claude Design. Створюйте презентації, лендинги, дашборди та бренд-системи через Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen на базі {skills} skills і {systems} DESIGN.md-систем.',
+      'Marketing AX — офіційна open-source і local-first альтернатива Claude Design. Створюйте презентації, лендинги, дашборди та бренд-системи через Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen на базі {skills} skills і {systems} DESIGN.md-систем.',
   },
 };
 
 const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   en: [
     {
-      q: 'What is Open Design?',
-      a: 'Open Design is the official open-source AI design workspace from the nexu-io/open-design project. It turns a local coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode, or Qwen — into a design engine driven by composable skills and portable DESIGN.md systems.',
+      q: 'What is Marketing AX?',
+      a: 'Marketing AX is the official open-source AI design workspace from the nexu-io/open-design project. It turns a local coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode, or Qwen — into a design engine driven by composable skills and portable DESIGN.md systems.',
     },
     {
-      q: 'Is Open Design official?',
-      a: 'Yes. The canonical project lives at {origin} and the source is on GitHub at {repo}. "Open Design", "OpenDesign", "open-design", and "Open Design AI" all refer to this same project.',
+      q: 'Is Marketing AX official?',
+      a: 'Yes. The canonical project lives at {origin} and the source is on GitHub at {repo}. "Marketing AX", "OpenDesign", "open-design", and "Open Design AI" all refer to this same project.',
       official: true,
     },
     {
-      q: 'How is Open Design different from Claude Design?',
-      a: 'Claude Design is a hosted product tied to a single vendor. Open Design is local-first, open source under Apache-2.0, and BYOK: you bring your own agent, credentials, and DESIGN.md system.',
+      q: 'How is Marketing AX different from Claude Design?',
+      a: 'Claude Design is a hosted product tied to a single vendor. Marketing AX is local-first, open source under Apache-2.0, and BYOK: you bring your own agent, credentials, and DESIGN.md system.',
     },
     {
-      q: 'Does Open Design run locally?',
+      q: 'Does Marketing AX run locally?',
       a: 'Yes. The desktop app, daemon, and skill runtime run on your machine. Generated artifacts land in your project directory instead of being forced through a vendor cloud.',
     },
     {
-      q: 'Which coding agents does Open Design support?',
-      a: 'Open Design ships 17 first-party BYOK adapters out of the box: Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot CLI, Grok, Hermes, Kimi, Devin for Terminal, OpenCode, Qwen, DeepSeek, Pi, Mistral Vibe, Kiro, Kilo, and Qoder. Any adapter that speaks the same skill protocol works — switching agents is a config change, not a redesign.',
+      q: 'Which coding agents does Marketing AX support?',
+      a: 'Marketing AX ships 17 first-party BYOK adapters out of the box: Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot CLI, Grok, Hermes, Kimi, Devin for Terminal, OpenCode, Qwen, DeepSeek, Pi, Mistral Vibe, Kiro, Kilo, and Qoder. Any adapter that speaks the same skill protocol works — switching agents is a config change, not a redesign.',
     },
     {
       q: 'Can I self-host or fork it?',
@@ -2396,22 +2396,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     // evaluator concerns), then workflow / roadmap. ----
     {
       q: 'Is my data sent to Anthropic, OpenAI, or Google?',
-      a: 'Only your prompt and skill context goes to whichever provider you bring keys for (BYOK). Open Design has no server of its own — the daemon talks to your provider directly. Generated artifacts land as files in your project directory, not in any vendor cloud.',
+      a: 'Only your prompt and skill context goes to whichever provider you bring keys for (BYOK). Marketing AX has no server of its own — the daemon talks to your provider directly. Generated artifacts land as files in your project directory, not in any vendor cloud.',
     },
     {
-      q: 'Can I run Open Design without installing the CLI or desktop app?',
-      a: 'Not today. Open Design is local-first by design — the minimum is a local daemon plus an agent (Claude Code, Codex, Cursor, Gemini CLI, or one of the 17 supported adapters). A hosted sandbox is on the roadmap but not the priority: artifacts in your repo beat documents in someone else\'s database.',
+      q: 'Can I run Marketing AX without installing the CLI or desktop app?',
+      a: 'Not today. Marketing AX is local-first by design — the minimum is a local daemon plus an agent (Claude Code, Codex, Cursor, Gemini CLI, or one of the 17 supported adapters). A hosted sandbox is on the roadmap but not the priority: artifacts in your repo beat documents in someone else\'s database.',
     },
     {
-      q: 'How much does Open Design cost?',
-      a: 'The product is free and Apache-2.0 — there is no Open Design subscription. You pay the API costs of whichever provider you use (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, etc.), billed directly to your account. BYOK keeps both the credentials and the spend on your side of the line.',
+      q: 'How much does Marketing AX cost?',
+      a: 'The product is free and Apache-2.0 — there is no Marketing AX subscription. You pay the API costs of whichever provider you use (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, etc.), billed directly to your account. BYOK keeps both the credentials and the spend on your side of the line.',
     },
     {
-      q: 'Can I self-host Open Design on Vercel, Cloudflare, or my own server?',
+      q: 'Can I self-host Marketing AX on Vercel, Cloudflare, or my own server?',
       a: 'Yes. The daemon runs anywhere Node 24 runs, and the landing page is a static Astro build that deploys to Cloudflare Pages, Vercel, or Netlify as-is. Teams running shared deployments typically pin the daemon to a machine inside their network and point each developer\'s CLI at it.',
     },
     {
-      q: 'How do I move my brand into Open Design?',
+      q: 'How do I move my brand into Marketing AX?',
       a: 'Drop a screenshot or a Figma export into the web UI and ask your agent to extract a brand into a DESIGN.md file. Save that file under design-systems/<your-brand>/ in your repo; every skill then renders in that brand without re-prompting. /alternatives/claude-design/ describes the same flow in step form.',
     },
     {
@@ -2419,26 +2419,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Yes. Skills and DESIGN.md systems are agent-agnostic — the same SKILL.md file renders against Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen, or any other supported adapter. Switching agents is a config change in the daemon, not a redesign.',
     },
     {
-      q: 'What\'s on the Open Design roadmap?',
+      q: 'What\'s on the Marketing AX roadmap?',
       a: 'The live roadmap is at docs/roadmap.md in the GitHub repo, and weekly release notes ship through GitHub Releases. Major themes for the next quarter: more agent adapters, richer template families (3D, video, audio), and an optional shared-daemon mode for design teams.',
     },
   ],
   zh: [
     {
-      q: 'Open Design 是什么？',
-      a: 'Open Design 是 nexu-io/open-design 项目的官方开源 AI 设计工作台。它把本地编码 Agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）变成设计引擎，并由可组合 SKILL.md 工作流驱动。',
+      q: 'Marketing AX 是什么？',
+      a: 'Marketing AX 是 nexu-io/open-design 项目的官方开源 AI 设计工作台。它把本地编码 Agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）变成设计引擎，并由可组合 SKILL.md 工作流驱动。',
     },
     {
-      q: 'Open Design 是官方项目吗？',
-      a: '是。官方站点是 {origin}，源代码在 GitHub：{repo}。"Open Design"、"OpenDesign"、"open-design" 和 "Open Design AI" 都指向同一个项目。',
+      q: 'Marketing AX 是官方项目吗？',
+      a: '是。官方站点是 {origin}，源代码在 GitHub：{repo}。"Marketing AX"、"OpenDesign"、"open-design" 和 "Open Design AI" 都指向同一个项目。',
       official: true,
     },
     {
       q: '它和 Claude Design 有什么不同？',
-      a: 'Claude Design 是绑定单一厂商的云端产品。Open Design 本地优先、Apache-2.0 开源，并且 BYOK：你使用自己的 Agent、密钥和 Skill 规则。',
+      a: 'Claude Design 是绑定单一厂商的云端产品。Marketing AX 本地优先、Apache-2.0 开源，并且 BYOK：你使用自己的 Agent、密钥和 Skill 规则。',
     },
     {
-      q: 'Open Design 可以本地运行吗？',
+      q: 'Marketing AX 可以本地运行吗？',
       a: '可以。桌面端、daemon 和 Skill 运行时都在你的机器上运行，生成的 artifact 会落在你的项目目录里。',
     },
     {
@@ -2451,22 +2451,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: '我的数据会发送给 Anthropic、OpenAI 或 Google 吗？',
-      a: '只有你的 prompt 和 Skill 上下文会发给你自带密钥（BYOK）的那家模型供应商。Open Design 没有自己的服务器——daemon 直接与你的供应商通信，生成的 artifact 以文件形式落在你的项目目录里，不会进入任何厂商云端。',
+      a: '只有你的 prompt 和 Skill 上下文会发给你自带密钥（BYOK）的那家模型供应商。Marketing AX 没有自己的服务器——daemon 直接与你的供应商通信，生成的 artifact 以文件形式落在你的项目目录里，不会进入任何厂商云端。',
     },
     {
-      q: '不安装 CLI 或桌面端能用 Open Design 吗？',
-      a: '目前不行。Open Design 的设计就是本地优先——最少需要一个本地 daemon 加一个 Agent（Claude Code、Codex、Cursor、Gemini CLI 或 17 个受支持适配器之一）。托管沙盒在路线图上但不是优先级：落在你仓库里的 artifact，胜过存在别人数据库里的文档。',
+      q: '不安装 CLI 或桌面端能用 Marketing AX 吗？',
+      a: '目前不行。Marketing AX 的设计就是本地优先——最少需要一个本地 daemon 加一个 Agent（Claude Code、Codex、Cursor、Gemini CLI 或 17 个受支持适配器之一）。托管沙盒在路线图上但不是优先级：落在你仓库里的 artifact，胜过存在别人数据库里的文档。',
     },
     {
-      q: 'Open Design 要多少钱？',
-      a: '产品本身免费且为 Apache-2.0 开源——不存在 Open Design 订阅。你只需支付所用供应商（Anthropic、OpenAI、Google、Mistral、xAI、Moonshot 等）的 API 费用，直接计入你自己的账户。BYOK 让密钥和开销都留在你这一侧。',
+      q: 'Marketing AX 要多少钱？',
+      a: '产品本身免费且为 Apache-2.0 开源——不存在 Marketing AX 订阅。你只需支付所用供应商（Anthropic、OpenAI、Google、Mistral、xAI、Moonshot 等）的 API 费用，直接计入你自己的账户。BYOK 让密钥和开销都留在你这一侧。',
     },
     {
-      q: '可以把 Open Design 自托管到 Vercel、Cloudflare 或自己的服务器吗？',
+      q: '可以把 Marketing AX 自托管到 Vercel、Cloudflare 或自己的服务器吗？',
       a: '可以。daemon 在任何能跑 Node 24 的地方运行，落地页是静态 Astro 构建，可直接部署到 Cloudflare Pages、Vercel 或 Netlify。团队共享部署通常把 daemon 固定在内网一台机器上，让每个开发者的 CLI 指向它。',
     },
     {
-      q: '怎么把我的品牌迁入 Open Design？',
+      q: '怎么把我的品牌迁入 Marketing AX？',
       a: '把截图或 Figma 导出拖进 Web UI，让 Agent 把品牌提取成一个 DESIGN.md 文件。把它保存到仓库的 design-systems/<your-brand>/ 下，之后所有 Skill 都会按这个品牌渲染，无需重复提示。/alternatives/claude-design/ 以分步形式描述了同一流程。',
     },
     {
@@ -2474,26 +2474,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: '不需要。Skill 和 DESIGN.md 系统与 Agent 无关——同一个 SKILL.md 文件可以在 Claude Code、Codex、Cursor、Gemini CLI、GitHub Copilot、Grok、Hermes、Qwen 或其他受支持的适配器上渲染。换 Agent 只是 daemon 里的一项配置变更，不是重新设计。',
     },
     {
-      q: 'Open Design 的路线图有什么？',
+      q: 'Marketing AX 的路线图有什么？',
       a: '实时路线图在 GitHub 仓库的 docs/roadmap.md，每周发布说明通过 GitHub Releases 发出。下个季度的主要方向：更多 Agent 适配器、更丰富的模板族（3D、视频、音频），以及面向设计团队的可选共享 daemon 模式。',
     },
   ],
   'zh-tw': [
     {
-      q: 'Open Design 是什麼？',
-      a: 'Open Design 是 nexu-io/open-design 專案的官方開源 AI 設計工作台。它把本地 coding agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）變成設計引擎，並由可組合 Skill 與可攜式 DESIGN.md 系統驅動。',
+      q: 'Marketing AX 是什麼？',
+      a: 'Marketing AX 是 nexu-io/open-design 專案的官方開源 AI 設計工作台。它把本地 coding agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）變成設計引擎，並由可組合 Skill 與可攜式 DESIGN.md 系統驅動。',
     },
     {
-      q: 'Open Design 是官方專案嗎？',
-      a: '是。官方站點是 {origin}，原始碼在 GitHub：{repo}。"Open Design"、"OpenDesign"、"open-design" 與 "Open Design AI" 都指同一個專案。',
+      q: 'Marketing AX 是官方專案嗎？',
+      a: '是。官方站點是 {origin}，原始碼在 GitHub：{repo}。"Marketing AX"、"OpenDesign"、"open-design" 與 "Open Design AI" 都指同一個專案。',
       official: true,
     },
     {
       q: '它和 Claude Design 有什麼不同？',
-      a: 'Claude Design 是綁定單一供應商的雲端產品。Open Design 本地優先、Apache-2.0 開源，並且 BYOK：你使用自己的 agent、密鑰與 DESIGN.md 設計系統。',
+      a: 'Claude Design 是綁定單一供應商的雲端產品。Marketing AX 本地優先、Apache-2.0 開源，並且 BYOK：你使用自己的 agent、密鑰與 DESIGN.md 設計系統。',
     },
     {
-      q: 'Open Design 可以本地執行嗎？',
+      q: 'Marketing AX 可以本地執行嗎？',
       a: '可以。桌面端、daemon 與 Skill runtime 都在你的機器上執行，生成的 artifact 會落在你的專案目錄。',
     },
     {
@@ -2506,22 +2506,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: '我的資料會傳給 Anthropic、OpenAI 或 Google 嗎？',
-      a: '只有你的 prompt 與 Skill 上下文會送到你自帶密鑰（BYOK）的那家模型供應商。Open Design 沒有自己的伺服器——daemon 直接與你的供應商通訊，生成的 artifact 以檔案形式落在你的專案目錄，不會進入任何廠商雲端。',
+      a: '只有你的 prompt 與 Skill 上下文會送到你自帶密鑰（BYOK）的那家模型供應商。Marketing AX 沒有自己的伺服器——daemon 直接與你的供應商通訊，生成的 artifact 以檔案形式落在你的專案目錄，不會進入任何廠商雲端。',
     },
     {
-      q: '不安裝 CLI 或桌面端能用 Open Design 嗎？',
-      a: '目前不行。Open Design 的設計就是本地優先——最少需要一個本地 daemon 加一個 agent（Claude Code、Codex、Cursor、Gemini CLI 或 17 個受支援 adapter 之一）。託管沙盒在路線圖上但不是優先事項：落在你 repo 裡的 artifact，勝過存在別人資料庫裡的文件。',
+      q: '不安裝 CLI 或桌面端能用 Marketing AX 嗎？',
+      a: '目前不行。Marketing AX 的設計就是本地優先——最少需要一個本地 daemon 加一個 agent（Claude Code、Codex、Cursor、Gemini CLI 或 17 個受支援 adapter 之一）。託管沙盒在路線圖上但不是優先事項：落在你 repo 裡的 artifact，勝過存在別人資料庫裡的文件。',
     },
     {
-      q: 'Open Design 要多少錢？',
-      a: '產品本身免費且採 Apache-2.0——不存在 Open Design 訂閱。你只需支付所用供應商（Anthropic、OpenAI、Google、Mistral、xAI、Moonshot 等）的 API 費用，直接計入你自己的帳戶。BYOK 讓密鑰與開銷都留在你這一側。',
+      q: 'Marketing AX 要多少錢？',
+      a: '產品本身免費且採 Apache-2.0——不存在 Marketing AX 訂閱。你只需支付所用供應商（Anthropic、OpenAI、Google、Mistral、xAI、Moonshot 等）的 API 費用，直接計入你自己的帳戶。BYOK 讓密鑰與開銷都留在你這一側。',
     },
     {
-      q: '可以把 Open Design 自架到 Vercel、Cloudflare 或自己的伺服器嗎？',
+      q: '可以把 Marketing AX 自架到 Vercel、Cloudflare 或自己的伺服器嗎？',
       a: '可以。daemon 在任何能跑 Node 24 的地方執行，落地頁是靜態 Astro 建置，可直接部署到 Cloudflare Pages、Vercel 或 Netlify。團隊共享部署通常把 daemon 固定在內網一台機器上，讓每個開發者的 CLI 指向它。',
     },
     {
-      q: '怎麼把我的品牌遷入 Open Design？',
+      q: '怎麼把我的品牌遷入 Marketing AX？',
       a: '把截圖或 Figma 匯出拖進 Web UI，讓 agent 把品牌萃取成一個 DESIGN.md 檔案。將它存到 repo 的 design-systems/<your-brand>/ 下，之後所有 Skill 都會以這個品牌渲染，無需重複提示。/alternatives/claude-design/ 以分步形式描述了同一流程。',
     },
     {
@@ -2529,23 +2529,23 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: '不需要。Skill 與 DESIGN.md 系統與 agent 無關——同一個 SKILL.md 檔案可以在 Claude Code、Codex、Cursor、Gemini CLI、GitHub Copilot、Grok、Hermes、Qwen 或其他受支援的 adapter 上渲染。換 agent 只是 daemon 裡的一項設定變更，不是重新設計。',
     },
     {
-      q: 'Open Design 的路線圖有什麼？',
+      q: 'Marketing AX 的路線圖有什麼？',
       a: '即時路線圖在 GitHub repo 的 docs/roadmap.md，每週發佈說明透過 GitHub Releases 發出。下一季的主要方向：更多 agent adapter、更豐富的範本家族（3D、影片、音訊），以及面向設計團隊的可選共享 daemon 模式。',
     },
   ],
   ja: [
     {
-      q: 'Open Design とは何ですか？',
-      a: 'Open Design は nexu-io/open-design プロジェクト公式のオープンソース AI デザインワークスペースです。Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen などのローカル coding agent を、スキルと DESIGN.md システムで動くデザインエンジンにします。',
+      q: 'Marketing AX とは何ですか？',
+      a: 'Marketing AX は nexu-io/open-design プロジェクト公式のオープンソース AI デザインワークスペースです。Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen などのローカル coding agent を、スキルと DESIGN.md システムで動くデザインエンジンにします。',
     },
     {
-      q: 'Open Design は公式ですか？',
-      a: 'はい。公式サイトは {origin}、ソースコードは GitHub の {repo} です。"Open Design"、"OpenDesign"、"open-design"、"Open Design AI" は同じプロジェクトを指します。',
+      q: 'Marketing AX は公式ですか？',
+      a: 'はい。公式サイトは {origin}、ソースコードは GitHub の {repo} です。"Marketing AX"、"OpenDesign"、"open-design"、"Open Design AI" は同じプロジェクトを指します。',
       official: true,
     },
     {
       q: 'Claude Design と何が違いますか？',
-      a: 'Claude Design は単一ベンダーに紐づくホスト型製品です。Open Design はローカル優先、Apache-2.0 のオープンソース、BYOK で、自分の agent、鍵、DESIGN.md を使います。',
+      a: 'Claude Design は単一ベンダーに紐づくホスト型製品です。Marketing AX はローカル優先、Apache-2.0 のオープンソース、BYOK で、自分の agent、鍵、DESIGN.md を使います。',
     },
     {
       q: 'ローカルで動きますか？',
@@ -2561,22 +2561,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'データは Anthropic、OpenAI、Google に送られますか？',
-      a: '送られるのは、あなたが鍵を持ち込んだ（BYOK）プロバイダーへの prompt とスキルのコンテキストだけです。Open Design 自身のサーバーはなく、daemon があなたのプロバイダーと直接通信します。生成物はベンダーのクラウドではなく、プロジェクトディレクトリにファイルとして保存されます。',
+      a: '送られるのは、あなたが鍵を持ち込んだ（BYOK）プロバイダーへの prompt とスキルのコンテキストだけです。Marketing AX 自身のサーバーはなく、daemon があなたのプロバイダーと直接通信します。生成物はベンダーのクラウドではなく、プロジェクトディレクトリにファイルとして保存されます。',
     },
     {
       q: 'CLI やデスクトップアプリなしで使えますか？',
-      a: '現時点では使えません。Open Design は設計からローカル優先で、最低限ローカル daemon と agent（Claude Code、Codex、Cursor、Gemini CLI、または対応する 17 の adapter のいずれか）が必要です。ホスト型サンドボックスはロードマップにありますが優先事項ではありません。自分の repo にある artifact は、他人のデータベースにあるドキュメントに勝ります。',
+      a: '現時点では使えません。Marketing AX は設計からローカル優先で、最低限ローカル daemon と agent（Claude Code、Codex、Cursor、Gemini CLI、または対応する 17 の adapter のいずれか）が必要です。ホスト型サンドボックスはロードマップにありますが優先事項ではありません。自分の repo にある artifact は、他人のデータベースにあるドキュメントに勝ります。',
     },
     {
-      q: 'Open Design の料金は？',
-      a: 'プロダクト自体は無料で Apache-2.0 です。Open Design のサブスクリプションはありません。支払うのは利用するプロバイダー（Anthropic、OpenAI、Google、Mistral、xAI、Moonshot など）の API 料金だけで、あなたのアカウントに直接請求されます。BYOK により、鍵も支出もあなたの側に残ります。',
+      q: 'Marketing AX の料金は？',
+      a: 'プロダクト自体は無料で Apache-2.0 です。Marketing AX のサブスクリプションはありません。支払うのは利用するプロバイダー（Anthropic、OpenAI、Google、Mistral、xAI、Moonshot など）の API 料金だけで、あなたのアカウントに直接請求されます。BYOK により、鍵も支出もあなたの側に残ります。',
     },
     {
       q: 'Vercel、Cloudflare、自前サーバーでセルフホストできますか？',
       a: 'できます。daemon は Node 24 が動く場所ならどこでも動き、ランディングページは静的な Astro ビルドなので Cloudflare Pages、Vercel、Netlify にそのままデプロイできます。共有運用するチームは通常、ネットワーク内のマシンに daemon を固定し、各開発者の CLI をそこに向けます。',
     },
     {
-      q: '自分のブランドを Open Design に持ち込むには？',
+      q: '自分のブランドを Marketing AX に持ち込むには？',
       a: 'スクリーンショットか Figma エクスポートを Web UI に投げ込み、agent にブランドを DESIGN.md ファイルへ抽出させます。そのファイルを repo の design-systems/<your-brand>/ に保存すれば、以後すべてのスキルが再プロンプトなしでそのブランドでレンダリングします。/alternatives/claude-design/ に同じ流れがステップ形式で書かれています。',
     },
     {
@@ -2584,23 +2584,23 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'できます。スキルと DESIGN.md システムは agent 非依存で、同じ SKILL.md が Claude Code、Codex、Cursor、Gemini CLI、GitHub Copilot、Grok、Hermes、Qwen など対応 adapter のどれでもレンダリングされます。agent の切り替えは daemon の設定変更であり、デザインのやり直しではありません。',
     },
     {
-      q: 'Open Design のロードマップは？',
+      q: 'Marketing AX のロードマップは？',
       a: '最新のロードマップは GitHub repo の docs/roadmap.md にあり、週次のリリースノートは GitHub Releases で公開されます。次の四半期の主なテーマは、agent adapter の追加、テンプレートファミリーの拡充（3D・動画・音声）、デザインチーム向けのオプションの共有 daemon モードです。',
     },
   ],
   ko: [
     {
-      q: 'Open Design은 무엇인가요?',
-      a: 'Open Design은 nexu-io/open-design 프로젝트의 공식 오픈소스 AI 디자인 워크스페이스입니다. Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Qwen 같은 로컬 coding agent를 조합형 skill과 DESIGN.md 시스템으로 구동되는 디자인 엔진으로 바꿉니다.',
+      q: 'Marketing AX은 무엇인가요?',
+      a: 'Marketing AX은 nexu-io/open-design 프로젝트의 공식 오픈소스 AI 디자인 워크스페이스입니다. Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Qwen 같은 로컬 coding agent를 조합형 skill과 DESIGN.md 시스템으로 구동되는 디자인 엔진으로 바꿉니다.',
     },
     {
-      q: 'Open Design은 공식 프로젝트인가요?',
-      a: '네. 공식 사이트는 {origin}이고 소스는 GitHub의 {repo}에 있습니다. "Open Design", "OpenDesign", "open-design", "Open Design AI"는 같은 프로젝트를 가리킵니다.',
+      q: 'Marketing AX은 공식 프로젝트인가요?',
+      a: '네. 공식 사이트는 {origin}이고 소스는 GitHub의 {repo}에 있습니다. "Marketing AX", "OpenDesign", "open-design", "Open Design AI"는 같은 프로젝트를 가리킵니다.',
       official: true,
     },
     {
       q: 'Claude Design과 무엇이 다른가요?',
-      a: 'Claude Design은 단일 벤더에 묶인 호스팅 제품입니다. Open Design은 로컬 우선, Apache-2.0 오픈소스, BYOK이며 사용자의 agent, 키, DESIGN.md 시스템을 그대로 씁니다.',
+      a: 'Claude Design은 단일 벤더에 묶인 호스팅 제품입니다. Marketing AX은 로컬 우선, Apache-2.0 오픈소스, BYOK이며 사용자의 agent, 키, DESIGN.md 시스템을 그대로 씁니다.',
     },
     {
       q: '로컬에서 실행되나요?',
@@ -2616,22 +2616,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: '내 데이터가 Anthropic, OpenAI, Google로 전송되나요?',
-      a: '키를 직접 가져온(BYOK) 프로바이더에게 prompt와 skill 컨텍스트만 전송됩니다. Open Design은 자체 서버가 없으며 daemon이 프로바이더와 직접 통신합니다. 생성된 artifact는 벤더 클라우드가 아니라 프로젝트 디렉터리에 파일로 저장됩니다.',
+      a: '키를 직접 가져온(BYOK) 프로바이더에게 prompt와 skill 컨텍스트만 전송됩니다. Marketing AX은 자체 서버가 없으며 daemon이 프로바이더와 직접 통신합니다. 생성된 artifact는 벤더 클라우드가 아니라 프로젝트 디렉터리에 파일로 저장됩니다.',
     },
     {
       q: 'CLI나 데스크톱 앱 없이 쓸 수 있나요?',
-      a: '아직은 안 됩니다. Open Design은 설계부터 로컬 우선이라 최소한 로컬 daemon과 agent(Claude Code, Codex, Cursor, Gemini CLI 또는 지원되는 17개 adapter 중 하나)가 필요합니다. 호스팅 샌드박스는 로드맵에 있지만 우선순위는 아닙니다. 내 repo에 남는 artifact가 남의 데이터베이스에 있는 문서보다 낫기 때문입니다.',
+      a: '아직은 안 됩니다. Marketing AX은 설계부터 로컬 우선이라 최소한 로컬 daemon과 agent(Claude Code, Codex, Cursor, Gemini CLI 또는 지원되는 17개 adapter 중 하나)가 필요합니다. 호스팅 샌드박스는 로드맵에 있지만 우선순위는 아닙니다. 내 repo에 남는 artifact가 남의 데이터베이스에 있는 문서보다 낫기 때문입니다.',
     },
     {
-      q: 'Open Design 비용은 얼마인가요?',
-      a: '제품은 무료이고 Apache-2.0입니다. Open Design 구독은 없습니다. 사용하는 프로바이더(Anthropic, OpenAI, Google, Mistral, xAI, Moonshot 등)의 API 비용만 본인 계정으로 직접 결제하면 됩니다. BYOK 덕분에 키와 지출 모두 사용자 쪽에 남습니다.',
+      q: 'Marketing AX 비용은 얼마인가요?',
+      a: '제품은 무료이고 Apache-2.0입니다. Marketing AX 구독은 없습니다. 사용하는 프로바이더(Anthropic, OpenAI, Google, Mistral, xAI, Moonshot 등)의 API 비용만 본인 계정으로 직접 결제하면 됩니다. BYOK 덕분에 키와 지출 모두 사용자 쪽에 남습니다.',
     },
     {
       q: 'Vercel, Cloudflare, 자체 서버에 셀프호스팅할 수 있나요?',
       a: '가능합니다. daemon은 Node 24가 도는 곳이면 어디서든 실행되고, 랜딩 페이지는 정적 Astro 빌드라 Cloudflare Pages, Vercel, Netlify에 그대로 배포됩니다. 공유 배포를 운영하는 팀은 보통 네트워크 안의 머신에 daemon을 고정하고 각 개발자의 CLI를 그쪽으로 연결합니다.',
     },
     {
-      q: '내 브랜드를 Open Design으로 옮기려면?',
+      q: '내 브랜드를 Marketing AX으로 옮기려면?',
       a: '스크린샷이나 Figma 내보내기를 웹 UI에 넣고 agent에게 브랜드를 DESIGN.md 파일로 추출하라고 하면 됩니다. 그 파일을 repo의 design-systems/<your-brand>/ 아래에 저장하면 이후 모든 skill이 다시 프롬프트하지 않아도 그 브랜드로 렌더링됩니다. /alternatives/claude-design/ 에 같은 흐름이 단계별로 정리돼 있습니다.',
     },
     {
@@ -2639,26 +2639,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: '네. skill과 DESIGN.md 시스템은 agent에 독립적이어서 같은 SKILL.md 파일이 Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen 등 지원되는 어떤 adapter에서도 렌더링됩니다. agent 교체는 daemon의 설정 변경일 뿐 재설계가 아닙니다.',
     },
     {
-      q: 'Open Design 로드맵에는 무엇이 있나요?',
+      q: 'Marketing AX 로드맵에는 무엇이 있나요?',
       a: '실시간 로드맵은 GitHub repo의 docs/roadmap.md에 있고, 주간 릴리스 노트는 GitHub Releases로 나갑니다. 다음 분기의 주요 주제는 더 많은 agent adapter, 더 풍부한 템플릿 패밀리(3D, 비디오, 오디오), 디자인 팀을 위한 선택형 공유 daemon 모드입니다.',
     },
   ],
   de: [
     {
-      q: 'Was ist Open Design?',
-      a: 'Open Design ist der offizielle Open-Source-AI-Design-Workspace des Projekts nexu-io/open-design. Es macht lokale Coding-Agents wie Claude Code, Codex, Cursor, Gemini CLI, OpenCode oder Qwen zu einer Design-Engine auf Basis von Skills und DESIGN.md-Systemen.',
+      q: 'Was ist Marketing AX?',
+      a: 'Marketing AX ist der offizielle Open-Source-AI-Design-Workspace des Projekts nexu-io/open-design. Es macht lokale Coding-Agents wie Claude Code, Codex, Cursor, Gemini CLI, OpenCode oder Qwen zu einer Design-Engine auf Basis von Skills und DESIGN.md-Systemen.',
     },
     {
-      q: 'Ist Open Design offiziell?',
-      a: 'Ja. Die kanonische Website ist {origin}, der Quellcode liegt auf GitHub unter {repo}. "Open Design", "OpenDesign", "open-design" und "Open Design AI" meinen dasselbe Projekt.',
+      q: 'Ist Marketing AX offiziell?',
+      a: 'Ja. Die kanonische Website ist {origin}, der Quellcode liegt auf GitHub unter {repo}. "Marketing AX", "OpenDesign", "open-design" und "Open Design AI" meinen dasselbe Projekt.',
       official: true,
     },
     {
       q: 'Worin unterscheidet es sich von Claude Design?',
-      a: 'Claude Design ist ein gehostetes Produkt eines einzelnen Anbieters. Open Design ist local-first, Apache-2.0 Open Source und BYOK: Sie bringen Agent, Schlüssel und DESIGN.md-System selbst mit.',
+      a: 'Claude Design ist ein gehostetes Produkt eines einzelnen Anbieters. Marketing AX ist local-first, Apache-2.0 Open Source und BYOK: Sie bringen Agent, Schlüssel und DESIGN.md-System selbst mit.',
     },
     {
-      q: 'Läuft Open Design lokal?',
+      q: 'Läuft Marketing AX lokal?',
       a: 'Ja. Desktop-App, Daemon und Skill-Runtime laufen auf Ihrem Rechner. Generierte Artifacts landen in Ihrem Projektverzeichnis.',
     },
     {
@@ -2671,22 +2671,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Werden meine Daten an Anthropic, OpenAI oder Google gesendet?',
-      a: 'Nur Ihr Prompt und der Skill-Kontext gehen an den Provider, für den Sie eigene Schlüssel mitbringen (BYOK). Open Design hat keinen eigenen Server — der Daemon spricht direkt mit Ihrem Provider. Generierte Artifacts landen als Dateien in Ihrem Projektverzeichnis, nicht in einer Vendor-Cloud.',
+      a: 'Nur Ihr Prompt und der Skill-Kontext gehen an den Provider, für den Sie eigene Schlüssel mitbringen (BYOK). Marketing AX hat keinen eigenen Server — der Daemon spricht direkt mit Ihrem Provider. Generierte Artifacts landen als Dateien in Ihrem Projektverzeichnis, nicht in einer Vendor-Cloud.',
     },
     {
-      q: 'Kann ich Open Design ohne CLI oder Desktop-App nutzen?',
-      a: 'Heute nicht. Open Design ist bewusst local-first — das Minimum ist ein lokaler Daemon plus ein Agent (Claude Code, Codex, Cursor, Gemini CLI oder einer der 17 unterstützten Adapter). Eine gehostete Sandbox steht auf der Roadmap, hat aber keine Priorität: Artifacts in Ihrem Repo schlagen Dokumente in fremden Datenbanken.',
+      q: 'Kann ich Marketing AX ohne CLI oder Desktop-App nutzen?',
+      a: 'Heute nicht. Marketing AX ist bewusst local-first — das Minimum ist ein lokaler Daemon plus ein Agent (Claude Code, Codex, Cursor, Gemini CLI oder einer der 17 unterstützten Adapter). Eine gehostete Sandbox steht auf der Roadmap, hat aber keine Priorität: Artifacts in Ihrem Repo schlagen Dokumente in fremden Datenbanken.',
     },
     {
-      q: 'Was kostet Open Design?',
+      q: 'Was kostet Marketing AX?',
       a: 'Das Produkt ist kostenlos und Apache-2.0 — es gibt kein Open-Design-Abo. Sie zahlen nur die API-Kosten Ihres Providers (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot usw.), direkt über Ihr eigenes Konto. BYOK hält Schlüssel und Ausgaben auf Ihrer Seite.',
     },
     {
-      q: 'Kann ich Open Design auf Vercel, Cloudflare oder eigenen Servern hosten?',
+      q: 'Kann ich Marketing AX auf Vercel, Cloudflare oder eigenen Servern hosten?',
       a: 'Ja. Der Daemon läuft überall, wo Node 24 läuft, und die Landingpage ist ein statischer Astro-Build, der unverändert auf Cloudflare Pages, Vercel oder Netlify deployt. Teams mit geteilten Deployments pinnen den Daemon meist auf eine Maschine im eigenen Netz und richten jede Entwickler-CLI darauf aus.',
     },
     {
-      q: 'Wie bringe ich meine Marke in Open Design?',
+      q: 'Wie bringe ich meine Marke in Marketing AX?',
       a: 'Werfen Sie einen Screenshot oder Figma-Export in die Web-UI und lassen Sie den Agent die Marke in eine DESIGN.md-Datei extrahieren. Speichern Sie die Datei unter design-systems/<your-brand>/ im Repo; danach rendert jede Skill in dieser Marke, ohne erneutes Prompten. /alternatives/claude-design/ beschreibt denselben Ablauf Schritt für Schritt.',
     },
     {
@@ -2700,20 +2700,20 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   fr: [
     {
-      q: "Qu'est-ce qu'Open Design ?",
-      a: "Open Design est l'espace de travail officiel et open source du projet nexu-io/open-design. Il transforme un agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — en moteur de design piloté par des skills composables et des systèmes DESIGN.md portables.",
+      q: "Qu'est-ce qu'Marketing AX ?",
+      a: "Marketing AX est l'espace de travail officiel et open source du projet nexu-io/open-design. Il transforme un agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — en moteur de design piloté par des skills composables et des systèmes DESIGN.md portables.",
     },
     {
-      q: 'Open Design est-il officiel ?',
-      a: 'Oui. Le site canonique est {origin} et le code source est sur GitHub à {repo}. "Open Design", "OpenDesign", "open-design" et "Open Design AI" désignent le même projet.',
+      q: 'Marketing AX est-il officiel ?',
+      a: 'Oui. Le site canonique est {origin} et le code source est sur GitHub à {repo}. "Marketing AX", "OpenDesign", "open-design" et "Open Design AI" désignent le même projet.',
       official: true,
     },
     {
       q: 'Quelle différence avec Claude Design ?',
-      a: 'Claude Design est un produit hébergé lié à un fournisseur unique. Open Design est local-first, open source Apache-2.0 et BYOK : vous apportez votre agent, vos clés et votre système DESIGN.md.',
+      a: 'Claude Design est un produit hébergé lié à un fournisseur unique. Marketing AX est local-first, open source Apache-2.0 et BYOK : vous apportez votre agent, vos clés et votre système DESIGN.md.',
     },
     {
-      q: 'Open Design fonctionne-t-il en local ?',
+      q: 'Marketing AX fonctionne-t-il en local ?',
       a: 'Oui. L’app desktop, le daemon et le runtime de skills tournent sur votre machine, et les artifacts générés restent dans votre répertoire de projet.',
     },
     {
@@ -2726,22 +2726,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Mes données sont-elles envoyées à Anthropic, OpenAI ou Google ?',
-      a: 'Seuls votre prompt et le contexte des skills partent vers le fournisseur dont vous apportez les clés (BYOK). Open Design n\'a aucun serveur propre — le daemon parle directement à votre fournisseur. Les artifacts générés sont des fichiers dans votre répertoire de projet, pas dans le cloud d\'un vendeur.',
+      a: 'Seuls votre prompt et le contexte des skills partent vers le fournisseur dont vous apportez les clés (BYOK). Marketing AX n\'a aucun serveur propre — le daemon parle directement à votre fournisseur. Les artifacts générés sont des fichiers dans votre répertoire de projet, pas dans le cloud d\'un vendeur.',
     },
     {
-      q: 'Puis-je utiliser Open Design sans installer la CLI ou l\'app desktop ?',
-      a: 'Pas aujourd\'hui. Open Design est local-first par conception — le minimum est un daemon local plus un agent (Claude Code, Codex, Cursor, Gemini CLI ou l\'un des 17 adaptateurs supportés). Une sandbox hébergée est sur la roadmap mais n\'est pas la priorité : des artifacts dans votre repo valent mieux que des documents dans la base de données de quelqu\'un d\'autre.',
+      q: 'Puis-je utiliser Marketing AX sans installer la CLI ou l\'app desktop ?',
+      a: 'Pas aujourd\'hui. Marketing AX est local-first par conception — le minimum est un daemon local plus un agent (Claude Code, Codex, Cursor, Gemini CLI ou l\'un des 17 adaptateurs supportés). Une sandbox hébergée est sur la roadmap mais n\'est pas la priorité : des artifacts dans votre repo valent mieux que des documents dans la base de données de quelqu\'un d\'autre.',
     },
     {
-      q: 'Combien coûte Open Design ?',
-      a: 'Le produit est gratuit et sous Apache-2.0 — il n\'existe pas d\'abonnement Open Design. Vous payez les coûts d\'API du fournisseur que vous utilisez (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, etc.), facturés directement sur votre compte. Le BYOK garde les clés et la dépense de votre côté.',
+      q: 'Combien coûte Marketing AX ?',
+      a: 'Le produit est gratuit et sous Apache-2.0 — il n\'existe pas d\'abonnement Marketing AX. Vous payez les coûts d\'API du fournisseur que vous utilisez (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, etc.), facturés directement sur votre compte. Le BYOK garde les clés et la dépense de votre côté.',
     },
     {
-      q: 'Puis-je auto-héberger Open Design sur Vercel, Cloudflare ou mon propre serveur ?',
+      q: 'Puis-je auto-héberger Marketing AX sur Vercel, Cloudflare ou mon propre serveur ?',
       a: 'Oui. Le daemon tourne partout où Node 24 tourne, et la landing page est un build Astro statique qui se déploie tel quel sur Cloudflare Pages, Vercel ou Netlify. Les équipes en déploiement partagé épinglent en général le daemon sur une machine de leur réseau et y pointent la CLI de chaque développeur.',
     },
     {
-      q: 'Comment importer ma marque dans Open Design ?',
+      q: 'Comment importer ma marque dans Marketing AX ?',
       a: 'Déposez une capture d\'écran ou un export Figma dans l\'interface web et demandez à votre agent d\'extraire la marque dans un fichier DESIGN.md. Enregistrez-le sous design-systems/<your-brand>/ dans votre repo ; chaque skill rend ensuite dans cette marque sans re-prompter. /alternatives/claude-design/ décrit le même flux étape par étape.',
     },
     {
@@ -2749,26 +2749,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Oui. Les skills et les systèmes DESIGN.md sont agnostiques à l\'agent — le même fichier SKILL.md rend avec Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen ou tout autre adaptateur supporté. Changer d\'agent est un changement de configuration dans le daemon, pas un redesign.',
     },
     {
-      q: 'Qu\'y a-t-il sur la roadmap d\'Open Design ?',
+      q: 'Qu\'y a-t-il sur la roadmap d\'Marketing AX ?',
       a: 'La roadmap vivante est dans docs/roadmap.md du repo GitHub, et des notes de version hebdomadaires sortent via GitHub Releases. Les grands thèmes du prochain trimestre : plus d\'adaptateurs d\'agents, des familles de templates plus riches (3D, vidéo, audio) et un mode shared-daemon optionnel pour les équipes design.',
     },
   ],
   ru: [
     {
-      q: 'Что такое Open Design?',
-      a: 'Open Design — официальный open-source AI design workspace проекта nexu-io/open-design. Он превращает локальный coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode или Qwen — в design-движок на базе composable skills и переносимых DESIGN.md-систем.',
+      q: 'Что такое Marketing AX?',
+      a: 'Marketing AX — официальный open-source AI design workspace проекта nexu-io/open-design. Он превращает локальный coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode или Qwen — в design-движок на базе composable skills и переносимых DESIGN.md-систем.',
     },
     {
-      q: 'Open Design официальный?',
-      a: 'Да. Канонический сайт — {origin}, исходный код — на GitHub: {repo}. "Open Design", "OpenDesign", "open-design" и "Open Design AI" обозначают один проект.',
+      q: 'Marketing AX официальный?',
+      a: 'Да. Канонический сайт — {origin}, исходный код — на GitHub: {repo}. "Marketing AX", "OpenDesign", "open-design" и "Open Design AI" обозначают один проект.',
       official: true,
     },
     {
       q: 'Чем он отличается от Claude Design?',
-      a: 'Claude Design — hosted-продукт одного вендора. Open Design — local-first, Apache-2.0 open source и BYOK: вы используете своего agent, свои ключи и свою DESIGN.md-систему.',
+      a: 'Claude Design — hosted-продукт одного вендора. Marketing AX — local-first, Apache-2.0 open source и BYOK: вы используете своего agent, свои ключи и свою DESIGN.md-систему.',
     },
     {
-      q: 'Open Design запускается локально?',
+      q: 'Marketing AX запускается локально?',
       a: 'Да. Desktop app, daemon и skill runtime работают на вашей машине, а generated artifacts сохраняются в папку проекта.',
     },
     {
@@ -2781,22 +2781,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Мои данные отправляются в Anthropic, OpenAI или Google?',
-      a: 'Провайдеру, чьи ключи вы принесли (BYOK), уходят только ваш prompt и контекст skills. У Open Design нет собственного сервера — daemon общается с вашим провайдером напрямую. Generated artifacts сохраняются файлами в папке проекта, а не в облаке вендора.',
+      a: 'Провайдеру, чьи ключи вы принесли (BYOK), уходят только ваш prompt и контекст skills. У Marketing AX нет собственного сервера — daemon общается с вашим провайдером напрямую. Generated artifacts сохраняются файлами в папке проекта, а не в облаке вендора.',
     },
     {
-      q: 'Можно использовать Open Design без установки CLI или desktop-приложения?',
-      a: 'Пока нет. Open Design по замыслу local-first — минимум это локальный daemon плюс agent (Claude Code, Codex, Cursor, Gemini CLI или один из 17 поддерживаемых adapters). Hosted-песочница есть в роадмапе, но не в приоритете: artifacts в вашем репозитории лучше документов в чужой базе данных.',
+      q: 'Можно использовать Marketing AX без установки CLI или desktop-приложения?',
+      a: 'Пока нет. Marketing AX по замыслу local-first — минимум это локальный daemon плюс agent (Claude Code, Codex, Cursor, Gemini CLI или один из 17 поддерживаемых adapters). Hosted-песочница есть в роадмапе, но не в приоритете: artifacts в вашем репозитории лучше документов в чужой базе данных.',
     },
     {
-      q: 'Сколько стоит Open Design?',
-      a: 'Продукт бесплатный и под Apache-2.0 — подписки Open Design не существует. Вы платите только за API того провайдера, которым пользуетесь (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot и др.), напрямую со своего аккаунта. BYOK оставляет и ключи, и расходы на вашей стороне.',
+      q: 'Сколько стоит Marketing AX?',
+      a: 'Продукт бесплатный и под Apache-2.0 — подписки Marketing AX не существует. Вы платите только за API того провайдера, которым пользуетесь (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot и др.), напрямую со своего аккаунта. BYOK оставляет и ключи, и расходы на вашей стороне.',
     },
     {
-      q: 'Можно self-host Open Design на Vercel, Cloudflare или своём сервере?',
+      q: 'Можно self-host Marketing AX на Vercel, Cloudflare или своём сервере?',
       a: 'Да. Daemon работает везде, где работает Node 24, а лендинг — статическая сборка Astro, которая деплоится на Cloudflare Pages, Vercel или Netlify как есть. Команды с общим деплоем обычно закрепляют daemon на машине внутри своей сети и направляют CLI каждого разработчика на неё.',
     },
     {
-      q: 'Как перенести свой бренд в Open Design?',
+      q: 'Как перенести свой бренд в Marketing AX?',
       a: 'Бросьте скриншот или экспорт из Figma в веб-интерфейс и попросите agent извлечь бренд в файл DESIGN.md. Сохраните его в design-systems/<your-brand>/ в репозитории — после этого каждая skill рендерит в этом бренде без повторных промптов. /alternatives/claude-design/ описывает тот же процесс по шагам.',
     },
     {
@@ -2804,26 +2804,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Да. Skills и DESIGN.md-системы не зависят от агента — один и тот же SKILL.md рендерится с Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen и любым другим поддерживаемым adapter. Смена агента — это изменение конфигурации daemon, а не redesign.',
     },
     {
-      q: 'Что в роадмапе Open Design?',
+      q: 'Что в роадмапе Marketing AX?',
       a: 'Живой роадмап — в docs/roadmap.md в GitHub-репозитории, еженедельные release notes выходят через GitHub Releases. Главные темы следующего квартала: больше agent adapters, более богатые семейства шаблонов (3D, видео, аудио) и опциональный режим общего daemon для дизайн-команд.',
     },
   ],
   es: [
     {
-      q: '¿Qué es Open Design?',
-      a: 'Open Design es el workspace oficial y open source de IA de diseño del proyecto nexu-io/open-design. Convierte un coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — en un motor de diseño con skills componibles y sistemas DESIGN.md portables.',
+      q: '¿Qué es Marketing AX?',
+      a: 'Marketing AX es el workspace oficial y open source de IA de diseño del proyecto nexu-io/open-design. Convierte un coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — en un motor de diseño con skills componibles y sistemas DESIGN.md portables.',
     },
     {
-      q: '¿Open Design es oficial?',
-      a: 'Sí. El sitio canónico es {origin} y el código fuente está en GitHub en {repo}. "Open Design", "OpenDesign", "open-design" y "Open Design AI" apuntan al mismo proyecto.',
+      q: '¿Marketing AX es oficial?',
+      a: 'Sí. El sitio canónico es {origin} y el código fuente está en GitHub en {repo}. "Marketing AX", "OpenDesign", "open-design" y "Open Design AI" apuntan al mismo proyecto.',
       official: true,
     },
     {
       q: '¿En qué se diferencia de Claude Design?',
-      a: 'Claude Design es un producto alojado ligado a un solo proveedor. Open Design es local-first, open source Apache-2.0 y BYOK: usas tu propio agent, claves y sistema DESIGN.md.',
+      a: 'Claude Design es un producto alojado ligado a un solo proveedor. Marketing AX es local-first, open source Apache-2.0 y BYOK: usas tu propio agent, claves y sistema DESIGN.md.',
     },
     {
-      q: '¿Open Design corre localmente?',
+      q: '¿Marketing AX corre localmente?',
       a: 'Sí. La app desktop, el daemon y el runtime de skills corren en tu máquina. Los artifacts generados quedan en tu directorio de proyecto.',
     },
     {
@@ -2836,22 +2836,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: '¿Mis datos se envían a Anthropic, OpenAI o Google?',
-      a: 'Solo tu prompt y el contexto de skills van al proveedor cuyas claves aportas (BYOK). Open Design no tiene servidor propio: el daemon habla directamente con tu proveedor. Los artifacts generados quedan como archivos en tu directorio de proyecto, no en la nube de ningún vendor.',
+      a: 'Solo tu prompt y el contexto de skills van al proveedor cuyas claves aportas (BYOK). Marketing AX no tiene servidor propio: el daemon habla directamente con tu proveedor. Los artifacts generados quedan como archivos en tu directorio de proyecto, no en la nube de ningún vendor.',
     },
     {
-      q: '¿Puedo usar Open Design sin instalar la CLI ni la app de escritorio?',
-      a: 'Hoy no. Open Design es local-first por diseño: el mínimo es un daemon local más un agent (Claude Code, Codex, Cursor, Gemini CLI o uno de los 17 adaptadores soportados). Un sandbox alojado está en el roadmap pero no es la prioridad: los artifacts en tu repo valen más que documentos en la base de datos de otro.',
+      q: '¿Puedo usar Marketing AX sin instalar la CLI ni la app de escritorio?',
+      a: 'Hoy no. Marketing AX es local-first por diseño: el mínimo es un daemon local más un agent (Claude Code, Codex, Cursor, Gemini CLI o uno de los 17 adaptadores soportados). Un sandbox alojado está en el roadmap pero no es la prioridad: los artifacts en tu repo valen más que documentos en la base de datos de otro.',
     },
     {
-      q: '¿Cuánto cuesta Open Design?',
-      a: 'El producto es gratuito y Apache-2.0: no existe una suscripción de Open Design. Pagas los costes de API del proveedor que uses (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, etc.), facturados directamente a tu cuenta. BYOK mantiene las claves y el gasto de tu lado.',
+      q: '¿Cuánto cuesta Marketing AX?',
+      a: 'El producto es gratuito y Apache-2.0: no existe una suscripción de Marketing AX. Pagas los costes de API del proveedor que uses (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, etc.), facturados directamente a tu cuenta. BYOK mantiene las claves y el gasto de tu lado.',
     },
     {
-      q: '¿Puedo autoalojar Open Design en Vercel, Cloudflare o mi propio servidor?',
+      q: '¿Puedo autoalojar Marketing AX en Vercel, Cloudflare o mi propio servidor?',
       a: 'Sí. El daemon corre donde corra Node 24, y la landing es un build estático de Astro que se despliega tal cual en Cloudflare Pages, Vercel o Netlify. Los equipos con despliegues compartidos suelen fijar el daemon en una máquina de su red y apuntar ahí la CLI de cada desarrollador.',
     },
     {
-      q: '¿Cómo llevo mi marca a Open Design?',
+      q: '¿Cómo llevo mi marca a Marketing AX?',
       a: 'Suelta una captura o un export de Figma en la UI web y pide a tu agent que extraiga la marca a un archivo DESIGN.md. Guárdalo en design-systems/<your-brand>/ en tu repo; desde entonces cada skill renderiza en esa marca sin re-promptear. /alternatives/claude-design/ describe el mismo flujo paso a paso.',
     },
     {
@@ -2859,26 +2859,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Sí. Las skills y los sistemas DESIGN.md son agnósticos al agent: el mismo SKILL.md renderiza con Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen o cualquier otro adaptador soportado. Cambiar de agent es un cambio de configuración en el daemon, no un rediseño.',
     },
     {
-      q: '¿Qué hay en el roadmap de Open Design?',
+      q: '¿Qué hay en el roadmap de Marketing AX?',
       a: 'El roadmap vivo está en docs/roadmap.md del repo de GitHub, y las notas de versión semanales salen por GitHub Releases. Los grandes temas del próximo trimestre: más adaptadores de agents, familias de plantillas más ricas (3D, vídeo, audio) y un modo opcional de daemon compartido para equipos de diseño.',
     },
   ],
   'pt-br': [
     {
-      q: 'O que é Open Design?',
-      a: 'Open Design é o workspace oficial, open source, de design com IA do projeto nexu-io/open-design. Ele transforma um coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — em um motor de design movido por skills componíveis e sistemas DESIGN.md portáteis.',
+      q: 'O que é Marketing AX?',
+      a: 'Marketing AX é o workspace oficial, open source, de design com IA do projeto nexu-io/open-design. Ele transforma um coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — em um motor de design movido por skills componíveis e sistemas DESIGN.md portáteis.',
     },
     {
-      q: 'Open Design é oficial?',
-      a: 'Sim. O site canônico é {origin} e o código-fonte está no GitHub em {repo}. "Open Design", "OpenDesign", "open-design" e "Open Design AI" apontam para o mesmo projeto.',
+      q: 'Marketing AX é oficial?',
+      a: 'Sim. O site canônico é {origin} e o código-fonte está no GitHub em {repo}. "Marketing AX", "OpenDesign", "open-design" e "Open Design AI" apontam para o mesmo projeto.',
       official: true,
     },
     {
       q: 'Qual a diferença para o Claude Design?',
-      a: 'Claude Design é um produto hospedado preso a um fornecedor. Open Design é local-first, open source Apache-2.0 e BYOK: você traz seu agent, suas chaves e seu sistema DESIGN.md.',
+      a: 'Claude Design é um produto hospedado preso a um fornecedor. Marketing AX é local-first, open source Apache-2.0 e BYOK: você traz seu agent, suas chaves e seu sistema DESIGN.md.',
     },
     {
-      q: 'Open Design roda localmente?',
+      q: 'Marketing AX roda localmente?',
       a: 'Sim. O app desktop, o daemon e o runtime de skills rodam na sua máquina, e os artifacts gerados ficam no diretório do projeto.',
     },
     {
@@ -2891,22 +2891,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Meus dados são enviados para Anthropic, OpenAI ou Google?',
-      a: 'Só o seu prompt e o contexto de skills vão para o provedor cujas chaves você traz (BYOK). O Open Design não tem servidor próprio — o daemon fala diretamente com o seu provedor. Os artifacts gerados ficam como arquivos no diretório do projeto, não na nuvem de nenhum vendor.',
+      a: 'Só o seu prompt e o contexto de skills vão para o provedor cujas chaves você traz (BYOK). O Marketing AX não tem servidor próprio — o daemon fala diretamente com o seu provedor. Os artifacts gerados ficam como arquivos no diretório do projeto, não na nuvem de nenhum vendor.',
     },
     {
-      q: 'Posso usar o Open Design sem instalar a CLI ou o app desktop?',
-      a: 'Hoje não. O Open Design é local-first por design — o mínimo é um daemon local mais um agent (Claude Code, Codex, Cursor, Gemini CLI ou um dos 17 adaptadores suportados). Um sandbox hospedado está no roadmap, mas não é prioridade: artifacts no seu repo valem mais que documentos no banco de dados de outra pessoa.',
+      q: 'Posso usar o Marketing AX sem instalar a CLI ou o app desktop?',
+      a: 'Hoje não. O Marketing AX é local-first por design — o mínimo é um daemon local mais um agent (Claude Code, Codex, Cursor, Gemini CLI ou um dos 17 adaptadores suportados). Um sandbox hospedado está no roadmap, mas não é prioridade: artifacts no seu repo valem mais que documentos no banco de dados de outra pessoa.',
     },
     {
-      q: 'Quanto custa o Open Design?',
-      a: 'O produto é gratuito e Apache-2.0 — não existe assinatura do Open Design. Você paga os custos de API do provedor que usar (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot etc.), cobrados direto na sua conta. O BYOK mantém as chaves e o gasto do seu lado.',
+      q: 'Quanto custa o Marketing AX?',
+      a: 'O produto é gratuito e Apache-2.0 — não existe assinatura do Marketing AX. Você paga os custos de API do provedor que usar (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot etc.), cobrados direto na sua conta. O BYOK mantém as chaves e o gasto do seu lado.',
     },
     {
-      q: 'Posso auto-hospedar o Open Design na Vercel, Cloudflare ou no meu servidor?',
+      q: 'Posso auto-hospedar o Marketing AX na Vercel, Cloudflare ou no meu servidor?',
       a: 'Sim. O daemon roda onde o Node 24 rodar, e a landing page é um build estático do Astro que vai para Cloudflare Pages, Vercel ou Netlify sem mudanças. Times com deployments compartilhados costumam fixar o daemon numa máquina da rede e apontar a CLI de cada dev para ela.',
     },
     {
-      q: 'Como levo minha marca para o Open Design?',
+      q: 'Como levo minha marca para o Marketing AX?',
       a: 'Solte um screenshot ou um export do Figma na UI web e peça ao agent para extrair a marca para um arquivo DESIGN.md. Salve-o em design-systems/<your-brand>/ no repo; a partir daí toda skill renderiza nessa marca sem novo prompt. /alternatives/claude-design/ descreve o mesmo fluxo em passos.',
     },
     {
@@ -2914,26 +2914,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Sim. Skills e sistemas DESIGN.md são agnósticos de agent — o mesmo SKILL.md renderiza com Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen ou qualquer outro adaptador suportado. Trocar de agent é uma mudança de configuração no daemon, não um redesign.',
     },
     {
-      q: 'O que tem no roadmap do Open Design?',
+      q: 'O que tem no roadmap do Marketing AX?',
       a: 'O roadmap vivo está em docs/roadmap.md no repo do GitHub, e notas de release semanais saem pelo GitHub Releases. Os grandes temas do próximo trimestre: mais adaptadores de agents, famílias de templates mais ricas (3D, vídeo, áudio) e um modo opcional de daemon compartilhado para times de design.',
     },
   ],
   it: [
     {
-      q: "Cos'è Open Design?",
-      a: 'Open Design è il workspace ufficiale e open source di AI design del progetto nexu-io/open-design. Trasforma un coding agent locale — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — in un motore di design guidato da skill componibili e sistemi DESIGN.md portabili.',
+      q: "Cos'è Marketing AX?",
+      a: 'Marketing AX è il workspace ufficiale e open source di AI design del progetto nexu-io/open-design. Trasforma un coding agent locale — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — in un motore di design guidato da skill componibili e sistemi DESIGN.md portabili.',
     },
     {
-      q: 'Open Design è ufficiale?',
-      a: 'Sì. Il sito canonico è {origin} e il codice sorgente è su GitHub in {repo}. "Open Design", "OpenDesign", "open-design" e "Open Design AI" indicano lo stesso progetto.',
+      q: 'Marketing AX è ufficiale?',
+      a: 'Sì. Il sito canonico è {origin} e il codice sorgente è su GitHub in {repo}. "Marketing AX", "OpenDesign", "open-design" e "Open Design AI" indicano lo stesso progetto.',
       official: true,
     },
     {
       q: 'In cosa differisce da Claude Design?',
-      a: 'Claude Design è un prodotto hosted legato a un solo vendor. Open Design è local-first, open source Apache-2.0 e BYOK: usi il tuo agent, le tue chiavi e il tuo sistema DESIGN.md.',
+      a: 'Claude Design è un prodotto hosted legato a un solo vendor. Marketing AX è local-first, open source Apache-2.0 e BYOK: usi il tuo agent, le tue chiavi e il tuo sistema DESIGN.md.',
     },
     {
-      q: 'Open Design gira in locale?',
+      q: 'Marketing AX gira in locale?',
       a: "Sì. App desktop, daemon e runtime delle skill girano sulla tua macchina. Gli artifact generati restano nella directory del progetto.",
     },
     {
@@ -2946,22 +2946,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'I miei dati vengono inviati ad Anthropic, OpenAI o Google?',
-      a: 'Al provider di cui porti le chiavi (BYOK) arrivano solo il tuo prompt e il contesto delle skill. Open Design non ha server propri — il daemon parla direttamente con il tuo provider. Gli artifact generati restano come file nella directory del progetto, non nel cloud di un vendor.',
+      a: 'Al provider di cui porti le chiavi (BYOK) arrivano solo il tuo prompt e il contesto delle skill. Marketing AX non ha server propri — il daemon parla direttamente con il tuo provider. Gli artifact generati restano come file nella directory del progetto, non nel cloud di un vendor.',
     },
     {
-      q: 'Posso usare Open Design senza installare la CLI o l\'app desktop?',
-      a: 'Oggi no. Open Design è local-first per progettazione — il minimo è un daemon locale più un agent (Claude Code, Codex, Cursor, Gemini CLI o uno dei 17 adapter supportati). Una sandbox hosted è nella roadmap ma non è la priorità: gli artifact nel tuo repo battono i documenti nel database di qualcun altro.',
+      q: 'Posso usare Marketing AX senza installare la CLI o l\'app desktop?',
+      a: 'Oggi no. Marketing AX è local-first per progettazione — il minimo è un daemon locale più un agent (Claude Code, Codex, Cursor, Gemini CLI o uno dei 17 adapter supportati). Una sandbox hosted è nella roadmap ma non è la priorità: gli artifact nel tuo repo battono i documenti nel database di qualcun altro.',
     },
     {
-      q: 'Quanto costa Open Design?',
-      a: 'Il prodotto è gratuito e Apache-2.0 — non esiste un abbonamento Open Design. Paghi solo i costi API del provider che usi (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, ecc.), addebitati direttamente sul tuo account. Il BYOK tiene chiavi e spesa dalla tua parte.',
+      q: 'Quanto costa Marketing AX?',
+      a: 'Il prodotto è gratuito e Apache-2.0 — non esiste un abbonamento Marketing AX. Paghi solo i costi API del provider che usi (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, ecc.), addebitati direttamente sul tuo account. Il BYOK tiene chiavi e spesa dalla tua parte.',
     },
     {
-      q: 'Posso self-hostare Open Design su Vercel, Cloudflare o un mio server?',
+      q: 'Posso self-hostare Marketing AX su Vercel, Cloudflare o un mio server?',
       a: 'Sì. Il daemon gira ovunque giri Node 24, e la landing è una build statica di Astro che si deploya così com\'è su Cloudflare Pages, Vercel o Netlify. I team con deployment condivisi di solito fissano il daemon su una macchina della propria rete e vi puntano la CLI di ogni sviluppatore.',
     },
     {
-      q: 'Come porto il mio brand in Open Design?',
+      q: 'Come porto il mio brand in Marketing AX?',
       a: 'Trascina uno screenshot o un export Figma nella UI web e chiedi al tuo agent di estrarre il brand in un file DESIGN.md. Salvalo in design-systems/<your-brand>/ nel repo; da quel momento ogni skill renderizza in quel brand senza nuovi prompt. /alternatives/claude-design/ descrive lo stesso flusso passo per passo.',
     },
     {
@@ -2969,26 +2969,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Sì. Le skill e i sistemi DESIGN.md sono agnostici rispetto all\'agent — lo stesso SKILL.md renderizza con Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen o qualsiasi altro adapter supportato. Cambiare agent è una modifica di configurazione nel daemon, non un redesign.',
     },
     {
-      q: 'Cosa c\'è nella roadmap di Open Design?',
+      q: 'Cosa c\'è nella roadmap di Marketing AX?',
       a: 'La roadmap viva è in docs/roadmap.md nel repo GitHub, e le release notes settimanali escono via GitHub Releases. I grandi temi del prossimo trimestre: più adapter per agent, famiglie di template più ricche (3D, video, audio) e una modalità opzionale di daemon condiviso per i team di design.',
     },
   ],
   vi: [
     {
-      q: 'Open Design là gì?',
-      a: 'Open Design là workspace thiết kế AI mã nguồn mở chính thức của dự án nexu-io/open-design. Nó biến coding agent chạy trên máy bạn — Claude Code, Codex, Cursor, Gemini CLI, OpenCode hoặc Qwen — thành engine thiết kế dựa trên skill ghép được và hệ DESIGN.md di động.',
+      q: 'Marketing AX là gì?',
+      a: 'Marketing AX là workspace thiết kế AI mã nguồn mở chính thức của dự án nexu-io/open-design. Nó biến coding agent chạy trên máy bạn — Claude Code, Codex, Cursor, Gemini CLI, OpenCode hoặc Qwen — thành engine thiết kế dựa trên skill ghép được và hệ DESIGN.md di động.',
     },
     {
-      q: 'Open Design có phải dự án chính thức không?',
-      a: 'Có. Trang canonical là {origin}, mã nguồn ở GitHub: {repo}. "Open Design", "OpenDesign", "open-design" và "Open Design AI" đều chỉ cùng một dự án.',
+      q: 'Marketing AX có phải dự án chính thức không?',
+      a: 'Có. Trang canonical là {origin}, mã nguồn ở GitHub: {repo}. "Marketing AX", "OpenDesign", "open-design" và "Open Design AI" đều chỉ cùng một dự án.',
       official: true,
     },
     {
       q: 'Khác gì Claude Design?',
-      a: 'Claude Design là sản phẩm hosted gắn với một nhà cung cấp. Open Design local-first, open source Apache-2.0 và BYOK: bạn dùng agent, key và hệ DESIGN.md của chính mình.',
+      a: 'Claude Design là sản phẩm hosted gắn với một nhà cung cấp. Marketing AX local-first, open source Apache-2.0 và BYOK: bạn dùng agent, key và hệ DESIGN.md của chính mình.',
     },
     {
-      q: 'Open Design chạy local được không?',
+      q: 'Marketing AX chạy local được không?',
       a: 'Có. Ứng dụng desktop, daemon và skill runtime chạy trên máy bạn. Artifact tạo ra nằm trong thư mục dự án của bạn.',
     },
     {
@@ -3001,22 +3001,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Dữ liệu của tôi có bị gửi cho Anthropic, OpenAI hay Google không?',
-      a: 'Chỉ prompt và ngữ cảnh skill của bạn được gửi tới nhà cung cấp mà bạn mang key tới (BYOK). Open Design không có máy chủ riêng — daemon nói chuyện trực tiếp với nhà cung cấp của bạn. Artifact tạo ra nằm dưới dạng file trong thư mục dự án, không vào đám mây của vendor nào.',
+      a: 'Chỉ prompt và ngữ cảnh skill của bạn được gửi tới nhà cung cấp mà bạn mang key tới (BYOK). Marketing AX không có máy chủ riêng — daemon nói chuyện trực tiếp với nhà cung cấp của bạn. Artifact tạo ra nằm dưới dạng file trong thư mục dự án, không vào đám mây của vendor nào.',
     },
     {
-      q: 'Có thể dùng Open Design mà không cài CLI hay app desktop không?',
-      a: 'Hiện chưa. Open Design được thiết kế local-first — tối thiểu cần một daemon cục bộ cộng một agent (Claude Code, Codex, Cursor, Gemini CLI hoặc một trong 17 adapter được hỗ trợ). Sandbox hosted có trong roadmap nhưng không phải ưu tiên: artifact trong repo của bạn tốt hơn tài liệu trong cơ sở dữ liệu của người khác.',
+      q: 'Có thể dùng Marketing AX mà không cài CLI hay app desktop không?',
+      a: 'Hiện chưa. Marketing AX được thiết kế local-first — tối thiểu cần một daemon cục bộ cộng một agent (Claude Code, Codex, Cursor, Gemini CLI hoặc một trong 17 adapter được hỗ trợ). Sandbox hosted có trong roadmap nhưng không phải ưu tiên: artifact trong repo của bạn tốt hơn tài liệu trong cơ sở dữ liệu của người khác.',
     },
     {
-      q: 'Open Design giá bao nhiêu?',
-      a: 'Sản phẩm miễn phí và theo Apache-2.0 — không có gói thuê bao Open Design. Bạn chỉ trả chi phí API của nhà cung cấp mình dùng (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, v.v.), tính thẳng vào tài khoản của bạn. BYOK giữ cả key lẫn chi tiêu ở phía bạn.',
+      q: 'Marketing AX giá bao nhiêu?',
+      a: 'Sản phẩm miễn phí và theo Apache-2.0 — không có gói thuê bao Marketing AX. Bạn chỉ trả chi phí API của nhà cung cấp mình dùng (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, v.v.), tính thẳng vào tài khoản của bạn. BYOK giữ cả key lẫn chi tiêu ở phía bạn.',
     },
     {
-      q: 'Có thể self-host Open Design trên Vercel, Cloudflare hay server riêng không?',
+      q: 'Có thể self-host Marketing AX trên Vercel, Cloudflare hay server riêng không?',
       a: 'Có. Daemon chạy ở bất cứ đâu Node 24 chạy được, còn landing page là bản build Astro tĩnh, deploy nguyên trạng lên Cloudflare Pages, Vercel hoặc Netlify. Các team dùng chung thường ghim daemon vào một máy trong mạng nội bộ và trỏ CLI của từng dev vào đó.',
     },
     {
-      q: 'Làm sao đưa thương hiệu của tôi vào Open Design?',
+      q: 'Làm sao đưa thương hiệu của tôi vào Marketing AX?',
       a: 'Thả một ảnh chụp màn hình hoặc bản xuất Figma vào UI web và yêu cầu agent trích xuất thương hiệu thành file DESIGN.md. Lưu file đó vào design-systems/<your-brand>/ trong repo; từ đó mọi skill đều render theo thương hiệu này mà không cần prompt lại. /alternatives/claude-design/ mô tả đúng quy trình này theo từng bước.',
     },
     {
@@ -3024,26 +3024,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Có. Skill và hệ DESIGN.md độc lập với agent — cùng một file SKILL.md render được với Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen hay bất kỳ adapter được hỗ trợ nào khác. Đổi agent chỉ là thay đổi cấu hình trong daemon, không phải thiết kế lại.',
     },
     {
-      q: 'Roadmap của Open Design có gì?',
+      q: 'Roadmap của Marketing AX có gì?',
       a: 'Roadmap trực tiếp nằm ở docs/roadmap.md trong repo GitHub, và release notes hằng tuần phát qua GitHub Releases. Chủ đề chính quý tới: thêm agent adapter, các họ template phong phú hơn (3D, video, audio) và chế độ daemon dùng chung tùy chọn cho team thiết kế.',
     },
   ],
   pl: [
     {
-      q: 'Czym jest Open Design?',
-      a: 'Open Design to oficjalny, open-source workspace AI design projektu nexu-io/open-design. Zamienia lokalnego coding agenta — Claude Code, Codex, Cursor, Gemini CLI, OpenCode albo Qwen — w silnik designu oparty o kompozycyjne skills i przenośne systemy DESIGN.md.',
+      q: 'Czym jest Marketing AX?',
+      a: 'Marketing AX to oficjalny, open-source workspace AI design projektu nexu-io/open-design. Zamienia lokalnego coding agenta — Claude Code, Codex, Cursor, Gemini CLI, OpenCode albo Qwen — w silnik designu oparty o kompozycyjne skills i przenośne systemy DESIGN.md.',
     },
     {
-      q: 'Czy Open Design jest oficjalne?',
-      a: 'Tak. Kanoniczna strona to {origin}, a kod źródłowy jest na GitHubie: {repo}. "Open Design", "OpenDesign", "open-design" i "Open Design AI" oznaczają ten sam projekt.',
+      q: 'Czy Marketing AX jest oficjalne?',
+      a: 'Tak. Kanoniczna strona to {origin}, a kod źródłowy jest na GitHubie: {repo}. "Marketing AX", "OpenDesign", "open-design" i "Open Design AI" oznaczają ten sam projekt.',
       official: true,
     },
     {
       q: 'Czym różni się od Claude Design?',
-      a: 'Claude Design to hostowany produkt jednego dostawcy. Open Design jest local-first, open source Apache-2.0 i BYOK: używasz własnego agenta, kluczy i systemu DESIGN.md.',
+      a: 'Claude Design to hostowany produkt jednego dostawcy. Marketing AX jest local-first, open source Apache-2.0 i BYOK: używasz własnego agenta, kluczy i systemu DESIGN.md.',
     },
     {
-      q: 'Czy Open Design działa lokalnie?',
+      q: 'Czy Marketing AX działa lokalnie?',
       a: 'Tak. Aplikacja desktop, daemon i runtime skills działają na Twojej maszynie, a wygenerowane artifacts trafiają do katalogu projektu.',
     },
     {
@@ -3056,22 +3056,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Czy moje dane trafiają do Anthropic, OpenAI lub Google?',
-      a: 'Do dostawcy, którego klucze przynosisz (BYOK), trafia tylko Twój prompt i kontekst skills. Open Design nie ma własnego serwera — daemon rozmawia z Twoim dostawcą bezpośrednio. Wygenerowane artifacts lądują jako pliki w katalogu projektu, a nie w chmurze żadnego vendora.',
+      a: 'Do dostawcy, którego klucze przynosisz (BYOK), trafia tylko Twój prompt i kontekst skills. Marketing AX nie ma własnego serwera — daemon rozmawia z Twoim dostawcą bezpośrednio. Wygenerowane artifacts lądują jako pliki w katalogu projektu, a nie w chmurze żadnego vendora.',
     },
     {
-      q: 'Czy mogę używać Open Design bez instalowania CLI ani aplikacji desktop?',
-      a: 'Dziś nie. Open Design jest local-first z założenia — minimum to lokalny daemon plus agent (Claude Code, Codex, Cursor, Gemini CLI albo jeden z 17 wspieranych adapterów). Hostowany sandbox jest w roadmapie, ale nie jest priorytetem: artifacts w Twoim repo są lepsze niż dokumenty w cudzej bazie danych.',
+      q: 'Czy mogę używać Marketing AX bez instalowania CLI ani aplikacji desktop?',
+      a: 'Dziś nie. Marketing AX jest local-first z założenia — minimum to lokalny daemon plus agent (Claude Code, Codex, Cursor, Gemini CLI albo jeden z 17 wspieranych adapterów). Hostowany sandbox jest w roadmapie, ale nie jest priorytetem: artifacts w Twoim repo są lepsze niż dokumenty w cudzej bazie danych.',
     },
     {
-      q: 'Ile kosztuje Open Design?',
-      a: 'Produkt jest darmowy i na licencji Apache-2.0 — nie istnieje subskrypcja Open Design. Płacisz tylko koszty API dostawcy, którego używasz (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot itd.), rozliczane bezpośrednio na Twoim koncie. BYOK trzyma i klucze, i wydatki po Twojej stronie.',
+      q: 'Ile kosztuje Marketing AX?',
+      a: 'Produkt jest darmowy i na licencji Apache-2.0 — nie istnieje subskrypcja Marketing AX. Płacisz tylko koszty API dostawcy, którego używasz (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot itd.), rozliczane bezpośrednio na Twoim koncie. BYOK trzyma i klucze, i wydatki po Twojej stronie.',
     },
     {
-      q: 'Czy mogę self-hostować Open Design na Vercel, Cloudflare albo własnym serwerze?',
+      q: 'Czy mogę self-hostować Marketing AX na Vercel, Cloudflare albo własnym serwerze?',
       a: 'Tak. Daemon działa wszędzie tam, gdzie działa Node 24, a landing page to statyczny build Astro, który wdrożysz bez zmian na Cloudflare Pages, Vercel czy Netlify. Zespoły ze wspólnym wdrożeniem zwykle przypinają daemon do maszyny w swojej sieci i kierują na nią CLI każdego dewelopera.',
     },
     {
-      q: 'Jak przenieść moją markę do Open Design?',
+      q: 'Jak przenieść moją markę do Marketing AX?',
       a: 'Wrzuć zrzut ekranu albo eksport z Figmy do webowego UI i poproś agenta o wyodrębnienie marki do pliku DESIGN.md. Zapisz go w design-systems/<your-brand>/ w repo; od tej pory każda skill renderuje w tej marce bez ponownych promptów. /alternatives/claude-design/ opisuje ten sam proces krok po kroku.',
     },
     {
@@ -3079,26 +3079,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Tak. Skills i systemy DESIGN.md są niezależne od agenta — ten sam SKILL.md renderuje się z Claude Code, Codex, Cursorem, Gemini CLI, GitHub Copilotem, Grokiem, Hermesem, Qwenem czy dowolnym innym wspieranym adapterem. Zmiana agenta to zmiana konfiguracji daemona, nie redesign.',
     },
     {
-      q: 'Co jest w roadmapie Open Design?',
+      q: 'Co jest w roadmapie Marketing AX?',
       a: 'Żywa roadmapa jest w docs/roadmap.md w repo na GitHubie, a cotygodniowe release notes wychodzą przez GitHub Releases. Główne tematy na następny kwartał: więcej adapterów agentów, bogatsze rodziny szablonów (3D, wideo, audio) i opcjonalny tryb współdzielonego daemona dla zespołów projektowych.',
     },
   ],
   id: [
     {
-      q: 'Apa itu Open Design?',
-      a: 'Open Design adalah workspace AI design resmi dan open source dari proyek nexu-io/open-design. Ia mengubah coding agent lokal — Claude Code, Codex, Cursor, Gemini CLI, OpenCode, atau Qwen — menjadi mesin desain berbasis skill komposable dan sistem DESIGN.md portabel.',
+      q: 'Apa itu Marketing AX?',
+      a: 'Marketing AX adalah workspace AI design resmi dan open source dari proyek nexu-io/open-design. Ia mengubah coding agent lokal — Claude Code, Codex, Cursor, Gemini CLI, OpenCode, atau Qwen — menjadi mesin desain berbasis skill komposable dan sistem DESIGN.md portabel.',
     },
     {
-      q: 'Apakah Open Design resmi?',
-      a: 'Ya. Situs canonical ada di {origin} dan source code ada di GitHub: {repo}. "Open Design", "OpenDesign", "open-design", dan "Open Design AI" merujuk ke proyek yang sama.',
+      q: 'Apakah Marketing AX resmi?',
+      a: 'Ya. Situs canonical ada di {origin} dan source code ada di GitHub: {repo}. "Marketing AX", "OpenDesign", "open-design", dan "Open Design AI" merujuk ke proyek yang sama.',
       official: true,
     },
     {
       q: 'Apa bedanya dengan Claude Design?',
-      a: 'Claude Design adalah produk hosted yang terikat pada satu vendor. Open Design local-first, open source Apache-2.0, dan BYOK: Anda memakai agent, key, dan sistem DESIGN.md sendiri.',
+      a: 'Claude Design adalah produk hosted yang terikat pada satu vendor. Marketing AX local-first, open source Apache-2.0, dan BYOK: Anda memakai agent, key, dan sistem DESIGN.md sendiri.',
     },
     {
-      q: 'Apakah Open Design berjalan lokal?',
+      q: 'Apakah Marketing AX berjalan lokal?',
       a: 'Ya. Aplikasi desktop, daemon, dan skill runtime berjalan di mesin Anda. Artifact yang dibuat masuk ke direktori proyek Anda.',
     },
     {
@@ -3111,22 +3111,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Apakah data saya dikirim ke Anthropic, OpenAI, atau Google?',
-      a: 'Hanya prompt dan konteks skill Anda yang pergi ke provider yang key-nya Anda bawa (BYOK). Open Design tidak punya server sendiri — daemon bicara langsung dengan provider Anda. Artifact yang dihasilkan tersimpan sebagai file di direktori proyek, bukan di cloud vendor mana pun.',
+      a: 'Hanya prompt dan konteks skill Anda yang pergi ke provider yang key-nya Anda bawa (BYOK). Marketing AX tidak punya server sendiri — daemon bicara langsung dengan provider Anda. Artifact yang dihasilkan tersimpan sebagai file di direktori proyek, bukan di cloud vendor mana pun.',
     },
     {
-      q: 'Bisakah memakai Open Design tanpa menginstal CLI atau app desktop?',
-      a: 'Belum bisa. Open Design memang local-first — minimumnya adalah daemon lokal plus satu agent (Claude Code, Codex, Cursor, Gemini CLI, atau salah satu dari 17 adapter yang didukung). Sandbox hosted ada di roadmap tapi bukan prioritas: artifact di repo Anda lebih baik daripada dokumen di database orang lain.',
+      q: 'Bisakah memakai Marketing AX tanpa menginstal CLI atau app desktop?',
+      a: 'Belum bisa. Marketing AX memang local-first — minimumnya adalah daemon lokal plus satu agent (Claude Code, Codex, Cursor, Gemini CLI, atau salah satu dari 17 adapter yang didukung). Sandbox hosted ada di roadmap tapi bukan prioritas: artifact di repo Anda lebih baik daripada dokumen di database orang lain.',
     },
     {
-      q: 'Berapa biaya Open Design?',
-      a: 'Produknya gratis dan Apache-2.0 — tidak ada langganan Open Design. Anda hanya membayar biaya API provider yang Anda pakai (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, dll.), ditagih langsung ke akun Anda. BYOK menjaga key dan pengeluaran tetap di sisi Anda.',
+      q: 'Berapa biaya Marketing AX?',
+      a: 'Produknya gratis dan Apache-2.0 — tidak ada langganan Marketing AX. Anda hanya membayar biaya API provider yang Anda pakai (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, dll.), ditagih langsung ke akun Anda. BYOK menjaga key dan pengeluaran tetap di sisi Anda.',
     },
     {
-      q: 'Bisakah self-host Open Design di Vercel, Cloudflare, atau server sendiri?',
+      q: 'Bisakah self-host Marketing AX di Vercel, Cloudflare, atau server sendiri?',
       a: 'Bisa. Daemon berjalan di mana pun Node 24 berjalan, dan landing page adalah build Astro statis yang bisa langsung dideploy ke Cloudflare Pages, Vercel, atau Netlify. Tim dengan deployment bersama biasanya menambatkan daemon di satu mesin dalam jaringan dan mengarahkan CLI tiap developer ke sana.',
     },
     {
-      q: 'Bagaimana memindahkan brand saya ke Open Design?',
+      q: 'Bagaimana memindahkan brand saya ke Marketing AX?',
       a: 'Jatuhkan screenshot atau ekspor Figma ke UI web dan minta agent mengekstrak brand menjadi file DESIGN.md. Simpan file itu di design-systems/<your-brand>/ dalam repo; sejak itu semua skill merender dalam brand tersebut tanpa prompt ulang. /alternatives/claude-design/ menjelaskan alur yang sama langkah demi langkah.',
     },
     {
@@ -3134,26 +3134,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Bisa. Skill dan sistem DESIGN.md tidak terikat agent — file SKILL.md yang sama merender dengan Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen, atau adapter lain yang didukung. Ganti agent hanyalah perubahan konfigurasi di daemon, bukan desain ulang.',
     },
     {
-      q: 'Apa saja di roadmap Open Design?',
+      q: 'Apa saja di roadmap Marketing AX?',
       a: 'Roadmap aktif ada di docs/roadmap.md dalam repo GitHub, dan catatan rilis mingguan keluar lewat GitHub Releases. Tema besar kuartal berikutnya: lebih banyak adapter agent, keluarga template yang lebih kaya (3D, video, audio), dan mode shared-daemon opsional untuk tim desain.',
     },
   ],
   nl: [
     {
-      q: 'Wat is Open Design?',
-      a: 'Open Design is de officiële open-source AI design workspace van het project nexu-io/open-design. Het verandert een lokale coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode of Qwen — in een design-engine met combineerbare skills en draagbare DESIGN.md-systemen.',
+      q: 'Wat is Marketing AX?',
+      a: 'Marketing AX is de officiële open-source AI design workspace van het project nexu-io/open-design. Het verandert een lokale coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode of Qwen — in een design-engine met combineerbare skills en draagbare DESIGN.md-systemen.',
     },
     {
-      q: 'Is Open Design officieel?',
-      a: 'Ja. De canonieke site is {origin} en de broncode staat op GitHub: {repo}. "Open Design", "OpenDesign", "open-design" en "Open Design AI" verwijzen naar hetzelfde project.',
+      q: 'Is Marketing AX officieel?',
+      a: 'Ja. De canonieke site is {origin} en de broncode staat op GitHub: {repo}. "Marketing AX", "OpenDesign", "open-design" en "Open Design AI" verwijzen naar hetzelfde project.',
       official: true,
     },
     {
       q: 'Wat is het verschil met Claude Design?',
-      a: 'Claude Design is een hosted product van één leverancier. Open Design is local-first, Apache-2.0 open source en BYOK: je gebruikt je eigen agent, sleutels en DESIGN.md-systeem.',
+      a: 'Claude Design is een hosted product van één leverancier. Marketing AX is local-first, Apache-2.0 open source en BYOK: je gebruikt je eigen agent, sleutels en DESIGN.md-systeem.',
     },
     {
-      q: 'Draait Open Design lokaal?',
+      q: 'Draait Marketing AX lokaal?',
       a: 'Ja. De desktop-app, daemon en skill runtime draaien op je eigen machine. Gegenereerde artifacts komen in je projectdirectory terecht.',
     },
     {
@@ -3166,22 +3166,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Worden mijn gegevens naar Anthropic, OpenAI of Google gestuurd?',
-      a: 'Alleen je prompt en de skill-context gaan naar de provider waarvoor je zelf sleutels meebrengt (BYOK). Open Design heeft geen eigen server — de daemon praat rechtstreeks met je provider. Gegenereerde artifacts komen als bestanden in je projectdirectory terecht, niet in de cloud van een vendor.',
+      a: 'Alleen je prompt en de skill-context gaan naar de provider waarvoor je zelf sleutels meebrengt (BYOK). Marketing AX heeft geen eigen server — de daemon praat rechtstreeks met je provider. Gegenereerde artifacts komen als bestanden in je projectdirectory terecht, niet in de cloud van een vendor.',
     },
     {
-      q: 'Kan ik Open Design gebruiken zonder de CLI of desktop-app te installeren?',
-      a: 'Vandaag niet. Open Design is bewust local-first — het minimum is een lokale daemon plus een agent (Claude Code, Codex, Cursor, Gemini CLI of een van de 17 ondersteunde adapters). Een gehoste sandbox staat op de roadmap maar is geen prioriteit: artifacts in je repo verslaan documenten in andermans database.',
+      q: 'Kan ik Marketing AX gebruiken zonder de CLI of desktop-app te installeren?',
+      a: 'Vandaag niet. Marketing AX is bewust local-first — het minimum is een lokale daemon plus een agent (Claude Code, Codex, Cursor, Gemini CLI of een van de 17 ondersteunde adapters). Een gehoste sandbox staat op de roadmap maar is geen prioriteit: artifacts in je repo verslaan documenten in andermans database.',
     },
     {
-      q: 'Wat kost Open Design?',
-      a: 'Het product is gratis en Apache-2.0 — er bestaat geen Open Design-abonnement. Je betaalt alleen de API-kosten van de provider die je gebruikt (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, enz.), rechtstreeks via je eigen account. BYOK houdt zowel de sleutels als de uitgaven aan jouw kant.',
+      q: 'Wat kost Marketing AX?',
+      a: 'Het product is gratis en Apache-2.0 — er bestaat geen Marketing AX-abonnement. Je betaalt alleen de API-kosten van de provider die je gebruikt (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot, enz.), rechtstreeks via je eigen account. BYOK houdt zowel de sleutels als de uitgaven aan jouw kant.',
     },
     {
-      q: 'Kan ik Open Design self-hosten op Vercel, Cloudflare of mijn eigen server?',
+      q: 'Kan ik Marketing AX self-hosten op Vercel, Cloudflare of mijn eigen server?',
       a: 'Ja. De daemon draait overal waar Node 24 draait, en de landingspagina is een statische Astro-build die ongewijzigd naar Cloudflare Pages, Vercel of Netlify gaat. Teams met gedeelde deployments pinnen de daemon meestal op een machine in hun netwerk en richten de CLI van elke developer daarop.',
     },
     {
-      q: 'Hoe breng ik mijn merk naar Open Design?',
+      q: 'Hoe breng ik mijn merk naar Marketing AX?',
       a: 'Sleep een screenshot of Figma-export in de web-UI en vraag je agent het merk te extraheren naar een DESIGN.md-bestand. Sla dat op onder design-systems/<your-brand>/ in je repo; elke skill rendert daarna in dat merk zonder opnieuw te prompten. /alternatives/claude-design/ beschrijft dezelfde flow stap voor stap.',
     },
     {
@@ -3189,26 +3189,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Ja. Skills en DESIGN.md-systemen zijn agent-agnostisch — hetzelfde SKILL.md-bestand rendert met Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen of elke andere ondersteunde adapter. Van agent wisselen is een configuratiewijziging in de daemon, geen redesign.',
     },
     {
-      q: 'Wat staat er op de roadmap van Open Design?',
+      q: 'Wat staat er op de roadmap van Marketing AX?',
       a: 'De actuele roadmap staat in docs/roadmap.md in de GitHub-repo, en wekelijkse release notes verschijnen via GitHub Releases. Grote thema\'s voor het komende kwartaal: meer agent-adapters, rijkere template-families (3D, video, audio) en een optionele shared-daemon-modus voor designteams.',
     },
   ],
   ar: [
     {
-      q: 'ما هو Open Design؟',
-      a: 'Open Design هو مساحة عمل تصميم بالذكاء الاصطناعي رسمية ومفتوحة المصدر من مشروع nexu-io/open-design. يحوّل coding agent محلياً مثل Claude Code أو Codex أو Cursor أو Gemini CLI أو OpenCode أو Qwen إلى محرك تصميم يعمل عبر skills قابلة للتركيب وأنظمة DESIGN.md قابلة للنقل.',
+      q: 'ما هو Marketing AX؟',
+      a: 'Marketing AX هو مساحة عمل تصميم بالذكاء الاصطناعي رسمية ومفتوحة المصدر من مشروع nexu-io/open-design. يحوّل coding agent محلياً مثل Claude Code أو Codex أو Cursor أو Gemini CLI أو OpenCode أو Qwen إلى محرك تصميم يعمل عبر skills قابلة للتركيب وأنظمة DESIGN.md قابلة للنقل.',
     },
     {
-      q: 'هل Open Design رسمي؟',
-      a: 'نعم. الموقع canonical هو {origin} والمصدر على GitHub في {repo}. تشير "Open Design" و"OpenDesign" و"open-design" و"Open Design AI" إلى المشروع نفسه.',
+      q: 'هل Marketing AX رسمي؟',
+      a: 'نعم. الموقع canonical هو {origin} والمصدر على GitHub في {repo}. تشير "Marketing AX" و"OpenDesign" و"open-design" و"Open Design AI" إلى المشروع نفسه.',
       official: true,
     },
     {
       q: 'ما الفرق عن Claude Design؟',
-      a: 'Claude Design منتج مستضاف مرتبط بمورّد واحد. Open Design محلي أولاً، مفتوح المصدر وفق Apache-2.0، وBYOK: تستخدم agent ومفاتيحك ونظام DESIGN.md الخاص بك.',
+      a: 'Claude Design منتج مستضاف مرتبط بمورّد واحد. Marketing AX محلي أولاً، مفتوح المصدر وفق Apache-2.0، وBYOK: تستخدم agent ومفاتيحك ونظام DESIGN.md الخاص بك.',
     },
     {
-      q: 'هل يعمل Open Design محلياً؟',
+      q: 'هل يعمل Marketing AX محلياً؟',
       a: 'نعم. تطبيق سطح المكتب والdaemon وskill runtime تعمل على جهازك، والartifacts الناتجة تحفظ في مجلد مشروعك.',
     },
     {
@@ -3221,22 +3221,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'هل تُرسل بياناتي إلى Anthropic أو OpenAI أو Google؟',
-      a: 'لا يذهب إلى المزوّد الذي تجلب مفاتيحه (BYOK) سوى الـ prompt وسياق الـ skills. لا يملك Open Design خادماً خاصاً به — يتواصل الـ daemon مع مزوّدك مباشرة. وتُحفظ الـ artifacts الناتجة كملفات في مجلد مشروعك، لا في سحابة أي مورّد.',
+      a: 'لا يذهب إلى المزوّد الذي تجلب مفاتيحه (BYOK) سوى الـ prompt وسياق الـ skills. لا يملك Marketing AX خادماً خاصاً به — يتواصل الـ daemon مع مزوّدك مباشرة. وتُحفظ الـ artifacts الناتجة كملفات في مجلد مشروعك، لا في سحابة أي مورّد.',
     },
     {
-      q: 'هل يمكن استخدام Open Design دون تثبيت CLI أو تطبيق سطح المكتب؟',
-      a: 'ليس حالياً. صُمم Open Design ليكون محلياً أولاً — الحد الأدنى هو daemon محلي مع agent واحد (Claude Code أو Codex أو Cursor أو Gemini CLI أو أحد الـ 17 adapter المدعومة). البيئة المستضافة موجودة في خارطة الطريق لكنها ليست أولوية: الـ artifacts في مستودعك أفضل من مستندات في قاعدة بيانات شخص آخر.',
+      q: 'هل يمكن استخدام Marketing AX دون تثبيت CLI أو تطبيق سطح المكتب؟',
+      a: 'ليس حالياً. صُمم Marketing AX ليكون محلياً أولاً — الحد الأدنى هو daemon محلي مع agent واحد (Claude Code أو Codex أو Cursor أو Gemini CLI أو أحد الـ 17 adapter المدعومة). البيئة المستضافة موجودة في خارطة الطريق لكنها ليست أولوية: الـ artifacts في مستودعك أفضل من مستندات في قاعدة بيانات شخص آخر.',
     },
     {
-      q: 'كم يكلّف Open Design؟',
-      a: 'المنتج مجاني وبرخصة Apache-2.0 — لا يوجد اشتراك في Open Design. تدفع فقط تكاليف API للمزوّد الذي تستخدمه (Anthropic أو OpenAI أو Google أو Mistral أو xAI أو Moonshot وغيرها)، وتُحاسب مباشرة على حسابك. يبقي BYOK المفاتيح والإنفاق في جانبك.',
+      q: 'كم يكلّف Marketing AX؟',
+      a: 'المنتج مجاني وبرخصة Apache-2.0 — لا يوجد اشتراك في Marketing AX. تدفع فقط تكاليف API للمزوّد الذي تستخدمه (Anthropic أو OpenAI أو Google أو Mistral أو xAI أو Moonshot وغيرها)، وتُحاسب مباشرة على حسابك. يبقي BYOK المفاتيح والإنفاق في جانبك.',
     },
     {
-      q: 'هل يمكن استضافة Open Design ذاتياً على Vercel أو Cloudflare أو خادمي الخاص؟',
+      q: 'هل يمكن استضافة Marketing AX ذاتياً على Vercel أو Cloudflare أو خادمي الخاص؟',
       a: 'نعم. يعمل الـ daemon أينما يعمل Node 24، وصفحة الهبوط بناء Astro ثابت يُنشر كما هو على Cloudflare Pages أو Vercel أو Netlify. الفرق التي تدير نشراً مشتركاً تثبّت عادةً الـ daemon على جهاز داخل شبكتها وتوجّه CLI كل مطوّر إليه.',
     },
     {
-      q: 'كيف أنقل علامتي التجارية إلى Open Design؟',
+      q: 'كيف أنقل علامتي التجارية إلى Marketing AX؟',
       a: 'أسقط لقطة شاشة أو تصدير Figma في واجهة الويب واطلب من الـ agent استخراج العلامة إلى ملف DESIGN.md. احفظ الملف تحت design-systems/<your-brand>/ في مستودعك؛ بعدها تعرض كل skill بهذه العلامة دون إعادة كتابة الـ prompt. تصف /alternatives/claude-design/ المسار نفسه خطوة بخطوة.',
     },
     {
@@ -3244,26 +3244,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'نعم. الـ skills وأنظمة DESIGN.md مستقلة عن الـ agent — يعمل ملف SKILL.md نفسه مع Claude Code وCodex وCursor وGemini CLI وGitHub Copilot وGrok وHermes وQwen وأي adapter آخر مدعوم. تبديل الـ agent تغيير في إعدادات الـ daemon، لا إعادة تصميم.',
     },
     {
-      q: 'ماذا في خارطة طريق Open Design؟',
+      q: 'ماذا في خارطة طريق Marketing AX؟',
       a: 'خارطة الطريق الحيّة في docs/roadmap.md داخل مستودع GitHub، وتصدر ملاحظات الإصدار أسبوعياً عبر GitHub Releases. أبرز محاور الربع القادم: المزيد من adapters للوكلاء، وعائلات قوالب أغنى (3D وفيديو وصوت)، ووضع daemon مشترك اختياري لفرق التصميم.',
     },
   ],
   tr: [
     {
-      q: 'Open Design nedir?',
-      a: "Open Design, nexu-io/open-design projesinin resmi açık kaynak AI design workspace'idir. Claude Code, Codex, Cursor, Gemini CLI, OpenCode veya Qwen gibi yerel coding agent'ları, birleştirilebilir skill'ler ve taşınabilir DESIGN.md sistemleriyle çalışan bir tasarım motoruna dönüştürür.",
+      q: 'Marketing AX nedir?',
+      a: "Marketing AX, nexu-io/open-design projesinin resmi açık kaynak AI design workspace'idir. Claude Code, Codex, Cursor, Gemini CLI, OpenCode veya Qwen gibi yerel coding agent'ları, birleştirilebilir skill'ler ve taşınabilir DESIGN.md sistemleriyle çalışan bir tasarım motoruna dönüştürür.",
     },
     {
-      q: 'Open Design resmi mi?',
-      a: 'Evet. Kanonik site {origin}, kaynak kod GitHub üzerinde {repo}. "Open Design", "OpenDesign", "open-design" ve "Open Design AI" aynı projeyi anlatır.',
+      q: 'Marketing AX resmi mi?',
+      a: 'Evet. Kanonik site {origin}, kaynak kod GitHub üzerinde {repo}. "Marketing AX", "OpenDesign", "open-design" ve "Open Design AI" aynı projeyi anlatır.',
       official: true,
     },
     {
       q: "Claude Design'dan farkı ne?",
-      a: 'Claude Design tek bir vendor’a bağlı hosted bir üründür. Open Design local-first, Apache-2.0 açık kaynak ve BYOK’tur: kendi agent’ını, anahtarlarını ve DESIGN.md sistemini kullanırsın.',
+      a: 'Claude Design tek bir vendor’a bağlı hosted bir üründür. Marketing AX local-first, Apache-2.0 açık kaynak ve BYOK’tur: kendi agent’ını, anahtarlarını ve DESIGN.md sistemini kullanırsın.',
     },
     {
-      q: 'Open Design yerelde çalışır mı?',
+      q: 'Marketing AX yerelde çalışır mı?',
       a: 'Evet. Desktop app, daemon ve skill runtime kendi makinenizde çalışır. Üretilen artifact’ler proje dizininize düşer.',
     },
     {
@@ -3276,22 +3276,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Verilerim Anthropic, OpenAI veya Google\'a gönderiliyor mu?',
-      a: 'Yalnızca prompt\'unuz ve skill bağlamı, anahtarlarını kendinizin getirdiği (BYOK) sağlayıcıya gider. Open Design\'ın kendi sunucusu yoktur — daemon doğrudan sağlayıcınızla konuşur. Üretilen artifact\'ler herhangi bir vendor bulutuna değil, proje dizininize dosya olarak düşer.',
+      a: 'Yalnızca prompt\'unuz ve skill bağlamı, anahtarlarını kendinizin getirdiği (BYOK) sağlayıcıya gider. Marketing AX\'ın kendi sunucusu yoktur — daemon doğrudan sağlayıcınızla konuşur. Üretilen artifact\'ler herhangi bir vendor bulutuna değil, proje dizininize dosya olarak düşer.',
     },
     {
-      q: 'CLI veya desktop app kurmadan Open Design kullanılabilir mi?',
-      a: 'Bugün için hayır. Open Design tasarımı gereği local-first\'tür — minimum, yerel bir daemon artı bir agent\'tır (Claude Code, Codex, Cursor, Gemini CLI veya desteklenen 17 adapter\'dan biri). Hosted bir sandbox roadmap\'te var ama öncelik değil: repo\'nuzdaki artifact\'ler, başkasının veritabanındaki belgelerden iyidir.',
+      q: 'CLI veya desktop app kurmadan Marketing AX kullanılabilir mi?',
+      a: 'Bugün için hayır. Marketing AX tasarımı gereği local-first\'tür — minimum, yerel bir daemon artı bir agent\'tır (Claude Code, Codex, Cursor, Gemini CLI veya desteklenen 17 adapter\'dan biri). Hosted bir sandbox roadmap\'te var ama öncelik değil: repo\'nuzdaki artifact\'ler, başkasının veritabanındaki belgelerden iyidir.',
     },
     {
-      q: 'Open Design\'ın maliyeti nedir?',
-      a: 'Ürün ücretsiz ve Apache-2.0 lisanslıdır — Open Design aboneliği yoktur. Yalnızca kullandığınız sağlayıcının (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot vb.) API maliyetini ödersiniz; doğrudan kendi hesabınıza faturalandırılır. BYOK hem anahtarları hem harcamayı sizin tarafınızda tutar.',
+      q: 'Marketing AX\'ın maliyeti nedir?',
+      a: 'Ürün ücretsiz ve Apache-2.0 lisanslıdır — Marketing AX aboneliği yoktur. Yalnızca kullandığınız sağlayıcının (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot vb.) API maliyetini ödersiniz; doğrudan kendi hesabınıza faturalandırılır. BYOK hem anahtarları hem harcamayı sizin tarafınızda tutar.',
     },
     {
-      q: 'Open Design\'ı Vercel, Cloudflare veya kendi sunucumda self-host edebilir miyim?',
+      q: 'Marketing AX\'ı Vercel, Cloudflare veya kendi sunucumda self-host edebilir miyim?',
       a: 'Evet. Daemon, Node 24\'ün çalıştığı her yerde çalışır; landing page ise Cloudflare Pages, Vercel veya Netlify\'a olduğu gibi deploy edilen statik bir Astro build\'idir. Paylaşımlı kurulum yöneten ekipler genellikle daemon\'ı ağlarındaki bir makineye sabitler ve her geliştiricinin CLI\'ını oraya yönlendirir.',
     },
     {
-      q: 'Markamı Open Design\'a nasıl taşırım?',
+      q: 'Markamı Marketing AX\'a nasıl taşırım?',
       a: 'Web arayüzüne bir ekran görüntüsü veya Figma dışa aktarımı bırakın ve agent\'ınızdan markayı bir DESIGN.md dosyasına çıkarmasını isteyin. Dosyayı repo\'da design-systems/<your-brand>/ altına kaydedin; sonrasında her skill yeniden prompt gerekmeden bu markada render eder. /alternatives/claude-design/ aynı akışı adım adım anlatır.',
     },
     {
@@ -3299,26 +3299,26 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Evet. Skill\'ler ve DESIGN.md sistemleri agent\'tan bağımsızdır — aynı SKILL.md dosyası Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen veya desteklenen başka herhangi bir adapter ile render eder. Agent değiştirmek daemon\'da bir yapılandırma değişikliğidir, redesign değil.',
     },
     {
-      q: 'Open Design roadmap\'inde neler var?',
+      q: 'Marketing AX roadmap\'inde neler var?',
       a: 'Canlı roadmap GitHub repo\'sundaki docs/roadmap.md dosyasında, haftalık release notları ise GitHub Releases üzerinden yayınlanır. Önümüzdeki çeyreğin ana başlıkları: daha fazla agent adapter\'ı, daha zengin şablon aileleri (3D, video, ses) ve tasarım ekipleri için isteğe bağlı shared-daemon modu.',
     },
   ],
   uk: [
     {
-      q: 'Що таке Open Design?',
-      a: 'Open Design — офіційний open-source AI design workspace проєкту nexu-io/open-design. Він перетворює локальний coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode або Qwen — на design-двигун із composable skills і переносними DESIGN.md-системами.',
+      q: 'Що таке Marketing AX?',
+      a: 'Marketing AX — офіційний open-source AI design workspace проєкту nexu-io/open-design. Він перетворює локальний coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode або Qwen — на design-двигун із composable skills і переносними DESIGN.md-системами.',
     },
     {
-      q: 'Open Design офіційний?',
-      a: 'Так. Канонічний сайт — {origin}, вихідний код на GitHub: {repo}. "Open Design", "OpenDesign", "open-design" і "Open Design AI" означають один проєкт.',
+      q: 'Marketing AX офіційний?',
+      a: 'Так. Канонічний сайт — {origin}, вихідний код на GitHub: {repo}. "Marketing AX", "OpenDesign", "open-design" і "Open Design AI" означають один проєкт.',
       official: true,
     },
     {
       q: 'Чим він відрізняється від Claude Design?',
-      a: 'Claude Design — hosted-продукт одного вендора. Open Design — local-first, Apache-2.0 open source і BYOK: ви використовуєте свого agent, свої ключі та свою DESIGN.md-систему.',
+      a: 'Claude Design — hosted-продукт одного вендора. Marketing AX — local-first, Apache-2.0 open source і BYOK: ви використовуєте свого agent, свої ключі та свою DESIGN.md-систему.',
     },
     {
-      q: 'Open Design запускається локально?',
+      q: 'Marketing AX запускається локально?',
       a: 'Так. Desktop app, daemon і skill runtime працюють на вашій машині, а generated artifacts зберігаються в папку проєкту.',
     },
     {
@@ -3331,22 +3331,22 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
     {
       q: 'Мої дані надсилаються в Anthropic, OpenAI чи Google?',
-      a: 'Провайдеру, чиї ключі ви принесли (BYOK), іде лише ваш prompt і контекст skills. В Open Design немає власного сервера — daemon спілкується з вашим провайдером напряму. Generated artifacts зберігаються файлами в папці проєкту, а не в хмарі вендора.',
+      a: 'Провайдеру, чиї ключі ви принесли (BYOK), іде лише ваш prompt і контекст skills. В Marketing AX немає власного сервера — daemon спілкується з вашим провайдером напряму. Generated artifacts зберігаються файлами в папці проєкту, а не в хмарі вендора.',
     },
     {
-      q: 'Чи можна користуватися Open Design без встановлення CLI чи desktop-застосунку?',
-      a: 'Поки ні. Open Design за задумом local-first — мінімум це локальний daemon плюс agent (Claude Code, Codex, Cursor, Gemini CLI або один із 17 підтримуваних adapters). Hosted-пісочниця є в роадмапі, але не в пріоритеті: artifacts у вашому репозиторії кращі за документи в чужій базі даних.',
+      q: 'Чи можна користуватися Marketing AX без встановлення CLI чи desktop-застосунку?',
+      a: 'Поки ні. Marketing AX за задумом local-first — мінімум це локальний daemon плюс agent (Claude Code, Codex, Cursor, Gemini CLI або один із 17 підтримуваних adapters). Hosted-пісочниця є в роадмапі, але не в пріоритеті: artifacts у вашому репозиторії кращі за документи в чужій базі даних.',
     },
     {
-      q: 'Скільки коштує Open Design?',
-      a: 'Продукт безплатний і під Apache-2.0 — підписки Open Design не існує. Ви платите лише за API того провайдера, яким користуєтеся (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot тощо), напряму зі свого акаунта. BYOK залишає і ключі, і витрати на вашому боці.',
+      q: 'Скільки коштує Marketing AX?',
+      a: 'Продукт безплатний і під Apache-2.0 — підписки Marketing AX не існує. Ви платите лише за API того провайдера, яким користуєтеся (Anthropic, OpenAI, Google, Mistral, xAI, Moonshot тощо), напряму зі свого акаунта. BYOK залишає і ключі, і витрати на вашому боці.',
     },
     {
-      q: 'Чи можна self-host Open Design на Vercel, Cloudflare або власному сервері?',
+      q: 'Чи можна self-host Marketing AX на Vercel, Cloudflare або власному сервері?',
       a: 'Так. Daemon працює всюди, де працює Node 24, а лендинг — статична збірка Astro, яка деплоїться на Cloudflare Pages, Vercel чи Netlify як є. Команди зі спільним деплоєм зазвичай закріплюють daemon на машині у своїй мережі та спрямовують CLI кожного розробника на неї.',
     },
     {
-      q: 'Як перенести свій бренд в Open Design?',
+      q: 'Як перенести свій бренд в Marketing AX?',
       a: 'Киньте скриншот або експорт із Figma у вебінтерфейс і попросіть agent видобути бренд у файл DESIGN.md. Збережіть його в design-systems/<your-brand>/ у репозиторії — після цього кожна skill рендерить у цьому бренді без повторних промптів. /alternatives/claude-design/ описує той самий процес покроково.',
     },
     {
@@ -3354,7 +3354,7 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
       a: 'Так. Skills і DESIGN.md-системи не залежать від агента — той самий SKILL.md рендериться з Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Grok, Hermes, Qwen чи будь-яким іншим підтримуваним adapter. Зміна агента — це зміна конфігурації daemon, а не redesign.',
     },
     {
-      q: 'Що в роадмапі Open Design?',
+      q: 'Що в роадмапі Marketing AX?',
       a: 'Живий роадмап — у docs/roadmap.md у GitHub-репозиторії, щотижневі release notes виходять через GitHub Releases. Головні теми наступного кварталу: більше agent adapters, багатші родини шаблонів (3D, відео, аудіо) та опційний режим спільного daemon для дизайн-команд.',
     },
   ],
@@ -3362,11 +3362,11 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
 
 const HOME_PAGE_COPY_EN: HomePageCopy = {
   rail: {
-    right: 'Open Design — Vol. 01 · Issue Nº 26 · Apache-2.0',
+    right: 'Marketing AX — Vol. 01 · Issue Nº 26 · Apache-2.0',
     left: 'Skills · Systems · Agents · BYOK · Local-first',
   },
   hero: {
-    discordAria: 'Join the Open Design Discord',
+    discordAria: 'Join the Marketing AX Discord',
     joinDiscord: 'Join Discord',
     label: 'Open-source design studio',
     issue: 'Nº 01',
@@ -3375,7 +3375,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
     titleMiddle: 'running on',
     titleSecondEmphasis: 'your own agent',
     lead: (skills, systems) =>
-      `Open Design is the official, local-first alternative to Claude Design. Your existing coding agent — Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen — becomes the design engine, driven by ${skills} composable skills and ${systems} portable DESIGN.md systems.`,
+      `Marketing AX is the official, local-first alternative to Claude Design. Your existing coding agent — Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen — becomes the design engine, driven by ${skills} composable skills and ${systems} portable DESIGN.md systems.`,
     star: 'Star us on GitHub',
     download: 'Download desktop',
     plate: 'Plate Nº 08',
@@ -3389,7 +3389,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
     index: ['Detect', 'Discover', 'Direct', 'Deliver'],
   },
   official: {
-    aria: 'Official Open Design sources',
+    aria: 'Official Marketing AX sources',
     label: 'Official source',
     items: [
       { label: 'Official site', value: 'open-design.ai' },
@@ -3402,7 +3402,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
   },
   about: {
     rule: 'About / Manifesto',
-    volume: 'Open Design / Volume 01',
+    volume: 'Marketing AX / Volume 01',
     label: 'About the studio',
     titlePrefix: 'We treat',
     titleAgent: 'your agent',
@@ -3416,7 +3416,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
     stampTop: 'Studio practice',
     stampBottom: 'Est. MMXXVI',
     sideNote: ['From model behavior', 'to visual taste, we', 'prototype the full', 'stack of creative', 'systems.'],
-    caption: 'Studies in form · perception · machine imagination. (Open Design, MMXXVI)',
+    caption: 'Studies in form · perception · machine imagination. (Marketing AX, MMXXVI)',
   },
   capabilities: {
     rule: 'Capabilities · Skills · Systems',
@@ -3541,7 +3541,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
   },
   work: {
     rule: 'Selected Work · 2026 Catalog',
-    editedBy: 'Edited by Open Design',
+    editedBy: 'Edited by Marketing AX',
     label: 'Selected work',
     titlePrefix: 'Skills that turn briefs into',
     titleEmphasisA: 'memorable',
@@ -3571,7 +3571,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
     shoulders: 'Standing on shoulders',
     label: 'Collaborators',
     quote:
-      '“Open Design helped us turn vague AI ideas into a visual system that felt sharp, believable, and genuinely new.”',
+      '“Marketing AX helped us turn vague AI ideas into a visual system that felt sharp, believable, and genuinely new.”',
     authorName: 'Mina Kovac',
     authorTitle: 'Creative Director · North Form',
     partnersText:
@@ -3582,7 +3582,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
   faqSection: {
     rule: 'Frequently asked',
     answers: 'Official answers, no marketing fluff',
-    label: 'Open Design 常见问题',
+    label: 'Marketing AX 常见问题',
     titlePrefix: 'Questions about',
     titleMiddle: 'and the',
     titleSuffix: 'open-source Claude Design alternative',
@@ -3606,13 +3606,13 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
   footer: {
     summary:
       'The open-source alternative to Claude Design. Built on the shoulders of huashu-design, guizang-ppt, multica-ai, and open-codesign.',
-    downloadAria: 'Download the Open Design desktop app',
+    downloadAria: 'Download the Marketing AX desktop app',
     download: 'Download desktop',
     columns: {
       studio: 'Studio',
       library: 'Library',
       connect: 'Connect',
-      openDesign: 'Open Design',
+      openDesign: 'Marketing AX',
     },
     studioLinks: ['Capabilities', 'Labs', 'Method', 'Manifesto'],
     connectLinks: ['GitHub', 'Issues', 'Contributors', 'Releases', 'Discord'],
@@ -3629,10 +3629,10 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
       compare: 'Compare',
       alternative: 'Claude Design alternative',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26',
     bottomRightA: 'Berlin / Open / Earth',
     bottomRightB: '52.5200° N · 13.4050° E',
-    mega: 'Open Design.',
+    mega: 'Marketing AX.',
   },
 };
 
@@ -3640,11 +3640,11 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
   en: HOME_PAGE_COPY_EN,
   zh: {
     rail: {
-      right: 'Open Design — 第 01 卷 · 第 26 期 · Apache-2.0',
+      right: 'Marketing AX — 第 01 卷 · 第 26 期 · Apache-2.0',
       left: 'Skills · UIUX Design · Agents · BYOK · 本地优先',
     },
     hero: {
-      discordAria: '加入 Open Design Discord',
+      discordAria: '加入 Marketing AX Discord',
       joinDiscord: '加入 Discord',
       label: '开源设计工作室',
       issue: 'Nº 01',
@@ -3653,7 +3653,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       titleMiddle: '运行在',
       titleSecondEmphasis: '你自己的 Agent 上',
       lead: (skills) =>
-        `Open Design 是官方、本地优先的 Claude Design 替代方案。你现有的编码 Agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 会变成设计引擎，并由 ${skills} 个可组合 SKILL.md 工作流驱动。`,
+        `Marketing AX 是官方、本地优先的 Claude Design 替代方案。你现有的编码 Agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 会变成设计引擎，并由 ${skills} 个可组合 SKILL.md 工作流驱动。`,
       star: 'Download',
       download: '下载桌面端',
       plate: '图版 Nº 08',
@@ -3667,7 +3667,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       index: ['检测', '发现', '指挥', '交付'],
     },
     official: {
-      aria: 'Open Design 官方来源',
+      aria: 'Marketing AX 官方来源',
       label: '官方来源',
       items: [
         { label: '官方网站', value: 'open-design.ai' },
@@ -3680,7 +3680,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
     },
     about: {
       rule: '关于 / 宣言',
-      volume: 'Open Design / 第 01 卷',
+      volume: 'Marketing AX / 第 01 卷',
       label: '关于工作室',
       titlePrefix: '我们把',
       titleAgent: '你的 Agent',
@@ -3694,7 +3694,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       stampTop: '工作室实践',
       stampBottom: '始于 MMXXVI',
       sideNote: ['从模型行为', '到视觉品味，', '我们原型化', '完整的创意', '工作流。'],
-      caption: '形式 · 感知 · 机器想象力研究。（Open Design，MMXXVI）',
+      caption: '形式 · 感知 · 机器想象力研究。（Marketing AX，MMXXVI）',
     },
     capabilities: {
       rule: '能力 · Skill · 规范',
@@ -3818,7 +3818,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
     },
     work: {
       rule: '精选作品 · 2026 目录',
-      editedBy: 'Open Design 编辑',
+      editedBy: 'Marketing AX 编辑',
       label: '精选作品',
       titlePrefix: '把 brief 变成',
       titleEmphasisA: '难忘',
@@ -3847,7 +3847,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       rule: '协作者 / 来源脉络',
       shoulders: '站在前人的肩膀上',
       label: '协作者',
-      quote: '来自全球，100+ 贡献者正在一起构建 Open Design',
+      quote: '来自全球，100+ 贡献者正在一起构建 Marketing AX',
       authorName: 'Mina Kovac',
       authorTitle: '创意总监 · North Form',
       partnersText: '站在那些持续交付开源设计文化的团队肩膀上。',
@@ -3857,7 +3857,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
     faqSection: {
       rule: '常见问题',
       answers: '官方回答，没有营销废话',
-      label: 'Open Design 常見問題',
+      label: 'Marketing AX 常見問題',
       titlePrefix: '关于',
       titleMiddle: '以及',
       titleSuffix: 'Claude Design 开源替代方案的问题',
@@ -3880,13 +3880,13 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
     footer: {
       summary:
         'Claude Design 的开源替代方案。站在 huashu-design、guizang-ppt、multica-ai 和 open-codesign 的肩膀上构建。',
-      downloadAria: '下载 Open Design 桌面应用',
+      downloadAria: '下载 Marketing AX 桌面应用',
       download: '下载桌面端',
       columns: {
         studio: '工作室',
         library: 'Skill',
         connect: '连接',
-        openDesign: 'Open Design',
+        openDesign: 'Marketing AX',
     },
     studioLinks: ['能力', '实验室', '方法', '宣言'],
     connectLinks: ['GitHub', '议题', '贡献者', '版本发布', 'Discord'],
@@ -3903,10 +3903,10 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
         compare: '对比',
         alternative: 'Claude Design 替代方案',
       },
-      bottomLeft: 'Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
+      bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRightA: '柏林 / 开放 / 地球',
       bottomRightB: '52.5200° N · 13.4050° E',
-      mega: 'Open Design.',
+      mega: 'Marketing AX.',
     },
   },
 };
@@ -3914,7 +3914,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
 HOME_PAGE_COPY['zh-tw'] = {
   ...HOME_PAGE_COPY.zh!,
   rail: {
-    right: 'Open Design — 第 01 卷 · 第 26 期 · Apache-2.0',
+    right: 'Marketing AX — 第 01 卷 · 第 26 期 · Apache-2.0',
     left: 'Skills · 設計系統 · Agents · BYOK · 本地優先',
   },
   hero: {
@@ -3925,7 +3925,7 @@ HOME_PAGE_COPY['zh-tw'] = {
     titleMiddle: '運行在',
     titleSecondEmphasis: '你自己的 Agent 上',
     lead: (skills, systems) =>
-      `Open Design 是官方、本地優先的 Claude Design 替代方案。你現有的 coding agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 會變成設計引擎，並由 ${skills} 個可組合 Skill 與 ${systems} 套可攜式 DESIGN.md 系統驅動。`,
+      `Marketing AX 是官方、本地優先的 Claude Design 替代方案。你現有的 coding agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 會變成設計引擎，並由 ${skills} 個可組合 Skill 與 ${systems} 套可攜式 DESIGN.md 系統驅動。`,
     star: '在 GitHub 點 Star',
     download: '下載桌面端',
     plate: '圖版 Nº 08',
@@ -3953,7 +3953,7 @@ HOME_PAGE_COPY['zh-tw'] = {
   about: {
     ...HOME_PAGE_COPY.zh!.about,
     rule: '關於 / 宣言',
-    volume: 'Open Design / 第 01 卷',
+    volume: 'Marketing AX / 第 01 卷',
     label: '關於工作室',
     titlePrefix: '我們把',
     titleAgent: '你的 Agent',
@@ -3966,7 +3966,7 @@ HOME_PAGE_COPY['zh-tw'] = {
     practice: '研究 · 設計 · 工程 · 循環',
     stampBottom: '始於 MMXXVI',
     sideNote: ['從模型行為', '到視覺品味，', '我們原型化', '完整的創意', '系統棧。'],
-    caption: '形式 · 感知 · 機器想像力研究。（Open Design，MMXXVI）',
+    caption: '形式 · 感知 · 機器想像力研究。（Marketing AX，MMXXVI）',
   },
   capabilities: {
     ...HOME_PAGE_COPY.zh!.capabilities,
@@ -4090,7 +4090,7 @@ HOME_PAGE_COPY['zh-tw'] = {
   work: {
     ...HOME_PAGE_COPY.zh!.work,
     rule: '精選作品 · 2026 目錄',
-    editedBy: 'Open Design 編輯',
+    editedBy: 'Marketing AX 編輯',
     label: '精選作品',
     titlePrefix: '把 brief 變成',
     titleEmphasisA: '難忘',
@@ -4120,7 +4120,7 @@ HOME_PAGE_COPY['zh-tw'] = {
     rule: '協作者 / 來源脈絡',
     shoulders: '站在前人的肩膀上',
     label: '協作者',
-    quote: '“Open Design 幫我們把模糊的 AI 想法變成了一個視覺系統：鋒利、可信，而且真的有新意。”',
+    quote: '“Marketing AX 幫我們把模糊的 AI 想法變成了一個視覺系統：鋒利、可信，而且真的有新意。”',
     authorTitle: '創意總監 · North Form',
     partnersText: '站在那些持續交付開源設計文化的團隊肩膀上。',
     partnerLabels: ['理念', '簡報', 'UX', '終端', '影格'],
@@ -4155,13 +4155,13 @@ HOME_PAGE_COPY['zh-tw'] = {
     ...HOME_PAGE_COPY.zh!.footer,
     summary:
       'Claude Design 的開源替代方案。站在 huashu-design、guizang-ppt、multica-ai 和 open-codesign 的肩膀上構建。',
-    downloadAria: '下載 Open Design 桌面應用',
+    downloadAria: '下載 Marketing AX 桌面應用',
     download: '下載桌面端',
     columns: {
       studio: '工作室',
       library: '資源庫',
       connect: '連結',
-      openDesign: 'Open Design',
+      openDesign: 'Marketing AX',
     },
     studioLinks: ['能力', '實驗室', '方法', '宣言'],
     connectLinks: ['GitHub', '議題', '貢獻者', '版本發布', 'Discord'],
@@ -4178,7 +4178,7 @@ HOME_PAGE_COPY['zh-tw'] = {
       compare: '比較',
       alternative: 'Claude Design 替代方案',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
     bottomRightA: '柏林 / 開放 / 地球',
   },
 };
@@ -4196,7 +4196,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
     summary:
       'The official open-source, local-first alternative to Claude Design. Apache-2.0, BYOK at every layer.',
     catalog: 'Catalog',
-    openDesign: 'Open Design',
+    openDesign: 'Marketing AX',
     products: 'Products',
     resources: 'Resources',
     official: 'Official source page',
@@ -4216,14 +4216,14 @@ const LANDING_UI_COPY: LandingUiCopy = {
     htmlAnything: 'HTML Anything',
     htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26',
     bottomRight: 'Berlin / Open / Earth · 52.5200° N · 13.4050° E',
   },
   blog: {
     title: 'Blog',
-    seoTitle: 'Blog — Open Design',
+    seoTitle: 'Blog — Marketing AX',
     description:
-      'Notes to help you understand, explore, and build with Open Design — across product, guides, use cases, and community.',
+      'Notes to help you understand, explore, and build with Marketing AX — across product, guides, use cases, and community.',
     categoriesLabel: 'Blog categories',
     categories: {
       all: 'All',
@@ -4258,9 +4258,9 @@ const LANDING_UI_COPY: LandingUiCopy = {
   },
   tutorials: {
     title: 'Tutorials',
-    seoTitle: 'Tutorials — Open Design',
+    seoTitle: 'Tutorials — Marketing AX',
     description:
-      'Watch Open Design from the inside — getting-started walkthroughs, plugin tutorials, demos, and community deep-dives, curated from YouTube and embedded for in-page playback.',
+      'Watch Marketing AX from the inside — getting-started walkthroughs, plugin tutorials, demos, and community deep-dives, curated from YouTube and embedded for in-page playback.',
     categoriesLabel: 'Tutorial categories',
     categories: {
       all: 'All',
@@ -4280,13 +4280,13 @@ const LANDING_UI_COPY: LandingUiCopy = {
     noEntries: "No tutorials yet. We're curating the first batch — check back soon, or",
     suggestVideo: 'suggest a video',
     noCategory: 'No tutorials in this category yet. More are on the way.',
-    contributeTitle: 'Made an Open Design tutorial?',
+    contributeTitle: 'Made an Marketing AX tutorial?',
     contributeBody:
       'Share your video — just paste a link in a quick form and a maintainer will add it to this page.',
     contributeCta: 'Submit a tutorial ↗',
     contributeSuggest: 'Prefer a pull request? ↗',
     thumbnailAlt: (title) => `Thumbnail for ${title}`,
-    detailTitle: (title) => `${title} — Open Design Tutorials`,
+    detailTitle: (title) => `${title} — Marketing AX Tutorials`,
     localizedTitle: (title) => title,
     localizedSummary: (_title, _author, summary) => summary,
     localizedBodyHtml: (_title, _author, summary) => `<p>${summary}</p>`,
@@ -4294,9 +4294,9 @@ const LANDING_UI_COPY: LandingUiCopy = {
   catalog: {
     breadcrumbLabel: 'Breadcrumb',
     skills: {
-      title: (count) => `Skills — ${count} composable design capabilities | Open Design`,
+      title: (count) => `Skills — ${count} composable design capabilities | Marketing AX`,
       description:
-        'Browse the full Open Design skills catalog: 100+ file-based SKILL.md bundles spanning decks, prototypes, dashboards, mobile flows, video, and live artifacts. Each skill is a folder you drop into the daemon.',
+        'Browse the full Marketing AX skills catalog: 100+ file-based SKILL.md bundles spanning decks, prototypes, dashboards, mobile flows, video, and live artifacts. Each skill is a folder you drop into the daemon.',
       label: 'Catalog · Nº 01',
       heading: (count) => `Skills — ${count} composable design capabilities.`,
       lead:
@@ -4306,8 +4306,8 @@ const LANDING_UI_COPY: LandingUiCopy = {
       platform: 'Platform',
       featured: 'Featured',
       allAria: 'All skills',
-      detailTitle: (name) => `${name} — Open Design skill`,
-      detailFallbackDescription: (name) => `Open Design skill bundle: ${name}.`,
+      detailTitle: (name) => `${name} — Marketing AX skill`,
+      detailFallbackDescription: (name) => `Marketing AX skill bundle: ${name}.`,
       detailLabel: 'Skill',
       featuredNumber: (rank) => `· Featured Nº ${rank}`,
       viewOnGithub: 'View on GitHub',
@@ -4319,11 +4319,11 @@ const LANDING_UI_COPY: LandingUiCopy = {
       examplePrompt: 'Example prompt',
       related: 'Related skills',
       filterTitle: (heading, count) =>
-        `${heading} skills — ${count} Open Design ${heading.toLowerCase()} agents`,
+        `${heading} skills — ${count} Marketing AX ${heading.toLowerCase()} agents`,
       modeDescription: (heading, count) =>
-        `Every Open Design skill that produces ${heading.toLowerCase()} artifacts. ${count} ready-to-run, system-aware agents — installable through the daemon, brand-locked through any DESIGN.md system.`,
+        `Every Marketing AX skill that produces ${heading.toLowerCase()} artifacts. ${count} ready-to-run, system-aware agents — installable through the daemon, brand-locked through any DESIGN.md system.`,
       scenarioDescription: (heading, count) =>
-        `Every Open Design skill in the ${heading.toLowerCase()} scenario. ${count} ready-to-run agents covering decks, prototypes, templates, and live artifacts — all brand-locked through any DESIGN.md.`,
+        `Every Marketing AX skill in the ${heading.toLowerCase()} scenario. ${count} ready-to-run agents covering decks, prototypes, templates, and live artifacts — all brand-locked through any DESIGN.md.`,
       modeHeading: (heading, count) =>
         `${heading} — ${count} brand-grade ${heading.toLowerCase()} agents.`,
       scenarioHeading: (heading, count) =>
@@ -4335,18 +4335,18 @@ const LANDING_UI_COPY: LandingUiCopy = {
       allSkills: (count) => `← All skills${typeof count === 'number' ? ` (${count} of total)` : ''}`,
     },
     systems: {
-      title: (count) => `Design Systems — ${count} portable visual systems | Open Design`,
+      title: (count) => `Design Systems — ${count} portable visual systems | Marketing AX`,
       description:
-        'Browse the full Open Design design systems catalog: 100+ DESIGN.md token bundles spanning editorial, productivity, brand, futuristic, and minimalist systems. Pick one in the daemon top-bar and every skill renders in that visual language.',
+        'Browse the full Marketing AX design systems catalog: 100+ DESIGN.md token bundles spanning editorial, productivity, brand, futuristic, and minimalist systems. Pick one in the daemon top-bar and every skill renders in that visual language.',
       label: 'Catalog · Nº 02',
       heading: (count) => `Design Systems — ${count} portable visual systems.`,
       lead:
         'Each system is a single DESIGN.md token spec. Pick one in the daemon top-bar and every skill reads it as part of its system prompt — colors, type, spacing, components, all consistent.',
       category: 'Category',
       allAria: 'All systems',
-      detailTitle: (name) => `${name} — Open Design design system`,
+      detailTitle: (name) => `${name} — Marketing AX design system`,
       detailFallbackDescription: (name, category) =>
-        `Open Design system bundle: ${name}, ${category}.`,
+        `Marketing AX system bundle: ${name}, ${category}.`,
       detailLabel: 'Design system',
       viewOnGithub: 'View DESIGN.md on GitHub',
       paletteSample: 'Palette sample',
@@ -4355,7 +4355,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
       visualTheme: 'Visual theme',
       related: (category) => `Related systems in ${category}`,
       categoryDescription: (heading, count) =>
-        `Every Open Design design system tagged ${heading.toLowerCase()}. ${count} portable DESIGN.md token bundles — ready to pair with any skill in the catalog for instant brand-grade output.`,
+        `Every Marketing AX design system tagged ${heading.toLowerCase()}. ${count} portable DESIGN.md token bundles — ready to pair with any skill in the catalog for instant brand-grade output.`,
       categoryHeading: (heading, count) =>
         `${heading} — ${count} portable visual systems.`,
       categoryLead: (label) =>
@@ -4363,7 +4363,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
       allSystems: '← All design systems',
     },
     templates: {
-      title: (count) => `Templates — ${count} ready-to-fork artifact templates | Open Design`,
+      title: (count) => `Templates — ${count} ready-to-fork artifact templates | Marketing AX`,
       description:
         'Ready-to-fork artifact templates: refreshable Live Artifacts (Notion-style team dashboards, ops briefs) plus deck and prototype starting points. Each template ships as a fork-friendly bundle with sample data.',
       label: 'Catalog · Nº 04',
@@ -4373,7 +4373,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
       allAria: 'All templates',
       liveArtifact: 'Live Artifact',
       skillTemplate: 'Skill template',
-      detailTitle: (name) => `${name} — Open Design template`,
+      detailTitle: (name) => `${name} — Marketing AX template`,
       detailLabel: 'Template',
       forkOnGithub: 'Fork on GitHub',
       previewCaption: "Rendered from the template's seed data.",
@@ -4385,26 +4385,26 @@ const LANDING_UI_COPY: LandingUiCopy = {
       readme: 'connector wiring, refresh cadence, customization notes',
     },
     craft: {
-      title: (count) => `Craft — ${count} brand-agnostic rendering principles | Open Design`,
+      title: (count) => `Craft — ${count} brand-agnostic rendering principles | Marketing AX`,
       description:
-        'Universal craft rules every Open Design skill can opt into: accessibility, animation discipline, color, form validation, laws of UX, RTL/Bidi, state coverage, and typography hierarchy.',
+        'Universal craft rules every Marketing AX skill can opt into: accessibility, animation discipline, color, form validation, laws of UX, RTL/Bidi, state coverage, and typography hierarchy.',
       label: 'Catalog · Nº 03',
       heading: (count) => `Craft — ${count} brand-agnostic rendering principles.`,
       lead:
         'Skills declare which craft rules they require. The agent loads the matching rules into its system prompt so quality concerns (a11y, motion, color, type) stay invariant across visual systems.',
       allAria: 'All craft principles',
-      detailTitle: (name) => `${name} — Open Design craft principle`,
-      detailFallbackDescription: (name) => `Open Design craft rule: ${name}.`,
+      detailTitle: (name) => `${name} — Marketing AX craft principle`,
+      detailFallbackDescription: (name) => `Marketing AX craft rule: ${name}.`,
       detailLabel: 'Craft principle',
       readFullRule: 'Read the full rule on GitHub',
       related: 'Other craft principles',
     },
   },
   plugins: {
-    registryTitle: 'Open Design Plugins — Official and community registries',
+    registryTitle: 'Marketing AX Plugins — Official and community registries',
     registryDescription: (count) =>
-      `Browse ${count} Open Design plugins from official and community registries. Search installable agent-native design workflows with stable vendor/plugin IDs.`,
-    directoryRailRight: 'Open Design Registry · Official · Community',
+      `Browse ${count} Marketing AX plugins from official and community registries. Search installable agent-native design workflows with stable vendor/plugin IDs.`,
+    directoryRailRight: 'Marketing AX Registry · Official · Community',
     directoryRailLeft: 'vendor/plugin-name · marketplace.json',
     topbarTitle: 'OD / REGISTRY',
     topbarSubtitle: 'Public index',
@@ -4431,9 +4431,9 @@ const LANDING_UI_COPY: LandingUiCopy = {
     visiblePlugins: 'visible plugins',
     openDetails: (title) => `Open ${title} details`,
     details: 'Details',
-    detailTitle: (title) => `${title} — Open Design Plugin`,
+    detailTitle: (title) => `${title} — Marketing AX Plugin`,
     detailDescription: (description, command) => `${description} Install with ${command}.`,
-    detailRailRight: (id) => `Open Design Plugin · ${id}`,
+    detailRailRight: (id) => `Marketing AX Plugin · ${id}`,
     allPlugins: 'All plugins',
     registry: 'Registry',
     deprecated: 'Deprecated',
@@ -4507,14 +4507,14 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       htmlAnything: 'HTML Anything',
       htmlVideo: 'HTML Video',
       nexuIo: 'nexu.io',
-      bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
+      bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRight: '柏林 / 开放 / 地球 · 52.5200° N · 13.4050° E',
     },
     blog: {
       title: '博客',
-      seoTitle: '博客 — Open Design',
+      seoTitle: '博客 — Marketing AX',
       description:
-        '理解、探索和构建 Open Design 的笔记，覆盖产品、指南、使用场景与社区。',
+        '理解、探索和构建 Marketing AX 的笔记，覆盖产品、指南、使用场景与社区。',
       categoriesLabel: '博客分类',
       categories: {
         all: '全部',
@@ -4549,9 +4549,9 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
     },
     tutorials: {
       title: '教程',
-      seoTitle: '教程 — Open Design',
+      seoTitle: '教程 — Marketing AX',
       description:
-        '观看 Open Design 的上手 walkthrough、插件教程、演示、评测与社区视频。所有视频都在页面内播放，并保留原始 YouTube 来源。',
+        '观看 Marketing AX 的上手 walkthrough、插件教程、演示、评测与社区视频。所有视频都在页面内播放，并保留原始 YouTube 来源。',
       categoriesLabel: '教程分类',
       categories: {
         all: '全部',
@@ -4571,24 +4571,24 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       noEntries: '暂时还没有教程。我们正在整理第一批视频，请稍后再来，或者',
       suggestVideo: '推荐一个视频',
       noCategory: '这个分类还没有教程，更多内容正在整理。',
-      contributeTitle: '做过 Open Design 的教程？',
+      contributeTitle: '做过 Marketing AX 的教程？',
       contributeBody:
         '把你的视频分享给社区——在简单的表单里贴个链接就行，维护者会把它加到这个页面。',
       contributeCta: '提交一个教程 ↗',
       contributeSuggest: '想直接提 PR？↗',
       thumbnailAlt: (title) => `${title} 的视频封面`,
-      detailTitle: (title) => `${title} — Open Design 教程`,
-      localizedTitle: (_title, author) => `Open Design 教程：${author}`,
+      detailTitle: (title) => `${title} — Marketing AX 教程`,
+      localizedTitle: (_title, author) => `Marketing AX 教程：${author}`,
       localizedSummary: (_title, author, category) =>
-        `${author} 通过一段 ${category} 视频讲解 Open Design 的本地优先设计工作流、Skill、设计系统与可复用模板。`,
+        `${author} 通过一段 ${category} 视频讲解 Marketing AX 的本地优先设计工作流、Skill、设计系统与可复用模板。`,
       localizedBodyHtml: (_title, author, summary) =>
-        `<p>${summary}</p><h2>本地化摘要</h2><p>这段视频来自 ${author}，围绕 Open Design 的安装、能力演示、设计系统、Skill 和本地 Agent 工作流展开。页面保留原始视频来源，非英文页面使用站内 i18n 摘要，让正文不会回退成英文。</p>`,
+        `<p>${summary}</p><h2>本地化摘要</h2><p>这段视频来自 ${author}，围绕 Marketing AX 的安装、能力演示、设计系统、Skill 和本地 Agent 工作流展开。页面保留原始视频来源，非英文页面使用站内 i18n 摘要，让正文不会回退成英文。</p>`,
     },
     catalog: {
       skills: {
-        title: (count) => `Skill — ${count} 个可组合设计能力 | Open Design`,
+        title: (count) => `Skill — ${count} 个可组合设计能力 | Marketing AX`,
         description:
-          '浏览完整的 Open Design Skill 目录：100+ 个基于 SKILL.md 的文件夹，覆盖演示文稿、原型、仪表盘、移动流程、视频与实时 Artifact。每个 Skill 都是一个可放入 daemon 的文件夹。',
+          '浏览完整的 Marketing AX Skill 目录：100+ 个基于 SKILL.md 的文件夹，覆盖演示文稿、原型、仪表盘、移动流程、视频与实时 Artifact。每个 Skill 都是一个可放入 daemon 的文件夹。',
         label: '目录 · Nº 01',
         heading: (count) => `Skill — ${count} 个可组合设计能力。`,
         lead:
@@ -4598,8 +4598,8 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         platform: '平台',
         featured: '精选',
         allAria: '全部 Skill',
-        detailTitle: (name) => `${name} — Open Design Skill`,
-        detailFallbackDescription: (name) => `Open Design Skill 包：${name}。`,
+        detailTitle: (name) => `${name} — Marketing AX Skill`,
+        detailFallbackDescription: (name) => `Marketing AX Skill 包：${name}。`,
         detailLabel: 'Skill',
         featuredNumber: (rank) => `· 精选 Nº ${rank}`,
         viewOnGithub: '在 GitHub 查看',
@@ -4610,11 +4610,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         examplePrompt: '示例提示词',
         related: '相关 Skill',
         filterTitle: (heading, count) =>
-          `${heading} Skill — ${count} 个 Open Design ${heading.toLowerCase()} Agent`,
+          `${heading} Skill — ${count} 个 Marketing AX ${heading.toLowerCase()} Agent`,
         modeDescription: (heading, count) =>
-          `所有生成 ${heading.toLowerCase()} Artifact 的 Open Design Skill。${count} 个可直接运行、读取系统上下文的 Agent，可以通过 daemon 安装，并通过任意 DESIGN.md 系统锁定品牌。`,
+          `所有生成 ${heading.toLowerCase()} Artifact 的 Marketing AX Skill。${count} 个可直接运行、读取系统上下文的 Agent，可以通过 daemon 安装，并通过任意 DESIGN.md 系统锁定品牌。`,
         scenarioDescription: (heading, count) =>
-          `${heading.toLowerCase()} 场景下的全部 Open Design Skill。${count} 个可运行 Agent，覆盖演示文稿、原型、模板与实时 Artifact，并可通过任意 DESIGN.md 锁定品牌。`,
+          `${heading.toLowerCase()} 场景下的全部 Marketing AX Skill。${count} 个可运行 Agent，覆盖演示文稿、原型、模板与实时 Artifact，并可通过任意 DESIGN.md 锁定品牌。`,
         modeHeading: (heading, count) =>
           `${heading} — ${count} 个品牌级 ${heading.toLowerCase()} Agent。`,
         scenarioHeading: (heading, count) =>
@@ -4626,18 +4626,18 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         allSkills: (count) => `← 全部 Skill${typeof count === 'number' ? `（共 ${count} 个）` : ''}`,
       },
       systems: {
-        title: (count) => `设计系统 — ${count} 套可移植视觉系统 | Open Design`,
+        title: (count) => `设计系统 — ${count} 套可移植视觉系统 | Marketing AX`,
         description:
-          '浏览完整的 Open Design 设计系统目录：100+ 个 DESIGN.md token 包，覆盖 editorial、productivity、brand、futuristic 与 minimalist 等系统。你可以在 daemon 顶栏选择一个系统，让所有 Skill 以同一种视觉语言渲染。',
+          '浏览完整的 Marketing AX 设计系统目录：100+ 个 DESIGN.md token 包，覆盖 editorial、productivity、brand、futuristic 与 minimalist 等系统。你可以在 daemon 顶栏选择一个系统，让所有 Skill 以同一种视觉语言渲染。',
         label: '目录 · Nº 02',
         heading: (count) => `设计系统 — ${count} 套可移植视觉系统。`,
         lead:
           '每套系统都是一个 DESIGN.md token spec。在 daemon 顶栏选择后，每个 Skill 都会把它作为系统提示的一部分读取，颜色、字体、间距和组件保持一致。',
         category: '分类',
         allAria: '全部设计系统',
-        detailTitle: (name) => `${name} — Open Design 设计系统`,
+        detailTitle: (name) => `${name} — Marketing AX 设计系统`,
         detailFallbackDescription: (name, category) =>
-          `Open Design 系统包：${name}，${category}。`,
+          `Marketing AX 系统包：${name}，${category}。`,
         detailLabel: '设计系统',
         viewOnGithub: '在 GitHub 查看 DESIGN.md',
         paletteSample: '色板示例',
@@ -4646,7 +4646,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         visualTheme: '视觉主题',
         related: (category) => `${category} 中的相关系统`,
         categoryDescription: (heading, count) =>
-          `所有标记为 ${heading.toLowerCase()} 的 Open Design 设计系统。${count} 套可移植 DESIGN.md token 包，可与目录中任意 Skill 搭配，快速得到品牌级输出。`,
+          `所有标记为 ${heading.toLowerCase()} 的 Marketing AX 设计系统。${count} 套可移植 DESIGN.md token 包，可与目录中任意 Skill 搭配，快速得到品牌级输出。`,
         categoryHeading: (heading, count) =>
           `${heading} — ${count} 套可移植视觉系统。`,
         categoryLead: (label) =>
@@ -4654,7 +4654,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         allSystems: '← 全部设计系统',
       },
       templates: {
-        title: (count) => `模板 — ${count} 个可 fork 的 Artifact 模板 | Open Design`,
+        title: (count) => `模板 — ${count} 个可 fork 的 Artifact 模板 | Marketing AX`,
         description:
           '可直接 fork 的 Artifact 模板：可刷新的 Live Artifact（类似 Notion 的团队仪表盘、运营简报）以及演示文稿和原型起点。每个模板都带有示例数据，适合复制改造。',
         label: '目录 · Nº 04',
@@ -4664,7 +4664,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         allAria: '全部模板',
         liveArtifact: 'Live Artifact',
         skillTemplate: 'Skill 模板',
-        detailTitle: (name) => `${name} — Open Design 模板`,
+        detailTitle: (name) => `${name} — Marketing AX 模板`,
         detailLabel: '模板',
         forkOnGithub: '在 GitHub fork',
         previewCaption: '由模板种子数据渲染。',
@@ -4676,26 +4676,26 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         readme: 'connector 接线、刷新节奏和自定义说明',
       },
       craft: {
-        title: (count) => `工艺规则 — ${count} 条品牌无关渲染原则 | Open Design`,
+        title: (count) => `工艺规则 — ${count} 条品牌无关渲染原则 | Marketing AX`,
         description:
-          '每个 Open Design Skill 都可以声明要加载的通用工艺规则：无障碍、动画纪律、颜色、表单验证、UX 法则、RTL/Bidi、状态覆盖和字体层级。',
+          '每个 Marketing AX Skill 都可以声明要加载的通用工艺规则：无障碍、动画纪律、颜色、表单验证、UX 法则、RTL/Bidi、状态覆盖和字体层级。',
         label: '目录 · Nº 03',
         heading: (count) => `工艺规则 — ${count} 条品牌无关渲染原则。`,
         lead:
           'Skill 会声明它需要哪些工艺规则。Agent 会把匹配的规则加载进系统提示，让无障碍、动效、颜色和字体等质量要求在不同视觉系统中保持不变。',
         allAria: '全部工艺规则',
-        detailTitle: (name) => `${name} — Open Design 工艺规则`,
-        detailFallbackDescription: (name) => `Open Design 工艺规则：${name}。`,
+        detailTitle: (name) => `${name} — Marketing AX 工艺规则`,
+        detailFallbackDescription: (name) => `Marketing AX 工艺规则：${name}。`,
         detailLabel: '工艺规则',
         readFullRule: '在 GitHub 阅读完整规则',
         related: '其他工艺规则',
       },
     },
     plugins: {
-      registryTitle: 'Open Design 插件 — 官方与社区注册表',
+      registryTitle: 'Marketing AX 插件 — 官方与社区注册表',
       registryDescription: (count) =>
-        `浏览来自官方与社区注册表的 ${count} 个 Open Design 插件。搜索可安装的 Agent 原生设计工作流，每个条目都有稳定的 vendor/plugin ID。`,
-      directoryRailRight: 'Open Design 注册表 · 官方 · 社区',
+        `浏览来自官方与社区注册表的 ${count} 个 Marketing AX 插件。搜索可安装的 Agent 原生设计工作流，每个条目都有稳定的 vendor/plugin ID。`,
+      directoryRailRight: 'Marketing AX 注册表 · 官方 · 社区',
       directoryRailLeft: 'vendor/plugin-name · marketplace.json',
       topbarTitle: 'OD / 注册表',
       topbarSubtitle: '公开索引',
@@ -4722,9 +4722,9 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       visiblePlugins: '个可见插件',
       openDetails: (title) => `打开 ${title} 详情`,
       details: '详情',
-      detailTitle: (title) => `${title} — Open Design 插件`,
+      detailTitle: (title) => `${title} — Marketing AX 插件`,
       detailDescription: (description, command) => `${description} 使用 ${command} 安装。`,
-      detailRailRight: (id) => `Open Design 插件 · ${id}`,
+      detailRailRight: (id) => `Marketing AX 插件 · ${id}`,
       allPlugins: '全部插件',
       registry: '注册表',
       deprecated: '已弃用',
@@ -4794,14 +4794,14 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       htmlAnything: 'HTML Anything',
       htmlVideo: 'HTML Video',
       nexuIo: 'nexu.io',
-      bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
+      bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRight: '柏林 / 開放 / 地球 · 52.5200° N · 13.4050° E',
     },
     blog: {
       title: '部落格',
-      seoTitle: '部落格 — Open Design',
+      seoTitle: '部落格 — Marketing AX',
       description:
-        '理解、探索與建構 Open Design 的筆記，涵蓋產品、指南、使用場景與社群。',
+        '理解、探索與建構 Marketing AX 的筆記，涵蓋產品、指南、使用場景與社群。',
       categoriesLabel: '部落格分類',
       categories: {
         all: '全部',
@@ -4822,9 +4822,9 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
     },
     tutorials: {
       title: '教學',
-      seoTitle: '教學 — Open Design',
+      seoTitle: '教學 — Marketing AX',
       description:
-        '觀看 Open Design 的上手 walkthrough、外掛教學、演示、評測與社群影片。所有影片都在頁面內播放，並保留原始 YouTube 來源。',
+        '觀看 Marketing AX 的上手 walkthrough、外掛教學、演示、評測與社群影片。所有影片都在頁面內播放，並保留原始 YouTube 來源。',
       categoriesLabel: '教學分類',
       categories: {
         all: '全部',
@@ -4844,18 +4844,18 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       noEntries: '暫時還沒有教學。我們正在整理第一批影片，請稍後再來，或者',
       suggestVideo: '推薦一支影片',
       noCategory: '這個分類還沒有教學，更多內容正在整理。',
-      contributeTitle: '做過 Open Design 的教學？',
+      contributeTitle: '做過 Marketing AX 的教學？',
       contributeBody:
         '把你的影片分享給社群——在簡單的表單裡貼個連結就行，維護者會把它加到這個頁面。',
       contributeCta: '提交一個教學 ↗',
       contributeSuggest: '想直接提 PR？↗',
       thumbnailAlt: (title) => `${title} 的影片封面`,
-      detailTitle: (title) => `${title} — Open Design 教學`,
-      localizedTitle: (_title, author) => `Open Design 教學：${author}`,
+      detailTitle: (title) => `${title} — Marketing AX 教學`,
+      localizedTitle: (_title, author) => `Marketing AX 教學：${author}`,
       localizedSummary: (_title, author, category) =>
-        `${author} 透過一支 ${category} 影片講解 Open Design 的本地優先設計工作流、Skill、設計系統與可複用模板。`,
+        `${author} 透過一支 ${category} 影片講解 Marketing AX 的本地優先設計工作流、Skill、設計系統與可複用模板。`,
       localizedBodyHtml: (_title, author, summary) =>
-        `<p>${summary}</p><h2>本地化摘要</h2><p>這支影片來自 ${author}，圍繞 Open Design 的安裝、能力演示、設計系統、Skill 與本地 Agent 工作流展開。頁面保留原始影片來源，非英文頁面使用站內 i18n 摘要，避免正文回退成英文。</p>`,
+        `<p>${summary}</p><h2>本地化摘要</h2><p>這支影片來自 ${author}，圍繞 Marketing AX 的安裝、能力演示、設計系統、Skill 與本地 Agent 工作流展開。頁面保留原始影片來源，非英文頁面使用站內 i18n 摘要，避免正文回退成英文。</p>`,
     },
   },
 };
@@ -4890,7 +4890,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'を',
       titleSecondEmphasis: '自分の Agent で動かす',
       lead: (skills, systems) =>
-        `Open Design は公式のローカル優先 Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen など既存の coding agent が、${skills} 個の composable skill と ${systems} 個の portable DESIGN.md system で動くデザインエンジンになります。`,
+        `Marketing AX は公式のローカル優先 Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen など既存の coding agent が、${skills} 個の composable skill と ${systems} 個の portable DESIGN.md system で動くデザインエンジンになります。`,
       star: 'GitHub で Star',
       download: 'デスクトップをダウンロード',
     },
@@ -4899,7 +4899,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'ラボ', titlePrefix: '成長し続ける', titleEmphasis: '実験アーカイブ', titleSuffix: '：Skill、デッキ、機械生成の形式' },
     method: { label: 'メソッド', titlePrefix: '', titleEmphasis: 'シグナル', titleSuffix: 'からシステムへ' },
     work: { label: '選定作品', titlePrefix: 'Brief を', titleEmphasisA: '記憶に残る', titleMiddle: '出荷可能な', titleEmphasisB: 'artifact', titleSuffix: 'へ変える Skill' },
-    faqSection: { rule: 'FAQ', answers: '公式回答', label: 'Open Design よくある質問', titlePrefix: '', titleMiddle: 'と', titleSuffix: 'Claude Design のオープンソース代替について' },
+    faqSection: { rule: 'FAQ', answers: '公式回答', label: 'Marketing AX よくある質問', titlePrefix: '', titleMiddle: 'と', titleSuffix: 'Claude Design のオープンソース代替について' },
     cta: { label: '始める', titlePrefix: '', titleOpen: 'オープン', titleMiddle: 'で', titleVisual: '視覚的に強い', titleSuffix: 'ものを一緒に作る', star: 'GitHub で Star' },
     footer: { summary: 'Claude Design のオープンソース代替。local-first、BYOK、Apache-2.0。', download: 'デスクトップをダウンロード' },
   },
@@ -4910,7 +4910,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: '을',
       titleSecondEmphasis: '내 Agent에서 실행',
       lead: (skills, systems) =>
-        `Open Design은 공식 local-first Claude Design 대안입니다. 이미 쓰는 Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen 같은 coding agent가 ${skills}개의 조합형 skill과 ${systems}개의 portable DESIGN.md system으로 구동되는 디자인 엔진이 됩니다.`,
+        `Marketing AX은 공식 local-first Claude Design 대안입니다. 이미 쓰는 Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen 같은 coding agent가 ${skills}개의 조합형 skill과 ${systems}개의 portable DESIGN.md system으로 구동되는 디자인 엔진이 됩니다.`,
       star: 'GitHub에서 Star',
       download: '데스크톱 다운로드',
     },
@@ -4919,7 +4919,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: '랩', titlePrefix: '계속 자라는', titleEmphasis: '실험 아카이브', titleSuffix: '— Skill, deck, 생성 형식' },
     method: { label: '방법', titlePrefix: '', titleEmphasis: '신호', titleSuffix: '에서 시스템으로' },
     work: { label: '선정 작업', titlePrefix: 'Brief를', titleEmphasisA: '기억에 남는', titleMiddle: '출하 가능한', titleEmphasisB: 'artifact', titleSuffix: '로 바꾸는 Skill' },
-    faqSection: { rule: 'FAQ', answers: '공식 답변', label: 'Open Design 자주 묻는 질문', titlePrefix: '', titleMiddle: '및', titleSuffix: 'Claude Design 오픈소스 대안 질문' },
+    faqSection: { rule: 'FAQ', answers: '공식 답변', label: 'Marketing AX 자주 묻는 질문', titlePrefix: '', titleMiddle: '및', titleSuffix: 'Claude Design 오픈소스 대안 질문' },
     cta: { label: '시작하기', titlePrefix: '함께', titleOpen: '열린', titleMiddle: '그리고', titleVisual: '시각적으로 강한', titleSuffix: '것을 만듭니다', star: 'GitHub에서 Star' },
     footer: { summary: 'Claude Design의 오픈소스 대안. Local-first, BYOK, Apache-2.0.', download: '데스크톱 다운로드' },
   },
@@ -4930,7 +4930,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'läuft auf',
       titleSecondEmphasis: 'deinem eigenen Agent',
       lead: (skills, systems) =>
-        `Open Design ist die offizielle local-first Alternative zu Claude Design. Dein vorhandener Coding-Agent — Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — wird zur Design-Engine, gesteuert von ${skills} kombinierbaren Skills und ${systems} portablen DESIGN.md-Systemen.`,
+        `Marketing AX ist die offizielle local-first Alternative zu Claude Design. Dein vorhandener Coding-Agent — Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — wird zur Design-Engine, gesteuert von ${skills} kombinierbaren Skills und ${systems} portablen DESIGN.md-Systemen.`,
       star: 'Auf GitHub sternen',
       download: 'Desktop herunterladen',
     },
@@ -4950,7 +4950,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, sur',
       titleSecondEmphasis: 'votre propre agent',
       lead: (skills, systems) =>
-        `Open Design est l'alternative officielle, local-first, à Claude Design. Votre agent de coding — Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — devient un moteur de design piloté par ${skills} skills composables et ${systems} systèmes DESIGN.md portables.`,
+        `Marketing AX est l'alternative officielle, local-first, à Claude Design. Votre agent de coding — Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — devient un moteur de design piloté par ${skills} skills composables et ${systems} systèmes DESIGN.md portables.`,
       star: 'Mettre une Star sur GitHub',
       download: 'Télécharger le desktop',
     },
@@ -4959,7 +4959,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Une', titleEmphasis: "archive d'expériences", titleSuffix: 'en croissance : skills, decks et formes générées' },
     method: { label: 'Méthode', titlePrefix: 'Du', titleEmphasis: 'signal', titleSuffix: 'au système' },
     work: { label: 'Travaux choisis', titlePrefix: 'Des skills qui transforment les briefs en', titleEmphasisA: 'artifacts', titleMiddle: 'mémorables et', titleEmphasisB: 'livrables', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Réponses officielles', label: 'FAQ Open Design', titlePrefix: 'Questions sur', titleMiddle: 'et', titleSuffix: "l'alternative open source à Claude Design" },
+    faqSection: { rule: 'FAQ', answers: 'Réponses officielles', label: 'FAQ Marketing AX', titlePrefix: 'Questions sur', titleMiddle: 'et', titleSuffix: "l'alternative open source à Claude Design" },
     cta: { label: 'Commencer', titlePrefix: 'Construisons quelque chose', titleOpen: "d'ouvert", titleMiddle: 'et', titleVisual: 'visuellement mémorable', titleSuffix: '', star: 'Mettre une Star sur GitHub' },
     footer: { summary: "L'alternative open source à Claude Design. Local-first, BYOK, Apache-2.0.", download: 'Télécharger le desktop' },
   },
@@ -4970,7 +4970,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'работает на',
       titleSecondEmphasis: 'вашем собственном Agent',
       lead: (skills, systems) =>
-        `Open Design — официальная local-first альтернатива Claude Design. Ваш coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen — становится design engine на базе ${skills} composable skills и ${systems} portable DESIGN.md systems.`,
+        `Marketing AX — официальная local-first альтернатива Claude Design. Ваш coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen — становится design engine на базе ${skills} composable skills и ${systems} portable DESIGN.md systems.`,
       star: 'Поставить Star на GitHub',
       download: 'Скачать desktop',
     },
@@ -4979,7 +4979,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Лаборатория', titlePrefix: 'Растущий', titleEmphasis: 'архив экспериментов', titleSuffix: 'со skills, deck и машинными формами' },
     method: { label: 'Метод', titlePrefix: 'От', titleEmphasis: 'сигнала', titleSuffix: 'к системе' },
     work: { label: 'Избранные работы', titlePrefix: 'Skills превращают brief в', titleEmphasisA: 'запоминающиеся', titleMiddle: 'и готовые к отправке', titleEmphasisB: 'artifacts', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Официальные ответы', label: 'Вопросы об Open Design', titlePrefix: 'Вопросы про', titleMiddle: 'и', titleSuffix: 'open-source альтернативу Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Официальные ответы', label: 'Вопросы об Marketing AX', titlePrefix: 'Вопросы про', titleMiddle: 'и', titleSuffix: 'open-source альтернативу Claude Design' },
     cta: { label: 'Начать', titlePrefix: 'Давайте создадим что-то', titleOpen: 'открытое', titleMiddle: 'и', titleVisual: 'визуально сильное', titleSuffix: '', star: 'Поставить Star на GitHub' },
     footer: { summary: 'Open-source альтернатива Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Скачать desktop' },
   },
@@ -4990,7 +4990,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, corriendo en',
       titleSecondEmphasis: 'tu propio agent',
       lead: (skills, systems) =>
-        `Open Design es la alternativa oficial, local-first, a Claude Design. Tu coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen — se convierte en motor de diseño con ${skills} skills componibles y ${systems} sistemas DESIGN.md portables.`,
+        `Marketing AX es la alternativa oficial, local-first, a Claude Design. Tu coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen — se convierte en motor de diseño con ${skills} skills componibles y ${systems} sistemas DESIGN.md portables.`,
       star: 'Dar Star en GitHub',
       download: 'Descargar desktop',
     },
@@ -4999,7 +4999,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Un', titleEmphasis: 'archivo experimental', titleSuffix: 'en crecimiento para skills, decks y formas generadas' },
     method: { label: 'Método', titlePrefix: 'De la', titleEmphasis: 'señal', titleSuffix: 'al sistema' },
     work: { label: 'Trabajos seleccionados', titlePrefix: 'Skills que convierten briefs en', titleEmphasisA: 'artifacts', titleMiddle: 'memorables y', titleEmphasisB: 'entregables', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Respuestas oficiales', label: 'FAQ de Open Design', titlePrefix: 'Preguntas sobre', titleMiddle: 'y', titleSuffix: 'la alternativa open source a Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Respuestas oficiales', label: 'FAQ de Marketing AX', titlePrefix: 'Preguntas sobre', titleMiddle: 'y', titleSuffix: 'la alternativa open source a Claude Design' },
     cta: { label: 'Empezar', titlePrefix: 'Construyamos algo', titleOpen: 'abierto', titleMiddle: 'y', titleVisual: 'visualmente memorable', titleSuffix: '', star: 'Dar Star en GitHub' },
     footer: { summary: 'La alternativa open source a Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Descargar desktop' },
   },
@@ -5010,7 +5010,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, rodando no',
       titleSecondEmphasis: 'seu próprio agent',
       lead: (skills, systems) =>
-        `Open Design é a alternativa oficial, local-first, ao Claude Design. Seu coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — vira um motor de design com ${skills} skills componíveis e ${systems} sistemas DESIGN.md portáteis.`,
+        `Marketing AX é a alternativa oficial, local-first, ao Claude Design. Seu coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — vira um motor de design com ${skills} skills componíveis e ${systems} sistemas DESIGN.md portáteis.`,
       star: 'Dar Star no GitHub',
       download: 'Baixar desktop',
     },
@@ -5019,7 +5019,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Um', titleEmphasis: 'arquivo experimental', titleSuffix: 'em crescimento para skills, decks e formas geradas' },
     method: { label: 'Método', titlePrefix: 'Do', titleEmphasis: 'sinal', titleSuffix: 'ao sistema' },
     work: { label: 'Trabalhos selecionados', titlePrefix: 'Skills que transformam briefs em', titleEmphasisA: 'artifacts', titleMiddle: 'memoráveis e', titleEmphasisB: 'entregáveis', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Respostas oficiais', label: 'FAQ Open Design', titlePrefix: 'Perguntas sobre', titleMiddle: 'e', titleSuffix: 'a alternativa open source ao Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Respostas oficiais', label: 'FAQ Marketing AX', titlePrefix: 'Perguntas sobre', titleMiddle: 'e', titleSuffix: 'a alternativa open source ao Claude Design' },
     cta: { label: 'Começar', titlePrefix: 'Vamos criar algo', titleOpen: 'aberto', titleMiddle: 'e', titleVisual: 'visualmente memorável', titleSuffix: '', star: 'Dar Star no GitHub' },
     footer: { summary: 'A alternativa open source ao Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Baixar desktop' },
   },
@@ -5030,7 +5030,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, sul',
       titleSecondEmphasis: 'tuo agent',
       lead: (skills, systems) =>
-        `Open Design è l'alternativa ufficiale, local-first, a Claude Design. Il tuo coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen — diventa un motore di design con ${skills} skill componibili e ${systems} sistemi DESIGN.md portabili.`,
+        `Marketing AX è l'alternativa ufficiale, local-first, a Claude Design. Il tuo coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen — diventa un motore di design con ${skills} skill componibili e ${systems} sistemi DESIGN.md portabili.`,
       star: 'Metti Star su GitHub',
       download: 'Scarica desktop',
     },
@@ -5039,7 +5039,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Un', titleEmphasis: 'archivio sperimentale', titleSuffix: 'in crescita per skill, deck e forme generate' },
     method: { label: 'Metodo', titlePrefix: 'Dal', titleEmphasis: 'segnale', titleSuffix: 'al sistema' },
     work: { label: 'Lavori selezionati', titlePrefix: 'Skill che trasformano brief in', titleEmphasisA: 'artifact', titleMiddle: 'memorabili e', titleEmphasisB: 'pronti da consegnare', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Risposte ufficiali', label: 'FAQ Open Design', titlePrefix: 'Domande su', titleMiddle: 'e', titleSuffix: "l'alternativa open source a Claude Design" },
+    faqSection: { rule: 'FAQ', answers: 'Risposte ufficiali', label: 'FAQ Marketing AX', titlePrefix: 'Domande su', titleMiddle: 'e', titleSuffix: "l'alternativa open source a Claude Design" },
     cta: { label: 'Inizia', titlePrefix: 'Costruiamo qualcosa di', titleOpen: 'aperto', titleMiddle: 'e', titleVisual: 'visivamente memorabile', titleSuffix: '', star: 'Metti Star su GitHub' },
     footer: { summary: "L'alternativa open source a Claude Design. Local-first, BYOK, Apache-2.0.", download: 'Scarica desktop' },
   },
@@ -5050,7 +5050,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'mã nguồn mở, chạy trên',
       titleSecondEmphasis: 'agent của bạn',
       lead: (skills, systems) =>
-        `Open Design là lựa chọn chính thức, local-first, thay Claude Design. Coding agent bạn đang dùng — Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen — trở thành engine thiết kế với ${skills} skill có thể ghép và ${systems} hệ DESIGN.md di động.`,
+        `Marketing AX là lựa chọn chính thức, local-first, thay Claude Design. Coding agent bạn đang dùng — Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen — trở thành engine thiết kế với ${skills} skill có thể ghép và ${systems} hệ DESIGN.md di động.`,
       star: 'Star trên GitHub',
       download: 'Tải desktop',
     },
@@ -5059,7 +5059,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Một', titleEmphasis: 'kho thử nghiệm', titleSuffix: 'đang lớn lên cho skill, deck và hình thức tạo sinh' },
     method: { label: 'Phương pháp', titlePrefix: 'Từ', titleEmphasis: 'tín hiệu', titleSuffix: 'đến hệ thống' },
     work: { label: 'Tác phẩm chọn lọc', titlePrefix: 'Skill biến brief thành', titleEmphasisA: 'artifact', titleMiddle: 'đáng nhớ và', titleEmphasisB: 'có thể giao', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Câu trả lời chính thức', label: 'FAQ Open Design', titlePrefix: 'Câu hỏi về', titleMiddle: 'và', titleSuffix: 'lựa chọn mã nguồn mở thay Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Câu trả lời chính thức', label: 'FAQ Marketing AX', titlePrefix: 'Câu hỏi về', titleMiddle: 'và', titleSuffix: 'lựa chọn mã nguồn mở thay Claude Design' },
     cta: { label: 'Bắt đầu', titlePrefix: 'Cùng tạo ra thứ', titleOpen: 'mở', titleMiddle: 'và', titleVisual: 'ấn tượng về thị giác', titleSuffix: '', star: 'Star trên GitHub' },
     footer: { summary: 'Lựa chọn mã nguồn mở thay Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Tải desktop' },
   },
@@ -5070,7 +5070,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, na',
       titleSecondEmphasis: 'Twoim agencie',
       lead: (skills, systems) =>
-        `Open Design to oficjalna, local-first alternatywa dla Claude Design. Twój coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode albo Qwen — staje się silnikiem designu z ${skills} kompozycyjnymi skills i ${systems} przenośnymi systemami DESIGN.md.`,
+        `Marketing AX to oficjalna, local-first alternatywa dla Claude Design. Twój coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode albo Qwen — staje się silnikiem designu z ${skills} kompozycyjnymi skills i ${systems} przenośnymi systemami DESIGN.md.`,
       star: 'Daj Star na GitHubie',
       download: 'Pobierz desktop',
     },
@@ -5079,7 +5079,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Rosnące', titleEmphasis: 'archiwum eksperymentów', titleSuffix: 'dla skills, decków i form generatywnych' },
     method: { label: 'Metoda', titlePrefix: 'Od', titleEmphasis: 'sygnału', titleSuffix: 'do systemu' },
     work: { label: 'Wybrane prace', titlePrefix: 'Skills zmieniają briefy w', titleEmphasisA: 'zapadające w pamięć', titleMiddle: 'i gotowe do wysyłki', titleEmphasisB: 'artifacts', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Oficjalne odpowiedzi', label: 'FAQ Open Design', titlePrefix: 'Pytania o', titleMiddle: 'i', titleSuffix: 'open-source alternatywę dla Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Oficjalne odpowiedzi', label: 'FAQ Marketing AX', titlePrefix: 'Pytania o', titleMiddle: 'i', titleSuffix: 'open-source alternatywę dla Claude Design' },
     cta: { label: 'Zacznij', titlePrefix: 'Zbudujmy coś', titleOpen: 'otwartego', titleMiddle: 'i', titleVisual: 'wizualnie mocnego', titleSuffix: '', star: 'Daj Star na GitHubie' },
     footer: { summary: 'Open-source alternatywa dla Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Pobierz desktop' },
   },
@@ -5090,7 +5090,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, berjalan di',
       titleSecondEmphasis: 'agent Anda sendiri',
       lead: (skills, systems) =>
-        `Open Design adalah alternatif resmi, local-first, untuk Claude Design. Coding agent yang sudah Anda pakai — Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen — menjadi mesin desain dengan ${skills} skill komposable dan ${systems} sistem DESIGN.md portabel.`,
+        `Marketing AX adalah alternatif resmi, local-first, untuk Claude Design. Coding agent yang sudah Anda pakai — Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen — menjadi mesin desain dengan ${skills} skill komposable dan ${systems} sistem DESIGN.md portabel.`,
       star: 'Beri Star di GitHub',
       download: 'Unduh desktop',
     },
@@ -5099,7 +5099,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Arsip', titleEmphasis: 'eksperimen', titleSuffix: 'yang terus tumbuh untuk skill, deck, dan bentuk generatif' },
     method: { label: 'Metode', titlePrefix: 'Dari', titleEmphasis: 'sinyal', titleSuffix: 'ke sistem' },
     work: { label: 'Karya pilihan', titlePrefix: 'Skill yang mengubah brief menjadi', titleEmphasisA: 'artifact', titleMiddle: 'berkesan dan', titleEmphasisB: 'siap dikirim', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Jawaban resmi', label: 'FAQ Open Design', titlePrefix: 'Pertanyaan tentang', titleMiddle: 'dan', titleSuffix: 'alternatif open source untuk Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Jawaban resmi', label: 'FAQ Marketing AX', titlePrefix: 'Pertanyaan tentang', titleMiddle: 'dan', titleSuffix: 'alternatif open source untuk Claude Design' },
     cta: { label: 'Mulai', titlePrefix: 'Mari bangun sesuatu yang', titleOpen: 'terbuka', titleMiddle: 'dan', titleVisual: 'kuat secara visual', titleSuffix: '', star: 'Beri Star di GitHub' },
     footer: { summary: 'Alternatif open source untuk Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Unduh desktop' },
   },
@@ -5110,7 +5110,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'open source, draaiend op',
       titleSecondEmphasis: 'je eigen agent',
       lead: (skills, systems) =>
-        `Open Design is het officiële local-first alternatief voor Claude Design. Je bestaande coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen — wordt een design-engine met ${skills} combineerbare skills en ${systems} draagbare DESIGN.md-systemen.`,
+        `Marketing AX is het officiële local-first alternatief voor Claude Design. Je bestaande coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen — wordt een design-engine met ${skills} combineerbare skills en ${systems} draagbare DESIGN.md-systemen.`,
       star: 'Star op GitHub',
       download: 'Desktop downloaden',
     },
@@ -5119,7 +5119,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Een groeiend', titleEmphasis: 'experimenteel archief', titleSuffix: 'voor skills, decks en machinevormen' },
     method: { label: 'Methode', titlePrefix: 'Van', titleEmphasis: 'signaal', titleSuffix: 'naar systeem' },
     work: { label: 'Geselecteerd werk', titlePrefix: 'Skills die briefings omzetten in', titleEmphasisA: 'memorabele', titleMiddle: 'en leverbare', titleEmphasisB: 'artifacts', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Officiële antwoorden', label: 'Open Design-FAQ', titlePrefix: 'Vragen over', titleMiddle: 'en', titleSuffix: 'het open-source alternatief voor Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Officiële antwoorden', label: 'Marketing AX-FAQ', titlePrefix: 'Vragen over', titleMiddle: 'en', titleSuffix: 'het open-source alternatief voor Claude Design' },
     cta: { label: 'Starten', titlePrefix: 'Laten we iets', titleOpen: 'opens', titleMiddle: 'en', titleVisual: 'visueel memorabels', titleSuffix: 'bouwen', star: 'Star op GitHub' },
     footer: { summary: 'Het open-source alternatief voor Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Desktop downloaden' },
   },
@@ -5130,7 +5130,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'مفتوح المصدر يعمل على',
       titleSecondEmphasis: 'الـ Agent الخاص بك',
       lead: (skills, systems) =>
-        `Open Design هو البديل الرسمي المحلي أولاً لـ Claude Design. يتحول coding agent الذي تستخدمه — Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen — إلى محرك تصميم مدفوع بـ ${skills} skills قابلة للتركيب و ${systems} أنظمة DESIGN.md قابلة للنقل.`,
+        `Marketing AX هو البديل الرسمي المحلي أولاً لـ Claude Design. يتحول coding agent الذي تستخدمه — Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen — إلى محرك تصميم مدفوع بـ ${skills} skills قابلة للتركيب و ${systems} أنظمة DESIGN.md قابلة للنقل.`,
       star: 'ضع Star على GitHub',
       download: 'تنزيل سطح المكتب',
     },
@@ -5139,7 +5139,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'المختبر', titlePrefix: 'أرشيف', titleEmphasis: 'تجارب', titleSuffix: 'ينمو للـ skills والعروض والأشكال التوليدية' },
     method: { label: 'المنهج', titlePrefix: 'من', titleEmphasis: 'الإشارة', titleSuffix: 'إلى النظام' },
     work: { label: 'أعمال مختارة', titlePrefix: 'Skills تحول الـ brief إلى', titleEmphasisA: 'artifacts', titleMiddle: 'لا تُنسى و', titleEmphasisB: 'قابلة للتسليم', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'إجابات رسمية', label: 'أسئلة Open Design', titlePrefix: 'أسئلة حول', titleMiddle: 'و', titleSuffix: 'البديل مفتوح المصدر لـ Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'إجابات رسمية', label: 'أسئلة Marketing AX', titlePrefix: 'أسئلة حول', titleMiddle: 'و', titleSuffix: 'البديل مفتوح المصدر لـ Claude Design' },
     cta: { label: 'ابدأ', titlePrefix: 'لنبن شيئاً', titleOpen: 'مفتوحاً', titleMiddle: 'و', titleVisual: 'قوياً بصرياً', titleSuffix: '', star: 'ضع Star على GitHub' },
     footer: { summary: 'البديل مفتوح المصدر لـ Claude Design. محلي أولاً، BYOK، Apache-2.0.', download: 'تنزيل سطح المكتب' },
   },
@@ -5150,7 +5150,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'açık kaynak,',
       titleSecondEmphasis: 'kendi Agentında çalışır',
       lead: (skills, systems) =>
-        `Open Design, Claude Design'ın resmi local-first alternatifidir. Zaten kullandığın coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen — ${skills} birleştirilebilir skill ve ${systems} taşınabilir DESIGN.md sistemiyle çalışan bir tasarım motoruna dönüşür.`,
+        `Marketing AX, Claude Design'ın resmi local-first alternatifidir. Zaten kullandığın coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen — ${skills} birleştirilebilir skill ve ${systems} taşınabilir DESIGN.md sistemiyle çalışan bir tasarım motoruna dönüşür.`,
       star: "GitHub'da Star ver",
       download: 'Desktop indir',
     },
@@ -5159,7 +5159,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Lab', titlePrefix: 'Büyüyen bir', titleEmphasis: 'deney arşivi', titleSuffix: ': skill, deck ve üretken formlar' },
     method: { label: 'Yöntem', titlePrefix: '', titleEmphasis: 'Sinyalden', titleSuffix: 'sisteme' },
     work: { label: 'Seçilmiş işler', titlePrefix: 'Briefleri', titleEmphasisA: 'akılda kalan', titleMiddle: 've teslim edilebilir', titleEmphasisB: 'artifactlara', titleSuffix: 'çeviren skilller' },
-    faqSection: { rule: 'FAQ', answers: 'Resmi yanıtlar', label: 'Open Design SSS', titlePrefix: '', titleMiddle: 've', titleSuffix: "Claude Design'ın açık kaynak alternatifi hakkında sorular" },
+    faqSection: { rule: 'FAQ', answers: 'Resmi yanıtlar', label: 'Marketing AX SSS', titlePrefix: '', titleMiddle: 've', titleSuffix: "Claude Design'ın açık kaynak alternatifi hakkında sorular" },
     cta: { label: 'Başla', titlePrefix: 'Birlikte', titleOpen: 'açık', titleMiddle: 've', titleVisual: 'görsel olarak güçlü', titleSuffix: 'bir şey üretelim', star: "GitHub'da Star ver" },
     footer: { summary: "Claude Design'ın açık kaynak alternatifi. Local-first, BYOK, Apache-2.0.", download: 'Desktop indir' },
   },
@@ -5170,7 +5170,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       titleMiddle: 'працює на',
       titleSecondEmphasis: 'вашому власному Agent',
       lead: (skills, systems) =>
-        `Open Design — офіційна local-first альтернатива Claude Design. Ваш coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen — стає design engine на базі ${skills} composable skills і ${systems} portable DESIGN.md systems.`,
+        `Marketing AX — офіційна local-first альтернатива Claude Design. Ваш coding agent — Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen — стає design engine на базі ${skills} composable skills і ${systems} portable DESIGN.md systems.`,
       star: 'Поставити Star на GitHub',
       download: 'Завантажити desktop',
     },
@@ -5179,7 +5179,7 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     labs: { label: 'Лабораторія', titlePrefix: 'Зростаючий', titleEmphasis: 'архів експериментів', titleSuffix: 'зі skills, deck та машинними формами' },
     method: { label: 'Метод', titlePrefix: 'Від', titleEmphasis: 'сигналу', titleSuffix: 'до системи' },
     work: { label: 'Вибрані роботи', titlePrefix: 'Skills перетворюють brief на', titleEmphasisA: 'пам’ятні', titleMiddle: 'і готові до відправки', titleEmphasisB: 'artifacts', titleSuffix: '' },
-    faqSection: { rule: 'FAQ', answers: 'Офіційні відповіді', label: 'FAQ Open Design українською', titlePrefix: 'Питання про', titleMiddle: 'і', titleSuffix: 'open-source альтернативу Claude Design' },
+    faqSection: { rule: 'FAQ', answers: 'Офіційні відповіді', label: 'FAQ Marketing AX українською', titlePrefix: 'Питання про', titleMiddle: 'і', titleSuffix: 'open-source альтернативу Claude Design' },
     cta: { label: 'Почати', titlePrefix: 'Давайте створимо щось', titleOpen: 'відкрите', titleMiddle: 'і', titleVisual: 'візуально сильне', titleSuffix: '', star: 'Поставити Star на GitHub' },
     footer: { summary: 'Open-source альтернатива Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Завантажити desktop' },
   },
@@ -5206,7 +5206,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'リリース',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 巻 / 第 26 号',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / 第 01 巻 / 第 26 号',
     bottomRight: 'ベルリン / オープン / 地球 · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: '姉妹プロジェクト',
@@ -5232,7 +5232,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: '릴리스',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / 01권 / 26호',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / 01권 / 26호',
     bottomRight: '베를린 / 오픈 / 지구 · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: '자매 프로젝트',
@@ -5258,7 +5258,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Versionen',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Band 01 / Ausgabe Nr. 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Band 01 / Ausgabe Nr. 26',
     bottomRight: 'Berlin / Offen / Erde · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Schwesterprojekte',
@@ -5284,7 +5284,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Versions',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Numéro 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volume 01 / Numéro 26',
     bottomRight: 'Berlin / Ouvert / Terre · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Projets sœurs',
@@ -5310,7 +5310,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Релизы',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Том 01 / Выпуск № 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Том 01 / Выпуск № 26',
     bottomRight: 'Берлин / Открыто / Земля · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Родственные проекты',
@@ -5336,7 +5336,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Versiones',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volumen 01 / Número 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volumen 01 / Número 26',
     bottomRight: 'Berlín / Abierto / Tierra · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Proyectos relacionados',
@@ -5362,7 +5362,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Versões',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Edição Nº 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volume 01 / Edição Nº 26',
     bottomRight: 'Berlim / Aberto / Terra · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Projetos irmãos',
@@ -5388,7 +5388,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Rilasci',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Numero 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volume 01 / Numero 26',
     bottomRight: 'Berlino / Aperto / Terra · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Progetti correlati',
@@ -5414,7 +5414,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Bản phát hành',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Tập 01 / Số 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Tập 01 / Số 26',
     bottomRight: 'Berlin / Mở / Trái đất · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Dự án liên quan',
@@ -5440,7 +5440,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Wydania',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Tom 01 / Numer 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Tom 01 / Numer 26',
     bottomRight: 'Berlin / Otwarte / Ziemia · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Projekty siostrzane',
@@ -5466,7 +5466,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Rilis',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Edisi Nº 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volume 01 / Edisi Nº 26',
     bottomRight: 'Berlin / Terbuka / Bumi · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Proyek terkait',
@@ -5492,7 +5492,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'Uitgaven',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Editie Nº 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Volume 01 / Editie Nº 26',
     bottomRight: 'Berlijn / Open / Aarde · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'Zusterprojecten',
@@ -5518,7 +5518,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     releases: 'الإصدارات',
     discord: 'Discord',
     rss: 'RSS',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / المجلد 01 / العدد 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / المجلد 01 / العدد 26',
     bottomRight: 'برلين / مفتوح / الأرض · 52.5200° N · 13.4050° E',
     xTwitter: 'X / Twitter',
     sisterProjects: 'المشاريع الشقيقة',
@@ -5549,7 +5549,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     htmlAnything: 'HTML Anything',
     htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Cilt 01 / Sayı Nº 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Cilt 01 / Sayı Nº 26',
     bottomRight: 'Berlin / Açık / Dünya · 52.5200° N · 13.4050° E',
   },
   uk: {
@@ -5575,7 +5575,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     htmlAnything: 'HTML Anything',
     htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
-    bottomLeft: '● Open Design · Apache-2.0 · 2026 / Том 01 / Випуск № 26',
+    bottomLeft: '● Marketing AX · Apache-2.0 · 2026 / Том 01 / Випуск № 26',
     bottomRight: 'Берлін / Відкрито / Земля · 52.5200° N · 13.4050° E',
   },
 };
@@ -5586,9 +5586,9 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
   ja: {
     summary:
       'Claude Design のオープンソース代替。huashu-design、guizang-ppt、multica-ai、open-codesign の蓄積の上に構築されています。',
-    downloadAria: 'Open Design デスクトップアプリをダウンロード',
+    downloadAria: 'Marketing AX デスクトップアプリをダウンロード',
     download: 'デスクトップをダウンロード',
-    columns: { studio: 'スタジオ', library: 'ライブラリ', connect: '接続', openDesign: 'Open Design' },
+    columns: { studio: 'スタジオ', library: 'ライブラリ', connect: '接続', openDesign: 'Marketing AX' },
     studioLinks: ['機能', 'ラボ', 'メソッド', 'マニフェスト'],
     connectLinks: ['GitHub', '課題', '貢献者', 'リリース', 'Discord'],
     libraryLinks: {
@@ -5604,16 +5604,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: '比較',
       alternative: 'Claude Design の代替',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / 第 01 巻 / 第 26 号',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / 第 01 巻 / 第 26 号',
     bottomRightA: 'ベルリン / オープン / 地球',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   ko: {
     summary:
       'Claude Design의 오픈소스 대안입니다. huashu-design, guizang-ppt, multica-ai, open-codesign의 축적 위에 구축되었습니다.',
-    downloadAria: 'Open Design 데스크톱 앱 다운로드',
+    downloadAria: 'Marketing AX 데스크톱 앱 다운로드',
     download: '데스크톱 다운로드',
-    columns: { studio: '스튜디오', library: '라이브러리', connect: '연결', openDesign: 'Open Design' },
+    columns: { studio: '스튜디오', library: '라이브러리', connect: '연결', openDesign: 'Marketing AX' },
     studioLinks: ['기능', '랩', '방법', '매니페스토'],
     connectLinks: ['GitHub', '이슈', '기여자', '릴리스', 'Discord'],
     libraryLinks: {
@@ -5629,7 +5629,7 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: '비교',
       alternative: 'Claude Design 대안',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / 01권 / 26호',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / 01권 / 26호',
     bottomRightA: '베를린 / 오픈 / 지구',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
@@ -5638,7 +5638,7 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       'Die quelloffene Alternative zu Claude Design. Gebaut auf den Vorarbeiten von huashu-design, guizang-ppt, multica-ai und open-codesign.',
     downloadAria: 'Open-Design-Desktop-App herunterladen',
     download: 'Desktop herunterladen',
-    columns: { studio: 'Studio', library: 'Bibliothek', connect: 'Verbinden', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Bibliothek', connect: 'Verbinden', openDesign: 'Marketing AX' },
     studioLinks: ['Fähigkeiten', 'Labor', 'Methode', 'Manifest'],
     connectLinks: ['GitHub', 'Tickets', 'Mitwirkende', 'Versionen', 'Discord'],
     libraryLinks: {
@@ -5654,16 +5654,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Vergleich',
       alternative: 'Claude-Design-Alternative',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Band 01 / Ausgabe Nr. 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Band 01 / Ausgabe Nr. 26',
     bottomRightA: 'Berlin / Offen / Erde',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   fr: {
     summary:
       "L'alternative open source à Claude Design. Construite sur les travaux de huashu-design, guizang-ppt, multica-ai et open-codesign.",
-    downloadAria: "Télécharger l'application desktop Open Design",
+    downloadAria: "Télécharger l'application desktop Marketing AX",
     download: 'Télécharger le desktop',
-    columns: { studio: 'Studio', library: 'Bibliothèque', connect: 'Connexion', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Bibliothèque', connect: 'Connexion', openDesign: 'Marketing AX' },
     studioLinks: ['Capacités', 'Lab', 'Méthode', 'Manifeste'],
     connectLinks: ['GitHub', 'Tickets', 'Contributeurs', 'Versions', 'Discord'],
     libraryLinks: {
@@ -5679,16 +5679,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Comparaison',
       alternative: 'Alternative à Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volume 01 / Numéro 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volume 01 / Numéro 26',
     bottomRightA: 'Berlin / Ouvert / Terre',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   ru: {
     summary:
       'Открытая альтернатива Claude Design, созданная на основе работ huashu-design, guizang-ppt, multica-ai и open-codesign.',
-    downloadAria: 'Скачать настольное приложение Open Design',
+    downloadAria: 'Скачать настольное приложение Marketing AX',
     download: 'Скачать desktop',
-    columns: { studio: 'Студия', library: 'Библиотека', connect: 'Связь', openDesign: 'Open Design' },
+    columns: { studio: 'Студия', library: 'Библиотека', connect: 'Связь', openDesign: 'Marketing AX' },
     studioLinks: ['Возможности', 'Лаборатория', 'Метод', 'Манифест'],
     connectLinks: ['GitHub', 'Задачи', 'Участники', 'Релизы', 'Discord'],
     libraryLinks: {
@@ -5704,16 +5704,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Сравнение',
       alternative: 'Альтернатива Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Том 01 / Выпуск № 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Том 01 / Выпуск № 26',
     bottomRightA: 'Берлин / Открыто / Земля',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   es: {
     summary:
       'La alternativa de código abierto a Claude Design, construida sobre huashu-design, guizang-ppt, multica-ai y open-codesign.',
-    downloadAria: 'Descargar la aplicación de escritorio de Open Design',
+    downloadAria: 'Descargar la aplicación de escritorio de Marketing AX',
     download: 'Descargar desktop',
-    columns: { studio: 'Estudio', library: 'Biblioteca', connect: 'Conectar', openDesign: 'Open Design' },
+    columns: { studio: 'Estudio', library: 'Biblioteca', connect: 'Conectar', openDesign: 'Marketing AX' },
     studioLinks: ['Capacidades', 'Lab', 'Método', 'Manifiesto'],
     connectLinks: ['GitHub', 'Incidencias', 'Colaboradores', 'Versiones', 'Discord'],
     libraryLinks: {
@@ -5729,16 +5729,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Comparación',
       alternative: 'Alternativa a Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volumen 01 / Número 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volumen 01 / Número 26',
     bottomRightA: 'Berlín / Abierto / Tierra',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   'pt-br': {
     summary:
       'A alternativa de código aberto ao Claude Design, construída sobre huashu-design, guizang-ppt, multica-ai e open-codesign.',
-    downloadAria: 'Baixar o aplicativo desktop do Open Design',
+    downloadAria: 'Baixar o aplicativo desktop do Marketing AX',
     download: 'Baixar desktop',
-    columns: { studio: 'Estúdio', library: 'Biblioteca', connect: 'Conectar', openDesign: 'Open Design' },
+    columns: { studio: 'Estúdio', library: 'Biblioteca', connect: 'Conectar', openDesign: 'Marketing AX' },
     studioLinks: ['Capacidades', 'Lab', 'Método', 'Manifesto aberto'],
     connectLinks: ['GitHub', 'Problemas', 'Colaboradores', 'Versões', 'Discord'],
     libraryLinks: {
@@ -5754,16 +5754,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Comparação',
       alternative: 'Alternativa ao Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volume 01 / Edição Nº 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volume 01 / Edição Nº 26',
     bottomRightA: 'Berlim / Aberto / Terra',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   it: {
     summary:
       "L'alternativa open source a Claude Design, costruita sulle basi di huashu-design, guizang-ppt, multica-ai e open-codesign.",
-    downloadAria: "Scarica l'app desktop di Open Design",
+    downloadAria: "Scarica l'app desktop di Marketing AX",
     download: 'Scarica desktop',
-    columns: { studio: 'Studio', library: 'Libreria', connect: 'Connessione', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Libreria', connect: 'Connessione', openDesign: 'Marketing AX' },
     studioLinks: ['Capacità', 'Lab', 'Metodo', 'Manifesto aperto'],
     connectLinks: ['GitHub', 'Problemi', 'Contributori', 'Rilasci', 'Discord'],
     libraryLinks: {
@@ -5779,16 +5779,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Confronto',
       alternative: 'Alternativa a Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volume 01 / Numero 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volume 01 / Numero 26',
     bottomRightA: 'Berlino / Aperto / Terra',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   vi: {
     summary:
       'Lựa chọn mã nguồn mở thay Claude Design, xây trên nền tảng của huashu-design, guizang-ppt, multica-ai và open-codesign.',
-    downloadAria: 'Tải ứng dụng desktop Open Design',
+    downloadAria: 'Tải ứng dụng desktop Marketing AX',
     download: 'Tải desktop',
-    columns: { studio: 'Studio', library: 'Thư viện', connect: 'Kết nối', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Thư viện', connect: 'Kết nối', openDesign: 'Marketing AX' },
     studioLinks: ['Năng lực', 'Lab', 'Phương pháp', 'Tuyên ngôn'],
     connectLinks: ['GitHub', 'Vấn đề', 'Người đóng góp', 'Bản phát hành', 'Discord'],
     libraryLinks: {
@@ -5804,16 +5804,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'So sánh',
       alternative: 'Lựa chọn thay Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Tập 01 / Số 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Tập 01 / Số 26',
     bottomRightA: 'Berlin / Mở / Trái đất',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   pl: {
     summary:
       'Otwarta alternatywa dla Claude Design, zbudowana na dorobku huashu-design, guizang-ppt, multica-ai i open-codesign.',
-    downloadAria: 'Pobierz aplikację desktop Open Design',
+    downloadAria: 'Pobierz aplikację desktop Marketing AX',
     download: 'Pobierz desktop',
-    columns: { studio: 'Studio', library: 'Biblioteka', connect: 'Kontakt', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Biblioteka', connect: 'Kontakt', openDesign: 'Marketing AX' },
     studioLinks: ['Możliwości', 'Lab', 'Metoda', 'Manifest'],
     connectLinks: ['GitHub', 'Zgłoszenia', 'Współtwórcy', 'Wydania', 'Discord'],
     libraryLinks: {
@@ -5829,16 +5829,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Porównanie',
       alternative: 'Alternatywa dla Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Tom 01 / Numer 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Tom 01 / Numer 26',
     bottomRightA: 'Berlin / Otwarte / Ziemia',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   id: {
     summary:
       'Alternatif sumber terbuka untuk Claude Design, dibangun di atas karya huashu-design, guizang-ppt, multica-ai, dan open-codesign.',
-    downloadAria: 'Unduh aplikasi desktop Open Design',
+    downloadAria: 'Unduh aplikasi desktop Marketing AX',
     download: 'Unduh desktop',
-    columns: { studio: 'Studio', library: 'Pustaka', connect: 'Koneksi', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Pustaka', connect: 'Koneksi', openDesign: 'Marketing AX' },
     studioLinks: ['Kapabilitas', 'Lab', 'Metode', 'Manifesto terbuka'],
     connectLinks: ['GitHub', 'Isu', 'Kontributor', 'Rilis', 'Discord'],
     libraryLinks: {
@@ -5854,16 +5854,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Perbandingan',
       alternative: 'Alternatif Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volume 01 / Edisi Nº 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volume 01 / Edisi Nº 26',
     bottomRightA: 'Berlin / Terbuka / Bumi',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   nl: {
     summary:
       'Het open-source alternatief voor Claude Design, gebouwd op het werk van huashu-design, guizang-ppt, multica-ai en open-codesign.',
-    downloadAria: 'Download de Open Design desktop-app',
+    downloadAria: 'Download de Marketing AX desktop-app',
     download: 'Desktop downloaden',
-    columns: { studio: 'Studio', library: 'Bibliotheek', connect: 'Verbinden', openDesign: 'Open Design' },
+    columns: { studio: 'Studio', library: 'Bibliotheek', connect: 'Verbinden', openDesign: 'Marketing AX' },
     studioLinks: ['Mogelijkheden', 'Lab', 'Methode', 'Manifest'],
     connectLinks: ['GitHub', 'Meldingen', 'Bijdragers', 'Uitgaven', 'Discord'],
     libraryLinks: {
@@ -5879,16 +5879,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Vergelijking',
       alternative: 'Claude Design-alternatief',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Volume 01 / Editie Nº 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Volume 01 / Editie Nº 26',
     bottomRightA: 'Berlijn / Open / Aarde',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   ar: {
     summary:
       'البديل مفتوح المصدر لـ Claude Design، مبني على أعمال huashu-design وguizang-ppt وmultica-ai وopen-codesign.',
-    downloadAria: 'تنزيل تطبيق Open Design لسطح المكتب',
+    downloadAria: 'تنزيل تطبيق Marketing AX لسطح المكتب',
     download: 'تنزيل سطح المكتب',
-    columns: { studio: 'الاستوديو', library: 'المكتبة', connect: 'التواصل', openDesign: 'Open Design' },
+    columns: { studio: 'الاستوديو', library: 'المكتبة', connect: 'التواصل', openDesign: 'Marketing AX' },
     studioLinks: ['القدرات', 'المختبر', 'المنهج', 'البيان'],
     connectLinks: ['GitHub', 'المسائل', 'المساهمون', 'الإصدارات', 'Discord'],
     libraryLinks: {
@@ -5904,16 +5904,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'المقارنة',
       alternative: 'بديل Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / المجلد 01 / العدد 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / المجلد 01 / العدد 26',
     bottomRightA: 'برلين / مفتوح / الأرض',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   tr: {
     summary:
       "Claude Design'ın açık kaynak alternatifi; huashu-design, guizang-ppt, multica-ai ve open-codesign çalışmalarının üzerine kuruldu.",
-    downloadAria: 'Open Design desktop uygulamasını indir',
+    downloadAria: 'Marketing AX desktop uygulamasını indir',
     download: 'Desktop indir',
-    columns: { studio: 'Stüdyo', library: 'Kütüphane', connect: 'Bağlantı', openDesign: 'Open Design' },
+    columns: { studio: 'Stüdyo', library: 'Kütüphane', connect: 'Bağlantı', openDesign: 'Marketing AX' },
     studioLinks: ['Yetenekler', 'Lab', 'Yöntem', 'Açık manifesto'],
     connectLinks: ['GitHub', 'Sorunlar', 'Katkıda bulunanlar', 'Sürümler', 'Discord'],
     libraryLinks: {
@@ -5929,16 +5929,16 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Karşılaştırma',
       alternative: 'Claude Design alternatifi',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Cilt 01 / Sayı Nº 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Cilt 01 / Sayı Nº 26',
     bottomRightA: 'Berlin / Açık / Dünya',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
   uk: {
     summary:
       'Відкрита альтернатива Claude Design, побудована на роботах huashu-design, guizang-ppt, multica-ai та open-codesign.',
-    downloadAria: 'Завантажити настільний застосунок Open Design',
+    downloadAria: 'Завантажити настільний застосунок Marketing AX',
     download: 'Завантажити desktop',
-    columns: { studio: 'Студія', library: 'Бібліотека', connect: "Зв'язок", openDesign: 'Open Design' },
+    columns: { studio: 'Студія', library: 'Бібліотека', connect: "Зв'язок", openDesign: 'Marketing AX' },
     studioLinks: ['Можливості', 'Лабораторія', 'Метод', 'Маніфест'],
     connectLinks: ['GitHub', 'Задачі', 'Учасники', 'Релізи', 'Discord'],
     libraryLinks: {
@@ -5954,7 +5954,7 @@ const LOCALIZED_HOME_FOOTER_COPY: Partial<
       compare: 'Порівняння',
       alternative: 'Альтернатива Claude Design',
     },
-    bottomLeft: 'Open Design · Apache-2.0 · 2026 / Том 01 / Випуск № 26',
+    bottomLeft: 'Marketing AX · Apache-2.0 · 2026 / Том 01 / Випуск № 26',
     bottomRightA: 'Берлін / Відкрито / Земля',
     bottomRightB: '52.5200° N · 13.4050° E',
   },
@@ -6155,9 +6155,9 @@ function homeFallbackCopy(text: HomeFallbackText): DeepPartial<HomePageCopy> {
 
 const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<HomePageCopy>>> = {
   ja: homeFallbackCopy({
-    railRight: 'Open Design — 第 01 巻 · 第 26 号 · Apache-2.0',
+    railRight: 'Marketing AX — 第 01 巻 · 第 26 号 · Apache-2.0',
     railLeft: 'Skill · Design System · Agent · BYOK · ローカル優先',
-    discordAria: 'Open Design Discord に参加',
+    discordAria: 'Marketing AX Discord に参加',
     joinDiscord: 'Discord に参加',
     heroLabel: 'オープンソースのデザインスタジオ',
     heroTitlePrefix: 'オープンソースの',
@@ -6165,7 +6165,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     heroTitleMiddle: '自分の',
     heroTitleSecondEmphasis: 'Agent で動かす',
     heroLead: (skills, systems) =>
-      `Open Design は Claude Design の公式ローカル優先代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen など既存の coding agent が、${skills} 個の組み合わせ可能な Skill と ${systems} 個のポータブル DESIGN.md システムで動くデザインエンジンになります。`,
+      `Marketing AX は Claude Design の公式ローカル優先代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen など既存の coding agent が、${skills} 個の組み合わせ可能な Skill と ${systems} 個のポータブル DESIGN.md システムで動くデザインエンジンになります。`,
     star: 'GitHub で Star',
     download: 'デスクトップをダウンロード',
     plate: '図版 Nº 08',
@@ -6177,7 +6177,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     ],
     heroFoot: 'pnpm tools-dev · 3 コマンドで開始',
     heroIndex: ['検出', '発見', '指示', '納品'],
-    officialAria: 'Open Design の公式ソース',
+    officialAria: 'Marketing AX の公式ソース',
     officialLabel: '公式ソース',
     officialItems: [
       { label: '公式サイト', value: 'open-design.ai' },
@@ -6189,7 +6189,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     ],
     about: {
       rule: '概要 / マニフェスト',
-      volume: 'Open Design / 第 01 巻',
+      volume: 'Marketing AX / 第 01 巻',
       label: 'スタジオについて',
       titlePrefix: '私たちは',
       titleAgent: 'あなたの Agent',
@@ -6203,7 +6203,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       stampTop: 'スタジオ実践',
       stampBottom: '創業 MMXXVI',
       sideNote: ['モデル挙動から', '視覚的な趣味まで', '創造システムの', '全スタックを', 'プロトタイプ化します。'],
-      caption: '形 · 知覚 · 機械の想像力の研究。（Open Design, MMXXVI）',
+      caption: '形 · 知覚 · 機械の想像力の研究。（Marketing AX, MMXXVI）',
     },
     capabilities: {
       rule: '機能 · Skill · System',
@@ -6261,7 +6261,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     },
     work: {
       rule: '選定作品 · 2026 カタログ',
-      editedBy: 'Open Design 編集',
+      editedBy: 'Marketing AX 編集',
       label: '選定作品',
       titlePrefix: 'brief を',
       titleEmphasisA: '記憶に残る',
@@ -6278,7 +6278,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       rule: '協働者 / 系譜',
       shoulders: '先人の肩の上に立つ',
       label: '協働者',
-      quote: '「Open Design は曖昧な AI のアイデアを、鋭く、信頼でき、本当に新しい視覚システムへ変えてくれました。」',
+      quote: '「Marketing AX は曖昧な AI のアイデアを、鋭く、信頼でき、本当に新しい視覚システムへ変えてくれました。」',
       authorTitle: 'クリエイティブディレクター · North Form',
       partnersText: 'オープンソースのデザイン文化を出荷してきたチームの蓄積の上に立っています。',
       partnerLabels: ['思想', 'Deck', 'UX', 'Terminal', 'Frame'],
@@ -6287,7 +6287,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     faqSection: {
       rule: 'よくある質問',
       answers: '公式回答、宣伝文句なし',
-      label: 'Open Design よくある質問',
+      label: 'Marketing AX よくある質問',
       titlePrefix: '',
       titleMiddle: 'と',
       titleSuffix: 'Claude Design のオープンソース代替について',
@@ -6311,9 +6311,9 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
 };
 
 LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
-  railRight: 'Open Design — 01권 · 26호 · Apache-2.0',
+  railRight: 'Marketing AX — 01권 · 26호 · Apache-2.0',
   railLeft: 'Skill · 디자인 시스템 · Agent · BYOK · 로컬 우선',
-  discordAria: 'Open Design Discord 참여',
+  discordAria: 'Marketing AX Discord 참여',
   joinDiscord: 'Discord 참여',
   heroLabel: '오픈소스 디자인 스튜디오',
   heroTitlePrefix: '오픈소스',
@@ -6321,7 +6321,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
   heroTitleMiddle: '내',
   heroTitleSecondEmphasis: 'Agent에서 실행',
   heroLead: (skills, systems) =>
-    `Open Design은 Claude Design의 공식 로컬 우선 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen 같은 기존 coding agent가 ${skills}개의 조합 가능한 Skill과 ${systems}개의 portable DESIGN.md 시스템으로 움직이는 디자인 엔진이 됩니다.`,
+    `Marketing AX은 Claude Design의 공식 로컬 우선 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen 같은 기존 coding agent가 ${skills}개의 조합 가능한 Skill과 ${systems}개의 portable DESIGN.md 시스템으로 움직이는 디자인 엔진이 됩니다.`,
   star: 'GitHub에서 Star',
   download: '데스크톱 다운로드',
   plate: '도판 Nº 08',
@@ -6333,7 +6333,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
   ],
   heroFoot: 'pnpm tools-dev · 3개 명령으로 시작',
   heroIndex: ['감지', '발견', '지시', '전달'],
-  officialAria: 'Open Design 공식 출처',
+  officialAria: 'Marketing AX 공식 출처',
   officialLabel: '공식 출처',
   officialItems: [
     { label: '공식 사이트', value: 'open-design.ai' },
@@ -6345,7 +6345,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
   ],
   about: {
     rule: '소개 / 선언',
-    volume: 'Open Design / 01권',
+    volume: 'Marketing AX / 01권',
     label: '스튜디오 소개',
     titlePrefix: '우리는',
     titleAgent: '당신의 Agent',
@@ -6359,7 +6359,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
     stampTop: '스튜디오 실천',
     stampBottom: '설립 MMXXVI',
     sideNote: ['모델 행동에서', '시각적 취향까지', '창작 시스템의', '전체 스택을', '프로토타입합니다.'],
-    caption: '형태 · 지각 · 기계적 상상력 연구. (Open Design, MMXXVI)',
+    caption: '형태 · 지각 · 기계적 상상력 연구. (Marketing AX, MMXXVI)',
   },
   capabilities: {
     rule: '기능 · Skill · System',
@@ -6417,7 +6417,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
   },
   work: {
     rule: '선정 작업 · 2026 카탈로그',
-    editedBy: 'Open Design 편집',
+    editedBy: 'Marketing AX 편집',
     label: '선정 작업',
     titlePrefix: 'brief를',
     titleEmphasisA: '기억에 남는',
@@ -6434,7 +6434,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
     rule: '협업자 / 계보',
     shoulders: '선행 작업 위에 서기',
     label: '협업자',
-    quote: '“Open Design은 모호한 AI 아이디어를 날카롭고 믿을 수 있으며 실제로 새로운 시각 시스템으로 바꾸어 주었습니다.”',
+    quote: '“Marketing AX은 모호한 AI 아이디어를 날카롭고 믿을 수 있으며 실제로 새로운 시각 시스템으로 바꾸어 주었습니다.”',
     authorTitle: '크리에이티브 디렉터 · North Form',
     partnersText: '오픈소스 디자인 문화를 출하해 온 팀들의 축적 위에 서 있습니다.',
     partnerLabels: ['철학', 'Deck', 'UX', 'Terminal', 'Frame'],
@@ -6443,7 +6443,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
   faqSection: {
     rule: '자주 묻는 질문',
     answers: '공식 답변, 마케팅 문구 없음',
-    label: 'Open Design 자주 묻는 질문',
+    label: 'Marketing AX 자주 묻는 질문',
     titlePrefix: '',
     titleMiddle: '및',
     titleSuffix: 'Claude Design 오픈소스 대안에 관한 질문',
@@ -6466,9 +6466,9 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
 });
 
 LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
-  railRight: 'Open Design — Band 01 · Ausgabe Nr. 26 · Apache-2.0',
+  railRight: 'Marketing AX — Band 01 · Ausgabe Nr. 26 · Apache-2.0',
   railLeft: 'Skills · Systeme · Agents · BYOK · lokal zuerst',
-  discordAria: 'Open Design Discord beitreten',
+  discordAria: 'Marketing AX Discord beitreten',
   joinDiscord: 'Discord beitreten',
   heroLabel: 'Open-Source-Designstudio',
   heroTitlePrefix: 'Offenes',
@@ -6476,7 +6476,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
   heroTitleMiddle: 'läuft mit',
   heroTitleSecondEmphasis: 'deinem eigenen Agent',
   heroLead: (skills, systems) =>
-    `Open Design ist die offizielle lokal zuerst gedachte Alternative zu Claude Design. Dein vorhandener Coding-Agent — Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — wird zur Design-Engine mit ${skills} kombinierbaren Skills und ${systems} portablen DESIGN.md-Systemen.`,
+    `Marketing AX ist die offizielle lokal zuerst gedachte Alternative zu Claude Design. Dein vorhandener Coding-Agent — Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — wird zur Design-Engine mit ${skills} kombinierbaren Skills und ${systems} portablen DESIGN.md-Systemen.`,
   star: 'Auf GitHub sternen',
   download: 'Desktop herunterladen',
   plate: 'Tafel Nr. 08',
@@ -6500,7 +6500,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
   ],
   about: {
     rule: 'Überblick / Manifest',
-    volume: 'Open Design / Band 01',
+    volume: 'Marketing AX / Band 01',
     label: 'Über das Studio',
     titlePrefix: 'Wir behandeln',
     titleAgent: 'deinen Agent',
@@ -6514,7 +6514,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
     stampTop: 'Studiopraxis',
     stampBottom: 'Seit MMXXVI',
     sideNote: ['Vom Modellverhalten', 'bis zum visuellen Geschmack', 'prototypisieren wir', 'den ganzen Stack', 'kreativer Systeme.'],
-    caption: 'Studien zu Form · Wahrnehmung · maschinischer Vorstellungskraft. (Open Design, MMXXVI)',
+    caption: 'Studien zu Form · Wahrnehmung · maschinischer Vorstellungskraft. (Marketing AX, MMXXVI)',
   },
   capabilities: {
     rule: 'Fähigkeiten · Skills · Systeme',
@@ -6572,7 +6572,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
   },
   work: {
     rule: 'Ausgewählte Arbeiten · Katalog 2026',
-    editedBy: 'Redaktion Open Design',
+    editedBy: 'Redaktion Marketing AX',
     label: 'Ausgewählte Arbeiten',
     titlePrefix: 'Skills verwandeln Briefings in',
     titleEmphasisA: 'prägnante',
@@ -6589,7 +6589,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
     rule: 'Mitwirkende / Herkunft',
     shoulders: 'Auf den Schultern anderer',
     label: 'Mitwirkende',
-    quote: '„Open Design half uns, vage KI-Ideen in ein visuelles System zu verwandeln, das scharf, glaubwürdig und wirklich neu wirkte.“',
+    quote: '„Marketing AX half uns, vage KI-Ideen in ein visuelles System zu verwandeln, das scharf, glaubwürdig und wirklich neu wirkte.“',
     authorTitle: 'Kreativdirektorin · North Form',
     partnersText: 'Wir bauen auf Teams auf, die Open-Source-Designkultur tatsächlich ausliefern.',
     partnerLabels: ['Philosophie', 'Decks', 'UX', 'Terminal', 'Frames'],

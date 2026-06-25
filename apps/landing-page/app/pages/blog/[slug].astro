@@ -145,13 +145,13 @@ const postUrl = new URL(Astro.url.pathname, Astro.site ?? 'https://open-design.a
 
 // BreadcrumbList for the blog post. SeoHead already emits the Article
 // JSON-LD via `kind='article'`; the breadcrumb here adds the trail
-// (Open Design → Blog → <post title>) so Google can render the post
+// (Marketing AX → Blog → <post title>) so Google can render the post
 // with breadcrumb-style URLs in the SERP.
 const breadcrumbJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Open Design', item: origin },
+    { '@type': 'ListItem', position: 1, name: 'Marketing AX', item: origin },
     { '@type': 'ListItem', position: 2, name: 'Blog', item: new URL('/blog/', origin).toString() },
     { '@type': 'ListItem', position: 3, name: localizedPostField('title'), item: postUrl },
   ],
