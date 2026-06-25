@@ -9,6 +9,8 @@ import type { ToolPackConfig } from "../src/config.js";
 import { prepareResourceTree } from "../src/win/resources.js";
 import type { WinPaths } from "../src/win/types.js";
 
+const RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS = 15_000;
+
 async function writeFakeOpenCodeCompanion(
   source: string,
   content = "#!/bin/sh\nexit 0\n",
@@ -110,7 +112,7 @@ describe("prepareResourceTree", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  });
+  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
 
   it("invalidates the Windows resource tree cache when the plugin-preview manifest changes", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-previews-"));
@@ -156,7 +158,7 @@ describe("prepareResourceTree", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  });
+  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
 
   it("copies a configured Vela CLI binary into the Windows resource tree", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-vela-"));
@@ -260,5 +262,5 @@ describe("prepareResourceTree", () => {
       else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
-  });
+  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
 });

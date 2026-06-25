@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
+import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
 
 type SqliteDb = Database.Database;
@@ -349,6 +350,7 @@ function migrate(db: SqliteDb): void {
   }
   migrateCritique(db);
   migrateMediaTasks(db);
+  migrateLibrary(db);
   migratePlugins(db);
 }
 
@@ -1247,6 +1249,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       )
       .get(conversationId) as DbRow | undefined;
     const position = (max?.m ?? -1) + 1;
+    const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
+      ? m.createdAt
+      : now;
     // 23 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, feedback_json,
@@ -1285,7 +1290,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.startedAt ?? null,
       m.endedAt ?? null,
       position,
-      now,
+      createdAt,
     );
   }
   // Bump conversation activity so the sidebar's recency sort works.

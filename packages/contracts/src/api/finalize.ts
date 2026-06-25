@@ -1,5 +1,4 @@
 import type { ConnectionTestProtocol } from './connectionTest';
-import type { ProviderCredentialSourceRequestFields } from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
@@ -30,7 +29,7 @@ export type FinalizeProviderProtocol = ConnectionTestProtocol;
  * the proxy, which requires it for some providers) — standard provider
  * defaults are applied by the daemon when possible.
  */
-export type FinalizeProviderRequest = ReasoningExecutionRequestFields & ProviderCredentialSourceRequestFields & {
+interface FinalizeProviderCommonRequest extends ReasoningExecutionRequestFields {
   /**
    * BYOK protocol selected in Settings. Omitted means `anthropic` for
    * backward compatibility with the original `/finalize/anthropic` caller.
@@ -40,7 +39,20 @@ export type FinalizeProviderRequest = ReasoningExecutionRequestFields & Provider
   maxTokens?: number;
   /** Azure OpenAI only. Defaults at the daemon when omitted. */
   apiVersion?: string;
-};
+}
+
+export type FinalizeProviderRequest =
+  | (FinalizeProviderCommonRequest & {
+      credentialSource?: 'user';
+      apiKey: string;
+      baseUrl?: string;
+    })
+  | (FinalizeProviderCommonRequest & {
+      credentialSource: 'deployment';
+      protocol: 'openai';
+      apiKey?: never;
+      baseUrl?: never;
+    });
 
 export type FinalizeAnthropicRequest = FinalizeProviderRequest;
 

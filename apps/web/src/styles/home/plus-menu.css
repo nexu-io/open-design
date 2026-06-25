@@ -13,6 +13,18 @@
 }
 .plus-menu__trigger {
   position: relative;
+  /* The base `button.icon-btn` only sets padding/font-size, so the inline SVG
+     baseline-aligns and the "+" reads as shifted up. Make the trigger a fixed
+     square flex box so the glyph sits dead-centre on every surface (the project
+     composer's higher-specificity `.composer-row .icon-btn` already does this;
+     this fixes the home hero, where that rule does not apply). */
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border-color: transparent;
 }
@@ -23,6 +35,21 @@
 .plus-menu__trigger.is-active {
   background: var(--bg-subtle);
   color: var(--text);
+}
+.home-hero__input-card .plus-menu__trigger {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-xs);
+}
+.home-hero__input-card .plus-menu__trigger:hover:not(:disabled),
+.home-hero__input-card .plus-menu__trigger:focus-visible,
+.home-hero__input-card .plus-menu__trigger.is-active {
+  outline: none;
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
 }
 .plus-menu__popup {
   position: fixed;

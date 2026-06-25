@@ -135,13 +135,16 @@ vi.mock('../../src/components/ProjectView', () => ({
     onBack,
     onProjectsRefresh,
     project,
+    routeConversationId,
   }: {
     onBack: () => void;
     onProjectsRefresh: () => Promise<void>;
     project: Project;
+    routeConversationId?: string | null;
   }) => (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
+      <span data-testid="project-route-conversation">{routeConversationId ?? 'none'}</span>
       <button type="button" onClick={onBack}>
         Back to projects
       </button>
@@ -913,5 +916,52 @@ describe('App project creation routing', () => {
     });
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByTestId('project-view')).toBeNull();
+  });
+
+  it('opens the seeded brand extraction conversation after creating a design system', async () => {
+    const brandProject: Project = {
+      id: 'brand-acme',
+      name: 'acme.com Design System',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1778244000000,
+      updatedAt: 1778244000000,
+      metadata: { kind: 'brand', importedFrom: 'brand-extraction', brandId: 'acme' },
+    };
+    window.history.replaceState(null, '', '/design-systems/create');
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockResolvedValue(brandProject);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, _init?: unknown) => {
+        if (typeof input === 'string' && input === '/api/brands') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: 'acme',
+              projectId: brandProject.id,
+              conversationId: 'conv-brand-acme',
+              sourceUrl: 'https://acme.com/',
+              status: 'extracting',
+            }),
+          } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }),
+    );
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByPlaceholderText('https://github.com/org/repo'), {
+      target: { value: 'https://acme.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /continue to generation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /extract design system/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-brand-acme');
+    });
+    expect(window.location.pathname).toBe(`/projects/${brandProject.id}/conversations/conv-brand-acme`);
   });
 });

@@ -87,7 +87,6 @@ import type {
 } from '../types';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
-import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
@@ -147,7 +146,6 @@ import { useBrandExtract } from '../runtime/useBrandExtract';
 import type { BrandReference } from '../runtime/brand-references';
 import { BrandReferencePicker } from './BrandReferencePicker';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
-import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
@@ -483,7 +481,6 @@ export function EntryShell({
   // view from the route rather than keeping it in component state.
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
-  const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
@@ -573,11 +570,6 @@ export function EntryShell({
     setNewProjectInitialTab(tab);
     setNewProjectOpen(true);
   }
-
-  const previewSystem = useMemo(
-    () => (previewSystemId ? designSystems.find((d) => d.id === previewSystemId) ?? null : null),
-    [designSystems, previewSystemId],
-  );
 
   function handleCreate(input: CreateInput) {
     // The NewProjectModal no longer asks the user to pick a plugin.
@@ -893,7 +885,6 @@ export function EntryShell({
                     onCreate={onCreateDesignSystem}
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
-                    onPreview={(id) => setPreviewSystemId(id)}
                   />
                 </div>
               )}
@@ -915,14 +906,6 @@ export function EntryShell({
           </div>
         </main>
       </div>
-      <AnimatePresence>
-        {previewSystem ? (
-          <DesignSystemPreviewModal
-            system={previewSystem}
-            onClose={() => setPreviewSystemId(null)}
-          />
-        ) : null}
-      </AnimatePresence>
       <NewProjectModal
         open={newProjectOpen}
         initialTab={newProjectInitialTab}
@@ -1682,6 +1665,43 @@ function OnboardingView({
     };
   }
 
+  function restoredOpenAiUserDraftConfig(): AppConfig | null {
+    if (config.apiProtocol !== 'openai' || config.apiCredentialSource !== 'deployment') {
+      return null;
+    }
+    const openAiUserDraft = preservedOpenAiUserDraft();
+    if (!openAiUserDraft) return null;
+    return {
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: openAiUserDraft.apiKey,
+      baseUrl: openAiUserDraft.baseUrl,
+      model: openAiUserDraft.model,
+      apiVersion: openAiUserDraft.apiVersion ?? '',
+      apiProviderBaseUrl: openAiUserDraft.apiProviderBaseUrl ?? null,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        openai: {
+          ...openAiUserDraft,
+          apiCredentialSource: 'user',
+        },
+      },
+    };
+  }
+
+  function selectByokRuntime(): void {
+    const restoredConfig = restoredOpenAiUserDraftConfig();
+    setRuntime('byok');
+    onModeChange('api');
+    if (restoredConfig) {
+      onApiModelChange(restoredConfig.model);
+      persistOnboardingConfig(restoredConfig);
+    }
+    setConnectExpanded('byok');
+  }
+
   function selectDeploymentProvider(): void {
     if (!deploymentProviderAvailable) return;
     const model = deploymentProviderConfig?.defaultModel?.trim() ?? '';
@@ -2426,9 +2446,7 @@ function OnboardingView({
                 className="onboarding-cloud__secondary"
                 onClick={() => {
                   emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                  setRuntime('byok');
-                  onModeChange('api');
-                  setConnectExpanded('byok');
+                  selectByokRuntime();
                 }}
               >
                 {t('settings.onboardingByokTitle')}

@@ -22,7 +22,7 @@ export type ArtifactRendererId =
   | 'mini-app'
   | 'design-system';
 
-export type ArtifactExportKind = 'html' | 'pdf' | 'zip' | 'pptx' | 'jsx' | 'md' | 'svg' | 'txt';
+export type ArtifactExportKind = 'html' | 'pdf' | 'zip' | 'jsx' | 'md' | 'svg' | 'txt';
 
 export type ArtifactStatus = 'streaming' | 'complete' | 'error';
 

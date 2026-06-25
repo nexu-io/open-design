@@ -50,6 +50,7 @@
     "chokidar": "5.0.0",
     "express": "5.2.1",
     "jszip": "3.10.1",
+    "kiwi-schema": "0.5.0",
     "multer": "2.1.1",
     "node-pty": "1.1.0",
     "posthog-node": "5.34.6",
