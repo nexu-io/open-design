@@ -1,11 +1,11 @@
-# NixOS module for Open Design — secondary interface for shared/server
+# NixOS module for Marketing AX — secondary interface for shared/server
 # installs (e.g. running the daemon as a long-lived service on a team
 # build host). For individual developer machines, prefer the Home
 # Manager module (nix/home-manager.nix).
 #
 # Usage:
-#   imports = [ inputs.open-design.nixosModules.default ];
-#   services.open-design = {
+#   imports = [ inputs.marketing-ax.nixosModules.default ];
+#   services.marketing-ax = {
 #     enable = true;
 #     autoStart = true;
 #     openFirewall = true;
@@ -20,11 +20,11 @@
   pkgs,
   ...
 }: let
-  cfg = config.services.open-design;
+  cfg = config.services.marketing-ax;
 
   commonOpts = moduleCommon {
     inherit lib pkgs flake;
-    defaultDataDir = "/var/lib/open-design";
+    defaultDataDir = "/var/lib/marketing-ax";
   };
 
   daemonExe = lib.getExe cfg.package;
@@ -34,7 +34,7 @@
   # blocks. The static SPA calls `/api/*`, `/artifacts/*`, `/frames/*`
   # at the same origin; caddy proxies those to the daemon. SSE on
   # `/api/*` requires no buffering (flush_interval, no encode).
-  caddyfile = pkgs.writeText "open-design-web.Caddyfile" ''
+  caddyfile = pkgs.writeText "marketing-ax-web.Caddyfile" ''
     {
       auto_https off
       admin off
@@ -84,7 +84,7 @@
   # or the UI reports "no agents detected". The service runs as a system
   # user, so per-user profile dirs aren't included by default — operators
   # who install agents into a specific location should add it via
-  # `services.open-design.extraBinPaths`.
+  # `services.marketing-ax.extraBinPaths`.
   daemonPathEntries =
     [
       "/run/wrappers/bin"
@@ -128,18 +128,18 @@
     }
     // cfg.extraEnv;
 in {
-  options.services.open-design =
+  options.services.marketing-ax =
     commonOpts
     // {
       user = lib.mkOption {
         type = lib.types.str;
-        default = "open-design";
+        default = "marketing-ax";
         description = "User the daemon runs as.";
       };
 
       group = lib.mkOption {
         type = lib.types.str;
-        default = "open-design";
+        default = "marketing-ax";
         description = "Group the daemon runs as.";
       };
 
@@ -153,8 +153,8 @@ in {
           Note: by default both the daemon and the bundled web frontend
           bind to loopback only, so opening the firewall has no effect
           until you also widen the bind address — set
-          `services.open-design.webFrontend.host = "0.0.0.0"` and
-          declare `services.open-design.webFrontend.allowedOrigins` so
+          `services.marketing-ax.webFrontend.host = "0.0.0.0"` and
+          declare `services.marketing-ax.webFrontend.allowedOrigins` so
           the daemon's CSRF gate accepts the externally reachable
           origin the SPA is loaded from.
 
@@ -178,7 +178,7 @@ in {
         isSystemUser = true;
         group = cfg.group;
         home = cfg.dataDir;
-        description = "Open Design daemon";
+        description = "Marketing AX daemon";
       };
       users.groups.${cfg.group} = {};
 
@@ -201,16 +201,16 @@ in {
             || isLoopbackHost cfg.webFrontend.host
             || cfg.webFrontend.allowedOrigins != [];
           message = ''
-            services.open-design.webFrontend.host = "${cfg.webFrontend.host}" exposes the
+            services.marketing-ax.webFrontend.host = "${cfg.webFrontend.host}" exposes the
             bundled web frontend on a non-loopback interface, but
-            services.open-design.webFrontend.allowedOrigins is empty.
+            services.marketing-ax.webFrontend.allowedOrigins is empty.
 
             The daemon's same-origin allowlist would reject every API
             write the SPA issues from that host. Either keep the
             default loopback bind, or declare every external origin
             the SPA will be loaded from, e.g.
 
-              services.open-design.webFrontend.allowedOrigins = [
+              services.marketing-ax.webFrontend.allowedOrigins = [
                 "http://laptop.local:''${toString cfg.webFrontend.port}"
               ];
           '';
@@ -219,8 +219,8 @@ in {
     }
 
     (lib.mkIf cfg.autoStart {
-      systemd.services.open-design = {
-        description = "Open Design daemon";
+      systemd.services.marketing-ax = {
+        description = "Marketing AX daemon";
         wantedBy = ["multi-user.target"];
         after = ["network-online.target"];
         wants = ["network-online.target"];
@@ -245,8 +245,8 @@ in {
     })
 
     (lib.mkIf cfg.webFrontend.enable {
-      systemd.services.open-design-web = {
-        description = "Open Design web frontend (static file server)";
+      systemd.services.marketing-ax-web = {
+        description = "Marketing AX web frontend (static file server)";
         wantedBy = ["multi-user.target"];
         after = ["network-online.target"];
         wants = ["network-online.target"];

@@ -11,7 +11,7 @@
   src,
   workspacePaths,
 }:
-# Builds the @open-design/web Next.js static export.
+# Builds the @marketing-ax/web Next.js static export.
 #
 # Output layout: $out/ contains the contents of `apps/web/out/` (an
 # index.html plus _next/ and asset subdirectories). Drop $out into any
@@ -24,7 +24,7 @@
 # the bundled caddy in the modules reverse-proxies those paths to
 # `127.0.0.1:<cfg.port>`, and a custom nginx/caddy must do the same.
 let
-  pname = "open-design-web";
+  pname = "marketing-ax-web";
   version = (lib.importJSON ../package.json).version;
 
   pnpmDepsHash = (import ./pnpm-deps.nix).webHash;
@@ -66,7 +66,7 @@ in
 
       # next.config.ts gates static-export emission on NODE_ENV=production
       # and writes to apps/web/out/.
-      pnpm --filter @open-design/web run build
+      pnpm --filter @marketing-ax/web run build
       runHook postBuild
     '';
 
@@ -83,7 +83,7 @@ in
     };
 
     meta = with lib; {
-      description = "Open Design — Next.js static SPA (apps/web)";
+      description = "Marketing AX — Next.js static SPA (apps/web)";
       homepage = "https://github.com/marketing-ax/marketing-ax";
       license = licenses.asl20;
       platforms = platforms.linux ++ platforms.darwin;

@@ -1,4 +1,4 @@
-# Home Manager module for Open Design — primary interface for individual
+# Home Manager module for Marketing AX — primary interface for individual
 # developers. Linux uses systemd --user units; macOS uses launchd agents.
 #
 # Both the daemon and the optional web frontend are user-scoped and run
@@ -6,8 +6,8 @@
 # privileged port binding by default.
 #
 # Usage:
-#   imports = [ inputs.open-design.homeManagerModules.default ];
-#   services.open-design = {
+#   imports = [ inputs.marketing-ax.homeManagerModules.default ];
+#   services.marketing-ax = {
 #     enable = true;
 #     autoStart = true;
 #     webFrontend.enable = true;
@@ -21,11 +21,11 @@
   pkgs,
   ...
 }: let
-  cfg = config.services.open-design;
+  cfg = config.services.marketing-ax;
 
   commonOpts = moduleCommon {
     inherit lib pkgs flake;
-    defaultDataDir = "${config.home.homeDirectory}/.od";
+    defaultDataDir = "${config.home.homeDirectory}/.max";
   };
 
   daemonExe = lib.getExe cfg.package;
@@ -34,7 +34,7 @@
   # SPA-style fallback if any deep link bypasses the trailingSlash
   # directories Next.js emits, and ~30MB is acceptable for an opt-in
   # service. Users who want lighter can override
-  # `services.open-design.webFrontend.package` and bring their own
+  # `services.marketing-ax.webFrontend.package` and bring their own
   # server — though that disables the bundled service in favor of
   # whatever they wire up.
   caddy = pkgs.caddy;
@@ -58,7 +58,7 @@
   # Site address is explicitly `http://` — a bare `host:port` lets Caddy
   # pick the listener scheme by port, which collides with `auto_https
   # off` and surfaces as TLS errors when the browser hits plain HTTP.
-  caddyfile = pkgs.writeText "open-design-web.Caddyfile" ''
+  caddyfile = pkgs.writeText "marketing-ax-web.Caddyfile" ''
     {
       auto_https off
       admin off
@@ -158,7 +158,7 @@
 
   envToList = e: lib.mapAttrsToList (k: v: "${k}=${v}") e;
 in {
-  options.services.open-design = commonOpts;
+  options.services.marketing-ax = commonOpts;
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
@@ -182,16 +182,16 @@ in {
             || isLoopbackHost cfg.webFrontend.host
             || cfg.webFrontend.allowedOrigins != [];
           message = ''
-            services.open-design.webFrontend.host = "${cfg.webFrontend.host}" exposes the
+            services.marketing-ax.webFrontend.host = "${cfg.webFrontend.host}" exposes the
             bundled web frontend on a non-loopback interface, but
-            services.open-design.webFrontend.allowedOrigins is empty.
+            services.marketing-ax.webFrontend.allowedOrigins is empty.
 
             The daemon's same-origin allowlist would reject every API
             write the SPA issues from that host. Either keep the
             default loopback bind, or declare every external origin
             the SPA will be loaded from, e.g.
 
-              services.open-design.webFrontend.allowedOrigins = [
+              services.marketing-ax.webFrontend.allowedOrigins = [
                 "http://laptop.local:''${toString cfg.webFrontend.port}"
               ];
           '';
@@ -201,9 +201,9 @@ in {
 
     # ----- Linux: systemd --user units --------------------------------
     (lib.mkIf (pkgs.stdenv.isLinux && cfg.autoStart) {
-      systemd.user.services.open-design = {
+      systemd.user.services.marketing-ax = {
         Unit = {
-          Description = "Open Design daemon (user service)";
+          Description = "Marketing AX daemon (user service)";
           After = ["network-online.target"];
           Wants = ["network-online.target"];
         };
@@ -223,9 +223,9 @@ in {
     })
 
     (lib.mkIf (pkgs.stdenv.isLinux && cfg.webFrontend.enable) {
-      systemd.user.services.open-design-web = {
+      systemd.user.services.marketing-ax-web = {
         Unit = {
-          Description = "Open Design web frontend (static file server)";
+          Description = "Marketing AX web frontend (static file server)";
           After = ["network-online.target"];
           Wants = ["network-online.target"];
         };
@@ -246,7 +246,7 @@ in {
       # at runtime — keeps secrets out of the world-readable Nix store
       # while still honoring the documented `environmentFile` option on
       # Darwin (parity with the Linux systemd path above).
-      daemonLaunchScript = pkgs.writeShellScript "open-design-daemon-launch" ''
+      daemonLaunchScript = pkgs.writeShellScript "marketing-ax-daemon-launch" ''
         set -a
         . ${lib.escapeShellArg (toString cfg.environmentFile)}
         set +a
@@ -257,25 +257,25 @@ in {
         then [(toString daemonLaunchScript)]
         else [daemonExe "--port" (toString cfg.port) "--no-open"];
     in {
-      launchd.agents.open-design = {
+      launchd.agents.marketing-ax = {
         enable = true;
         config = {
-          Label = "io.nexu.open-design";
+          Label = "io.nexu.marketing-ax";
           ProgramArguments = programArguments;
           RunAtLoad = true;
           KeepAlive = true;
           EnvironmentVariables = daemonEnv;
-          StandardOutPath = "${cfg.dataDir}/open-design.out.log";
-          StandardErrorPath = "${cfg.dataDir}/open-design.err.log";
+          StandardOutPath = "${cfg.dataDir}/marketing-ax.out.log";
+          StandardErrorPath = "${cfg.dataDir}/marketing-ax.err.log";
         };
       };
     }))
 
     (lib.mkIf (pkgs.stdenv.isDarwin && cfg.webFrontend.enable) {
-      launchd.agents.open-design-web = {
+      launchd.agents.marketing-ax-web = {
         enable = true;
         config = {
-          Label = "io.nexu.open-design-web";
+          Label = "io.nexu.marketing-ax-web";
           ProgramArguments = [
             (lib.getExe caddy)
             "run"
