@@ -364,6 +364,16 @@ const DESIGN_SYSTEM_GUIDANCE_FILES = new Set([
 ]);
 const DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS = /\.(svg|png|jpe?g|gif|webp|avif|ico|otf|ttf|woff2?)$/i;
 
+/**
+ * Whether a file on the preview surface is an HTML artifact the Design
+ * Signature strip can read. Used to decide if the workspace should load the
+ * file's text for the strip when there is no live streamed artifact.
+ */
+export function isHtmlPreviewFileName(name: string | undefined | null, mime?: string | null): boolean {
+  if (mime === 'text/html') return true;
+  return typeof name === 'string' && /\.html?$/i.test(name);
+}
+
 export function FileWorkspace({
   projectId,
   projectKind,
@@ -1478,6 +1488,36 @@ export function FileWorkspace({
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
 
+  // Feed the Design Signature strip the HTML of the artifact currently on the
+  // preview surface. A streamed artifact (`artifactHtml`) is the live, instant
+  // source while generating; once it lands as a file, the persisted preview is
+  // a `FileViewer` and `artifactHtml` is null, so load the active HTML file's
+  // text here and hand it to the strip. The load lives in the workspace (not in
+  // `useDesignSignatureDiff`) so the hook stays a pure, fetch-free computation,
+  // per Signature/AGENTS.md. Re-runs on `mtime` so a regeneration re-diffs.
+  const [activeFileHtml, setActiveFileHtml] = useState<string | null>(null);
+  useEffect(() => {
+    if (artifactHtml) {
+      setActiveFileHtml(null);
+      return;
+    }
+    if (!activeFile || !isHtmlPreviewFileName(activeFile.name, activeFile.mime)) {
+      setActiveFileHtml(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchProjectFileText(projectId, activeFile.name)
+      .then((text) => {
+        if (!cancelled) setActiveFileHtml(typeof text === 'string' ? text : null);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveFileHtml(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [artifactHtml, activeFile?.name, activeFile?.mime, activeFile?.mtime, projectId]);
+
   const activeWorkspaceContext = useMemo<WorkspaceContextItem | null>(() => {
     if (activeTab === DESIGN_SYSTEM_TAB && designSystemProject) {
       return {
@@ -2234,7 +2274,7 @@ export function FileWorkspace({
         ) : (
           <>
             <DesignSignatureStrip
-              artifactHtml={artifactHtml ?? null}
+              artifactHtml={artifactHtml ?? activeFileHtml ?? null}
               artifactId={activeLiveArtifact?.artifactId ?? activeFile?.name ?? 'artifact'}
             />
             {activeLiveArtifact ? (
