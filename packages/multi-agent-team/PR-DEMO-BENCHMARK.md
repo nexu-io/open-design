@@ -18,14 +18,15 @@
 | 超时 | 120s |
 | 迭代次数 | 每种模式 1 次（单 agent 场景下多轮方差小） |
 | daemon | OpenDesign v0.10.0 |
+| 备注 | inheritance/serial 模式在修复 Dependencies 后会执行全部 agent（之前只执行第一个） |
 
 ### 7 种模式基准结果
 
 | 模式 | mode | wall time | 状态 | artifact 数 | 说明 |
 |------|------|-----------|------|------------|------|
-| 继承链 | `inheritance` | 9.2s | ✅ 成功 | 0 | 父子上下文继承，单 agent 直接执行 |
+| 继承链 | `inheritance` | 9.2s | ✅ 成功 | 0 | 父子上下文继承（单 agent 场景，仅 1 个 agent 执行） |
 | 并行 | `parallel` | 13.8s | ✅ 成功 | 0 | `sync.WaitGroup` 汇总，单 agent 退化为单路 |
-| 串行 | `serial` | 7.3s | ✅ 成功 | 0 | 阶段链式传递，单 agent 最快路径 |
+| 串行 | `serial` | 7.3s | ✅ 成功 | 0 | 阶段链式传递（单 agent 场景，仅 1 个 agent 执行） |
 | 遗传 | `genetic` | 44.0s | ✅ 成功 | 0 | 多代进化（N 变体→选择→下一代），耗时最长 |
 | 混合 | `hybrid` | 7.2s | ✅ 成功 | 0 | 分层并行+层间串行，单 agent 退化为串行 |
 | 循环 | `cycle` | 24.0s | ✅ 成功 | 0 | 生成→评审往返（max_iterations=2），2 倍单次耗时 |
