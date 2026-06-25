@@ -22,6 +22,13 @@ const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows
 const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
+const bakePreviewsAutomergeWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "bake-plugin-previews-automerge.yml",
+);
+const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
@@ -264,6 +271,126 @@ describe("packaged smoke workflow", () => {
     expect(feishuStep).toContain("steps.pr.outputs.cross == 'false'");
   });
 
+  it("[P2] gates the plugin-preview manifest auto-merge as a trusted workflow_run consumer", async () => {
+    const workflow = await readFile(bakePreviewsAutomergeWorkflowPath, "utf8");
+
+    // Triggered only by ci completing, and only for a pull_request run on the rolling
+    // chore/plugin-previews branch — never a push / manual dispatch, so a non-PR run can't reach
+    // the App-token or merge steps.
+    expect(workflow).toContain("workflows: [ci]");
+    expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(workflow).toContain("github.event.workflow_run.head_branch == 'chore/plugin-previews'");
+
+    // It mints the privileged release App token, hence the identity + SHA gates below.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+
+    // Only a non-draft, same-repo PR authored by the release bot, targeting main, is merged.
+    expect(workflow).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(workflow).toContain("steps.pr.outputs.cross == 'false'");
+    expect(workflow).toContain("steps.pr.outputs.draft == 'false'");
+    expect(workflow).toContain('select(.base.ref == "main")');
+
+    // A human commit pushed onto the rolling branch is unreviewed, so auto-approve/merge require
+    // pristine == 'true': the PR's changed files are EXACTLY data/plugin-previews/manifest.json. A
+    // commit's author/committer identity is a spoofable git header and the Git Data API does not
+    // sign commits, so neither identity nor signature can prove bot provenance; instead the diff is
+    // bounded to manifest-only so a pushed code change can never auto-merge. Paginated across all
+    // files; any non-manifest file fails the count.
+    expect(workflow).toContain("steps.pr.outputs.pristine == 'true'");
+    expect(workflow).toContain("/files?per_page=100");
+    expect(workflow).toContain(".[].filename");
+    expect(workflow).toContain("--paginate");
+    expect(workflow).toContain("grep -Fvxc 'data/plugin-previews/manifest.json'");
+
+    // The PR is resolved from the run's authoritative workflow_run.pull_requests association
+    // (filtered to the main base at exactly the run's SHA), not a branch-name guess, and the merge
+    // is bound to that same SHA (no post-green commit merged untested). main has a merge queue, so
+    // the merge is GitHub-native --auto (enqueue), not a direct squash.
+    expect(workflow).toContain("github.event.workflow_run.pull_requests");
+    expect(workflow).toContain("select(.head.sha == $sha)");
+    expect(workflow).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(workflow).toContain("--match-head-commit");
+    expect(workflow).toContain("--squash");
+    expect(workflow).toContain("--auto");
+
+    // To satisfy main's one-approval rule, the bot's own clean manifest PR is auto-approved by
+    // github-actions[bot] (pull-requests: write) — a different identity than the App author.
+    expect(workflow).toContain("pull-requests: write");
+    expect(workflow).toContain("gh pr review");
+    expect(workflow).toContain("--approve");
+    const approveStep = sectionBetween(workflow, "Approve the clean manifest PR", "gh pr review");
+    expect(approveStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(approveStep).toContain("steps.pr.outputs.pristine == 'true'");
+    expect(approveStep).toContain("github.token");
+    // Approve only when the run CI actually succeeded — dropping this predicate would approve a
+    // PR whose CI failed.
+    expect(approveStep).toContain("github.event.workflow_run.conclusion == 'success'");
+
+    // The enqueue step carries the same identity + SHA + pristine + success gates as the approve,
+    // and merges via the native --auto path bound to the validated SHA. Dropping the success
+    // predicate here would enqueue a PR whose CI failed.
+    const enqueueStep = sectionBetween(workflow, "Enqueue the clean manifest PR", "gh pr merge");
+    expect(enqueueStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(enqueueStep).toContain("steps.pr.outputs.pristine == 'true'");
+    expect(enqueueStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    expect(enqueueStep).toContain("github.event.workflow_run.conclusion == 'success'");
+    // Base-freshness: main's merge queue does not require an up-to-date branch, so a bake rendered
+    // against an older main must not be squashed in over a newer manifest. The enqueue requires the
+    // rendered base (the PR head's first parent) to equal current main HEAD; a behind PR waits for
+    // the next bake to refresh.
+    expect(enqueueStep).toContain("steps.pr.outputs.base_fresh == 'true'");
+    expect(workflow).toContain('.parents[0].sha // ""');
+    expect(workflow).toContain("commits/heads/main");
+
+    // The Feishu failure path carries the same identity gates, so a fork / non-bot PR can't spam
+    // the release group, and fires only on a CI *failure* (not success).
+    const feishuStep = sectionBetween(workflow, "Notify Feishu on failed manifest CI", "python3");
+    expect(feishuStep).toContain("steps.pr.outputs.author == 'app/open-design-release-bot'");
+    expect(feishuStep).toContain("steps.pr.outputs.cross == 'false'");
+    // Page on every terminal RED state that strands the PR — failure AND timed_out (ci.yml has
+    // timeout-minutes jobs) — but NOT cancelled, which a routine force-push of the rolling branch
+    // produces and would otherwise page on every refresh.
+    expect(feishuStep).toContain("github.event.workflow_run.conclusion == 'failure'");
+    expect(feishuStep).toContain("github.event.workflow_run.conclusion == 'timed_out'");
+    expect(feishuStep).not.toContain("'cancelled'");
+    // Bind the alert to the exact SHA that failed: the rolling branch is force-pushed, so a stale
+    // failed run that finishes after the head advanced must not page about a SHA that is no longer
+    // the PR head.
+    expect(feishuStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
+    // Sign the release webhook with the SAME secret the rest of the repo pairs with
+    // FEISHU_RELEASE_WEBHOOK (notify-release-feishu / notify-daily-feishu / backport-automerge),
+    // not a stray secret that resolves empty and sends an unsigned, rejected request.
+    expect(feishuStep).toContain("secrets.FEISHU_RELEASE_WEBHOOK");
+    expect(feishuStep).toContain("secrets.FEISHU_RELEASE_SIGN_SECRET");
+  });
+
+  it("[P2] keeps the bake producer wired so the auto-merge pristine path works", async () => {
+    // The downstream pristine/auto-merge gates only hold if the producer keeps authoring the
+    // rolling manifest PR the right way. Lock the three producer invariants this PR depends on, so
+    // regressing any of them fails here instead of silently breaking auto-merge.
+    const workflow = await readFile(bakePreviewsWorkflowPath, "utf8");
+
+    // 1. The rolling PR is pushed with the release-bot App token, not GITHUB_TOKEN — a
+    //    GITHUB_TOKEN-authored push triggers no CI, so the PR could never clear main's required
+    //    `Validate workspace` check or the merge queue.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+    expect(workflow).toContain("x-access-token:${APP_TOKEN}");
+    // 2. The manifest commit touches ONLY data/plugin-previews/manifest.json. The reactor's
+    //    pristine gate trusts the PR file set (not a forgeable commit identity), so the producer
+    //    must keep committing exactly that one file.
+    expect(workflow).toContain("cp \"$NEW\" \"$OLD\"");
+    expect(workflow).toContain('git add "$OLD"');
+    // 3. The rolling branch is rebuilt from the checked-out HEAD (the revision the manifest was
+    //    rendered against), NOT live main — the bake can run ~90min while main advances, and basing
+    //    it on live main would publish a stale manifest on top of newer commits. Creating the branch
+    //    with `git checkout -B` from HEAD parents the commit on the rendered revision; a regression
+    //    to a live-main base (fetching refs/heads/main as the parent) fails here.
+    expect(workflow).toContain('git checkout -B "$BRANCH"');
+    expect(workflow).not.toContain("git/ref/heads/main");
+  });
+
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
@@ -395,7 +522,11 @@ describe("packaged smoke workflow", () => {
 
     expect(postMergeWorkflow).toContain("permissions:\n  contents: write");
     expect(postMergeWorkflow).toContain("CLOUDFLARE_R2_REPOSITORY_ASSETS_AK");
-    expect(postMergeWorkflow).toContain("PREVIEW_BAKE_TOKEN");
+    // The write-capable credential the PR path lacks lives here post-merge. The rolling manifest PR
+    // is now authored with the release-bot App (so its push triggers CI and the auto-merge reactor
+    // can act), replacing the never-configured PREVIEW_BAKE_TOKEN fallback.
+    expect(postMergeWorkflow).toContain("secrets.RELEASE_BOT_APP_ID");
+    expect(postMergeWorkflow).not.toContain("PREVIEW_BAKE_TOKEN");
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {
