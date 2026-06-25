@@ -14,7 +14,6 @@ const visualPrefix = 'visual-regression';
 const inlineCaseLimit = 20;
 const pixelThreshold = 0.1;
 const changedPixelFloor = 500;
-const changedPixelRatioFloor = 0.0275;
 const comparisonImageWidth = 220;
 const diffBoxPadding = 6;
 const diffBoxMergeDistance = 12;
@@ -251,8 +250,8 @@ export async function compareCase(input: {
   };
 }
 
-export function isChangedVisualDiff(diffPixels: number, diffPixelRatio: number): boolean {
-  return diffPixels >= changedPixelFloor && diffPixelRatio >= changedPixelRatioFloor;
+export function isChangedVisualDiff(diffPixels: number, _diffPixelRatio: number): boolean {
+  return diffPixels >= changedPixelFloor;
 }
 
 async function writeDiffPng(mainPath: string, prPath: string, diffPath: string): Promise<DiffPngResult> {
