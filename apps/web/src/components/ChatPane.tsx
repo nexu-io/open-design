@@ -3427,7 +3427,13 @@ export function isAssistantMessageStreaming(
 }
 
 export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
-  const lines = [
+  const lines: string[] = [];
+  const sourceText = input.rawMessage?.trim() || input.message.trim();
+  if (sourceText) {
+    lines.push(sourceText, '');
+  }
+
+  lines.push(
     'Open Design run error diagnostics',
     `trace_id: ${input.traceId ?? 'n/a'}`,
     `run_id: ${input.traceId ?? 'n/a'}`,
@@ -3436,15 +3442,7 @@ export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): str
     `conversation_id: ${input.conversationId ?? 'n/a'}`,
     `assistant_message_id: ${input.assistantMessageId ?? 'n/a'}`,
     `agent_id: ${input.agentId ?? 'n/a'}`,
-    '',
-    'error:',
-    input.message.trim(),
-  ];
-
-  const raw = input.rawMessage?.trim();
-  if (raw && raw !== input.message.trim()) {
-    lines.push('', 'raw_error:', raw);
-  }
+  );
 
   return lines.join('\n');
 }
