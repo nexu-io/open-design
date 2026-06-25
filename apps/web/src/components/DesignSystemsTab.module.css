@@ -833,6 +833,11 @@
   font-weight: 560;
 }
 
+.actionButton[aria-busy='true'] svg,
+.statusToggle[aria-busy='true'] svg {
+  animation: designSystemsActionSpin 0.8s linear infinite;
+}
+
 /* De-emphasized "Default for new chats" - a calm, low-priority text action
    beside the louder agent-edit button, not a primary CTA. */
 .defaultButton {
@@ -891,6 +896,10 @@
   opacity: 0.6;
 }
 
+.statusToggleSpinner {
+  flex: none;
+}
+
 .statusToggleTrack {
   position: relative;
   width: 28px;
@@ -936,6 +945,12 @@
 .dangerBtn:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--red) 38%, var(--border));
   background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+@keyframes designSystemsActionSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Coming-soon / empty preview pane */

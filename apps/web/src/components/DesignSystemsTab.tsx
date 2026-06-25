@@ -28,9 +28,10 @@ import {
 } from '../providers/registry';
 import { downloadDesignSystemArchive, downloadProjectArchive } from '../runtime/exports';
 import { useDesignKit } from '../runtime/design-kit';
-import { DesignKitView, HeaderActionsMenu, type HeaderMenuAction } from './DesignKitView';
+import { DesignKitView, HeaderActionsMenu, type DesignKitActionFeedbackTone, type HeaderMenuAction } from './DesignKitView';
 import { hostnameOf } from './BrandPreviewCard';
 import { Icon } from './Icon';
+import { Toast } from './Toast';
 import type { DesignSystemDetail, DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 import styles from './DesignSystemsTab.module.css';
 
@@ -60,6 +61,7 @@ const CATEGORY_ORDER = [
 
 type SurfaceFilter = 'all' | Surface;
 type DesignSystemCollection = 'mine' | 'official' | 'enterprise';
+type DesignSystemActionKind = 'edit' | 'publish' | 'default' | 'delete';
 
 const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
@@ -253,7 +255,18 @@ export function DesignSystemsTab({
   const searchTrackedRef = useRef(false);
   const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<{ systemId: string; action: DesignSystemActionKind } | null>(null);
+  const busyId = busyAction?.systemId ?? null;
+  const [actionToast, setActionToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);
+  const notifyAction = (tone: DesignKitActionFeedbackTone, message: string) => {
+    setActionToast({ tone, message });
+  };
+  const notifyActionLoading = (label?: string) => {
+    const message = label
+      ? label.endsWith('…') || label.endsWith('...') ? label : `${label}...`
+      : t('common.loading');
+    notifyAction('loading', message);
+  };
   const [designSystemCollection, setDesignSystemCollection] = useState<DesignSystemCollection>('mine');
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [category, setCategory] = useState<string>('All');
@@ -398,7 +411,9 @@ export function DesignSystemsTab({
   }
 
   async function togglePublished(system: DesignSystemSummary) {
-    setBusyId(system.id);
+    if (busyAction) return;
+    setBusyAction({ systemId: system.id, action: 'publish' });
+    notifyActionLoading();
     const startedAt = performance.now();
     const willPublish = system.status !== 'published';
     const action: TrackingDesignSystemStatusAction = willPublish
@@ -414,14 +429,19 @@ export function DesignSystemsTab({
       });
       succeeded = Boolean(updated);
       if (!succeeded) errorCode = 'DS_STATUS_UPDATE_RETURNED_NULL';
-      await refreshSystems();
+      if (succeeded) {
+        await refreshSystems();
+        notifyAction('success', t('ds.actionDone'));
+      } else {
+        notifyAction('error', t('ds.actionFailed'));
+      }
     } catch (err) {
       errorCode = err instanceof Error
         ? `DS_STATUS_UPDATE_THREW:${err.message.slice(0, 80)}`
         : 'DS_STATUS_UPDATE_THREW';
-      throw err;
+      notifyAction('error', t('ds.actionFailed'));
     } finally {
-      setBusyId(null);
+      setBusyAction(null);
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
         area: 'design_system_status',
@@ -443,6 +463,7 @@ export function DesignSystemsTab({
   }
 
   async function deleteSystem(system: DesignSystemSummary) {
+    if (busyAction) return;
     const ok = window.confirm(t('dsManager.deleteConfirm', { title: system.title }));
     if (!ok) {
       trackDesignSystemStatusResult(analytics.track, {
@@ -459,7 +480,8 @@ export function DesignSystemsTab({
       });
       return;
     }
-    setBusyId(system.id);
+    setBusyAction({ systemId: system.id, action: 'delete' });
+    notifyActionLoading(t('dsManager.deleteSystemAria', { title: system.title }));
     const startedAt = performance.now();
     const statusBefore = mapStatusToTracking(system.status);
     const wasDefault = system.id === selectedId;
@@ -475,14 +497,19 @@ export function DesignSystemsTab({
         );
         if (fallback) onSelect(fallback.id);
       }
-      await refreshSystems();
+      if (succeeded) {
+        await refreshSystems();
+        notifyAction('success', t('ds.actionDone'));
+      } else {
+        notifyAction('error', t('ds.actionFailed'));
+      }
     } catch (err) {
       errorCode = err instanceof Error
         ? `DS_DELETE_THREW:${err.message.slice(0, 80)}`
         : 'DS_DELETE_THREW';
-      throw err;
+      notifyAction('error', t('ds.actionFailed'));
     } finally {
-      setBusyId(null);
+      setBusyAction(null);
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
         area: 'design_system_status',
@@ -503,21 +530,58 @@ export function DesignSystemsTab({
   }
 
   function handleMakeDefaultClick(system: DesignSystemSummary): void {
+    if (busyAction) return;
+    setBusyAction({ systemId: system.id, action: 'default' });
+    notifyActionLoading(t('dsManager.makeDefault'));
     const wasDefault = system.id === selectedId;
     const statusBefore = mapStatusToTracking(system.status);
-    onSelect(system.id);
-    trackDesignSystemStatusResult(analytics.track, {
-      page_name: 'design_systems',
-      area: 'design_system_status',
-      action: wasDefault ? 'unset_default' : 'set_default',
-      result: 'success',
-      design_system_id: system.id,
-      status_before: statusBefore,
-      status_after: statusBefore,
-      is_default_before: wasDefault,
-      is_default_after: !wasDefault,
-      duration_ms: 0,
-    });
+    try {
+      onSelect(system.id);
+      notifyAction('success', t('ds.actionDone'));
+      trackDesignSystemStatusResult(analytics.track, {
+        page_name: 'design_systems',
+        area: 'design_system_status',
+        action: wasDefault ? 'unset_default' : 'set_default',
+        result: 'success',
+        design_system_id: system.id,
+        status_before: statusBefore,
+        status_after: statusBefore,
+        is_default_before: wasDefault,
+        is_default_after: !wasDefault,
+        duration_ms: 0,
+      });
+    } catch {
+      notifyAction('error', t('ds.actionFailed'));
+      trackDesignSystemStatusResult(analytics.track, {
+        page_name: 'design_systems',
+        area: 'design_system_status',
+        action: wasDefault ? 'unset_default' : 'set_default',
+        result: 'failed',
+        design_system_id: system.id,
+        status_before: statusBefore,
+        status_after: statusBefore,
+        is_default_before: wasDefault,
+        is_default_after: wasDefault,
+        error_code: 'DS_DEFAULT_SELECT_THREW',
+        duration_ms: 0,
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function handleEditSystem(system: DesignSystemSummary): void {
+    if (!onOpenSystem || busyAction) return;
+    setBusyAction({ systemId: system.id, action: 'edit' });
+    notifyActionLoading(t('dsManager.editWithAgent'));
+    try {
+      onOpenSystem(system.id);
+      notifyAction('success', t('ds.actionDone'));
+    } catch {
+      notifyAction('error', t('ds.actionFailed'));
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   function trackCardClick(system: DesignSystemSummary): void {
@@ -609,7 +673,17 @@ export function DesignSystemsTab({
   }
 
   return (
-    <div className={styles.root} data-testid="design-systems-tab">
+    <>
+      {actionToast ? (
+        <Toast
+          message={actionToast.message}
+          tone={actionToast.tone}
+          ttlMs={actionToast.tone === 'loading' ? 60000 : 2600}
+          role={actionToast.tone === 'error' ? 'alert' : 'status'}
+          onDismiss={() => setActionToast(null)}
+        />
+      ) : null}
+      <div className={styles.root} data-testid="design-systems-tab">
       <aside className={styles.sidebar}>
         {onCreate ? (
           <Button
@@ -733,7 +807,8 @@ export function DesignSystemsTab({
       <section className={styles.preview} data-testid="design-systems-preview">
         {renderPreview()}
       </section>
-    </div>
+      </div>
+    </>
   );
 
   function renderSidebarList() {
@@ -798,12 +873,14 @@ export function DesignSystemsTab({
           system={selectedSystem}
           isDefault={selectedSystem.id === selectedId}
           busy={busyId === selectedSystem.id}
+          actionBusy={busyAction?.systemId === selectedSystem.id ? busyAction.action : null}
           t={t}
-          onEdit={onOpenSystem}
+          onEdit={handleEditSystem}
           onMakeDefault={handleMakeDefaultClick}
           onTogglePublished={togglePublished}
           onDelete={deleteSystem}
           onSystemsRefresh={onSystemsRefresh}
+          onActionFeedback={notifyAction}
         />
       );
     }
@@ -979,24 +1056,28 @@ interface DetailProps {
   system: DesignSystemSummary;
   isDefault: boolean;
   busy: boolean;
+  actionBusy: DesignSystemActionKind | null;
   t: ReturnType<typeof useI18n>['t'];
-  onEdit?: (id: string) => void;
+  onEdit?: (system: DesignSystemSummary) => void;
   onMakeDefault: (system: DesignSystemSummary) => void;
   onTogglePublished: (system: DesignSystemSummary) => void | Promise<void>;
   onDelete: (system: DesignSystemSummary) => void | Promise<void>;
   onSystemsRefresh?: () => Promise<void> | void;
+  onActionFeedback: (tone: DesignKitActionFeedbackTone, message: string) => void;
 }
 
 function DesignSystemDetail({
   system,
   isDefault,
   busy,
+  actionBusy,
   t,
   onEdit,
   onMakeDefault,
   onTogglePublished,
   onDelete,
   onSystemsRefresh,
+  onActionFeedback,
 }: DetailProps) {
   const isUser = isUserSystem(system);
   const status = system.status ?? 'draft';
@@ -1068,6 +1149,7 @@ function DesignSystemDetail({
     if (downloading) return;
     setDownloading(true);
     setDownloadFailed(false);
+    onActionFeedback('loading', t('dsManager.downloadTitle'));
     try {
       const ok =
         await downloadDesignSystemArchive({
@@ -1077,6 +1159,10 @@ function DesignSystemDetail({
           ? await downloadProjectArchive({ projectId, fallbackTitle: system.title })
           : false);
       setDownloadFailed(!ok);
+      onActionFeedback(ok ? 'success' : 'error', ok ? t('ds.actionDone') : t('dsManager.downloadFailed'));
+    } catch {
+      setDownloadFailed(true);
+      onActionFeedback('error', t('dsManager.downloadFailed'));
     } finally {
       setDownloading(false);
     }
@@ -1097,6 +1183,7 @@ function DesignSystemDetail({
           icon: 'download' as const,
           onClick: () => void handleDownload(),
           disabled: busy || downloading,
+          loading: downloading,
         }]
       : []),
     ...(canBeDefault && !isDefault
@@ -1106,6 +1193,7 @@ function DesignSystemDetail({
           icon: 'star' as const,
           onClick: () => onMakeDefault(system),
           disabled: busy,
+          loading: actionBusy === 'default',
         }]
       : []),
     ...(isUser
@@ -1115,6 +1203,7 @@ function DesignSystemDetail({
           icon: 'trash' as const,
           onClick: () => void onDelete(system),
           disabled: busy,
+          loading: actionBusy === 'delete',
         }]
       : []),
   ];
@@ -1125,11 +1214,12 @@ function DesignSystemDetail({
         <Button
           variant="primary"
           className={styles.actionButton}
-          onClick={() => onEdit(system.id)}
+          onClick={() => onEdit(system)}
           disabled={busy}
+          aria-busy={actionBusy === 'edit' || undefined}
           title={t('dsManager.openSystemAria', { title: system.title })}
         >
-          <Icon name="sparkles" />
+          <Icon name={actionBusy === 'edit' ? 'spinner' : 'sparkles'} />
           {t('dsManager.editWithAgent')}
         </Button>
       ) : null}
@@ -1138,9 +1228,11 @@ function DesignSystemDetail({
           type="button"
           className={`${styles.statusToggle} ${published ? styles.statusToggleOn : ''}`}
           aria-pressed={published}
+          aria-busy={actionBusy === 'publish' || undefined}
           onClick={() => void onTogglePublished(system)}
           disabled={busy}
         >
+          {actionBusy === 'publish' ? <Icon name="spinner" size={13} className={styles.statusToggleSpinner} /> : null}
           <span>{published ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
           <span className={styles.statusToggleTrack} aria-hidden />
         </button>

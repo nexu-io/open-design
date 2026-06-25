@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
-import { fetchDesignSystem } from '../../src/providers/registry';
+import { fetchDesignSystem, updateDesignSystemDraft } from '../../src/providers/registry';
+
+const exportMocks = vi.hoisted(() => ({
+  downloadDesignSystemArchive: vi.fn(async () => true),
+  downloadProjectArchive: vi.fn(async () => false),
+}));
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -25,8 +30,14 @@ vi.mock('../../src/providers/registry', async () => {
   };
 });
 
+vi.mock('../../src/runtime/exports', () => exportMocks);
+
 afterEach(() => {
   cleanup();
+  exportMocks.downloadDesignSystemArchive.mockReset();
+  exportMocks.downloadDesignSystemArchive.mockResolvedValue(true);
+  exportMocks.downloadProjectArchive.mockReset();
+  exportMocks.downloadProjectArchive.mockResolvedValue(false);
   vi.restoreAllMocks();
 });
 
@@ -233,6 +244,67 @@ describe('DesignSystemsTab', () => {
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Default for new chats' }));
     expect(onSelect).toHaveBeenCalledWith('linear');
+  });
+
+  it('shows loading and result feedback when publishing a user system', async () => {
+    let resolveUpdate!: (value: Awaited<ReturnType<typeof updateDesignSystemDraft>>) => void;
+    vi.mocked(updateDesignSystemDraft).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveUpdate = resolve;
+      }),
+    );
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Draft' });
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByText('Loading…')).toBeTruthy();
+
+    resolveUpdate({
+      id: 'user:acme',
+      title: 'Acme Design System',
+      summary: 'Internal product system.',
+      category: 'Custom',
+      status: 'published',
+      body: '# Acme',
+    });
+
+    await waitFor(() => expect(screen.getByText('Done')).toBeTruthy());
+  });
+
+  it('shows loading and result feedback for detail overflow downloads', async () => {
+    let resolveDownload!: (value: boolean) => void;
+    exportMocks.downloadDesignSystemArchive.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveDownload = resolve;
+      }),
+    );
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Download design system (.zip + SKILLS.md)' }));
+
+    expect(screen.getByText('Download design system (.zip + SKILLS.md)')).toBeTruthy();
+    resolveDownload(true);
+
+    await waitFor(() => expect(screen.getByText('Done')).toBeTruthy());
   });
 });
 
