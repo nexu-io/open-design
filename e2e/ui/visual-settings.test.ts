@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import {
   captureVisual,
+  captureVisualTarget,
   configureVisualPage,
   gotoVisualHome,
   gotoVisualWorkspace,
@@ -58,11 +59,13 @@ test('[P2] captures the settings local CLI model dropdown surface', async ({ pag
   const modelSelect = dialog.locator('.agent-card.active [role="combobox"]').first();
   await expect(modelSelect).toBeVisible();
   await modelSelect.click();
-  await expect(page.getByTestId('settings-agent-model-popover-codex')).toBeVisible();
+  const popover = page.getByTestId('settings-agent-model-popover-codex');
+  await expect(popover).toBeVisible();
   await expect(page.getByTestId('settings-agent-model-search-codex')).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-settings-local-cli-model-dropdown');
+  await captureVisualTarget(page, 'visual-settings-local-cli-model-dropdown-popover', [modelSelect, popover]);
 });
 
 test('[P2] captures the settings BYOK surface', async ({ page }) => {
@@ -122,8 +125,10 @@ test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) 
   const modelSelect = dialog.getByRole('combobox', { name: 'Model', exact: true });
   await expect(modelSelect).toBeVisible();
   await modelSelect.click();
-  await expect(page.getByTestId('settings-byok-model-popover')).toBeVisible();
+  const popover = page.getByTestId('settings-byok-model-popover');
+  await expect(popover).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-settings-byok-model-dropdown');
+  await captureVisualTarget(page, 'visual-settings-byok-model-dropdown-popover', [modelSelect, popover]);
 });
