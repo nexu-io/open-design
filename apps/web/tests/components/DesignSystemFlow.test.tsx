@@ -1810,7 +1810,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
-      expect.stringContaining('"$MAX_NODE_BIN" "$MAX_BIN" tools connectors github-design-context --repo \'https://github.com/marketing-ax/marketing-ax\' --output context/github/nexu-io-open-design.md'),
+      expect.stringContaining('"$MAX_NODE_BIN" "$MAX_BIN" tools connectors github-design-context --repo \'https://github.com/marketing-ax/marketing-ax\' --output context/github/marketing-ax-marketing-ax.md'),
     );
     expect(mocks.writeProjectTextFile).not.toHaveBeenCalledWith(
       project.id,
