@@ -4,7 +4,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 
 ## Owns
 
-- Local packaging orchestration for packaged Open Design artifacts.
+- Local packaging orchestration for packaged Marketing AX artifacts.
 - mac build/install/start/stop/logs/uninstall/cleanup smoke commands.
 - Windows NSIS build/install/start/stop/logs/uninstall/cleanup/list/reset smoke commands.
 - Windows registry observation/cleanup must go through `reg.exe` and stay scoped to entries matching the namespace install/uninstaller paths.
@@ -12,7 +12,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 - Linux AppImage build/install/start/stop/logs/uninstall/cleanup smoke commands.
 - Linux headless (no-Electron) install/start/stop via `--headless` flag on `install`, `start`, and `stop`.
 - Linux containerized builds via `electronuserland/builder` Docker image for distro-agnostic glibc compat.
-- Consuming sidecar/process/path primitives from `@open-design/sidecar-proto`, `@open-design/sidecar`, and `@open-design/platform`.
+- Consuming sidecar/process/path primitives from `@marketing-ax/sidecar-proto`, `@marketing-ax/sidecar`, and `@marketing-ax/platform`.
 
 ## Does not own
 
@@ -141,14 +141,14 @@ pnpm tools-pack win cleanup --dir C:\odtp-beta-release-fixed --namespace release
 Run the narrow tests that match the surface you touched, then the repo checks:
 
 ```bash
-pnpm --filter @open-design/desktop test -- tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts tests/main/preload-host-boundary.test.ts
-pnpm --filter @open-design/web test -- tests/components/UpdaterPopup.test.tsx tests/lib/updater.test.ts
-pnpm --filter @open-design/tools-serve test
-pnpm --filter @open-design/tools-pack test -- tests/win-identity.test.ts tests/win-app.test.ts tests/win-builder.test.ts
-pnpm --filter @open-design/desktop typecheck
-pnpm --filter @open-design/web typecheck
-pnpm --filter @open-design/tools-pack typecheck
-pnpm --filter @open-design/tools-serve typecheck
+pnpm --filter @marketing-ax/desktop test -- tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts tests/main/preload-host-boundary.test.ts
+pnpm --filter @marketing-ax/web test -- tests/components/UpdaterPopup.test.tsx tests/lib/updater.test.ts
+pnpm --filter @marketing-ax/tools-serve test
+pnpm --filter @marketing-ax/tools-pack test -- tests/win-identity.test.ts tests/win-app.test.ts tests/win-builder.test.ts
+pnpm --filter @marketing-ax/desktop typecheck
+pnpm --filter @marketing-ax/web typecheck
+pnpm --filter @marketing-ax/tools-pack typecheck
+pnpm --filter @marketing-ax/tools-serve typecheck
 git diff --check
 pnpm guard
 pnpm typecheck
