@@ -105,9 +105,25 @@ export type TrackingSettingsPage = 'settings';
 
 export type TrackingProjectKind =
   | 'prototype'
+  // `wireframe` / `mobile` / `live_artifact` are prototype-kind projects the
+  // Home task rail (task_chip) offers as their own cards. They all reuse the
+  // web-prototype seed (so the product `metadata.kind` stays `prototype`), but
+  // the analytics dimension splits them out so a created project's
+  // `project_kind` lines up 1:1 with the card the user picked:
+  //   - `wireframe`     ← metadata.fidelity === 'wireframe'
+  //   - `mobile`        ← metadata.platform/platformTargets is a mobile surface
+  //   - `live_artifact` ← metadata.intent === 'live-artifact'
+  // Derivation precedence (a prototype that matches several): live_artifact >
+  // wireframe > mobile. See `projectKindToTracking`.
+  | 'wireframe'
+  | 'mobile'
   | 'live_artifact'
   | 'slide_deck'
   | 'template'
+  // `document` is an `other`-kind project (resumes / reports / PDFs) the Home
+  // `document` card creates. Tagged via `metadata.intent === 'document'` so it
+  // splits out of generic `other` and matches its task_chip.
+  | 'document'
   | 'image'
   | 'video'
   // `hyperframes` is a `video` project rendered by the local HyperFrames
@@ -3345,19 +3361,47 @@ export function sessionModeToTracking(
 // `'hyperframes'` member docblock on `TrackingProjectKind`.
 const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
 
+// Discriminators read off a project's persisted `metadata` to split the coarse
+// product `kind` into the finer analytics `project_kind` (so a created
+// project's kind matches the Home task_chip the user picked). All optional —
+// when none are supplied the function behaves exactly as the legacy
+// `(kind, videoModel)` mapping.
+export interface ProjectKindTrackingHints {
+  fidelity?: string | null | undefined;
+  intent?: string | null | undefined;
+  platform?: string | null | undefined;
+  platformTargets?: readonly string[] | null | undefined;
+}
+
+function isMobileSurface(hints: ProjectKindTrackingHints | undefined): boolean {
+  const mobile = (target: string | null | undefined): boolean =>
+    target === 'mobile-ios' || target === 'mobile-android';
+  if (mobile(hints?.platform)) return true;
+  return (hints?.platformTargets ?? []).some(mobile);
+}
+
 export function projectKindToTracking(
   kind: string | null | undefined,
   videoModel?: string | null,
+  hints?: ProjectKindTrackingHints,
 ): TrackingProjectKind | null {
   switch (kind) {
     case 'prototype':
+      // Prototype subtypes share `kind: 'prototype'` but carry a distinguishing
+      // metadata field. Precedence (a prototype matching several): live_artifact
+      // > wireframe > mobile, then plain prototype.
+      if (hints?.intent === 'live-artifact') return 'live_artifact';
+      if (hints?.fidelity === 'wireframe') return 'wireframe';
+      if (isMobileSurface(hints)) return 'mobile';
       return 'prototype';
     case 'deck':
       return 'slide_deck';
     case 'template':
       return 'template';
     case 'other':
-      return 'other';
+      // Documents (resumes / reports / PDFs) ride the generic `other` kind but
+      // tag `intent: 'document'` so they split out of catch-all `other`.
+      return hints?.intent === 'document' ? 'document' : 'other';
     case 'image':
       return 'image';
     case 'video':
@@ -3374,6 +3418,31 @@ export function projectKindToTracking(
     default:
       return null;
   }
+}
+
+// Convenience wrapper: derive the analytics `project_kind` straight from a
+// project's persisted metadata, forwarding the subtype discriminators
+// (fidelity / intent / platform) so prototype/other projects resolve to their
+// finer kind. Prefer this at every call site that has the full metadata object.
+export function projectKindFromMetadataToTracking(
+  metadata:
+    | {
+        kind?: string | null;
+        videoModel?: string | null;
+        fidelity?: string | null;
+        intent?: string | null;
+        platform?: string | null;
+        platformTargets?: readonly string[] | null;
+      }
+    | null
+    | undefined,
+): TrackingProjectKind | null {
+  return projectKindToTracking(metadata?.kind, metadata?.videoModel, {
+    fidelity: metadata?.fidelity,
+    intent: metadata?.intent,
+    platform: metadata?.platform,
+    platformTargets: metadata?.platformTargets,
+  });
 }
 
 // Code `CreateTab` from apps/web/src/components/NewProjectPanel.tsx:
