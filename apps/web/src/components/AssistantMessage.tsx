@@ -2800,7 +2800,13 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "running" ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
-        ev.label === "empty_response"
+        ev.label === "empty_response" ||
+        // Persisted events path: daemon normalizes tool_call / tool_call_update
+        // to 'running' via TRANSIENT_ACP_STATUS_LABELS in providers/daemon.ts,
+        // but the persisted-events path bypasses that normalization, so bare
+        // labels survive here with no detail to show.
+        ev.label === "tool_call" ||
+        ev.label === "tool_call_update"
       )
         continue;
       const last = out[out.length - 1];
