@@ -1,0 +1,12 @@
+# 遗传模式 — 智能组队
+# 自动选择综合能力（推理+设计+代码）最强的 Agent
+team:
+  name: "智能进化团队"
+  mode: genetic
+  auto_assign: true
+  
+  agents:
+    - id: evolution_engine
+      name: "设计进化引擎"
+      role: "多版本生成与优化"
+      skills: ["hero-section", "layout-design", "tailwind-css"]

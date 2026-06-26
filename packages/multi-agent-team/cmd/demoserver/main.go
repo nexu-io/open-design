@@ -23,6 +23,7 @@ import (
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/agent"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/bus"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/config"
+	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/profiler"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/scheduler"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/pkg/protocol"
 )
@@ -385,14 +386,39 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	sendSSETo(w, flusher, sseEvent{
 		Event: "init",
 		Data: map[string]any{
-			"mode":   cfg.Team.Mode,
-			"agents": len(cfg.Team.Agents),
-			"prompt": req.Prompt,
+			"mode":        cfg.Team.Mode,
+			"agents":      len(cfg.Team.Agents),
+			"prompt":      req.Prompt,
+			"auto_assign": cfg.Team.AutoAssign,
 		},
 	})
 
-	// 构建执行计划
-	plan := buildExecutionPlan(cfg, req.Prompt)
+	// 如果启用了 auto_assign，发送智能组队分配结果
+	if cfg.Team.AutoAssign {
+		builder := pool.GetTeamBuilder()
+		for _, spec := range cfg.Team.Agents {
+			profile := builder.GetProfile(spec.ID)
+			if profile != nil {
+				bestRole, score := profile.FindBestRole()
+				strengthLabels := profiler.CapabilityLabels(profile.Strengths)
+				sendSSETo(w, flusher, sseEvent{
+					Event: "auto_assign",
+					Data: map[string]any{
+						"agent_id":   spec.ID,
+						"agent_type": spec.Type,
+						"role":       bestRole.ID,
+						"score":      fmt.Sprintf("%.0f", score),
+						"profile":    profile.ProfileSummary(),
+						"strengths":  strengthLabels,
+						"traits":     profile.Traits,
+					},
+				})
+			}
+		}
+	}
+
+	// 构建执行计划（auto_assign 模式下会基于能力画像重写角色分配）
+	plan := buildExecutionPlan(cfg, req.Prompt, pool)
 
 	// 根据模式选择调度器
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
@@ -484,8 +510,13 @@ func runScheduler(
 }
 
 // buildExecutionPlan 将 YAML 配置转为执行计划
-func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.ExecutionPlan {
+// 启用 auto_assign 时，基于智能组队结果重写 AssignedTo，实现真正的能力驱动角色分配
+func buildExecutionPlan(cfg *config.TeamConfig, prompt string, pool *agent.Pool) *scheduler.ExecutionPlan {
 	plan := &scheduler.ExecutionPlan{}
+
+	// 智能组队：当 auto_assign 启用时，用 TeamBuilder 的角色分配结果重写任务分配
+	// roleToAgent: 角色 -> 实际执行的 Agent ID（由能力画像决定，而非 YAML 顺序）
+	roleToAgent := buildRoleAssignment(cfg, pool)
 
 	for i, spec := range cfg.Team.Agents {
 		task := scheduler.Task{
@@ -496,7 +527,7 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 				}
 				return fmt.Sprintf("[Inherited from previous stage]\nContinue refining: %s", prompt)
 			}(),
-			AssignedTo: spec.ID,
+			AssignedTo: resolveAssignedTo(spec, roleToAgent),
 			Timeout:    600,
 		}
 
@@ -517,11 +548,19 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 		plan.Tasks = append(plan.Tasks, task)
 	}
 
-	// 互补模式：专家链
+	// 互补模式：专家链 — 智能组队重写 ExpertID
 	if len(cfg.Team.Experts) > 0 {
 		for i, e := range cfg.Team.Experts {
+			expertID := e.AgentID
+			// auto_assign 模式下，用该角色的最佳 Agent 替换
+			if cfg.Team.AutoAssign && roleToAgent != nil {
+				role := profiler.RoleByName(e.Role)
+				if mapped, ok := roleToAgent[role.ID]; ok {
+					expertID = mapped
+				}
+			}
 			plan.Experts = append(plan.Experts, &scheduler.ExpertTask{
-				ExpertID:  e.AgentID,
+				ExpertID:  expertID,
 				Role:      e.Role,
 				Specialty: e.Specialty,
 				Skills:    e.Skills,
@@ -532,11 +571,25 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 		}
 	}
 
-	// 循环模式
+	// 循环模式 — 智能组队重写 GeneratorID / ReviewerID
 	if cfg.Team.Cycle != nil {
+		genID := cfg.Team.Cycle.GeneratorID
+		revID := cfg.Team.Cycle.ReviewerID
+		if cfg.Team.AutoAssign && pool != nil {
+			builder := pool.GetTeamBuilder()
+			cycleAssign := builder.BuildCycleTeam()
+			for _, a := range cycleAssign {
+				if a.Role == "generator" {
+					genID = a.AgentID
+				}
+				if a.Role == "reviewer" {
+					revID = a.AgentID
+				}
+			}
+		}
 		plan.Cycle = &scheduler.CycleConfig{
-			GeneratorID:    cfg.Team.Cycle.GeneratorID,
-			ReviewerID:     cfg.Team.Cycle.ReviewerID,
+			GeneratorID:    genID,
+			ReviewerID:     revID,
 			MaxIterations:  cfg.Team.Cycle.MaxIterations,
 			ScoreThreshold: cfg.Team.Cycle.ScoreThreshold,
 			Topic:          prompt,
@@ -544,6 +597,73 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 	}
 
 	return plan
+}
+
+// buildRoleAssignment 构建角色 -> Agent ID 的映射
+// auto_assign 启用时，按协作模式调用对应的 Build*Team 方法获取智能分配
+// 未启用时返回 nil，保持原有 YAML 静态分配
+func buildRoleAssignment(cfg *config.TeamConfig, pool *agent.Pool) map[string]string {
+	if !cfg.Team.AutoAssign || pool == nil {
+		return nil
+	}
+	builder := pool.GetTeamBuilder()
+	roleToAgent := make(map[string]string)
+
+	switch cfg.Team.Mode {
+	case "complementary":
+		for _, a := range builder.BuildComplementaryTeam() {
+			roleToAgent[a.Role] = a.AgentID
+		}
+	case "cycle":
+		for _, a := range builder.BuildCycleTeam() {
+			roleToAgent[a.Role] = a.AgentID
+		}
+	case "inheritance":
+		for _, a := range builder.BuildInheritanceTeam() {
+			roleToAgent[a.Role] = a.AgentID
+		}
+	case "genetic":
+		if a := builder.BuildGeneticTeam(); a.AgentID != "" {
+			roleToAgent["generator"] = a.AgentID
+		}
+	case "parallel":
+		roles := extractRolesFromAgents(cfg.Team.Agents)
+		for _, a := range builder.BuildParallelTeam(roles) {
+			roleToAgent[a.Role] = a.AgentID
+		}
+	case "serial":
+		roles := extractRolesFromAgents(cfg.Team.Agents)
+		for _, a := range builder.BuildSerialTeam(roles) {
+			roleToAgent[a.Role] = a.AgentID
+		}
+	case "hybrid":
+		roles := extractRolesFromAgents(cfg.Team.Agents)
+		for _, a := range builder.BuildHybridTeam(roles) {
+			roleToAgent[a.Role] = a.AgentID
+		}
+	}
+	return roleToAgent
+}
+
+// extractRolesFromAgents 从 AgentSpec 列表提取角色 ID
+func extractRolesFromAgents(agents []config.AgentSpec) []string {
+	var roles []string
+	for _, a := range agents {
+		roles = append(roles, profiler.RoleByName(a.Role).ID)
+	}
+	return roles
+}
+
+// resolveAssignedTo 解析任务应分配给哪个 Agent
+// 优先用智能组队结果，fallback 到 YAML 配置的 spec.ID
+func resolveAssignedTo(spec config.AgentSpec, roleToAgent map[string]string) string {
+	if roleToAgent != nil {
+		role := profiler.RoleByName(spec.Role)
+		if mapped, ok := roleToAgent[role.ID]; ok {
+			return mapped
+		}
+	}
+	return spec.ID
 }
 
 // findDependencies 在继承树中查找指定 agent 的父节点（即它依赖谁）

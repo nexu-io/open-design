@@ -1,0 +1,52 @@
+# 互补专家链 — 智能组队版本
+# auto_assign: true 启用后，系统会根据本地 Agent 能力自动匹配角色
+# 你只需定义角色需求，系统自动选择最佳 Agent 执行
+team:
+  name: "智能互补专家团队"
+  mode: complementary
+  auto_assign: true
+  
+  agents:
+    - id: designer
+      name: "UI 设计师"
+      role: "视觉设计"
+      skills: ["hero-section", "pricing-table", "layout-design"]
+      
+    - id: copywriter
+      name: "品牌文案"
+      role: "内容创作"
+      skills: ["brand-copywriting", "copywriting"]
+      
+    - id: developer
+      name: "前端开发"
+      role: "技术实现"
+      skills: ["tailwind-css", "responsive-layout", "html-css"]
+      
+    - id: reviewer
+      name: "质量审查"
+      role: "代码审查"
+      skills: ["code-review", "accessibility-check"]
+      
+  experts:
+    - agent_id: designer
+      role: "UI 设计师"
+      specialty: "视觉设计与品牌一致性"
+      skills: ["hero-section", "layout-design"]
+      order: 1
+      
+    - agent_id: copywriter
+      role: "品牌文案"
+      specialty: "用户体验文案与品牌语调"
+      skills: ["brand-copywriting", "seo-optimization"]
+      order: 2
+      
+    - agent_id: developer
+      role: "前端开发工程师"
+      specialty: "响应式布局实现与交互逻辑"
+      skills: ["tailwind-css", "responsive-layout"]
+      order: 3
+      
+    - agent_id: reviewer
+      role: "产品经理"
+      specialty: "功能完整性验证与体验审查"
+      order: 4

@@ -28,11 +28,12 @@ type TeamConfig struct {
 
 // Team 团队定义
 type Team struct {
-	Name      string             `yaml:"name"`
-	Mode      string             `yaml:"mode"`      // parallel | serial | genetic | inheritance | hybrid | cycle | complementary
-	Agents    []AgentSpec        `yaml:"agents"`
-	Experts   []ExpertSpec       `yaml:"experts,omitempty"`    // 互补模式：专家链配置
-	Cycle     *CycleSpec         `yaml:"cycle,omitempty"`      // 循环模式：循环参数
+	Name       string       `yaml:"name"`
+	Mode       string       `yaml:"mode"`        // parallel | serial | genetic | inheritance | hybrid | cycle | complementary
+	AutoAssign bool         `yaml:"auto_assign"` // 启用智能角色分配（根据 Agent 能力自动匹配角色）
+	Agents     []AgentSpec  `yaml:"agents"`
+	Experts    []ExpertSpec `yaml:"experts,omitempty"` // 互补模式：专家链配置
+	Cycle      *CycleSpec   `yaml:"cycle,omitempty"`   // 循环模式：循环参数
 }
 
 // InheritanceCfg 继承树配置
@@ -151,8 +152,10 @@ func (c *TeamConfig) Validate() error {
 			return &ValidationError{"duplicate agent id: " + a.ID}
 		}
 		seen[a.ID] = true
-		if a.Type == "" {
-			return &ValidationError{"agent type is required for " + a.ID}
+		// auto_assign 模式下 type 可为空（由 profiler 自动分配）
+		// 手动模式下 type 必填
+		if !c.Team.AutoAssign && a.Type == "" {
+			return &ValidationError{"agent type is required for " + a.ID + " (or enable auto_assign)"}
 		}
 	}
 	// 校验继承树引用的 agent id 都存在

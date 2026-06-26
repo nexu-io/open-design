@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/agent/adapter/daemon"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/bus"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/config"
+	"github.com/nexu-io/open-design/packages/multi-agent-team/internal/profiler"
 	"github.com/nexu-io/open-design/packages/multi-agent-team/pkg/protocol"
 )
 
@@ -28,18 +30,20 @@ type Pool struct {
 	bus          *bus.CommunicationBus
 	workDir      string
 	daemonClient *daemon.Client
+	builder      *profiler.TeamBuilder // 智能组队构建器
+	config       *config.TeamConfig    // 团队配置
 }
 
 // ManagedAgent 受管理的 Agent 实例
 type ManagedAgent struct {
-	Spec     config.AgentSpec
-	Runtime  protocol.AgentRuntime
-	taskCh   chan *TaskAssignment
-	replyCh  chan *TaskResult
-	ctx      context.Context
-	cancel   context.CancelFunc
-	client   *daemon.Client
-	workDir  string
+	Spec    config.AgentSpec
+	Runtime protocol.AgentRuntime
+	taskCh  chan *TaskAssignment
+	replyCh chan *TaskResult
+	ctx     context.Context
+	cancel  context.CancelFunc
+	client  *daemon.Client
+	workDir string
 }
 
 // TaskAssignment 任务分配
@@ -75,8 +79,8 @@ type ContextSnapshot struct {
 	ParentTask string
 	Skills     []string
 	Designs    []string
-	Memory     map[string]any        // 共享记忆（含 inheritance_depth 等）
-	Artifacts  []*protocol.Artifact  // 父任务产出的完整工件（含路径、类型）
+	Memory     map[string]any       // 共享记忆（含 inheritance_depth 等）
+	Artifacts  []*protocol.Artifact // 父任务产出的完整工件（含路径、类型）
 }
 
 // NewPool 创建 Agent 池，连接 OpenDesign daemon
@@ -88,13 +92,66 @@ func NewPool(cfg *config.TeamConfig, b *bus.CommunicationBus, workDir string) *P
 		bus:          b,
 		workDir:      workDir,
 		daemonClient: dc,
+		builder:      profiler.NewTeamBuilder(),
+		config:       cfg,
 	}
 
+	// 首先注册所有 Agent 到 TeamBuilder（收集能力画像）
+	for _, spec := range cfg.Team.Agents {
+		p.builder.RegisterAgent(spec.ID, spec.Type, spec.Name, protocol.AgentCapability{
+			Name:        spec.Name,
+			Skills:      spec.Skills,
+			Designs:     spec.Designs,
+			MaxParallel: 1,
+		})
+	}
+
+	// 如果启用了 auto_assign，自动分配 Agent 类型
+	if cfg.Team.AutoAssign {
+		p.applyAutoAssign(cfg)
+	}
+
+	// 注册并启动 Agent
 	for _, spec := range cfg.Team.Agents {
 		p.registerAgent(spec, dc)
 	}
 
 	return p
+}
+
+// applyAutoAssign 根据 Agent 能力画像自动分配运行时类型
+func (p *Pool) applyAutoAssign(cfg *config.TeamConfig) {
+	// 收集哪些 Agent 的 type 已手动设置（不覆盖）
+	manualTypes := make(map[string]bool)
+	for _, spec := range cfg.Team.Agents {
+		if spec.Type != "" {
+			manualTypes[spec.Type] = true
+		}
+	}
+
+	for i, spec := range cfg.Team.Agents {
+		if spec.Type != "" {
+			continue // 已有手动设置，不覆盖
+		}
+
+		// 根据角色找到最佳 Agent 类型
+		role := profiler.RoleByName(spec.Role)
+		bestType := p.builder.FindBestAgentType(role, manualTypes)
+		if bestType != "" {
+			cfg.Team.Agents[i].Type = bestType
+			manualTypes[bestType] = true
+			profile := p.builder.GetProfile(spec.ID)
+			if profile != nil {
+				log.Printf("[auto_assign] %s (%s) → %s (score: %.0f)",
+					spec.ID, spec.Role, bestType, profile.CalculateRoleScore(role))
+			}
+		}
+	}
+}
+
+// GetTeamBuilder 获取智能组队构建器
+func (p *Pool) GetTeamBuilder() *profiler.TeamBuilder {
+	return p.builder
 }
 
 // registerAgent 注册并启动 Agent
@@ -280,11 +337,11 @@ func (ma *ManagedAgent) buildChatRequest(task *TaskAssignment) daemon.ChatReques
 	}
 
 	return daemon.ChatRequest{
-		Message:    message,
-		AgentId:    ma.Spec.Type,                  // daemon 需要运行时 slug (claude-code/codex)，非团队标签 (designer/writer)
-		Skills:     ma.Spec.Skills,                // YAML 中配置的技能 ID
-		Designs:    firstOrEmpty(ma.Spec.Designs), // daemon 契约要求单个 string，发送第一个选中的设计系统
-		Stream:     true,
+		Message: message,
+		AgentId: ma.Spec.Type,                  // daemon 需要运行时 slug (claude-code/codex)，非团队标签 (designer/writer)
+		Skills:  ma.Spec.Skills,                // YAML 中配置的技能 ID
+		Designs: firstOrEmpty(ma.Spec.Designs), // daemon 契约要求单个 string，发送第一个选中的设计系统
+		Stream:  true,
 	}
 }
 

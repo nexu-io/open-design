@@ -1,0 +1,22 @@
+# 继承模式 — 智能组队
+# 自动选择继承链：Root(设计师) → Child(精修) → Leaf(开发)
+team:
+  name: "智能继承团队"
+  mode: inheritance
+  auto_assign: true
+  
+  agents:
+    - id: initial_designer
+      name: "初始设计师"
+      role: "视觉设计"
+      skills: ["hero-section", "layout-design"]
+      
+    - id: polisher
+      name: "精修者"
+      role: "细节优化"
+      skills: ["visual-polish", "micro-interactions"]
+      
+    - id: codegen
+      name: "代码生成"
+      role: "前端开发"
+      skills: ["tailwind-css", "responsive-layout", "html-css"]
