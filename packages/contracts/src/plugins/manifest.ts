@@ -163,6 +163,10 @@ export const PluginManifestSchema = z.object({
     mode:     z.string().optional(),
     platform: z.string().optional(),
     scenario: z.string().optional(),
+    badge: z.object({
+      label: z.string().min(1).max(40),
+      tone: z.enum(['blue', 'purple', 'amber', 'teal', 'red', 'pink', 'neutral']).optional(),
+    }).optional(),
     engineRequirements: z.object({
       od: z.string().optional(),
     }).passthrough().optional(),
