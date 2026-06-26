@@ -52,7 +52,9 @@ const datePublished = new Date('2026-06-25');
 const fallbackSite = 'https://open-design.ai/';
 const origin = Astro.site?.toString() ?? fallbackSite;
 const pageUrl = new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString();
-const ogImage = new URL('/stories/ikigai-one-cover.webp', Astro.site ?? fallbackSite).toString();
+// Dedicated social share card (X/OG/Twitter). Intentionally separate from the
+// in-article figures — swapping this does not change any image in the story body.
+const ogImage = new URL('/stories/ikigai-one-og.jpg', Astro.site ?? fallbackSite).toString();
 
 // Breadcrumb trail (Open Design → Ikigai One). SeoHead emits the Article
 // JSON-LD; this adds the SERP breadcrumb. There is no Stories index yet, so
