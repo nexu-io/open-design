@@ -810,7 +810,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       area: 'onboarding',
       result: 'completed',
       exit_step_name: 'design_system',
-      completion_type: 'completed_without_design_system',
+      // This flow clicks "Build a design system" at the final step, so the
+      // completion records the with-DS fork (C2 — tracking spec §3.1).
+      completion_type: 'completed_with_design_system',
       runtime_type: 'amr_cloud',
       has_about_you: true,
       has_design_system_request: false,

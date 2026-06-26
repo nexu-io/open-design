@@ -180,6 +180,12 @@ export interface ProjectMetadata {
   brandId?: string;
   brandSourceUrl?: string;
   brandDesignSystemId?: string;
+  // AI-optimize (deep enrichment) state for a programmatically-extracted DS.
+  // `programmatic` (or unset) = fast pass only; `ai_refined` = a user-triggered
+  // enrichment run completed successfully. Lets analytics compare the two
+  // cohorts' retention/usage (tracking spec C15 / §6).
+  enrichmentStatus?: 'programmatic' | 'ai_refined';
+  enrichmentCompletedAt?: number;
 }
 
 export interface Project {
