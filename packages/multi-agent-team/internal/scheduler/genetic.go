@@ -69,7 +69,10 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 
 	var allResults []*TaskResult
 
-	// 每一代生成 populationSize 个变体并并行执行
+	// 每一代生成 populationSize 个变体
+	// 多 agent：并行分发，每个 agent 最多执行 1 个变体，WaitResult 计时精确
+	// 单 agent：串行执行，避免变体在 taskCh 排队时 WaitResult 已开始计时导致超时
+	serial := len(agentPool) == 1
 	for gen := 0; gen < s.generations; gen++ {
 		var (
 			mu         sync.Mutex
@@ -78,20 +81,28 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 		)
 
 		for i := 0; i < s.populationSize; i++ {
-			wg.Add(1)
-			go func(idx, generation int) {
-				defer wg.Done()
-				prompt := fmt.Sprintf("[Generation %d, Variant %d]\n%s", generation+1, idx+1, basePrompt)
-				// 轮询分配：变体 i 分给 agentPool[i % len(agentPool)]
-				// 多 agent 时变体真正并行；单 agent 时退化为串行（但不会因排队超时）
-				agentID := agentPool[idx%len(agentPool)]
+			idx, generation := i, gen
+			prompt := fmt.Sprintf("[Generation %d, Variant %d]\n%s", generation+1, idx+1, basePrompt)
+			agentID := agentPool[idx%len(agentPool)]
+
+			if serial {
+				// 单 agent：串行执行，WaitResult 不会因排队而被计时
 				result := s.executeVariant(ctx, agentID, prompt, timeout)
-				mu.Lock()
 				genResults = append(genResults, result)
-				mu.Unlock()
-			}(i, gen)
+			} else {
+				wg.Add(1)
+				go func(agent string, p string) {
+					defer wg.Done()
+					result := s.executeVariant(ctx, agent, p, timeout)
+					mu.Lock()
+					genResults = append(genResults, result)
+					mu.Unlock()
+				}(agentID, prompt)
+			}
 		}
-		wg.Wait()
+		if !serial {
+			wg.Wait()
+		}
 
 		allResults = append(allResults, genResults...)
 
