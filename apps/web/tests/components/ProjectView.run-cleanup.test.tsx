@@ -1952,10 +1952,19 @@ afterEach(() => {
         exitCode: 0,
         signal: null,
       });
+    let reattachAttempts = 0;
     reattachDaemonRun.mockImplementation(async (options: {
-      handlers: { onError: (error: Error) => Promise<void> };
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
     }) => {
-      await options.handlers.onError(genericDisconnect);
+      reattachAttempts += 1;
+      if (reattachAttempts === 1) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDone();
     });
 
     render(
@@ -2024,6 +2033,7 @@ afterEach(() => {
     }) => {
       options.onRunCreated?.('run-live-terminal-success');
       await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
     });
 
     chatPaneSpy.mockClear();
@@ -2064,6 +2074,94 @@ afterEach(() => {
       );
       expect(succeededSave).toBeTruthy();
     });
+  });
+
+  it('preserves canceled status when a reattached run reports canceled before onDone', async () => {
+    const runCreatedAt = Date.now();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-canceled',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-canceled',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-reattach-canceled',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: null,
+      signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      onRunStatus?: (runStatus: 'canceled') => void;
+      handlers: {
+        onDone: () => void;
+      };
+    }) => {
+      options.onRunStatus?.('canceled');
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-canceled', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reattach-canceled',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reattach-canceled',
+          runStatus: 'canceled',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-reattach-canceled',
+      'conv-1',
+      expect.objectContaining({
+        id: 'msg-reattach-canceled',
+        runStatus: 'succeeded',
+      }),
+      expect.objectContaining({ telemetryFinalized: true }),
+    );
   });
 
   it('patches live generic-disconnect terminal metadata from a failed daemon status', async () => {
@@ -2151,6 +2249,93 @@ afterEach(() => {
           call[2]?.resumable === true,
       );
       expect(failedSave).toBeTruthy();
+    });
+  });
+
+  it('replays a spuriously failed empty row when daemon status is already succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);
+    const artifactContent =
+      '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke">' +
+      '<!doctype html><html><body><h1>Real Daemon Smoke</h1></body></html>' +
+      '</artifact>';
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-spurious-succeeded',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-spurious-succeeded',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([recoveredArtifact]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-spurious-succeeded',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta(artifactContent);
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-spurious-succeeded', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-spurious-succeeded',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-spurious-succeeded',
+          content: artifactContent,
+          producedFiles: [recoveredArtifact],
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
     });
   });
 

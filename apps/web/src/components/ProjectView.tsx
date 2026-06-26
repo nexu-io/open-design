@@ -2814,32 +2814,21 @@ export function ProjectView({
         }
         if (spuriouslyFailedPending && status.status === 'succeeded') {
           setError(null);
+          transientFailedRetriesRef.current.delete(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+        }
+        if (!(spuriouslyFailedPending && status.status === 'succeeded')) {
           updateMessageById(
             message.id,
             (prev) => ({
               ...prev,
-              runStatus: 'succeeded',
-              endedAt: prev.endedAt ?? Date.now(),
+              runStatus: status.status,
               ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
             }),
             true,
-            { telemetryFinalized: true },
           );
-          transientFailedRetriesRef.current.delete(runId);
-          genericDisconnectRetriesRef.current.delete(runId);
-          genericDisconnectBackoffUntilRef.current.delete(runId);
-          scheduleConversationMessageRefresh(reattachConversationId);
-          continue;
         }
-        updateMessageById(
-          message.id,
-          (prev) => ({
-            ...prev,
-            runStatus: status.status,
-            ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
-          }),
-          true,
-        );
 
         if (shouldReplayTerminalRunMessage(message)) {
           const replayedContent = textContentFromAgentEvents(message.events);
@@ -2993,6 +2982,7 @@ export function ProjectView({
         let liveHtml = '';
         let replayedContent = needsFullReplay ? '' : message.content;
         let replayedEvents: AgentEvent[] = needsFullReplay ? [] : [...(message.events ?? [])];
+        let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
         const applyContentDelta = (delta: string) => {
           for (const ev of parser.feed(delta)) {
             if (ev.type === 'artifact:start') {
@@ -3115,12 +3105,14 @@ export function ProjectView({
                   ...prev,
                   content: needsFullReplay ? replayedContent : prev.content,
                   events: needsFullReplay ? replayedEvents : prev.events,
-                  runStatus: 'succeeded',
+                  runStatus:
+                    latestReattachRunStatus === 'canceled' ? 'canceled' : 'succeeded',
                   endedAt: prev.endedAt ?? Date.now(),
                 }),
                 true,
                 { telemetryFinalized: true },
               );
+              if (latestReattachRunStatus === 'canceled') return;
               void (async () => {
                 const preTurn = message.preTurnFileNames;
                 let nextFiles = await refreshProjectFiles();
@@ -3342,6 +3334,7 @@ export function ProjectView({
               }),
               true,
             );
+            latestReattachRunStatus = runStatus;
             if (runStatus === 'canceled') {
               textBuffer.cancel();
               unregisterTextBuffer();
@@ -3353,7 +3346,6 @@ export function ProjectView({
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
-              persistNow({ telemetryFinalized: true });
             }
             if (isTerminalRunStatus(runStatus)) {
               scheduleConversationMessageRefresh(reattachConversationId);
