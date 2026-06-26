@@ -3173,6 +3173,7 @@ export function ProjectView({
             onError: async (err) => {
               const errorCode = (err as Error & { code?: string }).code;
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
+              let skipFinalPersistNow = false;
               // A superseded reattached run must not paint a global failure
               // banner or re-finalize its message over the replacement run.
               const runMayFinalize =
@@ -3272,20 +3273,21 @@ export function ProjectView({
               if (isGenericDaemonDisconnect(err)) {
                 const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
                 if (attempts >= MAX_TRANSIENT_RETRIES) {
+                  const backoffUntil = Date.now() + 3000;
+                  genericDisconnectRetriesRef.current.set(runId, attempts);
+                  genericDisconnectBackoffUntilRef.current.set(runId, backoffUntil);
+                  const backoffTimer = scheduleProjectTimeout(() => {
+                    const currentBackoffUntil =
+                      genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
+                    if (currentBackoffUntil <= Date.now()) {
+                      genericDisconnectBackoffUntilRef.current.delete(runId);
+                    }
+                    setRecoveryTick((t) => t + 1);
+                  }, 3000);
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
-                    genericDisconnectRetriesRef.current.set(runId, attempts);
-                    const backoffUntil = Date.now() + 3000;
-                    genericDisconnectBackoffUntilRef.current.set(runId, backoffUntil);
-                    scheduleProjectTimeout(() => {
-                      const currentBackoffUntil =
-                        genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
-                      if (currentBackoffUntil <= Date.now()) {
-                        genericDisconnectBackoffUntilRef.current.delete(runId);
-                      }
-                      setRecoveryTick((t) => t + 1);
-                    }, 3000);
                   } else if (latestRunStatus.status === 'succeeded') {
+                    clearProjectTimeout(backoffTimer);
                     setError(null);
                     updateMessageById(
                       message.id,
@@ -3300,9 +3302,26 @@ export function ProjectView({
                       true,
                       { telemetryFinalized: true },
                     );
+                    skipFinalPersistNow = true;
                     genericDisconnectRetriesRef.current.delete(runId);
                     genericDisconnectBackoffUntilRef.current.delete(runId);
                   } else {
+                    clearProjectTimeout(backoffTimer);
+                    if (latestRunStatus.status === 'canceled') setError(null);
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        runStatus: latestRunStatus.status,
+                        endedAt: prev.endedAt ?? Date.now(),
+                        ...(latestRunStatus.resumable !== undefined
+                          ? { resumable: latestRunStatus.resumable }
+                          : {}),
+                      }),
+                      true,
+                      { telemetryFinalized: true },
+                    );
+                    skipFinalPersistNow = true;
                     completedReattachRunsRef.current.add(runId);
                     genericDisconnectRetriesRef.current.delete(runId);
                     genericDisconnectBackoffUntilRef.current.delete(runId);
@@ -3319,7 +3338,7 @@ export function ProjectView({
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
-              persistNow({ telemetryFinalized: true });
+              if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
               scheduleConversationMessageRefresh(reattachConversationId);
             },
           },
@@ -4350,6 +4369,9 @@ export function ProjectView({
                         ? { resumable: latestRunStatus.resumable }
                         : {}),
                     }));
+                  }
+                  if (runCommentAttachments.length > 0) {
+                    void patchAttachedStatuses(runCommentAttachments, 'needs_review');
                   }
                   finalRunStatusAfterError = 'succeeded';
                   refreshConversationAfterError = true;
