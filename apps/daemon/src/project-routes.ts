@@ -1371,6 +1371,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
+        // Badge is server-owned (stamped at create from the plugin manifest).
+        // A wholesale metadata PATCH must not wipe it; re-stamp when the
+        // incoming patch omits it. Clients cannot set/override it here.
+        if (existingMeta?.badge && !('badge' in patch.metadata)) {
+          patch.metadata = { ...patch.metadata, badge: existingMeta.badge };
+        }
         if (existingMeta?.baseDir) {
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
             return sendApiError(

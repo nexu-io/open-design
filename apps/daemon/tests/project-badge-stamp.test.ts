@@ -83,3 +83,25 @@ describe('badge stamp at create', () => {
     expect(project.metadata?.badge).toBeUndefined();
   });
 });
+
+describe('badge preservation across PATCH', () => {
+  it('preserves badge across a metadata PATCH that omits it', async () => {
+    // Create a project with the braze plugin to get the badge stamped.
+    const id = `proj-patch-badge-${Date.now()}`;
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, name: 'B2', pluginId: 'example-braze-iam' }),
+    }).then((r) => r.json()) as { project: { id: string } };
+    // PATCH with metadata that omits badge — badge must be preserved.
+    await fetch(`${baseUrl}/api/projects/${created.project.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: { kind: 'prototype' } }),
+    });
+    const after = await fetch(`${baseUrl}/api/projects/${created.project.id}`).then((r) => r.json()) as {
+      project: { metadata?: { badge?: unknown } };
+    };
+    expect(after.project.metadata?.badge).toEqual({ label: 'In-App Message', tone: 'pink' });
+  });
+});
