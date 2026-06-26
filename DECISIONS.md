@@ -187,3 +187,10 @@
 - **A(landing-page) = 협소 슬라이스 결정**: 사용자 결정 3건 — ①도메인 `open-design.ai` 보존(인프라/이메일) ②슬러그·blog/tutorial 파일명·에셋명 보존(SEO) ③blog/tutorial 본문/제목=편집결정이라 기본 제외. 결과 = 사용자노출 표시텍스트 `Open Design`→`Marketing AX`만(118파일, 5110줄). preserve존(od://·kebab open-design·도메인·env·@open-design/) byte-identical 검증. astro build 3304페이지 PASS (출처: AskUserQuestion + 에이전트 검증)
 - 에이전트 판단 deviation 보존(합리적): PascalCase `OpenDesign`(41)·`Open Design AI`(29)는 JSON-LD `alternateName` SEO 검색별칭 배열 → 파괴적 추측 대신 보존+플래그. 리브랜드 시 별칭도 바꿀지는 별도 SEO 결정 (출처: A 에이전트 report)
 - 후속 잔여(미착수, 별도 결정): ①landing 패키지명 `@open-design/landing-page`→`@marketing-ax/*` ②landing `OD_LANDING_*` env ③blog/tutorial 본문 브랜드(1987 mention) ④B 타입약화(routes/plugins `string[]` vs `RegistryRoots`) 컴파일강제화
+
+## 2026-06-26 — Braze 카드 배지 출하 + 모델 이슈 진단
+- Braze 카드 배지 = 매니페스트 od.badge 선언 → 데몬 pre-insert 스탬프 → 카드/CLI 렌더. 서버소유. PR#3 머지(553bc42bc) (출처: badge 출하)
+- pre-insert 스탬프 채택(post-resolve 아님): 스냅샷은 od.badge 미적재 → 매니페스트 직접 read(getInstalledPlugin). resolve 실패와 무관하게 배지 존재 → codex Critical 3개(좀비 프로젝트·race·소스오류) 구조적 소멸 (출처: codex+plan-reviewer 리뷰)
+- 배지 라벨 non-i18n freeform 채택: 19로케일 churn 회피, ~7파일 유지. 내부툴이라 영문 OK (출처: brainstorming Q1)
+- "Usage credits 1M context" 에러 = 앱버그 아님, 글로벌 ~/.claude/settings.json model=sonnet[1m] fallback(앱 모델=default → 데몬 --model 미전달). fix=앱 컴포저서 표준모델 선택. 미적용(사용자 거부) (출처: investigate)
+- gh push 403 = credential helper evan2942 캐시. active=Gmin82여도 `gh auth switch --user Gmin82` 명시 필요 (출처: push 403 재발)
