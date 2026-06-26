@@ -81,8 +81,6 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
-import { HomeTemplatesReveal } from './HomeTemplatesReveal';
-import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
@@ -1677,22 +1675,6 @@ export function HomeView({
         }}
       />
 
-      <HomeTemplatesReveal
-        enabled={!projectsLoading && projects.length === 0}
-      >
-        <PluginsHomeSection
-          plugins={plugins}
-          loading={pluginsLoading}
-          activePluginId={active?.record.id ?? null}
-          pendingApplyId={pendingApplyId}
-          onUse={(record, action) => void routePluginUse(record, action)}
-          onOpenDetails={handleCommunityOpenDetails}
-          onOpenExternal={handleCommunityOpenExternal}
-          onBrowseRegistry={onBrowseRegistry}
-          preferDefaultFacet={false}
-          cardLayout="gallery"
-        />
-      </HomeTemplatesReveal>
 
       <AnimatePresence>
         {detailsRecord ? (
