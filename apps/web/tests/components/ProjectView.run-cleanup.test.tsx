@@ -84,6 +84,11 @@ function projectFile(
   };
 }
 
+async function createGenericDisconnectError() {
+  const { createGenericDaemonDisconnectError } = await import('../../src/providers/daemon');
+  return createGenericDaemonDisconnectError();
+}
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
@@ -1671,8 +1676,7 @@ afterEach(() => {
 
   it('keeps reattaching after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
     const runCreatedAt = Date.now();
-    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
+    const genericDisconnect = await createGenericDisconnectError();
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
@@ -1746,8 +1750,7 @@ afterEach(() => {
 
   it('keeps live-stream recovery retryable after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
     const runCreatedAt = Date.now();
-    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
+    const genericDisconnect = await createGenericDisconnectError();
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -1818,8 +1821,7 @@ afterEach(() => {
 
   it('keeps generic-disconnect cap retryable when the follow-up status probe returns null, but backs off before retrying', async () => {
     const runCreatedAt = Date.now();
-    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
+    const genericDisconnect = await createGenericDisconnectError();
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
@@ -1912,7 +1914,7 @@ afterEach(() => {
   it('finalizes a reattach generic disconnect as succeeded when the next status poll turns terminal', async () => {
     const runCreatedAt = Date.now();
     const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
+    const genericDisconnect = await createGenericDisconnectError();
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
@@ -2020,8 +2022,7 @@ afterEach(() => {
 
   it('patches terminal metadata when a reattach generic disconnect later proves failed', async () => {
     const runCreatedAt = Date.now();
-    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE) as Error & {
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
       resumable?: boolean;
     };
     genericDisconnect.resumable = false;
@@ -2112,7 +2113,7 @@ afterEach(() => {
   it('finalizes a live generic disconnect as succeeded when the next status poll turns terminal', async () => {
     const runCreatedAt = Date.now();
     const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
+    const genericDisconnect = await createGenericDisconnectError();
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -2288,8 +2289,7 @@ afterEach(() => {
 
   it('patches live generic-disconnect terminal metadata from a failed daemon status', async () => {
     const runCreatedAt = Date.now();
-    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE) as Error & {
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
       resumable?: boolean;
     };
     genericDisconnect.resumable = false;
@@ -2376,8 +2376,7 @@ afterEach(() => {
 
   it('restores attached comment statuses when a live generic disconnect later proves succeeded', async () => {
     const runCreatedAt = Date.now();
-    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
-    const genericDisconnect = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE);
+    const genericDisconnect = await createGenericDisconnectError();
 
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);

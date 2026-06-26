@@ -27,6 +27,7 @@ import { useI18n } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
+  GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
   fetchVelaLoginStatus,
   listActiveChatRuns,
@@ -382,7 +383,10 @@ const TAB_PERSIST_DEBOUNCE_MS = 400;
 // sites so generic disconnects stay eligible for attachRecoverableRuns to
 // re-query daemon authoritative status on the next tick.
 function isGenericDaemonDisconnect(err: unknown): boolean {
-  return err instanceof Error && err.message === GENERIC_DAEMON_DISCONNECT_MESSAGE;
+  return err instanceof Error && (
+    (err as Error & { code?: string }).code === GENERIC_DAEMON_DISCONNECT_CODE ||
+    err.message === GENERIC_DAEMON_DISCONNECT_MESSAGE
+  );
 }
 const MIN_NORMAL_SPLIT_WIDTH =
   MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
