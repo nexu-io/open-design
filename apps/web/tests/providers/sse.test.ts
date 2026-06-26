@@ -1776,7 +1776,12 @@ describe('streamViaDaemon', () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'daemon stream disconnected before run completed',
+        code: 'DAEMON_STREAM_DISCONNECTED',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -1815,7 +1820,12 @@ describe('streamViaDaemon', () => {
 
     expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
     expect(onRunStatus).toHaveBeenCalledWith('failed');
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'daemon stream disconnected before run completed',
+        code: 'DAEMON_STREAM_DISCONNECTED',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
