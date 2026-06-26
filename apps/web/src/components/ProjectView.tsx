@@ -3711,12 +3711,20 @@ export function ProjectView({
               : artifactFromStandaloneHtml(replayedContent);
             let recoveredExistingArtifact: ProjectFile | null = null;
             if (artifactToPersist?.html) {
+              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
               const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
-              recoveredExistingArtifact = findExistingArtifactProjectFile(
-                artifactToPersist,
-                nextFiles,
-                { minMtime: runStartedAt },
-              );
+              recoveredExistingArtifact =
+                await findSameTurnWriteForRecoveredArtifact({
+                  artifact: artifactToPersist,
+                  sourceText: replayedContent,
+                  producedFiles: producedBeforeFallback,
+                  readProjectText: readProjectHtml,
+                }) ??
+                findExistingArtifactProjectFile(
+                  artifactToPersist,
+                  nextFiles,
+                  { minMtime: runStartedAt },
+                );
               if (recoveredExistingArtifact) {
                 savedArtifactRef.current = recoveredExistingArtifact.name;
                 requestOpenFile(recoveredExistingArtifact.name);
@@ -3973,19 +3981,18 @@ export function ProjectView({
                 if (artifactToPersist?.html) {
                   const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
-                  recoveredExistingArtifact = findExistingArtifactProjectFile(
-                    artifactToPersist,
-                    nextFiles,
-                    { minMtime: runStartedAt },
-                  ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
-                    artifactHtml: resolvePersistedArtifactHtml({
-                      artifactHtml: artifactToPersist.html,
-                      identifier: artifactToPersist.identifier,
+                  recoveredExistingArtifact =
+                    await findSameTurnWriteForRecoveredArtifact({
+                      artifact: artifactToPersist,
                       sourceText: replayedContent,
-                    }),
-                    producedFiles: producedBeforeFallback,
-                    readProjectHtml,
-                  });
+                      producedFiles: producedBeforeFallback,
+                      readProjectText: readProjectHtml,
+                    }) ??
+                    findExistingArtifactProjectFile(
+                      artifactToPersist,
+                      nextFiles,
+                      { minMtime: runStartedAt },
+                    );
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
                     requestOpenFile(recoveredExistingArtifact.name);
@@ -4064,11 +4071,19 @@ export function ProjectView({
                     );
                     const runStartedAt =
                       latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-                    let recoveredExistingArtifact = findExistingArtifactProjectFile(
-                      artifactToPersist,
-                      nextFiles,
-                      { minMtime: runStartedAt },
-                    );
+                    const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    let recoveredExistingArtifact =
+                      await findSameTurnWriteForRecoveredArtifact({
+                        artifact: artifactToPersist,
+                        sourceText: replayedContent,
+                        producedFiles: producedBeforeFallback,
+                        readProjectText: readProjectHtml,
+                      }) ??
+                      findExistingArtifactProjectFile(
+                        artifactToPersist,
+                        nextFiles,
+                        { minMtime: runStartedAt },
+                      );
                     if (recoveredExistingArtifact) {
                       savedArtifactRef.current = recoveredExistingArtifact.name;
                       requestOpenFile(recoveredExistingArtifact.name);
@@ -4416,11 +4431,19 @@ export function ProjectView({
           );
           const runStartedAt =
             latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-          let recoveredExistingArtifact = findExistingArtifactProjectFile(
-            artifactToPersist,
-            nextFiles,
-            { minMtime: runStartedAt },
-          );
+          const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          let recoveredExistingArtifact =
+            await findSameTurnWriteForRecoveredArtifact({
+              artifact: artifactToPersist,
+              sourceText,
+              producedFiles: producedBeforeFallback,
+              readProjectText: readProjectHtml,
+            }) ??
+            findExistingArtifactProjectFile(
+              artifactToPersist,
+              nextFiles,
+              { minMtime: runStartedAt },
+            );
           if (recoveredExistingArtifact) {
             savedArtifactRef.current = recoveredExistingArtifact.name;
             requestOpenFile(recoveredExistingArtifact.name);
@@ -8514,14 +8537,9 @@ export function findExistingArtifactProjectFile(
     if (manifestMatches[0]) return manifestMatches[0];
   }
 
-  const exactNameMatch = currentRunFiles.find((file) => file.name === candidateFileName);
-  if (exactNameMatch) return exactNameMatch;
-  if (ext !== '.html') {
-    const namePattern = artifactFileNamePattern(baseName, ext);
-    const suffixedMatches = currentRunFiles
-      .filter((file) => namePattern.test(file.name))
-      .sort((a, b) => b.mtime - a.mtime);
-    if (suffixedMatches[0]) return suffixedMatches[0];
+  if (ext === '.html') {
+    const exactNameMatch = currentRunFiles.find((file) => file.name === candidateFileName);
+    if (exactNameMatch) return exactNameMatch;
   }
   return null;
 }
@@ -8568,6 +8586,34 @@ export async function findSameTurnNonHtmlWriteForRecoveredArtifact({
     if (actual === expected) return file;
   }
   return null;
+}
+
+async function findSameTurnWriteForRecoveredArtifact({
+  artifact,
+  sourceText,
+  producedFiles,
+  readProjectText,
+}: {
+  artifact: Artifact;
+  sourceText: string;
+  producedFiles: readonly ProjectFile[];
+  readProjectText: (name: string) => Promise<string | null>;
+}): Promise<ProjectFile | null> {
+  const nonHtmlWrite = await findSameTurnNonHtmlWriteForRecoveredArtifact({
+    artifact,
+    producedFiles,
+    readProjectText,
+  });
+  if (nonHtmlWrite || artifactExtensionFor(artifact) !== '.html') return nonHtmlWrite;
+  return findSameTurnHtmlWriteForRecoveredArtifact({
+    artifactHtml: resolvePersistedArtifactHtml({
+      artifactHtml: artifact.html,
+      identifier: artifact.identifier,
+      sourceText,
+    }),
+    producedFiles,
+    readProjectHtml: readProjectText,
+  });
 }
 
 function normalizeProjectTextForArtifactComparison(value: string | null | undefined): string {

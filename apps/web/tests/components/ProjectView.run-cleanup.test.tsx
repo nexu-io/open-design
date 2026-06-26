@@ -41,6 +41,7 @@ const patchPreviewCommentStatus = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
 const cancelBrandExtraction = vi.fn();
+const originalFetch = globalThis.fetch;
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -250,7 +251,7 @@ describe('terminal replay artifact recovery', () => {
     ).toBe(currentTarget);
   });
 
-  it('reuses same-turn non-html artifact files with their declared extension', () => {
+  it('reuses same-turn non-html artifact files with their declared extension after content matches', async () => {
     const cssArtifact: Artifact = {
       identifier: 'theme',
       artifactType: 'text/css',
@@ -259,11 +260,18 @@ describe('terminal replay artifact recovery', () => {
     };
     const cssFile = projectFile('theme.css', 'code', 1_000);
 
-    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
-    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: red; }',
+      }),
+    ).resolves.toBe(cssFile);
   });
 
-  it('reuses same-turn non-html artifact files with collision suffixes', () => {
+  it('reuses same-turn non-html artifact files with collision suffixes after content matches', async () => {
     const cssArtifact: Artifact = {
       identifier: '',
       artifactType: 'text/css',
@@ -272,8 +280,15 @@ describe('terminal replay artifact recovery', () => {
     };
     const cssFile = projectFile('theme-2.css', 'code', 1_000);
 
-    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
-    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBe(cssFile);
+    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
+    await expect(
+      findSameTurnNonHtmlWriteForRecoveredArtifact({
+        artifact: cssArtifact,
+        producedFiles: [cssFile],
+        readProjectText: async () => 'body { color: red; }',
+      }),
+    ).resolves.toBe(cssFile);
   });
 
   it('does not reuse same-turn non-html filename matches when contents differ', async () => {
@@ -445,12 +460,13 @@ describe('ProjectView daemon cleanup', () => {
     cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-  vi.useRealTimers();
-  window.sessionStorage.clear();
-});
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    globalThis.fetch = originalFetch;
+    window.sessionStorage.clear();
+  });
 
   it('does not abort daemon cancel reattach controllers during unmount cleanup', async () => {
     let seenCancelSignal: { aborted: boolean } | null = null;
@@ -3863,6 +3879,88 @@ afterEach(() => {
         expect.objectContaining({ telemetryFinalized: true }),
       );
     });
+  });
+
+  it('persists reload-recovered non-html artifacts when same-turn suffix matches have different contents', async () => {
+    const runCreatedAt = Date.now();
+    const staleCss = projectFile('theme-2.css', 'code', runCreatedAt + 1);
+    const finalCss = 'body { color: red; }';
+    const artifactContent =
+      `<artifact type="text/css" title="Theme">${finalCss}</artifact>`;
+
+    globalThis.fetch = vi.fn(async () =>
+      new Response('body { color: blue; }', { status: 200 }),
+    ) as typeof fetch;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-css-recover',
+        role: 'assistant',
+        content: artifactContent,
+        createdAt: runCreatedAt + 1,
+        runId: 'run-css-recover',
+        runStatus: 'succeeded',
+        producedFiles: [],
+        preTurnFileNames: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockImplementation(async () =>
+      writeProjectTextFile.mock.calls.length > 0
+        ? [staleCss, projectFile('theme.css', 'code', runCreatedAt + 2)]
+        : [staleCss],
+    );
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-css-recover',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    writeProjectTextFile.mockImplementation(async (_projectId, name) =>
+      projectFile(String(name), 'code', runCreatedAt + 2),
+    );
+
+    render(
+      <ProjectView
+        project={{ id: 'project-css-recover', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(writeProjectTextFile).toHaveBeenCalledTimes(1));
+    expect(writeProjectTextFile).toHaveBeenCalledWith(
+      'project-css-recover',
+      'theme.css',
+      finalCss,
+      expect.objectContaining({
+        artifactManifest: expect.objectContaining({ entry: 'theme.css' }),
+      }),
+    );
   });
 
   it('does not recover a stale pointer target when reattached artifact persistence falls back to writing', async () => {
