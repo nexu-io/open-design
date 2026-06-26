@@ -2879,7 +2879,7 @@ function requestRunOverride(runId, tokenRunId) {
 }
 
 function openNativeFolderDialog() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const platform = process.platform;
     if (platform === 'darwin') {
       // `choose folder` is handled specially by the system: it presents a fully
@@ -2903,8 +2903,18 @@ function openNativeFolderDialog() {
         'zenity',
         ['--file-selection', '--directory', '--title=Select a code folder to link'],
         { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
+        (err, stdout, stderr) => {
+          if (err) {
+            const code = err && typeof err === 'object' && 'code' in err
+              ? (err as { code?: unknown }).code
+              : undefined;
+            const stderrText = typeof stderr === 'string' ? stderr.trim() : '';
+            if (code === 1 && !stderrText) return resolve(null);
+            const message = stderrText || (typeof code === 'string' && code === 'ENOENT'
+              ? 'zenity is not installed'
+              : String(err && err.message ? err.message : err));
+            return reject(new Error(`Could not open folder picker: ${message}`));
+          }
           const p = stdout.trim();
           resolve(p || null);
         },

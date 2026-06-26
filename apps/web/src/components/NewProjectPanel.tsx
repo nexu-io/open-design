@@ -744,10 +744,16 @@ export function NewProjectPanel({
         });
         return;
       }
-      const picked = await openFolderDialog();
-      if (picked) {
-        setWorkingDir(picked);
-        setWorkingDirToken(null);
+      try {
+        const picked = await openFolderDialog({ throwOnError: true });
+        if (picked) {
+          setWorkingDir(picked);
+          setWorkingDirToken(null);
+        }
+      } catch (err) {
+        setWorkingDirError({
+          message: err instanceof Error ? err.message : t('workingDirPicker.unavailable'),
+        });
       }
     } finally {
       setWorkingDirPicking(false);
