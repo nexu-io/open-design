@@ -190,7 +190,11 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
-import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
+import {
+  buildWindowsFolderDialogCommand,
+  parseFolderDialogStdout,
+  parseLinuxFolderDialogResult,
+} from './native-folder-dialog.js';
 import {
   AssetCacheError,
   assetCacheRewriteUrl,
@@ -2904,19 +2908,11 @@ function openNativeFolderDialog() {
         ['--file-selection', '--directory', '--title=Select a code folder to link'],
         { timeout: 120_000 },
         (err, stdout, stderr) => {
-          if (err) {
-            const code = err && typeof err === 'object' && 'code' in err
-              ? (err as { code?: unknown }).code
-              : undefined;
-            const stderrText = typeof stderr === 'string' ? stderr.trim() : '';
-            if (code === 1 && !stderrText) return resolve(null);
-            const message = stderrText || (typeof code === 'string' && code === 'ENOENT'
-              ? 'zenity is not installed'
-              : String(err && err.message ? err.message : err));
-            return reject(new Error(`Could not open folder picker: ${message}`));
+          try {
+            resolve(parseLinuxFolderDialogResult(err, stdout, stderr));
+          } catch (folderDialogError) {
+            reject(folderDialogError);
           }
-          const p = stdout.trim();
-          resolve(p || null);
         },
       );
     } else if (platform === 'win32') {

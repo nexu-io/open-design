@@ -796,7 +796,7 @@ describe('NewProjectPanel working directory picker', () => {
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 
-  it('surfaces browser picker daemon failures instead of silently treating them as cancel', async () => {
+  it('surfaces browser picker daemon failures with localized copy and native details', async () => {
     mockedIsHostAvailable.mockReturnValue(false);
     mockedOpenFolderDialog.mockRejectedValue(new Error('Could not open folder picker: zenity is not installed'));
 
@@ -814,7 +814,9 @@ describe('NewProjectPanel working directory picker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
 
-    expect(await screen.findByText('Could not open folder picker: zenity is not installed')).toBeTruthy();
+    expect(await screen.findByText('Could not open folder picker')).toBeTruthy();
+    expect(await screen.findByText('zenity is not installed')).toBeTruthy();
+    expect(screen.queryByText('Could not open folder picker: zenity is not installed')).toBeNull();
     expect(mockedOpenFolderDialog).toHaveBeenCalledWith({ throwOnError: true });
   });
 });
