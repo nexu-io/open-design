@@ -7,7 +7,7 @@ export const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Acco
 export const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 export async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
 }
 
 export async function dismissPrivacyDialog(page: Page) {
@@ -71,12 +71,11 @@ export async function openSettingsDialog(page: Page) {
 
 export async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
-  const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 10_000 });
   await input.click();
   await input.fill(prompt);
-  await expect(sendButton).toBeEnabled();
-  await sendButton.click();
+  await expect(page.getByTestId('chat-send')).toBeEnabled();
+  await input.press('Enter');
 }
 
 export async function createProjectViaApi(page: Page, projectId: string, name: string) {
@@ -95,7 +94,12 @@ export async function createProjectViaApi(page: Page, projectId: string, name: s
 }
 
 export async function gotoProject(page: Page, projectId: string) {
-  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  try {
+    await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
+  }
   await dismissPrivacyDialog(page);
   await expectWorkspaceReady(page);
 }

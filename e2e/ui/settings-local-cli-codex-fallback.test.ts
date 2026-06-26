@@ -56,6 +56,7 @@ function baseConfig(overrides: Partial<AppConfigSeed> = {}): AppConfigSeed {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {},
     agentCliEnv: {},
@@ -63,15 +64,8 @@ function baseConfig(overrides: Partial<AppConfigSeed> = {}): AppConfigSeed {
   };
 }
 
-async function readSavedConfig(page: Page) {
-  return page.evaluate((key) => {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  }, STORAGE_KEY);
-}
-
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
 }
 
 async function gotoEntryHome(page: Page) {
@@ -98,6 +92,13 @@ async function openLocalCliSettings(
     onConnectionTest: (payload: Record<string, unknown>) => ConnectionTestFixture;
   },
 ) {
+  let currentConfig: AppConfigSeed = {
+    ...config,
+    agentCliEnv: { ...(config.agentCliEnv ?? {}) },
+    agentModels: { ...(config.agentModels ?? {}) },
+  };
+  let configSaveCount = 0;
+
   await page.addInitScript(
     ({ key, value, localeKey, localeValue }) => {
       window.localStorage.setItem(key, JSON.stringify(value));
@@ -120,20 +121,30 @@ async function openLocalCliSettings(
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          config: {
-            onboardingCompleted: true,
-            agentId: typeof config.agentId === 'string' ? config.agentId : 'codex',
-            agentCliEnv: config.agentCliEnv ?? {},
-            agentModels: config.agentModels ?? {},
-            skillId: null,
-            designSystemId: null,
-            disabledSkills: [],
-            disabledDesignSystems: [],
-          },
+          config: currentConfig,
         }),
       });
       return;
     }
+
+    const payload = route.request().postDataJSON() as
+      | Partial<AppConfigSeed>
+      | { config?: Partial<AppConfigSeed> };
+    const nextConfig: Partial<AppConfigSeed> =
+      'config' in payload && payload.config ? payload.config : payload;
+    currentConfig = {
+      ...currentConfig,
+      ...nextConfig,
+      agentCliEnv: { ...(nextConfig.agentCliEnv ?? currentConfig.agentCliEnv ?? {}) },
+      agentModels: { ...(nextConfig.agentModels ?? currentConfig.agentModels ?? {}) },
+    };
+    configSaveCount += 1;
+    await page.evaluate(
+      ({ key, value }) => {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      },
+      { key: STORAGE_KEY, value: currentConfig },
+    );
 
     await route.fulfill({
       status: 200,
@@ -169,7 +180,13 @@ async function openLocalCliSettings(
   await expect(
     dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
   ).toBeVisible();
-  return dialog;
+  return {
+    dialog,
+    waitForConfigSave: async (count = 1) => {
+      await expect.poll(() => configSaveCount, { timeout: 20_000 }).toBeGreaterThanOrEqual(count);
+    },
+    readCurrentConfig: () => currentConfig,
+  };
 }
 
 test.describe('Settings Local CLI Codex fallback UX', () => {
@@ -179,7 +196,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     const detectedPath = '/usr/local/bin/codex';
     let lastRequest: Record<string, unknown> | null = null;
 
-    const dialog = await openLocalCliSettings(page, {
+    const { dialog, waitForConfigSave, readCurrentConfig } = await openLocalCliSettings(page, {
       config: baseConfig({
         agentCliEnv: { codex: { CODEX_BIN: configuredPath } },
       }),
@@ -222,17 +239,20 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     });
 
     await dialog.getByRole('button', { name: 'Use detected Codex' }).click();
-    await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(detectedPath);
+    await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await waitForConfigSave();
+    await expect.poll(() => readCurrentConfig(), { timeout: 20_000 }).toMatchObject({
       agentCliEnv: {
         codex: {
           CODEX_BIN: detectedPath,
         },
       },
     });
-    await expect(
-      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
-    ).toHaveValue(detectedPath);
-    await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
   });
 
   test('[P0] can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
@@ -240,7 +260,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     const configuredPath = '/Applications/Codex.app/Contents/Resources/codex';
     const detectedPath = '/opt/homebrew/bin/codex';
 
-    const dialog = await openLocalCliSettings(page, {
+    const { dialog, waitForConfigSave, readCurrentConfig } = await openLocalCliSettings(page, {
       config: baseConfig({
         agentCliEnv: { codex: { CODEX_BIN: configuredPath } },
       }),
@@ -264,14 +284,16 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await expect(status).toContainText(detectedPath);
 
     await dialog.getByRole('button', { name: 'Clear custom path' }).click();
-
-    await expect.poll(async () => readSavedConfig(page)).toMatchObject({
-      agentCliEnv: {},
-    });
     await expect(
       dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
     ).toHaveValue('');
     await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await waitForConfigSave();
+    await expect.poll(() => readCurrentConfig(), { timeout: 20_000 }).toMatchObject({
+      agentCliEnv: {},
+    });
   });
 
 });

@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import {
   captureVisual,
+  captureVisualTarget,
   configureVisualPage,
   gotoVisualHome,
   scrollVisualLocatorIntoStableView,
@@ -112,10 +113,13 @@ test('[P2] captures the plugin detail share menu surface', async ({ page }) => {
   await card.hover();
   await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
   await expect(page.getByRole('dialog', { name: /Deck Writer preview/i })).toBeVisible();
-  await page.locator('.template-share-trigger').click();
-  await expect(page.locator('.template-share-popover[role="menu"]')).toBeVisible();
+  const trigger = page.locator('.template-share-trigger');
+  await trigger.click();
+  const popover = page.locator('.template-share-popover[role="menu"]');
+  await expect(popover).toBeVisible();
 
   await captureVisual(page, 'visual-plugin-share-menu');
+  await captureVisualTarget(page, 'visual-plugin-share-menu-popover', [trigger, popover]);
 });
 
 test('[P2] captures the home context picker surface', async ({ page }) => {
@@ -123,10 +127,13 @@ test('[P2] captures the home context picker surface', async ({ page }) => {
   await gotoVisualHome(page);
 
   await page.getByTestId('home-hero-input').fill('@visual');
-  await expect(page.getByTestId('home-hero-plugin-picker')).toBeVisible();
+  const input = page.getByTestId('home-hero-input');
+  const picker = page.getByTestId('home-hero-plugin-picker');
+  await expect(picker).toBeVisible();
   await expect(page.getByRole('option', { name: /Prototype Starter/i })).toBeVisible();
 
   await captureVisual(page, 'visual-home-context-picker');
+  await captureVisualTarget(page, 'visual-home-context-picker-popover', [input, picker]);
 });
 
 test('[P2] captures the home staged attachment surface', async ({ page }) => {
@@ -172,7 +179,11 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   // PreviewModal (aria-label "Deck Writer preview"), not the scenario
   // detail's "... details" dialog. Match on the plugin name only.
   await expect(page.getByRole('dialog', { name: /Deck Writer/i })).toBeVisible();
-  await page.getByTestId('plugin-details-use-visual-deck-writer-menu').click();
+  const trigger = page.getByTestId('plugin-details-use-visual-deck-writer-menu');
+  await trigger.click();
+  const menu = page.locator('.ds-modal-primary-action-popover[role="menu"]');
+  await expect(menu).toBeVisible();
+  await captureVisualTarget(page, 'visual-plugin-use-menu-popover', [trigger, menu]);
   await page.getByTestId('plugin-details-use-with-query-visual-deck-writer').click();
   // use-with-query now seeds the rendered preset text (placeholders filled in),
   // not the raw `{{...}}` query — matching the example-prompt card path.
