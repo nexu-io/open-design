@@ -7,6 +7,7 @@ import {
   trackProjectCreateResult,
 } from './analytics/events';
 import { deriveUploadCohort } from './analytics/upload-tracking';
+import { setPendingDesignSystemCreateEntry } from './analytics/ds-create-entry';
 import { detectClientType } from './analytics/identity';
 import {
   deriveConfigureGlobals,
@@ -2248,7 +2249,10 @@ function AppInner() {
         onRenameProject={handleRenameProject}
         onProjectsRefresh={refreshProjectsStrict}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
-        onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
+        onCreateDesignSystem={() => {
+          setPendingDesignSystemCreateEntry('design_systems_page');
+          navigate({ kind: 'design-system-create' });
+        }}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
         onDesignSystemsRefresh={refreshDesignSystems}
         onPersistComposioKey={handleConfigPersistComposioKey}

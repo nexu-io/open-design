@@ -162,6 +162,12 @@ export interface ChatAnalyticsHints {
   // onto run_created / run_finished, overriding its own BYOK-blind
   // derivation. Omitted means "let the daemon keep its derived value".
   runtimeType?: TrackingRuntimeType;
+  // Analytics-only marker that THIS run is the AI-optimize ("enrich") pass on a
+  // programmatically-extracted design system. The web AI-optimize path sets it;
+  // the daemon uses it to emit `design_system_enrich_result` and to stamp the
+  // `ai_refined` enrichment metadata on success. It carries no execution
+  // semantics — omitting it just means the run is not an enrichment pass.
+  dsEnrichment?: boolean;
 }
 
 export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {

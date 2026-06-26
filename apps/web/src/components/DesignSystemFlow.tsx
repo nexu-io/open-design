@@ -91,6 +91,8 @@ import {
   trackDesignSystemCreateResult,
   trackDesignSystemReviewResult,
   trackDesignSystemsCreateClick,
+  trackDesignSystemsPresetBrandPickerClick,
+  trackDesignSystemsPresetBrandPickerSurfaceView,
   trackDesignSystemSourceIngestResult,
   trackDesignSystemStatusResult,
   trackFileUploadResult,
@@ -100,6 +102,7 @@ import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
 } from '../analytics/onboarding-session';
+import { consumeDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import {
   designSystemFolderCountBucket,
@@ -383,18 +386,39 @@ export function DesignSystemCreationFlow({
   // OnboardingView, which owns the `area=design_system` step page_view.
   const analytics = useAnalytics();
   const creationPageViewFiredRef = useRef(false);
+  // Resolved create entry source. Consumed once from the pending hint set by
+  // the navigate() call site (§3.1); falls back to the onboarding-session /
+  // design_systems_page heuristic for direct URL loads. Reused by
+  // create_result so the funnel "entry → success" lines up.
+  const createEntryFromRef = useRef<TrackingDesignSystemCreateEntryFrom | null>(null);
   useEffect(() => {
     if (embedded) return;
     if (creationPageViewFiredRef.current) return;
     creationPageViewFiredRef.current = true;
     const onboardingSessionId = peekOnboardingSessionId();
+    const resolvedEntry: TrackingDesignSystemCreateEntryFrom =
+      consumeDesignSystemCreateEntry() ??
+      (onboardingSessionId ? 'onboarding' : 'design_systems_page');
+    createEntryFromRef.current = resolvedEntry;
     trackPageView(analytics.track, {
       page_name: 'design_systems',
       area: 'design_system_create',
       view_type: 'page',
-      entry_from: onboardingSessionId ? 'onboarding' : 'design_systems_page',
+      entry_from: resolvedEntry,
     });
   }, [analytics.track, embedded]);
+
+  // Preset-brand picker impression — fires each time the modal opens from the
+  // standalone create form. Gated on `embedded` to mirror the create page_view
+  // / clicks (onboarding owns its own area).
+  useEffect(() => {
+    if (embedded) return;
+    if (!brandPickerOpen) return;
+    trackDesignSystemsPresetBrandPickerSurfaceView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'preset_brand_picker',
+    });
+  }, [brandPickerOpen, embedded, analytics.track]);
 
   // `emitDsFileUpload` reports the user-side dropzone batch. `picked`
   // is the raw FileList; `staged` is what survived the size/count
@@ -835,15 +859,15 @@ export function DesignSystemCreationFlow({
     const onboardingSessionId = peekOnboardingSessionId();
     const createEntryFrom: TrackingDesignSystemCreateEntryFrom = embedded
       ? 'onboarding'
-      : onboardingSessionId
-        ? 'onboarding'
-        : 'design_systems_page';
+      : (createEntryFromRef.current ??
+        (onboardingSessionId ? 'onboarding' : 'design_systems_page'));
     const ingestEntryFrom: TrackingDesignSystemSourceIngestEntryFrom = embedded
       ? 'onboarding'
       : onboardingSessionId
         ? 'onboarding'
         : 'design_systems_page';
     const designSystemOrigin = deriveDesignSystemOrigin(snapshot);
+    const designSystemOrigins = deriveDesignSystemOrigins(snapshot);
     function emitCreateResult(
       result: 'success' | 'failed' | 'cancelled',
       designSystemId: string | undefined,
@@ -858,6 +882,7 @@ export function DesignSystemCreationFlow({
         design_system_id: designSystemId,
         project_id: projectId,
         design_system_source: designSystemOrigin,
+        ...(designSystemOrigins ? { ds_source_origins: designSystemOrigins } : {}),
         source_count: snapshot.sourceCount,
         created_as_project: result === 'success',
         has_brand_description: snapshot.hasBrandDescription,
@@ -1058,7 +1083,10 @@ export function DesignSystemCreationFlow({
                   className="ghost ds-brand-start-btn"
                   aria-haspopup="dialog"
                   aria-expanded={brandPickerOpen}
-                  onClick={() => setBrandPickerOpen(true)}
+                  onClick={() => {
+                    emitCreateFormClick('start_from_brand');
+                    setBrandPickerOpen(true);
+                  }}
                 >
                   <Icon name="sparkles" />
                   {t('dsCreate.startFromBrand')}
@@ -1067,7 +1095,17 @@ export function DesignSystemCreationFlow({
               <BrandPickerModal
                 open={brandPickerOpen}
                 onClose={() => setBrandPickerOpen(false)}
-                onPick={(brand) => handlePickBrandReference(brand.domain)}
+                onPick={(brand) => {
+                  if (!embedded) {
+                    trackDesignSystemsPresetBrandPickerClick(analytics.track, {
+                      page_name: 'design_systems',
+                      area: 'preset_brand_picker',
+                      element: 'brand_pick',
+                      preset_brand_category: brand.category,
+                    });
+                  }
+                  handlePickBrandReference(brand.domain);
+                }}
                 title={t('dsCreate.startFromBrand')}
                 subtitle={t('dsCreate.brandPickerSubtitle')}
                 actionLabel={t('dsCreate.add')}
@@ -4174,6 +4212,32 @@ function deriveDesignSystemOrigin(snapshot: {
   if (snapshot.hasDesignMd) return 'manual_create';
   if (snapshot.hasBrandDescription) return 'manual_create';
   return 'unknown';
+}
+
+// Multi-value companion to deriveDesignSystemOrigin: lists EVERY source used
+// instead of flattening to a single `mixed`, so analytics can read which
+// sources combine (tracking spec comment ②). Returns a comma-joined string
+// (target_platforms/connectors convention) or undefined when nothing is set.
+function deriveDesignSystemOrigins(snapshot: {
+  hasBrandDescription: boolean;
+  hasDesignMd?: boolean;
+  sourceUrlCount: number;
+  githubRepoCount: number;
+  localFolderCount: number;
+  figFileCount: number;
+  assetFileCount: number;
+}): string | undefined {
+  const nonGithubSourceUrlCount = Math.max(0, snapshot.sourceUrlCount - snapshot.githubRepoCount);
+  const origins: TrackingDesignSystemOrigin[] = [];
+  if (snapshot.githubRepoCount > 0) origins.push('github_repo');
+  if (nonGithubSourceUrlCount > 0) origins.push('source_url');
+  if (snapshot.localFolderCount > 0) origins.push('local_code');
+  if (snapshot.figFileCount > 0) origins.push('fig');
+  if (snapshot.assetFileCount > 0) origins.push('assets');
+  if (snapshot.hasDesignMd === true) origins.push('manual_create');
+  // Brand description alone (no concrete source) still reads as manual_create.
+  if (origins.length === 0 && snapshot.hasBrandDescription) origins.push('manual_create');
+  return origins.length > 0 ? origins.join(',') : undefined;
 }
 
 // Mirrors the DesignSystemsTab helper but lives here too so the

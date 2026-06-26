@@ -1474,6 +1474,11 @@ function resolveRunProjectKindForAnalytics({
 }) {
   if (typeof hintProjectKind === 'string') return hintProjectKind;
   if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
+  // Brand-extraction backing projects (kind:'brand', importedFrom:
+  // 'brand-extraction') ARE design systems — a brand is one source for a DS,
+  // not a separate object. Report them as design_system so DS-project runs
+  // (creation + later edits) drill down cleanly. See design-system tracking spec §1.
+  if (projectMetadata?.importedFrom === 'brand-extraction') return 'design_system';
   // Pass videoModel so a HyperFrames project (kind=video + videoModel=
   // hyperframes-html) is reported as project_kind=hyperframes, not generic
   // video. The web-supplied `hintProjectKind` already encodes this when set.

@@ -5,8 +5,10 @@ import {
   trackDesignSystemsTemplateCardClick,
   trackDesignSystemsTopClick,
   trackDesignSystemStatusResult,
+  trackDesignSystemEditClick,
   trackPageView,
 } from '../analytics/events';
+import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
 import type {
   TrackingDesignSystemStatusAction,
   TrackingDesignSystemStatusValue,
@@ -1079,6 +1081,7 @@ function DesignSystemDetail({
   onSystemsRefresh,
   onActionFeedback,
 }: DetailProps) {
+  const analytics = useAnalytics();
   const isUser = isUserSystem(system);
   const status = system.status ?? 'draft';
   const published = status === 'published';
@@ -1129,6 +1132,23 @@ function DesignSystemDetail({
   const host = designSystemLogoHost(system) || undefined;
   const projectId = detail?.projectId ?? system.projectId;
 
+  // Direct in-panel DS edits (E3 / §3.6). All carry edit_surface=direct_module
+  // + artifact_kind=design_system + the DS id so "edit depth" drills down.
+  function emitEditClick(
+    element: DesignSystemEditClickProps['element'],
+    module: DesignSystemEditClickProps['module'],
+  ) {
+    trackDesignSystemEditClick(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_edit',
+      element,
+      module,
+      edit_surface: 'direct_module',
+      artifact_kind: 'design_system',
+      design_system_id: system.id,
+      project_id: projectId ?? undefined,
+    });
+  }
   const { kit } = useDesignKit({
     designSystemId: system.id,
     title: system.title,
@@ -1147,6 +1167,7 @@ function DesignSystemDetail({
 
   async function handleDownload() {
     if (downloading) return;
+    emitEditClick('download', 'general');
     setDownloading(true);
     setDownloadFailed(false);
     onActionFeedback('loading', t('dsManager.downloadTitle'));
@@ -1214,7 +1235,10 @@ function DesignSystemDetail({
         <Button
           variant="primary"
           className={styles.actionButton}
-          onClick={() => onEdit(system)}
+          onClick={() => {
+            emitEditClick('edit_with_agent', 'general');
+            onEdit(system);
+          }}
           disabled={busy}
           aria-busy={actionBusy === 'edit' || undefined}
           title={t('dsManager.openSystemAria', { title: system.title })}
@@ -1251,6 +1275,7 @@ function DesignSystemDetail({
           badgeSlot={badgeSlot}
           actionsSlot={actionsSlot}
           showCover={false}
+          onEditClick={emitEditClick}
           noticeSlot={
             downloadFailed ? (
               <div className={styles.missingProjectNotice}>{t('dsManager.downloadFailed')}</div>

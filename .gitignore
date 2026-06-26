@@ -32,6 +32,11 @@ e2e/ui/reports
 e2e/ui/test-results
 apps/web/playwright/
 
+# Playwright MCP capture output (YAML page snapshots + PNG screenshots).
+# Written ad-hoc during local visual checks; never commit — these hold local
+# UI/session state and are not a maintained test fixture.
+.playwright-mcp/
+
 # Legacy folder name from before the rename; keep ignored so existing
 # clones don't accidentally stage stale runtime data.
 .ocd
