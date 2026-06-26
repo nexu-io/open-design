@@ -491,6 +491,8 @@ export const en: Dict = {
   'entry.discordAriaWithOnline': 'Join the Open Design Discord - {online}',
   'entry.discordOnlineLabel': '{count} online',
   'entry.followXLabel': 'Follow @OpenDesignHQ on X',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'Resize sidebar',
   'entry.loadingWorkspace': 'Loading workspace…',
   'entry.useEverywhereTitle': 'Use everywhere',

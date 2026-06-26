@@ -491,6 +491,8 @@ export const tr: Dict = {
   'entry.discordAriaWithOnline': 'Open Design Discord\'una katılın - {online}',
   'entry.discordOnlineLabel': '{count} çevrimiçi',
   'entry.followXLabel': 'X\'te @OpenDesignHQ hesabını takip et',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'Yan çubuğu yeniden boyutlandır',
   'entry.loadingWorkspace': 'Çalışma alanı yükleniyor…',
   'entry.useEverywhereTitle': 'Her yerde kullan',

@@ -491,6 +491,8 @@ export const zhCN: Dict = {
   'entry.discordAriaWithOnline': '加入 Open Design Discord - {online}',
   'entry.discordOnlineLabel': '{count} 在线',
   'entry.followXLabel': '在 X 上关注 @OpenDesignHQ',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': '调整侧边栏宽度',
   'entry.loadingWorkspace': '正在加载工作区…',
   'entry.useEverywhereTitle': '随处使用',

@@ -1430,6 +1430,11 @@ const matterRuntime = readFileSync(
             if (ev.key === 'Escape') setNavOpen(false);
           });
         })();
+        // Product and Resources are category-label <button class="nav-trigger">
+        // triggers (not links, so they never navigate) whose dropdown is
+        // revealed by the same pure-CSS :hover / :focus-within rule as the hub
+        // menus — no JS needed (works on first paint / JS-disabled, and on
+        // touch via focus). See header-enhancer.astro.
         enhanceDragIcon();
         enhanceWire();
         enhanceStatementReveal();

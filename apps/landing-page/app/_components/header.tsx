@@ -94,6 +94,7 @@ export interface HeaderProps {
     | 'craft'
     | 'resources'
     | 'blog'
+    | 'stories'
     | 'tutorials'
     | 'download'
     | 'community';
@@ -178,22 +179,28 @@ export function Header({
           <ul className='nav-links'>
             {/* Product — the Open Design products. The trigger lights up only
                 for its own family; every other section maps to its own
-                trigger below, so a sub-page never marks Product by accident. */}
+                trigger below, so a sub-page never marks Product by accident.
+                It is a <button> (not a link) so it never navigates — Product
+                used to bounce to the homepage — but its dropdown is revealed
+                by the SAME pure-CSS :hover / :focus-within rule as the hub
+                menus, so it works with no JS (first paint / script failure)
+                and on touch (tapping focuses the button → :focus-within). */}
             <li className='has-dropdown'>
-              <a
-                href={href('/')}
+              <button
+                type='button'
                 className={
-                  active === 'product' ||
+                  'nav-trigger' +
+                  (active === 'product' ||
                   active === 'home' ||
                   active === 'html-anything' ||
                   active === 'html-video'
-                    ? 'is-active'
-                    : undefined
+                    ? ' is-active'
+                    : '')
                 }
               >
                 {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
+              </button>
               <ul className='nav-dropdown' aria-label={productMenuCopy.product}>
                 <li>
                   <a href={href('/')}>
@@ -335,28 +342,39 @@ export function Header({
               </ul>
             </li>
 
-            {/* Resources — the top-level link mirrors the live site, which
-                points it at the blog index. */}
+            {/* Resources — a category label (Blog / Tutorials / Compare), not
+                a page; a <button> so it never navigates (it used to bounce to
+                /blog/), with its dropdown revealed by the same pure-CSS
+                :hover / :focus-within rule as the hub menus (see Product). */}
             <li className='has-dropdown'>
-              <a
-                href={href('/blog/')}
+              <button
+                type='button'
                 className={
-                  active === 'resources' ||
+                  'nav-trigger' +
+                  (active === 'resources' ||
                   active === 'blog' ||
+                  active === 'stories' ||
                   active === 'tutorials' ||
                   active === 'download'
-                    ? 'is-active'
-                    : undefined
+                    ? ' is-active'
+                    : '')
                 }
               >
                 {productMenuCopy.resources}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
+              </button>
               <ul className='nav-dropdown' aria-label={productMenuCopy.resources}>
                 <li>
                   <a href={href('/blog/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.resourceItems.blog}
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a href={href('/stories/')}>
+                    <span className='dropdown-name'>
+                      {productMenuCopy.resourceItems.stories}
                     </span>
                   </a>
                 </li>

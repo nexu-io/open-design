@@ -91,7 +91,12 @@ export interface DesignSystemReviewEntry {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
-  intent?: 'live-artifact';
+  // `live-artifact`: the data-backed live dashboard flow (drives the
+  // live-artifact skill/system-prompt path). `document`: resume/report/PDF
+  // projects from the Home `document` card — an analytics-only discriminator
+  // (no product behavior keys off it) so a created `other`-kind project reports
+  // `project_kind: 'document'` instead of generic `other`.
+  intent?: 'live-artifact' | 'document';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;
@@ -180,6 +185,12 @@ export interface ProjectMetadata {
   brandId?: string;
   brandSourceUrl?: string;
   brandDesignSystemId?: string;
+  // AI-optimize (deep enrichment) state for a programmatically-extracted DS.
+  // `programmatic` (or unset) = fast pass only; `ai_refined` = a user-triggered
+  // enrichment run completed successfully. Lets analytics compare the two
+  // cohorts' retention/usage (tracking spec C15 / §6).
+  enrichmentStatus?: 'programmatic' | 'ai_refined';
+  enrichmentCompletedAt?: number;
 }
 
 export interface Project {

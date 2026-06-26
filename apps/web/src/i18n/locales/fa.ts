@@ -491,6 +491,8 @@ export const fa: Dict = {
   'entry.discordAriaWithOnline': 'به Discord اوپن دیزاین بپیوندید - {online}',
   'entry.discordOnlineLabel': '{count} آنلاین',
   'entry.followXLabel': 'دنبال کردن @OpenDesignHQ در X',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'تغییر اندازه نوار کناری',
   'entry.loadingWorkspace': 'در حال بارگذاری فضای کاری…',
   'entry.useEverywhereTitle': 'استفاده در همه‌جا',

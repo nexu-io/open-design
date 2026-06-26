@@ -20,7 +20,7 @@ import type {
   AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -74,6 +74,7 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
 import { navigate } from '../router';
+import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -1490,6 +1491,7 @@ export function HomeView({
         // Brands merged into Design systems: brand extraction now starts from
         // the unified design-system create wizard (which carries the
         // "start from a brand" picker), rather than a separate Brand Kit tab.
+        setPendingDesignSystemCreateEntry('home_card');
         navigate({ kind: 'design-system-create' });
         return;
       }
@@ -1547,6 +1549,7 @@ export function HomeView({
   function submitScenario(scenario: PlaceholderScenario) {
     if (sending) return;
     setError(null);
+    if (pluginsLoading) return;
     const chip = scenario.chipId ? findChip(scenario.chipId) : null;
     const action = chip?.action ?? null;
     const record =
@@ -1554,13 +1557,13 @@ export function HomeView({
         ? plugins.find((plugin) => plugin.id === action.pluginId) ?? null
         : null;
     // When the user already picked this template (the carousel-over-a-selected-
-    // template case), its binding is live — reuse it instead of re-applying,
+    // template case), its binding is live -- reuse it instead of re-applying,
     // which would reset the resolved snapshot and re-fire chip analytics.
     const alreadyBound = Boolean(chip && active?.chipId === chip.id && !active.explicitPick);
     if (chip && record && !alreadyBound) {
       pickChip(chip);
     } else if (!chip || !record) {
-      // Template unavailable (bundle missing / catalog still loading) — fall
+      // Template unavailable (bundle missing / catalog still loading) -- fall
       // back to a free-form create from the line alone rather than dead-ending.
       setActive(null);
     }
@@ -1859,7 +1862,7 @@ export function HomeView({
           // before navigation so the event isn't lost when the host
           // re-renders into the project view.
           const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindToTracking(project?.metadata?.kind, project?.metadata?.videoModel);
+          const projectKind = projectKindFromMetadataToTracking(project?.metadata);
           trackRecentProjectsClick(analytics.track, {
             page_name: 'home',
             area: 'recent_projects',

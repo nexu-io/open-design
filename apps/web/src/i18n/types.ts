@@ -884,6 +884,8 @@ export interface Dict {
   'entry.discordAriaWithOnline': string;
   'entry.discordOnlineLabel': string;
   'entry.followXLabel': string;
+  'entry.followThreadsLabel': string;
+  'entry.youtubeLabel': string;
   'entry.resizeAria': string;
   'entry.loadingWorkspace': string;
   'entry.useEverywhereTitle': string;
