@@ -33,7 +33,6 @@ const TIER_1 = new Set([
   'Porsche',
   'Ford',
   'Honda',
-  'Hyundai',
   'Range Rover',
   'H&M',
   'Lululemon',

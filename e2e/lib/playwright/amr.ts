@@ -53,6 +53,11 @@ export async function openSettingsDialog(page: Page) {
     })
     .not.toBe('pending');
   if (await menu.isVisible().catch(() => false)) {
+    await dismissPrivacyDialog(page);
+    if (!(await menu.isVisible().catch(() => false))) {
+      await settingsTrigger.click();
+      await expect(menu).toBeVisible({ timeout: 10_000 });
+    }
     const settingsItem = menu
       .getByRole('menuitem', { name: SETTINGS_MENU_LABEL })
       .or(menu.getByRole('button', { name: SETTINGS_MENU_LABEL }))
