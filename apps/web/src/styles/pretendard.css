@@ -1,0 +1,13 @@
+/*
+ * Pretendard Variable — 제품 UI 기본 서체 (sans + serif 슬롯 모두 Pretendard 사용)
+ * https://github.com/orioncactus/pretendard (SIL OFL 1.1)
+ * 패키지앱 오프라인 동작 위해 self-host (remixicon 패턴과 동일). woff2 = public/fonts/.
+ * 가변폰트라 단일 파일로 45~920 weight 전부 커버.
+ */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
