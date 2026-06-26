@@ -2888,7 +2888,7 @@ export function ProjectView({
               (prev) => ({
                 ...prev,
                 content: replayedContent,
-                runStatus: 'succeeded',
+                runStatus: resolveSucceededRunStatus(prev.runStatus),
                 endedAt: prev.endedAt ?? Date.now(),
               }),
               true,

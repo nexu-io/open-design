@@ -1681,6 +1681,85 @@ afterEach(() => {
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('preserves authoritative failed status while replaying a stale succeeded row', async () => {
+    const runCreatedAt = Date.now();
+    const artifactEvent = {
+      kind: 'text',
+      text:
+        '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke"><h1>Real Daemon Smoke</h1></artifact>',
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stale-succeeded-failed-status',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        events: [artifactEvent],
+        runId: 'run-stale-succeeded-failed-status',
+        runStatus: 'succeeded',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-stale-succeeded-failed-status',
+      status: 'failed',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 1,
+      signal: null,
+      resumable: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    render(
+      <ProjectView
+        project={{ id: 'project-stale-succeeded-failed-status', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-stale-succeeded-failed-status',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-stale-succeeded-failed-status',
+          content: artifactEvent.text,
+          runStatus: 'failed',
+          resumable: true,
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
   it('keeps reattaching after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
     const runCreatedAt = Date.now();
     const genericDisconnect = await createGenericDisconnectError();
