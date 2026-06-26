@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { PluginManifestSchema } from '../src/plugins/manifest.js';
 
@@ -34,4 +36,13 @@ describe('od.badge', () => {
     const r = PluginManifestSchema.safeParse({ ...base, od: { badge: { label: '' } } });
     expect(r.success).toBe(false);
   });
+});
+
+it('braze-iam manifest declares the In-App Message badge', () => {
+  const path = fileURLToPath(new URL(
+    '../../../plugins/_official/examples/braze-iam/open-design.json', import.meta.url));
+  const manifest = JSON.parse(readFileSync(path, 'utf8'));
+  const r = PluginManifestSchema.safeParse(manifest);
+  expect(r.success).toBe(true);
+  if (r.success) expect(r.data.od?.badge).toEqual({ label: 'In-App Message', tone: 'pink' });
 });
