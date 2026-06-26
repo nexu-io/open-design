@@ -29,19 +29,19 @@ Trust guard for these. Focus review attention elsewhere.
 
 ## 1. Product relevance test
 
-Run this test **before** reviewing implementation details. A PR passes only when the changed behavior is visible in, required by, or directly validates an Open Design–owned surface.
+Run this test **before** reviewing implementation details. A PR passes only when the changed behavior is visible in, required by, or directly validates an Marketing AX–owned surface.
 
 A PR passes the relevance test when **all** of the following hold:
 
-- The PR description identifies the Open Design feature, command, protocol, package, resource format, or runtime path being changed.
-- Tests exercise existing Open Design flows through their public seams: artifact generation/rendering via documented daemon APIs, daemon HTTP/SSE endpoints, web UI on shipped routes, desktop/packaged launch behavior, sidecar status/IPC, `tools-dev`/`tools-pack` lifecycle commands, skills/design-system/craft resource loading, or documented cross-boundary smoke behavior. Rendering domain content through a generic primitive does **not** count.
+- The PR description identifies the Marketing AX feature, command, protocol, package, resource format, or runtime path being changed.
+- Tests exercise existing Marketing AX flows through their public seams: artifact generation/rendering via documented daemon APIs, daemon HTTP/SSE endpoints, web UI on shipped routes, desktop/packaged launch behavior, sidecar status/IPC, `tools-dev`/`tools-pack` lifecycle commands, skills/design-system/craft resource loading, or documented cross-boundary smoke behavior. Rendering domain content through a generic primitive does **not** count.
 - Tests target real routes, DOM, APIs, commands, fixtures, and user flows that exist in this repository.
 - Tests use the repository's existing harness, base URL, and lifecycle conventions — not hard-coded standalone app URLs.
 - Test assertions provide real signal. Tautological assertions (e.g. `expect(x + y).toBeGreaterThanOrEqual(0)`) are not coverage.
-- New sample content is a maintained fixture for an Open Design capability, minimal enough to support the test, and stored under the [first-party fixture rule](#first-party-fixture-rule).
+- New sample content is a maintained fixture for an Marketing AX capability, minimal enough to support the test, and stored under the [first-party fixture rule](#first-party-fixture-rule).
 - New scripts use the documented `pnpm tools-dev` or `pnpm tools-pack` control plane and belong to an existing owned package/tool. Ad hoc launchers that hard-code local paths or assume user-specific tools are out of scope.
 
-Domain-specific UI or content (a customer vertical, marketing experiment, unrelated rendering demo, arbitrary product page) is out of scope unless it is explicitly a first-party Open Design fixture and the PR explains which Open Design capability it validates.
+Domain-specific UI or content (a customer vertical, marketing experiment, unrelated rendering demo, arbitrary product page) is out of scope unless it is explicitly a first-party Marketing AX fixture and the PR explains which Marketing AX capability it validates.
 
 ### Repository governance documentation
 
@@ -64,7 +64,7 @@ A maintainer (not any reviewer) may close instead of requesting changes when **a
 - The DOM/API assumptions do not exist in this repo.
 - Scripts conflict with repository lifecycle rules in a way that requires rebuilding the change from scratch.
 
-A generally reasonable direction (e.g. "add Arabic/RTL coverage") is **not** sufficient justification to keep an unsalvageable PR open. Close with a comment that names which condition was met and asks for a fresh PR that uses the actual Open Design app and harness. If the contributor disputes the close, escalate to another maintainer rather than reopening unilaterally.
+A generally reasonable direction (e.g. "add Arabic/RTL coverage") is **not** sufficient justification to keep an unsalvageable PR open. Close with a comment that names which condition was met and asks for a fresh PR that uses the actual Marketing AX app and harness. If the contributor disputes the close, escalate to another maintainer rather than reopening unilaterally.
 
 ## 2. Forbidden surfaces
 
@@ -78,13 +78,13 @@ This is the canonical list. Any PR that recreates one of these is out of scope u
 - Shared web/daemon API shapes placed anywhere other than `packages/contracts`.
 - Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or sidecar control-plane dependencies added to `packages/contracts`.
 - App business logic depending on sidecar concepts (runtime mode, namespace, IPC, source, stamp flags, sidecar packages, control-plane protocols).
-- Open Design app/mode/source/stamp details hard-coded inside generic `packages/sidecar` or `packages/platform` code.
+- Marketing AX app/mode/source/stamp details hard-coded inside generic `packages/sidecar` or `packages/platform` code.
 - Hand-built sidecar stamp flags, process-scan regexes, runtime tokens, or namespace/source arguments in orchestration layers (must use package primitives).
 - Daemon or web ports used to decide packaged data, log, runtime, cache, or namespace-scoped paths.
 
 ## 3. Ownership and scope
 
-Treat scope as an approval gate. This repository is for Open Design itself: the local web/daemon/desktop product, its sidecar and packaging infrastructure, shared contracts, development/release tools, e2e coverage of those surfaces, and first-party skills/design-system/craft resources consumed by that product.
+Treat scope as an approval gate. This repository is for Marketing AX itself: the local web/daemon/desktop product, its sidecar and packaging infrastructure, shared contracts, development/release tools, e2e coverage of those surfaces, and first-party skills/design-system/craft resources consumed by that product.
 
 Accept a PR only when its boundary is clear, why the change belongs here is clear, and validation proves the touched boundary still works.
 
@@ -100,7 +100,7 @@ A PR is in scope when it passes the [Product relevance test](#1-product-relevanc
 - `apps/desktop` — Electron shell that discovers runtime state through sidecar IPC.
 - `apps/packaged` — packaged Electron entry, packaged sidecar startup, runtime integration, `od://` entry glue.
 - `packages/contracts` — pure TypeScript web/daemon DTOs, request/response shapes, SSE event unions, task shapes, errors, example payloads.
-- `packages/sidecar-proto` — Open Design sidecar business protocol; app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, error semantics.
+- `packages/sidecar-proto` — Marketing AX sidecar business protocol; app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, error semantics.
 - `packages/sidecar` — generic sidecar bootstrap, IPC transport, path/runtime resolution, launch environment, JSON runtime-file primitives.
 - `packages/platform` — generic OS process primitives, stamp serialization, command parsing, process matching/search.
 - `tools/dev` — local development lifecycle control plane.
@@ -120,7 +120,7 @@ Every in-scope PR must also:
 A PR is out of scope when it does any of the following — block or require a split:
 
 - Piggybacks unrelated cleanup, formatting, dependency churn, migrations, or feature work onto a focused fix.
-- Adds tests, fixtures, scripts, or UI for a separate product/domain that does not exercise an existing Open Design feature.
+- Adds tests, fixtures, scripts, or UI for a separate product/domain that does not exercise an existing Marketing AX feature.
 - Recreates anything in [Forbidden surfaces](#2-forbidden-surfaces).
 - Adds tests under `src/`, puts package/app tests outside the package-level `tests/` directory, puts Playwright UI tests outside `e2e/ui/`, or moves app-owned component coverage into e2e.
 - Adds feature-depth scenarios to `e2e/specs/` instead of `e2e/tests/` (see `e2e/AGENTS.md` for the test-pyramid rules).
@@ -193,9 +193,9 @@ For any change to `packages/contracts`, `packages/sidecar-proto`, persisted SQLi
 
 **Accept when:**
 
-- The skill supports design work in Open Design — artifact generation, visual design, layout, branding, design-system application, interaction design, accessibility review, design critique.
+- The skill supports design work in Marketing AX — artifact generation, visual design, layout, branding, design-system application, interaction design, accessibility review, design critique.
 - It follows the structure and metadata conventions of existing first-party skills, including the skills protocol front-matter (e.g. `od.craft.requires` when relevant).
-- Instructions are general-purpose enough for Open Design workflows, not a single unrelated external service or business process.
+- Instructions are general-purpose enough for Marketing AX workflows, not a single unrelated external service or business process.
 - Examples and fixtures are minimal, design-relevant, and satisfy the [first-party fixture rule](#first-party-fixture-rule).
 - Runtime expectations match the existing skills protocol and daemon resource-loading behavior.
 
@@ -204,7 +204,7 @@ For any change to `packages/contracts`, `packages/sidecar-proto`, persisted SQLi
 - The skill is unrelated to design or artifact creation/review, even if otherwise useful.
 - It primarily automates a non-design workflow (finance, sales, CRM, generic productivity, unrelated API administration, domain-specific content processing).
 - It requires new daemon/runtime semantics without updating the skills protocol, resource contract, and validation.
-- It adds broad external integrations or credentials not necessary for a design-focused Open Design workflow.
+- It adds broad external integrations or credentials not necessary for a design-focused Marketing AX workflow.
 
 ### 4.5 Craft additions (`craft/`)
 
@@ -303,9 +303,9 @@ For documentation-heavy PRs, reviewers should also check:
 
 Concrete examples of PRs that should be closed under [Close instead of request changes](#close-instead-of-request-changes-maintainer-only). Tag references back to the [Product relevance test](#1-product-relevance-test) rules they violated.
 
-- **Domain-specific app smuggled in as tests.** A PR adding tests for a "Quranic Arabic Learning App" with selectors like `#dashboard`, `#exercise`, `.vocabulary-item`, `.arabic-word` when those surfaces are not part of Open Design — violates the "tests target real routes/DOM/APIs" rule.
-- **Standalone-app E2E URLs.** Playwright tests hard-coding `http://localhost:17573/index.html` instead of using the configured Open Design app flow — violates the "use the existing harness, base URL, and lifecycle conventions" rule.
+- **Domain-specific app smuggled in as tests.** A PR adding tests for a "Quranic Arabic Learning App" with selectors like `#dashboard`, `#exercise`, `.vocabulary-item`, `.arabic-word` when those surfaces are not part of Marketing AX — violates the "tests target real routes/DOM/APIs" rule.
+- **Standalone-app E2E URLs.** Playwright tests hard-coding `http://localhost:17573/index.html` instead of using the configured Marketing AX app flow — violates the "use the existing harness, base URL, and lifecycle conventions" rule.
 - **Tautological assertions.** `expect(count + exerciseCount).toBeGreaterThanOrEqual(0)` — violates the "test assertions provide real signal" rule.
 - **Ad hoc launcher script.** A new root script that hard-codes `~/projects/open-design`, assumes a user-specific tool such as `fnm`, or bypasses `pnpm tools-dev` — violates the "scripts use the documented control plane" rule and recreates a [Forbidden surface](#2-forbidden-surfaces).
 
-A reasonable underlying intent (e.g. "we need RTL or Arabic coverage") does not justify keeping such a PR open. Ask for a fresh PR that exercises the actual Open Design app through the existing harness.
+A reasonable underlying intent (e.g. "we need RTL or Arabic coverage") does not justify keeping such a PR open. Ask for a fresh PR that exercises the actual Marketing AX app through the existing harness.

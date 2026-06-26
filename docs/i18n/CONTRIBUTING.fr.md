@@ -1,4 +1,4 @@
-# Contribuer à Open Design
+# Contribuer à Marketing AX
 
 Merci d'envisager de contribuer. OD reste volontairement petit : l'essentiel
 de la valeur vit dans des **fichiers** (Skills, Design Systems, morceaux de
@@ -41,7 +41,7 @@ corepack enable           # sélectionne la version de pnpm définie par package
 pnpm install
 pnpm tools-dev run web    # boucle daemon + web au premier plan
 pnpm typecheck            # tsc -b --noEmit
-pnpm --filter @open-design/web build  # build du paquet web si nécessaire
+pnpm --filter @marketing-ax/web build  # build du paquet web si nécessaire
 ```
 
 Node `~24` et pnpm `10.33.x` sont requis. `nvm` / `fnm` sont optionnels ;
@@ -311,7 +311,7 @@ les agents exécutent. Ces prompts source sont des entrées de workflow ; garder
 une langue source commune évite de multiplier la QA de prompts sur toutes les
 locales. Lorsqu'un Skill, un Design System ou un prompt template est ajouté ou
 renommé, mettez à jour les métadonnées display de la locale concernée et lancez
-`pnpm --filter @open-design/web test` ; `content.test.ts` échoue si la coverage
+`pnpm --filter @marketing-ax/web test` ; `content.test.ts` échoue si la coverage
 couverture des métadonnées d'affichage d'une locale déclarée dérive. Les erreurs daemon, noms de fichiers
 d'export et textes d'artifact générés par agent restent des limites connues,
 sauf si une PR les inclut explicitement.

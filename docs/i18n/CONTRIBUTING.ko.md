@@ -1,4 +1,4 @@
-# Open Design 기여 가이드
+# Marketing AX 기여 가이드
 
 기여를 고민하고 있다니 고맙습니다. OD는 일부러 작게 유지합니다. 대부분의 가치는 프레임워크 코드가 아니라 **파일**(skill, design system, 프롬프트 조각)에 담겨 있습니다. 그래서 가장 효과가 큰 기여는 대개 폴더 하나, Markdown 파일 하나, 또는 PR 한 건 크기의 adapter입니다.
 
@@ -33,14 +33,14 @@ corepack enable           # packageManager에 고정된 pnpm을 선택합니다
 pnpm install
 pnpm tools-dev run web    # daemon + web 포그라운드 루프
 pnpm typecheck            # tsc -b --noEmit
-pnpm --filter @open-design/web build  # 필요할 때 web 패키지 빌드
+pnpm --filter @marketing-ax/web build  # 필요할 때 web 패키지 빌드
 ```
 
 Node `~24`와 pnpm `10.33.x`가 필요합니다. `nvm`이나 `fnm`은 선택 사항입니다. Node를 그렇게 관리하는 게 편하다면 `nvm install 24 && nvm use 24` 또는 `fnm install 24 && fnm use 24`를 실행하세요. macOS, Linux, WSL2가 주요 지원 환경입니다. Windows 네이티브도 지원합니다. 흔히 겪는 설정 문제는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요.
 
 ## Docker 설정
 
-Node.js나 pnpm을 설치하지 않고도 Open Design을 실행할 수 있습니다.
+Node.js나 pnpm을 설치하지 않고도 Marketing AX을 실행할 수 있습니다.
 
 ### 사전 준비
 
@@ -50,7 +50,7 @@ Compose v2가 포함된 Docker Desktop이 설치되어 있는지 확인하세요
 docker compose version
 ```
 
-### Open Design 실행
+### Marketing AX 실행
 
 ```bash
 cd deploy
@@ -219,7 +219,7 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 
 ## 현지화 유지보수
 
-독일어는 격식 있는 `Sie`를 씁니다. OD는 1인 창작자, 에이전시, 엔지니어링 팀이 뒤섞인 사용자층에 말을 걸기 때문입니다. 비격식 `du` 어조가 더 잘 맞는다는 프로젝트 피드백이 나오기 전까지는, 격식 독일어가 가장 무난한 기본값입니다. 로케일 PR은 UI 요소, 핵심 문서, 그리고 `apps/web/src/i18n/content.ts`의 표시 전용 갤러리 메타데이터를 번역해야 하지만, `skills/`나 `design-systems/`, 또는 agent가 실행하는 프롬프트 본문은 번역하면 안 됩니다. 이런 원본 프롬프트는 워크플로우 입력으로 관리되며, 원본 언어를 하나로 유지해야 로케일마다 프롬프트 QA가 늘어나는 일을 막을 수 있습니다. skill, design system, 프롬프트 템플릿을 추가하거나 이름을 바꿀 때는 독일어 표시 메타데이터를 갱신하고 `pnpm --filter @open-design/web test`를 실행하세요. 독일어 표시 항목이 누락되면 `content.test.ts`가 실패합니다. daemon 오류, export 파일명, agent가 생성한 artifact 텍스트는 PR이 명시적으로 범위에 넣지 않는 한 알려진 한계로 둡니다.
+독일어는 격식 있는 `Sie`를 씁니다. OD는 1인 창작자, 에이전시, 엔지니어링 팀이 뒤섞인 사용자층에 말을 걸기 때문입니다. 비격식 `du` 어조가 더 잘 맞는다는 프로젝트 피드백이 나오기 전까지는, 격식 독일어가 가장 무난한 기본값입니다. 로케일 PR은 UI 요소, 핵심 문서, 그리고 `apps/web/src/i18n/content.ts`의 표시 전용 갤러리 메타데이터를 번역해야 하지만, `skills/`나 `design-systems/`, 또는 agent가 실행하는 프롬프트 본문은 번역하면 안 됩니다. 이런 원본 프롬프트는 워크플로우 입력으로 관리되며, 원본 언어를 하나로 유지해야 로케일마다 프롬프트 QA가 늘어나는 일을 막을 수 있습니다. skill, design system, 프롬프트 템플릿을 추가하거나 이름을 바꿀 때는 독일어 표시 메타데이터를 갱신하고 `pnpm --filter @marketing-ax/web test`를 실행하세요. 독일어 표시 항목이 누락되면 `content.test.ts`가 실패합니다. daemon 오류, export 파일명, agent가 생성한 artifact 텍스트는 PR이 명시적으로 범위에 넣지 않는 한 알려진 한계로 둡니다.
 
 새 로케일을 추가하는 단계별 안내(UI 사전, README, 언어 전환기, 지역별 용어)는 [`TRANSLATIONS.md`](../../TRANSLATIONS.md)를 참고하세요.
 

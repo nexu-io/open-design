@@ -1,4 +1,4 @@
-# Open Design — Product Spec
+# Marketing AX — Product Spec
 
 **Status:** Draft v0.1 · 2026-04-24
 **Scope:** Product definition, scenarios, non-goals, high-level modules, and positioning against both [Anthropic's Claude Design][cd] and the existing open-source alternative ([Open CoDesign][ocod]).

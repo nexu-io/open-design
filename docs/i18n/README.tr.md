@@ -1,13 +1,13 @@
-<h1 align="center">Open Design: Açık kaynaklı Claude Design alternatifi</h1>
+<h1 align="center">Marketing AX: Açık kaynaklı Claude Design alternatifi</h1>
 
-> 🔥 **Open Design 0.10.0 burada: hepsi bir arada Agentic tasarım çalışma alanı.** Zanaatın tamamı artık tek pencerede — belirsiz bir fikirden referans keşfine, malzeme toplamaya, etkileşimli düzenlemeye, yorumları kuyruğa almaya, animasyonları cilalamaya ve sonucu bir editöre ya da Code Agent'a devretmeye kadar — uygulamadan hiç çıkmadan. Paralel oturumlarla artık tek bir asistan gibi değil, sizin için çalışan yerel bir tasarım ekibi gibi hissettiriyor. [0.10.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Marketing AX 0.10.0 burada: hepsi bir arada Agentic tasarım çalışma alanı.** Zanaatın tamamı artık tek pencerede — belirsiz bir fikirden referans keşfine, malzeme toplamaya, etkileşimli düzenlemeye, yorumları kuyruğa almaya, animasyonları cilalamaya ve sonucu bir editöre ya da Code Agent'a devretmeye kadar — uygulamadan hiç çıkmadan. Paralel oturumlarla artık tek bir asistan gibi değil, sizin için çalışan yerel bir tasarım ekibi gibi hissettiriyor. [0.10.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [AMR'yi dene](https://open-design.ai/amr/)
+> ⚡ **Marketing AX AMR (Agentic Model Router) — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Marketing AX içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [AMR'yi dene](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Marketing AX Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Marketing AX Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Marketing AX — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
@@ -29,11 +29,11 @@
 
 ---
 
-## Open Design nedir
+## Marketing AX nedir
 
 🎨 **Yerel öncelikli, açık kaynaklı [Claude Design][cd] alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ beceri** · ✨ **150 marka düzeyinde `DESIGN.md` sistemi** · 📦 **261 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 21 yerel CLI üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
 
-Open Design, Anthropic'in Claude Design ile birlikte sunduğu **ajan-yerel** döngünün — özeti keşfet, yönü kilitle, artifact'i akıt, eleştir, teslim et — kapalı olmaktan çıkıp, dizüstü bilgisayarınızda zaten bulunan kodlama ajanlarının okuyabileceği, yazabileceği ve yeniden harmanlayabileceği bir **beceriler, tasarım sistemleri ve eklentiler dosya sistemine** dönüştüğünde elde ettiğiniz şeydir. CLI'niz tasarım motoru, dizüstü bilgisayarınız stüdyo ve ekibinizin `DESIGN.md` dosyası marka sözleşmesi olur.
+Marketing AX, Anthropic'in Claude Design ile birlikte sunduğu **ajan-yerel** döngünün — özeti keşfet, yönü kilitle, artifact'i akıt, eleştir, teslim et — kapalı olmaktan çıkıp, dizüstü bilgisayarınızda zaten bulunan kodlama ajanlarının okuyabileceği, yazabileceği ve yeniden harmanlayabileceği bir **beceriler, tasarım sistemleri ve eklentiler dosya sistemine** dönüştüğünde elde ettiğiniz şeydir. CLI'niz tasarım motoru, dizüstü bilgisayarınız stüdyo ve ekibinizin `DESIGN.md` dosyası marka sözleşmesi olur.
 
 Aynı zamanda **ajan çağı için Figma alternatifidir** — bir tuval üzerinde piksel itmek yerine, gerçek CSS, gerçek yazı tipleri, gerçek bileşenlerle tek sayfalık artifact'ler sunar, doğrudan HTML / PDF / PPTX / MP4 olarak dışa aktarılır — tasarım sisteminiz tarafından zaten şekillendirilmiş, her gün kullandığınız ajanın içinde zaten çalıştırılabilir halde.
 
@@ -43,7 +43,7 @@ Aynı zamanda **ajan çağı için Figma alternatifidir** — bir tuval üzerind
 
 ## Ürün turu
 
-Open Design'ın ne olduğuna ve ne yaptığına hızlı bir bakış. **Home**'dan başlayın, tekrar eden iş akışlarını **Automation** ile düzenleyin, **Design System** içinde bir marka sözleşmesi damıtın ve **Plugins** ile **entegrasyonlar** ile genişletin; herhangi bir projenin **Studio**'su içinde, aynı tasarım sistemi prototipler, canlı artifact'ler, HyperFrames, sunum desteleri ve görseller akıtır.
+Marketing AX'ın ne olduğuna ve ne yaptığına hızlı bir bakış. **Home**'dan başlayın, tekrar eden iş akışlarını **Automation** ile düzenleyin, **Design System** içinde bir marka sözleşmesi damıtın ve **Plugins** ile **entegrasyonlar** ile genişletin; herhangi bir projenin **Studio**'su içinde, aynı tasarım sistemi prototipler, canlı artifact'ler, HyperFrames, sunum desteleri ve görseller akıtır.
 
 ### Temel sayfalar
 
@@ -74,7 +74,7 @@ Open Design'ın ne olduğuna ve ne yaptığına hızlı bir bakış. **Home**'da
 </td>
 <td width="50%" valign="top">
 <img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — harici sistemleri ve MCP araçlarını bağlayın ve Open Design'ı herhangi bir IDE'den, betikten veya otomasyondan kullanın.</sub>
+<sub><b>Integrations</b> — harici sistemleri ve MCP araçlarını bağlayın ve Marketing AX'ı herhangi bir IDE'den, betikten veya otomasyondan kullanın.</sub>
 </td>
 </tr>
 </table>
@@ -110,7 +110,7 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 
 ## Platform Uyumluluğu
 
-> Open Design, ana akım kodlama ajanlarının yerel olarak tükettiği **beceriler, bir CLI ve bir MCP sunucusu** olarak sunulur. OD kurulduktan sonra, tek bir `od mcp install <agent>` komutu MCP sunucusunu o ajanın yapılandırmasına bağlar ve aynı araçları herhangi bir ajanın içinden çağırırsınız.
+> Marketing AX, ana akım kodlama ajanlarının yerel olarak tükettiği **beceriler, bir CLI ve bir MCP sunucusu** olarak sunulur. OD kurulduktan sonra, tek bir `od mcp install <agent>` komutu MCP sunucusunu o ajanın yapılandırmasına bağlar ve aynı araçları herhangi bir ajanın içinden çağırırsınız.
 
 | Kodlama ajanı / platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Durum &nbsp;&nbsp; | Tek satırlık MCP sunucusu kurulumu &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 Kuru çalıştırma önizlemesi için `od mcp install <agent> --print` · kaldırmak için `--uninstall` · tam liste için `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Marketing AX supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **Kurulu CLI yok mu?** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` adresindeki BYOK proxy size aynı döngüyü verir (süreç başlatma yok) — `baseUrl` + `apiKey` + `model` yapıştırın; OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM veya herhangi bir OpenAI uyumlu uç nokta desteğiyle. Hedef bazlı SSRF koruması, daemon kenarında dahili IP'leri / link-local / CGNAT adreslerini engeller.
@@ -233,7 +233,7 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 
 ### 5 · Video ve HyperFrames — ajan-yerel hareket grafikleri
 
-**[HyperFrames][hyperframes]**, HeyGen'in açık kaynaklı, ajan-yerel video çerçevesidir ve Open Design'da birinci sınıf bir vatandaş olarak entegre edilmiştir. Ajan HTML + CSS + GSAP yazar ve HyperFrames bunu başsız Chrome + FFmpeg aracılığıyla deterministik bir MP4'e işler. Sinematik t2v / i2v için **Seedance 2.0**, yönlendirilen model varyantları için **Veo 3 / Sora 2 / Kling 2** ve ses katmanı için **Suno v5 / Lyria 2** ile eşleştirin.
+**[HyperFrames][hyperframes]**, HeyGen'in açık kaynaklı, ajan-yerel video çerçevesidir ve Marketing AX'da birinci sınıf bir vatandaş olarak entegre edilmiştir. Ajan HTML + CSS + GSAP yazar ve HyperFrames bunu başsız Chrome + FFmpeg aracılığıyla deterministik bir MP4'e işler. Sinematik t2v / i2v için **Seedance 2.0**, yönlendirilen model varyantları için **Veo 3 / Sora 2 / Kling 2** ve ses katmanı için **Suno v5 / Lyria 2** ile eşleştirin.
 
 <table>
 <tr>
@@ -256,11 +256,11 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 
 ---
 
-## Neden Open Design
+## Neden Marketing AX
 
 > **Nisan 2026'da Anthropic [Claude Design][cd]'ı yayınladı — bir LLM'in ilk kez düz metin yazmayı bırakıp doğrudan tasarım artifact'leri sunduğu an.** Viral oldu. Ama kapalı kaynaklı, yalnızca ücretli, yalnızca bulut tabanlı kaldı; Anthropic'in modeline, Anthropic'in becerilerine, Anthropic'in yüzeyine kilitliydi. Ödeme yok, kendi sunucunda barındırma yok, Vercel dağıtımı yok, kendi ajanını takma yok.
 
-Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact öncelikli zihinsel model, hiçbir bağımlılık kilidi olmadan:
+Marketing AX (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact öncelikli zihinsel model, hiçbir bağımlılık kilidi olmadan:
 
 - 🤖 **Ajan-yerel, modelden bağımsız.** Bir ajan sunmuyoruz. `PATH`'inizde zaten bulunan `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` tasarım motorudur. Tek tıkla değiştirin.
 - 🧠 **Varsayılan olarak marka düzeyinde.** Her işleme etkin `DESIGN.md` dosyasını okur — palet, tipografi, boşluk, hareket, ses, anti-desenleri kapsayan 9 bölümlük bir şema. 150 sistem depoyla birlikte gelir (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Bir klasör bırakın, seçici onu bulur.
@@ -271,7 +271,7 @@ Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact �
 
 ### Karşılaştırma
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Marketing AX** |
 |---|---|---|---|---|
 | Açık kaynak | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Kendi sunucunda barındırma / masaüstü | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -288,7 +288,7 @@ Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact �
 
 ### 🖥️ Masaüstü uygulamasını indirin (önerilir — sıfır yapılandırma)
 
-Open Design'ı kullanmanın en hızlı yolu. Node yok, pnpm yok, klonlama yok.
+Marketing AX'ı kullanmanın en hızlı yolu. Node yok, pnpm yok, klonlama yok.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/) veya [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) veya [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -298,7 +298,7 @@ Kurulumdan sonra: uygulama `PATH`'inizdeki her kodlama ajanı CLI'sini otomatik 
 
 ### 🤖 Kodlama ajanınıza kurun (UI yok)
 
-Open Design'ı GUI'yi hiç açmadan kullanabilirsiniz — Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi ve daha fazlasının içinde bir beceri, eklenti veya MCP sunucusu olarak çağırın.
+Marketing AX'ı GUI'yi hiç açmadan kullanabilirsiniz — Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi ve daha fazlasının içinde bir beceri, eklenti veya MCP sunucusu olarak çağırın.
 
 ```bash
 # One-line install into the agent you're using:
@@ -345,13 +345,13 @@ Node `~24`, pnpm `10.33.x`. Windows kullanıcıları, bkz. [`docs/windows-troubl
 2. **Bir tasarımcı (veya ajan) yönü kilitler.** Marka yok mu? 5 seçilmiş yönden birini seçin. Markanız var mı? Bir ekran görüntüsü / URL bırakın → ajan GitHub'a bağlanır, Figma'yı içe aktarır ve yeniden kullanılabilir bir `DESIGN.md` dosyasına kodlar.
 3. **Ajan ilk `<artifact>`'i yayar.** Eklenti + beceri + `DESIGN.md` bağlanır. Yalıtılmış bir iframe'e akar, yerinde düzenlenebilir — "sıfırdan yeniden üretmek" değil.
 4. **Mühendisliğe devredin.** Artifact gerçek HTML/CSS'tir — kod olarak inşa etmeye devam etmek için Cursor, Codex veya Claude Code'a bırakın. Veya doğrudan pazarlamaya PPTX / PDF / MP4 olarak dışa aktarın.
-5. **Open Design kullandıkça akıllanır.** Ekran görüntüleriniz, yazı tipleriniz, paletleriniz ve onaylanmış artifact'leriniz bir sonraki oturum için varsayılan olarak birikir. Daha az yeniden çalışma, daha az sapma.
+5. **Marketing AX kullandıkça akıllanır.** Ekran görüntüleriniz, yazı tipleriniz, paletleriniz ve onaylanmış artifact'leriniz bir sonraki oturum için varsayılan olarak birikir. Daha az yeniden çalışma, daha az sapma.
 
 ---
 
-## Open Design'ı kodlama ajanınızdan kullanın
+## Marketing AX'ı kodlama ajanınızdan kullanın
 
-Open Design bir **stdio MCP sunucusu** ve ajan başına **kurulum betikleri** sunar. Başka bir depodaki herhangi bir MCP uyumlu ajan, yerel Open Design projelerinizdeki dosyaları doğrudan okuyabilir — token CSS'i, JSX bileşenleri, giriş HTML'i — ada göre sorgulanabilir yapılandırılmış bir API olarak. Ajan her zaman bayatlamış bir dışa aktarımı değil, canlı dosyayı görür.
+Marketing AX bir **stdio MCP sunucusu** ve ajan başına **kurulum betikleri** sunar. Başka bir depodaki herhangi bir MCP uyumlu ajan, yerel Marketing AX projelerinizdeki dosyaları doğrudan okuyabilir — token CSS'i, JSX bileşenleri, giriş HTML'i — ada göre sorgulanabilir yapılandırılmış bir API olarak. Ajan her zaman bayatlamış bir dışa aktarımı değil, canlı dosyayı görür.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -441,7 +441,7 @@ Kütüphaneyi [`scripts/sync-design-systems.ts`](../../scripts/sync-design-syste
 
 ## Eklentiler
 
-**261 resmî eklenti** [`plugins/_official/`](../../plugins/_official/) içinde yer alır. Her eklenti **taşınabilir bir ajan-beceri klasörüdür** — bir `SKILL.md` (Agent Skills'i destekleyen herhangi bir ajan tarafından okunabilir), artı Open Design'a pazar yeri meta verisi, girdiler, önizlemeler, işlem hatları ve yetenek bildirimleri veren isteğe bağlı bir `open-design.json` manifesti. Doğrudan bir kategoriye atlayın:
+**261 resmî eklenti** [`plugins/_official/`](../../plugins/_official/) içinde yer alır. Her eklenti **taşınabilir bir ajan-beceri klasörüdür** — bir `SKILL.md` (Agent Skills'i destekleyen herhangi bir ajan tarafından okunabilir), artı Marketing AX'a pazar yeri meta verisi, girdiler, önizlemeler, işlem hatları ve yetenek bildirimleri veren isteğe bağlı bir `open-design.json` manifesti. Doğrudan bir kategoriye atlayın:
 
 | Kategori | Sayı | İçerik |
 |---|---|---|
@@ -483,7 +483,7 @@ Her komut `--json` destekler, böylece onu `jq` / `xargs` aracılığıyla otoma
 
 ### Bir eklenti oluşturma
 
-Bir eklenti **en az bir `SKILL.md` gerektirir**; onu Open Design pazar yerinde listelemek için bir `open-design.json` ekleyin:
+Bir eklenti **en az bir `SKILL.md` gerektirir**; onu Marketing AX pazar yerinde listelemek için bir `open-design.json` ekleyin:
 
 ```
 my-plugin/
@@ -501,15 +501,15 @@ Yerel olarak iskeletle + doğrula:
 ```bash
 od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
 od plugin validate ./my-plugin                          # check manifest / file layout
-pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+pnpm guard && pnpm --filter @marketing-ax/plugin-runtime typecheck
 ```
 
 Tam alan kümesi ve çalışma zamanı sözleşmesi → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md); bir kodlama ajanıyla eklenti geliştirme → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md); kopyala-yapıştır minimal şablonlar → [`plugins/spec/examples/`](../../plugins/spec/examples/).
 
 ### Bir eklentiye katkıda bulunma
 
-1. Eklenti klasörünü [`plugins/community/`](../../plugins/community/) içine (üçüncü taraf eklentiler) veya — onu Open Design ile birlikte paketlenmiş olarak sunmak için — [`plugins/_official/`](../../plugins/_official/) içindeki eşleşen katmana bırakın.
-2. Doğrulamayı geçin: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
+1. Eklenti klasörünü [`plugins/community/`](../../plugins/community/) içine (üçüncü taraf eklentiler) veya — onu Marketing AX ile birlikte paketlenmiş olarak sunmak için — [`plugins/_official/`](../../plugins/_official/) içindeki eşleşen katmana bırakın.
+2. Doğrulamayı geçin: `od plugin validate`, `pnpm guard`, `pnpm --filter @marketing-ax/plugin-runtime typecheck`.
 3. PR'ı [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) içindeki şablonu kullanarak doldurun (kimlik, sürüm, hat, mod, yetenekler, tetikleme örnekleri; görsel eklentiler için bir ekran görüntüsü / önizleme ekleyin).
 4. Harici bir kayda yayınlamak için (skills.sh / ClawHub / bağımsız GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
 
@@ -571,7 +571,7 @@ Tam mimari → [`docs/architecture.md`](../../docs/architecture.md). Beceri prot
 - [x] Sidecar protokolü + Electron masaüstü + IPC otomasyonu
 - [x] Artifact lint API'si + 5 boyutlu öz-eleştiri ön-yayın kapısı
 - [x] **0.8.0** — eklenti pazar yeri altyapısı (261 resmî eklenti, manifest spesifikasyonu, ajan başına kurulum betikleri)
-- [x] **0.9.0** — Open Design AMR (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
+- [x] **0.9.0** — Marketing AX AMR (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
 - [x] Paketlenmiş Electron derlemeleri — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (isteğe bağlı hat)
 - [ ] Yorum modu cerrahi düzenlemeler — kısmen sunuldu; güvenilir hedefli yamalama devam ediyor
 - [ ] AI tarafından yayılan ayar paneli UX'i — henüz uygulanmadı
@@ -599,7 +599,7 @@ Her kanalın arkasında gerçek insanlar var.
 
 ## Katkıda bulunma
 
-Open Design, katkıda bulunanlar — tasarımcılar, mühendisler, komut yazarları — gelmeye devam ettiği için hareket etmeye devam ediyor. En çok kullanılan becerilerin, tasarım sistemlerinin ve eklentilerin çoğu çekirdek ekip dışındaki kişiler tarafından yazılmıştır.
+Marketing AX, katkıda bulunanlar — tasarımcılar, mühendisler, komut yazarları — gelmeye devam ettiği için hareket etmeye devam ediyor. En çok kullanılan becerilerin, tasarım sistemlerinin ve eklentilerin çoğu çekirdek ekip dışındaki kişiler tarafından yazılmıştır.
 
 ### 🎯 Nereden başlamalı (maksimum kaldıraç, minimum değişiklik)
 
@@ -636,9 +636,9 @@ gh pr create --fill
 
 Tam ajan dostu katkı akışı, kod stili ve PR çıtası → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
 
-### 🏅 Open Design Fellow programı
+### 🏅 Marketing AX Fellow programı
 
-Dünya çapında **Open Design Fellow'ları** alıyoruz — Fellow'lar ürünü çekirdek ekiple birlikte şekillendirir, kendi bölgelerinde Open Design'ı resmî olarak temsil eder ve topluluğu yerel olarak büyütür; fonlu destek ($1,000 / MR), ücretsiz LLM kredileri ve doğrudan inceleme hattıyla desteklenir. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4) üzerindeki duyuru.
+Dünya çapında **Marketing AX Fellow'ları** alıyoruz — Fellow'lar ürünü çekirdek ekiple birlikte şekillendirir, kendi bölgelerinde Marketing AX'ı resmî olarak temsil eder ve topluluğu yerel olarak büyütür; fonlu destek ($1,000 / MR), ücretsiz LLM kredileri ve doğrudan inceleme hattıyla desteklenir. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4) üzerindeki duyuru.
 
 ---
 
@@ -672,7 +672,7 @@ Bakımcı kuralları, terfi kriterleri ve çıkış protokolü → [`MAINTAINERS
 Katılan herkese teşekkürler — kod, belge, geri bildirim, keskin bir issue, yeni bir beceri, yeni bir tasarım sistemi.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Marketing AX contributors" />
 </a>
 
 ---
@@ -680,7 +680,7 @@ Katılan herkese teşekkürler — kod, belge, geri bildirim, keskin bir issue, 
 ## Depo etkinliği
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="Marketing AX — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 Yukarıdaki SVG, [`lowlighter/metrics`](https://github.com/lowlighter/metrics) kullanılarak [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) tarafından günlük olarak yeniden oluşturulur.
@@ -690,7 +690,7 @@ Yukarıdaki SVG, [`lowlighter/metrics`](https://github.com/lowlighter/metrics) k
 ## Bize yıldız verin
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Marketing AX on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Bu size otuz dakika kazandırdıysa, bir ★ verin. Yıldızlar kira ödemez — ama bir sonraki tasarımcıya, ajana ve katkıda bulunana bu deneyin dikkatlerine değer olduğunu söyler. Tek tıkla, üç saniyede, gerçek bir sinyal.
@@ -699,7 +699,7 @@ Bu size otuz dakika kazandırdıysa, bir ★ verin. Yıldızlar kira ödemez —
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Marketing AX star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -717,7 +717,7 @@ Bu size otuz dakika kazandırdıysa, bir ★ verin. Yıldızlar kira ödemez —
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | Daemon + adaptör mimarisi — PATH-tarama ajan algılama, tek ayrıcalıklı süreç olarak yerel daemon. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 9 bölümlük `DESIGN.md` şemasının ve 70 ürün sisteminin kaynağı. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` altına eklenen 57 tasarım becerisinin kaynağı. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 hareket grafikleri çerçevesi, Open Design'da birinci sınıf `hyperframes-html` olarak entegre edilmiştir. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 hareket grafikleri çerçevesi, Marketing AX'da birinci sınıf `hyperframes-html` olarak entegre edilmiştir. |
 | [Claude Code skills][skill] | Birebir benimsediğimiz `SKILL.md` kuralı. |
 
 Ayrıntılı köken → [`docs/references.md`](../../docs/references.md).

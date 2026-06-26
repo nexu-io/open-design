@@ -1,13 +1,13 @@
-<h1 align="center">Open Design：開源的 Claude Design 替代方案</h1>
+<h1 align="center">Marketing AX：開源的 Claude Design 替代方案</h1>
 
-> 🔥 **Open Design 0.10.0 正式發布：All-in-one 的 Agentic 設計工作台。** 設計的完整流程從此只需一個視窗——從一個模糊的想法出發，到發現參考、蒐集素材、互動式編輯、留言排入佇列、打磨動效，再交付給編輯器或 Code Agent，全程無須離開應用程式。搭配多會話並行，它不再只是一個助手，而是一支為你工作的本地設計團隊。[下載 0.10.0](https://github.com/nexu-io/open-design/releases) · [參與討論](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Marketing AX 0.10.0 正式發布：All-in-one 的 Agentic 設計工作台。** 設計的完整流程從此只需一個視窗——從一個模糊的想法出發，到發現參考、蒐集素材、互動式編輯、留言排入佇列、打磨動效，再交付給編輯器或 Code Agent，全程無須離開應用程式。搭配多會話並行，它不再只是一個助手，而是一支為你工作的本地設計團隊。[下載 0.10.0](https://github.com/nexu-io/open-design/releases) · [參與討論](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR（Agentic Model Router）——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/amr/)
+> ⚡ **Marketing AX AMR（Agentic Model Router）——官方模型服務。** 一次儲值，即可在 Marketing AX 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/qhbcCH8Am4)。
+> 🏅 **Marketing AX Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Marketing AX Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/qhbcCH8Am4)。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Marketing AX — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
@@ -29,11 +29,11 @@
 
 ---
 
-## 什麼是 Open Design
+## 什麼是 Marketing AX
 
 🎨 **本地優先、開源的 [Claude Design][cd] 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個 skills** · ✨ **150 套品牌級 `DESIGN.md` 設計系統** · 📦 **261 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 21 個本地 CLI 上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
 
-Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **skills、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
+Marketing AX 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **skills、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
 
 它同時也是 **agent 時代的 Figma 替代方案**——不必在畫布上推動像素，而是以真實 CSS、真實字型、真實元件交付單頁 artifact，直接匯出成 HTML / PDF / PPTX / MP4——這些產出早已由你的設計系統塑形，也早已能在你每天使用的 agent 中執行。
 
@@ -43,7 +43,7 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 
 ## 產品導覽
 
-快速看看 Open Design 是什麼、能做什麼。從 **首頁** 起步，用 **自動化** 編排重複的工作流程，在 **設計系統** 中提煉品牌契約，再以 **外掛** 與 **整合** 擴充；在任何專案的 **Studio** 中，同一套設計系統就能串流產出原型、即時 artifact、HyperFrames、簡報與圖片。
+快速看看 Marketing AX 是什麼、能做什麼。從 **首頁** 起步，用 **自動化** 編排重複的工作流程，在 **設計系統** 中提煉品牌契約，再以 **外掛** 與 **整合** 擴充；在任何專案的 **Studio** 中，同一套設計系統就能串流產出原型、即時 artifact、HyperFrames、簡報與圖片。
 
 ### 核心頁面
 
@@ -74,7 +74,7 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 </td>
 <td width="50%" valign="top">
 <img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>整合</b>——連接外部系統與 MCP 工具，並從任何 IDE、腳本或自動化流程使用 Open Design。</sub>
+<sub><b>整合</b>——連接外部系統與 MCP 工具，並從任何 IDE、腳本或自動化流程使用 Marketing AX。</sub>
 </td>
 </tr>
 </table>
@@ -110,7 +110,7 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 
 ## 平台相容性
 
-> Open Design 以 **skills、CLI 與 MCP server** 的形式發行，主流編碼 agent 都能原生使用。安裝 OD 後，只要一句 `od mcp install <agent>` 就能把 MCP server 接進該 agent 的設定，你便能在任何 agent 內呼叫同一組工具。
+> Marketing AX 以 **skills、CLI 與 MCP server** 的形式發行，主流編碼 agent 都能原生使用。安裝 OD 後，只要一句 `od mcp install <agent>` 就能把 MCP server 接進該 agent 的設定，你便能在任何 agent 內呼叫同一組工具。
 
 | 編碼 agent／平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 狀態 &nbsp;&nbsp; | 一行指令安裝 MCP server &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 `od mcp install <agent> --print` 可預覽 dry-run · `--uninstall` 可移除 · 完整清單請執行 `od mcp install --help`。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Marketing AX supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **沒有安裝任何 CLI？** 位於 `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理可提供相同的迴圈（不需衍生程序）——貼上 `baseUrl` + `apiKey` + `model` 即可，支援 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM，或任何相容 OpenAI 的端點。逐目標的 SSRF 防護會在 daemon 邊界阻擋內部 IP／link-local／CGNAT。
@@ -233,7 +233,7 @@ adapter 契約與 stream parser 位於 [`apps/daemon/src/agents.ts`](../../apps/
 
 ### 5 · 影片與 HyperFrames——agent 原生的動態圖像
 
-**[HyperFrames][hyperframes]** 是 HeyGen 開源、agent 原生的影片框架，在 Open Design 中以一等公民的身分整合。agent 撰寫 HTML + CSS + GSAP，HyperFrames 透過無頭 Chrome + FFmpeg 將其渲染成一支確定性的 MP4。搭配 **Seedance 2.0** 可做電影感的 t2v / i2v，**Veo 3 / Sora 2 / Kling 2** 提供路由後的模型變體，**Suno v5 / Lyria 2** 則負責音訊層。
+**[HyperFrames][hyperframes]** 是 HeyGen 開源、agent 原生的影片框架，在 Marketing AX 中以一等公民的身分整合。agent 撰寫 HTML + CSS + GSAP，HyperFrames 透過無頭 Chrome + FFmpeg 將其渲染成一支確定性的 MP4。搭配 **Seedance 2.0** 可做電影感的 t2v / i2v，**Veo 3 / Sora 2 / Kling 2** 提供路由後的模型變體，**Suno v5 / Lyria 2** 則負責音訊層。
 
 <table>
 <tr>
@@ -256,11 +256,11 @@ adapter 契約與 stream parser 位於 [`apps/daemon/src/agents.ts`](../../apps/
 
 ---
 
-## 為什麼選 Open Design
+## 為什麼選 Marketing AX
 
 > **2026 年 4 月，Anthropic 發表了 [Claude Design][cd]——這是 LLM 首次不再撰寫散文，而是直接交付設計 artifact。** 它爆紅。但它始終封閉原始碼、僅限付費、僅限雲端，並被綁死在 Anthropic 的模型、Anthropic 的 skills、Anthropic 的介面上。無法結帳、無法自架、無法部署到 Vercel、無法換上你自己的 agent。
 
-Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣以 artifact 為先的思維模式，卻沒有任何鎖定：
+Marketing AX（OD）就是那個開源的替代方案。同樣的迴圈、同樣以 artifact 為先的思維模式，卻沒有任何鎖定：
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
 - 🧠 **預設即品牌級。** 每一次渲染都會讀取目前啟用的 `DESIGN.md`——這是一份涵蓋色票、字體、間距、動態、語氣、反模式的 9 段式 schema。儲存庫隨附 150 套系統（Linear、Stripe、Vercel、Airbnb、Apple、Tesla、Notion、Anthropic、Cursor、Supabase、Figma…）。放進一個資料夾，選擇器就會找到它。
@@ -271,7 +271,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ### 比較
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Marketing AX** |
 |---|---|---|---|---|
 | 開源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 自架／桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -288,7 +288,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ### 🖥️ 下載桌面應用程式（推薦——零設定）
 
-使用 Open Design 最快的方式。無須 Node、無須 pnpm、無須 clone。
+使用 Marketing AX 最快的方式。無須 Node、無須 pnpm、無須 clone。
 
 - **macOS**（Apple Silicon · Intel x64）→ [**open-design.ai**](https://open-design.ai/) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -298,7 +298,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ### 🤖 安裝進你的編碼 agent（無 UI）
 
-你完全不必打開 GUI 也能使用 Open Design——在 Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi 等等之中，把它當成 skill、外掛或 MCP server 來呼叫。
+你完全不必打開 GUI 也能使用 Marketing AX——在 Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi 等等之中，把它當成 skill、外掛或 MCP server 來呼叫。
 
 ```bash
 # One-line install into the agent you're using:
@@ -345,13 +345,13 @@ Node `~24`、pnpm `10.33.x`。Windows 使用者請參見 [`docs/windows-troubles
 2. **設計師（或 agent）鎖定方向。** 沒有品牌？從 5 個精選方向中挑一個。已有品牌？放進一張截圖／URL → agent 會連接 GitHub、匯入 Figma，並編寫出一份可重複使用的 `DESIGN.md`。
 3. **agent 發出第一個 `<artifact>`。** 外掛 + skill + `DESIGN.md` 都已綁定。它會串流進沙箱化 iframe、可就地編輯——而不是「從頭重新生成」。
 4. **交接給工程團隊。** 這份 artifact 是真實的 HTML/CSS——把它丟進 Cursor、Codex 或 Claude Code，就能以程式碼繼續開發。或直接匯出 PPTX / PDF / MP4 給行銷團隊。
-5. **Open Design 會隨著你的使用愈來愈聰明。** 你的截圖、字型、色票與確認過的 artifact 會累積成下一次工作階段的預設值。更少返工、更少偏移。
+5. **Marketing AX 會隨著你的使用愈來愈聰明。** 你的截圖、字型、色票與確認過的 artifact 會累積成下一次工作階段的預設值。更少返工、更少偏移。
 
 ---
 
-## 從你的編碼 agent 使用 Open Design
+## 從你的編碼 agent 使用 Marketing AX
 
-Open Design 隨附一個 **stdio MCP server** 與各 agent 專屬的 **安裝腳本**。任何在其他儲存庫中、相容 MCP 的 agent，都能直接讀取你本地 Open Design 專案的檔案——tokens CSS、JSX 元件、入口 HTML——當成一個可按名稱查詢的結構化 API。agent 看到的永遠是即時檔案，而非過期的匯出檔。
+Marketing AX 隨附一個 **stdio MCP server** 與各 agent 專屬的 **安裝腳本**。任何在其他儲存庫中、相容 MCP 的 agent，都能直接讀取你本地 Marketing AX 專案的檔案——tokens CSS、JSX 元件、入口 HTML——當成一個可按名稱查詢的結構化 API。agent 看到的永遠是即時檔案，而非過期的匯出檔。
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -441,7 +441,7 @@ od skill list --scenario marketing
 
 ## 外掛
 
-**261 個官方外掛** 位於 [`plugins/_official/`](../../plugins/_official/)。每個外掛都是一個 **可攜的 agent-skill 資料夾**——含一份 `SKILL.md`（任何支援 Agent Skills 的 agent 都能讀取），外加一份選用的 `open-design.json` manifest，為 Open Design 提供市集中繼資料、輸入、預覽、pipeline 與能力宣告。直接跳到某個分類：
+**261 個官方外掛** 位於 [`plugins/_official/`](../../plugins/_official/)。每個外掛都是一個 **可攜的 agent-skill 資料夾**——含一份 `SKILL.md`（任何支援 Agent Skills 的 agent 都能讀取），外加一份選用的 `open-design.json` manifest，為 Marketing AX 提供市集中繼資料、輸入、預覽、pipeline 與能力宣告。直接跳到某個分類：
 
 | 分類 | 數量 | 內容 |
 |---|---|---|
@@ -483,7 +483,7 @@ od plugin uninstall od-default       # uninstall
 
 ### 建立外掛
 
-一個外掛 **至少只需要一份 `SKILL.md`**；若要把它列入 Open Design 市集，再加上一份 `open-design.json`：
+一個外掛 **至少只需要一份 `SKILL.md`**；若要把它列入 Marketing AX 市集，再加上一份 `open-design.json`：
 
 ```
 my-plugin/
@@ -501,15 +501,15 @@ my-plugin/
 ```bash
 od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
 od plugin validate ./my-plugin                          # check manifest / file layout
-pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+pnpm guard && pnpm --filter @marketing-ax/plugin-runtime typecheck
 ```
 
 完整欄位集與執行期契約 → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md)；用編碼 agent 開發外掛 → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md)；可複製貼上的最小範本 → [`plugins/spec/examples/`](../../plugins/spec/examples/)。
 
 ### 貢獻一個外掛
 
-1. 把外掛資料夾放進 [`plugins/community/`](../../plugins/community/)（第三方外掛），或——若要讓它隨 Open Design 一同附帶——放進 [`plugins/_official/`](../../plugins/_official/) 中對應的層級。
-2. 通過驗證：`od plugin validate`、`pnpm guard`、`pnpm --filter @open-design/plugin-runtime typecheck`。
+1. 把外掛資料夾放進 [`plugins/community/`](../../plugins/community/)（第三方外掛），或——若要讓它隨 Marketing AX 一同附帶——放進 [`plugins/_official/`](../../plugins/_official/) 中對應的層級。
+2. 通過驗證：`od plugin validate`、`pnpm guard`、`pnpm --filter @marketing-ax/plugin-runtime typecheck`。
 3. 使用 [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) 中的範本填寫 PR（ID、版本、通道、mode、能力、觸發範例；視覺型外掛請附上截圖／預覽）。
 4. 若要發布到外部 registry（skills.sh / ClawHub / 獨立 GitHub）→ [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md)。
 
@@ -571,7 +571,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Sidecar 協定 + Electron 桌面 + IPC 自動化
 - [x] Artifact lint API + 5 維自我評析的發出前閘門
 - [x] **0.8.0**——外掛市集基礎建設（261 個官方外掛、manifest 規格、各 agent 安裝腳本）
-- [x] **0.9.0**——Open Design AMR（內建於應用程式的官方 Model Router：零設定、一鍵登入）
+- [x] **0.9.0**——Marketing AX AMR（內建於應用程式的官方 Model Router：零設定、一鍵登入）
 - [x] 打包的 Electron 建置——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（選用通道）
 - [ ] 註解模式的精準編輯——部分完成；可靠的定點修補開發中
 - [ ] AI 發出的 tweaks 面板 UX——尚未實作
@@ -599,7 +599,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 貢獻
 
-Open Design 之所以能持續前進，是因為貢獻者——設計師、工程師、prompt 作者——不斷現身。許多最常用的 skills、設計系統與外掛，都出自核心團隊以外的人之手。
+Marketing AX 之所以能持續前進，是因為貢獻者——設計師、工程師、prompt 作者——不斷現身。許多最常用的 skills、設計系統與外掛，都出自核心團隊以外的人之手。
 
 ### 🎯 從哪裡開始（最大槓桿、最小改動）
 
@@ -636,9 +636,9 @@ gh pr create --fill
 
 完整的 agent 友善貢獻流程、程式碼風格與 PR 標準 → [`CONTRIBUTING.md`](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)）。
 
-### 🏅 Open Design Fellow 計畫
+### 🏅 Marketing AX Fellow 計畫
 
-我們正在全球招募 **Open Design Fellows**——Fellows 與核心團隊一同形塑產品、在各自地區正式代表 Open Design，並在當地壯大社群，背後有經費支援（$1,000 / MR）、免費的 LLM credits，以及一條直通的審查通道。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/qhbcCH8Am4) 上的公告。
+我們正在全球招募 **Marketing AX Fellows**——Fellows 與核心團隊一同形塑產品、在各自地區正式代表 Marketing AX，並在當地壯大社群，背後有經費支援（$1,000 / MR）、免費的 LLM credits，以及一條直通的審查通道。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/qhbcCH8Am4) 上的公告。
 
 ---
 
@@ -672,7 +672,7 @@ gh pr create --fill
 感謝每一位參與過的人——程式碼、文件、回饋、一則犀利的 issue、一個新的 skill、一套新的設計系統。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Marketing AX contributors" />
 </a>
 
 ---
@@ -680,7 +680,7 @@ gh pr create --fill
 ## 儲存庫活動
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="Marketing AX — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 上方的 SVG 由 [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) 使用 [`lowlighter/metrics`](https://github.com/lowlighter/metrics) 每日重新生成。
@@ -690,7 +690,7 @@ gh pr create --fill
 ## 給我們一顆星
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Marketing AX on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 如果這幫你省下了三十分鐘，給它一顆 ★。星星不能付房租——但它們會告訴下一位設計師、agent 與貢獻者，這場實驗值得他們關注。一鍵、三秒，一個真實的訊號。
@@ -699,7 +699,7 @@ gh pr create --fill
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Marketing AX star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -717,7 +717,7 @@ gh pr create --fill
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | daemon + adapter 架構——PATH 掃描的 agent 偵測、把本地 daemon 作為唯一的特權程序。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 9 段式 `DESIGN.md` schema 與 70 套產品系統的來源。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 之下新增的 57 個設計 skill 的來源。 |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖像框架，在 Open Design 中整合為一等公民的 `hyperframes-html`。 |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖像框架，在 Marketing AX 中整合為一等公民的 `hyperframes-html`。 |
 | [Claude Code skills][skill] | 我們原封不動採用的 `SKILL.md` 慣例。 |
 
 詳細出處 → [`docs/references.md`](../../docs/references.md)。

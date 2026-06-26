@@ -2,7 +2,7 @@
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`self-hosting.md`](self-hosting.md) · [`network-security.md`](network-security.md)
 
-Deploy Open Design on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
+Deploy Marketing AX on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
 
 ## Quick reference
 
@@ -48,7 +48,7 @@ Allowed origins (CORS, comma-separated, or empty) []:
 Memory limit [384m]:
 
 [open-design] Pulling image: docker.io/vanjayak/open-design:latest
-[open-design] Starting Open Design...
+[open-design] Starting Marketing AX...
 [open-design] Waiting for health check (up to 60s)...
 [open-design] Daemon is healthy (200 OK)
 ```

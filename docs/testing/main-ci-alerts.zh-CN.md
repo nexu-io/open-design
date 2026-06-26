@@ -51,7 +51,7 @@
 
 推荐格式：
 
-- `Open Design main CI failed`
+- `Marketing AX main CI failed`
 - `failing jobs: ...`
 - `commit: ...`
 - `PR: ...`

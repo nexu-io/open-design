@@ -1,13 +1,13 @@
-<h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
+<h1 align="center">Marketing AX: 오픈소스 Claude Design 대안</h1>
 
-> 🔥 **Open Design 0.10.0 출시: 올인원 Agentic 디자인 워크스페이스.** 디자인의 모든 과정이 이제 하나의 창 안에서 이루어집니다 — 막연한 아이디어에서 출발해 레퍼런스 발견, 소재 수집, 인터랙티브 편집, 코멘트 큐잉, 모션 다듬기, 그리고 에디터나 Code Agent로의 인계까지, 앱을 떠나지 않고 완성하세요. 여러 세션을 병렬로 실행하면, 더 이상 한 명의 어시스턴트가 아니라 당신을 위해 일하는 로컬 디자인 팀처럼 느껴집니다. [0.10.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Marketing AX 0.10.0 출시: 올인원 Agentic 디자인 워크스페이스.** 디자인의 모든 과정이 이제 하나의 창 안에서 이루어집니다 — 막연한 아이디어에서 출발해 레퍼런스 발견, 소재 수집, 인터랙티브 편집, 코멘트 큐잉, 모션 다듬기, 그리고 에디터나 Code Agent로의 인계까지, 앱을 떠나지 않고 완성하세요. 여러 세션을 병렬로 실행하면, 더 이상 한 명의 어시스턴트가 아니라 당신을 위해 일하는 로컬 디자인 팀처럼 느껴집니다. [0.10.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [AMR 사용해 보기](https://open-design.ai/amr/)
+> ⚡ **Marketing AX AMR (Agentic Model Router) — 공식 모델 서비스.** 한 번의 충전으로 Marketing AX 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [AMR 사용해 보기](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Marketing AX Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Marketing AX Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Marketing AX — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
@@ -29,11 +29,11 @@
 
 ---
 
-## Open Design란
+## Marketing AX란
 
 🎨 **로컬 우선의 오픈소스 [Claude Design][cd] 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 스킬** · ✨ **150개의 브랜드급 `DESIGN.md` 시스템** · 📦 **바로 쓸 수 있는 261개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 및 21개의 로컬 CLI에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
 
-Open Design는 Anthropic이 Claude Design과 함께 선보인 **에이전트 네이티브** 루프 — 브리프를 파악하고, 방향을 확정하고, 아티팩트를 스트리밍하고, 비평하고, 전달하는 그 흐름 — 이 더 이상 닫혀 있지 않고, 노트북에 이미 있는 코딩 에이전트가 읽고 쓰고 리믹스할 수 있는 **스킬 · 디자인 시스템 · 플러그인의 파일시스템**이 될 때 얻게 되는 결과물입니다. CLI는 디자인 엔진이 되고, 노트북은 스튜디오가 되며, 팀의 `DESIGN.md`는 브랜드 계약서가 됩니다.
+Marketing AX는 Anthropic이 Claude Design과 함께 선보인 **에이전트 네이티브** 루프 — 브리프를 파악하고, 방향을 확정하고, 아티팩트를 스트리밍하고, 비평하고, 전달하는 그 흐름 — 이 더 이상 닫혀 있지 않고, 노트북에 이미 있는 코딩 에이전트가 읽고 쓰고 리믹스할 수 있는 **스킬 · 디자인 시스템 · 플러그인의 파일시스템**이 될 때 얻게 되는 결과물입니다. CLI는 디자인 엔진이 되고, 노트북은 스튜디오가 되며, 팀의 `DESIGN.md`는 브랜드 계약서가 됩니다.
 
 또한 이것은 **에이전트 시대를 위한 Figma 대안**입니다 — 캔버스 위에서 픽셀을 밀어 옮기는 대신, 실제 CSS, 실제 폰트, 실제 컴포넌트로 된 단일 페이지 아티팩트를 HTML / PDF / PPTX / MP4로 곧바로 내보내 전달합니다 — 이미 당신의 디자인 시스템으로 빚어졌고, 이미 당신이 매일 쓰는 에이전트 안에서 실행 가능한 상태로요.
 
@@ -43,7 +43,7 @@ Open Design는 Anthropic이 Claude Design과 함께 선보인 **에이전트 네
 
 ## 제품 둘러보기
 
-Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Home**에서 시작해 **Automation**으로 반복 워크플로를 조율하고, **Design System**에서 브랜드 계약을 정제하며, **Plugins**와 **통합**으로 확장하세요. 어떤 프로젝트의 **Studio** 안에서든 동일한 디자인 시스템이 프로토타입, 라이브 아티팩트, HyperFrames, 덱, 이미지를 스트리밍해 냅니다.
+Marketing AX가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Home**에서 시작해 **Automation**으로 반복 워크플로를 조율하고, **Design System**에서 브랜드 계약을 정제하며, **Plugins**와 **통합**으로 확장하세요. 어떤 프로젝트의 **Studio** 안에서든 동일한 디자인 시스템이 프로토타입, 라이브 아티팩트, HyperFrames, 덱, 이미지를 스트리밍해 냅니다.
 
 ### 핵심 페이지
 
@@ -74,7 +74,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 </td>
 <td width="50%" valign="top">
 <img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — 외부 시스템과 MCP 도구를 연결하고, 어떤 IDE, 스크립트, 자동화에서든 Open Design를 사용합니다.</sub>
+<sub><b>Integrations</b> — 외부 시스템과 MCP 도구를 연결하고, 어떤 IDE, 스크립트, 자동화에서든 Marketing AX를 사용합니다.</sub>
 </td>
 </tr>
 </table>
@@ -110,7 +110,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 
 ## 플랫폼 호환성
 
-> Open Design는 주류 코딩 에이전트가 네이티브로 사용하는 **스킬, CLI, MCP 서버**로 제공됩니다. OD를 설치한 뒤 `od mcp install <agent>` 한 번이면 MCP 서버가 해당 에이전트의 설정에 연결되고, 어떤 에이전트 안에서든 동일한 도구를 호출할 수 있습니다.
+> Marketing AX는 주류 코딩 에이전트가 네이티브로 사용하는 **스킬, CLI, MCP 서버**로 제공됩니다. OD를 설치한 뒤 `od mcp install <agent>` 한 번이면 MCP 서버가 해당 에이전트의 설정에 연결되고, 어떤 에이전트 안에서든 동일한 도구를 호출할 수 있습니다.
 
 | 코딩 에이전트 / 플랫폼 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 상태 &nbsp;&nbsp; | 한 줄 MCP 서버 설치 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 `od mcp install <agent> --print`로 드라이런 미리보기 · `--uninstall`로 제거 · 전체 목록은 `od mcp install --help`로 확인.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Marketing AX supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **CLI를 설치하지 않았다고요?** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`의 BYOK 프록시가 동일한 루프(프로세스 스폰 없이)를 제공합니다 — `baseUrl` + `apiKey` + `model`을 붙여넣기만 하면 되며, OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM 또는 OpenAI 호환 엔드포인트라면 무엇이든 지원합니다. 대상별 SSRF 보호가 데몬 경계에서 내부 IP / 링크 로컬 / CGNAT를 차단합니다.
@@ -233,7 +233,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 
 ### 5 · 비디오 & HyperFrames — 에이전트 네이티브 모션 그래픽
 
-**[HyperFrames][hyperframes]**는 HeyGen의 오픈소스, 에이전트 네이티브 비디오 프레임워크로, Open Design에 일급 시민으로 통합되어 있습니다. 에이전트가 HTML + CSS + GSAP를 작성하면 HyperFrames가 헤드리스 Chrome + FFmpeg를 통해 결정론적 MP4로 렌더링합니다. 시네마틱 t2v / i2v를 위한 **Seedance 2.0**, 라우팅된 모델 변형을 위한 **Veo 3 / Sora 2 / Kling 2**, 오디오 레이어를 위한 **Suno v5 / Lyria 2**와 함께 사용하세요.
+**[HyperFrames][hyperframes]**는 HeyGen의 오픈소스, 에이전트 네이티브 비디오 프레임워크로, Marketing AX에 일급 시민으로 통합되어 있습니다. 에이전트가 HTML + CSS + GSAP를 작성하면 HyperFrames가 헤드리스 Chrome + FFmpeg를 통해 결정론적 MP4로 렌더링합니다. 시네마틱 t2v / i2v를 위한 **Seedance 2.0**, 라우팅된 모델 변형을 위한 **Veo 3 / Sora 2 / Kling 2**, 오디오 레이어를 위한 **Suno v5 / Lyria 2**와 함께 사용하세요.
 
 <table>
 <tr>
@@ -256,11 +256,11 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 
 ---
 
-## 왜 Open Design인가
+## 왜 Marketing AX인가
 
 > **2026년 4월, Anthropic은 [Claude Design][cd]을 출시했습니다 — LLM이 산문 작성을 멈추고 디자인 아티팩트를 직접 전달하기 시작한 최초의 순간이었습니다.** 그것은 입소문을 탔습니다. 그러나 그것은 닫힌 소스로, 유료 전용으로, 클라우드 전용으로 머물렀고, Anthropic의 모델, Anthropic의 스킬, Anthropic의 표면에 묶여 있었습니다. 결제도, 셀프 호스트도, Vercel 배포도, 자신의 에이전트로 교체하는 것도 없었습니다.
 
-Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
+Marketing AX(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
 
 - 🤖 **에이전트 네이티브, 모델에 구애받지 않음.** 우리는 에이전트를 제공하지 않습니다. 이미 당신의 `PATH`에 있는 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`가 디자인 엔진입니다. 한 번의 클릭으로 교체하세요.
 - 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 `DESIGN.md`를 읽습니다 — 팔레트, 타이포그래피, 간격, 모션, 보이스, 안티패턴을 다루는 9개 섹션 스키마입니다. 150개 시스템이 저장소와 함께 제공됩니다(Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). 폴더 하나만 넣으면 피커가 찾아냅니다.
@@ -271,7 +271,7 @@ Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아�
 
 ### 비교
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Marketing AX** |
 |---|---|---|---|---|
 | 오픈소스 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -288,7 +288,7 @@ Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아�
 
 ### 🖥️ 데스크톱 앱 다운로드 (권장 — 설정 불필요)
 
-Open Design를 사용하는 가장 빠른 방법입니다. Node도, pnpm도, 클론도 필요 없습니다.
+Marketing AX를 사용하는 가장 빠른 방법입니다. Node도, pnpm도, 클론도 필요 없습니다.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/) 또는 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) 또는 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -298,7 +298,7 @@ Open Design를 사용하는 가장 빠른 방법입니다. Node도, pnpm도, 클
 
 ### 🤖 코딩 에이전트에 설치 (UI 없이)
 
-GUI를 한 번도 열지 않고도 Open Design를 사용할 수 있습니다 — Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi 등의 내부에서 스킬, 플러그인, 또는 MCP 서버로 호출하세요.
+GUI를 한 번도 열지 않고도 Marketing AX를 사용할 수 있습니다 — Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi 등의 내부에서 스킬, 플러그인, 또는 MCP 서버로 호출하세요.
 
 ```bash
 # One-line install into the agent you're using:
@@ -345,13 +345,13 @@ Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.
 2. **디자이너(또는 에이전트)가 방향을 확정합니다.** 브랜드가 없나요? 엄선된 5가지 방향 중에서 고르세요. 브랜드가 있나요? 스크린샷 / URL을 넣으면 → 에이전트가 GitHub에 연결하고, Figma를 가져오고, 재사용 가능한 `DESIGN.md`로 코드화합니다.
 3. **에이전트가 첫 `<artifact>`를 내보냅니다.** 플러그인 + 스킬 + `DESIGN.md`가 바인딩됩니다. 그것은 샌드박스 iframe으로 스트리밍되어 그 자리에서 편집 가능합니다 — "처음부터 다시 생성"이 아닙니다.
 4. **엔지니어링으로 넘깁니다.** 아티팩트는 실제 HTML/CSS입니다 — Cursor, Codex, 또는 Claude Code에 넣어 코드로 계속 빌드하세요. 또는 PPTX / PDF / MP4를 마케팅으로 곧바로 내보내세요.
-5. **Open Design는 사용할수록 더 똑똑해집니다.** 당신의 스크린샷, 폰트, 팔레트, 확정된 아티팩트가 다음 세션의 기본값으로 쌓입니다. 재작업도 줄고, 표류도 줄어듭니다.
+5. **Marketing AX는 사용할수록 더 똑똑해집니다.** 당신의 스크린샷, 폰트, 팔레트, 확정된 아티팩트가 다음 세션의 기본값으로 쌓입니다. 재작업도 줄고, 표류도 줄어듭니다.
 
 ---
 
-## 코딩 에이전트에서 Open Design 사용하기
+## 코딩 에이전트에서 Marketing AX 사용하기
 
-Open Design는 **stdio MCP 서버**와 에이전트별 **설치 스크립트**를 제공합니다. 다른 저장소에 있는 MCP 호환 에이전트라면 무엇이든 당신의 로컬 Open Design 프로젝트에서 파일을 직접 읽을 수 있습니다 — 토큰 CSS, JSX 컴포넌트, entry HTML — 이름으로 질의 가능한 구조화된 API로요. 에이전트는 언제나 오래된 내보내기가 아니라 살아 있는 파일을 봅니다.
+Marketing AX는 **stdio MCP 서버**와 에이전트별 **설치 스크립트**를 제공합니다. 다른 저장소에 있는 MCP 호환 에이전트라면 무엇이든 당신의 로컬 Marketing AX 프로젝트에서 파일을 직접 읽을 수 있습니다 — 토큰 CSS, JSX 컴포넌트, entry HTML — 이름으로 질의 가능한 구조화된 API로요. 에이전트는 언제나 오래된 내보내기가 아니라 살아 있는 파일을 봅니다.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -441,7 +441,7 @@ od skill list --scenario marketing
 
 ## 플러그인
 
-**261개의 공식 플러그인**이 [`plugins/_official/`](../../plugins/_official/)에 있습니다. 각 플러그인은 **이식 가능한 에이전트 스킬 폴더**입니다 — `SKILL.md`(Agent Skills를 지원하는 어떤 에이전트든 읽을 수 있음)와, Open Design에 마켓플레이스 메타데이터, 입력, 미리보기, 파이프라인, 기능 선언을 제공하는 선택적 `open-design.json` 매니페스트로 구성됩니다. 카테고리로 바로 이동하세요:
+**261개의 공식 플러그인**이 [`plugins/_official/`](../../plugins/_official/)에 있습니다. 각 플러그인은 **이식 가능한 에이전트 스킬 폴더**입니다 — `SKILL.md`(Agent Skills를 지원하는 어떤 에이전트든 읽을 수 있음)와, Marketing AX에 마켓플레이스 메타데이터, 입력, 미리보기, 파이프라인, 기능 선언을 제공하는 선택적 `open-design.json` 매니페스트로 구성됩니다. 카테고리로 바로 이동하세요:
 
 | 카테고리 | 개수 | 내용 |
 |---|---|---|
@@ -483,7 +483,7 @@ od plugin uninstall od-default       # uninstall
 
 ### 플러그인 만들기
 
-플러그인은 **최소한 `SKILL.md` 하나만 있으면 됩니다**; Open Design 마켓플레이스에 등록하려면 `open-design.json`을 추가하세요:
+플러그인은 **최소한 `SKILL.md` 하나만 있으면 됩니다**; Marketing AX 마켓플레이스에 등록하려면 `open-design.json`을 추가하세요:
 
 ```
 my-plugin/
@@ -501,15 +501,15 @@ my-plugin/
 ```bash
 od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
 od plugin validate ./my-plugin                          # check manifest / file layout
-pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+pnpm guard && pnpm --filter @marketing-ax/plugin-runtime typecheck
 ```
 
 전체 필드 집합과 런타임 계약 → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md); 코딩 에이전트로 플러그인 개발하기 → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md); 복사해 붙여넣을 최소 템플릿 → [`plugins/spec/examples/`](../../plugins/spec/examples/).
 
 ### 플러그인 기여하기
 
-1. 플러그인 폴더를 [`plugins/community/`](../../plugins/community/)(서드파티 플러그인)에 넣거나 — Open Design와 함께 번들로 제공하려면 — [`plugins/_official/`](../../plugins/_official/)의 알맞은 티어에 넣으세요.
-2. 검증 통과: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
+1. 플러그인 폴더를 [`plugins/community/`](../../plugins/community/)(서드파티 플러그인)에 넣거나 — Marketing AX와 함께 번들로 제공하려면 — [`plugins/_official/`](../../plugins/_official/)의 알맞은 티어에 넣으세요.
+2. 검증 통과: `od plugin validate`, `pnpm guard`, `pnpm --filter @marketing-ax/plugin-runtime typecheck`.
 3. [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md)의 템플릿을 사용해 PR을 작성하세요(ID, 버전, 레인, 모드, 기능, 트리거 예시; 비주얼 플러그인에는 스크린샷 / 미리보기 첨부).
 4. 외부 레지스트리(skills.sh / ClawHub / 독립 GitHub)에 게시하려면 → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
 
@@ -571,7 +571,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] 사이드카 프로토콜 + Electron 데스크톱 + IPC 자동화
 - [x] 아티팩트 린트 API + 5차원 자가 비평 내보내기 전 게이트
 - [x] **0.8.0** — 플러그인 마켓플레이스 인프라(261개 공식 플러그인, 매니페스트 사양, 에이전트별 설치 스크립트)
-- [x] **0.9.0** — Open Design AMR(앱에 내장된 공식 Model Router: 설정 불필요, 원클릭 로그인)
+- [x] **0.9.0** — Marketing AX AMR(앱에 내장된 공식 Model Router: 설정 불필요, 원클릭 로그인)
 - [x] 패키징된 Electron 빌드 — macOS(Apple Silicon + Intel) + Windows(x64) + Linux AppImage(선택적 레인)
 - [ ] 코멘트 모드 정밀 편집 — 부분 출시됨; 안정적인 타깃 패칭 진행 중
 - [ ] AI가 내보내는 tweaks 패널 UX — 아직 구현되지 않음
@@ -599,7 +599,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 기여하기
 
-Open Design가 계속 나아가는 것은 기여자들 — 디자이너, 엔지니어, 프롬프트 작성자 — 이 계속 모습을 드러내기 때문입니다. 가장 많이 쓰이는 스킬, 디자인 시스템, 플러그인의 상당수는 핵심 팀 바깥의 사람들이 작성했습니다.
+Marketing AX가 계속 나아가는 것은 기여자들 — 디자이너, 엔지니어, 프롬프트 작성자 — 이 계속 모습을 드러내기 때문입니다. 가장 많이 쓰이는 스킬, 디자인 시스템, 플러그인의 상당수는 핵심 팀 바깥의 사람들이 작성했습니다.
 
 ### 🎯 어디서 시작할까 (최대 레버리지, 최소 변경)
 
@@ -636,9 +636,9 @@ gh pr create --fill
 
 전체 에이전트 친화적 기여 흐름, 코드 스타일, PR 기준 → [`CONTRIBUTING.ko.md`](CONTRIBUTING.ko.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
 
-### 🏅 Open Design Fellow 프로그램
+### 🏅 Marketing AX Fellow 프로그램
 
-우리는 전 세계에서 **Open Design Fellow**를 모집하고 있습니다 — Fellow는 핵심 팀과 함께 제품을 빚어내고, 자신의 지역에서 Open Design를 공식적으로 대표하며, 지역 커뮤니티를 키웁니다. 여기에는 자금 지원($1,000 / MR), 무료 LLM 크레딧, 직통 리뷰 트랙이 뒷받침됩니다. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4)의 공지.
+우리는 전 세계에서 **Marketing AX Fellow**를 모집하고 있습니다 — Fellow는 핵심 팀과 함께 제품을 빚어내고, 자신의 지역에서 Marketing AX를 공식적으로 대표하며, 지역 커뮤니티를 키웁니다. 여기에는 자금 지원($1,000 / MR), 무료 LLM 크레딧, 직통 리뷰 트랙이 뒷받침됩니다. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4)의 공지.
 
 ---
 
@@ -672,7 +672,7 @@ gh pr create --fill
 참여해 주신 모든 분께 감사드립니다 — 코드, 문서, 피드백, 날카로운 이슈, 새 스킬, 새 디자인 시스템.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Marketing AX contributors" />
 </a>
 
 ---
@@ -680,7 +680,7 @@ gh pr create --fill
 ## 저장소 활동
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="Marketing AX — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 위의 SVG는 [`lowlighter/metrics`](https://github.com/lowlighter/metrics)를 사용해 [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml)에 의해 매일 다시 생성됩니다.
@@ -690,7 +690,7 @@ gh pr create --fill
 ## 스타를 눌러주세요
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Marketing AX on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 이것이 당신의 30분을 아껴줬다면 ★를 눌러주세요. 스타가 집세를 내주지는 않지만 — 다음 디자이너, 에이전트, 기여자에게 이 실험이 관심을 쏟을 가치가 있다고 알려줍니다. 한 번의 클릭, 3초, 진짜 신호입니다.
@@ -699,7 +699,7 @@ gh pr create --fill
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Marketing AX star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -717,7 +717,7 @@ gh pr create --fill
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | 데몬 + 어댑터 아키텍처 — PATH 스캔 에이전트 감지, 유일한 특권 프로세스로서의 로컬 데몬. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 9개 섹션 `DESIGN.md` 스키마와 70개 제품 시스템의 출처. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 아래에 추가된 57개 디자인 스킬의 출처. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 모션 그래픽 프레임워크로, Open Design에 일급 `hyperframes-html`로 통합됨. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 모션 그래픽 프레임워크로, Marketing AX에 일급 `hyperframes-html`로 통합됨. |
 | [Claude Code skills][skill] | 우리가 그대로 채택한 `SKILL.md` 관례. |
 
 자세한 출처 → [`docs/references.md`](../../docs/references.md).

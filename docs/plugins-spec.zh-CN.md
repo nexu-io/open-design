@@ -1,10 +1,10 @@
-# Open Design 插件与 Marketplace 规范（v1）
+# Marketing AX 插件与 Marketplace 规范（v1）
 
-> **一句话总结：** Open Design 插件把可移植的 `SKILL.md` 能力包装成 marketplace 可发现、一键可用的设计工作流，同时保留对现有 agent skill 生态、headless CLI 使用方式和自托管部署的兼容性。
+> **一句话总结：** Marketing AX 插件把可移植的 `SKILL.md` 能力包装成 marketplace 可发现、一键可用的设计工作流，同时保留对现有 agent skill 生态、headless CLI 使用方式和自托管部署的兼容性。
 
 **父文档：** [`spec.md`](spec.md) · **同级文档：** [`skills-protocol.md`](skills-protocol.md) · [`architecture.md`](architecture.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
 
-**Plugin（插件）** 是 Open Design 的分发单元。[Skill](skills-protocol.md) 描述的是 agent 可以执行的一项能力，而 Plugin 是围绕这项能力形成的可发布包：一个或多个 skills、可选 design system 引用、可选 craft 规则、可选 Claude-plugin 资产、预览、use-case query、资产文件夹，以及一个用于驱动 OD marketplace 表面的轻量机器可读 sidecar。插件始终以可移植的 `SKILL.md` 为锚点，因此可以不经修改地发布到现有 agent skill 生态。
+**Plugin（插件）** 是 Marketing AX 的分发单元。[Skill](skills-protocol.md) 描述的是 agent 可以执行的一项能力，而 Plugin 是围绕这项能力形成的可发布包：一个或多个 skills、可选 design system 引用、可选 craft 规则、可选 Claude-plugin 资产、预览、use-case query、资产文件夹，以及一个用于驱动 OD marketplace 表面的轻量机器可读 sidecar。插件始终以可移植的 `SKILL.md` 为锚点，因此可以不经修改地发布到现有 agent skill 生态。
 
 > **兼容性承诺（扩展 [`skills-protocol.md`](skills-protocol.md)）：** 任何包含 `SKILL.md` 的插件文件夹，都可以作为普通 agent skill 在 Claude Code、Cursor、Codex、Gemini CLI、OpenClaw、Hermes 等工具中运行。添加 `open-design.json` 只是纯增量能力：它会解锁 OD 的 marketplace 卡片、预览、一键「使用」流程、类型化 context-chip strip，但不会改变底层 skill 的运行方式。**一个 repo，两种消费模式。**
 
@@ -22,7 +22,7 @@
 
 ### Figma 时代与 agent 时代的边界
 
-| 问题 | Figma 时代插件假设 | Open Design v1 的答案 |
+| 问题 | Figma 时代插件假设 | Marketing AX v1 的答案 |
 | --- | --- | --- |
 | 谁消费插件？ | 宿主 UI runtime。 | code agent 通过 OD project/run pipeline 消费。 |
 | 插件需要 live UI lifecycle 吗？ | 通常需要：挂载 panel、监听消息、修改 document。 | 不需要。插件是静态文件加 manifest；活跃进程是 agent run。 |
@@ -80,7 +80,7 @@ OD 的核心不是「一次 prompt 一次输出」，而是 **long-running desig
 
 一句话：**插件描述「这次长程任务的 pipeline 该长什么样、需要哪些 GenUI surface 与用户协作」，daemon 提供 atoms 与 surface 总线，agent 在 pipeline 上跑 devloop，artifact 带 provenance（§11.5）记录这条长程任务跑过谁。**
 
-**当前实现澄清：** `discovery -> plan -> generate -> critique` 是 reference pipeline 形态，不是一套写死的 wizard。插件 snapshot 可以携带 `od.pipeline.stages[].atoms[]`；daemon 解析 snapshot 后，把 active plugin block 与 active stage atom blocks 注入 system prompt，同时发出 stage events，让 agent 按 pipeline 推进。如果用户没有显式选择插件，OD 也**不是**启动一个通用裸 agent：Open Design 基础 designer prompt 与 discovery 规则始终存在。产品入口会在此基础上绑定合理默认值：Home 自由输入走内置隐藏的 `od-default` scenario，按类型创建新 project 时走对应 project kind 的 bundled scenario。`od-default` 是 router / task shaper；它的职责是把请求导回正常设计 pipeline，不应被理解成一个独立的「美化生成器」。
+**当前实现澄清：** `discovery -> plan -> generate -> critique` 是 reference pipeline 形态，不是一套写死的 wizard。插件 snapshot 可以携带 `od.pipeline.stages[].atoms[]`；daemon 解析 snapshot 后，把 active plugin block 与 active stage atom blocks 注入 system prompt，同时发出 stage events，让 agent 按 pipeline 推进。如果用户没有显式选择插件，OD 也**不是**启动一个通用裸 agent：Marketing AX 基础 designer prompt 与 discovery 规则始终存在。产品入口会在此基础上绑定合理默认值：Home 自由输入走内置隐藏的 `od-default` scenario，按类型创建新 project 时走对应 project kind 的 bundled scenario。`od-default` 是 router / task shaper；它的职责是把请求导回正常设计 pipeline，不应被理解成一个独立的「美化生成器」。
 
 ### 四类产品场景
 
@@ -116,7 +116,7 @@ OD 的核心不是「一次 prompt 一次输出」，而是 **long-running desig
 16. [分阶段实现计划](#16-分阶段实现计划)
 17. [示例](#17-示例)
 18. [风险与开放问题](#18-风险与开放问题)
-19. [为什么这是 Open Design 的重要一步](#19-为什么这是-open-design-的重要一步)
+19. [为什么这是 Marketing AX 的重要一步](#19-为什么这是-open-design-的重要一步)
 20. [Post-v1 可扩展性：artifact taxonomy、evaluators 与 production handoff](#20-post-v1-可扩展性artifact-taxonomyevaluators-与-production-handoff)
 21. [场景覆盖矩阵与交付路线图](#21-场景覆盖矩阵与交付路线图)
 22. [作者扩展点：基于 v1 substrate 实现未交付场景](#22-作者扩展点基于-v1-substrate-实现未交付场景)
@@ -133,7 +133,7 @@ OD 的核心不是「一次 prompt 一次输出」，而是 **long-running desig
 
 ## 1. 愿景
 
-Open Design 变成一套 **server + CLI + atomic core engine + plugin/marketplace system**。产品表面发生反转：不再是「点一个按钮，填一个表单」，而是用户打开 marketplace，点击某个插件，输入框自动填入 query，并在上方注入类型化 context chips。相同的插件文件夹也同时是 Claude Code、Cursor、Codex、Gemini CLI、OpenClaw、Hermes 可消费的 agent skill，并且可以作为独立 GitHub repo 发布到：
+Marketing AX 变成一套 **server + CLI + atomic core engine + plugin/marketplace system**。产品表面发生反转：不再是「点一个按钮，填一个表单」，而是用户打开 marketplace，点击某个插件，输入框自动填入 query，并在上方注入类型化 context chips。相同的插件文件夹也同时是 Claude Code、Cursor、Codex、Gemini CLI、OpenClaw、Hermes 可消费的 agent skill，并且可以作为独立 GitHub repo 发布到：
 
 - [`anthropics/skills`](https://github.com/anthropics/skills)
 - [`anthropics/claude-code/plugins`](https://github.com/anthropics/claude-code/tree/main/plugins)
@@ -143,7 +143,7 @@ Open Design 变成一套 **server + CLI + atomic core engine + plugin/marketplac
 
 不同目录的收录格式不同，但它们都索引 `SKILL.md` 形态的文件夹。只要保持 `SKILL.md` 作为 canonical，`open-design.json` 作为严格 sidecar，一个 repo 就可以不做目标目录专用改写而进入所有生态目录。
 
-同一愿景的第二条轴线：**CLI 是 Open Design 面向 agent 的 canonical API。** 代码 agent（Claude Code、Cursor、Codex、OpenClaw、Hermes、企业内部 orchestrator）通过 shell 调用 `od …` 驱动 OD，而不是直接请求 `/api/*`。CLI 用稳定的子命令 contract 包装所有 server 能力：project 创建、conversation/run 生命周期、plugin apply、project 文件系统操作、design library introspection、daemon control。HTTP server 是 desktop UI 与 CLI 自身的实现细节；agent 如果直接访问 HTTP，就绕过了 contract。
+同一愿景的第二条轴线：**CLI 是 Marketing AX 面向 agent 的 canonical API。** 代码 agent（Claude Code、Cursor、Codex、OpenClaw、Hermes、企业内部 orchestrator）通过 shell 调用 `od …` 驱动 OD，而不是直接请求 `/api/*`。CLI 用稳定的子命令 contract 包装所有 server 能力：project 创建、conversation/run 生命周期、plugin apply、project 文件系统操作、design library introspection、daemon control。HTTP server 是 desktop UI 与 CLI 自身的实现细节；agent 如果直接访问 HTTP，就绕过了 contract。
 
 第三条轴线来自第二条：**OD 可以完全 headless 运行；UI 是效率层，而不是运行时依赖。** 用户只有 Claude Code（或 Cursor、Codex、Gemini CLI）和已安装的 `od`，也能浏览 marketplace、安装插件、创建 project、拉起任务、消费产物，全流程不需要启动 desktop app。OD desktop UI 的价值类似 Cursor IDE 相对于 `cursor-agent` CLI：更快发现、实时 artifact preview、chat/canvas 并排、marketplace 浏览、direction-picker GUI、critique-theater 面板。这些都是同一批 primitives 之上的体验增强。每个 UI 功能都必须先能表达为 CLI 子命令或 streaming event；UI 消费这些 primitives 并添加呈现层。这个解耦由架构规则强制（§11.7）。
 
@@ -160,7 +160,7 @@ Open Design 变成一套 **server + CLI + atomic core engine + plugin/marketplac
 3. 支持四类安装源：本地文件夹、GitHub repo（可带 ref/subpath）、任意 HTTPS archive，以及联邦 `open-design-marketplace.json` index。
 4. 一键「使用」会自动填充 brief 输入框，并在上方填充 `ContextItem` chips（skills、design-system、craft、assets、MCP、claude-plugin、atom）。
 5. 默认分层信任；能力 scope 是声明式、可选的。
-6. OD core engine、atomic capabilities、plugin runtime 全部可以通过 CLI 访问，因此任何 code agent 都能 headless 地驱动 Open Design。
+6. OD core engine、atomic capabilities、plugin runtime 全部可以通过 CLI 访问，因此任何 code agent 都能 headless 地驱动 Marketing AX。
 7. **插件即长程任务封装**：每个插件覆盖四类产品场景之一（new-generation / code-migration / figma-migration / tune-collab），通过 `od.pipeline` 把 OD 一方 atoms 组装成有序 stages + 可选 devloop（§10）。
 8. **可复现 + 可审计**：每次 apply 落一份不可变 `AppliedPluginSnapshot`（§8.2.1），run / artifact 通过 snapshot id 反查 plugin source；插件升级不破坏历史 run 的 prompt 还原。
 9. **同一 artifact 跨协作面流转**：artifact manifest（§11.5.1）记录 plugin provenance + 各下游协作面（cli / 其他 code agent / 云 / 桌面端）的 export 与 deploy 历史，让后续二次调优、迁移、协作围绕同一 artifact 接续。
@@ -171,7 +171,7 @@ Open Design 变成一套 **server + CLI + atomic core engine + plugin/marketplac
 - 替代 SKILL.md / claude-plugin spec：OD 永不 fork。
 - 托管插件二进制：OD 指向 GitHub / CDN URL；存储由发布者负责。
 - 签名/PKI 生态：能力 gating 依赖用户授权，而不是签名。
-- 一个由 Open Design SaaS 代表用户运行 agent 的 web-hosted marketplace：v1 只做 local-first / self-hostable。
+- 一个由 Marketing AX SaaS 代表用户运行 agent 的 web-hosted marketplace：v1 只做 local-first / self-hostable。
 
 ## 3. 兼容性矩阵：什么样的文件夹对哪些系统是合法插件
 
@@ -232,7 +232,7 @@ my-plugin/
     "en": "Generate a 12-slide investor deck from a one-line brief.",
     "zh-CN": "根据一句 brief 生成 12 页投资人 deck。"
   },
-  "author":   { "name": "Open Design", "url": "https://open-design.ai" },
+  "author":   { "name": "Marketing AX", "url": "https://open-design.ai" },
   "license":  "MIT",
   "homepage": "https://github.com/open-design/plugins/make-a-deck",
   "icon":     "./icon.svg",
@@ -352,7 +352,7 @@ my-plugin/
 ### 5.1 字段说明
 
 - `compat.*`：指向继承格式文件的相对路径。loader 会把它们的内容合并进 [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts) 组装出的 OD prompt stack。
-- `specVersion`：解释此 manifest 时使用的 Open Design 插件规范版本。它独立于插件 `version`，并会冻结到 apply snapshot，便于 replay。
+- `specVersion`：解释此 manifest 时使用的 Marketing AX 插件规范版本。它独立于插件 `version`，并会冻结到 apply snapshot，便于 replay。
 - `version`：插件包自身版本。只要行为、元数据、pipeline、inputs 或随包 assets 出现用户需要审计的变化，就应该 bump。
 - `title_i18n` / `description_i18n`：可选本地化展示元数据。`title` 和 `description` 保持英文 fallback；UI 会按请求 locale、基础语言、英文、首个可用值的顺序解析。
 - `od.kind`：registry 里的分类（`skill` / `scenario` / `atom` / `bundle`）。
@@ -435,7 +435,7 @@ export type ContextItem =
   "specVersion": "1.0.0",
   "name": "open-design-official",
   "version": "1.0.0",
-  "owner":    { "name": "Open Design", "url": "https://open-design.ai" },
+  "owner":    { "name": "Marketing AX", "url": "https://open-design.ai" },
   "metadata": { "description": "First-party plugins", "version": "1.0.0" },
   "plugins": [
     { "name": "make-a-deck", "version": "1.0.0", "source": "github:open-design/plugins/make-a-deck", "tags": ["deck"] },
@@ -811,11 +811,11 @@ Devloop 的两条硬约束：
 
 每一轮 devloop 都把当轮 artifact diff、critique 输出、消耗 tokens 写入 `runs.devloop_iterations`（§11.4 SQLite 扩展），用于审计与按 iteration 计费的未来商业模型。
 
-`GET /api/atoms` 返回 atoms 与已知 reference pipelines。当前实现已经开始自举：一方 atom plugins 位于 `plugins/_official/atoms/**`，bundled scenario plugins 位于 `plugins/_official/scenarios/**`，`renderActiveStageBlock(stageId, bodies)` 会把 active stage 的 atom bodies 注入 prompt。因此 system prompt 现在已经 pipeline-aware，但还不是完全 data-driven：Open Design 基础 designer prompt、discovery philosophy 和部分入口默认逻辑仍在 daemon / product code 中。这足以支撑"插件组装核心管线"这条主张，但不假装所有行为字节都已经迁到插件。
+`GET /api/atoms` 返回 atoms 与已知 reference pipelines。当前实现已经开始自举：一方 atom plugins 位于 `plugins/_official/atoms/**`，bundled scenario plugins 位于 `plugins/_official/scenarios/**`，`renderActiveStageBlock(stageId, bodies)` 会把 active stage 的 atom bodies 注入 prompt。因此 system prompt 现在已经 pipeline-aware，但还不是完全 data-driven：Marketing AX 基础 designer prompt、discovery philosophy 和部分入口默认逻辑仍在 daemon / product code 中。这足以支撑"插件组装核心管线"这条主张，但不假装所有行为字节都已经迁到插件。
 
 ### 10.3 Generative UI：AG-UI–inspired surfaces
 
-OD 接受 [CopilotKit / AG-UI 协议](https://github.com/CopilotKit/CopilotKit) 中有价值的部分：agent 可以在 run 中请求交互 UI。OD **不**允许 agent 在主产品表面自由发明 app UI 或视觉样式。v1 提供自己的 `GenUISurface*` discriminated union，跟现有 `PersistedAgentEvent`、SSE / ND-JSON 流共用通道；`@open-design/agui-adapter` 会把这些事件投影成 AG-UI canonical events 供外部 client 使用。
+OD 接受 [CopilotKit / AG-UI 协议](https://github.com/CopilotKit/CopilotKit) 中有价值的部分：agent 可以在 run 中请求交互 UI。OD **不**允许 agent 在主产品表面自由发明 app UI 或视觉样式。v1 提供自己的 `GenUISurface*` discriminated union，跟现有 `PersistedAgentEvent`、SSE / ND-JSON 流共用通道；`@marketing-ax/agui-adapter` 会把这些事件投影成 AG-UI canonical events 供外部 client 使用。
 
 产品规则是：**agent / plugin 输出的是数据，OD 掌握 renderer。** 插件可以声明 `form`、`choice`、`confirmation`、`oauth-prompt` surface，带 schema 与 prompt data；web / desktop / CLI renderer 决定 layout、typography、controls、validation、accessibility 和 persistence UX。这让插件 UI 能覆盖未来场景，同时保持产品系统一致。任意视觉或代码输出属于生成的 artifact，或者必须走独立 custom-component sandbox 与 `genui:custom-component` capability gate；它不能替换核心协作 UI 的内置 renderer。
 
@@ -947,7 +947,7 @@ prefill 只把 row 写成 `resolved`，等待 plugin 触发时按 cache 读出�
 | Wire format | OD 自有 SSE / ND-JSON `PersistedAgentEvent` | 同时输出 AG-UI canonical events（包括 `agent.message`、`tool_call`、`state_update`、`ui.surface_requested`、`ui.surface_responded`） |
 | Surface kinds | 4 类内置 + plugin 在 manifest 中声明 | OD 内置 surface 仍是产品 source of truth；plugin React 组件路径必须经过 `genui:custom-component` gate 与 sandbox |
 | Shared state | `genui_surfaces` 表 + `genui_state_synced` 事件 | 把 OD 持久化状态映射到 AG-UI 的 `state` channel，供外部消费者使用 |
-| Frontend SDK 兼容 | OD desktop / web 自带 renderer | `@open-design/agui-adapter` 让 CopilotKit / 其他 AG-UI client 直接消费 OD run |
+| Frontend SDK 兼容 | OD desktop / web 自带 renderer | `@marketing-ax/agui-adapter` 让 CopilotKit / 其他 AG-UI client 直接消费 OD run |
 
 Adapter 是互操作表面，不是内部 UI 的 source of truth。除非另有外部 embed / demo / client 明确需要，否则 OD 不应把 CopilotKit 加成主产品依赖。v1 plugin **不需要改**就可以在 AG-UI ecosystem 内被消费，因为 adapter 是 OD 自有事件的一层投影。
 
@@ -1261,7 +1261,7 @@ OD 当前有**两份** `composeSystemPrompt()` 实现：
 
 ## 12. CLI 表面
 
-CLI（`od …`）是 **Open Design 面向 agent 的 canonical API**。Plugin verbs 只是其中一部分；CLI 的其它部分包装 daemon core capabilities：projects、conversations、runs、file operations、design library introspection、daemon control，因此任何 code agent 都能通过 shell calls 端到端驱动 OD。这是「通过 CLI 用自然语言创建 project + task」的路径：code agent 读取用户请求，然后发出一串 `od …` 调用，而不是直接说 HTTP。
+CLI（`od …`）是 **Marketing AX 面向 agent 的 canonical API**。Plugin verbs 只是其中一部分；CLI 的其它部分包装 daemon core capabilities：projects、conversations、runs、file operations、design library introspection、daemon control，因此任何 code agent 都能通过 shell calls 端到端驱动 OD。这是「通过 CLI 用自然语言创建 project + task」的路径：code agent 读取用户请求，然后发出一串 `od …` 调用，而不是直接说 HTTP。
 
 ### 12.1 一个逻辑 API 的三种 transports
 
@@ -1447,7 +1447,7 @@ od mcp live-artifacts        # specialized MCP server
 
 ### 12.5 Code agent authoring patterns
 
-一个通过 CLI 驱动 Open Design 的 code agent 通常这样做：
+一个通过 CLI 驱动 Marketing AX 的 code agent 通常这样做：
 
 ```bash
 # 1. (Optional) Inspect what's available.
@@ -1503,7 +1503,7 @@ Deep-link contract（Phase 4 deliverable，但在这里先锁定 schema 支持�
 - `od://plugins/<id>?apply=1[&input.k=v...]`：如果缺失则安装，然后用 supplied inputs apply。
 - `od://marketplace/add?url=<urlencoded>`：注册新的联邦 catalog。
 
-desktop app 注册 `od://` URL scheme；点击 `open-design.ai/marketplace` 上的按钮时，如果 desktop 已安装则启动 desktop，否则 fallback 到「How to install Open Design」流程。
+desktop app 注册 `od://` URL scheme；点击 `open-design.ai/marketplace` 上的按钮时，如果 desktop 已安装则启动 desktop，否则 fallback 到「How to install Marketing AX」流程。
 
 **状态：不属于 v1 implementation scope。** 但这里锁定 JSON shapes 和 URL scheme，使 in-app marketplace 与公网站点可以独立开发而不分叉。
 
@@ -1588,7 +1588,7 @@ open slides.html      # or however the user wants to view the file
 
 心智模型：
 
-| Layer | Cursor | Open Design |
+| Layer | Cursor | Marketing AX |
 | --- | --- | --- |
 | Headless agent CLI | `cursor-agent`（驱动 agent loop） | `od run start --agent claude --follow` + `od plugin run` |
 | Local services / db | Cursor 的 background indexing / state | OD daemon-managed state。存储路径只受 root `AGENTS.md` → **Daemon data directory contract** 约束。 |
@@ -1719,7 +1719,7 @@ adapter 之间保持相同 on-disk layout，因此 single-tenant deployment 迁�
 - Pure-TS contracts：`packages/contracts/src/plugins/{manifest,context,apply,marketplace,installed}.ts`。
 - Migration note：现有 `skills/`、`design-systems/`、`craft/` 100% 向后兼容。SKILL.md frontmatter 不变。
 
-Validation：`pnpm guard`、`pnpm typecheck`、`pnpm --filter @open-design/contracts test`。
+Validation：`pnpm guard`、`pnpm typecheck`、`pnpm --filter @marketing-ax/contracts test`。
 
 ### Phase 1 — Loader, installer, persistence + headless MVP CLI 闭环（5–7 天）
 
@@ -1737,8 +1737,8 @@ Phase 1 内容（合并原 Phase 1 + Phase 2C 的最小子集）：
 
 Validation：
 
-- `pnpm --filter @open-design/plugin-runtime test`（parser fixtures：pure SKILL.md、pure claude plugin、metadata-only open-design.json、三者组合、SKILL frontmatter mapping）。
-- `pnpm --filter @open-design/daemon test`。`pnpm guard`、`pnpm typecheck`。
+- `pnpm --filter @marketing-ax/plugin-runtime test`（parser fixtures：pure SKILL.md、pure claude plugin、metadata-only open-design.json、三者组合、SKILL frontmatter mapping）。
+- `pnpm --filter @marketing-ax/daemon test`。`pnpm guard`、`pnpm typecheck`。
 - **End-to-end headless smoke**（与 §12.5 walkthrough 等价）：`od plugin install ./fixtures/sample-plugin` → `od project create --plugin <id> --json` → `od run start --project <pid> --plugin <id> --follow` → `od files read <pid> <artifact>`。要求 produced artifact bytes 与同一插件在 Phase 2A UI 流程下产出**完全相同**。
 - **Apply 纯净性 smoke：** 仅 `od plugin apply <id>` 后取消 send，project cwd 无 staged assets、无 `.mcp.json`、`applied_plugin_snapshots` 行存在但未被任何 run/project 引用。
 
@@ -1824,7 +1824,7 @@ Validation：从本地 mock marketplace.json 安装 plugin、rotate ref、uninst
 - **剩余 CLI parity：** `od conversation list/new/info`、`od skills/design-systems/craft/atoms list/show`、`od status/doctor/version`、`od config get/set/list`、`od marketplace search`。这些基本都是纯 CLI 工作，endpoints 已存在或很轻量。
 - 可选：把 atoms 提取到 `skills/_official/<atom>/SKILL.md`。只在 Phases 1–3 稳定后做。
 - **§10.3.5 AG-UI 完整对齐：**
-  - 新 package `@open-design/agui-adapter`：把 OD 的 `PersistedAgentEvent` + `GenUIEvent` 双向映射到 AG-UI canonical events（`agent.message`、`tool_call`、`state_update`、`ui.surface_requested`、`ui.surface_responded`）。
+  - 新 package `@marketing-ax/agui-adapter`：把 OD 的 `PersistedAgentEvent` + `GenUIEvent` 双向映射到 AG-UI canonical events（`agent.message`、`tool_call`、`state_update`、`ui.surface_requested`、`ui.surface_responded`）。
   - daemon 增加可选 `/api/runs/:runId/agui` SSE 端点，输出 AG-UI canonical events，使 CopilotKit / 其他 AG-UI client 直接消费 OD run。
   - Plugin manifest 升级允许 `od.genui.surfaces[].component`：相对路径指向 plugin 内 React 组件（capability gate `genui:custom-component`），由 desktop / web renderer 在 sandbox 中加载。
   - Open-Ended (MCP-Apps / Open-JSON) 模式：让 plugin 通过 MCP server 推送任意 JSON UI tree，desktop / web 以受限 schema 渲染。
@@ -1925,7 +1925,7 @@ installer 会把 nested skills/design-systems/craft fan out 到 registry 的 nam
 | Sovereign-cloud customers（阿里云 / 腾讯云 / 华为云）需要 provider-specific secret + storage integrations | S3-compatible adapter 覆盖三者的 blob storage（Phase 5）；env-var secrets 各云都可用；cloud-specific KMS integrations post-v1。 |
 | Multi-cloud testing matrix 太大 | Phase 5 先发布一个 canonical compose smoke（单云），再逐步加云；per-cloud one-click templates 放在 `open-design/deploy` 独立演进（§15.5）。 |
 | 恶意 plugin 通过 GenUI surface 钓鱼用户敏感信息 | `od.genui.surfaces[]` schema 必须列入 manifest 并由 `od plugin doctor` 校验；运行时拒绝未声明 surface kind / surface id；`oauth-prompt` 与 `confirmation` 的 issuer / capability 信息显示「来自 plugin <id>，由 marketplace <id> 验证」；restricted 插件触发 `oauth-prompt` 前还需要 `network` capability 显式 grant（§9）。 |
-| AG-UI 协议生态可能演进，OD 自有 wire-format 与 AG-UI canonical 漂移 | OD-native `GenUIEvent` 仍是内部 source of truth；`@open-design/agui-adapter` 是外部投影层，因此 upstream 协议升级不绑死 daemon 或 web renderer release cadence。 |
+| AG-UI 协议生态可能演进，OD 自有 wire-format 与 AG-UI canonical 漂移 | OD-native `GenUIEvent` 仍是内部 source of truth；`@marketing-ax/agui-adapter` 是外部投影层，因此 upstream 协议升级不绑死 daemon 或 web renderer release cadence。 |
 | `genui_surfaces` 表 跨 conversation 复用导致用户「忘记自己授过权」 | UI 的 `GenUIInbox`、CLI 的 `od ui list --project <id>` 必须列出所有 `persist=project` 的 resolved row 与 revoke 入口；hosted mode 提供 `OD_GENUI_PROJECT_TTL_DAYS` 让 operator 设置默认过期；revoke 操作写 audit 日志。 |
 
 落代码前值得确认的开放问题：
@@ -1943,9 +1943,9 @@ installer 会把 nested skills/design-systems/craft fan out 到 registry 的 nam
 - **`od.taskKind` 是否成为 marketplace 一等过滤维度**：现有 `kind` / `mode` / `scenario` 是否需要为新增的 `taskKind` 重排 UI filter？（默认：marketplace 顶部增加 `taskKind` tab；现有 filter 保留为二级。）
 - ~~**`od.genui.surfaces[].component` 是否进 v1**~~：**已作为 gated extension path 解决。** Manifest schema 接受该字段，`od plugin doctor` 校验 `genui:custom-component` 与 path traversal；内置 `form` / `choice` / `confirmation` / `oauth-prompt` renderer 仍是主产品默认。
 - **GenUI persisted state 与 `AppliedPluginSnapshot` 的耦合**：当 plugin 升级且 `surface.schema` 变了，旧 row 自动 `invalidated`；但是否要同时**强制重新 apply** plugin（生成新 `AppliedPluginSnapshot`），还是允许仅 surface 失效、其余 snapshot 不变？（默认：仅 surface 失效；`od plugin doctor` 提示 schema drift；replay 仍走旧 snapshot。）
-- ~~**AG-UI 协议引入时机**~~：**已解决。** `@open-design/agui-adapter` 与 `GET /api/runs/:runId/agui` 已作为可选互操作表面交付；OD-native GenUI 仍是内部 renderer，CopilotKit 不是主产品必需依赖。
+- ~~**AG-UI 协议引入时机**~~：**已解决。** `@marketing-ax/agui-adapter` 与 `GET /api/runs/:runId/agui` 已作为可选互操作表面交付；OD-native GenUI 仍是内部 renderer，CopilotKit 不是主产品必需依赖。
 
-## 19. 为什么这是 Open Design 的重要一步
+## 19. 为什么这是 Marketing AX 的重要一步
 
 - **继承供给。** `anthropics/skills`、`awesome-agent-skills`、`clawhub`、`skills.sh` 上的每个 public agent skill，只需一个可选 `open-design.json` 就能成为 OD 插件；反过来，每个 OD 插件也能不经修改发布到这些 catalog。
 - **边界干净。** 新代码落在两个 pure-TS packages（`packages/plugin-runtime`、`packages/contracts/src/plugins/*`）和一个 daemon module group（`apps/daemon/src/plugins/`）；无跨 app coupling，无 contracts package leaks，无 SKILL.md fork。遵守根 [`AGENTS.md`](../AGENTS.md) 的约束。
@@ -2307,7 +2307,7 @@ C 类是 v1 已交付的那一半；A 类的第一批也已经移动。截至本
 - 驱动 §1 产品 brief 里"一致性"的 active design system + craft 注入，已经是 plugin substrate 的读：一方 DESIGN.md 没有比第三方 DESIGN.md 多任何特权路径。
 - `plugins/_official/atoms/**` 下的一方 atom plugins 已经携带 atom SKILL.md body 与 manifest metadata；`packages/contracts/src/prompts/atom-block.ts` 可以从这些 bodies 渲染 active stage blocks。
 - `plugins/_official/scenarios/**` 下的 bundled scenario plugins 已经携带默认 pipeline 形态，其中包括用于 Home 自由输入 routing / task shaping 的 `od-default`。`packages/plugin-runtime/src/pipeline-fallback.ts` 会在 plugin 省略 `od.pipeline` 时，通过这些 bundled scenarios 解析 applied pipeline。
-- `@open-design/agui-adapter` 与 `/api/runs/:runId/agui` 提供外部 AG-UI event projection，同时不改变 OD 内部 GenUI renderer。
+- `@marketing-ax/agui-adapter` 与 `/api/runs/:runId/agui` 提供外部 AG-UI event projection，同时不改变 OD 内部 GenUI renderer。
 
 这就是 §22 成立的原因：substrate 已经在 plugin artifacts、snapshots、GenUI declarations、pipeline declarations、bundled scenarios 与第一条 atom-body injection path 上自举。剩余硬编码部分更窄，也更偏产品入口：OD 基础 designer/discovery prompt、部分 stage-entry 选择逻辑、Home curated scenario rail，以及 §22.4 中列出的封闭 signal / surface 词汇表。
 

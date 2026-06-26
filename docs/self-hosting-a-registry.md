@@ -1,6 +1,6 @@
-# Self-hosting An Open Design Registry
+# Self-hosting An Marketing AX Registry
 
-An Open Design registry is a source of `open-design-marketplace.json` plus the
+An Marketing AX registry is a source of `open-design-marketplace.json` plus the
 review process that produces it. In v1 this can be a static GitHub repository,
 GitHub Enterprise, S3/R2, or any HTTPS host.
 

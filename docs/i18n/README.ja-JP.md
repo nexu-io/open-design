@@ -1,13 +1,13 @@
-<h1 align="center">Open Design: オープンソースの Claude Design 代替ツール</h1>
+<h1 align="center">Marketing AX: オープンソースの Claude Design 代替ツール</h1>
 
-> 🔥 **Open Design 0.10.0 が登場——オールインワンの Agentic デザインワークスペース。** デザインの全工程が、ひとつのウィンドウに。曖昧なアイデアから、リファレンス探し、素材集め、インタラクティブな編集、コメントのキュー投入、モーションの仕上げ、そしてエディタや Code Agent への受け渡しまで——アプリを離れることなく完結します。複数セッションの並行実行で、それはもはや一人のアシスタントではなく、あなたのために働くローカルなデザインチームです。[0.10.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Marketing AX 0.10.0 が登場——オールインワンの Agentic デザインワークスペース。** デザインの全工程が、ひとつのウィンドウに。曖昧なアイデアから、リファレンス探し、素材集め、インタラクティブな編集、コメントのキュー投入、モーションの仕上げ、そしてエディタや Code Agent への受け渡しまで——アプリを離れることなく完結します。複数セッションの並行実行で、それはもはや一人のアシスタントではなく、あなたのために働くローカルなデザインチームです。[0.10.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR（Agentic Model Router）——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[AMR を試す](https://open-design.ai/amr/)
+> ⚡ **Marketing AX AMR（Agentic Model Router）——公式モデルサービス。** 一度のチャージで、Marketing AX の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[AMR を試す](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4)。
+> 🏅 **Marketing AX Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Marketing AX Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4)。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Marketing AX — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
@@ -29,11 +29,11 @@
 
 ---
 
-## Open Design とは
+## Marketing AX とは
 
 🎨 **ローカルファーストでオープンソースの [Claude Design][cd] 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上のスキル** · ✨ **150 のブランドグレード `DESIGN.md` システム** · 📦 **261 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity および 21 のローカル CLI 上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
 
-Open Design は、Anthropic が Claude Design とともに送り出した **エージェントネイティブ**なループ——ブリーフを探り、方向性を確定し、アーティファクトをストリーミングし、批評し、納品する——がクローズドであることをやめ、ラップトップにすでにあるコーディングエージェントが読み・書き・リミックスできる **スキル・デザインシステム・プラグインのファイルシステム** になったときに得られるものです。あなたの CLI がデザインエンジンに、ラップトップがスタジオに、そしてチームの `DESIGN.md` がブランドの契約書になります。
+Marketing AX は、Anthropic が Claude Design とともに送り出した **エージェントネイティブ**なループ——ブリーフを探り、方向性を確定し、アーティファクトをストリーミングし、批評し、納品する——がクローズドであることをやめ、ラップトップにすでにあるコーディングエージェントが読み・書き・リミックスできる **スキル・デザインシステム・プラグインのファイルシステム** になったときに得られるものです。あなたの CLI がデザインエンジンに、ラップトップがスタジオに、そしてチームの `DESIGN.md` がブランドの契約書になります。
 
 これはまた、**エージェント時代の Figma 代替ツール**でもあります——キャンバス上でピクセルを動かす代わりに、本物の CSS、本物のフォント、本物のコンポーネントによる単一ページのアーティファクトを納品し、HTML / PDF / PPTX / MP4 へ直接エクスポートします。すでにあなたのデザインシステムによって形づくられ、すでに日常的に使うエージェントの中で実行可能です。
 
@@ -43,7 +43,7 @@ Open Design は、Anthropic が Claude Design とともに送り出した **エ�
 
 ## プロダクトツアー
 
-Open Design が何であり、何ができるのかを手早く見ていきましょう。**Home** から始め、**Automation** で繰り返しのワークフローをオーケストレーションし、**Design System** でブランドの契約書を抽出し、**Plugins** と **連携機能**で拡張します。どのプロジェクトの **Studio** 内でも、同じデザインシステムがプロトタイプ、ライブアーティファクト、HyperFrames、スライド、画像をストリーミング出力します。
+Marketing AX が何であり、何ができるのかを手早く見ていきましょう。**Home** から始め、**Automation** で繰り返しのワークフローをオーケストレーションし、**Design System** でブランドの契約書を抽出し、**Plugins** と **連携機能**で拡張します。どのプロジェクトの **Studio** 内でも、同じデザインシステムがプロトタイプ、ライブアーティファクト、HyperFrames、スライド、画像をストリーミング出力します。
 
 ### コアページ
 
@@ -74,7 +74,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 </td>
 <td width="50%" valign="top">
 <img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — 外部システムや MCP ツールを接続し、任意の IDE・スクリプト・自動化から Open Design を利用できます。</sub>
+<sub><b>Integrations</b> — 外部システムや MCP ツールを接続し、任意の IDE・スクリプト・自動化から Marketing AX を利用できます。</sub>
 </td>
 </tr>
 </table>
@@ -110,7 +110,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 
 ## プラットフォーム互換性
 
-> Open Design は、主流のコーディングエージェントがネイティブに利用する **スキル、CLI、MCP サーバー**として提供されます。OD をインストールすれば、`od mcp install <agent>` 一発で MCP サーバーがそのエージェントの設定に組み込まれ、どのエージェントの内部からでも同じツールを呼び出せます。
+> Marketing AX は、主流のコーディングエージェントがネイティブに利用する **スキル、CLI、MCP サーバー**として提供されます。OD をインストールすれば、`od mcp install <agent>` 一発で MCP サーバーがそのエージェントの設定に組み込まれ、どのエージェントの内部からでも同じツールを呼び出せます。
 
 | コーディングエージェント／プラットフォーム &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | ステータス &nbsp;&nbsp; | MCP サーバーのワンラインインストール &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 `od mcp install <agent> --print` でドライランのプレビュー · `--uninstall` で削除 · 完全な一覧は `od mcp install --help` で確認できます。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Marketing AX supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **CLI を一つもインストールしていない場合は？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` の BYOK プロキシが同じループ（プロセスのスポーンなし）を提供します——`baseUrl` + `apiKey` + `model` を貼り付けるだけで、OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM、または任意の OpenAI 互換エンドポイントに対応します。ターゲットごとの SSRF 保護が、内部 IP／リンクローカル／CGNAT をデーモンのエッジでブロックします。
@@ -233,7 +233,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 
 ### 5 · 動画と HyperFrames — エージェントネイティブなモーショングラフィックス
 
-**[HyperFrames][hyperframes]** は HeyGen のオープンソースでエージェントネイティブな動画フレームワークであり、Open Design に第一級の存在として統合されています。エージェントが HTML + CSS + GSAP を書き、HyperFrames がそれをヘッドレス Chrome + FFmpeg を通じて決定論的な MP4 にレンダリングします。シネマティックな t2v / i2v のための **Seedance 2.0**、ルーティングされたモデルバリアントのための **Veo 3 / Sora 2 / Kling 2**、そしてオーディオレイヤーのための **Suno v5 / Lyria 2** と組み合わせられます。
+**[HyperFrames][hyperframes]** は HeyGen のオープンソースでエージェントネイティブな動画フレームワークであり、Marketing AX に第一級の存在として統合されています。エージェントが HTML + CSS + GSAP を書き、HyperFrames がそれをヘッドレス Chrome + FFmpeg を通じて決定論的な MP4 にレンダリングします。シネマティックな t2v / i2v のための **Seedance 2.0**、ルーティングされたモデルバリアントのための **Veo 3 / Sora 2 / Kling 2**、そしてオーディオレイヤーのための **Suno v5 / Lyria 2** と組み合わせられます。
 
 <table>
 <tr>
@@ -256,11 +256,11 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 
 ---
 
-## なぜ Open Design なのか
+## なぜ Marketing AX なのか
 
 > **2026 年 4 月、Anthropic は [Claude Design][cd] をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
 
-Open Design (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
+Marketing AX (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
 
 - 🤖 **エージェントネイティブ、モデル非依存。** 私たちはエージェントを同梱しません。すでにあなたの `PATH` にある `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` がデザインエンジンです。ワンクリックで差し替えられます。
 - 🧠 **デフォルトでブランドグレード。** すべてのレンダリングはアクティブな `DESIGN.md` を読み取ります——パレット、タイポグラフィ、スペーシング、モーション、ボイス、アンチパターンをカバーする 9 セクションのスキーマです。150 のシステムがリポジトリに同梱されています（Linear、Stripe、Vercel、Airbnb、Apple、Tesla、Notion、Anthropic、Cursor、Supabase、Figma…）。フォルダをドロップすれば、ピッカーがそれを見つけます。
@@ -271,7 +271,7 @@ Open Design (OD) はそのオープンソースの代替ツールです。同じ
 
 ### 比較
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Marketing AX** |
 |---|---|---|---|---|
 | オープンソース | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | セルフホスト／デスクトップ | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -288,7 +288,7 @@ Open Design (OD) はそのオープンソースの代替ツールです。同じ
 
 ### 🖥️ デスクトップアプリをダウンロード（推奨——設定ゼロ）
 
-Open Design を使う最も速い方法。Node も、pnpm も、クローンも不要です。
+Marketing AX を使う最も速い方法。Node も、pnpm も、クローンも不要です。
 
 - **macOS**（Apple Silicon · Intel x64）→ [**open-design.ai**](https://open-design.ai/) または [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/) または [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -298,7 +298,7 @@ Open Design を使う最も速い方法。Node も、pnpm も、クローンも�
 
 ### 🤖 コーディングエージェントにインストール（UI なし）
 
-GUI を一度も開くことなく Open Design を使えます——Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi などの内部で、スキル、プラグイン、または MCP サーバーとして呼び出せます。
+GUI を一度も開くことなく Marketing AX を使えます——Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi などの内部で、スキル、プラグイン、または MCP サーバーとして呼び出せます。
 
 ```bash
 # One-line install into the agent you're using:
@@ -345,13 +345,13 @@ Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshoo
 2. **デザイナー（またはエージェント）が方向性を確定します。** ブランドがない？ 5 つの厳選された方向性から選びます。ブランドがある？ スクリーンショット／URL をドロップ → エージェントが GitHub に接続し、Figma をインポートし、再利用可能な `DESIGN.md` に体系化します。
 3. **エージェントが最初の `<artifact>` を発行します。** プラグイン + スキル + `DESIGN.md` がバインドされます。それはサンドボックス化された iframe にストリーミングされ、その場で編集可能です——「ゼロから再生成」ではありません。
 4. **エンジニアリングへ引き渡します。** アーティファクトは本物の HTML/CSS です——Cursor、Codex、または Claude Code にドロップして、コードとして開発を続けられます。あるいは PPTX / PDF / MP4 をマーケティングへ直接エクスポートできます。
-5. **Open Design は使うほど賢くなります。** あなたのスクリーンショット、フォント、パレット、確定したアーティファクトは、次回のセッションのデフォルトとして蓄積されます。やり直しは減り、ブレも減ります。
+5. **Marketing AX は使うほど賢くなります。** あなたのスクリーンショット、フォント、パレット、確定したアーティファクトは、次回のセッションのデフォルトとして蓄積されます。やり直しは減り、ブレも減ります。
 
 ---
 
-## コーディングエージェントから Open Design を使う
+## コーディングエージェントから Marketing AX を使う
 
-Open Design は **stdio MCP サーバー**とエージェントごとの**インストールスクリプト**を提供します。別のリポジトリにある MCP 互換のエージェントは、あなたのローカルの Open Design プロジェクトからファイル——トークン CSS、JSX コンポーネント、エントリー HTML——を、名前で問い合わせ可能な構造化 API として直接読み取れます。エージェントは常に、古いエクスポートではなくライブのファイルを見ます。
+Marketing AX は **stdio MCP サーバー**とエージェントごとの**インストールスクリプト**を提供します。別のリポジトリにある MCP 互換のエージェントは、あなたのローカルの Marketing AX プロジェクトからファイル——トークン CSS、JSX コンポーネント、エントリー HTML——を、名前で問い合わせ可能な構造化 API として直接読み取れます。エージェントは常に、古いエクスポートではなくライブのファイルを見ます。
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -441,7 +441,7 @@ od skill list --scenario marketing
 
 ## プラグイン
 
-**261 の公式プラグイン**が [`plugins/_official/`](../../plugins/_official/) にあります。各プラグインは**ポータブルなエージェントスキルのフォルダ**です——`SKILL.md`（Agent Skills をサポートする任意のエージェントが読める）に加え、Open Design にマーケットプレイスのメタデータ、入力、プレビュー、パイプライン、機能宣言を与える任意の `open-design.json` マニフェストを備えています。カテゴリーに直接ジャンプ:
+**261 の公式プラグイン**が [`plugins/_official/`](../../plugins/_official/) にあります。各プラグインは**ポータブルなエージェントスキルのフォルダ**です——`SKILL.md`（Agent Skills をサポートする任意のエージェントが読める）に加え、Marketing AX にマーケットプレイスのメタデータ、入力、プレビュー、パイプライン、機能宣言を与える任意の `open-design.json` マニフェストを備えています。カテゴリーに直接ジャンプ:
 
 | カテゴリー | 数 | 内容 |
 |---|---|---|
@@ -483,7 +483,7 @@ od plugin uninstall od-default       # uninstall
 
 ### プラグインを作る
 
-プラグインは **最低限 `SKILL.md` が 1 つあれば成り立ちます**。Open Design のマーケットプレイスに掲載するには `open-design.json` を追加します:
+プラグインは **最低限 `SKILL.md` が 1 つあれば成り立ちます**。Marketing AX のマーケットプレイスに掲載するには `open-design.json` を追加します:
 
 ```
 my-plugin/
@@ -501,15 +501,15 @@ my-plugin/
 ```bash
 od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
 od plugin validate ./my-plugin                          # check manifest / file layout
-pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+pnpm guard && pnpm --filter @marketing-ax/plugin-runtime typecheck
 ```
 
 完全なフィールドセットとランタイム契約 → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md)。コーディングエージェントでプラグインを開発する → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md)。コピー＆ペースト用の最小テンプレート → [`plugins/spec/examples/`](../../plugins/spec/examples/)。
 
 ### プラグインを貢献する
 
-1. プラグインフォルダを [`plugins/community/`](../../plugins/community/)（サードパーティプラグイン）にドロップするか、または——Open Design に同梱して提供するには——[`plugins/_official/`](../../plugins/_official/) の該当するティアにドロップします。
-2. 検証を通過させます: `od plugin validate`、`pnpm guard`、`pnpm --filter @open-design/plugin-runtime typecheck`。
+1. プラグインフォルダを [`plugins/community/`](../../plugins/community/)（サードパーティプラグイン）にドロップするか、または——Marketing AX に同梱して提供するには——[`plugins/_official/`](../../plugins/_official/) の該当するティアにドロップします。
+2. 検証を通過させます: `od plugin validate`、`pnpm guard`、`pnpm --filter @marketing-ax/plugin-runtime typecheck`。
 3. [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) のテンプレートを使って PR を記入します（ID、バージョン、レーン、モード、機能、トリガー例。ビジュアルプラグインにはスクリーンショット／プレビューを添付）。
 4. 外部レジストリ（skills.sh / ClawHub / スタンドアロンの GitHub）に公開する → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md)。
 
@@ -571,7 +571,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] サイドカープロトコル + Electron デスクトップ + IPC 自動化
 - [x] アーティファクト lint API + 5 次元の自己批評による発行前ゲート
 - [x] **0.8.0** — プラグインマーケットプレイスのインフラ（261 の公式プラグイン、マニフェスト仕様、エージェントごとのインストールスクリプト）
-- [x] **0.9.0** — Open Design AMR（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
+- [x] **0.9.0** — Marketing AX AMR（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
 - [x] パッケージ化された Electron ビルド — macOS（Apple Silicon + Intel） + Windows（x64） + Linux AppImage（オプションのレーン）
 - [ ] コメントモードの外科的な編集 — 一部提供済み。信頼性の高いターゲット指定のパッチ適用は進行中
 - [ ] AI が発行する tweaks パネルの UX — 未実装
@@ -599,7 +599,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 貢献
 
-Open Design が動き続けるのは、貢献者——デザイナー、エンジニア、プロンプトの作者——が現れ続けるからです。最もよく使われるスキル、デザインシステム、プラグインの多くは、コアチームの外の人々によって書かれました。
+Marketing AX が動き続けるのは、貢献者——デザイナー、エンジニア、プロンプトの作者——が現れ続けるからです。最もよく使われるスキル、デザインシステム、プラグインの多くは、コアチームの外の人々によって書かれました。
 
 ### 🎯 どこから始めるか（最大のレバレッジ、最小の変更）
 
@@ -636,9 +636,9 @@ gh pr create --fill
 
 完全なエージェントフレンドリーな貢献フロー、コードスタイル、PR の基準 → [English](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)）。
 
-### 🏅 Open Design Fellow プログラム
+### 🏅 Marketing AX Fellow プログラム
 
-私たちは世界中で **Open Design Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Open Design を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4) のアナウンス。
+私たちは世界中で **Marketing AX Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Marketing AX を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4) のアナウンス。
 
 ---
 
@@ -672,7 +672,7 @@ gh pr create --fill
 参加してくださったすべての方に感謝します——コード、ドキュメント、フィードバック、鋭い issue、新しいスキル、新しいデザインシステム。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Marketing AX contributors" />
 </a>
 
 ---
@@ -680,7 +680,7 @@ gh pr create --fill
 ## リポジトリのアクティビティ
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="Marketing AX — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 上の SVG は、[`lowlighter/metrics`](https://github.com/lowlighter/metrics) を使って [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) によって毎日再生成されます。
@@ -690,7 +690,7 @@ gh pr create --fill
 ## スターをお願いします
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Marketing AX on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 これで 30 分を節約できたなら、★ を付けてください。スターは家賃を払ってはくれません——でも、次のデザイナー、エージェント、貢献者に、この実験が注目に値することを伝えてくれます。ワンクリック、3 秒、本物のシグナルです。
@@ -699,7 +699,7 @@ gh pr create --fill
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Marketing AX star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -717,7 +717,7 @@ gh pr create --fill
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | デーモン + アダプターのアーキテクチャ——PATH スキャンによるエージェント検出、唯一の特権プロセスとしてのローカルデーモン。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 9 セクションの `DESIGN.md` スキーマと 70 のプロダクトシステムの出典。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` の下に追加された 57 のデザインスキルの出典。 |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 のモーショングラフィックスフレームワークで、Open Design に第一級の `hyperframes-html` として統合されています。 |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 のモーショングラフィックスフレームワークで、Marketing AX に第一級の `hyperframes-html` として統合されています。 |
 | [Claude Code skills][skill] | 私たちがそのまま採用している `SKILL.md` 規約。 |
 
 詳細な来歴 → [`docs/references.md`](../../docs/references.md)。
