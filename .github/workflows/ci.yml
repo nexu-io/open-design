@@ -29,9 +29,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  runners:
+    name: Resolve runner profiles
+    runs-on: ubuntu-24.04
+    outputs:
+      runs_on: ${{ steps.runners.outputs.runs_on }}
+      decision: ${{ steps.runners.outputs.decision }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve runner profiles
+        id: runners
+        env:
+          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+        run: python3 .github/scripts/runners.py
+
   scopes:
     name: Detect validation scopes
-    runs-on: ${{ fromJSON((vars.OD_CI_RUNNER_MODE == 'performance' || vars.OD_CI_RUNNER_MODE == 'economic') && '["ubuntu-24.04"]' || '["self-hosted","Linux","X64","od-persistent-ci","od-ci-hot-poc"]') }}
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     outputs:
       ci_mode: ${{ steps.detect.outputs.ci_mode }}
       daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
@@ -115,30 +133,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  runners:
-    name: Resolve runner profiles
-    runs-on: ubuntu-24.04
-    outputs:
-      mode: ${{ steps.runners.outputs.mode }}
-      github_hosted: ${{ steps.runners.outputs.github_hosted }}
-      contabo_control: ${{ steps.runners.outputs.contabo_control }}
-      hosted_or_blacksmith: ${{ steps.runners.outputs.hosted_or_blacksmith }}
-      blacksmith_default: ${{ steps.runners.outputs.blacksmith_default }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Resolve runner profiles
-        id: runners
-        env:
-          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
-        run: python3 .github/scripts/runners.py
-
   static_gate:
     name: Static gate
     needs: [runners]
-    runs-on: ${{ fromJSON(needs.runners.outputs.contabo_control) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 10
     env:
       ACTIONLINT_VERSION: 1.7.12
@@ -220,7 +218,7 @@ jobs:
     name: Validate Nix flake
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.hosted_or_blacksmith) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -428,7 +426,7 @@ jobs:
     name: Preflight
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.hosted_or_blacksmith) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
 
     steps:
@@ -441,7 +439,7 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.hosted_or_blacksmith }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium) }}
 
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
@@ -477,9 +475,9 @@ jobs:
 
   workspace_unit_tests:
     name: Workspace unit tests
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 20
 
     steps:
@@ -491,6 +489,8 @@ jobs:
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit) }}
 
       - name: Workspace unit tests
         run: |
@@ -528,9 +528,9 @@ jobs:
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true' }}
-    runs-on: windows-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).windows_tools }}
     timeout-minutes: 20
 
     steps:
@@ -539,6 +539,8 @@ jobs:
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools) }}
 
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
@@ -547,7 +549,7 @@ jobs:
     name: Web workspace tests
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
     steps:
@@ -560,7 +562,7 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Prebuild web sidecar declarations
         run: pnpm --filter @open-design/web build:sidecar
@@ -572,7 +574,7 @@ jobs:
     name: E2E Vitest
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
     steps:
@@ -585,14 +587,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -607,7 +609,7 @@ jobs:
     name: Playwright critical (${{ matrix.group }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -628,14 +630,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -655,7 +657,7 @@ jobs:
     name: UI P0 smoke
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
 
     steps:
@@ -668,14 +670,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -706,7 +708,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -723,14 +725,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -761,7 +763,7 @@ jobs:
     name: Playwright visual (${{ matrix.name }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.blacksmith_default) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).visual_hot }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -778,14 +780,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ needs.runners.outputs.blacksmith_default }}
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -850,7 +852,7 @@ jobs:
     name: Docker image build
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.hosted_or_blacksmith) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -905,7 +907,7 @@ jobs:
       - playwright_visual
       - docker_pr
     if: ${{ always() }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.contabo_control) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
 
     steps:
@@ -1021,7 +1023,7 @@ jobs:
       - runners
       - validate
     if: ${{ always() }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.contabo_control) }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
     continue-on-error: true
 
