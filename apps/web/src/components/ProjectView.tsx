@@ -388,6 +388,15 @@ function isGenericDaemonDisconnect(err: unknown): boolean {
     err.message === GENERIC_DAEMON_DISCONNECT_MESSAGE
   );
 }
+
+function hasGenericDisconnectFailureEvent(message: ChatMessage): boolean {
+  return (message.events ?? []).some(
+    (event) =>
+      event.kind === 'status' &&
+      event.label === 'error' &&
+      event.code === GENERIC_DAEMON_DISCONNECT_CODE,
+  );
+}
 const MIN_NORMAL_SPLIT_WIDTH =
   MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
@@ -2709,12 +2718,17 @@ export function ProjectView({
           !!message.runId &&
           !message.content &&
           !(message.producedFiles?.length);
+        const recoverableGenericDisconnectFailed =
+          message.runStatus === 'failed' &&
+          !!message.runId &&
+          hasGenericDisconnectFailureEvent(message);
         const replayingTerminalRun =
           shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
         const needsFullReplay =
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
-          spuriouslyFailedPending;
+          spuriouslyFailedPending ||
+          recoverableGenericDisconnectFailed;
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -4415,20 +4429,21 @@ export function ProjectView({
               const attempts =
                 (genericDisconnectRetriesRef.current.get(runIdForGenericDisconnect) ?? 0) + 1;
               if (attempts >= MAX_TRANSIENT_RETRIES) {
+                const backoffUntil = Date.now() + 3000;
+                genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
+                genericDisconnectBackoffUntilRef.current.set(runIdForGenericDisconnect, backoffUntil);
+                const backoffTimer = scheduleProjectTimeout(() => {
+                  const currentBackoffUntil =
+                    genericDisconnectBackoffUntilRef.current.get(runIdForGenericDisconnect) ?? 0;
+                  if (currentBackoffUntil <= Date.now()) {
+                    genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
+                  }
+                  setRecoveryTick((t) => t + 1);
+                }, 3000);
                 const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
                 if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
-                  genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
-                  const backoffUntil = Date.now() + 3000;
-                  genericDisconnectBackoffUntilRef.current.set(runIdForGenericDisconnect, backoffUntil);
-                  scheduleProjectTimeout(() => {
-                    const currentBackoffUntil =
-                      genericDisconnectBackoffUntilRef.current.get(runIdForGenericDisconnect) ?? 0;
-                    if (currentBackoffUntil <= Date.now()) {
-                      genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
-                    }
-                    setRecoveryTick((t) => t + 1);
-                  }, 3000);
                 } else if (latestRunStatus.status === 'succeeded') {
+                  clearProjectTimeout(backoffTimer);
                   if (runMayFinalize) {
                     setError(null);
                     updateAssistant((prev) => {
@@ -4466,6 +4481,7 @@ export function ProjectView({
                   genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
                   genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
                 } else {
+                  clearProjectTimeout(backoffTimer);
                   if (runMayFinalize) {
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
