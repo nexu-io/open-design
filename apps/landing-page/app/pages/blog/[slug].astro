@@ -9,7 +9,7 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import GoogleAnalytics from '../../_components/google-analytics.astro';
+import SiteAnalytics from '../../_components/site-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
@@ -207,7 +207,7 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
       category={post.data.category}
     />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
-    <GoogleAnalytics />
+    <SiteAnalytics />
   </head>
   <body>
     <div class='shell'>

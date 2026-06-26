@@ -6,8 +6,7 @@ import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../_components/favicon-links.astro';
-import GoogleAnalytics from '../_components/google-analytics.astro';
-import PostHogAnalytics from '../_components/posthog-analytics.astro';
+import SiteAnalytics from '../_components/site-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
@@ -164,8 +163,7 @@ const matterRuntime = readFileSync(
     <FaviconLinks />
     <ResourceHints />
 
-    <GoogleAnalytics />
-    <PostHogAnalytics />
+    <SiteAnalytics />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
