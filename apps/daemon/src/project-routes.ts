@@ -1136,6 +1136,26 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
+      // Hoist initialSessionMode so the badge-compute block below can use it.
+      // It only depends on req.body and has no side effects.
+      const initialSessionMode = normalizeChatSessionMode(
+        req.body?.conversationMode ?? req.body?.sessionMode,
+      );
+      // Card badge denormalization: read the effective scenario plugin's
+      // manifest `od.badge` and stamp it onto metadata at create time so the
+      // card tag is correct regardless of creation path (chip/CLI/API) and
+      // regardless of whether later snapshot resolution succeeds. Cosmetic
+      // display field — intentionally bypasses applyPlugin/capability gating.
+      const effectiveBadgePluginId =
+        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
+          ? req.body.pluginId.trim()
+          : (initialSessionMode === 'design'
+              ? defaultScenarioPluginIdForProjectMetadata(
+                  (metadata && typeof metadata === 'object' ? metadata : undefined) as any)
+              : null);
+      const stampedBadge = effectiveBadgePluginId
+        ? getInstalledPlugin(db, effectiveBadgePluginId)?.manifest?.od?.badge
+        : undefined;
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -1154,6 +1174,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                     return v.error ? {} : { linkedDirs: v.dirs };
                   })()
                 : {}),
+              ...(stampedBadge ? { badge: stampedBadge } : {}),
             }
           : skipDiscoveryBrief === true
             ? {
@@ -1165,6 +1186,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                       projectLocationId: selectedLocationId,
                     }
                   : {}),
+                ...(stampedBadge ? { badge: stampedBadge } : {}),
               }
             : externalProjectDir
               ? {
@@ -1172,8 +1194,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   baseDir: externalProjectDir,
                   importedFrom: 'project-location',
                   projectLocationId: selectedLocationId,
+                  ...(stampedBadge ? { badge: stampedBadge } : {}),
                 }
-              : null;
+              : stampedBadge
+                ? { badge: stampedBadge }
+                : null;
       const now = Date.now();
       let project;
       try {
@@ -1210,9 +1235,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       // Seed a default conversation so the UI always has somewhere to write.
       const cid = randomId();
-      const initialSessionMode = normalizeChatSessionMode(
-        req.body?.conversationMode ?? req.body?.sessionMode,
-      );
       insertConversation(db, {
         id: cid,
         projectId: id,
