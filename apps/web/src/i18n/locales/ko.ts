@@ -491,6 +491,8 @@ export const ko: Dict = {
   'entry.discordAriaWithOnline': 'Open Design Discord 참여하기 - {online}',
   'entry.discordOnlineLabel': '{count}명 온라인',
   'entry.followXLabel': 'X에서 @OpenDesignHQ 팔로우하기',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': '사이드바 크기 조절',
   'entry.loadingWorkspace': '워크스페이스를 불러오는 중…',
   'entry.useEverywhereTitle': '어디서나 사용',

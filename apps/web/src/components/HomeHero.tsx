@@ -129,7 +129,7 @@ interface Props {
   onSubmit: HomeHeroSubmitHandler;
   // Send pressed on an EMPTY composer while the placeholder carousel is
   // showing: the host seeds the prompt with `scenario.text`, binds the
-  // scenario's template, and creates the project — one-click "just start".
+  // scenario's template, and creates the project -- one-click "just start".
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
@@ -423,6 +423,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // template switch before the carousel reports the new pool's first scenario.
   const carouselSubmittable =
     carouselActive &&
+    !pluginsLoading &&
     carouselScenario !== null &&
     carouselScenarios.some((scenario) => scenario.id === carouselScenario.id);
   const sendEnabled = canSubmit || carouselSubmittable;

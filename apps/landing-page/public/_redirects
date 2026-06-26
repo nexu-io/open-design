@@ -192,7 +192,17 @@
 # paths still fold to English via the `/<retired>/* -> /:splat` rules above.
 # The /skills /systems /templates legacy listings below are NOT static (their
 # generators were removed), so folding them is safe.
+#
+# The same `plugins` collision bites the per-section folds, not just the
+# `/:loc/plugins/*` shape warned against above: `:loc` matches the literal
+# segment `plugins`, so `/plugins/{skills,systems,templates}/` binds
+# `:loc=plugins` and 301s to `/plugins/plugins/{...}/` (404). Guard the real
+# English hub pages with a 200 rewrite FIRST so the folds never see them
+# (first match wins). `/plugins/craft/` has no fold below, so it needs none.
 # ---------------------------------------------------------------------------
+/plugins/skills/*     /plugins/skills/:splat     200
+/plugins/systems/*    /plugins/systems/:splat    200
+/plugins/templates/*  /plugins/templates/:splat  200
 /:loc/skills/*     /:loc/plugins/skills/     301
 /:loc/systems/*    /:loc/plugins/systems/    301
 /:loc/templates/*  /:loc/plugins/templates/  301

@@ -139,9 +139,10 @@
         ev.stopPropagation();
         setOpen(!navEl.classList.contains('is-open'));
       });
-      // Close when clicking any actual nav link (but not the Product
-      // parent trigger — its href='/' is a real page link, so we let it
-      // navigate which closes the menu naturally).
+      // Close when clicking any actual nav link. The Product and Resources
+      // parent triggers are <button>s (category labels that only open their
+      // dropdown), not <a>s, so they are naturally excluded here and never
+      // close the mobile menu on tap.
       primaryNav.querySelectorAll('a').forEach((link) => {
         link.addEventListener('click', () => setOpen(false));
       });
@@ -152,6 +153,14 @@
         if (ev.key === 'Escape') setOpen(false);
       });
     }
+
+    // Product and Resources are category labels (not pages): they render as
+    // <button class="nav-trigger"> so they never navigate (Product used to
+    // bounce to the homepage, Resources to /blog/), and their dropdown is
+    // revealed by the SAME pure-CSS :hover / :focus-within rule as the hub
+    // menus — no JS, so it works on first paint / with JS disabled, and on
+    // touch (tapping the button focuses it → :focus-within reveals the menu).
+    // No JS enhancement is needed here.
 
     const starSlots = document.querySelectorAll('[data-github-stars]');
     if (starSlots.length > 0) {

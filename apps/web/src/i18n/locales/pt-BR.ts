@@ -491,6 +491,8 @@ export const ptBR: Dict = {
   'entry.discordAriaWithOnline': 'Entre no Discord do Open Design - {online}',
   'entry.discordOnlineLabel': '{count} online',
   'entry.followXLabel': 'Siga @OpenDesignHQ no X',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'Redimensionar barra lateral',
   'entry.loadingWorkspace': 'Carregando área de trabalho…',
   'entry.useEverywhereTitle': 'Usar em qualquer lugar',

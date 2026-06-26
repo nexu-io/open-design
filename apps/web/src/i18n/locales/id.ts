@@ -491,6 +491,8 @@ export const id: Dict = {
   'entry.discordAriaWithOnline': 'Gabung Discord Open Design - {online}',
   'entry.discordOnlineLabel': '{count} online',
   'entry.followXLabel': 'Ikuti @OpenDesignHQ di X',
+  'entry.followThreadsLabel': 'Follow Open Design on Threads',
+  'entry.youtubeLabel': 'Open Design on YouTube',
   'entry.resizeAria': 'Ubah ukuran sidebar',
   'entry.loadingWorkspace': 'Memuat workspace...',
   'entry.useEverywhereTitle': 'Gunakan di mana saja',
