@@ -71,12 +71,11 @@ export async function openSettingsDialog(page: Page) {
 
 export async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
-  const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 10_000 });
   await input.click();
   await input.fill(prompt);
-  await expect(sendButton).toBeEnabled();
-  await sendButton.click();
+  await expect(page.getByTestId('chat-send')).toBeEnabled();
+  await input.press('Enter');
 }
 
 export async function createProjectViaApi(page: Page, projectId: string, name: string) {
@@ -95,19 +94,14 @@ export async function createProjectViaApi(page: Page, projectId: string, name: s
 }
 
 export async function gotoProject(page: Page, projectId: string) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
-      await dismissPrivacyDialog(page);
-      await expectWorkspaceReady(page);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt === 1) break;
-    }
+  try {
+    await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
   }
-  throw lastError;
+  await dismissPrivacyDialog(page);
+  await expectWorkspaceReady(page);
 }
 
 export async function putAppConfig(page: Page, config: Record<string, unknown>) {
