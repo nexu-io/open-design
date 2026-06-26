@@ -75,6 +75,7 @@
     "mode": "prototype",
     "platform": "mobile",
     "scenario": "marketing",
+    "badge": { "label": "In-App Message", "tone": "pink" },
     "surface": "web",
     "preview": {
       "type": "html",
