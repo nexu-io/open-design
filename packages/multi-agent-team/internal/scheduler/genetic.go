@@ -15,13 +15,20 @@ import (
 // GeneticScheduler 遗传调度器：多变体并行生成 + 适应度评估 + 选择/交叉/变异
 // 适用场景：设计探索（多方案并行生成 → 评分 → 最优解）
 type GeneticScheduler struct {
-	pool           *agent.Pool
+	pool           GeneticPool
 	bus            *bus.CommunicationBus
 	populationSize int
 	generations    int
 }
 
-func NewGeneticScheduler(pool *agent.Pool, b *bus.CommunicationBus) *GeneticScheduler {
+// GeneticPool 遗传调度器所需的 pool 接口（便于测试注入 fake pool）
+type GeneticPool interface {
+	AssignTask(agentID string, task *agent.TaskAssignment) error
+	WaitResult(agentID string, timeout time.Duration) (*agent.TaskResult, error)
+	ListRuntimes() []protocol.AgentRuntime
+}
+
+func NewGeneticScheduler(pool GeneticPool, b *bus.CommunicationBus) *GeneticScheduler {
 	return &GeneticScheduler{
 		pool:           pool,
 		bus:            b,
@@ -50,13 +57,14 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 	}
 
 	basePrompt := plan.Tasks[0].Prompt
-	assignedTo := plan.Tasks[0].AssignedTo
-	if assignedTo == "" {
-		runtimes := s.pool.ListRuntimes()
-		if len(runtimes) == 0 {
-			return nil, fmt.Errorf("no agents available")
-		}
-		assignedTo = runtimes[0].ID
+	timeout := time.Duration(plan.Tasks[0].Timeout) * time.Second
+
+	// 收集所有可用 agent：优先用 plan.Tasks 里显式分配的，再补充池里空闲的
+	// 这样变体可以分散到多个 agent 真正并行执行，而不是全塞给同一个 agent
+	// （ManagedAgent.MaxParallel=1，单 agent 的变体会串行排队导致超时）
+	agentPool := s.collectAgents(plan)
+	if len(agentPool) == 0 {
+		return nil, fmt.Errorf("no agents available for genetic execution")
 	}
 
 	var allResults []*TaskResult
@@ -64,9 +72,9 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 	// 每一代生成 populationSize 个变体并并行执行
 	for gen := 0; gen < s.generations; gen++ {
 		var (
-			mu       sync.Mutex
+			mu         sync.Mutex
 			genResults []*TaskResult
-			wg       sync.WaitGroup
+			wg         sync.WaitGroup
 		)
 
 		for i := 0; i < s.populationSize; i++ {
@@ -74,7 +82,10 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 			go func(idx, generation int) {
 				defer wg.Done()
 				prompt := fmt.Sprintf("[Generation %d, Variant %d]\n%s", generation+1, idx+1, basePrompt)
-				result := s.executeVariant(ctx, assignedTo, prompt, time.Duration(plan.Tasks[0].Timeout)*time.Second)
+				// 轮询分配：变体 i 分给 agentPool[i % len(agentPool)]
+				// 多 agent 时变体真正并行；单 agent 时退化为串行（但不会因排队超时）
+				agentID := agentPool[idx%len(agentPool)]
+				result := s.executeVariant(ctx, agentID, prompt, timeout)
 				mu.Lock()
 				genResults = append(genResults, result)
 				mu.Unlock()
@@ -102,6 +113,32 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 	}
 
 	return allResults, nil
+}
+
+// collectAgents 收集可用于执行变体的 agent 列表
+// 优先用 plan.Tasks 中显式 AssignedTo 的 agent（去重），再补充池中空闲 agent
+// 确保变体能分散到多个 agent 并行执行
+func (s *GeneticScheduler) collectAgents(plan *ExecutionPlan) []string {
+	seen := make(map[string]bool)
+	var agents []string
+
+	// 1. 收集 plan 里显式分配的 agent
+	for _, t := range plan.Tasks {
+		if t.AssignedTo != "" && !seen[t.AssignedTo] {
+			seen[t.AssignedTo] = true
+			agents = append(agents, t.AssignedTo)
+		}
+	}
+
+	// 2. 补充池中空闲 agent，扩大并行度
+	for _, rt := range s.pool.ListRuntimes() {
+		if !seen[rt.ID] {
+			seen[rt.ID] = true
+			agents = append(agents, rt.ID)
+		}
+	}
+
+	return agents
 }
 
 func (s *GeneticScheduler) executeVariant(ctx context.Context, agentID, prompt string, timeout time.Duration) *TaskResult {
