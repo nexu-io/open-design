@@ -1,13 +1,13 @@
-<h1 align="center">Open Design: The open-source Claude Design alternative</h1>
+<h1 align="center">Marketing AX: The open-source Claude Design alternative</h1>
 
-> 🔥 **Open Design 0.10.0 is here: the all-in-one Agentic design workspace.** The whole craft now lives in one window — go from a vague idea to discovering references, gathering material, editing interactively, queuing comments, polishing motion, and handing off to an editor or a Code Agent — without leaving the app. With parallel sessions, it stops feeling like one assistant and starts feeling like a local design team working for you. [Download 0.10.0](https://github.com/nexu-io/open-design/releases) · [Join the discussion](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Marketing AX 0.10.0 is here: the all-in-one Agentic design workspace.** The whole craft now lives in one window — go from a vague idea to discovering references, gathering material, editing interactively, queuing comments, polishing motion, and handing off to an editor or a Code Agent — without leaving the app. With parallel sessions, it stops feeling like one assistant and starts feeling like a local design team working for you. [Download 0.10.0](https://github.com/nexu-io/open-design/releases) · [Join the discussion](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try AMR](https://open-design.ai/amr/)
+> ⚡ **Marketing AX AMR (Agentic Model Router) — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Marketing AX: 20+ flagship models, zero config, billed by real token usage. [Try AMR](https://open-design.ai/amr/)
 >
-> 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **The Marketing AX Fellow program is now open.** If you also believe design should be open — become a Marketing AX Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/qhbcCH8Am4).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Marketing AX — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
@@ -29,11 +29,11 @@
 
 ---
 
-## What is Open Design
+## What is Marketing AX
 
 🎨 **The local-first, open-source [Claude Design][cd] alternative.** &nbsp;🖥️ **Native desktop app for macOS and Windows.** &nbsp;⚡ **100+ skills** · ✨ **150 brand-grade `DESIGN.md` systems** · 📦 **261 ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 22 local CLIs**, or any OpenAI-compatible endpoint via BYOK.
 
-Open Design is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of skills, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
+Marketing AX is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of skills, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
 
 It's also the **Figma alternative for the agent era** — instead of pushing pixels on a canvas, it delivers single-page artifacts in real CSS, real fonts, real components, exported straight to HTML / PDF / PPTX / MP4 — already shaped by your design system, already runnable inside the agent you use every day.
 
@@ -43,7 +43,7 @@ It's also the **Figma alternative for the agent era** — instead of pushing pix
 
 ## Product tour
 
-A quick look at what Open Design is and what it does. Start from **Home**, orchestrate repeat workflows with **Automation**, distill a brand contract in **Design System**, and extend with **Plugins** and **integrations**; inside any project's **Studio**, the same design system streams out prototypes, live artifacts, HyperFrames, decks, and images.
+A quick look at what Marketing AX is and what it does. Start from **Home**, orchestrate repeat workflows with **Automation**, distill a brand contract in **Design System**, and extend with **Plugins** and **integrations**; inside any project's **Studio**, the same design system streams out prototypes, live artifacts, HyperFrames, decks, and images.
 
 ### Core pages
 
@@ -74,7 +74,7 @@ A quick look at what Open Design is and what it does. Start from **Home**, orche
 </td>
 <td width="50%" valign="top">
 <img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — connect external systems and MCP tools, and use Open Design from any IDE, script, or automation.</sub>
+<sub><b>Integrations</b> — connect external systems and MCP tools, and use Marketing AX from any IDE, script, or automation.</sub>
 </td>
 </tr>
 </table>
@@ -110,7 +110,7 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 
 ## Platform Compatibility
 
-> Open Design ships as **skills, a CLI, and an MCP server** that mainstream coding agents consume natively. Once OD is installed, a single `od mcp install <agent>` wires the MCP server into that agent's config, and you call the same tools from inside any agent.
+> Marketing AX ships as **skills, a CLI, and an MCP server** that mainstream coding agents consume natively. Once OD is installed, a single `od mcp install <agent>` wires the MCP server into that agent's config, and you call the same tools from inside any agent.
 
 | Coding agent / platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Status &nbsp;&nbsp; | One-line MCP server install &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 `od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Marketing AX supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **No CLI installed?** The BYOK proxy at `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` gives you the same loop (no process spawn) — paste `baseUrl` + `apiKey` + `model`, with support for OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM, or any OpenAI-compatible endpoint. Per-target SSRF protection blocks internal IPs / link-local / CGNAT at the daemon edge.
@@ -233,7 +233,7 @@ Every deck exports to **HTML** (single file, inlined assets), **PDF** (browser p
 
 ### 5 · Video & HyperFrames — agent-native motion graphics
 
-**[HyperFrames][hyperframes]** is HeyGen's open-source, agent-native video framework, integrated as a first-class citizen in Open Design. The agent writes HTML + CSS + GSAP, and HyperFrames renders it to a deterministic MP4 via headless Chrome + FFmpeg. Pair it with **Seedance 2.0** for cinematic t2v / i2v, **Veo 3 / Sora 2 / Kling 2** for routed model variants, and **Suno v5 / Lyria 2** for the audio layer.
+**[HyperFrames][hyperframes]** is HeyGen's open-source, agent-native video framework, integrated as a first-class citizen in Marketing AX. The agent writes HTML + CSS + GSAP, and HyperFrames renders it to a deterministic MP4 via headless Chrome + FFmpeg. Pair it with **Seedance 2.0** for cinematic t2v / i2v, **Veo 3 / Sora 2 / Kling 2** for routed model variants, and **Suno v5 / Lyria 2** for the audio layer.
 
 <table>
 <tr>
@@ -256,11 +256,11 @@ Every deck exports to **HTML** (single file, inlined assets), **PDF** (browser p
 
 ---
 
-## Why Open Design
+## Why Marketing AX
 
 > **In April 2026, Anthropic released [Claude Design][cd] — the first time an LLM stopped writing prose and started delivering design artifacts directly.** It went viral. But it stayed closed-source, paid-only, cloud-only, locked to Anthropic's model, Anthropic's skills, Anthropic's surface. No checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 
-Open Design (OD) is the open-source alternative. Same loop, same artifact-first mental model, none of the lock-in:
+Marketing AX (OD) is the open-source alternative. Same loop, same artifact-first mental model, none of the lock-in:
 
 - 🤖 **Agent-native, model-agnostic.** We don't ship an agent. The `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` already on your `PATH` are the design engine. Swap with one click.
 - 🧠 **Brand-grade by default.** Every render reads the active `DESIGN.md` — a 9-section schema covering palette, type, spacing, motion, voice, anti-patterns. 150 systems ship with the repo (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Drop a folder in, the picker finds it.
@@ -271,7 +271,7 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 
 ### Comparison
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Marketing AX** |
 |---|---|---|---|---|
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -288,7 +288,7 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 
 ### 🖥️ Download the desktop app (recommended — zero config)
 
-The fastest way to use Open Design. No Node, no pnpm, no clone.
+The fastest way to use Marketing AX. No Node, no pnpm, no clone.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -298,7 +298,7 @@ After install: the app auto-detects every coding-agent CLI on your `PATH`, loads
 
 ### 🤖 Install into your coding agent (no UI)
 
-You can use Open Design without ever opening the GUI — call it as a skill, plugin, or MCP server inside Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi, and more.
+You can use Marketing AX without ever opening the GUI — call it as a skill, plugin, or MCP server inside Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi, and more.
 
 ```bash
 # One-line install into the agent you're using:
@@ -347,13 +347,13 @@ Node `~24`, pnpm `10.33.x`. Windows users, see [`docs/windows-troubleshooting.md
 2. **A designer (or the agent) locks the direction.** No brand? Pick from 5 curated directions. Have a brand? Drop a screenshot / URL → the agent connects GitHub, imports Figma, and codifies a reusable `DESIGN.md`.
 3. **The agent emits the first `<artifact>`.** Plugin + skill + `DESIGN.md` are bound. It streams into a sandboxed iframe, editable in place — not "regenerate from scratch."
 4. **Hand off to engineering.** The artifact is real HTML/CSS — drop it into Cursor, Codex, or Claude Code to keep building as code. Or export PPTX / PDF / MP4 straight to marketing.
-5. **Open Design gets smarter as you use it.** Your screenshots, fonts, palettes, and confirmed artifacts accumulate as defaults for the next session. Less rework, less drift.
+5. **Marketing AX gets smarter as you use it.** Your screenshots, fonts, palettes, and confirmed artifacts accumulate as defaults for the next session. Less rework, less drift.
 
 ---
 
-## Use Open Design from your coding agent
+## Use Marketing AX from your coding agent
 
-Open Design ships a **stdio MCP server** and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local Open Design projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
+Marketing AX ships a **stdio MCP server** and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local Marketing AX projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -443,7 +443,7 @@ Re-import the library via [`scripts/sync-design-systems.ts`](scripts/sync-design
 
 ## Plugins
 
-**261 official plugins** live in [`plugins/_official/`](plugins/_official/). Each plugin is a **portable agent-skill folder** — a `SKILL.md` (readable by any agent that supports Agent Skills), plus an optional `open-design.json` manifest that gives Open Design marketplace metadata, inputs, previews, pipelines, and capability declarations. Jump straight to a category:
+**261 official plugins** live in [`plugins/_official/`](plugins/_official/). Each plugin is a **portable agent-skill folder** — a `SKILL.md` (readable by any agent that supports Agent Skills), plus an optional `open-design.json` manifest that gives Marketing AX marketplace metadata, inputs, previews, pipelines, and capability declarations. Jump straight to a category:
 
 | Category | Count | Contents |
 |---|---|---|
@@ -485,7 +485,7 @@ Every command supports `--json`, so you can pipe it through `jq` / `xargs` into 
 
 ### Building a plugin
 
-A plugin **needs only a `SKILL.md` at minimum**; to list it in the Open Design marketplace, add an `open-design.json`:
+A plugin **needs only a `SKILL.md` at minimum**; to list it in the Marketing AX marketplace, add an `open-design.json`:
 
 ```
 my-plugin/
@@ -503,15 +503,15 @@ Scaffold + validate locally:
 ```bash
 od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
 od plugin validate ./my-plugin                          # check manifest / file layout
-pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+pnpm guard && pnpm --filter @marketing-ax/plugin-runtime typecheck
 ```
 
 Full field set and runtime contract → [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md); developing a plugin with a coding agent → [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md); copy-paste minimal templates → [`plugins/spec/examples/`](plugins/spec/examples/).
 
 ### Contributing a plugin
 
-1. Drop the plugin folder into [`plugins/community/`](plugins/community/) (third-party plugins), or — to ship it bundled with Open Design — into the matching tier of [`plugins/_official/`](plugins/_official/).
-2. Pass validation: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
+1. Drop the plugin folder into [`plugins/community/`](plugins/community/) (third-party plugins), or — to ship it bundled with Marketing AX — into the matching tier of [`plugins/_official/`](plugins/_official/).
+2. Pass validation: `od plugin validate`, `pnpm guard`, `pnpm --filter @marketing-ax/plugin-runtime typecheck`.
 3. Fill the PR using the template in [`plugins/spec/CONTRIBUTING.md`](plugins/spec/CONTRIBUTING.md) (ID, version, lane, mode, capabilities, trigger examples; attach a screenshot / preview for visual plugins).
 4. To publish to an external registry (skills.sh / ClawHub / standalone GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](plugins/spec/PUBLISHING-REGISTRIES.md).
 
@@ -573,7 +573,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 - [x] Sidecar protocol + Electron desktop + IPC automation
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (261 official plugins, manifest spec, per-agent install scripts)
-- [x] **0.9.0** — Open Design AMR (official Model Router built into the app: zero config, one-click sign-in)
+- [x] **0.9.0** — Marketing AX AMR (official Model Router built into the app: zero config, one-click sign-in)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
 - [ ] Comment-mode surgical edits — partially shipped; reliable targeted patching in progress
 - [ ] AI-emitted tweaks panel UX — not yet implemented
@@ -601,7 +601,7 @@ The [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Ais
 
 ## Contributing
 
-Open Design keeps moving because contributors — designers, engineers, prompt authors — keep showing up. Many of the most-used skills, design systems, and plugins were written by people outside the core team.
+Marketing AX keeps moving because contributors — designers, engineers, prompt authors — keep showing up. Many of the most-used skills, design systems, and plugins were written by people outside the core team.
 
 ### 🎯 Where to start (max leverage, min change)
 
@@ -638,9 +638,9 @@ gh pr create --fill
 
 Full agent-friendly contribution flow, code style, and PR bar → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](docs/i18n/CONTRIBUTING.de.md) · [Français](docs/i18n/CONTRIBUTING.fr.md) · [简体中文](docs/i18n/CONTRIBUTING.zh-CN.md) · [日本語](docs/i18n/CONTRIBUTING.ja-JP.md) · [Português](docs/i18n/CONTRIBUTING.pt-BR.md)).
 
-### 🏅 Open Design Fellow program
+### 🏅 Marketing AX Fellow program
 
-We're recruiting **Open Design Fellows** around the world — Fellows shape the product alongside the core team, represent Open Design officially in their region, and grow the community locally, backed by funded support ($1,000 / MR), free LLM credits, and a direct review track. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and the announcement on [Discord](https://discord.gg/qhbcCH8Am4).
+We're recruiting **Marketing AX Fellows** around the world — Fellows shape the product alongside the core team, represent Marketing AX officially in their region, and grow the community locally, backed by funded support ($1,000 / MR), free LLM credits, and a direct review track. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and the announcement on [Discord](https://discord.gg/qhbcCH8Am4).
 
 ---
 
@@ -681,7 +681,7 @@ Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md
 Thanks to everyone who has taken part — code, docs, feedback, a sharp issue, a new skill, a new design system.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Marketing AX contributors" />
 </a>
 
 ---
@@ -689,7 +689,7 @@ Thanks to everyone who has taken part — code, docs, feedback, a sharp issue, a
 ## Repository activity
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="Marketing AX — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) using [`lowlighter/metrics`](https://github.com/lowlighter/metrics).
@@ -699,7 +699,7 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 ## Star us
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Marketing AX on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 If this saved you thirty minutes, give it a ★. Stars don't pay rent — but they tell the next designer, agent, and contributor that this experiment is worth their attention. One click, three seconds, a real signal.
@@ -708,7 +708,7 @@ If this saved you thirty minutes, give it a ★. Stars don't pay rent — but th
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Marketing AX star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -726,7 +726,7 @@ If this saved you thirty minutes, give it a ★. Stars don't pay rent — but th
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | The daemon + adapter architecture — PATH-scan agent detection, local daemon as the only privileged process. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Source of the 9-section `DESIGN.md` schema and 70 product systems. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Source of the 57 design skills added under `design-systems/`. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | The HTML→MP4 motion-graphics framework, integrated as the first-class `hyperframes-html` in Open Design. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | The HTML→MP4 motion-graphics framework, integrated as the first-class `hyperframes-html` in Marketing AX. |
 | [Claude Code skills][skill] | The `SKILL.md` convention we adopt verbatim. |
 
 Detailed provenance → [`docs/references.md`](docs/references.md).

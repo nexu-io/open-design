@@ -1,10 +1,10 @@
 # Privacy
 
-This page describes what data the Open Design desktop and web app collects,
+This page describes what data the Marketing AX desktop and web app collects,
 when it collects it, and how you stay in control. It documents the behavior
 shipped in the app — the same controls live under **Settings → Privacy**.
 
-Open Design is **local-first**. Your projects, generated files, and BYOK API
+Marketing AX is **local-first**. Your projects, generated files, and BYOK API
 keys stay on your machine. The app works fully offline; nothing in this page
 applies unless you explicitly turn telemetry on.
 
@@ -17,7 +17,7 @@ before you do. You can change your decision at any time under
 
 ## What is collected when you opt in
 
-When telemetry is enabled, the app may send the following to the Open Design
+When telemetry is enabled, the app may send the following to the Marketing AX
 team. Each category is independently controllable in Settings.
 
 - **Anonymous metrics** — run counts, token usage, error rate, and duration.
@@ -39,7 +39,7 @@ team. Each category is independently controllable in Settings.
 ## How telemetry is sent
 
 Redacted telemetry batches are sent to a Cloudflare Worker relay operated by
-the Open Design team, which forwards them to [Langfuse](https://langfuse.com)
+the Marketing AX team, which forwards them to [Langfuse](https://langfuse.com)
 for analysis. The relay holds the Langfuse write credentials server-side, so
 packaged clients only ever ship a public relay URL — no secret keys. If the
 relay is unavailable the app retries quietly and keeps working; telemetry
@@ -59,9 +59,9 @@ policy.
 
 ## Bring your own key
 
-Open Design is BYOK at every layer. The API keys you configure for coding
+Marketing AX is BYOK at every layer. The API keys you configure for coding
 agents and model providers are stored locally and used only to talk to those
-providers directly. They are never sent to the Open Design team.
+providers directly. They are never sent to the Marketing AX team.
 
 ## Changes to this page
 

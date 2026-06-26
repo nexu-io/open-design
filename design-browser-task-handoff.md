@@ -5,7 +5,7 @@ Generated from this chat session on 2026-05-30.
 ## Repository
 
 - Worktree: `/Users/pftom/.superset/worktrees/d3aab1a3-c696-403f-9692-7e5bc2dfa1f3/accidental-bolt`
-- Product area: Open Design `Design Files` workspace, embedded browser module, desktop host bridge, browser-harness task entry.
+- Product area: Marketing AX `Design Files` workspace, embedded browser module, desktop host bridge, browser-harness task entry.
 
 ## User Queries, In Order
 
@@ -107,7 +107,7 @@ Generated from this chat session on 2026-05-30.
   - https://startups.gallery/
   - https://www.worldindots.com/
   - https://getdesign.md/
-- Add browser-use/browser-harness oriented shortcut/task entry so a user can extract page screenshots/design language/assets and apply them to Open Design artifacts.
+- Add browser-use/browser-harness oriented shortcut/task entry so a user can extract page screenshots/design language/assets and apply them to Marketing AX artifacts.
 
 ## Current Implementation Status
 
@@ -140,11 +140,11 @@ Implemented behavior:
 
 Passed:
 
-- `pnpm --filter @open-design/web typecheck`
-- `pnpm --filter @open-design/desktop typecheck`
-- `pnpm --filter @open-design/host typecheck`
-- `pnpm --filter @open-design/host test`
-- `pnpm --filter @open-design/packaged test -- desktop-url-allowlist`
+- `pnpm --filter @marketing-ax/web typecheck`
+- `pnpm --filter @marketing-ax/desktop typecheck`
+- `pnpm --filter @marketing-ax/host typecheck`
+- `pnpm --filter @marketing-ax/host test`
+- `pnpm --filter @marketing-ax/packaged test -- desktop-url-allowlist`
 - Direct targeted web tests from `apps/web`:
   - `pnpm exec vitest run -c vitest.config.ts tests/components/FileWorkspace.test.tsx tests/components/FileWorkspace.design-system.test.tsx`
   - Result: 2 files passed, 38 tests passed.
@@ -158,7 +158,7 @@ Not fully verified:
 
 Observed unrelated test friction:
 
-- Running `pnpm --filter @open-design/web test -- FileWorkspace` or passing paths through the package script unexpectedly exercised the full web test set. It hit unrelated failures/timeouts in `SettingsDialog.execution.test.tsx` or `ExamplesTab.test.tsx`.
+- Running `pnpm --filter @marketing-ax/web test -- FileWorkspace` or passing paths through the package script unexpectedly exercised the full web test set. It hit unrelated failures/timeouts in `SettingsDialog.execution.test.tsx` or `ExamplesTab.test.tsx`.
 - Direct `pnpm exec vitest ...` from `apps/web` correctly scoped to FileWorkspace and passed.
 
 ## Next Agent Suggested Checks

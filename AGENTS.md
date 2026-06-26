@@ -20,7 +20,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
 - `apps/packaged` is the thin packaged Electron runtime entry; it starts packaged sidecars and owns the `od://` entry glue only.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
-- `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
+- `packages/sidecar-proto` owns the Marketing AX sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
@@ -111,7 +111,7 @@ Sanctioned exceptions:
 - `OD_LEGACY_DATA_DIR` is a migration source for legacy data import only. It is
   not an active daemon data root.
 - External tool homes such as `CODEX_HOME` are integration inputs, not daemon
-  data roots. The daemon must not describe them as Open Design runtime data.
+  data roots. The daemon must not describe them as Marketing AX runtime data.
 - Agent/project-cwd skill staging aliases are not daemon data roots.
 - Manifest metadata keys and CSS identifiers are semantic namespaces, not
   filesystem path conventions.
@@ -165,7 +165,7 @@ obvious, block the PR and request core-maintainer guidance.
 
 Every user-facing capability must be reachable through both the web UI **and** the `od` CLI (`apps/daemon/src/cli.ts`). Shipping a feature with only one of the two surfaces is a regression.
 
-- The CLI is the embeddability contract. External agents (hermes-agent, openclaw, custom Slack/Discord bots, packaged runtimes invoked from another shell) drive Open Design through `od` subcommands — they do not render the web UI. If a capability is UI-only, it cannot be composed into those external agents.
+- The CLI is the embeddability contract. External agents (hermes-agent, openclaw, custom Slack/Discord bots, packaged runtimes invoked from another shell) drive Marketing AX through `od` subcommands — they do not render the web UI. If a capability is UI-only, it cannot be composed into those external agents.
 - Both surfaces must call the same `/api/*` endpoints; do not let the CLI talk to one shape and the UI to another. The daemon HTTP layer is the single source of truth, with `packages/contracts` carrying the shared DTOs.
 - The CLI form must support `--json` for machine-readable output and accept long-form prompts via `--prompt-file <path|->`, so jobs that pipe through `xargs`, `jq`, and `<heredoc` stay clean.
 - Adding a new capability is a three-step closure: HTTP endpoint in `apps/daemon/src/*-routes.ts` (with a contract type in `packages/contracts/src/api/`), UI surface in `apps/web/src/`, and `od <capability>` subcommand in `apps/daemon/src/cli.ts` registered through `SUBCOMMAND_MAP`. Land all three in the same PR; do not stage them across PRs.
@@ -230,15 +230,15 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 - New component-owned UI styles should default to CSS Modules next to the component (`Component.module.css`) instead of expanding global stylesheets. This is preferred for isolated components, panels, menus, drawers, toolbars, cards, and form sections.
 - When touching an existing component with nearby global styles, prefer migrating that component's local selectors to a CSS Module as part of the change if it is small and testable. Do not mix a large mechanical move with behavior/styling changes in the same patch.
 - Keep global class names only for deliberate shared contracts: reusable primitives, theme hooks, third-party/content styling, cross-component layout, or selectors that rely on global cascade/specificity. Document any new global selector group with its owning feature.
-- CSS refactors must preserve cascade semantics. For mechanical splits, verify expanded import content/order matches the previous stylesheet; for CSS Module migrations, validate the affected UI path with `pnpm --filter @open-design/web typecheck` and a focused build/test or visual check when practical.
+- CSS refactors must preserve cascade semantics. For mechanical splits, verify expanded import content/order matches the previous stylesheet; for CSS Module migrations, validate the affected UI path with `pnpm --filter @marketing-ax/web typecheck` and a focused build/test or visual check when practical.
 
 ## Web component reuse
 
-- New `apps/web` UI should reuse shared primitives from `@open-design/components` when one exists instead of styling plain HTML elements directly. For example, use `Button` for app buttons and `VisuallyHidden` for screen-reader-only text/status content.
+- New `apps/web` UI should reuse shared primitives from `@marketing-ax/components` when one exists instead of styling plain HTML elements directly. For example, use `Button` for app buttons and `VisuallyHidden` for screen-reader-only text/status content.
 - Do not add new raw primitive classes such as `primary`, `primary-ghost`, `ghost`, `subtle`, `icon-btn`, or `sr-only` for new UI. Those classes are legacy compatibility surface for existing markup until it is migrated.
 - If a needed primitive is missing, prefer adding a small focused primitive to `packages/components` with colocated CSS Modules, then consume it from the app. Keep product-specific layout and workflow styling in the app, not in `packages/components`.
 - Keep semantic plain HTML when it is content markup or a specialized control that the shared package does not model yet; do not force a migration that would hide native behavior or make a custom widget harder to reason about.
-- `apps/web` transpiles `@open-design/components` from source during dev, so component and CSS Module edits should work through the normal web dev loop without rebuilding the package.
+- `apps/web` transpiles `@marketing-ax/components` from source during dev, so component and CSS Module edits should work through the normal web dev loop without rebuilding the package.
 
 ## i18n keys
 
@@ -300,15 +300,15 @@ pnpm typecheck
 ```
 
 ```bash
-pnpm --filter @open-design/web typecheck
-pnpm --filter @open-design/web test
-pnpm --filter @open-design/web build
-pnpm --filter @open-design/daemon test
-pnpm --filter @open-design/daemon build
-pnpm --filter @open-design/desktop build
-pnpm --filter @open-design/tools-dev build
-pnpm --filter @open-design/tools-pack build
-pnpm --filter @open-design/tools-serve build
+pnpm --filter @marketing-ax/web typecheck
+pnpm --filter @marketing-ax/web test
+pnpm --filter @marketing-ax/web build
+pnpm --filter @marketing-ax/daemon test
+pnpm --filter @marketing-ax/daemon build
+pnpm --filter @marketing-ax/desktop build
+pnpm --filter @marketing-ax/tools-dev build
+pnpm --filter @marketing-ax/tools-pack build
+pnpm --filter @marketing-ax/tools-serve build
 ```
 
 ```bash
@@ -339,7 +339,7 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 
 ## How are sidecar-proto, sidecar, and platform split?
 
-`@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
+`@marketing-ax/sidecar-proto` owns Marketing AX app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@marketing-ax/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@marketing-ax/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
 
 ## When is `pnpm install` required?
 
