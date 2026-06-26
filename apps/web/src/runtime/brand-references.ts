@@ -37,14 +37,11 @@ const TIER_1 = new Set([
   'H&M',
   'Lululemon',
   'New Balance',
-  'Under Armour',
   'Nespresso',
   'Hulu',
   'Vogue',
-  'The New York Times',
   'The Economist',
   'Philips',
-  'Whole Foods',
   'MasterClass',
 ]);
 
@@ -76,7 +73,7 @@ export const BRAND_REFERENCES: BrandReference[] = [...data.brands].sort(
 
 // Brands pinned to the front of the quick-pick row, in this order, ahead of
 // the fame-tier ordering — same tasteful curation as the reference demo.
-const PINNED_QUICK_PICKS = ['The New York Times', 'The Economist'];
+const PINNED_QUICK_PICKS = ['The Economist'];
 
 const QUICK_PICK_COUNT = 8;
 
