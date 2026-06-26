@@ -39,7 +39,8 @@ od:
 
 Build a swipeable Instagram carousel as one self-contained HTML artifact: a
 vertical deck of full-size 4:5 slides where every slide is export-ready as an
-individual 1080x1350 image, with a working Download button on each slide.
+individual 1080x1350 image, with one top-level "Download all slides" button that
+exports every slide as a PNG in a single zip (no per-slide buttons).
 
 ## Writing rule (strict)
 
