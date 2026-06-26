@@ -56,6 +56,7 @@ function baseConfig(overrides: Partial<AppConfigSeed> = {}): AppConfigSeed {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {},
     agentCliEnv: {},

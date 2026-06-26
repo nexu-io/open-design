@@ -606,6 +606,7 @@ async function setupAmrWorkspace(
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {
       amr: { model: 'default', reasoning: 'default' },
