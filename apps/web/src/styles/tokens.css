@@ -24,12 +24,14 @@
   --text-soft: #989590;
   --text-faint: #b3b0a8;
 
-  /* Accent — Marketing AX action color for app chrome only. */
-  --accent: #c96442;
-  --accent-strong: #b45a3b;
-  --accent-soft: #f5d8cb;
-  --accent-tint: #fbeee5;
-  --accent-hover: #b45a3b;
+  /* Accent — Marketing AX action color for app chrome only.
+     파생값은 appearance.ts accentVars()/layout.tsx pre-hydration 스크립트와
+     동일 color-mix식 — 정적 fallback과 런타임 결과가 어긋나지 않게 동기화. */
+  --accent: #16c5ff;
+  --accent-strong: color-mix(in srgb, #16c5ff 86%, var(--text-strong));
+  --accent-soft: color-mix(in srgb, #16c5ff 22%, var(--bg-panel));
+  --accent-tint: color-mix(in srgb, #16c5ff 12%, var(--bg-panel));
+  --accent-hover: color-mix(in srgb, #16c5ff 90%, var(--text-strong));
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #1f7a3a;
@@ -83,8 +85,10 @@
   --selected: #2563eb;
   --selected-soft: rgba(37, 99, 235, 0.16);
 
-  --serif: 'Source Serif Pro', 'Source Serif 4', 'Iowan Old Style', 'Apple Garamond', Georgia, 'Times New Roman', serif;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Pretendard = 제품 기본 서체. sans/serif 슬롯 모두 Pretendard로 통일(사용자 결정).
+     코드(--mono)만 고정폭 유지. @font-face = styles/pretendard.css. */
+  --serif: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+  --sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', 'Noto Sans KR', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
   --prose-font-size: 15px;
@@ -118,11 +122,11 @@
   --text-soft: #6e6b65;
   --text-faint: #4e4b46;
 
-  --accent: #d97a56;
-  --accent-strong: #e8896a;
-  --accent-soft: #3d2318;
-  --accent-tint: #2e1a12;
-  --accent-hover: #e8896a;
+  --accent: #16c5ff;
+  --accent-strong: color-mix(in srgb, #16c5ff 86%, var(--text-strong));
+  --accent-soft: color-mix(in srgb, #16c5ff 22%, var(--bg-panel));
+  --accent-tint: color-mix(in srgb, #16c5ff 12%, var(--bg-panel));
+  --accent-hover: color-mix(in srgb, #16c5ff 90%, var(--text-strong));
 
   --green: #4caf72;
   --green-bg: #0f2a18;
