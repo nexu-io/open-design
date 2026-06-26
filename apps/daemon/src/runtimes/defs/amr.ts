@@ -271,6 +271,11 @@ export const amrAgentDef = {
   fallbackModels: [] as RuntimeModelOption[],
   buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
   streamFormat: 'acp-json-rpc',
+  // vela resumes the upstream OpenCode session via ACP session/load across
+  // turns (the OpenCode session store persists per conversation), so the daemon
+  // captures the durable handle, skips the transcript resend on resume, and
+  // maps vela's resume_failed onto the reseed path. See resumesSessionViaAcpLoad.
+  resumesSessionViaAcpLoad: true,
   // Vela routes model selection through ACP's `session/set_model` and only
   // accepts ids that survived the `vela models` preflight check, so a
   // free-text "Custom" id silently fails at spawn. The model picker

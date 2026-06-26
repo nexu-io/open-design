@@ -41,6 +41,11 @@ export interface RunDiagnosticsAnalytics {
   tool_call_seen: boolean;
   artifact_write_seen: boolean;
   live_artifact_seen: boolean;
+  // True when this run transparently re-seeded after an upstream session resume
+  // failed (expired/pruned): the dead handle was cleared and the turn was re-run
+  // with a fresh session + full transcript, with no user-facing error. Lets us
+  // monitor how often the resume optimization falls back (should be rare).
+  resume_auto_reseeded: boolean;
 }
 
 export interface StreamTailSummary {
@@ -158,6 +163,7 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
   let artifactWriteSeen = args.artifactWriteSeen === true;
   let liveArtifactSeen = args.liveArtifactSeen === true;
   let recordedCloseReason: RunCloseReason | null = null;
+  let resumeAutoReseeded = false;
   for (const event of events) {
     if (event.event === 'stderr') {
       const chunk = readStderrChunk(event.data);
@@ -178,6 +184,9 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
       if (delta.length > 0) userVisibleOutputSeen = true;
     }
     if (data.type === 'tool_use') toolCallSeen = true;
+    if (event.event === 'diagnostic' && data.type === 'agent_resume_auto_reseed') {
+      resumeAutoReseeded = true;
+    }
     if (data.type === 'artifact') artifactWriteSeen = true;
     if (data.type === 'live_artifact' || event.event === 'live_artifact') {
       liveArtifactSeen = true;
@@ -237,5 +246,6 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
     tool_call_seen: toolCallSeen,
     artifact_write_seen: artifactWriteSeen,
     live_artifact_seen: liveArtifactSeen,
+    resume_auto_reseeded: resumeAutoReseeded,
   };
 }

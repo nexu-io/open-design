@@ -25,6 +25,20 @@ describe('run diagnostics', () => {
     expect(summary?.tail).not.toContain('sk-');
   });
 
+  it('flags resume_auto_reseeded when an agent_resume_auto_reseed event is present', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'diagnostic', data: { type: 'agent_resume_auto_reseed', agent_id: 'amr', reason: 'resume_failed' } },
+        { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: 'exit_0' } },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+    expect(result.resume_auto_reseeded).toBe(true);
+    // The reseed succeeded transparently — terminal reason is a clean exit.
+    expect(result.rpc_close_reason).toBe('exit_0');
+  });
+
   it('returns only low-cardinality stderr fields for PostHog analytics', () => {
     const result = summarizeRunDiagnosticsForAnalytics({
       events: [
@@ -46,6 +60,7 @@ describe('run diagnostics', () => {
       tool_call_seen: false,
       artifact_write_seen: false,
       live_artifact_seen: false,
+      resume_auto_reseeded: false,
     });
   });
 
@@ -74,6 +89,7 @@ describe('run diagnostics', () => {
       tool_call_seen: false,
       artifact_write_seen: false,
       live_artifact_seen: false,
+      resume_auto_reseeded: false,
     });
   });
 
@@ -99,6 +115,7 @@ describe('run diagnostics', () => {
       tool_call_seen: false,
       artifact_write_seen: false,
       live_artifact_seen: false,
+      resume_auto_reseeded: false,
     });
   });
 

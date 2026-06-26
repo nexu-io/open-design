@@ -480,6 +480,54 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(thinkingDeltas.join('')).toBe('thinking-chunk');
   });
 
+  it('resumes a prior session via session/load and captures the durable handle', async () => {
+    const child = spawnFakeVela({ FAKE_VELA_TEXT: 'Resumed.' });
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'continue',
+        cwd: process.cwd(),
+        model: 'deepseek-v3.2',
+        // A stored durable handle drives session/load instead of session/new.
+        resumeSessionId: 'oc-prev-handle',
+        mcpServers: [],
+        send: () => {},
+      });
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+      // The fake echoes the requested handle back as the durable id; the daemon
+      // would persist this to resume again next turn.
+      expect(session.getDurableSessionId()).toBe('oc-prev-handle');
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+  });
+
+  it('surfaces resume_failed (no completion) when the resumed session is gone', async () => {
+    const child = spawnFakeVela({ FAKE_VELA_RESUME_FAILED: '1' });
+    const events: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'continue',
+        cwd: process.cwd(),
+        model: 'deepseek-v3.2',
+        resumeSessionId: 'oc-gone',
+        mcpServers: [],
+        send: (event, payload) => events.push({ event, payload }),
+      });
+      await waitForExit(child);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+    // The structured resume_failed marker reaches the host (the daemon matches
+    // it on stdout to clear the stale handle and reseed). It must never look
+    // like a successful turn.
+    expect(JSON.stringify(events)).toContain('resume_failed');
+  });
+
   it('regression: stub mirrors real vela by rejecting session/prompt before session/set_model', async () => {
     const child = spawnFakeVela({ FAKE_VELA_TEXT: 'unused' });
     const errors: Array<{ event: string; payload: unknown }> = [];

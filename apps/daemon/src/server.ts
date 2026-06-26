@@ -490,7 +490,6 @@ import {
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
-  updateAgentSessionStableHash,
   upsertAgentSession,
   upsertDeployment,
   upsertMessage,
@@ -499,7 +498,7 @@ import {
 import {
   computeIncludeStable,
   hashStableInstructions,
-  isClaudeResumeFailure,
+  isAgentResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
@@ -5791,14 +5790,93 @@ export async function startServer({
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
     // create-turn persistence below.
     const agentSupportsSessionResume =
-      def.resumesSessionViaCli === true || def.streamFormat === 'pi-rpc';
+      def.resumesSessionViaCli === true ||
+      def.streamFormat === 'pi-rpc' ||
+      def.resumesSessionViaAcpLoad === true;
+    // Capture-style adapters (codex) mint their OWN session id and report it on
+    // the stream; the daemon captures it here and persists THAT as the resume
+    // handle instead of `agentResumeCtx.newSessionId` (which such CLIs ignore).
+    // Set from the `status` event's `sessionId` in `sendAgentEvent` below.
+    const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
+    let capturedSessionId: string | null = null;
+    // --- Model resolution hoisted above the resume-identity guard ---
+    // The guard (and the persisted `agent_sessions.model`) must key off the
+    // CONCRETE model actually launched, not the raw request token: a user who
+    // picked `default` would otherwise store `default`/null, so changing the
+    // effective default between turns would still pass the guard and resume the
+    // old upstream session under the wrong model (#4704, reported by @nettee).
+    // resolveModelForAgent is hoisted here; the AMR `default`->live-catalog
+    // rewrite is mirrored below so `safeModel` is final before the guard. The
+    // preflight further down stays authoritative for auth/availability and
+    // re-runs the (cached, idempotent) resolution.
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
+    const requestedLiveModelScope = def.id === 'amr'
+      ? resolveAmrProfile({
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        })
+      : null;
+    let safeModel = resolveModelForAgent(
+      def,
+      typeof model === 'string'
+        ? isKnownModel(def, model, requestedLiveModelScope)
+          ? model
+          : sanitizeCustomModel(model)
+        : null,
+      process.env,
+      requestedLiveModelScope,
+    );
+    const safeReasoning =
+      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
+        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+        : null;
+    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
+    const resolvedBin = agentLaunch.selectedPath;
+    if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
+      // Concretize a default/empty model to the live catalog's first entry, the
+      // same rewrite the AMR preflight applies — done here only so the resume
+      // guard sees the launched model. Read-only + cached (hot on follow-up
+      // turns); the preflight below remains the authoritative gate.
+      try {
+        const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
+        const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
+          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
+        });
+        const resumeLiveModels = preferFreshLiveModels(
+          resumeCatalog.models ?? [],
+          getRememberedLiveModels(def.id, requestedLiveModelScope),
+        );
+        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
+        const askedForDefault =
+          typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+        if (!safeModel || safeModel === 'default' || (askedForDefault && !resumeModelIds.has(safeModel))) {
+          safeModel = resumeLiveModels[0]?.id ?? safeModel ?? null;
+          agentOptions.model = safeModel;
+        }
+      } catch {
+        // Degrade silently: keep the requested value. The preflight below records
+        // the probe failure and applies the identical fallback.
+      }
+    }
     const agentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
+            currentModel: safeModel ?? null,
+            currentCwd: effectiveCwd,
+            currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -5953,40 +6031,7 @@ export async function startServer({
       ...(run.analyticsTelemetry ?? {}),
       promptBuildEndAt: Date.now(),
     };
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-    // Per-agent model + reasoning the user picked in the model menu.
-    // Trust the value when it matches the most recent /api/agents listing
-    // (live or fallback). Otherwise allow it through if it passes a
-    // permissive sanitizer — that's the path for user-typed custom model
-    // ids the CLI's listing didn't surface yet.
-    const requestedLiveModelScope = def.id === 'amr'
-      ? resolveAmrProfile({
-          ...process.env,
-          ...(def.env || {}),
-          ...configuredAgentEnv,
-        })
-      : null;
-    let safeModel = resolveModelForAgent(
-      def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
-        : null,
-      process.env,
-      requestedLiveModelScope,
-    );
-    const safeReasoning =
-      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
-        : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    // (model resolution + AMR concretization hoisted above the resume guard)
     const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
@@ -6270,7 +6315,9 @@ export async function startServer({
       );
       const liveSessionId = agentResumeCtx.isResuming
         ? agentResumeCtx.resumeSessionId
-        : agentResumeCtx.newSessionId;
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -6285,6 +6332,9 @@ export async function startServer({
           agentId: def.id,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
         });
       }
       finalizeRetryTelemetry(status, decision, failure, errorCode);
@@ -6469,9 +6519,7 @@ export async function startServer({
       ).catch(() => null);
     }
 
-    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
-    const resolvedBin = agentLaunch.selectedPath;
-
+    // agentLaunch / resolvedBin are resolved above the resume guard (hoisted).
     // Hoisted above the AMR catalog preflight: the empty-catalog branch
     // below calls `sendAmrAccountFailure(...)` to surface AMR_AUTH_REQUIRED
     // for signed-out users, and a `const` declared later in the same outer
@@ -6772,17 +6820,42 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
-        if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
+        // The id to persist for a create turn: capture-style adapters store the
+        // session id the CLI minted and reported on the stream; specify-style
+        // adapters store the daemon-minted id they passed to the CLI. A
+        // capture-style run that never reported an id (CLI died before
+        // `thread.started`) leaves nothing to resume — correct, the next turn
+        // starts fresh and re-seeds the transcript.
+        const createTurnSessionId = agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+        if (!agentResumeCtx.isResuming && createTurnSessionId) {
           upsertAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
-            sessionId: agentResumeCtx.newSessionId,
+            sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
           });
           return;
         }
-        if (agentResumeCtx.isResuming && includeStableInstructions) {
-          updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+        if (agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId) {
+          // Advance the resume identity guard after a successful resume turn:
+          // the conversation grew by this turn, so the cursor must move to the
+          // new max position (otherwise the next turn sees `cursor + 4` and
+          // falsely reseeds). model/cwd are unchanged (they matched on resume);
+          // refresh the stable hash to what the session now holds.
+          upsertAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: agentResumeCtx.resumeSessionId,
+            stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
+          });
         }
       };
     }
@@ -7767,6 +7840,18 @@ export async function startServer({
       // First well-formed decoded stream event = CLI ready for the
       // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
       noteCliReadyAt();
+      // Capture-style resume: codex reports its own thread id on the
+      // `thread.started` status event. Persist the most recent non-empty id we
+      // see so the create-turn store (and the resumable-failure store) use the
+      // CLI's real session handle, not the unused daemon-minted `newSessionId`.
+      if (
+        agentCapturesSessionId &&
+        ev?.type === 'status' &&
+        typeof ev.sessionId === 'string' &&
+        ev.sessionId.length > 0
+      ) {
+        capturedSessionId = ev.sessionId;
+      }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -7967,6 +8052,11 @@ export async function startServer({
         envFormat: def.acpMcpEnvFormat ?? 'array',
         executionProfile,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        // Resume the prior upstream session (drives `session/load`) when the
+        // resume-identity guard says it is safe; otherwise a fresh session/new.
+        ...(def.resumesSessionViaAcpLoad === true && agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? { resumeSessionId: agentResumeCtx.resumeSessionId }
+          : {}),
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
@@ -7989,6 +8079,35 @@ export async function startServer({
               sendAmrAccountFailure(failure);
               return;
             }
+          }
+          // Hold back the `resume_failed` error so the same-turn reseed stays
+          // transparent. When this run is resuming an upstream session via
+          // `session/load` and the agent reports that session is gone, the ACP
+          // bridge has already called `fail()` -> `send('error')` for the failed
+          // load. The child-close handler then clears the stale handle and
+          // re-runs this turn fresh (the resume-target-missing block below), so
+          // forwarding this error would flash an execution failure — and trip
+          // clients that treat an SSE `error` as terminal — a beat before the
+          // invisible recovery. Suppress it and leave a diagnostic instead; the
+          // close handler is the sole authority on whether this turn ends in an
+          // error or a transparent reseed. The `resumeAutoReseeded` guard lets a
+          // second resume failure in one run fall through to the explicit
+          // "resend your message" affordance the close handler emits.
+          if (
+            event === 'error' &&
+            def.resumesSessionViaAcpLoad === true &&
+            agentResumeCtx.isResuming &&
+            agentResumeCtx.resumeSessionId &&
+            !run.resumeAutoReseeded &&
+            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+          ) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'agent_resume_failed_suppressed',
+              agent_id: def.id,
+              reason: 'resume_failed',
+              previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            });
+            return;
           }
           if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
             if (emitTitleFilteredGuardedTextDelta(data.delta)) {
@@ -8093,6 +8212,56 @@ export async function startServer({
       }
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      // Resume-target-missing recovery runs BEFORE the generic fatal/stream-error
+      // short-circuits. The signal arrives differently per adapter: codex reports
+      // "no rollout found for thread id" as a stream `error` event, while AMR/vela
+      // reports a structured `resume_failed` JSON-RPC error that the ACP bridge
+      // turns into a FATAL. Either would otherwise be swallowed by the
+      // `fatal_rpc_error` / `stream_error` paths below and leave the dead session
+      // id stored — so every later turn would retry the same broken resume (#4275
+      // class). Clearing the stale handle here lets the next turn start fresh +
+      // re-seed the full transcript: one cold turn, never a broken conversation.
+      if (
+        !run.cancelRequested &&
+        (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+        agentResumeCtx.isResuming &&
+        run.conversationId &&
+        isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+      ) {
+        // The resumed upstream session is gone (expired / pruned). Clear the dead
+        // handle and TRANSPARENTLY re-run this same turn with a fresh session +
+        // the full transcript rebuilt from the DB — exactly the pre-session-reuse
+        // path. The user sees one (slightly slower) turn, never an error or a
+        // "resend" prompt. Re-spawn reuses the same-run retry machinery; because
+        // the session row is now cleared, the re-spawn resolves isResuming=false
+        // (fresh session, full transcript), so it CANNOT resume-fail again — the
+        // `resumeAutoReseeded` guard is belt-and-suspenders against any loop.
+        clearAgentSession(db, run.conversationId, def.id);
+        if (!run.resumeAutoReseeded) {
+          run.resumeAutoReseeded = true;
+          run.resumeAutoReseededFrom = agentResumeCtx.resumeSessionId ?? null;
+          // Persisted to the per-run events.jsonl that the help → diagnostics
+          // export bundles, so the whole resume → fail → auto-reseed chain is
+          // visible in a support bundle without any user-facing signal.
+          design.runs.emit(run, 'diagnostic', {
+            type: 'agent_resume_auto_reseed',
+            agent_id: def.id,
+            reason: 'resume_failed',
+            previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            stale_session_cleared: true,
+          });
+          scheduleRetryRestart(0);
+          return;
+        }
+        // Unreachable in practice (the reseed runs fresh); if a second resume
+        // failure ever surfaces in one run, fall back to the explicit affordance.
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The previous session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
       if (acpSession?.hasFatalError()) {
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -8128,26 +8297,6 @@ export async function startServer({
           ));
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
-      }
-      if (
-        code !== 0 &&
-        !run.cancelRequested &&
-        def.resumesSessionViaCli === true &&
-        agentResumeCtx.isResuming &&
-        run.conversationId &&
-        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
-      ) {
-        // The stored session id no longer resolves (pruned / machine moved
-        // / ~/.claude cleared). Drop it so the next turn starts a fresh
-        // session seeded with the full transcript, and surface a retryable
-        // error rather than a confusing hard failure.
-        clearAgentSession(db, run.conversationId, def.id);
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
@@ -8433,8 +8582,32 @@ export async function startServer({
             agentId: def.id,
             sessionId: sessionPath,
             stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
           });
         }
+      }
+      // ACP session/load adapters (AMR/vela) report a durable upstream handle
+      // from the ACP session; persist it (under the resume-identity guard) so
+      // the next turn resumes via session/load. A missing handle clears the row
+      // (so a fresh session is opened next turn), mirroring the capture-style
+      // adapters.
+      if (
+        def.resumesSessionViaAcpLoad === true &&
+        status === 'succeeded' &&
+        acpSession &&
+        typeof acpSession.getDurableSessionId === 'function'
+      ) {
+        persistCapturedAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: acpSession.getDurableSessionId(),
+          stablePromptHash: currentStableHash,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
       }
       if (status === 'succeeded') {
         persistDeliveredAgentSessionState();

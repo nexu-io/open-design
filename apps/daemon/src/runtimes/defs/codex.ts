@@ -117,28 +117,64 @@ export const codexAgentDef = {
       // and Linux (Landlock+seccomp) keep workspace-write because their
       // sandbox enforcement permits shell while restricting writes.
       const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
-      const args = needsDangerFullAccess
-        ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
-        : [
-            'exec',
-            '--json',
-            '--skip-git-repo-check',
-            '--sandbox',
-            'workspace-write',
-            '-c',
-            'sandbox_workspace_write.network_access=true',
-          ];
+      // Capture-style resume: when the daemon has a stored Codex thread id for
+      // this conversation it asks the CLI to continue that session with
+      // `exec resume <thread_id>` instead of `exec` (a fresh session). Codex
+      // mints its own id, so the daemon does not specify one — it captures the
+      // id from the create turn's `thread.started.thread_id` event (see the
+      // json-event-stream `codex` parser) and replays it here on resume.
+      const resumeSessionId =
+        typeof runtimeContext.resumeSessionId === 'string' &&
+        runtimeContext.resumeSessionId.length > 0
+          ? runtimeContext.resumeSessionId
+          : null;
+      // `codex exec resume` rejects `--sandbox` (only valid on a fresh
+      // `exec`); the sandbox mode must be passed as a `-c sandbox_mode=...`
+      // config override. We mirror the exact same effective sandbox policy as
+      // the create turn so Codex's per-turn `turn_context` block byte-matches
+      // across turns and does not break the upstream prefix cache the resume
+      // is meant to reuse.
+      const sandboxArgs = needsDangerFullAccess
+        ? resumeSessionId
+          ? ['-c', 'sandbox_mode="danger-full-access"']
+          : ['--sandbox', 'danger-full-access']
+        : resumeSessionId
+          ? [
+              '-c',
+              'sandbox_mode="workspace-write"',
+              '-c',
+              'sandbox_workspace_write.network_access=true',
+            ]
+          : [
+              '--sandbox',
+              'workspace-write',
+              '-c',
+              'sandbox_workspace_write.network_access=true',
+            ];
+      const args = resumeSessionId
+        ? ['exec', 'resume', '--json', '--skip-git-repo-check', ...sandboxArgs]
+        : ['exec', '--json', '--skip-git-repo-check', ...sandboxArgs];
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }
-      if (runtimeContext.cwd) {
-        args.push('-C', runtimeContext.cwd);
-      }
-      const dirs = (extraAllowedDirs || []).filter(
-        (d) => typeof d === 'string' && d.length > 0,
-      );
-      for (const d of dirs) {
-        args.push('--add-dir', d);
+      // `-C <cwd>` and `--add-dir <dir>` are CREATE-only flags: `codex exec
+      // resume` rejects both (`error: unexpected argument '-C' found`), so
+      // appending them on a resume turn would make the follow-up turn die
+      // before the first event. The daemon already spawns the child with
+      // `cwd: effectiveCwd`, and resuming by explicit SESSION_ID does not use
+      // codex's cwd-based session filtering, so the resumed turn still runs in
+      // the right workspace without `-C`. The extra writable dirs were granted
+      // when the session was created and are carried by the resumed session.
+      if (!resumeSessionId) {
+        if (runtimeContext.cwd) {
+          args.push('-C', runtimeContext.cwd);
+        }
+        const dirs = (extraAllowedDirs || []).filter(
+          (d) => typeof d === 'string' && d.length > 0,
+        );
+        for (const d of dirs) {
+          args.push('--add-dir', d);
+        }
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
@@ -149,9 +185,23 @@ export const codexAgentDef = {
         // is exposed as `model_reasoning_effort`.
         args.push('-c', `model_reasoning_effort="${effort}"`);
       }
+      // The resume thread id is the positional SESSION_ID argument of
+      // `codex exec resume`; it must come after the flags. The prompt is
+      // delivered via stdin (promptViaStdin), so the thread id is the final
+      // argv entry.
+      if (resumeSessionId) {
+        args.push(resumeSessionId);
+      }
       return args;
     },
     promptViaStdin: true,
+    // Codex's CLI carries its own session across spawns: on a follow-up turn
+    // the daemon resumes the captured thread id instead of re-sending the
+    // flattened transcript, so the first upstream call reuses the warm prefix
+    // cache. Capture-style: the resume handle is the `thread.started.thread_id`
+    // captured from the stream, not a daemon-minted id.
+    resumesSessionViaCli: true,
+    capturesSessionIdFromStream: true,
     streamFormat: 'json-event-stream',
     eventParser: 'codex',
 } satisfies RuntimeAgentDef;
