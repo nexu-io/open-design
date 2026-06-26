@@ -99,6 +99,12 @@ async function openLocalCliSettings(
     onConnectionTest: (payload: Record<string, unknown>) => ConnectionTestFixture;
   },
 ) {
+  let currentConfig: AppConfigSeed = {
+    ...config,
+    agentCliEnv: { ...(config.agentCliEnv ?? {}) },
+    agentModels: { ...(config.agentModels ?? {}) },
+  };
+
   await page.addInitScript(
     ({ key, value, localeKey, localeValue }) => {
       window.localStorage.setItem(key, JSON.stringify(value));
@@ -121,20 +127,29 @@ async function openLocalCliSettings(
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          config: {
-            onboardingCompleted: true,
-            agentId: typeof config.agentId === 'string' ? config.agentId : 'codex',
-            agentCliEnv: config.agentCliEnv ?? {},
-            agentModels: config.agentModels ?? {},
-            skillId: null,
-            designSystemId: null,
-            disabledSkills: [],
-            disabledDesignSystems: [],
-          },
+          config: currentConfig,
         }),
       });
       return;
     }
+
+    const payload = route.request().postDataJSON() as
+      | Partial<AppConfigSeed>
+      | { config?: Partial<AppConfigSeed> };
+    const nextConfig: Partial<AppConfigSeed> =
+      'config' in payload && payload.config ? payload.config : payload;
+    currentConfig = {
+      ...currentConfig,
+      ...nextConfig,
+      agentCliEnv: { ...(nextConfig.agentCliEnv ?? currentConfig.agentCliEnv ?? {}) },
+      agentModels: { ...(nextConfig.agentModels ?? currentConfig.agentModels ?? {}) },
+    };
+    await page.evaluate(
+      ({ key, value }) => {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      },
+      { key: STORAGE_KEY, value: currentConfig },
+    );
 
     await route.fulfill({
       status: 200,

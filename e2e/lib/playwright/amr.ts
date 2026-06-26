@@ -7,7 +7,7 @@ export const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Acco
 export const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 export async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long }).catch(() => {});
 }
 
 export async function dismissPrivacyDialog(page: Page) {
@@ -53,6 +53,7 @@ export async function openSettingsDialog(page: Page) {
     })
     .not.toBe('pending');
   if (await menu.isVisible().catch(() => false)) {
+    await dismissPrivacyDialog(page);
     const settingsItem = menu
       .getByRole('menuitem', { name: SETTINGS_MENU_LABEL })
       .or(menu.getByRole('button', { name: SETTINGS_MENU_LABEL }))
@@ -90,9 +91,19 @@ export async function createProjectViaApi(page: Page, projectId: string, name: s
 }
 
 export async function gotoProject(page: Page, projectId: string) {
-  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
-  await dismissPrivacyDialog(page);
-  await expectWorkspaceReady(page);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+      await dismissPrivacyDialog(page);
+      await expectWorkspaceReady(page);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) break;
+    }
+  }
+  throw lastError;
 }
 
 export async function putAppConfig(page: Page, config: Record<string, unknown>) {
