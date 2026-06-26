@@ -89,6 +89,13 @@ async function createGenericDisconnectError() {
   return createGenericDaemonDisconnectError();
 }
 
+async function createCodeOnlyGenericDisconnectError(message = 'code-only generic disconnect') {
+  const { GENERIC_DAEMON_DISCONNECT_CODE } = await import('../../src/providers/daemon');
+  const error = new Error(message) as Error & { code?: string };
+  error.code = GENERIC_DAEMON_DISCONNECT_CODE;
+  return error;
+}
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
@@ -2018,6 +2025,109 @@ afterEach(() => {
           event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE,
       ),
     ).toBe(false);
+  });
+
+  it('treats a code-only generic disconnect as retryable even when the message differs', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createCodeOnlyGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-code-only-generic-disconnect',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-code-only-generic-disconnect',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-code-only-generic-disconnect',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-code-only-generic-disconnect',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-code-only-generic-disconnect',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 3,
+        exitCode: 0,
+        signal: null,
+      });
+    let reattachAttempts = 0;
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
+    }) => {
+      reattachAttempts += 1;
+      if (reattachAttempts < 3) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-code-only-generic-disconnect', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reattach-code-only-generic-disconnect',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reattach-code-only-generic-disconnect',
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
   });
 
   it('patches terminal metadata when a reattach generic disconnect later proves failed', async () => {
