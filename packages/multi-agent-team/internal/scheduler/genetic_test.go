@@ -154,7 +154,7 @@ func TestGeneticSchedulerMultiAgentDistribution(t *testing.T) {
 	}
 }
 
-// TestGeneticSchedulerSingleAgentFallback 单 agent 时退化为串行但不报错
+// TestGeneticSchedulerSingleAgentFallback 单 agent 时串行执行，不因排队超时
 func TestGeneticSchedulerSingleAgentFallback(t *testing.T) {
 	fp := newFakePool([]string{"solo-agent"})
 	b := bus.NewBus()
@@ -172,14 +172,19 @@ func TestGeneticSchedulerSingleAgentFallback(t *testing.T) {
 		},
 	}
 
+	start := time.Now()
 	results, err := s.Execute(context.Background(), plan)
+	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 	if len(results) != 2 {
 		t.Fatalf("expected 2 variants, got %d", len(results))
 	}
-	// 单 agent 时所有变体都给同一个 agent，这是预期行为
+	// 单 agent 串行执行：fakeAgent 每个变体 50ms，两个变体总共约 100ms
+	if elapsed < 80*time.Millisecond {
+		t.Errorf("single agent serial execution took %v, expected >= 80ms (2 sequential 50ms tasks)", elapsed)
+	}
 	for _, r := range results {
 		if r.AgentID != "solo-agent" {
 			t.Errorf("single agent mode: variant assigned to %s, want solo-agent", r.AgentID)
