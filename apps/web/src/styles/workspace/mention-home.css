@@ -551,6 +551,21 @@
   background: color-mix(in srgb, var(--red) 9%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--red) 34%, transparent);
 }
+.design-card-tag.badge-tone-neutral {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.design-card-tag.badge-tone-pink {
+  color: #b1185b;
+  background: rgba(214, 51, 132, 0.12);
+  border-color: rgba(214, 51, 132, 0.28);
+}
+.design-card-tag.badge-tone-blue { color: #2348b8; background: #e8efff; border-color: rgba(35, 72, 184, 0.18); }
+.design-card-tag.badge-tone-purple { color: #6d4ff5; background: rgba(116, 92, 255, 0.12); border-color: rgba(116, 92, 255, 0.28); }
+.design-card-tag.badge-tone-amber { color: #b15e00; background: rgba(255, 159, 64, 0.14); border-color: rgba(255, 159, 64, 0.32); }
+.design-card-tag.badge-tone-teal { color: #1c8a73; background: rgba(28, 138, 115, 0.12); border-color: rgba(28, 138, 115, 0.28); }
+.design-card-tag.badge-tone-red { color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--bg-panel)); border-color: color-mix(in srgb, var(--red) 34%, transparent); }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in {
