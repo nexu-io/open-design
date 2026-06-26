@@ -1166,15 +1166,10 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
   expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
 });
 
-test('[P0] @critical home composer can route free-form Ask mode without the design router', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
   await gotoEntryHome(page);
 
-  const modeTrigger = page.getByTestId('session-mode-trigger');
-  await expect(modeTrigger).toBeVisible();
-  await expect(modeTrigger).toContainText('Design');
-  await modeTrigger.click();
-  await page.getByRole('menuitemradio', { name: /Ask mode/i }).click();
-  await expect(modeTrigger).toContainText('Ask');
+  await expect(page.getByTestId('session-mode-trigger')).toHaveCount(0);
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -1194,8 +1189,8 @@ test('[P0] @critical home composer can route free-form Ask mode without the desi
   };
   expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
-  expect(body.conversationMode).toBe('chat');
-  expect(body.pluginId ?? null).toBeNull();
+  expect(body.conversationMode).toBe('design');
+  expect(body.pluginId).toBe('od-default');
   expect(body.metadata?.kind).toBe('other');
 });
 

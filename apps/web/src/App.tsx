@@ -349,6 +349,7 @@ function AppInner() {
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-od-app-mounted', '1');
+      document.querySelectorAll('.od-loading-shell').forEach((node) => node.remove());
     }
   }, []);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
