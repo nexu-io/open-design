@@ -109,6 +109,48 @@ export function isCritiqueEnabled(input: RolloutInputs): boolean {
 }
 
 /**
+ * The downstream eligibility terms `shouldRunReview` composes on top of the
+ * `isCritiqueEnabled` rollout decision. Every field is a pre-resolved boolean
+ * so the invariant stays a pure predicate with no IO or env reads.
+ */
+export interface ReviewRunEligibility {
+  /** Result of the `isCritiqueEnabled` rollout resolver for this run. */
+  critiqueEnabledForRun: boolean;
+  /** The active design system resolved a brand (name + design_md). */
+  hasBrand: boolean;
+  /** A critique skill id was resolved for the run. */
+  hasSkill: boolean;
+  /** Exclusive image/video/audio surface — the v1 panel forbids HTML output
+   *  there, so critique must be skipped. */
+  isMediaSurface: boolean;
+  /** The stream adapter is plain stdout. Non-plain adapters
+   *  (claude-stream-json, copilot-stream-json, json-event-stream,
+   *  acp-json-rpc, pi-rpc) emit wrapper protocols the v1 critique parser
+   *  cannot read, so they fall through to legacy generation. */
+  isPlainAdapter: boolean;
+}
+
+/**
+ * Single source of truth for "does this generation run the Critique Theater
+ * panel?". The composer prompt addendum gate and the orchestrator spawn gate
+ * MUST consult the same decision — otherwise one side instructs the model to
+ * emit `<CRITIQUE_RUN>` tags the other side never consumes, or vice versa.
+ * Computing the 5-term invariant once here and threading the result keeps
+ * prompt and orchestrator in exact lockstep regardless of which gate enforces
+ * eligibility downstream.
+ *
+ * Pure predicate: callers resolve each term (rollout decision, brand/skill
+ * presence, surface kind, adapter format) and pass the booleans in.
+ */
+export function shouldRunReview(eligibility: ReviewRunEligibility): boolean {
+  return eligibility.critiqueEnabledForRun
+    && eligibility.hasBrand
+    && eligibility.hasSkill
+    && !eligibility.isMediaSurface
+    && eligibility.isPlainAdapter;
+}
+
+/**
  * Parse the `MAX_CRITIQUE_ROLLOUT_PHASE` env var into a `RolloutPhase`.
  * Defaults to `M0` (dark-launch) when the value is missing or unknown
  * so a fresh install never surprises users with the feature on.
