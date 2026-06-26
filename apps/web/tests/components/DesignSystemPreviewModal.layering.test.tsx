@@ -1,16 +1,30 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignSystemPreviewModal } from '../../src/components/DesignSystemPreviewModal';
 import { I18nProvider } from '../../src/i18n';
 import type { DesignSystemSummary } from '../../src/types';
 
+const { fetchDesignSystemShowcaseMock } = vi.hoisted(() => ({
+  fetchDesignSystemShowcaseMock: vi.fn(async () => '<!doctype html><p>showcase</p>'),
+}));
+
 vi.mock('../../src/providers/registry', () => ({
   fetchDesignSystem: vi.fn(async () => ({ body: '# Claymorphism' })),
   fetchDesignSystemPreview: vi.fn(async () => '<!doctype html><p>tokens</p>'),
-  fetchDesignSystemShowcase: vi.fn(async () => '<!doctype html><p>showcase</p>'),
+  fetchDesignSystemShowcase: fetchDesignSystemShowcaseMock,
+}));
+
+vi.mock('../../src/runtime/design-kit', () => ({
+  useDesignKit: () => ({ kit: { title: 'Claymorphism kit' }, loading: false }),
+}));
+
+vi.mock('../../src/components/DesignKitView', () => ({
+  DesignKitView: ({ dataTestId }: { dataTestId?: string }) => (
+    <div data-testid={dataTestId ?? 'design-kit-view'}>Rich design kit</div>
+  ),
 }));
 
 const SYSTEM = {
@@ -42,6 +56,7 @@ describe('DesignSystemPreviewModal layering', () => {
   afterEach(() => {
     cleanup();
     document.body.innerHTML = '';
+    fetchDesignSystemShowcaseMock.mockClear();
   });
 
   it('portals the preview to document.body so composer overlays cannot cover it', () => {
@@ -51,5 +66,30 @@ describe('DesignSystemPreviewModal layering', () => {
     expect(backdrop).toBeTruthy();
     expect(backdrop?.parentElement).toBe(document.body);
     expect(host.querySelector('.ds-modal-backdrop')).toBeNull();
+  });
+
+  it('opens chip previews on the rich kit tab while keeping Showcase HTML-backed', async () => {
+    render(
+      <I18nProvider>
+        <DesignSystemPreviewModal
+          system={{ ...SYSTEM, projectId: 'project-clay' }}
+          initialViewId="kit"
+          onClose={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Visualize' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Showcase' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.getByTestId('design-system-modal-kit')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Showcase' }));
+
+    await waitFor(() => {
+      expect(fetchDesignSystemShowcaseMock).toHaveBeenCalledWith('claymorphism');
+    });
+    expect(screen.getByRole('tab', { name: 'Showcase' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy();
   });
 });

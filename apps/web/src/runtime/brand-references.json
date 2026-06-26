@@ -72,7 +72,6 @@
     { "name": "Philips", "domain": "philips.com", "category": "electronics" },
     { "name": "Apple", "domain": "apple.com", "category": "electronics" },
     { "name": "Lucid Motors", "domain": "lucidmotors.com", "category": "automotive" },
-    { "name": "Hyundai", "domain": "hyundai.com", "category": "automotive" },
     { "name": "Honda", "domain": "honda.com", "category": "automotive" },
     { "name": "Porsche", "domain": "porsche.com", "category": "automotive" },
     { "name": "Ford", "domain": "ford.com", "category": "automotive" },

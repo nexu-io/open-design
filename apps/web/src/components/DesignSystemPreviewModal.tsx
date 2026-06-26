@@ -12,13 +12,16 @@ import {
   fetchDesignSystemPreview,
   fetchDesignSystemShowcase,
 } from '../providers/registry';
+import { useDesignKit } from '../runtime/design-kit';
 import type { DesignSystemDetail, DesignSystemSummary } from '../types';
+import { DesignKitView } from './DesignKitView';
 import { DesignSpecView } from './DesignSpecView';
 import { PreviewModal } from './PreviewModal';
 
 interface Props {
   system: DesignSystemSummary;
   onClose: () => void;
+  initialViewId?: 'showcase' | 'kit' | 'tokens';
 }
 
 function isDesignSystemDetail(system: DesignSystemSummary): system is DesignSystemDetail {
@@ -30,7 +33,7 @@ function isDesignSystemDetail(system: DesignSystemSummary): system is DesignSyst
 // rendered DESIGN.md prose). A toggleable side panel surfaces the raw
 // DESIGN.md so users can compare spec to render at the same time, mirroring
 // the styles.refero.design layout.
-export function DesignSystemPreviewModal({ system, onClose }: Props) {
+export function DesignSystemPreviewModal({ system, onClose, initialViewId = 'showcase' }: Props) {
   const t = useT();
   const analytics = useAnalytics();
   const surfaceViewFiredRef = useRef<string | null>(null);
@@ -50,14 +53,30 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
   const [detail, setDetail] = useState<DesignSystemDetail | null | undefined>(
     () => (isDesignSystemDetail(system) ? system : undefined),
   );
+  const [reloadKey, setReloadKey] = useState(0);
+  const projectId = detail?.projectId ?? system.projectId;
   const detailBody = detail?.body ?? (isDesignSystemDetail(system) ? system.body : undefined);
+  const showKitView = initialViewId === 'kit' || Boolean(projectId);
+  const { kit, loading: kitLoading } = useDesignKit({
+    designSystemId: system.id,
+    title: detail?.title ?? system.title,
+    projectId,
+    body: detailBody,
+    packageInfo: detail?.packageInfo,
+    swatches: detail?.swatches ?? system.swatches,
+    showcaseHtml: null,
+    editable: Boolean(detail?.isEditable ?? system.isEditable),
+    reloadKey,
+  });
 
   useEffect(() => {
     let cancelled = false;
     setDetail(isDesignSystemDetail(system) ? system : undefined);
+    setReloadKey((key) => key + 1);
     void fetchDesignSystem(system.id).then((next) => {
       if (cancelled) return;
       if (next) setDetail(next);
+      setReloadKey((key) => key + 1);
     });
     return () => {
       cancelled = true;
@@ -78,11 +97,11 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
         initialViewIdRef.current = viewId;
       } else if (initialViewIdRef.current !== viewId) {
         initialViewIdRef.current = viewId;
-        if (viewId === 'showcase' || viewId === 'tokens') {
+        if (viewId === 'showcase' || viewId === 'kit' || viewId === 'tokens') {
           trackDesignSystemsTemplatesModalClick(analytics.track, {
             page_name: 'design_systems',
             area: 'templates_modal',
-            element: viewId,
+            element: viewId === 'kit' ? 'open_design_set' : viewId,
             templates_id: system.id,
             templates_type: system.source ?? 'library',
           });
@@ -124,15 +143,34 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
     setSpecBody(undefined);
   }, [system.id]);
 
+  const richPreview = (
+    <div className="ds-modal-rich-kit">
+      {kit ? (
+        <DesignKitView
+          kit={kit}
+          variant="panel"
+          dataTestId="design-system-modal-kit"
+        />
+      ) : (
+        <div className="viewer-empty">
+          {kitLoading ? t('ds.workspaceLoadingLabel') : t('ds.workspacePreparing')}
+        </div>
+      )}
+    </div>
+  );
+
   const modal = (
     <PreviewModal
       title={system.title}
       subtitle={system.summary || system.category}
       views={[
         { id: 'showcase', label: t('ds.showcase'), html: showcaseHtml },
+        ...(showKitView
+          ? [{ id: 'kit', label: t('ds.kitVisualize'), custom: richPreview }]
+          : []),
         { id: 'tokens', label: t('ds.tokens'), html: tokensHtml },
       ]}
-      initialViewId="showcase"
+      initialViewId={initialViewId}
       onView={handleView}
       exportTitleFor={(viewId) => `${system.title} — ${viewId}`}
       onClose={onClose}
