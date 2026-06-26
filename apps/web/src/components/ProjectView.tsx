@@ -2709,9 +2709,11 @@ export function ProjectView({
           !!message.runId &&
           !message.content &&
           !(message.producedFiles?.length);
+        const replayingTerminalRun =
+          shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
         const needsFullReplay =
           isActiveRunStatus(message.runStatus) ||
-          shouldReplayTerminalRunMessage(message) ||
+          replayingTerminalRun ||
           spuriouslyFailedPending;
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
@@ -2810,6 +2812,23 @@ export function ProjectView({
             );
           }
           // Clear stale retry count — this run is authoritatively done.
+          transientFailedRetriesRef.current.delete(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+          completedReattachRunsRef.current.add(runId);
+          continue;
+        }
+        if (spuriouslyFailedPending && status.status === 'canceled') {
+          setError(null);
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...prev,
+              runStatus: 'canceled',
+              ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
+            }),
+            true,
+          );
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
           genericDisconnectBackoffUntilRef.current.delete(runId);
@@ -3053,16 +3072,24 @@ export function ProjectView({
               // sending data, not just answering REST status probes.  Reset the
               // transient retry budgets so a future disconnect starts from zero, but
               // only on genuine stream progress (not on a status fetch or queued→running
-              // transition).  PR #4651 round 9 (nettee BLOCKING + codex P2).
+              // transition). Terminal replay recovery is the exception: if a
+              // replay-only reconnect delivers partial output and then disconnects
+              // again, we must preserve the generic-disconnect retry budget long
+              // enough to status-probe and force a clean full replay instead of
+              // persisting that truncated transcript.
               transientFailedRetriesRef.current.delete(runId);
-              genericDisconnectRetriesRef.current.delete(runId);
+              if (!(replayingTerminalRun && !(message.producedFiles?.length))) {
+                genericDisconnectRetriesRef.current.delete(runId);
+              }
               genericDisconnectBackoffUntilRef.current.delete(runId);
               replayedContent += delta;
               textBuffer.appendContent(delta);
             },
             onAgentEvent: (ev) => {
               transientFailedRetriesRef.current.delete(runId);
-              genericDisconnectRetriesRef.current.delete(runId);
+              if (!(replayingTerminalRun && !(message.producedFiles?.length))) {
+                genericDisconnectRetriesRef.current.delete(runId);
+              }
               genericDisconnectBackoffUntilRef.current.delete(runId);
               replayedEvents = [...replayedEvents, ev];
               textBuffer.appendEvent(ev);
@@ -3178,6 +3205,7 @@ export function ProjectView({
               const errorCode = (err as Error & { code?: string }).code;
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               let skipFinalPersistNow = false;
+              let retryFullReplayAfterCleanup = false;
               // A superseded reattached run must not paint a global failure
               // banner or re-finalize its message over the replacement run.
               const runMayFinalize =
@@ -3318,7 +3346,7 @@ export function ProjectView({
                         true,
                         { telemetryFinalized: true },
                       );
-                      setRecoveryTick((t) => t + 1);
+                      retryFullReplayAfterCleanup = true;
                     } else {
                       updateMessageById(
                         message.id,
@@ -3371,6 +3399,7 @@ export function ProjectView({
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
+              if (retryFullReplayAfterCleanup) setRecoveryTick((t) => t + 1);
               scheduleConversationMessageRefresh(reattachConversationId);
             },
           },

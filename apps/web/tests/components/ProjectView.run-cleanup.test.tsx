@@ -2779,6 +2779,89 @@ afterEach(() => {
     });
   });
 
+  it('preserves a spuriously failed empty row when daemon status is already canceled', async () => {
+    const runCreatedAt = Date.now();
+    const preservedEvents = [
+      {
+        kind: 'status',
+        label: 'warning',
+        detail: 'Canceled after reload.',
+        timestamp: runCreatedAt + 1,
+      },
+    ];
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-spurious-canceled',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-spurious-canceled',
+        runStatus: 'failed',
+        producedFiles: [],
+        events: preservedEvents,
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-spurious-canceled',
+      status: 'canceled',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 130,
+      signal: null,
+      resumable: true,
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-spurious-canceled', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun).not.toHaveBeenCalled();
+      const canceledSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-spurious-canceled' &&
+          call[1] === 'conv-1' &&
+          call[2]?.id === 'msg-spurious-canceled' &&
+          call[2]?.runStatus === 'canceled' &&
+          call[2]?.resumable === true &&
+          call[2]?.events === preservedEvents &&
+          call[3] === undefined,
+      );
+      expect(canceledSave).toBeTruthy();
+    });
+  });
+
   it('keeps reload artifact recovery retryable after a transient persistence miss', async () => {
     const runCreatedAt = Date.now();
     const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);
