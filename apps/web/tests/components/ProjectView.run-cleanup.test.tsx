@@ -2435,6 +2435,106 @@ afterEach(() => {
     expect(patchPreviewCommentStatus).not.toHaveBeenCalled();
   });
 
+  it('does not persist a live generic disconnect as succeeded with partial streamed text', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-terminal-partial-success',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      options.onRunCreated?.('run-live-terminal-partial-success');
+      options.handlers.onDelta('partial output');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta('full recovered output');
+      options.handlers.onDone();
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-terminal-partial-success', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal success after partial disconnect', [], []);
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalled();
+    });
+
+    const truncatedSucceededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-live-terminal-partial-success' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-live-terminal-partial-success' &&
+        call[2]?.runStatus === 'succeeded' &&
+        call[2]?.content === 'partial output',
+    );
+    expect(truncatedSucceededSave).toBeFalsy();
+
+    await waitFor(() => {
+      const recoveredSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-live-terminal-partial-success' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-live-terminal-partial-success' &&
+          call[2]?.runStatus === 'succeeded' &&
+          call[2]?.content === 'full recovered output',
+      );
+      expect(recoveredSave).toBeTruthy();
+    });
+  });
+
   it('preserves canceled status when a reattached run reports canceled before onDone', async () => {
     const runCreatedAt = Date.now();
 

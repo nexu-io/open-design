@@ -4422,14 +4422,32 @@ export function ProjectView({
                 } else if (latestRunStatus.status === 'succeeded') {
                   if (runMayFinalize) {
                     setError(null);
-                    updateAssistant((prev) => ({
-                      ...removeErrorStatusEvent(prev, err.message, errorCode),
-                      endedAt: prev.endedAt ?? endedAt,
-                      runStatus: 'succeeded',
-                      ...(latestRunStatus.resumable !== undefined
-                        ? { resumable: latestRunStatus.resumable }
-                        : {}),
-                    }));
+                    updateAssistant((prev) => {
+                      const recovered = removeErrorStatusEvent(prev, err.message, errorCode);
+                      if (
+                        !prev.producedFiles?.length
+                        && (prev.content.trim().length > 0 || (prev.events?.length ?? 0) > 0)
+                      ) {
+                        return {
+                          ...recovered,
+                          content: '',
+                          events: [],
+                          endedAt: prev.endedAt ?? endedAt,
+                          runStatus: 'succeeded',
+                          ...(latestRunStatus.resumable !== undefined
+                            ? { resumable: latestRunStatus.resumable }
+                            : {}),
+                        };
+                      }
+                      return {
+                        ...recovered,
+                        endedAt: prev.endedAt ?? endedAt,
+                        runStatus: 'succeeded',
+                        ...(latestRunStatus.resumable !== undefined
+                          ? { resumable: latestRunStatus.resumable }
+                          : {}),
+                      };
+                    });
                   }
                   if (runCommentAttachments.length > 0) {
                     void patchAttachedStatuses(runCommentAttachments, 'needs_review');
