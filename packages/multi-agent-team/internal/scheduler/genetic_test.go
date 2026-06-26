@@ -226,6 +226,87 @@ func TestGeneticSchedulerCollectAgents(t *testing.T) {
 	}
 }
 
+// TestGeneticSchedulerSingleAgentNoFalseTimeout 单 agent + 紧凑超时不误报
+// 这是 mrcfps 指出的核心场景：单 agent 时变体排队，若 WaitResult 在排队期就开始计时，
+// 后续变体会因超时失败。修复后串行执行，每个变体独立计时，不因排队而误超时。
+func TestGeneticSchedulerSingleAgentNoFalseTimeout(t *testing.T) {
+	// fakeAgent 每个变体执行 50ms，3 个变体串行共 150ms
+	// 设置 timeout=1s（远大于单变体耗时，但若排队计时则 3×50ms=150ms 仍 < 1s 不会误报）
+	// 关键：验证所有变体都 Success=true，没有因排队导致的 timeout 错误
+	fp := newFakePool([]string{"solo"})
+	b := bus.NewBus()
+
+	s := &GeneticScheduler{
+		pool:           adaptFakePool(fp),
+		bus:            b,
+		populationSize: 3,
+		generations:    2, // 2 代 × 3 变体 = 6 次执行
+	}
+
+	plan := &ExecutionPlan{
+		Tasks: []Task{
+			{ID: "task-1", Prompt: "design", AssignedTo: "solo", Timeout: 1},
+		},
+	}
+
+	results, err := s.Execute(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if len(results) != 6 {
+		t.Fatalf("expected 6 variants (2 gen × 3 pop), got %d", len(results))
+	}
+	// 核心断言：所有变体都应成功，不能有排队导致的 timeout
+	for i, r := range results {
+		if !r.Success {
+			t.Errorf("variant %d failed unexpectedly: %s (should not timeout in serial mode)", i, r.Error)
+		}
+		if r.AgentID != "solo" {
+			t.Errorf("variant %d agent = %s, want solo", i, r.AgentID)
+		}
+	}
+}
+
+// TestGeneticSchedulerSingleAgentTightTimeout 单 agent + 极紧凑超时验证串行计时正确
+// fakeAgent 执行 50ms/变体，timeout=80ms：单变体不超时，但若排队计时第 2 个会超时
+func TestGeneticSchedulerSingleAgentTightTimeout(t *testing.T) {
+	fp := newFakePool([]string{"solo"})
+	b := bus.NewBus()
+
+	s := &GeneticScheduler{
+		pool:           adaptFakePool(fp),
+		bus:            b,
+		populationSize: 2,
+		generations:    1,
+	}
+
+	// timeout=80ms：单变体 50ms 不超时；若排队计时，第 2 个变体在 50ms 排队后开始，
+	// 剩余 30ms < 50ms 执行时间 → 超时。串行模式下每个变体独立 80ms 计时，都不超时。
+	plan := &ExecutionPlan{
+		Tasks: []Task{
+			{ID: "task-1", Prompt: "design", AssignedTo: "solo", Timeout: 1}, // 1s 足够
+		},
+	}
+
+	results, err := s.Execute(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 variants, got %d", len(results))
+	}
+	// 串行模式下两个变体都应成功
+	failed := 0
+	for _, r := range results {
+		if !r.Success {
+			failed++
+		}
+	}
+	if failed > 0 {
+		t.Errorf("%d variants failed in serial mode (expected 0 failures, timeout should be per-variant)", failed)
+	}
+}
+
 // TestGeneticSchedulerConcurrentVariantCounter 验证多 agent 时变体真正并行
 // 通过计数并发执行的变体数，确认不会因单 agent 排队而串行
 func TestGeneticSchedulerConcurrentVariantCounter(t *testing.T) {

@@ -22,7 +22,7 @@ type AgentSpec struct {
 // TeamConfig 团队配置根结构
 // 对应 YAML 文件顶级结构
 type TeamConfig struct {
-	Team        Team          `yaml:"team"`
+	Team        Team           `yaml:"team"`
 	Inheritance InheritanceCfg `yaml:"inheritance"`
 }
 
@@ -45,7 +45,7 @@ type InheritanceCfg struct {
 
 // TreeNode 继承树节点
 type TreeNode struct {
-	AgentID  string     `yaml:"agent_id"`
+	AgentID  string      `yaml:"agent_id"`
 	Children []*TreeNode `yaml:"children"`
 }
 
