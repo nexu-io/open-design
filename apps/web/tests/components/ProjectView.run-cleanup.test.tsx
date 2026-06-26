@@ -1755,6 +1755,108 @@ afterEach(() => {
     });
   }, 12_000);
 
+  it('clears streaming after a slow retry-cap status probe on reattach generic disconnects', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+    type RunningStatusProbe = {
+      id: string;
+      status: 'running';
+      createdAt: number;
+      updatedAt: number;
+      exitCode: null;
+      signal: null;
+    };
+    let resolveStatusProbe!: (value: RunningStatusProbe) => void;
+    const statusProbe = new Promise<RunningStatusProbe>((resolve) => {
+      resolveStatusProbe = resolve;
+    });
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-slow-status-probe',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-slow-status-probe',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    let statusChecks = 0;
+    fetchChatRunStatus.mockImplementation(async () => {
+      statusChecks += 1;
+      if (statusChecks === 3) return statusProbe;
+      return {
+        id: 'run-reattach-slow-status-probe',
+        status: 'running' as const,
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + statusChecks,
+        exitCode: null,
+        signal: null,
+      };
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      void options.handlers.onError(genericDisconnect);
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-slow-status-probe', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun).toHaveBeenCalledTimes(2);
+      expect(fetchChatRunStatus).toHaveBeenCalledTimes(3);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(false);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    });
+
+    resolveStatusProbe({
+      id: 'run-reattach-slow-status-probe',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 3,
+      exitCode: null,
+      signal: null,
+    });
+
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(false);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    });
+  });
+
   it('keeps live-stream recovery retryable after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
     const runCreatedAt = Date.now();
     const genericDisconnect = await createGenericDisconnectError();

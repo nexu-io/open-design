@@ -3308,6 +3308,15 @@ export function ProjectView({
                   const backoffUntil = Date.now() + 3000;
                   genericDisconnectRetriesRef.current.set(runId, attempts);
                   genericDisconnectBackoffUntilRef.current.set(runId, backoffUntil);
+                  // consumeDaemonRun invokes async error handlers without
+                  // awaiting them. Clear the streaming marker before the status
+                  // probe yields so the surrounding finally block cannot clear
+                  // the refs first and strand the conversation in streaming.
+                  clearCurrentRunStreamingMarker(
+                    reattachConversationId,
+                    controller,
+                    cancelController,
+                  );
                   const backoffTimer = scheduleProjectTimeout(() => {
                     const currentBackoffUntil =
                       genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
