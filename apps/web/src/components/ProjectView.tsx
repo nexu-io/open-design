@@ -106,7 +106,7 @@ import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
-import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { appendErrorStatusEvent, removeErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
@@ -3292,7 +3292,7 @@ export function ProjectView({
                     updateMessageById(
                       message.id,
                       (prev) => ({
-                        ...prev,
+                        ...removeErrorStatusEvent(prev, err.message, errorCode),
                         runStatus: 'succeeded',
                         endedAt: prev.endedAt ?? Date.now(),
                         ...(latestRunStatus.resumable !== undefined
@@ -4362,7 +4362,7 @@ export function ProjectView({
                   if (runMayFinalize) {
                     setError(null);
                     updateAssistant((prev) => ({
-                      ...prev,
+                      ...removeErrorStatusEvent(prev, err.message, errorCode),
                       endedAt: prev.endedAt ?? endedAt,
                       runStatus: 'succeeded',
                       ...(latestRunStatus.resumable !== undefined

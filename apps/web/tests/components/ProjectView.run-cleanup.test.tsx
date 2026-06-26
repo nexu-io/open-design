@@ -2002,6 +2002,20 @@ afterEach(() => {
         expect.objectContaining({ telemetryFinalized: true }),
       );
     });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reattach-terminal-success' &&
+        call[2]?.id === 'msg-reattach-terminal-success' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    expect(
+      recoveredSave?.[2]?.events?.some(
+        (event: { kind?: string; label?: string; detail?: string }) =>
+          event.kind === 'status' &&
+          event.label === 'error' &&
+          event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE,
+      ),
+    ).toBe(false);
   });
 
   it('patches terminal metadata when a reattach generic disconnect later proves failed', async () => {
@@ -2166,6 +2180,21 @@ afterEach(() => {
       );
       expect(succeededSave).toBeTruthy();
     });
+    const succeededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-live-terminal-success' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-live-terminal-success' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    expect(
+      succeededSave?.[2]?.events?.some(
+        (event: { kind?: string; label?: string; detail?: string }) =>
+          event.kind === 'status' &&
+          event.label === 'error' &&
+          event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE,
+      ),
+    ).toBe(false);
     expect(patchPreviewCommentStatus).not.toHaveBeenCalled();
   });
 
