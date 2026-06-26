@@ -1,5 +1,14 @@
 # Decisions Log
 
+## 2026-06-26 — 리브랜드 후속 #1: stale 문서 참조 (SDD 3-병렬, doc-only)
+- 발견: P0가 패키지를 `@marketing-ax/*`로 리네임했으나 문서가 옛 `@open-design/*` 가리켜 `pnpm --filter @open-design/web` 류 300+ 명령이 **실제 깨짐**(0매칭). 활성 가이드 correctness 버그 = 우선순위 1.
+- 스왑 맵 = on-disk `@marketing-ax/X` 존재하는 22 suffix만(`web,daemon,contracts,plugin-runtime,agui-adapter,desktop,sidecar,sidecar-proto,platform,tools-dev,tools-pack,tools-serve,packaged,host,components,metatool,telemetry-worker,registry-protocol,e2e,diagnostics,download,launcher-proto`). 카운터파트 없는 `@open-design/landing-page`(defer)·`tools-pr`/`cli`/`shared`/`nextjs`(제거/historical) = 자동 보존
+- 디렉터리 disjoint 3 worktree 병렬(install 불필요=doc-only): G1 루트공개문서(13파일 39pkg+110prose)·G2 docs/(74파일 112pkg+815prose)·G3 모듈AGENTS+README(13파일 54pkg+19prose). 메인스레드 git 전담
+- 보존 결정: ①`nexu-io/open-design` repo slug = OSS 귀속(P0 계승) ②upstream 귀속/트레이드마크 prose(FORK-GUIDE Apache "Open Design"·CHANGELOG 역사 rename·ARCHITECTURE 분석대상) = 에이전트 판단으로 보존+플래그 ③`od://`·`open-design.ai`·kebab identifier 불변
+- **아카이브 defer**: `docs/superpowers/plans|specs/`(4파일, p0-rebranding-v5.md 등 SDD 세션기록)·`specs/`·`docs/handoffs/` = 과거작업 기록이라 `@open-design` 참조가 문서화된 "before"측 → 스왑 시 기록 왜곡. handoffs 제외 정신대로 보류. 활성 가이드는 전부 clean
+- 검증: 활성 가이드 broken-ref **0** · `pnpm --filter @marketing-ax/web exec` **실작동 확인**(깨진 명령 복구 증명) · guard 63/63 · 순수 swap 1043/1043
+- 잔여 follow-up: bare `OD` 약어("Marketing AX (OD)")·non-md brand(docs/assets/_cover/*.html·docs/schemas/open-design.*.json)·design-templates README prose
+
 ## 2026-06-23 — BRAZE-BODOC-CATALOG.md 작성 (보닥 실 Braze 데이터)
 - 사용자 제공 xlsx 2종 파싱 → `BRAZE-BODOC-CATALOG.md`: 128 커스텀 이벤트(+프로퍼티/타입/발생시점), 122 유저 어트리뷰트(타입/목적/수집시점), 13 화면 딥링크(`bodoc://action/<Route>?param`) (출처: /Users/gyumin/Project/braze-iam/data/braze_iam.xlsx + 화면별 딥링크.xlsx)
 - 용도: 마케팅 두뇌 디스커버리 질문폼 트리거 이벤트 선택지 + 세그먼트/Liquid 개인화 어트리뷰트 + IAM CTA 딥링크 craft 룰. BRAZE-DOMAIN §5.2(SDK 커스텀이벤트=IAM 트리거)·§2.3(딥링크)와 연결
