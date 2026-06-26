@@ -88,9 +88,22 @@ export interface DesignSystemReviewEntry {
   agentTask?: DesignSystemReviewAgentTask;
 }
 
+export type BadgeTone = 'blue' | 'purple' | 'amber' | 'teal' | 'red' | 'pink' | 'neutral';
+
+/** Card badge declared by a scenario plugin manifest (`od.badge`) and
+ *  denormalized onto the project at create. */
+export interface ProjectBadge {
+  label: string;
+  tone?: BadgeTone;
+}
+
 export interface ProjectMetadata {
   kind: ProjectKind;
   intent?: 'live-artifact';
+  /** Denormalized at create from the scenario plugin manifest `od.badge`.
+   *  Server-owned: preserved across PATCH, never set by clients. Primary
+   *  source for the design-card tag; category inference is the fallback. */
+  badge?: ProjectBadge;
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

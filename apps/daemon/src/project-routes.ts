@@ -5,6 +5,7 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type PluginManifest,
+  type ProjectBadge,
 } from '@marketing-ax/contracts';
 import { createProjectArtifactFile } from './artifact-create.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
@@ -753,6 +754,18 @@ function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' ? 'chat' : 'design';
 }
 
+/**
+ * badge 필드는 플러그인 매니페스트에서 파생됨 — snapshot resolve 결과와 독립적.
+ * create 경로에서 pre-insert 스탬프 시 호출하며, 단위 테스트에서 직접 검증 가능.
+ */
+export function resolveStampBadge(
+  db: Parameters<typeof getInstalledPlugin>[0],
+  pluginId: string | null | undefined,
+): ProjectBadge | undefined {
+  if (!pluginId) return undefined;
+  return getInstalledPlugin(db, pluginId)?.manifest?.od?.badge as ProjectBadge | undefined;
+}
+
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
@@ -1136,6 +1149,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
+      // Hoist initialSessionMode so the badge-compute block below can use it.
+      // It only depends on req.body and has no side effects.
+      const initialSessionMode = normalizeChatSessionMode(
+        req.body?.conversationMode ?? req.body?.sessionMode,
+      );
+      // Card badge denormalization: read the effective scenario plugin's
+      // manifest `od.badge` and stamp it onto metadata at create time so the
+      // card tag is correct regardless of creation path (chip/CLI/API) and
+      // regardless of whether later snapshot resolution succeeds. Cosmetic
+      // display field — intentionally bypasses applyPlugin/capability gating.
+      const effectiveBadgePluginId =
+        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
+          ? req.body.pluginId.trim()
+          : (initialSessionMode === 'design'
+              ? defaultScenarioPluginIdForProjectMetadata(
+                  (metadata && typeof metadata === 'object' ? metadata : undefined) as any)
+              : null);
+      // resolveStampBadge는 export된 순수 헬퍼 — snapshot resolve 결과와 독립적.
+      const stampedBadge = resolveStampBadge(db, effectiveBadgePluginId);
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -1154,6 +1186,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                     return v.error ? {} : { linkedDirs: v.dirs };
                   })()
                 : {}),
+              ...(stampedBadge ? { badge: stampedBadge } : {}),
             }
           : skipDiscoveryBrief === true
             ? {
@@ -1165,6 +1198,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                       projectLocationId: selectedLocationId,
                     }
                   : {}),
+                ...(stampedBadge ? { badge: stampedBadge } : {}),
               }
             : externalProjectDir
               ? {
@@ -1172,8 +1206,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   baseDir: externalProjectDir,
                   importedFrom: 'project-location',
                   projectLocationId: selectedLocationId,
+                  ...(stampedBadge ? { badge: stampedBadge } : {}),
                 }
-              : null;
+              : stampedBadge
+                ? { badge: stampedBadge }
+                : null;
       const now = Date.now();
       let project;
       try {
@@ -1210,9 +1247,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       // Seed a default conversation so the UI always has somewhere to write.
       const cid = randomId();
-      const initialSessionMode = normalizeChatSessionMode(
-        req.body?.conversationMode ?? req.body?.sessionMode,
-      );
       insertConversation(db, {
         id: cid,
         projectId: id,
@@ -1348,6 +1382,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             res, 400, 'BAD_REQUEST',
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
+        }
+        // Badge는 서버 소유 필드 — 플러그인 매니페스트에서 create 시 스탬프됨.
+        // 클라이언트가 badge를 포함해 전송해도 무시하고 항상 서버 값으로 덮어씀.
+        if (existingMeta?.badge) {
+          patch.metadata = { ...patch.metadata, badge: existingMeta.badge };
         }
         if (existingMeta?.baseDir) {
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {

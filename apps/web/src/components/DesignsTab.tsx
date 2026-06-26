@@ -22,6 +22,7 @@ import type {
 import { AnimatePresence } from "motion/react";
 import { Icon } from "./Icon";
 import { isDesignSystemProject, isPublishedDesignSystemProject } from "./design-system-project";
+import { projectCategory as deriveCategory, resolveProjectBadge } from "../runtime/project-card-tag";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
 
@@ -812,7 +813,7 @@ export function DesignsTab({
 										{designSystemProject ? (
 											<DesignSystemProjectTag />
 										) : (
-											<ProjectTag category={projectCategory(p)} />
+											<ProjectTag project={p} />
 										)}
 									</div>
 									<div className="design-card-name" title={p.name}>
@@ -1111,30 +1112,33 @@ function projectCover(
 
 type ProjectCategory = "prototype" | "live-artifact" | "slide" | "media";
 
-function projectCategory(project: Project): ProjectCategory {
-	const meta = project.metadata;
-	if (meta?.intent === "live-artifact" || project.skillId === "live-artifact") {
-		return "live-artifact";
-	}
-	if (meta?.kind === "deck") return "slide";
-	if (meta?.kind === "image" || meta?.kind === "video" || meta?.kind === "audio") {
-		return "media";
-	}
-	return "prototype";
-}
-
-function ProjectTag({ category }: { category: ProjectCategory }) {
+// manifest badge가 존재하면 우선 렌더링; 없으면 category tag로 폴백.
+// project를 받는 경우 badge + category 추론, category만 받는 경우 직접 렌더링.
+function ProjectTag({ project, category }: { project?: Project; category?: ProjectCategory }) {
 	const t = useT();
+	if (project) {
+		const badge = resolveProjectBadge(project);
+		if (badge) {
+			return <span className={`design-card-tag ${badge.toneClass}`}>{badge.label}</span>;
+		}
+		const cat = deriveCategory(project);
+		const label = cat === "live-artifact" ? t("designs.tagLiveArtifact")
+			: cat === "slide" ? t("designs.tagSlide")
+			: cat === "media" ? t("designs.tagMedia")
+			: t("designs.tagPrototype");
+		return <span className={`design-card-tag tag-${cat}`}>{label}</span>;
+	}
+	const cat = category ?? "prototype";
 	const label =
-		category === "live-artifact"
+		cat === "live-artifact"
 			? t("designs.tagLiveArtifact")
-			: category === "slide"
+			: cat === "slide"
 				? t("designs.tagSlide")
-				: category === "media"
+				: cat === "media"
 					? t("designs.tagMedia")
 					: t("designs.tagPrototype");
 	return (
-		<span className={`design-card-tag tag-${category}`}>{label}</span>
+		<span className={`design-card-tag tag-${cat}`}>{label}</span>
 	);
 }
 
