@@ -91,7 +91,12 @@ export interface DesignSystemReviewEntry {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
-  intent?: 'live-artifact';
+  // `live-artifact`: the data-backed live dashboard flow (drives the
+  // live-artifact skill/system-prompt path). `document`: resume/report/PDF
+  // projects from the Home `document` card — an analytics-only discriminator
+  // (no product behavior keys off it) so a created `other`-kind project reports
+  // `project_kind: 'document'` instead of generic `other`.
+  intent?: 'live-artifact' | 'document';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

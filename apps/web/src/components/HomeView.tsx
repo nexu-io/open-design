@@ -20,7 +20,7 @@ import type {
   AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -1862,7 +1862,7 @@ export function HomeView({
           // before navigation so the event isn't lost when the host
           // re-renders into the project view.
           const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindToTracking(project?.metadata?.kind, project?.metadata?.videoModel);
+          const projectKind = projectKindFromMetadataToTracking(project?.metadata);
           trackRecentProjectsClick(analytics.track, {
             page_name: 'home',
             area: 'recent_projects',
