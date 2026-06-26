@@ -1180,7 +1180,7 @@ export const TRACKING_HANDOFF_TARGET_IDS = [
   // editors / file managers (HostEditorId)
   'cursor', 'vscode', 'windsurf', 'zed', 'qoder', 'antigravity', 'webstorm',
   'idea', 'xcode', 'finder', 'explorer', 'file-manager', 'terminal', 'warp',
-  // code-agent CLIs (HandoffButton CLI_ORDER; qoder / antigravity already above)
+  // code-agent CLIs (HandoffButton CLI_ORDER; qoder / antigravity already above; kiro also in HostEditorId)
   'amr', 'claude', 'codex', 'opencode', 'cursor-agent', 'gemini', 'qwen',
   'copilot', 'grok-build', 'deepseek', 'kimi', 'hermes', 'devin', 'kiro',
   'kilo', 'vibe', 'aider', 'trae-cli', 'pi', 'reasonix',

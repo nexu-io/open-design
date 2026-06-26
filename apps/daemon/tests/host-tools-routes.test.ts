@@ -61,6 +61,14 @@ describe('platform gate — Warp is darwin-only, cross-platform tools stay avail
     const cursor = CATALOGUE.find((e: CatalogueEntry) => e.id === 'cursor')!;
     expect(applicableForPlatform(cursor, 'darwin' as Platform)).toBe(true);
   });
+
+  it('kiro is applicable on all desktop platforms (regression guard)', () => {
+    const kiro = CATALOGUE.find((e: CatalogueEntry) => e.id === 'kiro')!;
+    expect(kiro).toBeDefined();
+    expect(applicableForPlatform(kiro, 'darwin' as Platform)).toBe(true);
+    expect(applicableForPlatform(kiro, 'win32' as Platform)).toBe(true);
+    expect(applicableForPlatform(kiro, 'linux' as Platform)).toBe(true);
+  });
 });
 
 describe('host tools launch reporting (#3871)', () => {

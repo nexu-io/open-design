@@ -114,6 +114,7 @@ const EDITORS: Record<string, EditorVisual> = {
   vscode: { bg: '#007ACC', fg: '#ffffff', glyph: vscodeLogo },
   cursor: { bg: '#0a0a0a', fg: '#ffffff', glyph: simplePath(cursorPath) },
   windsurf: { bg: '#f7fffb', fg: '#0b100f', glyph: simplePath(windsurfPath) },
+  kiro: { bg: '#7C5CFF', fg: '#ffffff', glyph: simplePath('M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3 6.5 3.6v7.2L12 18.7 5.5 15.1V7.9L12 4.3Z') },
   zed: { bg: '#1348DC', fg: '#ffffff', glyph: simplePath(zedPath) },
   qoder: { bg: '#ffb15e', fg: '#1f2937', glyph: qoderLogo },
   antigravity: { bg: '#ffffff', fg: '#1f2937', glyph: antigravityLogo },

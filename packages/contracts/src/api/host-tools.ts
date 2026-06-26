@@ -10,6 +10,7 @@ export type HostEditorId =
   | 'cursor'
   | 'vscode'
   | 'windsurf'
+  | 'kiro'
   | 'zed'
   | 'qoder'
   | 'antigravity'
