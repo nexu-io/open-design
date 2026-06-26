@@ -110,7 +110,7 @@ re-harvest.
 
 `mocks/golden/<trace>.events.json` holds the exact event sequence the
 OD daemon emits when fed each (mock CLI → handler) pipeline. Diffed
-on every `pnpm --filter @open-design/daemon test` run by
+on every `pnpm --filter @marketing-ax/daemon test` run by
 `apps/daemon/tests/mocks-golden.test.ts`.
 
 A parser refactor that semantically changes events (drops a field,
@@ -118,7 +118,7 @@ renames `sessionId`, stops emitting `turn_end`) fails the diff loudly.
 After an intentional parser change, regenerate:
 
 ```bash
-MOCKS_GOLDEN_UPDATE=1 pnpm --filter @open-design/daemon test mocks-golden
+MOCKS_GOLDEN_UPDATE=1 pnpm --filter @marketing-ax/daemon test mocks-golden
 git diff mocks/golden/    # eyeball the new shapes
 git add mocks/golden/ && git commit -m "mocks: refresh goldens for <parser change>"
 ```

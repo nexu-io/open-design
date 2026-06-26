@@ -77,10 +77,10 @@ without code churn.
    zh-CN value (the other 16 locales pick up English via `...en`
    spread). Native translations for de, ja, ko, zh-TW land in the
    same PR for the six-locale set the spec mandates.
-3. Run `pnpm --filter @open-design/web exec vitest run tests/components/Theater`
+3. Run `pnpm --filter @marketing-ax/web exec vitest run tests/components/Theater`
    before pushing. The suite has 100+ cases pinning the reducer
    shape, SSE validation, host lifecycle, and component renders.
-4. Visual regression: run `pnpm --filter @open-design/e2e test:ui:extended`
+4. Visual regression: run `pnpm --filter @marketing-ax/e2e test:ui:extended`
    with `--update-snapshots` after any CSS change in
    `apps/web/src/index.css`'s `.theater-*` block.
 

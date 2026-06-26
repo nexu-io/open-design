@@ -32,7 +32,7 @@ makes that test fail loudly.
 ## Updating after an intentional parser change
 
 ```bash
-MOCKS_GOLDEN_UPDATE=1 pnpm --filter @open-design/daemon test mocks-golden
+MOCKS_GOLDEN_UPDATE=1 pnpm --filter @marketing-ax/daemon test mocks-golden
 git diff mocks/golden/
 git add mocks/golden/ && git commit -m "mocks: refresh goldens — parser X now emits Y"
 ```

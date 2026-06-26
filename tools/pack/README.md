@@ -1,6 +1,6 @@
 # tools/pack
 
-Local packaging control plane for Open Design.
+Local packaging control plane for Marketing AX.
 
 The active slice is mac-first local packaging and smoke lifecycle control:
 
@@ -16,8 +16,8 @@ The active slice is mac-first local packaging and smoke lifecycle control:
 - `tools-pack mac cleanup`
 
 Build artifacts are namespace-scoped under `.tmp/tools-pack/out/mac/namespaces/<namespace>/`.
-Release artifacts keep the canonical `Open Design.app` bundle shape; local `tools-pack install` copies it as
-`Open Design.<namespace>.app` so developer namespaces can coexist without affecting runtime data/log/cache paths.
+Release artifacts keep the canonical `Marketing AX.app` bundle shape; local `tools-pack install` copies it as
+`Marketing AX.<namespace>.app` so developer namespaces can coexist without affecting runtime data/log/cache paths.
 
 Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/mac/namespaces/<namespace>/`:
 
@@ -66,7 +66,7 @@ from the user's Electron `userData` root instead of the build machine's `.tmp` p
 ### macOS compatibility notes
 
 - `tools-pack mac build --portable --to zip` is the safest manual-install artifact for Intel Macs. This path was smoke-tested on macOS 12.7.6 Monterey on a 2015 Intel iMac and the app launched successfully from `/Applications`.
-- Finder/manual launches on macOS may not inherit your shell-managed `PATH`. If packaged Open Design cannot detect agent CLIs that work in Terminal, expose those binaries to the GUI login environment or launch the packaged app from a shell session that already sees them.
+- Finder/manual launches on macOS may not inherit your shell-managed `PATH`. If packaged Marketing AX cannot detect agent CLIs that work in Terminal, expose those binaries to the GUI login environment or launch the packaged app from a shell session that already sees them.
 
 ## Windows
 
@@ -126,7 +126,7 @@ The `<namespace>` suffix is unconditional so multiple developer namespaces can c
 
 Headless mode targets environments without a display (WSL2, headless servers, CI) where Electron can't run. If you have a desktop, use the AppImage; if you're SSH'd into a machine or in WSL, use headless.
 
-`--headless` makes `install`, `start`, `stop`, `uninstall`, and `cleanup` operate on the headless entry (`@open-design/packaged/dist/headless.mjs`) instead of the AppImage. Headless mode runs daemon + web without Electron.
+`--headless` makes `install`, `start`, `stop`, `uninstall`, and `cleanup` operate on the headless entry (`@marketing-ax/packaged/dist/headless.mjs`) instead of the AppImage. Headless mode runs daemon + web without Electron.
 
 - `install --headless` writes a shell launcher at `~/.local/bin/open-design-headless-<namespace>` that bakes in the namespace and resource paths. The launcher is self-contained, but the assembled app directory at those paths must remain in place — don't move it after install.
 - `start --headless` spawns the headless process directly, redirects stdout/stderr to `logs/desktop/latest.log`, and waits up to 95s (35s for identity marker + 60s for web URL) before returning.

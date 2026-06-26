@@ -1,6 +1,6 @@
-# Open Design Telemetry Relay
+# Marketing AX Telemetry Relay
 
-Cloudflare Worker relay for opt-in Open Design telemetry. The shipped desktop
+Cloudflare Worker relay for opt-in Marketing AX telemetry. The shipped desktop
 client sends redacted Langfuse ingestion batches here after the user enables
 metrics. This Worker holds the Langfuse write credentials and forwards valid
 batches to Langfuse.
@@ -12,7 +12,7 @@ daemon retries, logs the failure, and continues the user flow without blocking
 the CLI or desktop app.
 
 The same Worker also exposes a write-only trace object ingest endpoint at
-`POST /api/objects/batch`. It accepts Open Design observability objects such as
+`POST /api/objects/batch`. It accepts Marketing AX observability objects such as
 attachments, produced artifacts, and over-threshold input text snapshots, writes
 them through the `TRACE_OBJECT_BUCKET` R2 binding, and returns trace-safe
 `storage_ref` / `sha256` / size metadata for Langfuse manifests.
@@ -31,7 +31,7 @@ release config should use only `MARKETING_AX_TELEMETRY_RELAY_URL`.
 
 ## Abuse controls
 
-The Worker requires the Open Design telemetry marker header, validates the
+The Worker requires the Marketing AX telemetry marker header, validates the
 Langfuse ingestion batch shape and size before forwarding, and uses Cloudflare
 Rate Limiting bindings for two independent keys:
 
@@ -82,7 +82,7 @@ TRACE_OBJECT_BATCH_MAX_BYTES = "20971520"
 ## Deploy
 
 ```bash
-pnpm --filter @open-design/telemetry-worker deploy
+pnpm --filter @marketing-ax/telemetry-worker deploy
 ```
 
 After deploy, set the repository variable `MARKETING_AX_TELEMETRY_RELAY_URL` to
