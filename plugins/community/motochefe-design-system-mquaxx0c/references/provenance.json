@@ -1,0 +1,40 @@
+{
+  "candidateId": "8ab24c93-ac30-497c-8375-de59dfc68176",
+  "projectId": "ds-motochefebrasil-design-system",
+  "runId": "634f2eef-8862-455a-a1f9-277fd1e8b862",
+  "conversationId": "04fc874e-1536-431b-8028-11aa01a9b102",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md, ui_kits/app/README.md, context/source-context.md after a successful run.",
+    "detectedAt": 1782440210296
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 8525,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 7053,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 6026,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 10614,
+      "copied": true
+    }
+  ]
+}

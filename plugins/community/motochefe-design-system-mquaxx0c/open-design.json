@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "motochefe-design-system-mquaxx0c",
+  "title": "MotoChefe Design System",
+  "version": "0.1.0",
+  "description": "> A reusable Claude Design-style package for the MotoChefe electric mobility brand. > Source: https://motochefebrasil.com.br/",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
