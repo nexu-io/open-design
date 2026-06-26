@@ -21,7 +21,7 @@ Notes: 상태 컬럼은 작업 진행 시 갱신 — 메이저 트랙 완료/착
 | 단계 | 제목 | 내용 | 상태 | 산출물 |
 |------|------|------|------|--------|
 | **P0** | 리브랜딩 | OD 식별자 전역 정리(`OD_*`/`od://`/`.od`/`__od__`/appId/제품명/URL/npm 스코프) + 빌드·기동 검증 | ✅ **완료** (v5, main 머지·푸시) | `plans/2026-06-24-p0-rebranding-v5.md` |
-| **P1** | startChatRun 정리 | god-function + lockstep 3곳 → `shouldRunReview()` 단일 수렴 리팩터. BrainProvider/engine 추출은 YAGNI 폐기. 동작 100% 보존 | ❌ **미완** (플랜만 존재) | `plans/2026-06-22-p1-engine-brain-seam.md` |
+| **P1** | startChatRun 정리 | god-function + lockstep 3곳 → `shouldRunReview()` 단일 수렴 리팩터. BrainProvider/engine 추출은 YAGNI 폐기. 동작 100% 보존 | ✅ **완료** (정찰: 구조 ~90% 상류 충족 / 잔여 = 명명 헬퍼 추출) | `plans/2026-06-26-p1-shouldrunreview.md` |
 | **P2** | 마케팅 도메인 | 브랜드 **다중화**(design-system 확장) + **산출물 5종**(skill+DS+plugin 튜플) + 산출물 선택기 + discovery 분기 | ❌ **미설계** (spec/plan 0건) | — |
 | **P3** | 커스텀 검수 | 파이프라인 엔진 위 **사용자 검수단계 편집 UI**. 디자인 배심원/Theater 제거. = **핵심 차별점** | ❌ **미설계** (spec/plan 0건) | — |
 
@@ -57,7 +57,7 @@ Notes: 상태 컬럼은 작업 진행 시 갱신 — 메이저 트랙 완료/착
 착수 옵션:
 - **A** — P2 전체 spec 작성 (브랜드 다중화 + 5종 아키텍처 + 산출물 선택기). 큰 설계 선행.
 - **B** (권장) — 산출물 1종 슬라이스 (인스타 카드뉴스 or 네이버 블로그). Braze IAM 패턴 복제로 빠르게 2번째 버티컬 세우고, 그 시점에 P2 추상화 결정.
-- **C** — P1 리팩터 먼저 (P2 의존 선행).
+- ~~**C** — P1 리팩터 먼저~~ (✅ 2026-06-26 완료 — `shouldRunReview()` 명명 헬퍼 추출).
 
 ---
 

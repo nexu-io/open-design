@@ -229,6 +229,7 @@ import {
   isCritiqueEnabled,
   parseEnvEnabled,
   parseRolloutPhase,
+  shouldRunReview,
   type SkillCritiquePolicy,
 } from './critique/rollout.js';
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
@@ -7924,11 +7925,16 @@ export async function startServer({
       || resolvedExclusiveSurface === 'video'
       || resolvedExclusiveSurface === 'audio';
     const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueEnabledForRun
-      && critiqueBrand !== undefined
-      && critiqueSkill !== undefined
-      && !isMediaSurface
-      && isPlainAdapter;
+    // Single named invariant (critique/rollout.ts:shouldRunReview) so the
+    // composer prompt addendum gate (below) and the orchestrator spawn gate
+    // (runOrchestrator path) consult one decision and stay in exact lockstep.
+    const critiqueShouldRun = shouldRunReview({
+      critiqueEnabledForRun,
+      hasBrand: critiqueBrand !== undefined,
+      hasSkill: critiqueSkill !== undefined,
+      isMediaSurface,
+      isPlainAdapter,
+    });
     // Only thread the critique fields when the run is actually eligible;
     // otherwise the composer's own internal eligibility check (cfg.enabled
     // && brand && skill && !isMediaSurface) might still fire on

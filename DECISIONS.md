@@ -1,5 +1,13 @@
 # Decisions Log
 
+## 2026-06-26 — P1 (startChatRun 정리) = `shouldRunReview()` 명명 헬퍼 (SDD+TDD, 정찰 선행)
+- 정찰(p1-recon 워크플로 5에이전트): P1 구조적 의도는 **상류 머지로 이미 ~90% 충족**. prompt-builder closure = `composeDaemonSystemPrompt`(명명 async, server.ts:7561)로 상류 `3fb849d04`(2026-04-30)서 추출 — 스펙(6/22)보다 앞섬. lockstep 3곳은 `critiqueShouldRun` 단일소스로 이미 수렴(상류 Critique Theater Phase 5 `bb2015766a` 2026-05-07). 스펙 line번호(7925/7984/9995)·"shouldRunReview()"는 stale/개념명칭 (출처: git blame + 5병렬 정찰)
+- 사용자 결정(AskUserQuestion) = **잔여만 구현**(close-as-done도 god-function 공략도 아님). 잔여 = 인라인 5항 eligibility를 순수 명명 헬퍼로 추출(스펙 문구 "명명 헬퍼/단일 수렴" 선언적 충족)
+- 구현: `critique/rollout.ts`에 `shouldRunReview(ReviewRunEligibility)` 순수함수(`isCritiqueEnabled` 옆 co-locate, 불변식 docblock=composer↔orchestrator 동일결정 보장) + server.ts:7927 인라인→호출 치환. 소비 3곳(:8017/:8041/:9997) 무변경. 동작 100% 보존
+- 테스트 결정: 32케이스 truth table(`shouldRunReview === legacy 5항 &&`)로 predicate 완전 잠금. **route-level positive e2e는 제거** — 테스트 데이터 env가 'default' DS brand(registryBody) 미해석 → fixture 취약·마진 낮음. lockstep은 T1(truth table)+critique-composer(composer 게이트)+opt-out(route 억제)+spawn-wiring(orchestrator skip)로 잠김 (출처: brand 미해석 진단)
+- 검증(p1-verify 워크플로 3병렬): guard 63/63 · typecheck exit0 · critique 255pass/0fail · chat-route 유일실패=기존 OPENCODE_CONFIG(clean main서도 실패=회귀아님, baseline diff 확인) · 적대적 동작-등가 divergence 0. all_pass
+- startChatRun 2921줄 god-function 분해 = **P1 범위 밖**(추출=인터페이스 발명 위험·회귀 리스크 高, 중복로직 없음). 별도 결정 (출처: startchatrun-godfunc 정찰)
+
 ## 2026-06-26 — 리브랜드 후속 #1: stale 문서 참조 (SDD 3-병렬, doc-only)
 - 발견: P0가 패키지를 `@marketing-ax/*`로 리네임했으나 문서가 옛 `@open-design/*` 가리켜 `pnpm --filter @open-design/web` 류 300+ 명령이 **실제 깨짐**(0매칭). 활성 가이드 correctness 버그 = 우선순위 1.
 - 스왑 맵 = on-disk `@marketing-ax/X` 존재하는 22 suffix만(`web,daemon,contracts,plugin-runtime,agui-adapter,desktop,sidecar,sidecar-proto,platform,tools-dev,tools-pack,tools-serve,packaged,host,components,metatool,telemetry-worker,registry-protocol,e2e,diagnostics,download,launcher-proto`). 카운터파트 없는 `@open-design/landing-page`(defer)·`tools-pr`/`cli`/`shared`/`nextjs`(제거/historical) = 자동 보존

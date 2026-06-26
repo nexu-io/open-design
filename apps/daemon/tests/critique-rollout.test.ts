@@ -10,6 +10,8 @@ import {
   isCritiqueEnabled,
   parseEnvEnabled,
   parseRolloutPhase,
+  shouldRunReview,
+  type ReviewRunEligibility,
 } from '../src/critique/rollout.js';
 
 describe('critique rollout flag resolver (Phase 15)', () => {
@@ -139,5 +141,61 @@ describe('critique rollout flag resolver (Phase 15)', () => {
     expect(parseEnvEnabled(undefined)).toBeNull();
     expect(parseEnvEnabled('')).toBeNull();
     expect(parseEnvEnabled('maybe')).toBeNull();
+  });
+});
+
+describe('shouldRunReview — critique-run eligibility invariant', () => {
+  // 모든 항이 충족된 happy-path: 검수런 적격.
+  const ALL_TRUE: ReviewRunEligibility = {
+    critiqueEnabledForRun: true,
+    hasBrand: true,
+    hasSkill: true,
+    isMediaSurface: false,
+    isPlainAdapter: true,
+  };
+
+  it('returns true only when every eligibility term is satisfied', () => {
+    expect(shouldRunReview(ALL_TRUE)).toBe(true);
+  });
+
+  it('returns false when the rollout resolver disabled the run', () => {
+    expect(shouldRunReview({ ...ALL_TRUE, critiqueEnabledForRun: false })).toBe(false);
+  });
+
+  it('returns false when the active design system carries no brand', () => {
+    expect(shouldRunReview({ ...ALL_TRUE, hasBrand: false })).toBe(false);
+  });
+
+  it('returns false when no critique skill id is resolved', () => {
+    expect(shouldRunReview({ ...ALL_TRUE, hasSkill: false })).toBe(false);
+  });
+
+  it('returns false on media surfaces (image/video/audio)', () => {
+    expect(shouldRunReview({ ...ALL_TRUE, isMediaSurface: true })).toBe(false);
+  });
+
+  it('returns false for non-plain stream adapters', () => {
+    expect(shouldRunReview({ ...ALL_TRUE, isPlainAdapter: false })).toBe(false);
+  });
+
+  it('matches the legacy inline 5-term && across the full truth table', () => {
+    // server.ts가 인라인으로 쓰던 표현식과 비트단위 동일함을 32케이스로 잠금 —
+    // 리팩터가 적격 의미를 바꾸지 않았음을 증명한다.
+    const legacy = (i: ReviewRunEligibility): boolean =>
+      i.critiqueEnabledForRun
+      && i.hasBrand
+      && i.hasSkill
+      && !i.isMediaSurface
+      && i.isPlainAdapter;
+    for (let mask = 0; mask < 32; mask += 1) {
+      const i: ReviewRunEligibility = {
+        critiqueEnabledForRun: Boolean(mask & 1),
+        hasBrand: Boolean(mask & 2),
+        hasSkill: Boolean(mask & 4),
+        isMediaSurface: Boolean(mask & 8),
+        isPlainAdapter: Boolean(mask & 16),
+      };
+      expect(shouldRunReview(i)).toBe(legacy(i));
+    }
   });
 });
