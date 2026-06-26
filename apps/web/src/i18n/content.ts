@@ -132,6 +132,14 @@ import {
   IT_PROMPT_TEMPLATE_TAGS,
   IT_SKILL_COPY,
 } from './content.it';
+import {
+  TA_DESIGN_SYSTEM_CATEGORIES,
+  TA_DESIGN_SYSTEM_SUMMARIES,
+  TA_PROMPT_TEMPLATE_CATEGORIES,
+  TA_PROMPT_TEMPLATE_COPY,
+  TA_PROMPT_TEMPLATE_TAGS,
+  TA_SKILL_COPY,
+} from './content.ta';
 
 type LocalizedSkillCopy = { description?: string; examplePrompt?: string };
 type LocalizedPromptTemplateCopy = Partial<Pick<PromptTemplateSummary, 'summary' | 'title'>>;
@@ -1202,6 +1210,14 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
     promptTemplateCategories: IT_PROMPT_TEMPLATE_CATEGORIES,
     promptTemplateTags: IT_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: IT_PROMPT_TEMPLATE_COPY,
+  },
+  ta: {
+    skillCopy: TA_SKILL_COPY,
+    designSystemSummaries: TA_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: TA_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: TA_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: TA_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: TA_PROMPT_TEMPLATE_COPY,
   },
 };
 

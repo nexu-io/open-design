@@ -91,7 +91,7 @@ export const ta: Dict = {
   'plugins.availableDetails.versionDeprecatedSuffix': ' (கைவிடப்பட்டது)',
   'plugins.availableDetails.versionYankedSuffix': ' (திரும்பப் பெறப்பட்டது)',
   'plugins.availableDetails.ref': 'குறிப்பு',
-  'plugins.availableDetails.integrity': 'ஒருமைப்பாடு',
+  'plugins.availableDetails.integrity': 'Integrity',
   'plugins.availableDetails.permissions': 'அனுமதிகள்',
   'plugins.availableDetails.capabilitySummary': 'திறன் சுருக்கம்',
   'plugins.actions.copyInstallCommand': 'நிறுவல் கட்டளையை நகலெடு',
