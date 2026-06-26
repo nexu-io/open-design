@@ -4887,7 +4887,10 @@ Common options:
         console.log('No projects. Create one with `od project create --name "..."`.');
         return;
       }
-      for (const p of projects) console.log(`${p.id}\t${p.name}\t${p.skillId ?? '-'}`);
+      for (const p of projects) {
+        const badge = p.metadata?.badge?.label ? `\t[${p.metadata.badge.label}]` : '';
+        console.log(`${p.id}\t${p.name}\t${p.skillId ?? '-'}${badge}`);
+      }
       return;
     }
     case 'info': {
