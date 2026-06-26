@@ -2110,6 +2110,132 @@ afterEach(() => {
     });
   });
 
+  it('replays a terminally-succeeded reattach run again when the previous retry only restored partial content', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-terminal-partial-success',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-terminal-partial-success',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 3,
+        exitCode: 0,
+        signal: null,
+      })
+      .mockResolvedValue({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 4,
+        exitCode: 0,
+        signal: null,
+      });
+    let reattachAttempts = 0;
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
+    }) => {
+      reattachAttempts += 1;
+      if (reattachAttempts === 1) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      if (reattachAttempts === 2) {
+        options.handlers.onDelta('partial output');
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDelta('full recovered output');
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-terminal-partial-success', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3);
+      const succeededSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-reattach-terminal-partial-success' &&
+          call[2]?.id === 'msg-reattach-terminal-partial-success' &&
+          call[2]?.runStatus === 'succeeded' &&
+          call[2]?.content === 'full recovered output',
+      );
+      expect(succeededSave).toBeTruthy();
+    });
+
+    const truncatedSucceededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reattach-terminal-partial-success' &&
+        call[2]?.id === 'msg-reattach-terminal-partial-success' &&
+        call[2]?.runStatus === 'succeeded' &&
+        call[2]?.content === 'partial output',
+    );
+    expect(truncatedSucceededSave).toBeFalsy();
+  });
+
   it('finalizes a live generic disconnect as succeeded when the next status poll turns terminal', async () => {
     const runCreatedAt = Date.now();
     const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');

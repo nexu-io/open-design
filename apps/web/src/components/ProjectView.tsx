@@ -3293,19 +3293,47 @@ export function ProjectView({
                   } else if (latestRunStatus.status === 'succeeded') {
                     clearProjectTimeout(backoffTimer);
                     setError(null);
-                    updateMessageById(
-                      message.id,
-                      (prev) => ({
-                        ...removeErrorStatusEvent(prev, err.message, errorCode),
-                        runStatus: 'succeeded',
-                        endedAt: prev.endedAt ?? Date.now(),
-                        ...(latestRunStatus.resumable !== undefined
-                          ? { resumable: latestRunStatus.resumable }
-                          : {}),
-                      }),
-                      true,
-                      { telemetryFinalized: true },
-                    );
+                    // If the resumed stream already replayed some content/events
+                    // before disconnecting again, finalizing this row as
+                    // succeeded would persist a truncated transcript. Clear the
+                    // partial local replay and trigger one immediate full replay
+                    // from the daemon's terminal event log instead.
+                    if (
+                      needsFullReplay
+                      && !(message.producedFiles?.length)
+                      && (replayedContent.trim().length > 0 || replayedEvents.length > 0)
+                    ) {
+                      updateMessageById(
+                        message.id,
+                        (prev) => ({
+                          ...removeErrorStatusEvent(prev, err.message, errorCode),
+                          content: '',
+                          events: [],
+                          runStatus: 'succeeded',
+                          endedAt: prev.endedAt ?? Date.now(),
+                          ...(latestRunStatus.resumable !== undefined
+                            ? { resumable: latestRunStatus.resumable }
+                            : {}),
+                        }),
+                        true,
+                        { telemetryFinalized: true },
+                      );
+                      setRecoveryTick((t) => t + 1);
+                    } else {
+                      updateMessageById(
+                        message.id,
+                        (prev) => ({
+                          ...removeErrorStatusEvent(prev, err.message, errorCode),
+                          runStatus: 'succeeded',
+                          endedAt: prev.endedAt ?? Date.now(),
+                          ...(latestRunStatus.resumable !== undefined
+                            ? { resumable: latestRunStatus.resumable }
+                            : {}),
+                        }),
+                        true,
+                        { telemetryFinalized: true },
+                      );
+                    }
                     skipFinalPersistNow = true;
                     genericDisconnectRetriesRef.current.delete(runId);
                     genericDisconnectBackoffUntilRef.current.delete(runId);
