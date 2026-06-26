@@ -1,6 +1,6 @@
 # Translation Guide
 
-> **Quick start for contributors:** This guide helps you add a new language translation to Open Design in ~2 hours instead of ~8 hours. Follow the checklist, avoid common mistakes, and ship your PR with confidence.
+> **Quick start for contributors:** This guide helps you add a new language translation to Marketing AX in ~2 hours instead of ~8 hours. Follow the checklist, avoid common mistakes, and ship your PR with confidence.
 
 For general contribution flow, see [CONTRIBUTING.md](CONTRIBUTING.md). The "Localization maintenance" section there documents the boundary between translated surfaces and agent-facing source material. This file covers **how** to add and maintain a locale across the surfaces contributors touch most often: UI chrome, root READMEs, core docs, and display metadata.
 
@@ -31,13 +31,13 @@ cp README.md docs/i18n/README.it.md
 
 **What to translate:**
 - ✅ All text, headings, descriptions
-- ✅ Alt text: `alt="Open Design banner"`
+- ✅ Alt text: `alt="Marketing AX banner"`
 - ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (paths are relative to `docs/i18n/`: link a translated core doc as a sibling filename, or fall back to the English target at `../../QUICKSTART.md`)
 
 **What NOT to translate:**
 - ❌ Code snippets, commands, file paths
 - ❌ URLs, GitHub usernames, repo names
-- ❌ Brand names: "Open Design", "Claude Code"
+- ❌ Brand names: "Marketing AX", "Claude Code"
 - ❌ Technical terms: CLI, API, BYOK, daemon
 
 ### Step 3: Update ALL Language Switchers (Critical!)
@@ -83,7 +83,7 @@ export const it: Dict = {
 
 Then register it in `apps/web/src/i18n/index.tsx` and `apps/web/src/i18n/types.ts` (see [detailed steps below](#adding-a-new-locale)).
 
-**Don't forget to update test fixtures:** Add your locale code to `EXPECTED_LOCALES` in `apps/web/tests/i18n/locales.test.ts` and add a `LOCALE_LABEL` assertion (e.g., `expect(LOCALE_LABEL.it).toBe('Italiano');`). Run `pnpm --filter @open-design/web test` to verify.
+**Don't forget to update test fixtures:** Add your locale code to `EXPECTED_LOCALES` in `apps/web/tests/i18n/locales.test.ts` and add a `LOCALE_LABEL` assertion (e.g., `expect(LOCALE_LABEL.it).toBe('Italiano');`). Run `pnpm --filter @marketing-ax/web test` to verify.
 
 ### Step 5: Test and Submit
 
@@ -111,7 +111,7 @@ pnpm i18n:check
 
 ## 📋 Supported Languages
 
-Open Design currently supports **19 languages** across different surfaces:
+Marketing AX currently supports **19 languages** across different surfaces:
 
 | Language             | Code    | README | UI Dict | Core Docs | Status |
 | -------------------- | ------- | ------ | ------- | --------- | ------ |
@@ -269,14 +269,14 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
    ```bash
    pnpm typecheck  # Confirms locale union and DICTS map agree
    pnpm i18n:check  # Enforces UI locale registration and README switcher consistency
-   pnpm --filter @open-design/web test  # Covers locale/content drift tests
+   pnpm --filter @marketing-ax/web test  # Covers locale/content drift tests
    ```
 
 ### Translation Best Practices
 
 **What to translate:**
 - ✅ All prose text, headings, descriptions
-- ✅ Alt text in images: `alt="Open Design banner"` → `alt="Banner di Open Design"`
+- ✅ Alt text in images: `alt="Marketing AX banner"` → `alt="Banner di Marketing AX"`
 - ✅ Badge labels where appropriate: `discord-join` → `discord-unisciti`
 - ✅ Code comments in examples (if instructional)
 - ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (sibling translation in `docs/i18n/` if it exists; otherwise keep the English target `../../QUICKSTART.md`)
@@ -285,14 +285,14 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 - ❌ Code snippets (commands, file paths, variable names)
 - ❌ URLs and domain names
 - ❌ GitHub usernames and repository names
-- ❌ Brand names: "Open Design", "Claude Code", "Anthropic", "Vercel"
+- ❌ Brand names: "Marketing AX", "Claude Code", "Anthropic", "Vercel"
 - ❌ Technical terms with no standard translation: CLI, API, SDK, BYOK, daemon, sidecar, monorepo, artifact, iframe
 - ❌ Command output (keep terminal output in English as it appears in actual software)
 
 **Terminology guidelines:**
 - Use the English term with a brief explanation in parentheses on first use if no standard translation exists:
   ```
-  Open Design è un'alternativa open-source (codice aperto) a Claude Design.
+  Marketing AX è un'alternativa open-source (codice aperto) a Claude Design.
   ```
 - For regional variants (zh-CN vs zh-TW, pt-BR vs pt-PT), choose the most widely understood variant for your target audience
 - See [Regional terminology](#regional-terminology) section for specific glossaries
@@ -329,7 +329,7 @@ Some badges in the README can be localized by changing the badge URL:
 Translations follow the conventions of the target region's tech writing community. Maintainers trust contributors to make idiomatic choices and will not gate-keep on style.
 
 **Technical terms to keep in English:**
-- Open Design, Claude Code, Claude Design
+- Marketing AX, Claude Code, Claude Design
 - Skills, Design Systems
 - BYOK (Bring Your Own Key)
 - CLI, API, SDK
@@ -360,7 +360,7 @@ runtime nouns that are clearer in English:
 
 | English source | French usage |
 | -------------- | ------------ |
-| Open Design | Open Design |
+| Marketing AX | Marketing AX |
 | Claude Code, Codex, Cursor, Gemini, OpenCode | Claude Code, Codex, Cursor, Gemini, OpenCode |
 | CLI, API, SDK, MCP, HTTP, REST, SSE, JSONL | CLI, API, SDK, MCP, HTTP, REST, SSE, JSONL |
 | BYOK | BYOK |
@@ -414,10 +414,10 @@ when a natural French equivalent exists:
 
 #### Context-Sensitive Choices
 
-- `Skill` stays `Skill` when it names the Open Design/Claude skill format.
+- `Skill` stays `Skill` when it names the Marketing AX/Claude skill format.
   Translate only generic prose such as "ability" or "capability" as
   `capacité`.
-- `fork` stays `fork` when it names the Open Design conversation-fork feature
+- `fork` stays `fork` when it names the Marketing AX conversation-fork feature
   or related product/CLI wording. Translate Git branches as `branche`, but do
   not rewrite the product action itself as a branch.
 - `Design System` may stay `Design System` when referring to the product
@@ -426,7 +426,7 @@ when a natural French equivalent exists:
 - `Craft` stays `Craft` when it refers to the repository's `craft/` extension
   point or the matching UI label. Do not translate that feature name as a
   generic polish/finishing pass.
-- `SOTA Harness` and `Harness` stay in English when they name the Open Design
+- `SOTA Harness` and `Harness` stay in English when they name the Marketing AX
   product/runtime harness concept or matching marketing label.
 - Motion-design jargon such as `motion`, `timing`, `easing`, `fallback`, and
   `timeline` may stay in English for compact UI labels or agent-workflow
@@ -529,7 +529,7 @@ If a contributor wants neutral or Latin American Spanish, propose a separate loc
 
 **Example:**
 ```markdown
-Open Design هو البديل مفتوح المصدر لـ Claude Design
+Marketing AX هو البديل مفتوح المصدر لـ Claude Design
 ```
 
 ### Other Languages
@@ -594,7 +594,7 @@ pnpm typecheck
 pnpm i18n:check
 
 # Web package tests (if you added UI dictionary)
-pnpm --filter @open-design/web test
+pnpm --filter @marketing-ax/web test
 ```
 
 All checks must pass before submitting your PR.
@@ -618,7 +618,7 @@ feat(i18n): add [Language] translation
 
 ```markdown
 ## Summary
-Adds [Language] translation for Open Design documentation.
+Adds [Language] translation for Marketing AX documentation.
 
 ## Translation Scope
 - [x] docs/i18n/README.[lang].md
@@ -799,7 +799,7 @@ Web server running at http://localhost:17573
 **A:** Use the English term with a brief explanation in parentheses on first use:
 
 ```markdown
-Open Design è un'alternativa open-source (codice aperto) a Claude Design.
+Marketing AX è un'alternativa open-source (codice aperto) a Claude Design.
 ```
 
 After the first use, you can use just the English term.
@@ -812,7 +812,7 @@ After the first use, you can use just the English term.
 
 ```markdown
 <!-- README: Arabic text flows RTL automatically -->
-Open Design هو البديل مفتوح المصدر لـ Claude Design
+Marketing AX هو البديل مفتوح المصدر لـ Claude Design
 
 <!-- Code blocks stay LTR -->
 ```bash
@@ -910,11 +910,11 @@ These items are **decided to defer** — the team has agreed not to act on them 
 
 Thank you to all our translation contributors! 🌍
 
-Every translation makes Open Design accessible to more developers worldwide.
+Every translation makes Marketing AX accessible to more developers worldwide.
 
 **Current contributors:**
 - See [Contributors](https://github.com/nexu-io/open-design/graphs/contributors) for the full list
 
 ---
 
-**Ready to contribute?** Pick a language, follow the [Quick Start](#-quick-start-adding-your-language-in-5-steps), and submit your PR. We can't wait to see Open Design in your language! 🚀
+**Ready to contribute?** Pick a language, follow the [Quick Start](#-quick-start-adding-your-language-in-5-steps), and submit your PR. We can't wait to see Marketing AX in your language! 🚀

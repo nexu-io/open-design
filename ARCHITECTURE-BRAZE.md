@@ -179,7 +179,7 @@ Open Design는 **데몬(Express+SQLite) ↔ 웹(Next.js) ↔ 데스크톱(Electr
 
 ### 2.4 IPC / 프로세스 모델
 - **사이드카 IPC**: Unix 소켓(또는 Windows pipe) JSON-RPC. 계약 `packages/sidecar-proto/src/index.ts` (메시지: STATUS, SHUTDOWN, CLICK, CONSOLE, EVAL, SCREENSHOT, EXPORT_PDF, MINT_IMPORT_TOKEN, REGISTER_DESKTOP_AUTH, UPDATE). 스탬프 5필드: app/mode/namespace/ipc/source.
-- **서버**: `sidecar/server.ts` → `DaemonSidecarHandle`, `createJsonIpcServer()`(@open-design/sidecar). 소켓 경로 `/tmp/open-design/ipc/<namespace>/<app>.sock`. desktop-auth 게이트(임포트 토큰 TTL 60s).
+- **서버**: `sidecar/server.ts` → `DaemonSidecarHandle`, `createJsonIpcServer()`(@marketing-ax/sidecar). 소켓 경로 `/tmp/open-design/ipc/<namespace>/<app>.sock`. desktop-auth 게이트(임포트 토큰 TTL 60s).
 - **부트스트랩**: `sidecar/index.ts` → `bootstrapSidecarRuntime()` → `startDaemonSidecar()`.
 - **프로세스 계층**: 데몬(메인 루프)이 MCP 서버 / 에이전트 런타임 / 미디어 잡 / 루틴 러너 스폰.
 
@@ -414,7 +414,7 @@ app/layout.tsx (45줄) — <I18nProvider><AnalyticsProvider>, 테마 인라인 �
 ### 5.10 CSS 소유권
 - `src/index.css` = **import-only 캐스케이드** (선택자 추가 금지). 순서: remixicon → tokens → base → primitives → shell/chat/design-system-flow/entrance → workspace/* → viewer/*.
 - 신규 컴포넌트는 **CSS Module**(`Component.module.css`) 우선, 공유 전역은 `styles/`. 토큰 변수(`--color-*`/`--space-*`/`--font-*`) 재사용. 새 전역 선택자는 소유 feature 문서화. (AGENTS.md "Web CSS ownership" / "UI animation philosophy": ease-out `cubic-bezier(0.23,1,0.32,1)`, enter ~200ms/exit ~140ms, accordion `grid-template-rows 0fr→1fr`.)
-- 컴포넌트 reuse: `@open-design/components`의 `Button`/`VisuallyHidden` 등 우선, raw `primary`/`ghost`/`sr-only` 신규 금지.
+- 컴포넌트 reuse: `@marketing-ax/components`의 `Button`/`VisuallyHidden` 등 우선, raw `primary`/`ghost`/`sr-only` 신규 금지.
 
 ### 5.11 Braze 포크 — 웹 변경 7-포인트 (착지 위치)
 1. `router.ts` union + parse/build에 `braze-messages` kind.

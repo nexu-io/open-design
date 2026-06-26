@@ -206,7 +206,7 @@
 
 ## 7. 프로세스 간 결합도 (재사용 안전성)
 
-- **web↔daemon: 규약 기반 느슨한 결합**. `pnpm guard`의 `checkWebImportIsolation`(`scripts/guard.ts:891`)이 web이 daemon/sidecar 소스 import하는 것을 **금지** → web은 HTTP `/api/*` + `@open-design/contracts` 타입으로만 통신. (단 생성된 RPC 클라이언트는 아니고, 실제 호출은 `fetch('/api/...')` 문자열 경로. contracts는 타입/스키마만, web에서 192× import.)
+- **web↔daemon: 규약 기반 느슨한 결합**. `pnpm guard`의 `checkWebImportIsolation`(`scripts/guard.ts:891`)이 web이 daemon/sidecar 소스 import하는 것을 **금지** → web은 HTTP `/api/*` + `@marketing-ax/contracts` 타입으로만 통신. (단 생성된 RPC 클라이언트는 아니고, 실제 호출은 `fetch('/api/...')` 문자열 경로. contracts는 타입/스키마만, web에서 192× import.)
 - **desktop 셸: 깨끗하게 재사용 가능**. 제너릭 패키지만 의존, daemon/contracts 의존 0. config/env로 파라미터화(사이드카 경로, 웹 dist, 업데이트 URL). 바꿀 식별자만: `od://` 스킴, `__od__`, 세션 파티션, updater origin, 번들 id.
 - **daemon: 도메인 코어** → 새 앱이 같은 도메인이라 토대로 유지하고 라우트/atom 확장.
 
