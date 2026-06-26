@@ -1,4 +1,4 @@
-# Open Design Plugin & Marketplace — Implementation Plan (living)
+# Marketing AX Plugin & Marketplace — Implementation Plan (living)
 
 Source spec: [`docs/plugins-spec.md`](../plugins-spec.md) (zh-CN: [`docs/plugins-spec.zh-CN.md`](../plugins-spec.zh-CN.md)).
 
@@ -78,7 +78,7 @@ This section tracks **what exists in the repo today**. Update in the same PR tha
 
 These notes capture the product/implementation answers that otherwise get lost between the spec and the code:
 
-- **No plugin selected does not mean a naked agent.** `composeSystemPrompt()` still always layers the Open Design base designer/discovery prompt, project metadata, active design system/craft, and daemon-owned safety/tooling guidance. Plugin context is additive: a selected plugin contributes snapshot-derived `## Active plugin`, `## Plugin inputs`, and active-stage atom blocks. Home free-form runs route through the bundled hidden `od-default` scenario, which shapes task type and then returns to the normal design pipeline.
+- **No plugin selected does not mean a naked agent.** `composeSystemPrompt()` still always layers the Marketing AX base designer/discovery prompt, project metadata, active design system/craft, and daemon-owned safety/tooling guidance. Plugin context is additive: a selected plugin contributes snapshot-derived `## Active plugin`, `## Plugin inputs`, and active-stage atom blocks. Home free-form runs route through the bundled hidden `od-default` scenario, which shapes task type and then returns to the normal design pipeline.
 - **The pipeline is plugin-assembled, not a fixed wizard.** The reference shorthand is `discovery -> plan -> generate -> critique`, but the runnable shape comes from `od.pipeline.stages[].atoms[]` on the applied plugin or bundled scenario fallback. `apps/daemon/src/plugins/pipeline-runner.ts` emits stage/GenUI events and `packages/contracts/src/prompts/atom-block.ts` renders the active stage body. Some atoms are still prompt fragments / permissive workers; observable atoms such as `diff-review`, `build-test`, and `handoff` now emit durable files or signals.
 - **GenUI is controlled rendering.** Agents/plugins emit structured surface requests (`form`, `choice`, `confirmation`, `oauth-prompt`) and OD renders them with product-owned React/CLI components. Inline `<question-form>` chat UI follows the same principle: parse structured data, render through `QuestionForm`, and keep styling in OD. Plugin-bundled custom components are a separate sandboxed path behind `genui:custom-component`.
 - **AG-UI is interoperability, not the product UI runtime.** `packages/agui-adapter` and `GET /api/runs/:runId/agui` are shipped so CopilotKit / AG-UI clients can consume an OD run. The internal web/desktop UI remains OD-native; adding CopilotKit itself is only justified for an explicit external embed/demo/client.
@@ -208,7 +208,7 @@ These notes capture the product/implementation answers that otherwise get lost b
 | `POST /api/applied-plugins/prune` | shipped | Phase 5 (early) — operator escape hatch |
 | `GET /api/daemon/status` | shipped | Phase 1.5 |
 | `POST /api/daemon/shutdown` | shipped | Phase 1.5 — loopback-only |
-| `GET /api/runs/:runId/agui` | shipped | Phase 4 — pipes events through `@open-design/agui-adapter` |
+| `GET /api/runs/:runId/agui` | shipped | Phase 4 — pipes events through `@marketing-ax/agui-adapter` |
 
 ### 3.5 CLI subcommands
 
@@ -325,13 +325,13 @@ Deliverables
 
 Validation
 
-- [x] `pnpm --filter @open-design/plugin-runtime test`
+- [x] `pnpm --filter @marketing-ax/plugin-runtime test`
 - [x] `pnpm guard && pnpm typecheck`
 - [x] CI digest stability: re-running `digest()` on the fixtures matches the pinned hex.
 
 Exit criterion
 
-- Importing `import type { ApplyResult, AppliedPluginSnapshot } from '@open-design/contracts'` works from daemon and web. ✓ verified.
+- Importing `import type { ApplyResult, AppliedPluginSnapshot } from '@marketing-ax/contracts'` works from daemon and web. ✓ verified.
 
 ### Phase 1 — Loader + installer + apply + snapshot + headless CLI loop (5–7 d)
 
@@ -357,7 +357,7 @@ Deliverables (week 2: surface layer)
 
 Validation
 
-- [x] `pnpm --filter @open-design/plugin-runtime test` covers: digest stability, `parseManifest` + `parseMarketplace`, SKILL frontmatter adapter, sidecar+adapter merge precedence, `validateSafe` cross-field rules.
+- [x] `pnpm --filter @marketing-ax/plugin-runtime test` covers: digest stability, `parseManifest` + `parseMarketplace`, SKILL frontmatter adapter, sidecar+adapter merge precedence, `validateSafe` cross-field rules.
 - [x] `apps/daemon/tests/plugins-{apply,snapshots,installer,e2e-fixture}.test.ts` cover apply purity, snapshot writer, installer guards, and the closed-loop install→apply→snapshot→doctor walk.
 - [x] **e2e-1 closed loop** — `apps/daemon/tests/plugins-e2e-fixture.test.ts` runs the §12.5 walk against the bundled `apps/daemon/tests/fixtures/plugin-fixtures/sample-plugin/` fixture without spinning the HTTP server.
 - [ ] **e2e-2 pure apply across runs** — Phase 1 follow-up: drive `applyPlugin` through `POST /api/plugins/:id/apply` against a running daemon and assert two consecutive applies share the same `manifestSourceDigest`.
@@ -493,7 +493,7 @@ Deliverables
 - [x] `od plugin publish --to anthropics-skills|awesome-agent-skills|clawhub|skills-sh` (PR template launcher) — `apps/daemon/src/plugins/publish.ts`.
 - [x] CLI parity remainder: `od skills/design-systems/craft/atoms list/show`, `od status`, `od version`, `od marketplace search`, `od doctor`, `od config get/set/list/unset`.
 - [x] Optional `plugins/_official/atoms/<atom>/SKILL.md` extraction (spec §23.3.2 patch 2) — entry slice ships four atom SKILL.md fragments + the bundled boot walker; the system.ts → SKILL.md prompt-composer rewiring stays open.
-- [x] `@open-design/agui-adapter` package; `GET /api/runs/:runId/agui` SSE endpoint emits AG-UI canonical events.
+- [x] `@marketing-ax/agui-adapter` package; `GET /api/runs/:runId/agui` SSE endpoint emits AG-UI canonical events.
 - [x] Plugin manifest upgrade: `od.genui.surfaces[].component` (capability gate `genui:custom-component`) — schema accepts the field; doctor flags missing-capability + path-traversal; web sandbox loader stays scheduled.
 
 Validation
@@ -573,10 +573,10 @@ Plus repo-wide gates
 
 - [x] `pnpm guard` clean.
 - [x] `pnpm typecheck` clean.
-- [x] `pnpm --filter @open-design/contracts test` clean.
-- [x] `pnpm --filter @open-design/plugin-runtime test` clean.
-- [x] `pnpm --filter @open-design/daemon test` — all 56 `plugins-*.test.ts` (391 tests) green. Three unrelated pre-existing failures remain (`finalize-design.test.ts` resolveCurrentArtifact path normalization, `chat-route.test.ts` stalled-json-stream timeout, `connection-test.test.ts` hard-cancel timeout). They were inherited from PR #832 and the chat/connection timeout test refactors and do not block the plugin loop; tracked separately.
-- [x] `pnpm --filter @open-design/web test` clean.
+- [x] `pnpm --filter @marketing-ax/contracts test` clean.
+- [x] `pnpm --filter @marketing-ax/plugin-runtime test` clean.
+- [x] `pnpm --filter @marketing-ax/daemon test` — all 56 `plugins-*.test.ts` (391 tests) green. Three unrelated pre-existing failures remain (`finalize-design.test.ts` resolveCurrentArtifact path normalization, `chat-route.test.ts` stalled-json-stream timeout, `connection-test.test.ts` hard-cancel timeout). They were inherited from PR #832 and the chat/connection timeout test refactors and do not block the plugin loop; tracked separately.
+- [x] `pnpm --filter @marketing-ax/web test` clean.
 
 ---
 

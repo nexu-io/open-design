@@ -68,8 +68,8 @@ pnpm tools-dev status          # inspect managed runtimes
 pnpm tools-dev logs            # show daemon/web/desktop logs
 pnpm tools-dev check           # status + recent logs + common diagnostics
 pnpm tools-dev stop            # stop managed runtimes
-pnpm --filter @open-design/daemon build  # build apps/daemon/dist/cli.js for `od`
-pnpm --filter @open-design/web build     # build do pacote web quando necessário
+pnpm --filter @marketing-ax/daemon build  # build apps/daemon/dist/cli.js for `od`
+pnpm --filter @marketing-ax/web build     # build do pacote web quando necessário
 pnpm typecheck                 # workspace typecheck
 ```
 
@@ -79,7 +79,7 @@ Em desenvolvimento local, o `tools-dev` sobe o daemon primeiro, repassa a porta 
 
 ## Configuração Docker
 
-Execute o Open Design em um ambiente totalmente conteinerizado sem instalar Node.js ou pnpm localmente.
+Execute o Marketing AX em um ambiente totalmente conteinerizado sem instalar Node.js ou pnpm localmente.
 
 ### Requisitos
 
@@ -94,7 +94,7 @@ docker compose version
 
 ---
 
-## Iniciar o Open Design
+## Iniciar o Marketing AX
 
 A partir da raiz do repositório:
 
@@ -222,13 +222,13 @@ Skills de imagem, vídeo, áudio e HyperFrames chamam o CLI local `od` por meio 
 Se a geração de mídia falhar com `OD_BIN: parameter not set`, com `apps/daemon/dist/cli.js` ausente ou com `failed to reach daemon at http://127.0.0.1:0`, recompile o CLI do daemon e reinicie o runtime gerenciado:
 
 ```bash
-pnpm --filter @open-design/daemon build
+pnpm --filter @marketing-ax/daemon build
 pnpm tools-dev restart --daemon-port 7457 --web-port 5175
 ls -la apps/daemon/dist/cli.js
 curl -s http://127.0.0.1:7457/api/health
 ```
 
-Em seguida, abra o projeto pelo app Open Design novamente em vez de retomar uma sessão antiga de agente no terminal. Um agente spawnado pelo daemon deve ver valores como:
+Em seguida, abra o projeto pelo app Marketing AX novamente em vez de retomar uma sessão antiga de agente no terminal. Um agente spawnado pelo daemon deve ver valores como:
 
 ```bash
 echo "OD_BIN=$OD_BIN"
@@ -312,7 +312,7 @@ open-design/
 │   └── desktop/               # Electron runtime, launched/inspected by tools-dev
 ├── packages/
 │   ├── contracts/             # shared web/daemon app contracts
-│   ├── sidecar-proto/         # Open Design sidecar protocol contract
+│   ├── sidecar-proto/         # Marketing AX sidecar protocol contract
 │   ├── sidecar/               # generic sidecar runtime primitives
 │   └── platform/              # generic process/platform primitives
 ├── tools/dev/                 # `pnpm tools-dev` lifecycle and inspect CLI
@@ -345,8 +345,8 @@ open-design/
 
 - **"no agents found on PATH"** — instale um destes: `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Ou troque para o modo API em Settings e cole uma chave de provider.
 - **daemon 500 em /api/chat** — confira o terminal do daemon para a tail de stderr; geralmente o CLI rejeitou os args. CLIs diferentes aceitam formatos de argv diferentes; veja `buildArgs` em `apps/daemon/src/agents.ts` se precisar ajustar.
-- **geração de mídia diz que `OD_BIN` está faltando ou que a URL do daemon é `:0`** — rode as verificações do dispatcher de mídia acima. Não retome a sessão antiga do CLI; reabra o projeto pelo app Open Design para o daemon injetar variáveis `OD_*` novas.
-- **Codex carrega muito contexto de plugin** — suba o Open Design com `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` para que processos Codex spawnados pelo daemon rodem com `--disable plugins`.
+- **geração de mídia diz que `OD_BIN` está faltando ou que a URL do daemon é `:0`** — rode as verificações do dispatcher de mídia acima. Não retome a sessão antiga do CLI; reabra o projeto pelo app Marketing AX para o daemon injetar variáveis `OD_*` novas.
+- **Codex carrega muito contexto de plugin** — suba o Marketing AX com `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` para que processos Codex spawnados pelo daemon rodem com `--disable plugins`.
 - **artifact nunca renderiza** — o modelo emitiu texto sem empacotar em `<artifact>`. Confirme que o system prompt está chegando (cheque o log do daemon) e considere trocar para um modelo mais capaz ou um skill mais estrito.
 
 ## Voltando à visão

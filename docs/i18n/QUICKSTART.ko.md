@@ -13,7 +13,7 @@
 
 ### 로컬 에이전트 CLI와 PATH
 
-daemon은 **`PATH`**(여기에 더해 자주 쓰이는 사용자 툴체인 디렉터리)를 스캔합니다. **`npm install -g`**나 **Homebrew**로 CLI를 설치했는데도 Open Design이 *not installed*로 표시한다면, GUI가 최소한의 `PATH`로 시작하면서 전역 npm이나 Homebrew의 `bin` 디렉터리를 포함하지 못한 경우입니다(앱이 전체 로그인 셸에서 실행되지 않은 macOS에서 흔히 발생). daemon을 실행하는 프로세스의 `PATH`에 실행 파일 디렉터리가 들어 있는지 확인한 뒤, **Settings → Execution mode**에서 **Rescan**을 누르세요.
+daemon은 **`PATH`**(여기에 더해 자주 쓰이는 사용자 툴체인 디렉터리)를 스캔합니다. **`npm install -g`**나 **Homebrew**로 CLI를 설치했는데도 Marketing AX이 *not installed*로 표시한다면, GUI가 최소한의 `PATH`로 시작하면서 전역 npm이나 Homebrew의 `bin` 디렉터리를 포함하지 못한 경우입니다(앱이 전체 로그인 셸에서 실행되지 않은 macOS에서 흔히 발생). daemon을 실행하는 프로세스의 `PATH`에 실행 파일 디렉터리가 들어 있는지 확인한 뒤, **Settings → Execution mode**에서 **Rescan**을 누르세요.
 
 [`nvm`](https://github.com/nvm-sh/nvm) / [`fnm`](https://github.com/Schniz/fnm)은 편의를 위한 선택 도구일 뿐, 프로젝트 설정에 꼭 필요한 것은 아닙니다. 둘 중 하나를 쓴다면 pnpm을 실행하기 전에 Node 24를 설치하고 선택하세요.
 
@@ -36,7 +36,7 @@ corepack pnpm --version   # 10.33.2가 출력되어야 합니다
 
 ## Docker 설정
 
-Node.js나 pnpm을 로컬에 설치하지 않고도, 완전히 컨테이너화된 환경에서 Open Design을 실행할 수 있습니다.
+Node.js나 pnpm을 로컬에 설치하지 않고도, 완전히 컨테이너화된 환경에서 Marketing AX을 실행할 수 있습니다.
 
 ### 요구사항
 
@@ -51,7 +51,7 @@ docker compose version
 
 ---
 
-## Open Design 시작하기
+## Marketing AX 시작하기
 
 리포지토리 루트에서 진행합니다.
 
@@ -205,8 +205,8 @@ pnpm tools-dev status          # 관리 중인 런타임 확인
 pnpm tools-dev logs            # daemon/web/desktop 로그 보기
 pnpm tools-dev check           # 상태 + 최근 로그 + 일반 진단
 pnpm tools-dev stop            # 관리 중인 런타임 중지
-pnpm --filter @open-design/daemon build  # `od`용 apps/daemon/dist/cli.js 빌드
-pnpm --filter @open-design/web build     # 필요할 때 web 패키지 빌드
+pnpm --filter @marketing-ax/daemon build  # `od`용 apps/daemon/dist/cli.js 빌드
+pnpm --filter @marketing-ax/web build     # 필요할 때 web 패키지 빌드
 pnpm typecheck                 # 워크스페이스 타입 체크
 ```
 
@@ -226,13 +226,13 @@ pnpm typecheck                 # 워크스페이스 타입 체크
 미디어 생성이 `OD_BIN: parameter not set`, `apps/daemon/dist/cli.js` 누락, `failed to reach daemon at http://127.0.0.1:0` 같은 메시지로 실패하면, daemon CLI를 다시 빌드하고 관리 중인 런타임을 재시작하세요.
 
 ```bash
-pnpm --filter @open-design/daemon build
+pnpm --filter @marketing-ax/daemon build
 pnpm tools-dev restart --daemon-port 7457 --web-port 5175
 ls -la apps/daemon/dist/cli.js
 curl -s http://127.0.0.1:7457/api/health
 ```
 
-그다음 오래된 터미널 에이전트 세션을 이어 가지 말고, Open Design 앱에서 프로젝트를 다시 여세요. daemon이 spawn한 에이전트라면 다음과 같은 값이 보여야 합니다.
+그다음 오래된 터미널 에이전트 세션을 이어 가지 말고, Marketing AX 앱에서 프로젝트를 다시 여세요. daemon이 spawn한 에이전트라면 다음과 같은 값이 보여야 합니다.
 
 ```bash
 echo "OD_BIN=$OD_BIN"
@@ -316,7 +316,7 @@ open-design/
 │   └── desktop/               # tools-dev가 실행/점검하는 Electron 런타임
 ├── packages/
 │   ├── contracts/             # 공유 web/daemon 앱 contract
-│   ├── sidecar-proto/         # Open Design sidecar 프로토콜 contract
+│   ├── sidecar-proto/         # Marketing AX sidecar 프로토콜 contract
 │   ├── sidecar/               # 범용 sidecar 런타임 프리미티브
 │   └── platform/              # 범용 process/platform 프리미티브
 ├── tools/dev/                 # `pnpm tools-dev` 라이프사이클 및 inspect CLI
@@ -347,18 +347,18 @@ open-design/
 
 ## 문제 해결
 
-- **Node.js 버전을 바꾼 뒤 `better-sqlite3`가 로드되지 않거나 ABI가 맞지 않을 때** — `pnpm install`이 `postinstall`을 자동으로 다시 돌려 현재 Node.js에 맞게 네이티브 애드온을 리빌드합니다. 직접 리빌드하거나 수정을 확인하려면 `pnpm --filter @open-design/daemon rebuild better-sqlite3`를 실행한 뒤 `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`를 돌리세요. 빌드 도구 `python3`, `make`, `g++`(또는 `clang++`)가 필요합니다. `.npmrc`에 `ignore-scripts=true`가 있다면, `pnpm install` 후 `node scripts/postinstall.mjs`를 실행하세요.
+- **Node.js 버전을 바꾼 뒤 `better-sqlite3`가 로드되지 않거나 ABI가 맞지 않을 때** — `pnpm install`이 `postinstall`을 자동으로 다시 돌려 현재 Node.js에 맞게 네이티브 애드온을 리빌드합니다. 직접 리빌드하거나 수정을 확인하려면 `pnpm --filter @marketing-ax/daemon rebuild better-sqlite3`를 실행한 뒤 `pnpm --filter @marketing-ax/daemon exec node -e "require('better-sqlite3')"`를 돌리세요. 빌드 도구 `python3`, `make`, `g++`(또는 `clang++`)가 필요합니다. `.npmrc`에 `ignore-scripts=true`가 있다면, `pnpm install` 후 `node scripts/postinstall.mjs`를 실행하세요.
 - **"no agents found on PATH"** — `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `qodercli`, `copilot` 중 하나를 설치하세요. 아니면 Settings에서 API 모드로 바꾸고 프로바이더 키를 붙여 넣으세요.
-- **Claude Code가 코드 1로 종료될 때** — Open Design이 `claude`를 시작하긴 했지만, spawn된 비대화형 실행이 응답을 내기 전에 실패한 경우입니다. Open Design을 시작하는 셸이나 앱 환경과 같은 곳에서 다음을 확인하세요.
+- **Claude Code가 코드 1로 종료될 때** — Marketing AX이 `claude`를 시작하긴 했지만, spawn된 비대화형 실행이 응답을 내기 전에 실패한 경우입니다. Marketing AX을 시작하는 셸이나 앱 환경과 같은 곳에서 다음을 확인하세요.
   ```bash
   claude --version
   claude auth status --text
   printf 'hello' | claude -p --output-format stream-json --verbose --permission-mode bypassPermissions
   ```
-  스모크 테스트가 커스텀 엔드포인트 없이 `401`, `apiKeySource: "none"`, 또는 다른 인증 오류를 낸다면, `claude`를 실행해 `/login`한 뒤 Claude를 종료하고 Open Design을 다시 시도하세요. Claude 프로필을 여러 개 쓴다면 **Settings -> Execution mode -> Claude Code config directory**를 `~/.claude-2` 같은 프로필 경로로 지정하세요. `ANTHROPIC_BASE_URL`이나 프록시가 설정돼 있다면 엔드포인트 URL, 프록시 자격 증명, 엔드포인트 인증 환경, 모델 접근 권한을 확인하세요. 표준 Claude Code 인증으로 다시 시도하려는 게 아니라면 커스텀 엔드포인트는 그대로 두세요. Windows에서는 네이티브 PowerShell과 WSL이 서로 다른 Claude 설치본과 자격 증명 저장소를 쓰므로, Open Design이 쓰는 것과 같은 환경에서 다시 인증하고, `/login`으로도 네이티브 Windows 자격 증명이 복구되지 않으면 Windows 자격 증명 관리자를 확인하세요.
+  스모크 테스트가 커스텀 엔드포인트 없이 `401`, `apiKeySource: "none"`, 또는 다른 인증 오류를 낸다면, `claude`를 실행해 `/login`한 뒤 Claude를 종료하고 Marketing AX을 다시 시도하세요. Claude 프로필을 여러 개 쓴다면 **Settings -> Execution mode -> Claude Code config directory**를 `~/.claude-2` 같은 프로필 경로로 지정하세요. `ANTHROPIC_BASE_URL`이나 프록시가 설정돼 있다면 엔드포인트 URL, 프록시 자격 증명, 엔드포인트 인증 환경, 모델 접근 권한을 확인하세요. 표준 Claude Code 인증으로 다시 시도하려는 게 아니라면 커스텀 엔드포인트는 그대로 두세요. Windows에서는 네이티브 PowerShell과 WSL이 서로 다른 Claude 설치본과 자격 증명 저장소를 쓰므로, Marketing AX이 쓰는 것과 같은 환경에서 다시 인증하고, `/login`으로도 네이티브 Windows 자격 증명이 복구되지 않으면 Windows 자격 증명 관리자를 확인하세요.
 - **`/api/chat`에서 daemon 500** — daemon 터미널의 stderr 끝부분을 확인하세요. 대개 CLI가 자신의 인자를 거부한 경우입니다. CLI마다 받는 argv 형태가 다릅니다. 손봐야 한다면 `apps/daemon/src/agents.ts`의 `buildArgs`를 보세요.
-- **미디어 생성이 `OD_BIN` 누락 또는 daemon URL이 `:0`이라고 할 때** — 위의 미디어 dispatcher 점검을 실행하세요. 옛 CLI 세션을 이어 가지 말고, Open Design 앱에서 프로젝트를 다시 열어 daemon이 새 `OD_*` 변수를 주입하게 하세요.
-- **Codex가 플러그인 컨텍스트를 너무 많이 로드할 때** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`로 Open Design을 시작하면, daemon이 spawn하는 Codex 프로세스가 `--disable plugins`로 실행됩니다.
+- **미디어 생성이 `OD_BIN` 누락 또는 daemon URL이 `:0`이라고 할 때** — 위의 미디어 dispatcher 점검을 실행하세요. 옛 CLI 세션을 이어 가지 말고, Marketing AX 앱에서 프로젝트를 다시 열어 daemon이 새 `OD_*` 변수를 주입하게 하세요.
+- **Codex가 플러그인 컨텍스트를 너무 많이 로드할 때** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`로 Marketing AX을 시작하면, daemon이 spawn하는 Codex 프로세스가 `--disable plugins`로 실행됩니다.
 - **artifact가 끝내 렌더링되지 않을 때** — 모델이 `<artifact>`로 감싸지 않은 텍스트를 만든 경우입니다. 시스템 프롬프트가 제대로 전달되는지 확인하고(daemon 로그 확인), 더 강력한 모델이나 더 엄격한 skill로 바꿔 보세요.
 
 ## 비전과 다시 잇기

@@ -1,12 +1,12 @@
 # First-party atom catalog
 
-> The atomic capabilities Open Design exposes to plugins.
+> The atomic capabilities Marketing AX exposes to plugins.
 > Spec: [`docs/plugins-spec.md`](plugins-spec.md) §10.
 > Source of truth: [`apps/daemon/src/plugins/atoms.ts`](../apps/daemon/src/plugins/atoms.ts).
 > Live discovery: `GET /api/atoms` (also reachable via `od atoms list --json` in a future PR).
 
 A **plugin** assembles atoms into ordered stages (`od.pipeline.stages[].atoms[]`).
-The Open Design daemon is responsible for resolving each atom into a system-prompt
+The Marketing AX daemon is responsible for resolving each atom into a system-prompt
 fragment, tool gating, and (when applicable) GenUI surface declarations. Plugins
 never own the atom implementations; they only reference them by id.
 

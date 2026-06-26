@@ -2,19 +2,19 @@
 
 ## Summary
 
-This PR wires Open Design's beta mac arm64 packaging path to Vela's npm-owned CLI distribution contract.
+This PR wires Marketing AX's beta mac arm64 packaging path to Vela's npm-owned CLI distribution contract.
 
 The goal is to make packaged AMR builds use a lockfile-backed Vela CLI package instead of requiring CI to download, build, or manually locate a Vela binary. The rollout is intentionally narrow: beta mac arm64 release builds require Vela, while mac Intel, Windows, Linux, preview, and stable builds remain non-strict and continue to skip Vela bundling when unsupported.
 
 ## Design Contract
 
-Open Design depends only on the Vela meta package:
+Marketing AX depends only on the Vela meta package:
 
 ```json
 "@powerformer/vela-cli": "0.0.1-test"
 ```
 
-Open Design does not depend directly on platform packages such as `@powerformer/vela-cli-darwin-arm64`. Vela owns that platform matrix through optional dependencies and its resolver API.
+Marketing AX does not depend directly on platform packages such as `@powerformer/vela-cli-darwin-arm64`. Vela owns that platform matrix through optional dependencies and its resolver API.
 
 The Vela CLI binary resolution order is:
 
@@ -26,10 +26,10 @@ This preserves a developer/emergency override while making npm the normal CI con
 
 The CI/package timing is:
 
-1. Vela publishes `@powerformer/vela-cli` to npm before Open Design packaging starts.
-2. Open Design pins that package in `tools/pack/package.json` and `pnpm-lock.yaml`.
+1. Vela publishes `@powerformer/vela-cli` to npm before Marketing AX packaging starts.
+2. Marketing AX pins that package in `tools/pack/package.json` and `pnpm-lock.yaml`.
 3. CI runs `pnpm install --frozen-lockfile`, which installs the pinned meta package and its supported optional native binary package.
-4. `tools-pack` enters the `resource-tree` phase and resolves/copies the Vela binary into the Open Design resource tree.
+4. `tools-pack` enters the `resource-tree` phase and resolves/copies the Vela binary into the Marketing AX resource tree.
 5. `electron-builder` embeds that resource tree through `extraResources`.
 6. The packaged daemon receives `OD_RESOURCE_ROOT` at launch and resolves AMR to `OD_RESOURCE_ROOT/bin/vela` unless `VELA_BIN` explicitly overrides it.
 
@@ -37,7 +37,7 @@ The CI/package timing is:
 
 `tools-pack` now supports `--require-vela-cli`. When this flag is absent, missing Vela packages, unsupported platforms, missing resolvers, or null resolver results are treated as "skip Vela bundling." When this flag is present, packaging fails with an actionable error that mentions both remediation paths: install/use `@powerformer/vela-cli` or set `OPEN_DESIGN_VELA_CLI_BIN`.
 
-Vela resource copying now lives in `tools/pack/src/vela-cli.ts`, so the generic resource-tree helper only owns static Open Design resources. The Vela helper resolves the binary through the shared resolver path and copies it into:
+Vela resource copying now lives in `tools/pack/src/vela-cli.ts`, so the generic resource-tree helper only owns static Marketing AX resources. The Vela helper resolves the binary through the shared resolver path and copies it into:
 
 ```text
 resources/open-design/bin/vela
@@ -56,7 +56,7 @@ The current verification npm packages have been published:
 - `@powerformer/vela-cli@0.0.1-test`
 - `@powerformer/vela-cli-darwin-arm64@0.0.1-test`
 
-Open Design should install only `@powerformer/vela-cli`. The meta package pulls the macOS arm64 binary package as an optional dependency on supported machines.
+Marketing AX should install only `@powerformer/vela-cli`. The meta package pulls the macOS arm64 binary package as an optional dependency on supported machines.
 
 Local verification outside the Vela monorepo:
 
@@ -86,7 +86,7 @@ Focused `tools-pack` tests cover:
 Local validation for the Vela module extraction and `0.0.1-test` bump passed under Node `v24.0.0` and pnpm `10.33.2`:
 
 ```bash
-pnpm --filter @open-design/tools-pack typecheck
+pnpm --filter @marketing-ax/tools-pack typecheck
 pnpm --dir tools/pack exec vitest run tests/resources.test.ts tests/release-workflows.test.ts tests/config.test.ts tests/win-resources.test.ts
 pnpm guard
 pnpm typecheck
@@ -106,7 +106,7 @@ The bundled binary was verified as executable and `Mach-O 64-bit executable arm6
 
 Reviewers should focus on these boundaries:
 
-- Open Design depends only on `@powerformer/vela-cli`.
+- Marketing AX depends only on `@powerformer/vela-cli`.
 - `OPEN_DESIGN_VELA_CLI_BIN` remains highest priority.
 - Strict mode is opt-in and used only by beta mac arm64 CI.
 - Non-strict platforms must not fail when Vela is unsupported or unavailable.

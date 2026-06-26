@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans 또는 superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) 추적.
 >
-> **v2 개정 이유 (2026-06-22)**: v1은 규모를 ~50배 과소평가했다. 실측: `@open-design/` 스코프 **1037곳/512파일**(import 동반 필수 — tsconfig path alias 없음, 모듈 해석이 package `name` 기반), env `OD_` **distinct 202키 / `process.env.OD_*` 읽기 ~880곳**(중앙화 안 됨), `"Open Design"` 텍스트 **7157곳/386파일**. v1의 "const 1곳 + sweep" 전제는 거짓 → 컴파일·게이트 둘 다 실패. v2는 **카테고리 전역 치환**으로 재설계. 근거: `FORK-GUIDE.md §3`(v2 교정본).
+> **v2 개정 이유 (2026-06-22)**: v1은 규모를 ~50배 과소평가했다. 실측: `@open-design/` 스코프 **1037곳/512파일**(import 동반 필수 — tsconfig path alias 없음, 모듈 해석이 package `name` 기반), env `OD_` **distinct 202키 / `process.env.OD_*` 읽기 ~880곳**(중앙화 안 됨), `"Marketing AX"` 텍스트 **7157곳/386파일**. v1의 "const 1곳 + sweep" 전제는 거짓 → 컴파일·게이트 둘 다 실패. v2는 **카테고리 전역 치환**으로 재설계. 근거: `FORK-GUIDE.md §3`(v2 교정본).
 
 **Goal:** OD 기능 식별자를 Marketing AX로 전역 치환하고 빌드·타입체크·가드가 그린.
 
@@ -14,7 +14,7 @@
 
 ## 결정 (이 플랜의 전제 — 변경 시 해당 줄만 교체)
 
-- **[Q1 = A] 텍스트 범위**: 기능 식별자는 전역. `"Open Design"` 브랜드 텍스트는 **apps/web(18개 i18n 로케일 포함) + 앱 UI + 패키징 제품명**까지. **apps/landing-page 마케팅 사이트(4903곳) 제외**(별도 P 단계). `LICENSE`/`docs/*.md`/`CHANGELOG.md`/`*.md` 제외(Apache-2.0 attribution).
+- **[Q1 = A] 텍스트 범위**: 기능 식별자는 전역. `"Marketing AX"` 브랜드 텍스트는 **apps/web(18개 i18n 로케일 포함) + 앱 UI + 패키징 제품명**까지. **apps/landing-page 마케팅 사이트(4903곳) 제외**(별도 P 단계). `LICENSE`/`docs/*.md`/`CHANGELOG.md`/`*.md` 제외(Apache-2.0 attribution).
 - **[Q2 = A] mocks/**: **건드리지 않음**. 익명 replay fixture 무결성 보존. sweep/게이트 제외.
 - **마켓플레이스 repo/URL**: 자체 도메인 미정 → placeholder + env 오버라이드. (전면 비활성화는 P2.)
 
@@ -35,14 +35,14 @@
 | 6 스킴 | `od://` + `OD_SCHEME = "od"` | `max://` + `"max"` | 값만 |
 | 6 host 글로벌 | `__od__` | `__max__` | |
 | 7 데이터 디렉터리 | `.od` | `.max` | **앵커 필수**: `'.od'`/`"/.od"`/`.od/`/regex만. `.odd` 등 오염 금지 |
-| 8 제품명 | `Open Design` | `Marketing AX` | **Q1 범위 한정** (landing-page/docs/mocks 제외) |
+| 8 제품명 | `Marketing AX` | `Marketing AX` | **Q1 범위 한정** (landing-page/docs/mocks 제외) |
 
 ## Global Constraints
 
 - **macOS = BSD sed → `\b` 미지원.** 모든 앵커 치환은 **`perl -pi -e`** 사용(PCRE `\b` 지원). `sed -i ''`는 단순 비앵커 치환에만.
 - 치환 대상 파일 글롭: `*.ts *.tsx *.mts *.cts *.json *.mjs *.cjs *.css`, 디렉터리 `apps packages tools scripts e2e` + 루트 package.json. **제외**: `node_modules`, `**/dist`, `apps/landing-page`(Q1), `mocks/`(Q2), `*.md`, `LICENSE`.
 - 각 카테고리 종료 시 **카테고리 grep 0**(허용 잔존 제외) + `pnpm typecheck` 그린. 전체 종료 시 `pnpm guard`.
-- 라이선스(Apache-2.0): 루트 `LICENSE` 유지, 수정 파일 변경 표시 허용, "Open Design" **상표** 잔존 0(코드/UI). 문서 attribution 잔존은 의도적 허용.
+- 라이선스(Apache-2.0): 루트 `LICENSE` 유지, 수정 파일 변경 표시 허용, "Marketing AX" **상표** 잔존 0(코드/UI). 문서 attribution 잔존은 의도적 허용.
 - 기존 로컬 `.od/` 런타임 데이터는 무시(신규 `.max/` 생성).
 
 ## 잔존 검증 헬퍼 (재사용)
@@ -159,22 +159,22 @@ perl -pi -e 's/windowsPipePrefix: "open-design"/windowsPipePrefix: "marketing-ax
 
 ---
 
-## Task 8: 제품명 "Open Design" → "Marketing AX" (Q1 범위 한정)
+## Task 8: 제품명 "Marketing AX" → "Marketing AX" (Q1 범위 한정)
 
-**규모/위험:** `"Open Design"` 7157곳. **위험 계층 분리** — 테스트 단언/스냅샷이 옛 문자열에 의존하면 깨짐. 단계적으로.
+**규모/위험:** `"Marketing AX"` 7157곳. **위험 계층 분리** — 테스트 단언/스냅샷이 옛 문자열에 의존하면 깨짐. 단계적으로.
 
 - [ ] **Step 1: 패키징/UI 제품명 상수 (확실·안전)** — 먼저 1급 식별자만:
   - `packages/sidecar-proto/src/index.ts:70` `OPEN_DESIGN_PRODUCT_NAME` 값 → `"Marketing AX"` (상수명 유지 → Windows 레지스트리 키 자동 전파)
   - `tools/pack/src/mac/constants.ts:1`, `win/constants.ts:1` `PRODUCT_NAME` → `"Marketing AX"`, `tools/pack/src/linux.ts:37` 동일
-  - `apps/web/app/layout.tsx:9` `title: 'Open Design'` → `'Marketing AX'`
+  - `apps/web/app/layout.tsx:9` `title: 'Marketing AX'` → `'Marketing AX'`
   - typecheck PASS 확인 후 커밋
-- [ ] **Step 2: 범위 산정** — `odgrep 'Open Design' | cut -d/ -f1-2 | sort | uniq -c | sort -rn` 로 분포 확인. (landing-page·mocks는 odgrep에서 이미 제외.) 남은 분포 = apps/web(i18n 포함), apps/daemon(프롬프트/주석), 패키징, e2e
-- [ ] **Step 3: i18n 로케일 치환** — `apps/web/src/i18n/locales/*.ts` 의 사용자 노출 "Open Design" → "Marketing AX" (18개 로케일 동일 키). `odgrep 'Open Design' apps/web/src/i18n` 대상
+- [ ] **Step 2: 범위 산정** — `odgrep 'Marketing AX' | cut -d/ -f1-2 | sort | uniq -c | sort -rn` 로 분포 확인. (landing-page·mocks는 odgrep에서 이미 제외.) 남은 분포 = apps/web(i18n 포함), apps/daemon(프롬프트/주석), 패키징, e2e
+- [ ] **Step 3: i18n 로케일 치환** — `apps/web/src/i18n/locales/*.ts` 의 사용자 노출 "Marketing AX" → "Marketing AX" (18개 로케일 동일 키). `odgrep 'Marketing AX' apps/web/src/i18n` 대상
 - [ ] **Step 4: 앱 UI 문자열 치환** — `apps/web/src` 잔여(컴포넌트 표시 문자열). **주의**: 주석은 선택. 치환 후 `pnpm --filter @marketing-ax/web typecheck` + `pnpm --filter @marketing-ax/web test`
-- [ ] **Step 5: 데몬 프롬프트/도메인 문자열** — `apps/daemon/src/prompts/*` 등 에이전트에 제품을 "Open Design"으로 소개하는 문자열 → 새 브랜드. `pnpm --filter @marketing-ax/daemon test`
-- [ ] **Step 6: 테스트 단언 처리** — `odgrep 'Open Design'` 에 남은 e2e/단위 테스트의 단언/스냅샷: 제품명을 검증하는 것이면 새 값으로 갱신, fixture면 검토. **테스트 그린 유지가 게이트.**
-- [ ] **Step 7: 잔존 검증** — `odgrep 'Open Design'` = 의도된 잔존(있다면 명시)만. `pnpm typecheck` PASS
-- [ ] **Step 8: 커밋** — `git commit -am "Rebrand product name Open Design -> Marketing AX (app UI + i18n + packaging, P0 task8)"`
+- [ ] **Step 5: 데몬 프롬프트/도메인 문자열** — `apps/daemon/src/prompts/*` 등 에이전트에 제품을 "Marketing AX"으로 소개하는 문자열 → 새 브랜드. `pnpm --filter @marketing-ax/daemon test`
+- [ ] **Step 6: 테스트 단언 처리** — `odgrep 'Marketing AX'` 에 남은 e2e/단위 테스트의 단언/스냅샷: 제품명을 검증하는 것이면 새 값으로 갱신, fixture면 검토. **테스트 그린 유지가 게이트.**
+- [ ] **Step 7: 잔존 검증** — `odgrep 'Marketing AX'` = 의도된 잔존(있다면 명시)만. `pnpm typecheck` PASS
+- [ ] **Step 8: 커밋** — `git commit -am "Rebrand product name Marketing AX -> Marketing AX (app UI + i18n + packaging, P0 task8)"`
 
 ---
 
@@ -182,10 +182,10 @@ perl -pi -e 's/windowsPipePrefix: "open-design"/windowsPipePrefix: "marketing-ax
 
 - [ ] **Step 1: 기능식별자 sweep 0**
 ```bash
-odgrep 'open-design|Open Design|\bOD_|__od__|od://|io\.open-design'
+odgrep 'open-design|Marketing AX|\bOD_|__od__|od://|io\.open-design'
 ```
 Expected: 0 (apps/landing-page·mocks·*.md 제외 — odgrep 규칙). 잔존 시 해당 카테고리 규칙 재적용.
-> landing-page/docs/mocks의 "Open Design"은 의도적 잔존(Q1/Q2 + attribution).
+> landing-page/docs/mocks의 "Marketing AX"은 의도적 잔존(Q1/Q2 + attribution).
 - [ ] **Step 2: guard** — `pnpm guard` PASS (web import isolation, style policy)
 - [ ] **Step 3: typecheck** — `pnpm typecheck` PASS
 - [ ] **Step 4: 기동 검증** — `pnpm tools-dev run web` → 데몬+웹 기동, 데이터 디렉터리 `.max/` 생성, 스킴 `max://` 동작, HTML title "Marketing AX", 기존 기능(프로젝트 생성·디자인시스템 목록) 정상

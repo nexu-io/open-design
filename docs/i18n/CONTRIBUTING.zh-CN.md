@@ -1,4 +1,4 @@
-# 贡献指南 · Contributing to Open Design
+# 贡献指南 · Contributing to Marketing AX
 
 谢谢你愿意参与。OD 是有意做小的 —— 大部分价值在 **文件** 里（skill、design system、提示词片段），而不是框架代码。这意味着收益最高的贡献往往就是一个文件夹、一份 Markdown，或者一个 PR 大小的 adapter。
 
@@ -33,7 +33,7 @@ corepack enable           # 使用 packageManager 固定的 pnpm
 pnpm install
 pnpm tools-dev run web    # daemon + web 前台闭环
 pnpm typecheck            # tsc -b --noEmit
-pnpm --filter @open-design/web build  # 需要时构建 web package
+pnpm --filter @marketing-ax/web build  # 需要时构建 web package
 ```
 
 要求 Node `~24` 和 pnpm `10.33.x`。`nvm` / `fnm` 是可选路径；如果你习惯用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`。macOS、Linux、WSL2 是主要路径。Windows 原生已支持；常见的安装与配置坑请参见 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)。

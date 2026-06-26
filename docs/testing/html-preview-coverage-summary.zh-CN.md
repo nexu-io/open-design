@@ -105,7 +105,7 @@
 
 在 [PR #2311](https://github.com/nexu-io/open-design/pull/2311) 里，验证重心是：
 
-- `pnpm --filter @open-design/daemon test`
+- `pnpm --filter @marketing-ax/daemon test`
 - `pnpm guard`
 - `pnpm typecheck`
 

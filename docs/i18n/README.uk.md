@@ -1,13 +1,13 @@
-<h1 align="center">Open Design: відкрита альтернатива Claude Design</h1>
+<h1 align="center">Marketing AX: відкрита альтернатива Claude Design</h1>
 
-> 🔥 **Open Design 0.10.0 вже тут: універсальний Agentic-робочий простір для дизайну.** Усе ремесло тепер живе в одному вікні — від розмитої ідеї до пошуку референсів, збирання матеріалу, інтерактивного редагування, черги коментарів, шліфування анімацій і передачі результату редактору чи Code Agent — не виходячи із застосунку. З паралельними сесіями це вже не один асистент, а ціла локальна команда дизайнерів, що працює на вас. [Завантажити 0.10.0](https://github.com/nexu-io/open-design/releases) · [Долучитися до обговорення](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Marketing AX 0.10.0 вже тут: універсальний Agentic-робочий простір для дизайну.** Усе ремесло тепер живе в одному вікні — від розмитої ідеї до пошуку референсів, збирання матеріалу, інтерактивного редагування, черги коментарів, шліфування анімацій і передачі результату редактору чи Code Agent — не виходячи із застосунку. З паралельними сесіями це вже не один асистент, а ціла локальна команда дизайнерів, що працює на вас. [Завантажити 0.10.0](https://github.com/nexu-io/open-design/releases) · [Долучитися до обговорення](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати AMR](https://open-design.ai/amr/)
+> ⚡ **Marketing AX AMR (Agentic Model Router) — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Marketing AX: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати AMR](https://open-design.ai/amr/)
 >
-> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Програма Marketing AX Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Marketing AX Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/qhbcCH8Am4).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Marketing AX — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
@@ -29,11 +29,11 @@
 
 ---
 
-## Що таке Open Design
+## Що таке Marketing AX
 
 🎨 **Локально-орієнтована альтернатива [Claude Design][cd] з відкритим кодом.** &nbsp;🖥️ **Нативний десктопний застосунок для macOS і Windows.** &nbsp;⚡ **100+ навичок** · ✨ **150 систем `DESIGN.md` брендового рівня** · 📦 **261 готовий до використання плагін.** &nbsp;🖼️ Генерує **вебпрототипи · десктопні · мобільні прототипи**, **живі дашборди / артефакти**, **презентації**, **зображення**, **відео**, а також моушн-графіку **HyperFrames**. 🔒 Попередній перегляд у пісочниці iframe · експорт у HTML / PDF / PPTX / MP4. &nbsp;🤖 **Працює на Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity і 21 локальному CLI**, або на будь-якій OpenAI-сумісній кінцевій точці через BYOK.
 
-Open Design — це те, що ви отримуєте, коли **agent-native** цикл, який Anthropic випустила разом із Claude Design — з'ясуй бриф, зафіксуй напрям, передавай артефакт потоком, критикуй, доставляй — перестає бути закритим і стає **файловою системою навичок, дизайн-систем і плагінів**, яку кодувальні агенти, що вже є на вашому ноутбуці, можуть читати, записувати та реміксувати. Ваш CLI стає рушієм дизайну, ваш ноутбук стає студією, а `DESIGN.md` вашої команди стає контрактом бренду.
+Marketing AX — це те, що ви отримуєте, коли **agent-native** цикл, який Anthropic випустила разом із Claude Design — з'ясуй бриф, зафіксуй напрям, передавай артефакт потоком, критикуй, доставляй — перестає бути закритим і стає **файловою системою навичок, дизайн-систем і плагінів**, яку кодувальні агенти, що вже є на вашому ноутбуці, можуть читати, записувати та реміксувати. Ваш CLI стає рушієм дизайну, ваш ноутбук стає студією, а `DESIGN.md` вашої команди стає контрактом бренду.
 
 Це також **альтернатива Figma для епохи агентів** — замість того, щоб пересувати пікселі на полотні, вона доставляє односторінкові артефакти на справжньому CSS, справжніх шрифтах, справжніх компонентах, експортовані одразу в HTML / PDF / PPTX / MP4 — уже сформовані вашою дизайн-системою, уже готові до запуску всередині агента, яким ви користуєтеся щодня.
 
@@ -43,7 +43,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 
 ## Огляд продукту
 
-Швидкий погляд на те, що таке Open Design і що він робить. Почніть з **Home**, оркеструйте повторювані робочі процеси за допомогою **Automation**, виокремте контракт бренду в **Design System** та розширюйте можливості за допомогою **Plugins** і **integrations**; усередині **Studio** будь-якого проєкту та сама дизайн-система передає потоком прототипи, живі артефакти, HyperFrames, презентації та зображення.
+Швидкий погляд на те, що таке Marketing AX і що він робить. Почніть з **Home**, оркеструйте повторювані робочі процеси за допомогою **Automation**, виокремте контракт бренду в **Design System** та розширюйте можливості за допомогою **Plugins** і **integrations**; усередині **Studio** будь-якого проєкту та сама дизайн-система передає потоком прототипи, живі артефакти, HyperFrames, презентації та зображення.
 
 ### Основні сторінки
 
@@ -74,7 +74,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 </td>
 <td width="50%" valign="top">
 <img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — підключайте зовнішні системи та інструменти MCP й використовуйте Open Design з будь-якого IDE, скрипта чи автоматизації.</sub>
+<sub><b>Integrations</b> — підключайте зовнішні системи та інструменти MCP й використовуйте Marketing AX з будь-якого IDE, скрипта чи автоматизації.</sub>
 </td>
 </tr>
 </table>
@@ -110,7 +110,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 
 ## Сумісність платформ
 
-> Open Design постачається як **навички, CLI та сервер MCP**, які основні кодувальні агенти споживають нативно. Щойно OD встановлено, одна команда `od mcp install <agent>` під'єднує сервер MCP до конфігурації цього агента, і ви викликаєте ті самі інструменти зсередини будь-якого агента.
+> Marketing AX постачається як **навички, CLI та сервер MCP**, які основні кодувальні агенти споживають нативно. Щойно OD встановлено, одна команда `od mcp install <agent>` під'єднує сервер MCP до конфігурації цього агента, і ви викликаєте ті самі інструменти зсередини будь-якого агента.
 
 | Кодувальний агент / платформа &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Статус &nbsp;&nbsp; | Встановлення сервера MCP одним рядком &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -133,7 +133,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 `od mcp install <agent> --print` для попереднього перегляду без застосування · `--uninstall` для видалення · повний список через `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Marketing AX supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **Не встановлено жодного CLI?** Проксі BYOK на `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` дає вам той самий цикл (без породження процесу) — вставте `baseUrl` + `apiKey` + `model`, з підтримкою OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM або будь-якої OpenAI-сумісної кінцевої точки. Захист від SSRF для кожної цілі блокує внутрішні IP / link-local / CGNAT на межі демона.
@@ -233,7 +233,7 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 
 ### 5 · Відео та HyperFrames — моушн-графіка agent-native
 
-**[HyperFrames][hyperframes]** — це відкрита, agent-native відеоплатформа від HeyGen, інтегрована як повноправний учасник в Open Design. Агент пише HTML + CSS + GSAP, а HyperFrames рендерить це в детермінований MP4 через headless Chrome + FFmpeg. Поєднайте її з **Seedance 2.0** для кінематографічного t2v / i2v, **Veo 3 / Sora 2 / Kling 2** для маршрутизованих варіантів моделей та **Suno v5 / Lyria 2** для аудіошару.
+**[HyperFrames][hyperframes]** — це відкрита, agent-native відеоплатформа від HeyGen, інтегрована як повноправний учасник в Marketing AX. Агент пише HTML + CSS + GSAP, а HyperFrames рендерить це в детермінований MP4 через headless Chrome + FFmpeg. Поєднайте її з **Seedance 2.0** для кінематографічного t2v / i2v, **Veo 3 / Sora 2 / Kling 2** для маршрутизованих варіантів моделей та **Suno v5 / Lyria 2** для аудіошару.
 
 <table>
 <tr>
@@ -256,11 +256,11 @@ Open Design — це те, що ви отримуєте, коли **agent-native
 
 ---
 
-## Чому Open Design
+## Чому Marketing AX
 
 > **У квітні 2026 року Anthropic випустила [Claude Design][cd] — уперше LLM перестала писати прозу й почала доставляти дизайн-артефакти безпосередньо.** Це стало вірусним. Але вона залишилася закритою, лише платною, лише хмарною, прив'язаною до моделі Anthropic, навичок Anthropic, поверхні Anthropic. Без виходу, без самохостингу, без розгортання на Vercel, без можливості підставити власного агента.
 
-Open Design (OD) — це альтернатива з відкритим кодом. Той самий цикл, та сама ментальна модель «спершу артефакт», без жодної прив'язки:
+Marketing AX (OD) — це альтернатива з відкритим кодом. Той самий цикл, та сама ментальна модель «спершу артефакт», без жодної прив'язки:
 
 - 🤖 **Agent-native, незалежна від моделі.** Ми не постачаємо агента. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, які вже є у вашому `PATH`, і є рушієм дизайну. Замінюйте одним кліком.
 - 🧠 **Брендовий рівень за замовчуванням.** Кожен рендер зчитує активний `DESIGN.md` — схему з 9 розділів, що охоплює палітру, типографіку, відступи, рух, голос, антипатерни. 150 систем постачаються разом із репозиторієм (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Покладіть теку всередину — селектор її знайде.
@@ -271,7 +271,7 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ### Порівняння
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Marketing AX** |
 |---|---|---|---|---|
 | Відкритий код | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Самохостинг / десктоп | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -288,7 +288,7 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ### 🖥️ Завантажте десктопний застосунок (рекомендовано — нуль конфігурації)
 
-Найшвидший спосіб скористатися Open Design. Без Node, без pnpm, без клонування.
+Найшвидший спосіб скористатися Marketing AX. Без Node, без pnpm, без клонування.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/) або [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) або [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -298,7 +298,7 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ### 🤖 Встановіть у свого кодувального агента (без UI)
 
-Ви можете користуватися Open Design, жодного разу не відкриваючи GUI — викликайте його як навичку, плагін або сервер MCP усередині Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi тощо.
+Ви можете користуватися Marketing AX, жодного разу не відкриваючи GUI — викликайте його як навичку, плагін або сервер MCP усередині Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi тощо.
 
 ```bash
 # One-line install into the agent you're using:
@@ -345,13 +345,13 @@ Node `~24`, pnpm `10.33.x`. Користувачі Windows, див. [`docs/windo
 2. **Дизайнер (або агент) фіксує напрям.** Немає бренду? Виберіть з-поміж 5 курованих напрямів. Маєте бренд? Скиньте скриншот / URL → агент під'єднує GitHub, імпортує Figma та кодифікує багаторазовий `DESIGN.md`.
 3. **Агент видає перший `<artifact>`.** Плагін + навичка + `DESIGN.md` прив'язані. Він передається потоком в iframe-пісочницю, редагований на місці — не «згенерувати з нуля».
 4. **Передача в інженерію.** Артефакт — це справжній HTML/CSS — скиньте його в Cursor, Codex або Claude Code, щоб продовжувати будувати як код. Або експортуйте PPTX / PDF / MP4 прямо в маркетинг.
-5. **Open Design стає розумнішим у міру використання.** Ваші скриншоти, шрифти, палітри та підтверджені артефакти накопичуються як значення за замовчуванням для наступної сесії. Менше переробки, менше дрейфу.
+5. **Marketing AX стає розумнішим у міру використання.** Ваші скриншоти, шрифти, палітри та підтверджені артефакти накопичуються як значення за замовчуванням для наступної сесії. Менше переробки, менше дрейфу.
 
 ---
 
-## Використання Open Design зі свого кодувального агента
+## Використання Marketing AX зі свого кодувального агента
 
-Open Design постачає **сервер MCP через stdio** та **скрипти встановлення** для кожного агента. Будь-який MCP-сумісний агент в іншому репозиторії може читати файли з ваших локальних проєктів Open Design безпосередньо — CSS токенів, JSX-компоненти, вхідний HTML — як структурований API, до якого можна звертатися за іменем. Агент завжди бачить живий файл, а не застарілий експорт.
+Marketing AX постачає **сервер MCP через stdio** та **скрипти встановлення** для кожного агента. Будь-який MCP-сумісний агент в іншому репозиторії може читати файли з ваших локальних проєктів Marketing AX безпосередньо — CSS токенів, JSX-компоненти, вхідний HTML — як структурований API, до якого можна звертатися за іменем. Агент завжди бачить живий файл, а не застарілий експорт.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -441,7 +441,7 @@ od skill list --scenario marketing
 
 ## Плагіни
 
-**261 офіційний плагін** міститься в [`plugins/_official/`](../../plugins/_official/). Кожен плагін — це **портативна тека agent-skill** — `SKILL.md` (зчитувана будь-яким агентом, що підтримує Agent Skills), плюс опціональний маніфест `open-design.json`, який надає Open Design метадані маркетплейсу, входи, попередні перегляди, конвеєри та декларації можливостей. Перейдіть одразу до категорії:
+**261 офіційний плагін** міститься в [`plugins/_official/`](../../plugins/_official/). Кожен плагін — це **портативна тека agent-skill** — `SKILL.md` (зчитувана будь-яким агентом, що підтримує Agent Skills), плюс опціональний маніфест `open-design.json`, який надає Marketing AX метадані маркетплейсу, входи, попередні перегляди, конвеєри та декларації можливостей. Перейдіть одразу до категорії:
 
 | Категорія | Кількість | Вміст |
 |---|---|---|
@@ -483,7 +483,7 @@ od plugin uninstall od-default       # uninstall
 
 ### Створення плагіна
 
-Плагіну **щонайменше потрібен лише `SKILL.md`**; щоб помістити його в маркетплейс Open Design, додайте `open-design.json`:
+Плагіну **щонайменше потрібен лише `SKILL.md`**; щоб помістити його в маркетплейс Marketing AX, додайте `open-design.json`:
 
 ```
 my-plugin/
@@ -501,15 +501,15 @@ my-plugin/
 ```bash
 od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
 od plugin validate ./my-plugin                          # check manifest / file layout
-pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+pnpm guard && pnpm --filter @marketing-ax/plugin-runtime typecheck
 ```
 
 Повний набір полів та рантайм-контракт → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md); розробка плагіна з кодувальним агентом → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md); мінімальні шаблони для копіювання → [`plugins/spec/examples/`](../../plugins/spec/examples/).
 
 ### Внесок плагіна
 
-1. Покладіть теку плагіна в [`plugins/community/`](../../plugins/community/) (сторонні плагіни), або — щоб постачати його в комплекті з Open Design — у відповідний рівень [`plugins/_official/`](../../plugins/_official/).
-2. Пройдіть валідацію: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
+1. Покладіть теку плагіна в [`plugins/community/`](../../plugins/community/) (сторонні плагіни), або — щоб постачати його в комплекті з Marketing AX — у відповідний рівень [`plugins/_official/`](../../plugins/_official/).
+2. Пройдіть валідацію: `od plugin validate`, `pnpm guard`, `pnpm --filter @marketing-ax/plugin-runtime typecheck`.
 3. Заповніть PR за шаблоном у [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) (ID, версія, лінія, режим, можливості, приклади тригерів; додайте скриншот / попередній перегляд для візуальних плагінів).
 4. Щоб опублікувати у зовнішньому реєстрі (skills.sh / ClawHub / окремий GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
 
@@ -571,7 +571,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Протокол sidecar + десктоп Electron + автоматизація IPC
 - [x] API лінтингу артефактів + 5-вимірний шлюз самокритики перед видачею
 - [x] **0.8.0** — інфраструктура маркетплейсу плагінів (261 офіційний плагін, специфікація маніфесту, скрипти встановлення для кожного агента)
-- [x] **0.9.0** — Open Design AMR (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
+- [x] **0.9.0** — Marketing AX AMR (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
 - [x] Упаковані збірки Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (опціональна лінія)
 - [ ] Хірургічні правки в режимі коментарів — частково випущено; надійне цільове патчування в розробці
 - [ ] UX панелі налаштувань, виданої ШІ — ще не реалізовано
@@ -599,7 +599,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## Внесок
 
-Open Design продовжує рухатися, бо контриб'ютори — дизайнери, інженери, автори промптів — продовжують приходити. Багато з найуживаніших навичок, дизайн-систем і плагінів написали люди поза основною командою.
+Marketing AX продовжує рухатися, бо контриб'ютори — дизайнери, інженери, автори промптів — продовжують приходити. Багато з найуживаніших навичок, дизайн-систем і плагінів написали люди поза основною командою.
 
 ### 🎯 З чого почати (максимальний важіль, мінімальна зміна)
 
@@ -636,9 +636,9 @@ gh pr create --fill
 
 Повний дружній до агентів процес внеску, стиль коду та планка PR → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
 
-### 🏅 Програма Open Design Fellow
+### 🏅 Програма Marketing AX Fellow
 
-Ми набираємо **Open Design Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Open Design у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/qhbcCH8Am4).
+Ми набираємо **Marketing AX Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Marketing AX у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/qhbcCH8Am4).
 
 ---
 
@@ -672,7 +672,7 @@ gh pr create --fill
 Дякуємо всім, хто долучився — кодом, документацією, відгуками, влучним issue, новою навичкою, новою дизайн-системою.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Marketing AX contributors" />
 </a>
 
 ---
@@ -680,7 +680,7 @@ gh pr create --fill
 ## Активність репозиторію
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="Marketing AX — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 SVG вище щодня перегенеровується [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) за допомогою [`lowlighter/metrics`](https://github.com/lowlighter/metrics).
@@ -690,7 +690,7 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 ## Поставте нам зірку
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Marketing AX on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Якщо це зекономило вам тридцять хвилин, поставте ★. Зірки не платять за оренду — але вони кажуть наступному дизайнеру, агенту й контриб'ютору, що цей експеримент вартий їхньої уваги. Один клік, три секунди, реальний сигнал.
@@ -699,7 +699,7 @@ SVG вище щодня перегенеровується [`.github/workflows/m
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Marketing AX star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -717,7 +717,7 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | Архітектура демон + адаптер — виявлення агентів скануванням PATH, локальний демон як єдиний привілейований процес. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Джерело схеми `DESIGN.md` з 9 розділів та 70 продуктових систем. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Джерело 57 дизайн-навичок, доданих під `design-systems/`. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Платформа моушн-графіки HTML→MP4, інтегрована як повноправний `hyperframes-html` в Open Design. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Платформа моушн-графіки HTML→MP4, інтегрована як повноправний `hyperframes-html` в Marketing AX. |
 | [Claude Code skills][skill] | Конвенція `SKILL.md`, яку ми приймаємо дослівно. |
 
 Детальне походження → [`docs/references.md`](../../docs/references.md).

@@ -1,6 +1,6 @@
-# NotebookLM: export issues/PRs from Open Design
+# NotebookLM: export issues/PRs from Marketing AX
 
-Open Design gets a lot of feedback via GitHub Issues + PRs. If you want NotebookLM to help with:
+Marketing AX gets a lot of feedback via GitHub Issues + PRs. If you want NotebookLM to help with:
 
 - support answers (with citations)
 - clustering + taxonomy of user scenarios

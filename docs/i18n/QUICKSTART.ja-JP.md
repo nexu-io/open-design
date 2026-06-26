@@ -68,8 +68,8 @@ pnpm tools-dev status          # 管理対象ランタイムを検査
 pnpm tools-dev logs            # daemon/web/desktop のログを表示
 pnpm tools-dev check           # status + 最近のログ + 一般的な診断
 pnpm tools-dev stop            # 管理対象ランタイムを停止
-pnpm --filter @open-design/daemon build  # `od` 用に apps/daemon/dist/cli.js をビルド
-pnpm --filter @open-design/web build     # 必要に応じて web パッケージをビルド
+pnpm --filter @marketing-ax/daemon build  # `od` 用に apps/daemon/dist/cli.js をビルド
+pnpm --filter @marketing-ax/web build     # 必要に応じて web パッケージをビルド
 pnpm typecheck                 # workspace の typecheck
 ```
 
@@ -79,7 +79,7 @@ pnpm typecheck                 # workspace の typecheck
 
 ## Docker セットアップ
 
-Node.js や pnpm をローカルにインストールせずに、完全にコンテナ化された環境で Open Design を実行できます。
+Node.js や pnpm をローカルにインストールせずに、完全にコンテナ化された環境で Marketing AX を実行できます。
 
 ### 必要条件
 
@@ -94,7 +94,7 @@ docker compose version
 
 ---
 
-## Open Design を起動
+## Marketing AX を起動
 
 リポジトリルートから：
 
@@ -222,13 +222,13 @@ Image、Video、Audio、HyperFrames スキルは、daemon がエージェント�
 メディア生成が `OD_BIN: parameter not set`、`apps/daemon/dist/cli.js` の欠落、または `failed to reach daemon at http://127.0.0.1:0` で失敗する場合は、daemon CLI を再ビルドして管理対象ランタイムを再起動してください：
 
 ```bash
-pnpm --filter @open-design/daemon build
+pnpm --filter @marketing-ax/daemon build
 pnpm tools-dev restart --daemon-port 7457 --web-port 5175
 ls -la apps/daemon/dist/cli.js
 curl -s http://127.0.0.1:7457/api/health
 ```
 
-その後、古いターミナルエージェントセッションを再開する代わりに、Open Design アプリからプロジェクトを再度開いてください。daemon から起動されたエージェントは、次のような値を確認できるはずです：
+その後、古いターミナルエージェントセッションを再開する代わりに、Marketing AX アプリからプロジェクトを再度開いてください。daemon から起動されたエージェントは、次のような値を確認できるはずです：
 
 ```bash
 echo "OD_BIN=$OD_BIN"
@@ -312,7 +312,7 @@ open-design/
 │   └── desktop/               # Electron ランタイム、tools-dev によって起動／検査される
 ├── packages/
 │   ├── contracts/             # 共有 web/daemon アプリ契約
-│   ├── sidecar-proto/         # Open Design sidecar プロトコル契約
+│   ├── sidecar-proto/         # Marketing AX sidecar プロトコル契約
 │   ├── sidecar/               # 汎用 sidecar ランタイムプリミティブ
 │   └── platform/              # 汎用プロセス／プラットフォームプリミティブ
 ├── tools/dev/                 # `pnpm tools-dev` ライフサイクルと inspect CLI
@@ -345,8 +345,8 @@ open-design/
 
 - **「no agents found on PATH」** — `claude`、`codex`、`devin`、`gemini`、`opencode`、`cursor-agent`、`qwen`、`copilot` のいずれかをインストールしてください。または、トップバーで「Anthropic API · BYOK」に切り替え、**設定** にキーを貼り付けます。
 - **/api/chat で daemon が 500 を返す** — daemon ターミナルで stderr の末尾を確認してください。通常は CLI が引数を拒否しています。CLI ごとに argv の形式が異なります。調整が必要な場合は `apps/daemon/src/agents.ts` の `buildArgs` を参照してください。
-- **メディア生成で `OD_BIN` が欠落、または daemon URL が `:0`** — 上記のメディアディスパッチャーチェックを実行してください。古い CLI セッションを再開せず、Open Design アプリからプロジェクトを再度開いて、daemon が新しい `OD_*` 変数を注入できるようにしてください。
-- **Codex がプラグインコンテキストを多く読み込みすぎる** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` で Open Design を起動すると、daemon から起動された Codex プロセスが `--disable plugins` で実行されます。
+- **メディア生成で `OD_BIN` が欠落、または daemon URL が `:0`** — 上記のメディアディスパッチャーチェックを実行してください。古い CLI セッションを再開せず、Marketing AX アプリからプロジェクトを再度開いて、daemon が新しい `OD_*` 変数を注入できるようにしてください。
+- **Codex がプラグインコンテキストを多く読み込みすぎる** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` で Marketing AX を起動すると、daemon から起動された Codex プロセスが `--disable plugins` で実行されます。
 - **アーティファクトがレンダリングされない** — モデルが `<artifact>` でラップせずにテキストを生成しました。システムプロンプトが通っていることを確認し（daemon ログを確認）、より高性能なモデルまたは厳格なスキルへの切り替えを検討してください。
 
 ## ビジョンへのマッピング
