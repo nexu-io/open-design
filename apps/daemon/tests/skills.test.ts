@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from '../src/cwd-aliases.js';
 import {
+  buildExternalizedSkillReference,
   deleteUserSkill,
   importUserSkill,
   listSkillFiles,
@@ -850,5 +851,35 @@ describe('listSkillFiles', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+});
+
+describe('buildExternalizedSkillReference', () => {
+  it('points to the staged SKILL.md path and lists side files', () => {
+    const dir = path.join(repoRoot, 'skills', 'imagegen-frontend-web');
+    const ref = buildExternalizedSkillReference({
+      skillName: 'imagegen-frontend-web',
+      skillDir: dir,
+      composedSkill: false,
+      skillBody: 'Read assets/template.html and references/layouts.md.',
+    });
+    expect(ref).toContain('## Active skill — imagegen-frontend-web');
+    expect(ref).toContain('Read that file and follow its instructions exactly.');
+    const expectedAlias = `${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(dir)}/SKILL.md`;
+    expect(ref).toContain(expectedAlias);
+    expect(ref).toContain('`assets/template.html`');
+    expect(ref).toContain('`references/layouts.md`');
+  });
+
+  it('uses composed-skill header for ad-hoc skills', () => {
+    const dir = path.join(repoRoot, 'skills', 'faq-page');
+    const ref = buildExternalizedSkillReference({
+      skillName: 'faq-page',
+      skillDir: dir,
+      composedSkill: true,
+    });
+    expect(ref).toContain('## Composed skill — faq-page');
+    expect(ref).toContain(`${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(dir)}/SKILL.md`);
   });
 });

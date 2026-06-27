@@ -547,25 +547,37 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
-      try {
-        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
-        const agents = await detectAgents(
-          toJsonRecord(appCfg.agentCliEnv),
-        ).catch((): DetectedAgent[] => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        if (cfgAgent && cfgAgentAvailable) {
-          meta.agentId = cfgAgent;
-        } else {
-          const firstAvailable = agents.find((agent) => agent.available)?.id ?? null;
-          if (firstAvailable) meta.agentId = firstAvailable;
+      // Per-project agent override: a project can pin its default agent in
+      // metadata (e.g., a heavy-skill / live-artifact project that would
+      // overflow an argv-only adapter like Kimi can default to a stdin-capable
+      // adapter without changing the global default).
+      const projectAgentOverride =
+        runProject?.metadata && typeof runProject.metadata === 'object'
+          ? (runProject.metadata as Record<string, unknown>).agentId
+          : undefined;
+      if (typeof projectAgentOverride === 'string' && projectAgentOverride) {
+        meta.agentId = projectAgentOverride;
+      } else {
+        try {
+          const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+          const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
+            ? appCfg.agentId
+            : null;
+          const agents = await detectAgents(
+            toJsonRecord(appCfg.agentCliEnv),
+          ).catch((): DetectedAgent[] => []);
+          const cfgAgentAvailable = cfgAgent
+            ? agents.some((agent) => agent.id === cfgAgent && agent.available)
+            : false;
+          if (cfgAgent && cfgAgentAvailable) {
+            meta.agentId = cfgAgent;
+          } else {
+            const firstAvailable = agents.find((agent) => agent.available)?.id ?? null;
+            if (firstAvailable) meta.agentId = firstAvailable;
+          }
+        } catch (err) {
+          console.warn('[runs] agent id fallback failed', err);
         }
-      } catch (err) {
-        console.warn('[runs] agent id fallback failed', err);
       }
     }
     const toolBundleSupport = validateRunToolBundleForAgent(
