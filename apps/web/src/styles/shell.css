@@ -1355,10 +1355,9 @@ a.avatar-item:visited {
 .split-resize-handle::before {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -10px;
-  right: -10px;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inset-inline-end: -10px;
   cursor: col-resize;
 }
 .split-resize-handle::after {
