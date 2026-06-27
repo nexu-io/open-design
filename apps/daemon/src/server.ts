@@ -7569,13 +7569,12 @@ export async function startServer({
     let trackingSubstantiveOutput = false;
     // Event types that count as "the agent actually produced a response or a
     // deliverable." Lifecycle markers (`status`), meter readings (`usage`),
-    // and tool activity deliberately do NOT count: a run can successfully read
-    // files or call tools and still terminate before returning text/artifacts
+    // reasoning deltas, and tool activity deliberately do NOT count: a run can
+    // think/read/call tools and still terminate before returning text/artifacts
     // to the user. Treat that as empty output instead of a silent success
     // (issues #691, #4814).
     const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
       'text_delta',
-      'thinking_delta',
       'artifact',
     ]);
     // First-token timing must reflect when the user actually starts seeing

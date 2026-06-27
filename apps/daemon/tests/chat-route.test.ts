@@ -2261,6 +2261,63 @@ process.exit(0);
     );
   });
 
+  it('marks reasoning-only stream runs failed when no assistant output is produced', async () => {
+    const reasoningLine = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'I should inspect the project before answering.',
+          },
+        ],
+      },
+    });
+    const resultLine = JSON.stringify({
+      type: 'result',
+      is_error: false,
+      usage: { input_tokens: 1, output_tokens: 0 },
+    });
+
+    await withFakeAgent(
+      'qodercli',
+      `
+console.log(${JSON.stringify(reasoningLine)});
+console.log(${JSON.stringify(resultLine)});
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'qoder',
+            message: 'think but do not answer',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(
+          eventsResponse,
+          'Agent completed without producing any output',
+        );
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('"type":"thinking_delta"');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('Agent completed without producing any output');
+        expect(eventsBody).not.toContain('"status":"succeeded"');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('fails Qoder runs when the result reports is_error with exit code 0', async () => {
     const qoderResultLine = JSON.stringify({
       type: 'result',
