@@ -32,17 +32,12 @@
     ]
   },
   "od": {
-    "kind": "scenario",
+    "kind": "skill",
     "taskKind": "new-generation",
     "scenario": "plugin-authoring",
     "mode": "scenario",
     "engineRequirements": {
       "od": ">=0.4.0"
-    },
-    "preview": {
-      "type": "html",
-      "entry": "./examples/sample-workflow/index.html",
-      "motion": "static"
     },
     "useCase": {
       "query": {
@@ -95,9 +90,7 @@
       ]
     },
     "capabilities": [
-      "prompt:inject",
-      "fs:read",
-      "fs:write"
+      "prompt:inject"
     ],
     "inputs": [
       {
