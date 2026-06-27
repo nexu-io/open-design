@@ -243,6 +243,66 @@ process.exit(0);
     );
   });
 
+  it('marks OpenCode tool-only runs failed when no assistant output is produced', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-tool-only-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-tool-only-session',
+  part: {
+    tool: 'Read',
+    callID: 'call-read-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ file: 'src/app.ts' }),
+      output: 'file contents',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 0 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'read the file and summarize it',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('"type":"tool_use"');
+        expect(body).toContain('"type":"tool_result"');
+        expect(body).toContain('AGENT_EXECUTION_FAILED');
+        expect(body).toContain('Agent completed without producing any output');
+        expect(body).toContain('"status":"failed"');
+        expect(body).not.toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ conversationId: string | null; status: string; exitCode: number | null }>;
+        };
+
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          conversationId,
+          status: 'failed',
+          exitCode: 0,
+        });
+      },
+    );
+  });
+
   it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');
