@@ -1,0 +1,117 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "reusable-workflow-author",
+  "title": "Reusable workflow author",
+  "title_i18n": {
+    "en": "Reusable workflow author",
+    "zh-CN": "可复用工作流编写器"
+  },
+  "version": "0.1.0",
+  "description": "Turn a one-line workflow brief into a local Open Design plugin folder (SKILL.md + open-design.json + example) ready to install into My plugins.",
+  "description_i18n": {
+    "en": "Turn a one-line workflow brief into a local Open Design plugin folder (SKILL.md + open-design.json + example) ready to install into My plugins.",
+    "zh-CN": "把一句工作流描述变成可安装的 Open Design 插件文件夹（SKILL.md + open-design.json + 示例），直接加入「我的插件」。"
+  },
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/VaqueroGroup"
+  },
+  "license": "MIT",
+  "tags": [
+    "scenario",
+    "plugin-authoring",
+    "workflow",
+    "my-plugins"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "plugin-authoring",
+    "mode": "scenario",
+    "engineRequirements": {
+      "od": ">=0.4.0"
+    },
+    "preview": {
+      "type": "html",
+      "entry": "./examples/sample-workflow/index.html",
+      "motion": "static"
+    },
+    "useCase": {
+      "query": {
+        "en": "Author a reusable Open Design plugin for: {{pluginGoal}}. Produce a folder named generated-plugin with SKILL.md, open-design.json, and any useful examples or assets. Follow docs/plugins-spec.md and finish with a readiness summary plus next actions: Add to My plugins, Publish repo, or Open Design PR.",
+        "zh-CN": "编写一个用于「{{pluginGoal}}」的可复用 Open Design 插件，生成名为 generated-plugin 的文件夹，包含 SKILL.md、open-design.json，以及有用的 examples 或 assets。遵循 docs/plugins-spec.md，并在最后总结它是否可以添加到 My plugins，同时给出下一步操作：添加到 My plugins、发布仓库或创建 Open Design PR。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/sample-workflow/open-design.json",
+          "title": "Sample workflow manifest"
+        }
+      ]
+    },
+    "context": {
+      "atoms": [
+        "discovery-question-form",
+        "todo-write",
+        "file-write",
+        "critique-theater"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate-plugin",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "review-plugin",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "inputs": [
+      {
+        "name": "pluginGoal",
+        "type": "text",
+        "required": false,
+        "default": "a reusable workflow described by the user's prompt",
+        "label": "Plugin goal",
+        "placeholder": "turn a brand brief into a launch landing page workflow"
+      }
+    ]
+  },
+  "plugin": {
+    "repo": "https://github.com/VaqueroGroup/reusable-workflow-author"
+  },
+  "homepage": "https://github.com/VaqueroGroup/reusable-workflow-author"
+}

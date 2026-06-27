@@ -1,0 +1,35 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "brief-to-landing",
+  "title": "Brief to landing",
+  "version": "0.1.0",
+  "description": "Turn a one-paragraph product brief into a 3-section marketing landing page.",
+  "license": "MIT",
+  "tags": ["landing", "marketing", "example"],
+  "compat": {
+    "agentSkills": [{ "path": "../SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "landing",
+    "scenario": "marketing",
+    "useCase": {
+      "query": "Make a 3-section marketing landing page for {{product}} targeting {{audience}}."
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write"] },
+        { "id": "critique", "atoms": ["critique-theater"], "repeat": true, "until": "critique.score>=4 || iterations>=3" }
+      ]
+    },
+    "inputs": [
+      { "name": "product", "type": "string", "required": true, "label": "Product", "placeholder": "an AI browser extension for design teams" },
+      { "name": "audience", "type": "string", "required": true, "label": "Audience", "placeholder": "indie product designers, 25–40" }
+    ],
+    "capabilities": ["prompt:inject"]
+  }
+}
