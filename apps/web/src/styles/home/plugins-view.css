@@ -136,7 +136,7 @@
 .plugins-view__tab-hint {
   overflow: hidden;
   max-width: 100%;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -183,7 +183,7 @@
 
 .plugins-view__section-count {
   flex: 0 0 auto;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -356,7 +356,7 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 11.5px;
 }
 

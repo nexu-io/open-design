@@ -746,7 +746,7 @@
 .home-hero__plugin-hover-kicker {
   display: block;
   margin-bottom: 2px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
@@ -757,7 +757,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 11px;
 }
 .home-hero__plugin-hover-meta span {
