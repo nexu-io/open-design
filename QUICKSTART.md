@@ -62,19 +62,11 @@ From the repository root:
    cp .env.example .env
    ```
 
-2. Generate a secure token:
+2. Start the service:
 
    ```bash
-   openssl rand -hex 32
+   docker compose up -d
    ```
-
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
-
-Then start the service:
-
-```bash
-docker compose up -d
-```
 
 Open the app in your browser:
 
