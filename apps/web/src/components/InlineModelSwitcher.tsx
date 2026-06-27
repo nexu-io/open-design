@@ -992,7 +992,7 @@ export function InlineModelSwitcher({
                 )}
               </div>
 
-              {!config.apiKey ? (
+              {credentialSource !== 'deployment' && !config.apiKey ? (
                 <div className="inline-switcher__warn" role="status">
                   {t('inlineSwitcher.missingApiKey')}
                 </div>

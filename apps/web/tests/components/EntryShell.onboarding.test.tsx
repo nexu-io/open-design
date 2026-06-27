@@ -290,6 +290,34 @@ beforeEach(() => {
 });
 
 describe('EntryShell settings menu', () => {
+  it('passes deployment provider config to the home execution switcher', async () => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({})) as typeof fetch;
+    renderHome({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'gpt-routed',
+      }),
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Workspace provider',
+        kind: 'available',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    expect(screen.getByTestId('inline-model-switcher-api-model').textContent).toContain('gpt-routed');
+    expect(screen.queryByText('API key not set — open Settings to add it.')).toBeNull();
+  });
+
   it('opens quick actions before opening the full settings dialog', async () => {
     globalThis.fetch = vi.fn(async (input) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);

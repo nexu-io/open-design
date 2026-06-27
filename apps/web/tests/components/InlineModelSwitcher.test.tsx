@@ -540,6 +540,7 @@ describe('InlineModelSwitcher AMR row', () => {
     ]);
     expect(optionText.some((text) => text?.includes('gpt-4o'))).toBe(false);
     expect(optionText.some((text) => text?.includes('o3'))).toBe(false);
+    expect(screen.queryByText('API key not set — open Settings to add it.')).toBeNull();
   });
 
   it('does not fetch from the home picker for a keyed protocol with no API key', async () => {

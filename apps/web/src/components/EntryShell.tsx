@@ -743,6 +743,7 @@ export function EntryShell({
     <InlineModelSwitcher
       compact
       config={config}
+      deploymentProviderConfig={deploymentProviderConfig}
       agents={agents}
       providerModelsCache={activeProviderModelsCache}
       onProviderModelsCacheChange={activeSetProviderModelsCache}
