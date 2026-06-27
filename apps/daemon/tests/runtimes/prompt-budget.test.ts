@@ -146,18 +146,12 @@ test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts'
   assert.match(flagged.message, /stdin-capable adapter/);
 });
 
-test('Kimi prompt mode declares and enforces an argv-byte budget', () => {
-  assert.equal(kimi.maxPromptArgBytes, 30_000);
+test('Kimi ACP mode does not declare an argv-byte budget', () => {
+  assert.equal(kimi.maxPromptArgBytes, undefined);
 
-  const oversized = 'x'.repeat(kimi.maxPromptArgBytes + 1);
+  const oversized = 'x'.repeat(100_000);
   const flagged = checkPromptArgvBudget(kimi, oversized, 'win32');
-  assert.ok(flagged, 'oversized Kimi prompts must trip the argv-byte guard');
-  assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
-  assert.equal(flagged.limit, kimi.maxPromptArgBytes);
-  assert.equal(flagged.bytes, kimi.maxPromptArgBytes + 1);
-  assert.match(flagged.message, /Kimi CLI/);
-  assert.match(flagged.message, /command-line argument/);
-  assert.match(flagged.message, /stdin support/);
+  assert.equal(flagged, null);
 
   assert.equal(checkPromptArgvBudget(kimi, 'hello'), null);
 });
