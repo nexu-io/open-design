@@ -4,7 +4,7 @@
 >
 > ⚡ **Open Design AMR (Agentic Model Router) — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати AMR](https://open-design.ai/amr/)
 >
-> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/9ptkbbqRu).
+> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -14,14 +14,14 @@
   <a href="https://open-design.ai/">Вебсайт</a> ·
   <a href="https://open-design.ai/">Завантажити</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
+  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Стежити за @OpenDesignHQ</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="../../QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
@@ -594,7 +594,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 За кожним каналом — реальні люди.
 
-- 💬 **Discord** — щоденний чат, обмін плагінами, запитання → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
+- 💬 **Discord** — щоденний чат, обмін плагінами, запитання → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
 - 🐦 **X / Twitter** — нотатки до релізів, віхи, закулісся → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — глибокі Q&A, RFC, «покажи свою роботу» → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — звіти про баги, запити на функції → [**Issues**](https://github.com/nexu-io/open-design/issues)
@@ -644,7 +644,7 @@ gh pr create --fill
 
 ### 🏅 Програма Open Design Fellow
 
-Ми набираємо **Open Design Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Open Design у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/9ptkbbqRu).
+Ми набираємо **Open Design Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Open Design у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 

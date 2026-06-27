@@ -4,7 +4,7 @@
 >
 > ⚡ **Open Design AMR (Agentic Model Router) — o serviço de modelos oficial.** Uma única recarga para usar GPT, Claude, Gemini e DeepSeek dentro do Open Design: mais de 20 modelos de ponta, zero configuração, cobrança pelo uso real de tokens. [Experimentar o AMR](https://open-design.ai/amr/)
 >
-> 🏅 **O programa Open Design Fellow está aberto.** Se você também acredita que o design deveria ser aberto — torne-se um Open Design Fellow, ajude a moldar o produto ao lado do time central e contribua para que mais pessoas participem da definição do futuro do design. Detalhes → [`MAINTAINERS.md`](../../MAINTAINERS.md) e [Discord](https://discord.gg/9ptkbbqRu).
+> 🏅 **O programa Open Design Fellow está aberto.** Se você também acredita que o design deveria ser aberto — torne-se um Open Design Fellow, ajude a moldar o produto ao lado do time central e contribua para que mais pessoas participem da definição do futuro do design. Detalhes → [`MAINTAINERS.md`](../../MAINTAINERS.md) e [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -14,14 +14,14 @@
   <a href="https://open-design.ai/">Site</a> ·
   <a href="https://open-design.ai/">Download</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
+  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Siga @OpenDesignHQ</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="QUICKSTART.pt-BR.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
@@ -594,7 +594,7 @@ Entrega faseada → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 Pessoas de verdade por trás de cada canal.
 
-- 💬 **Discord** — chat diário, compartilhamento de plugins, perguntas → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
+- 💬 **Discord** — chat diário, compartilhamento de plugins, perguntas → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
 - 🐦 **X / Twitter** — notas de release, marcos, bastidores → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
 - 🗣️ **GitHub Discussions** — Q&A aprofundado, RFCs, "mostre seu trabalho" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — relatos de bugs, pedidos de features → [**Issues**](https://github.com/nexu-io/open-design/issues)
@@ -644,7 +644,7 @@ Fluxo completo de contribuição amigável a agentes, estilo de código e barra 
 
 ### 🏅 Programa Open Design Fellow
 
-Estamos recrutando **Open Design Fellows** ao redor do mundo — os Fellows moldam o produto ao lado do time central, representam oficialmente o Open Design em sua região e fazem a comunidade crescer localmente, com suporte financiado ($1,000 / MR), créditos gratuitos de LLM e uma trilha de revisão direta. Detalhes → [`MAINTAINERS.md`](../../MAINTAINERS.md) e o anúncio no [Discord](https://discord.gg/9ptkbbqRu).
+Estamos recrutando **Open Design Fellows** ao redor do mundo — os Fellows moldam o produto ao lado do time central, representam oficialmente o Open Design em sua região e fazem a comunidade crescer localmente, com suporte financiado ($1,000 / MR), créditos gratuitos de LLM e uma trilha de revisão direta. Detalhes → [`MAINTAINERS.md`](../../MAINTAINERS.md) e o anúncio no [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 

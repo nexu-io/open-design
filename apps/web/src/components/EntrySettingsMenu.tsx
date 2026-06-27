@@ -28,7 +28,7 @@ import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPres
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
 
-const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
+const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const THREADS_URL = 'https://www.threads.com/@opendesign.ai';
 const YOUTUBE_URL = 'https://www.youtube.com/@Open-Design-ai';
