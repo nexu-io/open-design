@@ -2090,7 +2090,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // The ids staged for the current turn. Drives both the @-popover's
     // suggestion filter (staged skills drop out so the picker keeps moving
     // forward as the user picks) and its active indicator, so removing a
-    // skill from the draft immediately clears that skill's checkmark.
+    // skill from the draft immediately clears that skill's checkmark.  
     const stagedSkillIds = useMemo(
       () => new Set(stagedSkills.map((s) => s.id)),
       [stagedSkills],
