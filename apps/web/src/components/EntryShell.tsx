@@ -244,7 +244,7 @@ function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
 
-function defaultPluginInputsForCreate(
+export function defaultPluginInputsForCreate(
   input: CreateInput,
   pluginId: string | null,
 ): Record<string, unknown> | null {
@@ -264,11 +264,15 @@ function defaultPluginInputsForCreate(
   }
 
   if (pluginId === 'example-simple-deck') {
+    const slideCount =
+      typeof input.metadata.slideCount === 'string' && input.metadata.slideCount.trim().length > 0
+        ? input.metadata.slideCount.trim()
+        : '10-15 pages';
     return {
       deckType: 'pitch deck',
       topic: projectName || 'the user brief',
       audience: 'decision makers',
-      slideCount: '10-15 pages',
+      slideCount,
       speakerNotes: input.metadata.speakerNotes
         ? 'include speaker notes'
         : 'no speaker notes',

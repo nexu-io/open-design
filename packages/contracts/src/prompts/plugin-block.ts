@@ -38,6 +38,12 @@ export function renderPluginBlock(snapshot: AppliedPluginSnapshot): string {
     for (const key of inputKeys) {
       lines.push(`- **${key}**: ${formatInput(inputs[key])}`);
     }
+    const slideCount = authoritativeSlideCountInput(inputs);
+    if (slideCount) {
+      lines.push(
+        `- **required slide count**: ${slideCount}. This overrides any conflicting slide-count or page-count text in the user's prompt.`,
+      );
+    }
   }
 
   const atomIds = snapshot.resolvedContext?.atoms ?? [];
@@ -53,6 +59,18 @@ export function renderPluginBlock(snapshot: AppliedPluginSnapshot): string {
   }
 
   return lines.join('\n');
+}
+
+function authoritativeSlideCountInput(
+  inputs: AppliedPluginSnapshot['inputs'],
+): string | null {
+  for (const key of ['slideCount', 'slides', 'pageCount']) {
+    const value = inputs[key];
+    if (value === undefined || value === null || typeof value === 'boolean') continue;
+    const text = String(value).trim();
+    if (text.length > 0) return text;
+  }
+  return null;
 }
 
 function formatInput(value: string | number | boolean | undefined): string {

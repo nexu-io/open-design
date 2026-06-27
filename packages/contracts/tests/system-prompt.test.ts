@@ -156,6 +156,21 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('`实时作品`');
   });
 
+  it('makes deck slide count authoritative over conflicting prompt text', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'deck',
+        speakerNotes: true,
+        slideCount: '25-30 pages',
+      } as any,
+    });
+
+    expect(prompt).toContain('- **slideCount**: 25-30 pages');
+    expect(prompt).toContain(
+      "- **required slide count**: 25-30 pages. This overrides any conflicting slide-count or page-count text in the user's prompt.",
+    );
+  });
+
   it('treats an active design system as the visual direction', () => {
     const prompt = composeSystemPrompt({
       designSystemTitle: 'ComfyUI',

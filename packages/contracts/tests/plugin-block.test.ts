@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { renderPluginBlock } from '../src/prompts/plugin-block.js';
+
 import type { AppliedPluginSnapshot } from '../src/plugins/apply.js';
+import { renderPluginBlock } from '../src/prompts/plugin-block.js';
 
 function makeSnapshot(overrides: Partial<AppliedPluginSnapshot> = {}): AppliedPluginSnapshot {
   return {
@@ -87,5 +88,19 @@ describe('renderPluginBlock', () => {
     expect(out).toContain('Walks a designer through a pitch deck.');
     expect(out).not.toContain('  Walks');
     expect(out).toContain('_write me a deck about fluorine_');
+  });
+
+  it('makes slideCount plugin inputs authoritative over conflicting prompt text', () => {
+    const block = renderPluginBlock(makeSnapshot({
+      inputs: {
+        slideCount: '25-30 pages',
+        topic: 'architecture blueprint',
+      },
+    }));
+
+    expect(block).toContain('- **slideCount**: 25-30 pages');
+    expect(block).toContain(
+      "- **required slide count**: 25-30 pages. This overrides any conflicting slide-count or page-count text in the user's prompt.",
+    );
   });
 });

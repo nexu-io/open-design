@@ -291,6 +291,21 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('**platformTargets**');
   });
 
+  it('makes deck slide count authoritative over conflicting prompt text', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'deck',
+        speakerNotes: true,
+        slideCount: '25-30 pages',
+      } as any,
+    });
+
+    expect(prompt).toContain('- **slideCount**: 25-30 pages');
+    expect(prompt).toContain(
+      "- **required slide count**: 25-30 pages. This overrides any conflicting slide-count or page-count text in the user's prompt.",
+    );
+  });
+
   it('tells artifact generation to summarize instead of dumping raw HTML source into chat', () => {
     const prompt = composeSystemPrompt({
       metadata: { kind: 'prototype', fidelity: 'production' } as any,

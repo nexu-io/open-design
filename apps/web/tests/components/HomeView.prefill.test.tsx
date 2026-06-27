@@ -1631,6 +1631,70 @@ describe('HomeView prompt handoff', () => {
     })));
   });
 
+  it('keeps user-edited deck slide count inputs when submitting a rendered deck query', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+        return new Response(JSON.stringify({
+          ...SIMPLE_DECK_APPLY_RESULT,
+          appliedPlugin: {
+            ...SIMPLE_DECK_APPLY_RESULT.appliedPlugin,
+            inputs: body.inputs ?? SIMPLE_DECK_APPLY_RESULT.appliedPlugin.inputs,
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(4, 'example-simple-deck', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    const seed =
+      'Create a pitch deck for decision makers about the user brief with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.';
+    await waitFor(() => expect(homeHeroPromptText()).toBe(seed));
+
+    await setPromptAndSettle(seed.replace('10-15 pages', '25-30 pages'));
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-simple-deck',
+      pluginInputs: expect.objectContaining({
+        slideCount: '25-30 pages',
+      }),
+    })));
+  });
+
   it('extracts a placeholder edit even after the use-with-query draft prefix is also edited', async () => {
     // The "tweak a preset before running" case: with an existing draft,
     // use-with-query appends the rendered query; the user then edits BOTH the

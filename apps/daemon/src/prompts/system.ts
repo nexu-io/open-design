@@ -1300,9 +1300,18 @@ function renderMetadataBlock(
     );
   }
   if (metadata.kind === 'deck') {
+    const slideCount =
+      typeof metadata.slideCount === 'string' && metadata.slideCount.trim().length > 0
+        ? metadata.slideCount.trim()
+        : null;
     lines.push(
-      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+      `- **slideCount**: ${slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
     );
+    if (slideCount) {
+      lines.push(
+        `- **required slide count**: ${slideCount}. This overrides any conflicting slide-count or page-count text in the user's prompt.`,
+      );
+    }
     lines.push(
       `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
     );

@@ -36,6 +36,7 @@ These are the structured choices the user made (or skipped) when creating this p
 
 - **kind**: deck
 - **slideCount**: 12
+- **required slide count**: 12. This overrides any conflicting slide-count or page-count text in the user's prompt.
 - **speakerNotes**: true"
 `;
 

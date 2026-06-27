@@ -1829,18 +1829,18 @@ export function HomeView({
       // stripped from this set just below to form the run-facing inputs.
       const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
       // Inputs forwarded to the run AND used to build the run-facing snapshot:
-      // drop every now-hidden footer/media setting so the first-turn
-      // question-form flow collects them instead of inheriting a baked-in
-      // default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …). The
+      // drop now-hidden footer/media defaults so the first-turn question-form
+      // flow collects them instead of inheriting a baked-in default (`ratio:
+      // 16:9`, `duration: 5`, `audioType: speech`, …). `slideCount` has one
+      // narrow exception: a non-default value may come from the user's visible
+      // deck-query edit and must remain authoritative.
       // snapshot is resolved from these stripped inputs too — the daemon renders
       // `## Plugin inputs` from `snapshot.inputs` and tells the agent not to
       // re-ask about anything listed there, so leaving the deferred defaults in
-      // the snapshot would suppress the discovery flow even though
-      // `onSubmit.pluginInputs` was stripped. Stripping only removes non-required
-      // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
-      // od-media-generation apply still validates.
+      // the snapshot would suppress the discovery flow even though the user did
+      // not explicitly choose them.
       const submittedPluginInputs = submittedActive
-        ? stripArtifactFooterInputs(submittedApplyInputs)
+        ? stripArtifactFooterInputs(submittedApplyInputs, submittedActive.inputFields)
         : defaultInputs;
       const activeInputsChangedForSubmit = submittedActive
         ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
@@ -2372,22 +2372,44 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'voice',
 ]);
 
+const AUTHORITATIVE_HIDDEN_INPUT_NAMES = new Set(['slideCount']);
+
 // The prototype/deck footer no longer exposes these settings, so any plugin
 // default for them must NOT be seeded into the Home composer's inputs — that
 // would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
 // instead of leaving it "unknown" for the first-turn discovery flow to ask.
 function stripArtifactFooterInputs(
   inputs: Record<string, unknown>,
+  fields: InputFieldSpec[] = [],
 ): Record<string, unknown> {
   if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
     return inputs;
   }
+  const fieldsByName = new Map(fields.map((field) => [field.name, field]));
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(inputs)) {
-    if (ARTIFACT_FOOTER_FIELD_NAMES.has(key)) continue;
+    if (ARTIFACT_FOOTER_FIELD_NAMES.has(key)) {
+      const field = fieldsByName.get(key);
+      if (
+        AUTHORITATIVE_HIDDEN_INPUT_NAMES.has(key) &&
+        field &&
+        !inputValueMatchesDefault(value, field.default)
+      ) {
+        next[key] = value;
+      }
+      continue;
+    }
     next[key] = value;
   }
   return next;
+}
+
+function inputValueMatchesDefault(value: unknown, defaultValue: unknown): boolean {
+  if (defaultValue === undefined) return false;
+  if (typeof value === 'string' || typeof defaultValue === 'string') {
+    return String(value ?? '').trim() === String(defaultValue ?? '').trim();
+  }
+  return Object.is(value, defaultValue);
 }
 
 function footerInputNamesForChip(_chipId: string | null): string[] {
