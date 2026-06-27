@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTML PPT Studio Preview</title>
+<style>
+:root{--bg:#0f1117;--panel:#171b26;--ink:#f7f4eb;--muted:#9da3b4;--cyan:#8be9fd;--pink:#ff79c6;--line:#2a3040}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#0f1117,#191325 70%);color:var(--ink);font-family:Inter,system-ui,sans-serif;padding:34px}
+.stage{height:calc(100vh - 68px);border:1px solid var(--line);background:var(--panel);display:grid;grid-template-columns:240px 1fr;box-shadow:0 28px 70px rgba(0,0,0,.34)}
+.sidebar{border-right:1px solid var(--line);padding:24px}.logo{font:800 13px ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)}
+.thumb{height:86px;border:1px solid var(--line);margin-top:18px;border-radius:10px;padding:12px;color:var(--muted)}.thumb.active{background:#202638;color:var(--ink);border-color:var(--cyan)}
+.slide{padding:56px;display:grid;grid-template-rows:auto 1fr auto}.kicker{font:700 12px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--pink)}
+h1{font:900 clamp(48px,8vw,104px)/.9 Inter,system-ui,sans-serif;letter-spacing:-.07em;margin:22px 0}.grad{background:linear-gradient(90deg,var(--cyan),var(--pink));-webkit-background-clip:text;color:transparent}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-self:end}.card{border:1px solid var(--line);border-radius:16px;padding:18px;background:#11151f}.card b{display:block;font-size:30px}.card span{color:var(--muted);font-size:13px}
+.footer{display:flex;justify-content:space-between;color:var(--muted);font:700 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.14em}
+</style>
+</head>
+<body>
+<main class="stage">
+  <aside class="sidebar"><div class="logo">HTML PPT Studio</div><div class="thumb active">01 cover</div><div class="thumb">02 metrics</div><div class="thumb">03 reveal</div></aside>
+  <section class="slide">
+    <div class="kicker">Theme gallery / runtime ready</div>
+    <h1>Decks with<br><span class="grad">tasteful motion</span><br>and keyboard flow.</h1>
+    <div class="cards"><div class="card"><b>36</b><span>themes</span></div><div class="card"><b>31</b><span>layouts</span></div><div class="card"><b>27</b><span>animations</span></div></div>
+    <div class="footer"><span>Arrow keys</span><span>Presenter notes</span></div>
+  </section>
+</main>
+</body>
+</html>

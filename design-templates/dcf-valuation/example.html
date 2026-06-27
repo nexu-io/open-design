@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCF Valuation Preview</title>
+<style>
+:root{--bg:#f4f0e5;--ink:#11140f;--muted:#6d675a;--line:#d8cfbd;--accent:#1f7a5a;--warn:#b85c3a}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,sans-serif;padding:42px}
+.sheet{max-width:980px;margin:auto;background:#fffdf7;border:1px solid var(--line);box-shadow:0 30px 70px rgba(35,29,18,.16);padding:32px}
+.top{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid var(--ink);padding-bottom:20px}
+.eyebrow{font:700 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font:800 clamp(34px,6vw,76px)/.92 Georgia,serif;margin:18px 0 0;letter-spacing:-.04em}
+.summary{display:grid;grid-template-columns:1.1fr .9fr;gap:26px;margin-top:30px}
+.price{background:#10251d;color:#f7f0df;padding:28px;border-radius:4px}.price b{display:block;font-size:62px;line-height:1}.price span{color:#9fe0c2}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metric{border:1px solid var(--line);padding:18px;background:#fbf8ef}.metric strong{display:block;font-size:28px}.metric small{color:var(--muted)}
+table{width:100%;border-collapse:collapse;margin-top:28px;font-size:14px}th,td{text-align:left;border-bottom:1px solid var(--line);padding:12px}th{font:700 10px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tag{display:inline-block;border:1px solid var(--line);padding:5px 8px;border-radius:999px;color:var(--warn);font:700 11px ui-monospace,monospace}
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="top">
+    <div><div class="eyebrow">Valuation memo</div><h1>Intrinsic value model</h1></div>
+    <div class="eyebrow">DCF / WACC / terminal growth</div>
+  </div>
+  <section class="summary">
+    <div class="price"><span>Fair value</span><b>$148</b><p>Base case implies 22% upside with sensitivity around discount rate and margin recovery.</p></div>
+    <div class="grid">
+      <div class="metric"><strong>9.1%</strong><small>WACC</small></div>
+      <div class="metric"><strong>2.5%</strong><small>Terminal growth</small></div>
+      <div class="metric"><strong>18%</strong><small>FCF margin</small></div>
+    </div>
+  </section>
+  <table>
+    <tr><th>Scenario</th><th>Equity value</th><th>Signal</th></tr>
+    <tr><td>Bear case</td><td>$112</td><td><span class="tag">margin risk</span></td></tr>
+    <tr><td>Base case</td><td>$148</td><td><span class="tag">undervalued</span></td></tr>
+    <tr><td>Bull case</td><td>$181</td><td><span class="tag">growth optionality</span></td></tr>
+  </table>
+</main>
+</body>
+</html>

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="mimo-dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiMo Code — Component Showcase</title>
+<style>
+/* ── Theme tokens (inline from tokens.css) ─────────────────────────── */
+:root{--font-family:'JetBrains Mono','Fira Code','Cascadia Code','SF Mono','Consolas',monospace;--font-xs:.7rem;--font-sm:.8rem;--font-base:.875rem;--font-lg:1.1rem;--font-xl:1.4rem;--line-height:1.5;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--transition:200ms ease}
+[data-theme="mimo-dark"],:root{--background:#1a1b2e;--foreground:#e0e0e0;--primary:#FF6900;--secondary:#7c3aed;--success:#10b981;--warning:#f59e0b;--error:#ef4444;--muted:#6b7280;--accent:#FF6900}
+[data-theme="mimo-light"]{--background:#ffffff;--foreground:#1f2937;--primary:#2563eb;--secondary:#7c3aed;--success:#059669;--warning:#d97706;--error:#dc2626;--muted:#9ca3af;--accent:#2563eb}
+[data-theme="dracula"]{--background:#282a36;--foreground:#f8f8f2;--primary:#bd93f9;--secondary:#ff79c6;--success:#50fa7b;--warning:#f1fa8c;--error:#ff5555;--muted:#6272a4;--accent:#8be9fd}
+[data-theme="nord"]{--background:#2e3440;--foreground:#eceff4;--primary:#88c0d0;--secondary:#b48ead;--success:#a3be8c;--warning:#ebcb8b;--error:#bf616a;--muted:#4c566a;--accent:#81a1c1}
+[data-theme="solarized-dark"]{--background:#002b36;--foreground:#839496;--primary:#2aa198;--secondary:#6c71c4;--success:#859900;--warning:#b58900;--error:#dc322f;--muted:#586e75;--accent:#268bd2}
+
+/* ── Reset & base ──────────────────────────────────────────────────── */
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--background);color:var(--foreground);font-family:var(--font-family);font-size:var(--font-base);line-height:var(--line-height);transition:background var(--transition),color var(--transition);min-height:100vh;padding:0 0 80px}
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+.shell{max-width:960px;margin:0 auto;padding:32px 24px}
+h1{font-size:var(--font-xl);color:var(--primary);margin-bottom:4px;letter-spacing:-.02em}
+.subtitle{color:var(--muted);font-size:var(--font-sm);margin-bottom:32px}
+h2{font-size:var(--font-lg);color:var(--foreground);margin:36px 0 16px;border-bottom:1px solid var(--muted);padding-bottom:8px}
+h3{font-size:var(--font-base);color:var(--primary);margin:20px 0 10px}
+
+/* ── Theme switcher ────────────────────────────────────────────────── */
+.theme-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}
+.theme-btn{background:transparent;color:var(--muted);border:1px solid var(--muted);border-radius:var(--font-xs);padding:6px 14px;font-family:var(--font-family);font-size:var(--font-sm);cursor:pointer;transition:all var(--transition)}
+.theme-btn:hover,.theme-btn.active{color:var(--primary);border-color:var(--primary)}
+
+/* ── Section card ──────────────────────────────────────────────────── */
+.section{background:color-mix(in srgb, var(--foreground) 4%, var(--background));border:1px solid color-mix(in srgb, var(--muted) 25%, transparent);border-radius:6px;padding:20px;margin-bottom:20px;transition:background var(--transition),border-color var(--transition)}
+
+/* ── Color swatches ────────────────────────────────────────────────── */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.swatch{border-radius:6px;overflow:hidden;border:1px solid color-mix(in srgb,var(--muted) 20%,transparent)}
+.swatch-color{height:48px;transition:background var(--transition)}
+.swatch-label{padding:6px 8px;font-size:var(--font-xs);color:var(--muted);display:flex;justify-content:space-between}
+.swatch-label span:last-child{color:var(--foreground);opacity:.7}
+
+/* ── Mascot ────────────────────────────────────────────────────────── */
+.mascot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
+.mascot-card{text-align:center}
+.mascot-card pre{color:var(--primary);font-size:var(--font-sm);line-height:1.35;text-align:left;display:inline-block;min-height:112px;transition:color var(--transition)}
+.mascot-label{font-size:var(--font-xs);color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.08em}
+
+/* ── PromptInput ───────────────────────────────────────────────────── */
+.prompt-box{display:flex;align-items:center;gap:4px;padding:8px 12px;background:color-mix(in srgb,var(--foreground) 3%,var(--background));border:1px solid color-mix(in srgb,var(--primary) 40%,transparent);border-radius:6px;font-size:var(--font-base);transition:all var(--transition)}
+.prompt-gt{color:var(--primary);font-weight:700}
+.prompt-text{color:var(--foreground)}
+.prompt-cursor{color:var(--muted);animation:blink 1s step-end infinite}
+.prompt-help{font-size:var(--font-xs);color:var(--muted);margin-top:6px}
+@keyframes blink{50%{opacity:0}}
+
+/* ── StatusLine ────────────────────────────────────────────────────── */
+.status-row{display:flex;align-items:center;gap:12px;padding:6px 0;font-size:var(--font-sm)}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-label{font-weight:700}
+.status-time{color:var(--muted)}
+.status-tool{color:var(--foreground);font-size:var(--font-xs);margin-left:16px}
+
+/* ── Spinner ───────────────────────────────────────────────────────── */
+.spinner-row{display:flex;align-items:center;gap:24px;padding:6px 0;font-size:var(--font-base)}
+.spinner-char{display:inline-block;width:1.2em;text-align:center;color:var(--primary)}
+
+/* ── Button ────────────────────────────────────────────────────────── */
+.btn-row{display:flex;gap:12px;flex-wrap:wrap}
+.btn{border:1px solid;border-radius:12px;padding:6px 18px;font-family:var(--font-family);font-size:var(--font-sm);cursor:pointer;background:transparent;transition:all var(--transition)}
+.btn-primary{color:var(--primary);border-color:var(--primary)}
+.btn-primary:hover{background:var(--primary);color:var(--background)}
+.btn-secondary{color:var(--muted);border-color:var(--muted)}
+.btn-secondary:hover{background:var(--muted);color:var(--background)}
+.btn-danger{color:var(--error);border-color:var(--error)}
+.btn-danger:hover{background:var(--error);color:var(--background)}
+
+/* ── Card ──────────────────────────────────────────────────────────── */
+.card{border:1px solid var(--muted);border-radius:12px;padding:14px 18px;transition:border-color var(--transition)}
+.card-title{font-weight:700;color:var(--foreground);margin-bottom:8px}
+.card-body{color:var(--muted);font-size:var(--font-sm)}
+
+/* ── Table ─────────────────────────────────────────────────────────── */
+.term-table{font-size:var(--font-sm);width:100%;border-collapse:collapse}
+.term-table th{text-align:left;color:var(--primary);font-weight:700;padding:4px 12px 4px 0;border-bottom:1px solid var(--muted)}
+.term-table td{padding:4px 12px 4px 0;color:var(--foreground)}
+.term-table tr:nth-child(even) td{color:var(--muted)}
+.term-table .sep{border-color:color-mix(in srgb,var(--muted) 40%,transparent)}
+
+/* ── Slash commands ────────────────────────────────────────────────── */
+.cmd-list{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:var(--font-sm)}
+.cmd-kbd{color:var(--primary);font-weight:700}
+.cmd-desc{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<h1>MiMo Code</h1>
+<p class="subtitle">Terminal UI · CLI Agent — Component Showcase</p>
+
+<!-- Theme switcher -->
+<div class="theme-bar">
+  <button class="theme-btn active" data-set-theme="mimo-dark">mimo-dark</button>
+  <button class="theme-btn" data-set-theme="mimo-light">mimo-light</button>
+  <button class="theme-btn" data-set-theme="dracula">dracula</button>
+  <button class="theme-btn" data-set-theme="nord">nord</button>
+  <button class="theme-btn" data-set-theme="solarized-dark">solarized-dark</button>
+</div>
+
+<!-- Color palette -->
+<h2>Color Palette</h2>
+<div class="section">
+  <div class="swatches" id="swatches"></div>
+</div>
+
+<!-- Xiaomi Cat Mascot -->
+<h2>Xiaomi Cat Mascot</h2>
+<div class="section">
+  <div class="mascot-grid" id="mascot-grid"></div>
+</div>
+
+<!-- PromptInput -->
+<h2>PromptInput</h2>
+<div class="section">
+  <div class="prompt-box">
+    <span class="prompt-gt">&nbsp;&gt;&nbsp;</span>
+    <span class="prompt-text">Explain the difference between TCP and UDP</span>
+    <span class="prompt-cursor">_</span>
+  </div>
+  <p class="prompt-help">Enter to submit &nbsp;·&nbsp; Shift+Enter for newline &nbsp;·&nbsp; ↑↓ history &nbsp;·&nbsp; Esc clear</p>
+</div>
+
+<!-- StatusLine -->
+<h2>StatusLine</h2>
+<div class="section" id="status-section">
+  <div class="status-row">
+    <span class="status-dot" style="background:var(--muted)"></span>
+    <span class="status-label" style="color:var(--muted)">[Idle]</span>
+    <span class="status-time">Ready</span>
+  </div>
+  <div class="status-row">
+    <span class="status-dot" style="background:var(--primary)"></span>
+    <span class="status-label" style="color:var(--primary)">[Thinking]</span>
+    <span class="status-time" id="thinking-time">0.0s</span>
+  </div>
+  <div class="status-row">
+    <span class="status-dot" style="background:var(--accent)"></span>
+    <span class="status-label" style="color:var(--accent)">[Executing]</span>
+    <span class="status-time" id="exec-time">0.0s</span>
+    <span class="status-tool">▸ read_file /tmp/app.ts</span>
+  </div>
+  <div class="status-row">
+    <span class="status-dot" style="background:var(--success)"></span>
+    <span class="status-label" style="color:var(--success)">[Done!]</span>
+    <span class="status-time">2.4s</span>
+  </div>
+  <div class="status-row">
+    <span class="status-dot" style="background:var(--error)"></span>
+    <span class="status-label" style="color:var(--error)">[Error]</span>
+    <span class="status-time">Something went wrong</span>
+  </div>
+</div>
+
+<!-- Spinners -->
+<h2>Spinners</h2>
+<div class="section" id="spinner-section">
+  <div class="spinner-row"><span class="spinner-char" data-spinner="dots"></span><span>dots — default, 10 frames</span></div>
+  <div class="spinner-row"><span class="spinner-char" data-spinner="line"></span><span>line — 4 frames</span></div>
+  <div class="spinner-row"><span class="spinner-char" data-spinner="arc"></span><span>arc — 6 frames</span></div>
+</div>
+
+<!-- Buttons -->
+<h2>Button</h2>
+<div class="section">
+  <div class="btn-row">
+    <button class="btn btn-primary">Confirm</button>
+    <button class="btn btn-secondary">Cancel</button>
+    <button class="btn btn-danger">Delete</button>
+  </div>
+</div>
+
+<!-- Card -->
+<h2>Card</h2>
+<div class="section" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+  <div class="card">
+    <div class="card-title">File: utils/themes.ts</div>
+    <div class="card-body">Exported 5 themes with 9 semantic color tokens each. Default: mimo-dark.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Status</div>
+    <div class="card-body">✓ Type check passed &nbsp;·&nbsp; ✓ Lint clean &nbsp;·&nbsp; 3 tests pending</div>
+  </div>
+</div>
+
+<!-- Table -->
+<h2>Table</h2>
+<div class="section">
+  <table class="term-table">
+    <thead>
+      <tr><th>Command</th><th>Description</th><th>Shortcut</th></tr>
+      <tr><td colspan="3" class="sep" style="padding:0;border-bottom:1px solid"></td></tr>
+    </thead>
+    <tbody>
+      <tr><td>/help</td><td>Show available commands</td><td>—</td></tr>
+      <tr><td>/clear</td><td>Clear terminal output</td><td>Ctrl+L</td></tr>
+      <tr><td>/theme</td><td>Switch color theme</td><td>—</td></tr>
+      <tr><td>/model</td><td>Switch AI model</td><td>—</td></tr>
+      <tr><td>/quit</td><td>Exit MiMo Code</td><td>Ctrl+D</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Keyboard shortcuts -->
+<h2>Keyboard Shortcuts</h2>
+<div class="section">
+  <div class="cmd-list">
+    <span class="cmd-kbd">Enter</span><span class="cmd-desc">Submit input</span>
+    <span class="cmd-kbd">Shift+Enter</span><span class="cmd-desc">Insert newline</span>
+    <span class="cmd-kbd">↑&nbsp;/&nbsp;↓</span><span class="cmd-desc">Command history</span>
+    <span class="cmd-kbd">Escape</span><span class="cmd-desc">Clear input / abort</span>
+    <span class="cmd-kbd">Ctrl+C</span><span class="cmd-desc">Exit application</span>
+    <span class="cmd-kbd">Tab</span><span class="cmd-desc">Toggle focus input ↔ output</span>
+  </div>
+</div>
+
+</div><!-- .shell -->
+
+<script>
+/* ── Theme switcher ────────────────────────────────────────────────── */
+document.querySelectorAll('[data-set-theme]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.documentElement.dataset.theme = btn.dataset.setTheme;
+    document.querySelectorAll('[data-set-theme]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+/* ── Color swatches ────────────────────────────────────────────────── */
+const themes = {
+  'mimo-dark':       { background:'#1a1b2e', foreground:'#e0e0e0', primary:'#FF6900', secondary:'#7c3aed', success:'#10b981', warning:'#f59e0b', error:'#ef4444', muted:'#6b7280', accent:'#FF6900' },
+  'mimo-light':      { background:'#ffffff', foreground:'#1f2937', primary:'#2563eb', secondary:'#7c3aed', success:'#059669', warning:'#d97706', error:'#dc2626', muted:'#9ca3af', accent:'#2563eb' },
+  'dracula':         { background:'#282a36', foreground:'#f8f8f2', primary:'#bd93f9', secondary:'#ff79c6', success:'#50fa7b', warning:'#f1fa8c', error:'#ff5555', muted:'#6272a4', accent:'#8be9fd' },
+  'nord':            { background:'#2e3440', foreground:'#eceff4', primary:'#88c0d0', secondary:'#b48ead', success:'#a3be8c', warning:'#ebcb8b', error:'#bf616a', muted:'#4c566a', accent:'#81a1c1' },
+  'solarized-dark':  { background:'#002b36', foreground:'#839496', primary:'#2aa198', secondary:'#6c71c4', success:'#859900', warning:'#b58900', error:'#dc322f', muted:'#586e75', accent:'#268bd2' },
+};
+const tokenNames = ['background','foreground','primary','secondary','success','warning','error','muted','accent'];
+
+function renderSwatches() {
+  const theme = document.documentElement.dataset.theme || 'mimo-dark';
+  const c = themes[theme];
+  document.getElementById('swatches').innerHTML = tokenNames.map(t =>
+    `<div class="swatch"><div class="swatch-color" style="background:${c[t]}"></div><div class="swatch-label"><span>--${t}</span><span>${c[t]}</span></div></div>`
+  ).join('');
+}
+renderSwatches();
+const observer = new MutationObserver(renderSwatches);
+observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ── Mascot frames ─────────────────────────────────────────────────── */
+const mascotStates = {
+  idle: [
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ●    ● │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯│  ','           │  '],
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │ ●     ● │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯ │ ','           ╱  '],
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ●    ●  │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯   ','   ╲         '],
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ─    ─ │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯│  ','           │  '],
+  ],
+  thinking: [
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ●    ● │ ','  │   ∪    │ ','   ╲      ╱  ','    ╰────╯ ╱ ','          ╱  '],
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ●    ● │ ','  │    ∪   │ ','   ╲      ╱  ','    ╰────╯  ╲','            ╲'],
+  ],
+  coding: [
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ●    ● │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯│  ','           │  '],
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │ ●     ● │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯ │ ','           ╱  '],
+  ],
+  success: [
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ◠    ◠ │ ','  │   ╰╯   │ ','   ╲      ╱  ','    ╰────╯│  ','           │  '],
+  ],
+  error: [
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ◉    ◉ │ ','  │    ○   │ ','   ╲      ╱  ','    ╰────╯│  ','           │  '],
+  ],
+  reading: [
+    ['   ╱╲    ╱╲  ','  ╱  ╲──╱  ╲ ','  │  ─    ─ │ ','  │    ω    │ ','   ╲      ╱  ','    ╰────╯│  ','           │  '],
+  ],
+};
+const stateTicks = { idle:500, thinking:400, coding:300, success:0, error:0, reading:0 };
+
+const grid = document.getElementById('mascot-grid');
+Object.entries(mascotStates).forEach(([state, frames]) => {
+  const card = document.createElement('div');
+  card.className = 'mascot-card section';
+  const pre = document.createElement('pre');
+  pre.textContent = frames[0].join('\n');
+  const label = document.createElement('div');
+  label.className = 'mascot-label';
+  label.textContent = state;
+  card.append(pre, label);
+  grid.appendChild(card);
+
+  if (frames.length > 1) {
+    let fi = 0;
+    setInterval(() => { fi = (fi + 1) % frames.length; pre.textContent = frames[fi].join('\n'); }, stateTicks[state]);
+  }
+});
+
+/* ── Spinner animation ─────────────────────────────────────────────── */
+const spinnerFrames = {
+  dots: ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'],
+  line: ['-','\\','|','/'],
+  arc:  ['◜','◠','◝','◞','◡','◟'],
+};
+document.querySelectorAll('[data-spinner]').forEach(el => {
+  const frames = spinnerFrames[el.dataset.spinner];
+  let fi = 0;
+  setInterval(() => { fi = (fi + 1) % frames.length; el.textContent = frames[fi]; }, 80);
+});
+
+/* ── StatusLine live timers ────────────────────────────────────────── */
+let thinkStart = Date.now();
+let execStart = Date.now();
+function fmt(ms){ return ms < 1000 ? ms+'ms' : (ms/1000).toFixed(1)+'s'; }
+setInterval(() => {
+  document.getElementById('thinking-time').textContent = fmt(Date.now() - thinkStart);
+  document.getElementById('exec-time').textContent = fmt(Date.now() - execStart);
+}, 100);
+</script>
+</body>
+</html>

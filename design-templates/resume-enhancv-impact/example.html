@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impact Sales Resume</title>
+  <style>
+    :root {
+      --ink: #15191f;
+      --muted: #66707d;
+      --paper: #ffffff;
+      --line: #dfe4ea;
+      --accent: #d94f42;
+      --navy: #243447;
+      --soft: #fff1ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e8ebef;
+      color: var(--ink);
+      font: 13px/1.45 Arial, Helvetica, sans-serif;
+    }
+    .page {
+      width: min(100%, 8.5in);
+      min-height: 11in;
+      margin: 28px auto;
+      background: var(--paper);
+      box-shadow: 0 18px 48px rgba(21, 25, 31, 0.16);
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 36px 42px;
+      display: grid;
+      grid-template-columns: 1fr 2.25in;
+      gap: 28px;
+      align-items: end;
+    }
+    h1 {
+      margin: 0;
+      font-size: 40px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .role {
+      margin: 8px 0 0;
+      color: #f7c9c2;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+    .contact {
+      display: grid;
+      gap: 5px;
+      color: #d8e0e8;
+      font-size: 12px;
+      text-align: right;
+    }
+    .content {
+      padding: 34px 42px 40px;
+      display: grid;
+      grid-template-columns: 2.25in 1fr;
+      gap: 28px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      color: var(--navy);
+    }
+    section + section { margin-top: 24px; }
+    .story {
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+      padding: 14px;
+      margin: 0;
+      color: #3c3432;
+    }
+    .impact-card {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .impact-card strong {
+      display: block;
+      color: var(--accent);
+      font-size: 22px;
+      line-height: 1;
+    }
+    .impact-card span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .skill-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+    .skill-cloud span {
+      background: #f5f7fa;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+    .job {
+      position: relative;
+      padding: 0 0 18px 20px;
+      border-left: 2px solid var(--line);
+    }
+    .job + .job { margin-top: 18px; }
+    .job::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      top: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .job-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+    }
+    h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .company {
+      color: var(--muted);
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .date {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: #303844;
+    }
+    li + li { margin-top: 5px; }
+    .note {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+      color: var(--muted);
+    }
+    @media (max-width: 760px) {
+      .page { margin: 0; box-shadow: none; }
+      header, .content, .job-head { grid-template-columns: 1fr; }
+      header, .content { padding: 30px; }
+      .contact { text-align: left; }
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { background: #fff; }
+      .page { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <div>
+        <h1>Priya Nair</h1>
+        <p class="role">Enterprise Account Executive</p>
+      </div>
+      <address class="contact">
+        <span>priya.nair@example.com</span>
+        <span>New York, NY</span>
+        <span>linkedin.com/in/priyanair</span>
+        <span>+1 646 555 0166</span>
+      </address>
+    </header>
+    <div class="content">
+      <aside>
+        <section>
+          <h2>Career Story</h2>
+          <p class="story">I help complex buyers make confident decisions by turning product depth into clear business cases, executive alignment, and durable adoption plans.</p>
+        </section>
+        <section>
+          <h2>Impact</h2>
+          <div class="impact-card"><strong>142%</strong><span>FY25 quota attainment</span></div>
+          <div class="impact-card"><strong>$6.2M</strong><span>new enterprise ARR closed</span></div>
+          <div class="impact-card"><strong>41%</strong><span>multi-threaded opportunity lift</span></div>
+        </section>
+        <section>
+          <h2>Strengths</h2>
+          <div class="skill-cloud">
+            <span>Discovery</span>
+            <span>MEDDICC</span>
+            <span>Exec briefings</span>
+            <span>Mutual plans</span>
+            <span>Forecasting</span>
+            <span>Partner motion</span>
+          </div>
+        </section>
+        <section>
+          <p class="note">Volunteer mentor for first-generation sales professionals through a regional career access program.</p>
+        </section>
+      </aside>
+      <main>
+        <section>
+          <h2>Experience</h2>
+          <div class="job">
+            <div class="job-head">
+              <div><h3>Enterprise Account Executive</h3><div class="company">SignalForge Analytics</div></div>
+              <div class="date">2022 - Present</div>
+            </div>
+            <ul>
+              <li>Closed $6.2M in new ARR across financial services and healthcare accounts by building CFO-ready value cases.</li>
+              <li>Improved late-stage conversion by 23% after introducing mutual action plans and executive sponsor checkpoints.</li>
+              <li>Partnered with customer success to expand three strategic accounts by $1.1M within nine months of initial close.</li>
+            </ul>
+          </div>
+          <div class="job">
+            <div class="job-head">
+              <div><h3>Mid-Market Account Executive</h3><div class="company">North Pier Software</div></div>
+              <div class="date">2019 - 2022</div>
+            </div>
+            <ul>
+              <li>Ranked in the top 10% of the sales organization for eight consecutive quarters.</li>
+              <li>Built a healthcare vertical talk track that became the basis for regional enablement materials.</li>
+            </ul>
+          </div>
+          <div class="job">
+            <div class="job-head">
+              <div><h3>Sales Development Representative</h3><div class="company">MetricRoom</div></div>
+              <div class="date">2017 - 2019</div>
+            </div>
+            <ul>
+              <li>Generated 312 qualified meetings and was promoted after exceeding pipeline goals for four straight quarters.</li>
+            </ul>
+          </div>
+        </section>
+        <section>
+          <h2>Education</h2>
+          <div class="job">
+            <div class="job-head">
+              <div><h3>B.A. Economics</h3><div class="company">Hudson College</div></div>
+              <div class="date">2017</div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </article>
+</body>
+</html>

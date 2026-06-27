@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Last 30 Days Preview</title>
+<style>
+:root{--bg:#eff2ea;--ink:#182018;--muted:#647064;--line:#cfd8c8;--green:#2f7d4f;--yellow:#d7b94b}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;padding:36px}
+.report{max-width:1040px;margin:auto;display:grid;grid-template-columns:.8fr 1.2fr;gap:24px}
+.cover,.panel{background:#fbfcf5;border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 24px 70px rgba(24,32,24,.12)}
+.eyebrow{font:800 11px ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--green)}
+h1{font:850 clamp(44px,7vw,86px)/.9 Inter,system-ui,sans-serif;letter-spacing:-.07em;margin:22px 0}.window{font-size:15px;color:var(--muted);line-height:1.6}
+.source{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:14px 0}.status{font:800 11px ui-monospace,monospace;color:var(--green);text-transform:uppercase}
+.finding{margin-top:18px;padding:18px;border-radius:14px;background:#f1f4ea;border:1px solid var(--line)}.finding b{display:block;margin-bottom:6px}.bar{height:10px;border-radius:99px;background:#e0e6d8;overflow:hidden}.bar span{display:block;height:100%;width:68%;background:linear-gradient(90deg,var(--green),var(--yellow))}
+</style>
+</head>
+<body>
+<main class="report">
+  <section class="cover"><div class="eyebrow">Community briefing</div><h1>Last 30 days:<br>what changed?</h1><p class="window">A compact evidence table, theme synthesis, and explicit source limitations for recent discourse.</p></section>
+  <section class="panel">
+    <div class="source"><span>News and blogs</span><span class="status">checked</span></div>
+    <div class="source"><span>Public forums</span><span class="status">thin</span></div>
+    <div class="source"><span>Social exports</span><span class="status">optional</span></div>
+    <div class="finding"><b>Repeated signal</b><p>Users praise speed gains but worry about workflow lock-in and source quality.</p><div class="bar"><span></span></div></div>
+    <div class="finding"><b>Watch next</b><p>Fresh launches, pricing changes, and migration stories in the next capture window.</p></div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workday Canvas - reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/workday-canvas: enterprise task workflow components distilled for Open Design."
+    />
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --surface: #ffffff;
+        --surface-warm: #edf4ff;
+        --fg: #1f2933;
+        --fg-2: #334155;
+        --muted: #5f6b7a;
+        --meta: #7b8794;
+        --border: #d7dde5;
+        --border-soft: #e7ebf0;
+        --accent: #005cb9;
+        --accent-on: #ffffff;
+        --accent-hover: #004387;
+        --accent-active: #00315f;
+        --success: #16803c;
+        --warn: #a15c00;
+        --danger: #c7291c;
+        --font-display: Roboto, "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-body: Roboto, "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "Roboto Mono", "SF Mono", Consolas, Menlo, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 22px;
+        --text-2xl: 28px;
+        --text-3xl: 40px;
+        --text-4xl: 56px;
+        --leading-body: 1.5;
+        --leading-tight: 1.18;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 80px;
+        --section-y-tablet: 56px;
+        --section-y-phone: 36px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 16px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 2px 4px rgba(31, 41, 51, 0.12), 0 8px 16px rgba(31, 41, 51, 0.08);
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+        --container-max: 1280px;
+        --container-gutter-desktop: 40px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font: var(--text-base) / var(--leading-body) var(--font-body);
+        -webkit-font-smoothing: antialiased;
+      }
+      .page {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding: var(--section-y-desktop) var(--container-gutter-desktop);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-3xl); }
+      h2 { font-size: var(--text-xl); }
+      h3 { font-size: var(--text-lg); }
+      .header {
+        align-items: start;
+        display: flex;
+        gap: var(--space-6);
+        justify-content: space-between;
+        margin-bottom: var(--space-8);
+      }
+      .lead { color: var(--muted); max-width: 760px; margin-top: var(--space-2); }
+      .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+      .btn {
+        min-height: 40px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        background: var(--surface);
+        color: var(--fg-2);
+        cursor: pointer;
+        font: 500 var(--text-sm) / 1 var(--font-body);
+        padding: 0 var(--space-4);
+        transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:hover { border-color: var(--accent); color: var(--accent); }
+      .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); color: var(--accent-on); }
+      .btn-danger { color: var(--danger); }
+      .btn:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .summary {
+        display: grid;
+        gap: var(--space-4);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-bottom: var(--space-6);
+      }
+      .metric, .card, .banner, .panel {
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--elev-flat);
+      }
+      .metric { padding: var(--space-5); }
+      .metric strong {
+        display: block;
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+        margin-top: var(--space-2);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: var(--space-6);
+      }
+      .stack { display: grid; gap: var(--space-5); }
+      .banner {
+        align-items: start;
+        border-left: 4px solid var(--accent);
+        display: grid;
+        gap: var(--space-3);
+        grid-template-columns: 36px 1fr auto;
+        padding: var(--space-5);
+      }
+      .icon {
+        align-items: center;
+        background: var(--surface-warm);
+        border-radius: var(--radius-pill);
+        color: var(--accent);
+        display: inline-flex;
+        font-weight: 700;
+        height: 36px;
+        justify-content: center;
+        width: 36px;
+      }
+      .card, .panel { padding: var(--space-5); }
+      .card-head, .panel-head {
+        align-items: center;
+        display: flex;
+        gap: var(--space-3);
+        justify-content: space-between;
+        margin-bottom: var(--space-4);
+      }
+      .task-list {
+        display: grid;
+        gap: var(--space-3);
+      }
+      .task {
+        align-items: start;
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        display: grid;
+        gap: var(--space-3);
+        grid-template-columns: 1fr auto;
+        padding: var(--space-4);
+      }
+      .task.active { background: var(--surface-warm); border-color: color-mix(in oklab, var(--accent), white 60%); }
+      .muted { color: var(--muted); }
+      .meta { color: var(--meta); font-size: var(--text-sm); }
+      .pill {
+        align-items: center;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-pill);
+        display: inline-flex;
+        font: 500 var(--text-xs) / 1.2 var(--font-body);
+        padding: var(--space-1) var(--space-3);
+        white-space: nowrap;
+      }
+      .pill.success { background: #eef8f0; color: var(--success); }
+      .pill.warn { background: #fff4df; color: var(--warn); }
+      .pill.danger { background: #fff0ee; color: var(--danger); }
+      .field { display: grid; gap: var(--space-2); }
+      .form {
+        display: grid;
+        gap: var(--space-4);
+      }
+      label {
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      input, select, textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--fg);
+        font: inherit;
+        min-height: 44px;
+        padding: var(--space-2) var(--space-3);
+      }
+      textarea { min-height: 108px; resize: vertical; }
+      .divider { border-top: 1px solid var(--border-soft); margin: var(--space-4) 0; }
+      .progress {
+        background: var(--border-soft);
+        border-radius: var(--radius-pill);
+        height: 8px;
+        overflow: hidden;
+      }
+      .progress span { background: var(--accent); display: block; height: 100%; }
+      @media (max-width: 960px) {
+        .page { padding: var(--section-y-tablet) var(--container-gutter-tablet); }
+        .summary, .layout { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        .page { padding: var(--section-y-phone) var(--container-gutter-phone); }
+        .header, .banner, .task { display: grid; grid-template-columns: 1fr; }
+        h1 { font-size: var(--text-2xl); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <div>
+          <h1>Employee change review</h1>
+          <p class="lead">Review approvals, employee details, task progress, and policy notes in a calm enterprise workflow.</p>
+        </div>
+        <div class="actions">
+          <button class="btn">Save for later</button>
+          <button class="btn btn-primary">Submit review</button>
+        </div>
+      </header>
+
+      <section class="summary" aria-label="Review summary">
+        <article class="metric">
+          <span class="meta">Open tasks</span>
+          <strong>12</strong>
+          <p class="muted">4 due today</p>
+        </article>
+        <article class="metric">
+          <span class="meta">Completion</span>
+          <strong>68%</strong>
+          <div class="progress" aria-label="Completion"><span style="width: 68%"></span></div>
+        </article>
+        <article class="metric">
+          <span class="meta">Policy status</span>
+          <strong>Ready</strong>
+          <p class="muted">No exceptions found</p>
+        </article>
+      </section>
+
+      <div class="layout">
+        <section class="stack" aria-label="Approval workflow">
+          <article class="banner" role="status">
+            <span class="icon" aria-hidden="true">i</span>
+            <div>
+              <h2>Manager approval requested</h2>
+              <p class="muted">The compensation change is ready for final review after payroll validation.</p>
+            </div>
+            <button class="btn">View policy</button>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Task queue</h2>
+              <span class="pill warn">Due today</span>
+            </div>
+            <div class="task-list">
+              <div class="task active">
+                <div>
+                  <h3>Confirm effective date</h3>
+                  <p class="meta">Payroll impact - assigned to People Ops</p>
+                </div>
+                <span class="pill warn">Review</span>
+              </div>
+              <div class="task">
+                <div>
+                  <h3>Validate cost center</h3>
+                  <p class="meta">Finance approval completed yesterday</p>
+                </div>
+                <span class="pill success">Done</span>
+              </div>
+              <div class="task">
+                <div>
+                  <h3>Check employee notification</h3>
+                  <p class="meta">Message draft waiting for confirmation</p>
+                </div>
+                <span class="pill">Draft</span>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <aside class="stack" aria-label="Review details">
+          <article class="card">
+            <div class="card-head">
+              <h2>Employee</h2>
+              <span class="pill success">Eligible</span>
+            </div>
+            <p><strong>Avery Johnson</strong></p>
+            <p class="muted">Senior analyst - Product Operations</p>
+            <div class="divider"></div>
+            <p class="meta">Employee ID</p>
+            <p style="font-family: var(--font-mono)">WD-18472</p>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>Review form</h2>
+              <span class="pill">Step 2 of 3</span>
+            </div>
+            <form class="form">
+              <div class="field">
+                <label for="reason">Reason</label>
+                <select id="reason">
+                  <option>Role change</option>
+                  <option>Compensation update</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="date">Effective date</label>
+                <input id="date" value="2026-07-01" />
+              </div>
+              <div class="field">
+                <label for="notes">Reviewer notes</label>
+                <textarea id="notes">Payroll validation passed. Confirm manager acknowledgement before submission.</textarea>
+              </div>
+              <div class="actions">
+                <button class="btn">Cancel</button>
+                <button class="btn btn-primary">Approve</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>Risk</h2>
+              <span class="pill danger">Needs check</span>
+            </div>
+            <p class="muted">One downstream notification is still in draft state.</p>
+          </article>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Developer Mono</title>
+  <style>
+    @page { size: A4; margin: 13mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #d8dde2;
+      color: #111827;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 9.4pt;
+      line-height: 1.5;
+    }
+    .page {
+      width: min(210mm, calc(100vw - 28px));
+      min-height: 297mm;
+      margin: 24px auto;
+      background: #fbfcf8;
+      padding: 14mm;
+      border: 1px solid #b9c0c8;
+      box-shadow: 0 18px 48px rgba(28, 35, 45, 0.18);
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      border: 1px solid #1f2937;
+      padding: 12px;
+    }
+    h1 { margin: 0; font-size: 21pt; line-height: 1.05; letter-spacing: 0; }
+    .role { margin: 5px 0 0; font-weight: 700; }
+    .contact { text-align: right; color: #374151; }
+    .contact p { margin: 0 0 3px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 55mm;
+      gap: 14mm;
+      margin-top: 14px;
+    }
+    h2 {
+      margin: 15px 0 8px;
+      font-size: 10pt;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    h2::before { content: ":: "; color: #0f766e; }
+    .item { margin-top: 10px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    h3 { margin: 0; font-size: 10.5pt; }
+    .date { color: #4b5563; white-space: nowrap; }
+    .sub { color: #374151; margin-top: 2px; }
+    ul { margin: 5px 0 0 17px; padding: 0; }
+    li { margin: 4px 0; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .tag { border: 1px solid #9ca3af; padding: 2px 5px; background: #f1f5f2; }
+    aside {
+      border-left: 1px solid #9ca3af;
+      padding-left: 12px;
+    }
+    aside p { margin: 0 0 9px; }
+    .repo {
+      border: 1px dashed #6b7280;
+      padding: 8px;
+      margin-top: 8px;
+      background: #f6f8f4;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { width: auto; min-height: auto; margin: 0; padding: 0; border: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Developer mono resume preview">
+    <header>
+      <div>
+        <h1>Jordan Patel</h1>
+        <p class="role">Senior Full-Stack Engineer</p>
+      </div>
+      <div class="contact">
+        <p>jordan.patel@example.com</p>
+        <p>github.com/jordanpatel</p>
+        <p>San Francisco, CA</p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section>
+        <h2>Profile</h2>
+        <p>Product-minded engineer with 7 years of experience building reliable collaboration tools, internal platforms, and data-heavy web apps. Strongest at translating messy workflows into typed APIs, observable services, and interfaces teams can maintain.</p>
+
+        <h2>Experience</h2>
+        <article class="item">
+          <div class="row"><h3>Staffbase Labs</h3><span class="date">2022..present</span></div>
+          <p class="sub">Senior Full-Stack Engineer</p>
+          <ul>
+            <li>Designed a typed event ingestion service processing 42M monthly events with p95 latency under 180ms.</li>
+            <li>Led migration from ad hoc REST payloads to shared TypeScript contracts, cutting integration bugs by 34% quarter over quarter.</li>
+            <li>Built workflow debugging views that reduced support escalation time from 3 days to under 8 hours.</li>
+          </ul>
+        </article>
+        <article class="item">
+          <div class="row"><h3>Coda Harbor</h3><span class="date">2019..2022</span></div>
+          <p class="sub">Product Engineer</p>
+          <ul>
+            <li>Shipped permissions, audit history, and comment resolution flows for a collaborative planning workspace.</li>
+            <li>Improved frontend bundle health by replacing duplicate charting code and trimming initial JS by 24%.</li>
+            <li>Partnered with design to build accessible primitives for menus, dialogs, and keyboard navigation.</li>
+          </ul>
+        </article>
+        <article class="item">
+          <div class="row"><h3>North Pier Analytics</h3><span class="date">2017..2019</span></div>
+          <p class="sub">Software Engineer</p>
+          <ul>
+            <li>Implemented data import tools, retry queues, and customer-facing validation reports for finance teams.</li>
+          </ul>
+        </article>
+
+        <h2>Selected Builds</h2>
+        <div class="repo">
+          <strong>workflow-trace-viewer</strong>
+          <p>Interactive run inspector with timeline search, event diffing, and redaction-aware copy actions. React, Node, SQLite.</p>
+        </div>
+        <div class="repo">
+          <strong>contract-check</strong>
+          <p>CI utility that compares generated client types against server DTOs and blocks drift before release.</p>
+        </div>
+      </section>
+
+      <aside>
+        <h2>Stack</h2>
+        <div class="tag-list">
+          <span class="tag">TypeScript</span><span class="tag">React</span><span class="tag">Node</span><span class="tag">Postgres</span><span class="tag">SQLite</span><span class="tag">Playwright</span><span class="tag">OpenAPI</span><span class="tag">Docker</span>
+        </div>
+
+        <h2>Operating Mode</h2>
+        <p><strong>Design:</strong> reusable primitives, state coverage, accessibility checks.</p>
+        <p><strong>Backend:</strong> typed boundaries, queues, idempotency, observability.</p>
+        <p><strong>Team:</strong> RFCs, pairing, small PRs, release notes.</p>
+
+        <h2>Education</h2>
+        <p>B.S. Computer Science<br>UC Davis, 2017</p>
+
+        <h2>Certifications</h2>
+        <p>AWS Developer Associate, 2024</p>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bilingual ATS Resume</title>
+  <style>
+    :root {
+      --paper: #ffffff;
+      --ink: #1b1f24;
+      --muted: #5f6b76;
+      --line: #d8dde3;
+      --accent: #334155;
+      --label: #f3f5f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eceff3;
+      color: var(--ink);
+      font-family: Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      line-height: 1.44;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      padding: 17mm 18mm;
+      background: var(--paper);
+      box-shadow: 0 20px 48px rgba(22, 30, 38, 0.18);
+    }
+    header {
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--accent);
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .role {
+      margin-top: 5px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .contact {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 14px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+    section {
+      margin-top: 15px;
+    }
+    h2 {
+      margin: 0 0 8px;
+      display: inline-block;
+      padding: 3px 8px;
+      background: var(--label);
+      border: 1px solid var(--line);
+      color: var(--accent);
+      font-size: 12.5px;
+      letter-spacing: 0;
+    }
+    .summary {
+      margin: 0;
+      font-size: 12px;
+      color: #303842;
+    }
+    .item {
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+    .item:first-of-type { border-top: 0; padding-top: 0; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: baseline;
+    }
+    h3 {
+      margin: 0;
+      font-size: 13px;
+    }
+    .en {
+      color: var(--muted);
+      font-size: 11.2px;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li {
+      margin: 3px 0;
+      font-size: 11.6px;
+    }
+    .skills {
+      display: grid;
+      grid-template-columns: 27mm 1fr;
+      gap: 6px 12px;
+      font-size: 11.5px;
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+    }
+    .skills b { color: var(--accent); }
+    .note {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 10.8px;
+    }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Bilingual ATS Chinese English resume preview">
+    <header>
+      <h1>王启航 / Qihang Wang</h1>
+      <div class="role">数据分析师 Data Analyst</div>
+      <div class="contact">
+        <span>深圳 Shenzhen</span>
+        <span>wangqihang@example.com</span>
+        <span>135-0000-0000</span>
+        <span>github.com/example-qihang</span>
+        <span>可双语工作 Bilingual workplace communication</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>SUMMARY / 职业概述</h2>
+      <p class="summary">3 年互联网数据分析经验，熟悉增长、留存、实验评估和经营看板。Three years of analytics experience across growth, retention, experiment measurement, and executive dashboards.</p>
+    </section>
+
+    <section>
+      <h2>EXPERIENCE / 工作经历</h2>
+      <article class="item">
+        <div class="row">
+          <div>
+            <h3>南星科技 / 数据分析师</h3>
+            <div class="en">Nanxing Tech / Data Analyst</div>
+          </div>
+          <span class="meta">2023.01 - Present</span>
+        </div>
+        <ul>
+          <li>搭建订阅业务指标体系，覆盖获客、激活、留存、付费和流失预警，服务 6 个产品小组。</li>
+          <li>Built a subscription KPI framework covering acquisition, activation, retention, monetization, and churn risk.</li>
+          <li>设计新手任务 A/B 实验，验证 7 日留存提升 3.8 个百分点，并推动全量上线。</li>
+          <li>Automated weekly business review dashboards with SQL and Python, reducing manual reporting time by 60%.</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row">
+          <div>
+            <h3>蓝湾出行 / 商业分析助理</h3>
+            <div class="en">BlueBay Mobility / Business Analyst Associate</div>
+          </div>
+          <span class="meta">2021.07 - 2022.12</span>
+        </div>
+        <ul>
+          <li>分析城市补贴策略与订单毛利，识别 12 个低 ROI 场景，支持预算重分配。</li>
+          <li>Created cohort reports for regional operations and documented definitions for recurring metrics.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>PROJECTS / 项目经历</h2>
+      <article class="item">
+        <div class="row">
+          <div>
+            <h3>用户流失预警模型 Churn Risk Scoring</h3>
+            <div class="en">SQL, Python, Logistic Regression, Tableau</div>
+          </div>
+          <span class="meta">2024.04 - 2024.07</span>
+        </div>
+        <ul>
+          <li>整合登录、付费、客服和功能使用数据，输出高风险用户清单，召回活动转化率提升 11%。</li>
+          <li>Combined usage, billing, and support signals to produce weekly risk segments for customer success teams.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>EDUCATION / 教育背景</h2>
+      <article class="item">
+        <div class="row">
+          <div>
+            <h3>中山大学 / 统计学 本科</h3>
+            <div class="en">Sun Yat-sen University / B.S. Statistics</div>
+          </div>
+          <span class="meta">2017.09 - 2021.06</span>
+        </div>
+      </article>
+    </section>
+
+    <section>
+      <h2>SKILLS / 技能</h2>
+      <div class="skills">
+        <b>Analytics</b><span>SQL, Python, A/B Testing, Cohort Analysis, Funnel Analysis</span>
+        <b>BI Tools</b><span>Tableau, Power BI, Metabase, Excel, Data Studio</span>
+        <b>Domain</b><span>Subscription metrics, growth analytics, retention, executive reporting</span>
+        <b>Languages</b><span>Mandarin Chinese native, English professional working proficiency</span>
+      </div>
+      <div class="note">ATS note: plain text, no icons, no image-only content, explicit section labels, consistent dates.</div>
+    </section>
+  </main>
+</body>
+</html>

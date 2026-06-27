@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlassian Design System - reference components</title>
+    <style>
+      :root {
+        --bg: #f7f8f9;
+        --surface: #ffffff;
+        --surface-warm: #f1f2f4;
+        --fg: #172b4d;
+        --fg-2: #44546f;
+        --muted: #626f86;
+        --meta: #8590a2;
+        --border: #dcdfe4;
+        --border-soft: #f1f2f4;
+        --accent: #0c66e4;
+        --accent-on: #ffffff;
+        --accent-hover: #0055cc;
+        --accent-active: #09326c;
+        --success: #22a06b;
+        --warn: #f5cd47;
+        --danger: #c9372c;
+        --font-display: "Charlie Display", "Atlassian Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-body: "Atlassian Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "Atlassian Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 24px;
+        --text-2xl: 32px;
+        --text-3xl: 48px;
+        --text-4xl: 64px;
+        --leading-body: 1.5;
+        --leading-tight: 1.12;
+        --tracking-display: -0.012em;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 80px;
+        --section-y-tablet: 56px;
+        --section-y-phone: 40px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 8px 16px rgba(9, 30, 66, 0.15), 0 0 1px rgba(9, 30, 66, 0.31);
+        --focus-ring: 0 0 0 3px rgba(12, 102, 228, 0.28);
+        --motion-fast: 120ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+        --container-max: 1200px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .page {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding: var(--space-8) var(--container-gutter-desktop) var(--section-y-desktop);
+      }
+      .topbar, .panel, .card, .issue, .table {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-8);
+      }
+      .brand {
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        font-weight: 700;
+        letter-spacing: var(--tracking-display);
+      }
+      .nav {
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .nav a, .btn {
+        border-radius: var(--radius-sm);
+        color: var(--fg-2);
+        font-weight: 600;
+        font-size: var(--text-sm);
+        text-decoration: none;
+      }
+      .nav a {
+        padding: var(--space-2) var(--space-3);
+      }
+      .nav a[aria-current="page"] {
+        background: #e9f2ff;
+        color: var(--accent);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: var(--space-8);
+        align-items: start;
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1 {
+        font-family: var(--font-display);
+        font-size: clamp(var(--text-2xl), 5vw, var(--text-4xl));
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        line-height: 1.2;
+      }
+      h3 {
+        font-size: var(--text-base);
+        line-height: 1.35;
+      }
+      .lead {
+        max-width: 62ch;
+        color: var(--fg-2);
+        font-size: var(--text-lg);
+        margin-top: var(--space-4);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        margin-top: var(--space-6);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        padding: 0 var(--space-3);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .btn.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn.primary:hover { background: var(--accent-hover); }
+      .btn:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .panel {
+        padding: var(--space-5);
+        box-shadow: var(--elev-ring);
+      }
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-3);
+        margin-top: var(--space-6);
+      }
+      .metric {
+        padding: var(--space-4);
+        background: var(--surface-warm);
+        border-radius: var(--radius-md);
+      }
+      .metric strong {
+        display: block;
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .metric span { color: var(--muted); font-size: var(--text-sm); }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+        margin-top: var(--space-8);
+      }
+      .lane {
+        background: var(--surface-warm);
+        border-radius: var(--radius-lg);
+        padding: var(--space-3);
+      }
+      .lane-title {
+        display: flex;
+        justify-content: space-between;
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        font-weight: 700;
+        margin-bottom: var(--space-3);
+      }
+      .issue {
+        padding: var(--space-3);
+        margin-top: var(--space-2);
+      }
+      .issue:first-of-type { margin-top: 0; }
+      .issue p {
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        margin-top: var(--space-1);
+      }
+      .tag-row {
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        margin-top: var(--space-3);
+      }
+      .tag {
+        border-radius: var(--radius-sm);
+        padding: 2px var(--space-2);
+        background: var(--border-soft);
+        color: var(--fg-2);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .tag.success { background: #dcfff1; color: #216e4e; }
+      .tag.warn { background: #fff7d6; color: #7f5f01; }
+      .tag.danger { background: #ffeceb; color: var(--danger); }
+      .table {
+        width: 100%;
+        margin-top: var(--space-8);
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+      }
+      th, td {
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+        text-align: left;
+      }
+      th {
+        color: var(--muted);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      td { color: var(--fg-2); }
+      tr:last-child td { border-bottom: 0; }
+      @media (max-width: 820px) {
+        .page { padding-inline: var(--container-gutter-tablet); }
+        .hero, .board { grid-template-columns: 1fr; }
+        .metric-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 560px) {
+        .page { padding-inline: var(--container-gutter-phone); }
+        .topbar { align-items: flex-start; flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div class="brand">Atlas workspace</div>
+        <nav class="nav" aria-label="Project sections">
+          <a href="#" aria-current="page">Plan</a>
+          <a href="#">Roadmap</a>
+          <a href="#">Docs</a>
+          <a href="#">Reports</a>
+        </nav>
+      </header>
+
+      <section class="hero">
+        <div>
+          <h1>Team planning that stays readable at full speed.</h1>
+          <p class="lead">Use clear hierarchy, soft wells, compact controls, and scarce blue actions to keep daily collaboration surfaces focused.</p>
+          <div class="actions">
+            <button class="btn primary">Create sprint</button>
+            <button class="btn">Open backlog</button>
+          </div>
+          <div class="metric-grid" aria-label="Sprint metrics">
+            <div class="metric"><strong>42</strong><span>Issues scoped</span></div>
+            <div class="metric"><strong>87%</strong><span>Ready for build</span></div>
+            <div class="metric"><strong>3</strong><span>Risks flagged</span></div>
+          </div>
+        </div>
+        <aside class="panel">
+          <h2>Release health</h2>
+          <p class="lead">The system favors status clarity over decoration.</p>
+          <div class="tag-row">
+            <span class="tag success">On track</span>
+            <span class="tag warn">Needs review</span>
+            <span class="tag danger">Blocked</span>
+          </div>
+        </aside>
+      </section>
+
+      <section class="board" aria-label="Issue board">
+        <div class="lane">
+          <div class="lane-title"><span>To do</span><span>3</span></div>
+          <article class="issue"><h3>Audit project settings</h3><p>Confirm permissions and notification defaults.</p><div class="tag-row"><span class="tag">Admin</span></div></article>
+          <article class="issue"><h3>Write migration note</h3><p>Summarize user-visible changes.</p><div class="tag-row"><span class="tag">Docs</span></div></article>
+        </div>
+        <div class="lane">
+          <div class="lane-title"><span>In progress</span><span>2</span></div>
+          <article class="issue"><h3>Refine backlog grouping</h3><p>Use spacing before adding separators.</p><div class="tag-row"><span class="tag warn">Review</span></div></article>
+          <article class="issue"><h3>Test keyboard focus</h3><p>Primary actions need visible rings.</p><div class="tag-row"><span class="tag">A11y</span></div></article>
+        </div>
+        <div class="lane">
+          <div class="lane-title"><span>Done</span><span>4</span></div>
+          <article class="issue"><h3>Normalize tokens</h3><p>Map brand language into OD schema names.</p><div class="tag-row"><span class="tag success">Shipped</span></div></article>
+          <article class="issue"><h3>Document source evidence</h3><p>Keep the capture attributable and original.</p><div class="tag-row"><span class="tag success">Ready</span></div></article>
+        </div>
+      </section>
+
+      <table class="table">
+        <thead><tr><th>Surface</th><th>Token</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td>Canvas</td><td><code>--bg</code></td><td>Long workspace background</td></tr>
+          <tr><td>Card</td><td><code>--surface</code></td><td>Primary content container</td></tr>
+          <tr><td>Well</td><td><code>--surface-warm</code></td><td>Grouped board or filter area</td></tr>
+        </tbody>
+      </table>
+    </main>
+  </body>
+</html>

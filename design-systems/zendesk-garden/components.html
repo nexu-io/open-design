@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zendesk Garden - reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/zendesk-garden: compact Zendesk-like support workspace components distilled for Open Design."
+    />
+    <style>
+      :root {
+        --bg: #f8f9f9;
+        --surface: #ffffff;
+        --surface-warm: #edf7ff;
+        --fg: #293239;
+        --fg-2: #39434b;
+        --muted: #5c6970;
+        --meta: #848f99;
+        --border: #d8dcde;
+        --border-soft: #e8eaec;
+        --accent: #1f73b7;
+        --accent-on: #ffffff;
+        --accent-hover: #13456d;
+        --accent-active: #0f3655;
+        --success: #037f52;
+        --warn: #ac5918;
+        --danger: #cd3642;
+        --font-display: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-mono: SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        --text-xs: 10px;
+        --text-sm: 12px;
+        --text-base: 14px;
+        --text-lg: 18px;
+        --text-xl: 22px;
+        --text-2xl: 26px;
+        --text-3xl: 36px;
+        --text-4xl: 44px;
+        --leading-body: 1.43;
+        --leading-tight: 1.2;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 64px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+        --radius-sm: 2px;
+        --radius-md: 4px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 20px 24px color-mix(in oklab, var(--fg), transparent 88%);
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 68%);
+        --motion-fast: 100ms;
+        --motion-base: 160ms;
+        --ease-standard: ease-in-out;
+        --container-max: 1184px;
+        --container-gutter-desktop: 40px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font: var(--text-base) / var(--leading-body) var(--font-body);
+        -webkit-font-smoothing: antialiased;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 224px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+      .sidebar {
+        border-right: 1px solid var(--border);
+        background: var(--surface);
+        padding: var(--space-5) var(--space-4);
+      }
+      .brand {
+        margin: 0 0 var(--space-5);
+        color: var(--fg-2);
+        font-size: var(--text-lg);
+        line-height: var(--leading-tight);
+      }
+      .nav {
+        display: grid;
+        gap: var(--space-1);
+      }
+      .nav a {
+        border-radius: var(--radius-md);
+        color: var(--muted);
+        font-weight: 600;
+        padding: var(--space-2) var(--space-3);
+        text-decoration: none;
+      }
+      .nav a.active {
+        background: var(--surface-warm);
+        color: var(--accent);
+      }
+      .main {
+        max-width: var(--container-max);
+        width: 100%;
+        margin-inline: auto;
+        padding: var(--section-y-desktop) var(--container-gutter-desktop);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-2xl); }
+      h2 { font-size: var(--text-xl); }
+      h3 { font-size: var(--text-lg); }
+      .lead { color: var(--muted); margin-top: var(--space-2); max-width: 680px; }
+      .toolbar {
+        align-items: center;
+        display: flex;
+        gap: var(--space-2);
+        justify-content: space-between;
+        margin-bottom: var(--space-5);
+      }
+      .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+      .btn {
+        min-height: 32px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--fg-2);
+        cursor: pointer;
+        font: 600 var(--text-sm) / 1 var(--font-body);
+        padding: 0 var(--space-3);
+        transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:hover { border-color: var(--accent); color: var(--accent); }
+      .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); color: var(--accent-on); }
+      .btn-danger { color: var(--danger); }
+      .btn:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 336px;
+        gap: var(--space-5);
+      }
+      .panel, .card, .notice {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--elev-flat);
+      }
+      .panel-head, .card-head {
+        align-items: center;
+        border-bottom: 1px solid var(--border-soft);
+        display: flex;
+        gap: var(--space-3);
+        justify-content: space-between;
+        padding: var(--space-4);
+      }
+      .ticket-list { display: grid; }
+      .ticket {
+        display: grid;
+        gap: var(--space-2);
+        grid-template-columns: 1fr auto;
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .ticket:last-child { border-bottom: 0; }
+      .ticket.selected { background: var(--surface-warm); box-shadow: inset 3px 0 0 var(--accent); }
+      .meta {
+        color: var(--meta);
+        font-size: var(--text-sm);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+      }
+      .tag, .status {
+        align-items: center;
+        border-radius: var(--radius-pill);
+        display: inline-flex;
+        font: 600 var(--text-xs) / 1.2 var(--font-body);
+        padding: var(--space-1) var(--space-2);
+        white-space: nowrap;
+      }
+      .tag { background: var(--surface-warm); border: 1px solid #cce0f1; color: var(--accent); }
+      .status { border: 1px solid var(--border-soft); color: var(--muted); }
+      .status.success { background: #eef8f4; color: var(--success); }
+      .status.warn { background: #fff3e4; color: var(--warn); }
+      .status.danger { background: #fff2f3; color: var(--danger); }
+      .stack { display: grid; gap: var(--space-4); }
+      .card { padding: var(--space-4); }
+      .card-head { padding: 0 0 var(--space-3); margin-bottom: var(--space-3); }
+      .notice {
+        border-left: 3px solid var(--warn);
+        padding: var(--space-4);
+      }
+      .timeline {
+        display: grid;
+        gap: var(--space-3);
+      }
+      .event {
+        display: grid;
+        grid-template-columns: 10px 1fr;
+        gap: var(--space-3);
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: var(--radius-pill);
+        background: var(--accent);
+        margin-top: 5px;
+      }
+      .field { display: grid; gap: var(--space-2); }
+      label {
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        font-weight: 600;
+      }
+      input, textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--fg);
+        font: inherit;
+        padding: var(--space-2) var(--space-3);
+      }
+      textarea { min-height: 92px; resize: vertical; }
+      .form { display: grid; gap: var(--space-4); }
+      .meter {
+        background: var(--border-soft);
+        border-radius: var(--radius-pill);
+        height: 6px;
+        overflow: hidden;
+      }
+      .meter span { background: var(--success); display: block; height: 100%; }
+      @media (max-width: 920px) {
+        .shell { grid-template-columns: 1fr; }
+        .sidebar { border-bottom: 1px solid var(--border); border-right: 0; }
+        .main { padding: var(--section-y-tablet) var(--container-gutter-tablet); }
+        .layout { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 620px) {
+        .main { padding: var(--section-y-phone) var(--container-gutter-phone); }
+        .toolbar, .ticket { align-items: stretch; display: grid; grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Support navigation">
+        <h2 class="brand">Support desk</h2>
+        <nav class="nav">
+          <a class="active" href="#">Views</a>
+          <a href="#">Customers</a>
+          <a href="#">Knowledge</a>
+          <a href="#">Reporting</a>
+          <a href="#">Admin</a>
+        </nav>
+      </aside>
+      <main class="main">
+        <header class="toolbar">
+          <div>
+            <h1>Priority tickets</h1>
+            <p class="lead">Triage conversations, ownership, SLA state, and next action from a compact service workspace.</p>
+          </div>
+          <div class="actions">
+            <button class="btn">Export</button>
+            <button class="btn btn-primary">Create ticket</button>
+          </div>
+        </header>
+
+        <div class="layout">
+          <section class="panel" aria-label="Ticket queue">
+            <div class="panel-head">
+              <h2>Queue</h2>
+              <span class="status warn">SLA watch</span>
+            </div>
+            <div class="ticket-list">
+              <article class="ticket selected">
+                <div>
+                  <h3>Billing export failed for Acme</h3>
+                  <p class="meta">#42871 - opened 18 min ago - assigned to Mina</p>
+                  <div class="chips">
+                    <span class="tag">Enterprise</span>
+                    <span class="status danger">Urgent</span>
+                  </div>
+                </div>
+                <button class="btn">Open</button>
+              </article>
+              <article class="ticket">
+                <div>
+                  <h3>Agent handoff needs review</h3>
+                  <p class="meta">#42863 - opened 41 min ago - support ops</p>
+                  <div class="chips">
+                    <span class="tag">Workflow</span>
+                    <span class="status success">On track</span>
+                  </div>
+                </div>
+                <button class="btn">Open</button>
+              </article>
+              <article class="ticket">
+                <div>
+                  <h3>Help center article feedback</h3>
+                  <p class="meta">#42852 - opened 1 hr ago - unassigned</p>
+                  <div class="chips">
+                    <span class="tag">Guide</span>
+                    <span class="status">Normal</span>
+                  </div>
+                </div>
+                <button class="btn">Open</button>
+              </article>
+            </div>
+          </section>
+
+          <aside class="stack" aria-label="Ticket detail">
+            <article class="notice">
+              <h3>Customer waiting</h3>
+              <p class="meta">Next response target in 22 minutes.</p>
+            </article>
+            <article class="card">
+              <div class="card-head">
+                <h2>Reply draft</h2>
+                <span class="status success">Saved</span>
+              </div>
+              <form class="form">
+                <div class="field">
+                  <label for="macro">Macro</label>
+                  <input id="macro" value="Billing investigation" />
+                </div>
+                <div class="field">
+                  <label for="reply">Message</label>
+                  <textarea id="reply">Thanks for the details. We are checking the export job and will update you shortly.</textarea>
+                </div>
+                <div class="actions">
+                  <button class="btn">Save draft</button>
+                  <button class="btn btn-primary">Send reply</button>
+                </div>
+              </form>
+            </article>
+            <article class="card">
+              <div class="card-head">
+                <h2>Activity</h2>
+                <span class="meta">3 events</span>
+              </div>
+              <div class="timeline">
+                <div class="event"><span class="dot"></span><p>Priority raised by automation.</p></div>
+                <div class="event"><span class="dot"></span><p>Customer attached export logs.</p></div>
+                <div class="event"><span class="dot"></span><p>Mina claimed ownership.</p></div>
+              </div>
+            </article>
+            <article class="card">
+              <h2>Resolution readiness</h2>
+              <div class="meter" aria-label="Resolution readiness"><span style="width: 68%"></span></div>
+            </article>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

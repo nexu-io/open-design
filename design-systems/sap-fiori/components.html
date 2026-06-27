@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAP Fiori reference components</title>
+    <meta
+      name="description"
+      content="Open Design fixture for SAP Fiori-inspired enterprise UI: Morning Horizon surfaces, shell bar, object page cards, compact filters, status chips, data table, and message patterns."
+    />
+    <style>
+:root {
+  --bg: #f5f6f7;
+  --surface: #ffffff;
+  --surface-warm: #eff1f2;
+  --fg: #131e29;
+  --fg-2: #223548;
+  --muted: #556b82;
+  --meta: #788fa6;
+  --border: #d9d9d9;
+  --border-soft: #e5e5e5;
+  --accent: #0070f2;
+  --accent-on: #ffffff;
+  --accent-hover: #0057d2;
+  --accent-active: #0040a8;
+  --success: #256f3a;
+  --warn: #d27700;
+  --danger: #aa0808;
+  --font-display: "72", "SAP 72", Arial, Helvetica, sans-serif;
+  --font-body: "72", "SAP 72", Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
+  --leading-body: 1.5;
+  --leading-tight: 1.15;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 56px;
+  --section-y-tablet: 40px;
+  --section-y-phone: 28px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 8px 24px rgba(19, 30, 41, 0.12);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --container-max: 1280px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}
+    </style>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .shell-bar {
+        min-height: 56px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        box-shadow: var(--elev-ring);
+      }
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      .shell-row {
+        min-height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+      }
+      .brand-lockup {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-3);
+        color: var(--fg);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .brand-chip {
+        display: inline-grid;
+        place-items: center;
+        min-width: 46px;
+        height: 28px;
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+        color: var(--accent-on);
+        font-size: var(--text-sm);
+        font-weight: 700;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      .icon-btn {
+        width: 36px;
+        height: 36px;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--muted);
+      }
+      .icon-btn svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+      main {
+        padding-block: var(--section-y-desktop);
+      }
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-6);
+        margin-bottom: var(--space-6);
+      }
+      .eyebrow {
+        color: var(--muted);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      h1, h2, h3 {
+        margin: 0;
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-3xl); }
+      h2 { font-size: var(--text-xl); }
+      h3 { font-size: var(--text-lg); }
+      .body-muted {
+        color: var(--muted);
+      }
+      .btn {
+        min-height: 36px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        padding: var(--space-2) var(--space-4);
+        font: 700 var(--text-sm) / 1 var(--font-body);
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--accent);
+        border-color: var(--border);
+      }
+      .btn:focus, .icon-btn:focus, .link:focus, .input:focus, .select:focus {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .layout-grid {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: var(--space-6);
+      }
+      .panel, .card, .filter-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+      .filter-panel {
+        padding: var(--space-4);
+      }
+      .field-label {
+        display: block;
+        color: var(--muted);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        margin-bottom: var(--space-1);
+      }
+      .input, .select {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--fg);
+        font: var(--text-sm) / 1.2 var(--font-body);
+        padding: var(--space-2);
+      }
+      .stack-3 > * + * {
+        margin-top: var(--space-3);
+      }
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-4);
+      }
+      .card {
+        padding: var(--space-4);
+        box-shadow: var(--elev-flat);
+      }
+      .metric-value {
+        margin-top: var(--space-2);
+        font-size: var(--text-2xl);
+        font-weight: 700;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: var(--radius-pill);
+        padding-inline: var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .tag-success {
+        background: #f5fae5;
+        color: var(--success);
+      }
+      .tag-warn {
+        background: #fff8d6;
+        color: var(--warn);
+      }
+      .tag-danger {
+        background: #ffeaf4;
+        color: var(--danger);
+      }
+      .message-strip {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        margin-bottom: var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: var(--radius-sm);
+        background: #e1f4ff;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 700px;
+        font-size: var(--text-sm);
+      }
+      th, td {
+        padding: var(--space-3);
+        border-bottom: 1px solid var(--border-soft);
+        text-align: left;
+      }
+      th {
+        color: var(--muted);
+        background: var(--surface-warm);
+        font-weight: 700;
+      }
+      tr.selected {
+        background: #ebf8ff;
+      }
+      .link {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .kbd {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-warm);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 0 var(--space-1);
+      }
+      @media (max-width: 860px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        main { padding-block: var(--section-y-phone); }
+        .page-header, .shell-row { flex-direction: column; align-items: stretch; }
+        .layout-grid { grid-template-columns: 1fr; }
+        .metric-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="shell-bar">
+      <div class="container shell-row">
+        <a class="brand-lockup" href="#"><span class="brand-chip">SAP</span><span>Sales Orders</span></a>
+        <div class="toolbar" aria-label="Shell actions">
+          <button class="icon-btn" type="button" aria-label="Search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.1 10.5l3.4 3.4-1.4 1.4-3.4-3.4A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
+          </button>
+          <button class="icon-btn" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-5-2-2v-5a5 5 0 0 0-10 0v5l-2 2v1h14v-1Z"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+    <main class="container">
+      <section class="page-header">
+        <div>
+          <div class="eyebrow">Object page</div>
+          <h1>Sales Order 50000112</h1>
+          <p class="body-muted">Review fulfillment status, release blocks, and apply changes in a predictable enterprise flow.</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-secondary" type="button">Cancel</button>
+          <button class="btn btn-primary" type="button">Apply</button>
+        </div>
+      </section>
+      <section class="layout-grid">
+        <aside class="filter-panel stack-3" aria-label="Filters">
+          <h2>Filters</h2>
+          <label class="field-label" for="customer">Customer</label>
+          <input class="input" id="customer" value="Northwind Traders" />
+          <label class="field-label" for="status">Status</label>
+          <select class="select" id="status">
+            <option>All statuses</option>
+            <option>Ready to ship</option>
+            <option>Blocked</option>
+          </select>
+          <button class="btn btn-primary" type="button">Go</button>
+        </aside>
+        <div>
+          <div class="metric-grid">
+            <article class="card">
+              <h3>Net value</h3>
+              <div class="metric-value">$128K</div>
+              <span class="tag tag-success">In target</span>
+            </article>
+            <article class="card">
+              <h3>Delivery risk</h3>
+              <div class="metric-value">3</div>
+              <span class="tag tag-warn">Review</span>
+            </article>
+            <article class="card">
+              <h3>Credit block</h3>
+              <div class="metric-value">1</div>
+              <span class="tag tag-danger">Action needed</span>
+            </article>
+          </div>
+          <div class="message-strip" role="status">
+            <strong>Information</strong>
+            <span>Press <kbd class="kbd">F6</kbd> to move between filter, table, and details groups.</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Material</th>
+                  <th>Status</th>
+                  <th>Quantity</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="selected">
+                  <td><a class="link" href="#">10</a></td>
+                  <td>High-capacity sensor</td>
+                  <td><span class="tag tag-success">Ready</span></td>
+                  <td>240</td>
+                  <td>$42,000</td>
+                </tr>
+                <tr>
+                  <td><a class="link" href="#">20</a></td>
+                  <td>Control module</td>
+                  <td><span class="tag tag-warn">Pending</span></td>
+                  <td>80</td>
+                  <td>$31,500</td>
+                </tr>
+                <tr>
+                  <td><a class="link" href="#">30</a></td>
+                  <td>Maintenance kit</td>
+                  <td><span class="tag tag-danger">Blocked</span></td>
+                  <td>18</td>
+                  <td>$9,800</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

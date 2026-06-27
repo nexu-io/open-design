@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>One Page Operations Resume</title>
+  <style>
+    :root {
+      --ink: #17212f;
+      --muted: #657082;
+      --paper: #ffffff;
+      --line: #d9e0ea;
+      --accent: #1f7a78;
+      --soft: #eef8f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e7ebf0;
+      color: var(--ink);
+      font: 12.5px/1.38 Arial, Helvetica, sans-serif;
+    }
+    .page {
+      width: min(100%, 8.5in);
+      min-height: 11in;
+      margin: 28px auto;
+      background: var(--paper);
+      box-shadow: 0 18px 42px rgba(23, 33, 47, 0.16);
+      padding: 34px 38px;
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      padding-bottom: 16px;
+      border-bottom: 3px solid var(--accent);
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .headline {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .contact {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      text-align: right;
+      font-size: 11.5px;
+    }
+    .summary {
+      margin: 16px 0;
+      padding: 11px 13px;
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+      color: #263546;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.35fr 3fr;
+      gap: 24px;
+    }
+    section + section { margin-top: 17px; }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      color: var(--accent);
+    }
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .skill-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 5px;
+    }
+    .skill-row + .skill-row { margin-top: 9px; }
+    .bar {
+      height: 5px;
+      border-radius: 999px;
+      background: var(--line);
+      overflow: hidden;
+    }
+    .bar span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+    }
+    .role {
+      padding-bottom: 13px;
+      border-bottom: 1px solid var(--line);
+    }
+    .role + .role { margin-top: 13px; }
+    .role-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+    h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .company {
+      color: var(--muted);
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .date {
+      color: var(--muted);
+      white-space: nowrap;
+      font-size: 11px;
+    }
+    ul {
+      margin: 7px 0 0;
+      padding-left: 17px;
+    }
+    li + li { margin-top: 3px; }
+    .compact-list {
+      margin: 0;
+      padding-left: 16px;
+      color: #344154;
+    }
+    .compact-list li + li { margin-top: 5px; }
+    @media (max-width: 760px) {
+      .page { margin: 0; padding: 28px; box-shadow: none; }
+      header, .grid, .role-head { grid-template-columns: 1fr; }
+      .contact { text-align: left; }
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { background: #fff; }
+      .page { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <div>
+        <h1>Jonah Patel</h1>
+        <p class="headline">Operations Manager | Marketplace Logistics</p>
+      </div>
+      <address class="contact">
+        <span>jonah.patel@example.com</span>
+        <span>+1 312 555 0129</span>
+        <span>Chicago, IL</span>
+        <span>linkedin.com/in/jonahpatel</span>
+      </address>
+    </header>
+    <p class="summary">Operations manager with 7 years of experience building reliable marketplace fulfillment workflows, reducing defects, and coaching distributed teams through high-volume seasonal peaks.</p>
+    <div class="grid">
+      <aside>
+        <section>
+          <h2>Skills</h2>
+          <div class="box">
+            <div class="skill-row"><strong>Process design</strong><div class="bar"><span style="width: 92%"></span></div></div>
+            <div class="skill-row"><strong>Vendor ops</strong><div class="bar"><span style="width: 86%"></span></div></div>
+            <div class="skill-row"><strong>SQL reporting</strong><div class="bar"><span style="width: 78%"></span></div></div>
+            <div class="skill-row"><strong>Team coaching</strong><div class="bar"><span style="width: 88%"></span></div></div>
+          </div>
+        </section>
+        <section>
+          <h2>Certifications</h2>
+          <ul class="compact-list">
+            <li>Lean Six Sigma Green Belt</li>
+            <li>OSHA 30-hour General Industry</li>
+            <li>Tableau Desktop Specialist</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Education</h2>
+          <p><strong>B.B.A. Supply Chain</strong><br>Midwest State University</p>
+        </section>
+      </aside>
+      <main>
+        <section>
+          <h2>Experience</h2>
+          <div class="role">
+            <div class="role-head">
+              <div><h3>Senior Operations Manager</h3><div class="company">ParcelPilot</div></div>
+              <div class="date">2021 - Present</div>
+            </div>
+            <ul>
+              <li>Reduced missed pickup defects by 27% by redesigning carrier escalation rules and daily exception reviews.</li>
+              <li>Managed 42 coordinators across four regions while maintaining 96% SLA adherence during peak season.</li>
+              <li>Built a self-serve dashboard that shortened weekly performance reporting from 5 hours to 35 minutes.</li>
+            </ul>
+          </div>
+          <div class="role">
+            <div class="role-head">
+              <div><h3>Operations Lead</h3><div class="company">FreshCart Local</div></div>
+              <div class="date">2018 - 2021</div>
+            </div>
+            <ul>
+              <li>Opened two micro-fulfillment sites and created launch checklists adopted by later city teams.</li>
+              <li>Improved substitution accuracy by 18% through shopper training and revised category rules.</li>
+            </ul>
+          </div>
+          <div class="role">
+            <div class="role-head">
+              <div><h3>Logistics Analyst</h3><div class="company">Harbor Retail Group</div></div>
+              <div class="date">2016 - 2018</div>
+            </div>
+            <ul>
+              <li>Forecasted weekly transfer volume for 120 stores and flagged capacity risks for regional managers.</li>
+            </ul>
+          </div>
+        </section>
+        <section>
+          <h2>Projects</h2>
+          <div class="role">
+            <div class="role-head">
+              <div><h3>Peak Readiness Program</h3><div class="company">Internal operations playbook</div></div>
+              <div class="date">2025</div>
+            </div>
+            <ul>
+              <li>Standardized staffing, carrier scorecards, and escalation scripts across 18 fulfillment partners.</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+  </article>
+</body>
+</html>

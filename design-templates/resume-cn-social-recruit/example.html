@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Social Recruit Resume</title>
+  <style>
+    :root {
+      --paper: #ffffff;
+      --ink: #20252c;
+      --muted: #68717c;
+      --line: #d7dde4;
+      --accent: #145a5f;
+      --accent-soft: #e7f2f1;
+      --warm: #9a5b2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #ebeef0;
+      color: var(--ink);
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+      line-height: 1.46;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      padding: 17mm 18mm;
+      background: var(--paper);
+      box-shadow: 0 20px 48px rgba(23, 35, 43, 0.2);
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1fr 72mm;
+      gap: 20px;
+      align-items: start;
+      padding-bottom: 14px;
+      border-bottom: 1.5px solid var(--accent);
+    }
+    h1 {
+      margin: 0 0 7px;
+      font-size: 30px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .title {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .contact {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 11.2px;
+      text-align: right;
+    }
+    .brief {
+      margin: 12px 0 14px;
+      padding: 10px 12px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      font-size: 12.2px;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .kpi {
+      border-top: 2px solid var(--accent);
+      padding-top: 7px;
+    }
+    .kpi b {
+      display: block;
+      font-size: 17px;
+      line-height: 1.1;
+      color: var(--accent);
+    }
+    .kpi span {
+      color: var(--muted);
+      font-size: 10.8px;
+    }
+    section { margin-top: 15px; }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      letter-spacing: 0;
+      color: var(--accent);
+    }
+    .item {
+      padding: 10px 0;
+      border-top: 1px solid var(--line);
+    }
+    .item:first-of-type { border-top: 0; padding-top: 0; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: baseline;
+    }
+    h3 { margin: 0; font-size: 13.4px; }
+    .meta {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .scope {
+      margin-top: 4px;
+      color: var(--warm);
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li {
+      margin: 3px 0;
+      font-size: 11.8px;
+    }
+    .skills {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-size: 11.5px;
+    }
+    .skills div {
+      border: 1px solid var(--line);
+      padding: 7px 8px;
+      background: #fbfcfd;
+    }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Experienced Chinese resume preview">
+    <header>
+      <div>
+        <h1>周明远</h1>
+        <div class="title">高级产品经理 · 企业协同与商业化增长</div>
+      </div>
+      <address class="contact">
+        <span>北京 / 可接受华北出差</span>
+        <span>zhoumingyuan@example.com</span>
+        <span>136-0000-0000</span>
+        <span>linkedin.com/in/example-zhou</span>
+      </address>
+    </header>
+
+    <p class="brief">8 年 SaaS 产品经验，覆盖 0-1 平台搭建、商业化包装、客户成功协同和数据驱动增长。熟悉中大型客户采购链路，擅长把复杂协作场景抽象为可落地的产品能力。</p>
+
+    <div class="kpis">
+      <div class="kpi"><b>8 年</b><span>B2B SaaS 产品经验</span></div>
+      <div class="kpi"><b>3200 万</b><span>负责产品线 ARR</span></div>
+      <div class="kpi"><b>41%</b><span>关键功能采用率提升</span></div>
+      <div class="kpi"><b>12 人</b><span>跨职能项目团队</span></div>
+    </div>
+
+    <section>
+      <h2>工作经历</h2>
+      <article class="item">
+        <div class="row">
+          <h3>云策科技 / 高级产品经理</h3>
+          <span class="meta">2022.02 - 至今</span>
+        </div>
+        <div class="scope">负责企业知识协同产品线，面向 200+ 付费客户</div>
+        <ul>
+          <li>主导权限与审计体系升级，支撑金融、制造行业大客户交付，企业版续费率提升至 91%。</li>
+          <li>设计角色化 onboarding 流程，使新团队 14 日内激活率从 38% 提升至 54%。</li>
+          <li>建立产品经营看板，统一销售、实施、客服反馈口径，每月输出优先级决策建议。</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row">
+          <h3>北辰协作 / 产品经理</h3>
+          <span class="meta">2018.05 - 2022.01</span>
+        </div>
+        <div class="scope">从协作文档切入项目管理场景，负责需求发现到上线复盘</div>
+        <ul>
+          <li>推动任务模板、批量导入、成员负载视图上线，帮助销售打入 17 家中型客户。</li>
+          <li>把客户访谈沉淀为行业解决方案卡片，售前方案准备时间从 3 天缩短至 1 天。</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row">
+          <h3>星启网络 / 产品助理</h3>
+          <span class="meta">2016.07 - 2018.04</span>
+        </div>
+        <ul>
+          <li>维护运营后台需求池，跟进 60+ 小版本迭代，建立验收清单与发布记录。</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>代表项目</h2>
+      <article class="item">
+        <div class="row">
+          <h3>企业级知识权限与审计中心</h3>
+          <span class="meta">2023.08 - 2024.03</span>
+        </div>
+        <ul>
+          <li>抽象空间、文档、字段、操作 4 层权限模型，兼容 9 类企业组织结构。</li>
+          <li>联合技术负责人拆分 5 个里程碑，按期交付，并通过 3 家标杆客户安全审查。</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>核心能力</h2>
+      <div class="skills">
+        <div><strong>产品战略</strong><br>商业化包装、路线图、定价实验</div>
+        <div><strong>增长分析</strong><br>漏斗指标、留存、客户分层</div>
+        <div><strong>协作交付</strong><br>PRD、评审、验收、上线复盘</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

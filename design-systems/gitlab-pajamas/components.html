@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GitLab Pajamas - reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/gitlab-pajamas: GitLab-style product workflow UI with labels, alerts, merge request summaries, and pipeline state."
+    />
+    <style>
+      :root {
+        --bg: #f7f7f8;
+        --surface: #ffffff;
+        --surface-warm: #f4f0ff;
+        --fg: #18171d;
+        --fg-2: #333238;
+        --muted: #626168;
+        --meta: #737278;
+        --border: #dcdcde;
+        --border-soft: #ececef;
+        --accent: #7759c2;
+        --accent-on: #ffffff;
+        --accent-hover: #6242b3;
+        --accent-active: #4f2f9f;
+        --success: #108548;
+        --warn: #ab6100;
+        --danger: #dd2b0e;
+        --font-display: "GitLab Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-body: "GitLab Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-mono: "GitLab Mono", "SFMono-Regular", Consolas, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 24px;
+        --text-2xl: 32px;
+        --text-3xl: 40px;
+        --text-4xl: 56px;
+        --leading-body: 1.5;
+        --leading-tight: 1.16;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 24px;
+        --space-6: 32px;
+        --space-8: 48px;
+        --space-12: 72px;
+        --section-y-desktop: 88px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 44px;
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 8px 24px rgba(24, 23, 29, 0.16);
+        --focus-ring: 0 0 0 3px rgba(119, 89, 194, 0.32);
+        --motion-fast: 120ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+        --container-max: 1200px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font: var(--text-base) / var(--leading-body) var(--font-body);
+        -webkit-font-smoothing: antialiased;
+      }
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding: var(--section-y-desktop) var(--container-gutter-desktop);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-bottom: var(--space-5);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-3xl); }
+      h2 { font-size: var(--text-xl); }
+      h3 { font-size: var(--text-lg); }
+      .lead { margin-top: var(--space-2); color: var(--muted); max-width: 720px; }
+      .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+      .btn {
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0 var(--space-3);
+        background: var(--surface);
+        color: var(--fg-2);
+        font: 600 var(--text-sm) / 1 var(--font-body);
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:hover { border-color: var(--accent); color: var(--accent); }
+      .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); color: var(--accent-on); }
+      .btn-danger { color: var(--danger); }
+      .btn:focus-visible,
+      a:focus-visible,
+      input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: var(--space-5);
+      }
+      .stack > * + * { margin-top: var(--space-4); }
+      .panel,
+      .card,
+      .alert {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--elev-flat);
+      }
+      .panel-head,
+      .card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .card { padding: var(--space-4); }
+      .card-head { padding: 0 0 var(--space-3); margin-bottom: var(--space-3); }
+      .metadata {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-3);
+      }
+      .badge,
+      .label,
+      .status {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        border-radius: var(--radius-pill);
+        padding: var(--space-1) var(--space-2);
+        font: 600 var(--text-xs) / 1.2 var(--font-body);
+        white-space: nowrap;
+      }
+      .badge { background: var(--surface-warm); color: var(--accent); border: 1px solid #d8ccff; }
+      .label { background: #fff1de; color: #8f4700; border: 1px solid #f5d4a4; }
+      .status { border: 1px solid var(--border-soft); }
+      .status.success { color: var(--success); background: #ecf4ee; }
+      .status.warn { color: var(--warn); background: #fff4e1; }
+      .status.danger { color: var(--danger); background: #fff1ef; }
+      .alert {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: var(--space-3);
+        align-items: start;
+        padding: var(--space-4);
+        border-left: 4px solid var(--warn);
+      }
+      .icon {
+        width: 18px;
+        height: 18px;
+        border-radius: var(--radius-pill);
+        background: var(--warn);
+        color: var(--surface);
+        display: inline-grid;
+        place-items: center;
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .merge-list { display: grid; gap: var(--space-3); padding: var(--space-4); }
+      .merge-card {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      .branch {
+        color: var(--meta);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        margin-top: var(--space-2);
+      }
+      .pipeline {
+        display: grid;
+        gap: var(--space-3);
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: 88px 1fr auto;
+        gap: var(--space-3);
+        align-items: center;
+        font-size: var(--text-sm);
+      }
+      .bar {
+        height: 8px;
+        overflow: hidden;
+        border-radius: var(--radius-pill);
+        background: var(--border-soft);
+      }
+      .bar span { display: block; height: 100%; background: var(--success); }
+      label { color: var(--muted); font-size: var(--text-sm); }
+      input {
+        min-height: 36px;
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0 var(--space-3);
+        font: inherit;
+      }
+      .field { display: grid; gap: var(--space-2); }
+      .form-grid { display: grid; gap: var(--space-4); }
+      .link { color: var(--accent); text-decoration: none; font-weight: 600; }
+      .link:hover { text-decoration: underline; }
+      @media (max-width: 900px) {
+        .container { padding: var(--section-y-tablet) var(--container-gutter-tablet); }
+        .layout { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 600px) {
+        .container { padding: var(--section-y-phone) var(--container-gutter-phone); }
+        .topbar, .panel-head, .merge-card { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; }
+        .stage { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <header class="topbar">
+        <div>
+          <h1>Merge requests</h1>
+          <p class="lead">Review code, pipeline state, labels, and approvals across active work.</p>
+        </div>
+        <div class="actions">
+          <button class="btn">Export CSV</button>
+          <button class="btn btn-primary">New merge request</button>
+        </div>
+      </header>
+      <div class="layout">
+        <section class="stack" aria-label="Merge request workflow">
+          <article class="alert" role="status">
+            <span class="icon" aria-hidden="true">!</span>
+            <div>
+              <h2>Pipeline attention needed</h2>
+              <p>Two merge requests require a retry before they can be merged.</p>
+            </div>
+            <a class="link" href="#">View jobs</a>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Open review queue</h2>
+              <span class="badge">12 active</span>
+            </div>
+            <div class="merge-list">
+              <div class="merge-card">
+                <div>
+                  <h3>Improve runner autoscaling metrics</h3>
+                  <div class="branch">feature/runner-metrics -> main</div>
+                  <div class="metadata">
+                    <span class="status success">Pipeline passed</span>
+                    <span class="badge">2 approvals</span>
+                    <span class="label">group::runner</span>
+                  </div>
+                </div>
+                <button class="btn btn-primary">Review</button>
+              </div>
+              <div class="merge-card">
+                <div>
+                  <h3>Resolve package registry timeout</h3>
+                  <div class="branch">fix/registry-timeout -> main</div>
+                  <div class="metadata">
+                    <span class="status warn">Pipeline retrying</span>
+                    <span class="badge">1 approval</span>
+                    <span class="label">type::bug</span>
+                  </div>
+                </div>
+                <button class="btn">Open</button>
+              </div>
+              <div class="merge-card">
+                <div>
+                  <h3>Remove deprecated deploy token scope</h3>
+                  <div class="branch">security/token-scope -> main</div>
+                  <div class="metadata">
+                    <span class="status danger">Security review</span>
+                    <span class="badge">Draft</span>
+                    <span class="label">severity::high</span>
+                  </div>
+                </div>
+                <button class="btn btn-danger">Review risk</button>
+              </div>
+            </div>
+          </article>
+        </section>
+        <aside class="stack" aria-label="Pipeline and settings">
+          <article class="card">
+            <div class="card-head">
+              <h2>Pipeline health</h2>
+              <span class="status success">Stable</span>
+            </div>
+            <div class="pipeline">
+              <div class="stage"><span>Build</span><div class="bar"><span style="width: 100%"></span></div><strong>100%</strong></div>
+              <div class="stage"><span>Test</span><div class="bar"><span style="width: 86%"></span></div><strong>86%</strong></div>
+              <div class="stage"><span>Deploy</span><div class="bar"><span style="width: 62%"></span></div><strong>62%</strong></div>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-head">
+              <h2>Triage filter</h2>
+              <a class="link" href="#">Reset</a>
+            </div>
+            <form class="form-grid">
+              <div class="field">
+                <label for="assignee">Assignee</label>
+                <input id="assignee" value="@reviewer" />
+              </div>
+              <div class="field">
+                <label for="label">Label</label>
+                <input id="label" value="workflow::review" />
+              </div>
+              <button class="btn btn-primary" type="button">Apply filter</button>
+            </form>
+          </article>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>

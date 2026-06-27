@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Structured Product Resume</title>
+  <style>
+    :root {
+      --ink: #182033;
+      --muted: #697386;
+      --line: #d9dee8;
+      --paper: #fffdf8;
+      --wash: #f4f7fb;
+      --accent: #3167b1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #dfe5ee;
+      color: var(--ink);
+      font: 14px/1.45 Arial, Helvetica, sans-serif;
+    }
+    .page {
+      width: min(100%, 8.5in);
+      min-height: 11in;
+      margin: 28px auto;
+      background: var(--paper);
+      box-shadow: 0 18px 50px rgba(24, 32, 51, 0.18);
+      display: grid;
+      grid-template-columns: 2.1in 1fr;
+    }
+    aside {
+      background: var(--wash);
+      padding: 42px 28px;
+      border-right: 1px solid var(--line);
+    }
+    main { padding: 42px 44px; }
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .role {
+      margin: 10px 0 18px;
+      color: var(--accent);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+    .summary {
+      margin: 0 0 26px;
+      color: #30394d;
+      max-width: 5.1in;
+    }
+    h2 {
+      margin: 0 0 12px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    section + section { margin-top: 24px; }
+    .side-section + .side-section { margin-top: 24px; }
+    .contact, .skills, .facts {
+      display: grid;
+      gap: 9px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 6px 8px;
+      border-radius: 4px;
+    }
+    .item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 16px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .item + .item { margin-top: 18px; }
+    h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .company {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    ul {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding-left: 18px;
+      color: #30394d;
+    }
+    li + li { margin-top: 5px; }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      padding: 10px;
+      border-radius: 5px;
+      background: #fff;
+    }
+    .metric strong {
+      display: block;
+      font-size: 18px;
+      color: var(--accent);
+    }
+    .metric span { color: var(--muted); font-size: 11px; }
+    @media (max-width: 760px) {
+      .page { grid-template-columns: 1fr; margin: 0; box-shadow: none; }
+      aside, main { padding: 28px; }
+      .item { grid-template-columns: 1fr; }
+      .meta { text-align: left; }
+      .metric-grid { grid-template-columns: 1fr; }
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { background: #fff; }
+      .page { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page" aria-label="Resume preview">
+    <aside>
+      <section class="side-section">
+        <h2>Contact</h2>
+        <div class="contact">
+          <span>mira.chen@example.com</span>
+          <span>+1 415 555 0184</span>
+          <span>San Francisco, CA</span>
+          <span>linkedin.com/in/mirachen</span>
+        </div>
+      </section>
+      <section class="side-section">
+        <h2>Core Skills</h2>
+        <div class="skills">
+          <span class="chip">Product strategy</span>
+          <span class="chip">Experiment design</span>
+          <span class="chip">Roadmapping</span>
+          <span class="chip">SQL dashboards</span>
+          <span class="chip">Design critique</span>
+          <span class="chip">Stakeholder alignment</span>
+        </div>
+      </section>
+      <section class="side-section">
+        <h2>Facts</h2>
+        <div class="facts">
+          <span>Languages: English, Mandarin</span>
+          <span>Tools: Figma, Amplitude, Linear</span>
+          <span>Certification: Pragmatic PM</span>
+        </div>
+      </section>
+    </aside>
+    <main>
+      <header>
+        <h1>Mira Chen</h1>
+        <p class="role">Senior Product Manager</p>
+        <p class="summary">Product leader with 8 years of experience turning ambiguous customer problems into focused launches across collaboration, billing, and developer tooling.</p>
+      </header>
+      <section>
+        <h2>Impact Snapshot</h2>
+        <div class="metric-grid">
+          <div class="metric"><strong>31%</strong><span>activation lift</span></div>
+          <div class="metric"><strong>$4.8M</strong><span>retained ARR</span></div>
+          <div class="metric"><strong>12</strong><span>major launches</span></div>
+        </div>
+      </section>
+      <section>
+        <h2>Experience</h2>
+        <div class="item">
+          <div>
+            <h3>Lead Product Manager</h3>
+            <div class="company">Northstar Labs</div>
+          </div>
+          <div class="meta">2022 - Present</div>
+          <ul>
+            <li>Led a cross-functional team of 11 to rebuild onboarding, increasing team workspace activation from 43% to 56%.</li>
+            <li>Shipped usage-based billing controls that reduced enterprise churn risk across $4.8M in renewal pipeline.</li>
+            <li>Established a weekly discovery review that cut duplicate roadmap work by 24% in two quarters.</li>
+          </ul>
+        </div>
+        <div class="item">
+          <div>
+            <h3>Product Manager</h3>
+            <div class="company">Atlas Workflow</div>
+          </div>
+          <div class="meta">2018 - 2022</div>
+          <ul>
+            <li>Launched admin analytics for 18,000 customer workspaces, creating a new expansion signal used by sales.</li>
+            <li>Partnered with design to simplify permission setup, lowering support tickets by 19% after release.</li>
+          </ul>
+        </div>
+      </section>
+      <section>
+        <h2>Education</h2>
+        <div class="item">
+          <div>
+            <h3>B.S. Human-Computer Interaction</h3>
+            <div class="company">Pacific State University</div>
+          </div>
+          <div class="meta">2014 - 2018</div>
+        </div>
+      </section>
+    </main>
+  </article>
+</body>
+</html>

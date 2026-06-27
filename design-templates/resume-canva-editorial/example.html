@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editorial Brand Resume</title>
+  <style>
+    :root {
+      --ink: #241f21;
+      --muted: #746c69;
+      --paper: #fffaf4;
+      --line: #e4d8cc;
+      --accent: #b4563a;
+      --sage: #8aa195;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #d9ddd8;
+      color: var(--ink);
+      font: 13px/1.48 Georgia, "Times New Roman", serif;
+    }
+    .page {
+      width: min(100%, 8.5in);
+      min-height: 11in;
+      margin: 28px auto;
+      background: var(--paper);
+      box-shadow: 0 22px 48px rgba(36, 31, 33, 0.16);
+      padding: 42px;
+      position: relative;
+      overflow: hidden;
+    }
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 18px;
+      background: linear-gradient(var(--accent), var(--sage));
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 28px;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 24px;
+      margin-left: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 50px;
+      line-height: 0.95;
+      letter-spacing: 0;
+      max-width: 4in;
+    }
+    .title {
+      margin: 14px 0 0;
+      color: var(--accent);
+      font: 700 13px/1.3 Arial, Helvetica, sans-serif;
+      text-transform: uppercase;
+    }
+    .contact {
+      align-self: end;
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      text-align: right;
+    }
+    .body {
+      margin-left: 18px;
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 30px;
+      padding-top: 28px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font: 800 12px/1.2 Arial, Helvetica, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+    section + section { margin-top: 24px; }
+    .lede {
+      font-size: 17px;
+      line-height: 1.42;
+      margin: 0;
+    }
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .pill {
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 6px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+    .role {
+      padding: 0 0 18px 22px;
+      border-left: 2px solid var(--line);
+      position: relative;
+    }
+    .role + .role { margin-top: 16px; }
+    .role::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      top: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    h3 {
+      margin: 0;
+      font: 800 17px/1.2 Arial, Helvetica, sans-serif;
+    }
+    .meta {
+      margin: 4px 0 8px;
+      color: var(--muted);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+    }
+    ul { margin: 0; padding-left: 18px; }
+    li + li { margin-top: 5px; }
+    .quote {
+      margin: 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 0;
+      color: #4b403d;
+      font-size: 16px;
+    }
+    .small {
+      color: var(--muted);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+    }
+    @media (max-width: 760px) {
+      .page { margin: 0; padding: 30px; box-shadow: none; }
+      header, .body { grid-template-columns: 1fr; }
+      .contact { text-align: left; }
+      h1 { font-size: 40px; }
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { background: #fff; }
+      .page { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <div>
+        <h1>Elena Brooks</h1>
+        <p class="title">Brand Strategist + Editorial Designer</p>
+      </div>
+      <address class="contact">
+        <span>elena.brooks@example.com</span>
+        <span>Portland, OR</span>
+        <span>elenabrooks.work</span>
+        <span>+1 503 555 0142</span>
+      </address>
+    </header>
+    <div class="body">
+      <aside>
+        <section>
+          <h2>Profile</h2>
+          <p class="lede">I shape concise brand systems for teams that need campaigns, content, and product moments to feel unmistakably connected.</p>
+        </section>
+        <section>
+          <h2>Capabilities</h2>
+          <div class="pill-list">
+            <span class="pill">Naming</span>
+            <span class="pill">Art direction</span>
+            <span class="pill">Launch systems</span>
+            <span class="pill">Editorial design</span>
+            <span class="pill">Messaging</span>
+            <span class="pill">Workshop facilitation</span>
+          </div>
+        </section>
+        <section>
+          <h2>Recognition</h2>
+          <p class="small">2025 Independent Design Annual, shortlist</p>
+          <p class="small">2024 Brand Week speaker</p>
+        </section>
+        <section>
+          <p class="quote">Recent work helped a climate-tech client turn technical proof into a buyer narrative used across sales, hiring, and fundraising.</p>
+        </section>
+      </aside>
+      <main>
+        <section>
+          <h2>Experience</h2>
+          <div class="role">
+            <h3>Principal Brand Strategist, Loomfield Studio</h3>
+            <p class="meta">2021 - Present</p>
+            <ul>
+              <li>Built positioning and launch systems for 14 venture-backed teams across climate, health, and education.</li>
+              <li>Directed campaign concepts that raised qualified demo requests by 38% while reducing one-off content requests.</li>
+              <li>Created modular editorial guidelines adopted by sales, design, and customer education teams.</li>
+            </ul>
+          </div>
+          <div class="role">
+            <h3>Senior Designer, Page & Signal</h3>
+            <p class="meta">2017 - 2021</p>
+            <ul>
+              <li>Led identity refreshes for nonprofit and cultural clients with print, web, and event applications.</li>
+              <li>Designed a publication system that cut monthly production time from 6 days to 2.5 days.</li>
+            </ul>
+          </div>
+        </section>
+        <section>
+          <h2>Education</h2>
+          <div class="role">
+            <h3>BFA Graphic Design, North Coast College</h3>
+            <p class="meta">2013 - 2017</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </article>
+</body>
+</html>

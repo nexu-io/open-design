@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Creative Studio</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e2e2df;
+      color: #211f1d;
+      font-family: "Trebuchet MS", Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.45;
+    }
+    .page {
+      width: min(210mm, calc(100vw - 28px));
+      min-height: 297mm;
+      margin: 24px auto;
+      background: #fffaf0;
+      padding: 15mm;
+      box-shadow: 0 18px 50px rgba(42, 35, 24, 0.18);
+      position: relative;
+      overflow: hidden;
+    }
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 8mm;
+      background: #e35d3f;
+    }
+    .content { position: relative; z-index: 1; padding-left: 8mm; }
+    header {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 18mm;
+      align-items: end;
+      border-bottom: 2px solid #211f1d;
+      padding-bottom: 15px;
+    }
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 35pt;
+      line-height: 0.9;
+      letter-spacing: 0;
+    }
+    .role { margin: 10px 0 0; font-weight: 700; text-transform: uppercase; }
+    .contact { text-align: right; color: #514b45; }
+    .contact p { margin: 0 0 5px; }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 64mm;
+      gap: 14mm;
+      margin-top: 15px;
+    }
+    h2 {
+      margin: 16px 0 8px;
+      font-size: 9pt;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    h2 span { color: #e35d3f; }
+    h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 13pt; }
+    .item { margin-top: 13px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .date { color: #6a625b; white-space: nowrap; font-size: 9pt; }
+    .sub { margin-top: 2px; font-weight: 700; }
+    ul { margin: 6px 0 0 18px; padding: 0; }
+    li { margin: 4px 0; }
+    .project {
+      border-top: 1px solid #211f1d;
+      padding-top: 9px;
+      margin-top: 10px;
+    }
+    .project strong { display: block; color: #e35d3f; }
+    .chipbox { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { background: #211f1d; color: #fffaf0; padding: 3px 7px; }
+    aside {
+      background: #f3eadc;
+      padding: 11px;
+      align-self: start;
+    }
+    aside p { margin: 0 0 9px; }
+    @media print {
+      body { background: #fff; }
+      .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Creative studio resume preview">
+    <div class="content">
+      <header>
+        <div>
+          <h1>Ari Morgan</h1>
+          <p class="role">Brand Designer and Creative Strategist</p>
+        </div>
+        <div class="contact">
+          <p>Los Angeles, CA</p>
+          <p>ari.morgan@example.com</p>
+          <p>arimorgan.studio</p>
+          <p>@ari.makes</p>
+        </div>
+      </header>
+
+      <div class="layout">
+        <section>
+          <h2><span>01</span> Profile</h2>
+          <p>Creative lead shaping identity systems, launch campaigns, and editorial content for early-stage teams. Brings strategy, typography, and production discipline together so brands feel coherent from pitch deck to product surface.</p>
+
+          <h2><span>02</span> Experience</h2>
+          <article class="item">
+            <div class="row"><h3>Lumen Yard Studio</h3><span class="date">2022 - Present</span></div>
+            <p class="sub">Senior Brand Designer</p>
+            <ul>
+              <li>Led identity refreshes for 9 venture-backed companies, including naming workshops, visual systems, launch pages, and sales narrative kits.</li>
+              <li>Created a modular pitch deck language that shortened founder revision cycles by 40% while improving story consistency.</li>
+              <li>Directed freelance illustrators, motion designers, and copywriters across campaigns with budgets from $25K to $180K.</li>
+            </ul>
+          </article>
+          <article class="item">
+            <div class="row"><h3>Fieldnote Collective</h3><span class="date">2018 - 2022</span></div>
+            <p class="sub">Art Director</p>
+            <ul>
+              <li>Built campaign concepts for hospitality, wellness, and education clients, spanning social, print, landing pages, and environmental graphics.</li>
+              <li>Designed editorial systems that increased client content production from monthly launches to weekly publishing cadences.</li>
+            </ul>
+          </article>
+
+          <h2><span>03</span> Selected Work</h2>
+          <div class="project"><strong>Juniper Finance</strong> visual identity, product launch system, investor narrative, event signage.</div>
+          <div class="project"><strong>Casa Vale</strong> boutique hotel brand refresh, photo art direction, booking page design, seasonal campaign kit.</div>
+        </section>
+
+        <aside>
+          <h2><span>04</span> Studio Skills</h2>
+          <div class="chipbox">
+            <span class="chip">Identity</span><span class="chip">Typography</span><span class="chip">Decks</span><span class="chip">Art Direction</span><span class="chip">Launch Systems</span>
+          </div>
+          <h2><span>05</span> Tools</h2>
+          <p>Figma, Adobe Illustrator, InDesign, Photoshop, Keynote, Webflow, Notion.</p>
+          <h2><span>06</span> Recognition</h2>
+          <p>Shortlisted, Independent Brand Awards, 2025.</p>
+          <p>Speaker, Small Studio Systems, LA Design Week, 2024.</p>
+          <h2><span>07</span> Education</h2>
+          <p>BFA Graphic Design, California College of the Arts.</p>
+        </aside>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,3169 @@
+{
+  "schemaVersion": "od-commercial-product-launches/v1",
+  "captured": "2026-06-26",
+  "description": "A source-linked case library for commercial-grade product launch and campaign pages. Entries capture narrative, modules, media requirements, motion, commerce, responsiveness, and reuse notes without copying proprietary brand assets.",
+  "indexes": {
+    "views": ["brands", "pages", "modules", "assets", "motion"],
+    "moduleTypes": ["hero", "chapter", "comparison", "product-grid", "commerce", "support", "proof", "category-grid", "solution-grid"],
+    "assetTypes": ["product-render", "lifestyle-photo", "macro-detail", "ui-mockup", "video", "category-image", "data-visual"],
+    "motionTypes": ["scroll-chapter", "sticky-media", "carousel", "reveal", "configuration-flow", "reduced-motion-fallback"]
+  },
+  "entries": [
+    {
+      "id": "apple-iphone-product-family",
+      "brand": {
+        "name": "Apple",
+        "sector": "consumer hardware",
+        "url": "https://www.apple.com/"
+      },
+      "page": {
+        "title": "iPhone",
+        "url": "https://www.apple.com/iphone/",
+        "type": "product-family"
+      },
+      "why": "A benchmark for product-family storytelling that moves from switching reassurance to durability, software, privacy, cameras, environment, safety, and purchase comparison.",
+      "chapters": [
+        {
+          "type": "switching",
+          "title": "Switch to iPhone",
+          "study": "Starts with adoption friction and service reassurance before deeper feature proof."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Designed to Last",
+          "study": "Turns durability and software updates into long-term ownership value."
+        },
+        {
+          "type": "trust",
+          "title": "Privacy",
+          "study": "Uses trust and safety as a major product chapter, not a footer afterthought."
+        }
+      ],
+      "modules": [
+        {
+          "type": "chapter",
+          "title": "Benefit-led chapter stack",
+          "study": "Each chapter pairs a short emotional headline with product imagery and practical proof points.",
+          "reuse": "Use for premium products where the buyer needs confidence across migration, durability, software, and support."
+        },
+        {
+          "type": "comparison",
+          "title": "Explore the lineup",
+          "study": "Moves from narrative to model comparison with colors, claims, learn-more links, and buy links.",
+          "reuse": "Use when a brand has multiple SKUs and needs choice support without leaving the campaign page."
+        },
+        {
+          "type": "commerce",
+          "title": "Trade-in and support reassurance",
+          "study": "Purchase paths are reinforced by trade-in, help, and support messages.",
+          "reuse": "Pair high-consideration CTAs with reassurance modules that reduce purchase anxiety."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "device lineup and finish comparison",
+          "notes": "Requires clean product renders, colorway variants, and transparent or controlled-background exports.",
+          "reuse": "Plan separate desktop and mobile crops so the product remains the visual subject."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "software feature evidence",
+          "notes": "Screen content is used as proof for software and intelligence features.",
+          "reuse": "Use product UI shots as evidence rather than decorative interface noise."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Chapter progression",
+          "notes": "Long page rhythm benefits from discrete chapter reveals and image swaps.",
+          "fallback": "Reduced motion should keep all chapters statically visible with image-first stacking."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "buy-and-compare-links",
+          "notes": "Learn more, compare, and buy paths coexist after narrative proof."
+        },
+        {
+          "type": "trade-in",
+          "notes": "Trade-in credit is surfaced as a purchase accelerator and ownership reassurance."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Collapse modules into single-column chapters and keep product imagery before detailed copy."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Use wide breathing room and alternating chapter scales to avoid a flat spec sheet."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Requires lazy-loaded responsive imagery and careful LCP control for hero media.",
+        "accessibilityNotes": "All feature evidence should remain understandable without motion."
+      },
+      "capture": {
+        "date": "2026-06-14",
+        "sourceLinks": ["https://www.apple.com/iphone/"],
+        "attribution": "Apple",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "tesla-model-y-product-page",
+      "brand": {
+        "name": "Tesla",
+        "sector": "automotive",
+        "url": "https://www.tesla.com/"
+      },
+      "page": {
+        "title": "Model Y",
+        "url": "https://www.tesla.com/modely",
+        "type": "vehicle-product"
+      },
+      "why": "A direct conversion-led product page that keeps lease price, order CTA, trade-in incentive, and specs close to the product story.",
+      "chapters": [
+        {
+          "type": "offer",
+          "title": "Lease and order entry",
+          "study": "Commercial intent appears immediately with lease price and order action."
+        },
+        {
+          "type": "spec-proof",
+          "title": "Model Y Premium Specs",
+          "study": "Performance, range, and drivetrain choices are structured as purchase proof."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Offer-first hero",
+          "study": "The page foregrounds price and order intent instead of delaying conversion until the end.",
+          "reuse": "Use for high-consideration products when a known buyer may arrive ready to configure."
+        },
+        {
+          "type": "commerce",
+          "title": "Trade-in incentive",
+          "study": "A concrete incentive creates a reason to start the purchase process now.",
+          "reuse": "Use for categories where replacement timing is a meaningful conversion lever."
+        },
+        {
+          "type": "proof",
+          "title": "Spec table as confidence layer",
+          "study": "Key numbers such as range and acceleration anchor the emotional story in measurable claims.",
+          "reuse": "Use compact specs near CTA paths to support fast comparison."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "vehicle exterior hero",
+          "notes": "Needs clean vehicle angles that remain legible behind copy and CTA overlays.",
+          "reuse": "Prepare darker and lighter crops so price/CTA overlays stay readable."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "sticky-media",
+          "title": "Vehicle stage",
+          "notes": "Vehicle pages benefit from fixed product framing while specs and offers move around it.",
+          "fallback": "Use static product image sections and keep the order CTA visible."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "order-now",
+          "notes": "Primary CTA should remain short, direct, and available before dense specifications."
+        },
+        {
+          "type": "trade-in-estimate",
+          "notes": "Estimate flow converts a broad campaign visit into a concrete purchase calculation."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Keep price, order CTA, and one primary image visible before long spec detail."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "Hero media should be optimized for fast visual arrival; spec sections can lazy-load.",
+        "accessibilityNotes": "Specs and incentives need text equivalents independent of image overlays."
+      },
+      "capture": {
+        "date": "2026-06-14",
+        "sourceLinks": ["https://www.tesla.com/modely"],
+        "attribution": "Tesla",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "dyson-v15-detect-commerce-page",
+      "brand": {
+        "name": "Dyson",
+        "sector": "home technology",
+        "url": "https://www.dyson.com/"
+      },
+      "page": {
+        "title": "Dyson V15 Detect",
+        "url": "https://www.dyson.com/vacuum-cleaners/cordless/v15/detect-absolute-hepa-gold",
+        "type": "product-commerce"
+      },
+      "why": "A technical consumer product page that combines claims, attachments, rating proof, price, basket action, and detailed feature explanations.",
+      "chapters": [
+        {
+          "type": "claim",
+          "title": "Powerful and intelligent",
+          "study": "Hero copy quickly states suction, run time, de-tangling, dust illumination, and sensor proof."
+        },
+        {
+          "type": "product-description",
+          "title": "Feature bullets",
+          "study": "Technical proof is expressed through scannable bullets instead of long paragraphs."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Claim-plus-basket hero",
+          "study": "A product claim stack, price, rating, stock status, and add-to-basket CTA live in one commerce block.",
+          "reuse": "Use for technical products where proof and purchase must be visible together."
+        },
+        {
+          "type": "support",
+          "title": "Attachments and service details",
+          "study": "Accessories, attachments, support, and app guidance extend confidence beyond the initial purchase.",
+          "reuse": "Use for hardware products whose value depends on ecosystem and upkeep."
+        },
+        {
+          "type": "proof",
+          "title": "Scientific feature evidence",
+          "study": "Claims such as illumination and dust detection make invisible value tangible.",
+          "reuse": "Turn technical mechanisms into visible proof modules."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "macro-detail",
+          "role": "dust illumination and cleaner head detail",
+          "notes": "Needs close-up demonstration media that shows the invisible benefit becoming visible.",
+          "reuse": "Capture before/after or mechanism-detail media for technical proof."
+        },
+        {
+          "type": "product-render",
+          "role": "full product with attachments",
+          "notes": "Requires clean product angles plus attachment thumbnails.",
+          "reuse": "Use a primary product stage with secondary accessory evidence."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "reveal",
+          "title": "Feature evidence reveal",
+          "notes": "Technical detail can appear as progressive reveals tied to product part close-ups.",
+          "fallback": "Show all proof bullets and detail images in static order."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "add-to-basket",
+          "notes": "Availability, price, reviews, and basket CTA should be colocated."
+        },
+        {
+          "type": "support-after-purchase",
+          "notes": "App guidance and expert support become part of the purchase reassurance system."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Keep proof bullets short and avoid hiding stock, price, or basket action below dense imagery."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Use optimized close-up media and lazy-load accessory/support sections.",
+        "accessibilityNotes": "Technical proof must be readable as text and not depend only on visual before/after."
+      },
+      "capture": {
+        "date": "2026-06-14",
+        "sourceLinks": ["https://www.dyson.com/vacuum-cleaners/cordless/v15/detect-absolute-hepa-gold"],
+        "attribution": "Dyson",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "stripe-homepage-revenue-platform",
+      "brand": {
+        "name": "Stripe",
+        "sector": "financial infrastructure",
+        "url": "https://stripe.com/"
+      },
+      "page": {
+        "title": "Financial infrastructure",
+        "url": "https://stripe.com/",
+        "type": "b2b-platform-home"
+      },
+      "why": "A B2B commercial homepage that turns a broad platform into solution cards, quantitative proof, enterprise paths, developer trust, and sales/self-serve CTAs.",
+      "chapters": [
+        {
+          "type": "platform-claim",
+          "title": "Financial infrastructure to grow your revenue",
+          "study": "The headline compresses payments, financial services, and custom revenue models into one platform promise."
+        },
+        {
+          "type": "solution-grid",
+          "title": "Flexible solutions for every business model",
+          "study": "Use-case cards help multiple audiences find their path without fragmenting the page."
+        },
+        {
+          "type": "metric-proof",
+          "title": "The backbone of global commerce",
+          "study": "Large global metrics turn infrastructure reliability into commercial proof."
+        }
+      ],
+      "modules": [
+        {
+          "type": "solution-grid",
+          "title": "Business model solution grid",
+          "study": "A broad product suite becomes a set of audience-specific entry points.",
+          "reuse": "Use when a platform serves several business models and cannot rely on a single product CTA."
+        },
+        {
+          "type": "proof",
+          "title": "Global metric band",
+          "study": "Currencies, payment volume, uptime, and subscriptions create enterprise-grade trust.",
+          "reuse": "Use verified scale metrics as a structural trust band near the top third of the page."
+        },
+        {
+          "type": "commerce",
+          "title": "Start now and contact sales",
+          "study": "Self-serve and sales motions are both exposed early.",
+          "reuse": "Use dual CTAs when the product spans startups, platforms, and enterprises."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "ui-mockup",
+          "role": "financial workflow evidence",
+          "notes": "Requires abstracted dashboard, billing, and payment UI fragments that imply platform depth.",
+          "reuse": "Use UI vignettes to show invisible infrastructure without turning the page into a screenshot dump."
+        },
+        {
+          "type": "data-visual",
+          "role": "global scale proof",
+          "notes": "Metric typography and small data visuals carry commercial credibility.",
+          "reuse": "Design metrics as proof modules with clear source and date."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "reveal",
+          "title": "Layered product UI reveal",
+          "notes": "B2B infrastructure pages can reveal UI fragments and metrics progressively to imply system depth.",
+          "fallback": "Keep all solution cards and metrics visible in DOM order."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "self-serve-plus-sales",
+          "notes": "Pair start-now and contact-sales actions for mixed buyer maturity."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Turn solution grids into short stacked cards and keep CTAs close to the platform claim."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Animated UI fragments should avoid blocking headline and CTA rendering.",
+        "accessibilityNotes": "Metrics and product claims need text labels and source clarity."
+      },
+      "capture": {
+        "date": "2026-06-14",
+        "sourceLinks": ["https://stripe.com/"],
+        "attribution": "Stripe",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "nike-running-campaign-commerce",
+      "brand": {
+        "name": "Nike",
+        "sector": "sports retail",
+        "url": "https://www.nike.com/"
+      },
+      "page": {
+        "title": "Nike Running",
+        "url": "https://www.nike.com/running",
+        "type": "campaign-category"
+      },
+      "why": "A category campaign page that combines bold campaign copy, immediate shop actions, category entry points, trending product cards, and guided product selection.",
+      "chapters": [
+        {
+          "type": "campaign-hero",
+          "title": "Full Horsepower",
+          "study": "A short campaign phrase and product benefit introduce Pegasus 42 before category browsing."
+        },
+        {
+          "type": "category-commerce",
+          "title": "Shop by Category",
+          "study": "The campaign quickly becomes actionable through clothing, shoes, accessories, and shoe-finder paths."
+        },
+        {
+          "type": "guided-choice",
+          "title": "Shop by Cushioning Type",
+          "study": "Choice support is framed by runner need states such as support, responsiveness, and comfort."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Campaign slogan hero",
+          "study": "A punchy headline, product name, benefit line, and shop CTA create fast retail momentum.",
+          "reuse": "Use for seasonal campaigns where brand energy and purchase path should be immediate."
+        },
+        {
+          "type": "category-grid",
+          "title": "Shop by Category",
+          "study": "Image-led category tiles split the broad audience into useful shopping paths.",
+          "reuse": "Use category tiles when a campaign must serve multiple intent levels."
+        },
+        {
+          "type": "comparison",
+          "title": "Shop by Cushioning Type",
+          "study": "Product families are organized by user need rather than internal SKU logic.",
+          "reuse": "Use need-state comparison for consumer products with confusing feature families."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "lifestyle-photo",
+          "role": "runner campaign imagery",
+          "notes": "Needs energetic action photography that can carry a campaign phrase and shop CTA.",
+          "reuse": "Plan desktop and mobile crops so body movement, product, and headline do not compete."
+        },
+        {
+          "type": "category-image",
+          "role": "category and product-family tiles",
+          "notes": "Requires consistent tile imagery for clothing, shoes, accessories, and cushioning families.",
+          "reuse": "Use category images as wayfinding, not decoration."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "carousel",
+          "title": "Trending and cushioning carousel",
+          "notes": "Horizontal product/category browsing supports retail exploration without a full page jump.",
+          "fallback": "Render carousel items as a simple stacked list on reduced motion or narrow viewports."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "shop-cta",
+          "notes": "Campaign sections keep short shop CTAs visible after each major story beat."
+        },
+        {
+          "type": "finder",
+          "notes": "A shoe finder provides guided selling for shoppers who do not know the right product family."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Use large touch-friendly category cards and avoid tiny text overlays on action photos."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "Campaign imagery should be strongly compressed and lazy-loaded after the hero.",
+        "accessibilityNotes": "Carousel state and product category links need keyboard and screen-reader support."
+      },
+      "capture": {
+        "date": "2026-06-14",
+        "sourceLinks": ["https://www.nike.com/running"],
+        "attribution": "Nike",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "monos-carry-on-pro-travel-commerce-page",
+      "brand": {
+        "name": "Monos",
+        "sector": "travel goods",
+        "url": "https://monos.com/"
+      },
+      "page": {
+        "title": "Carry-On Pro",
+        "url": "https://monos.com/products/carry-on-pro",
+        "type": "product-commerce"
+      },
+      "why": "A premium travel-goods page that turns organization, materials, airline-fit reassurance, and warranty/trial promises into a calm, trust-heavy purchase flow.",
+      "chapters": [
+        {
+          "type": "product-description",
+          "title": "Built for access",
+          "study": "The front compartment is framed as the core product story, not a buried technical feature."
+        },
+        {
+          "type": "spec-proof",
+          "title": "Measurements and airline compatibility",
+          "study": "Exact dimensions and region-spanning airline fit reduce hesitation for a high-consideration luggage purchase."
+        },
+        {
+          "type": "trust",
+          "title": "Warranty, trial, and B Corp proof",
+          "study": "A 100-day trial, lifetime warranty, and B Corporation badge work together as reassurance instead of post-purchase fine print."
+        }
+      ],
+      "modules": [
+        {
+          "type": "proof",
+          "title": "Feature-first organization module",
+          "study": "Pocket internals, lockable zipper, laptop fit, and removable compression pad make the storage system legible before checkout.",
+          "reuse": "Use for premium travel or utility products whose value depends on internal organization details."
+        },
+        {
+          "type": "support",
+          "title": "Measurement and compatibility block",
+          "study": "Trip length, weight, volume, dimensions, and airline-fit guidance answer the most practical buyer questions in one place.",
+          "reuse": "Pair emotional product styling with a dense utilitarian block when buyers need operational confidence."
+        },
+        {
+          "type": "commerce",
+          "title": "Trial-and-warranty reassurance rail",
+          "study": "The 100-day trial, lifetime warranty, and optional coverage shift the CTA from risk to confidence.",
+          "reuse": "Use stacked reassurance when the product is premium-priced and buyers expect longevity protection."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "finish and silhouette overview",
+          "notes": "Needs clean product imagery across multiple finishes so colorway choice feels tactile and premium.",
+          "reuse": "Plan a consistent finish system before adding lifestyle scenes or detail crops."
+        },
+        {
+          "type": "macro-detail",
+          "role": "front-pocket and hardware proof",
+          "notes": "Close crops show the organized compartment, zippers, lock, and handle engineering.",
+          "reuse": "Use macro detail to turn abstract build-quality claims into visible evidence."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "quiet premium travel mood",
+          "notes": "Editorial room scenes and street carry shots soften the page so it does not read like a spec sheet alone.",
+          "reuse": "Balance technical proof with sparse lifestyle context when selling premium utility products."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "carousel",
+          "title": "Finish and detail gallery",
+          "notes": "The page benefits from image sequences that move between finish, environment, and compartment-detail views.",
+          "fallback": "Render the image set as a stacked gallery with no loss of product understanding."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "trial-and-warranty",
+          "notes": "The 100-day trial and lifetime warranty are treated as primary purchase accelerators."
+        },
+        {
+          "type": "set-bundling",
+          "notes": "A small bundle-saving module nudges the shopper toward a larger luggage set without derailing the main product."
+        },
+        {
+          "type": "airline-compatibility",
+          "notes": "Explicit airline-fit guidance functions as guided selling for anxious travelers."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Keep dimensions, laptop-fit proof, and warranty/trial copy close to the first product images so the utility story survives a shorter scroll."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Use generous whitespace and large product photography so the page stays premium even with dense specs."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "Large finish galleries and lifestyle photography should lazy-load after the first product proof block.",
+        "accessibilityNotes": "Dimension tables, gallery controls, and warranty language need text-first equivalents."
+      },
+      "capture": {
+        "date": "2026-06-15",
+        "sourceLinks": ["https://monos.com/products/carry-on-pro"],
+        "attribution": "Monos",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "oura-ring-4-health-wearable-page",
+      "brand": {
+        "name": "Oura",
+        "sector": "health wearable",
+        "url": "https://ouraring.com/"
+      },
+      "page": {
+        "title": "Oura Ring 4",
+        "url": "https://ouraring.com/store/rings/oura-ring-4/silver",
+        "type": "wearable-product"
+      },
+      "why": "A health-device page that sells premium hardware, always-on sensing, software membership value, and sizing/trust guidance as one coherent wearable system.",
+      "chapters": [
+        {
+          "type": "hardware-proof",
+          "title": "Sleeker, smarter, and made for you",
+          "study": "Smart Sensing, titanium comfort, and 5-8 day battery life are presented as a compact proof trio instead of one long feature list."
+        },
+        {
+          "type": "subscription-value",
+          "title": "Oura Membership grows with you",
+          "study": "The page makes the software layer explicit by tying device ownership to AI-guided health insights and long-term personalization."
+        },
+        {
+          "type": "trust",
+          "title": "FAQ and specs as skepticism reducers",
+          "study": "Accuracy, water resistance, subscription limits, and sizing guidance are surfaced early enough to answer common wearable objections."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Three-benefit wearable hero",
+          "study": "A tight hero stack links sensing accuracy, discreet comfort, and battery longevity to immediate product desirability.",
+          "reuse": "Use for compact devices where the buyer needs a fast read on what materially improved."
+        },
+        {
+          "type": "proof",
+          "title": "Metrics and membership value section",
+          "study": "Health domains such as sleep, stress, heart health, and women's health turn the membership pitch into concrete outcome categories.",
+          "reuse": "Organize subscription value around outcomes, not abstract platform language."
+        },
+        {
+          "type": "support",
+          "title": "Sizing and FAQ reassurance block",
+          "study": "Sizing-kit guidance, lab-validation language, and environmental durability notes reduce return anxiety for a ring-sized device.",
+          "reuse": "Use a support block when the physical fit of the product materially affects confidence and performance."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "finish and form-factor gallery",
+          "notes": "Needs clean finish renders that show thinness, curvature, and color options without clutter.",
+          "reuse": "For wearables, show thickness and finish consistency before adding lifestyle imagery."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "health tracking in daily context",
+          "notes": "Lifestyle photos show the ring during running, daily routines, and app use without overstaging the product.",
+          "reuse": "Use understated lifestyle context so the wearable remains believable and easy to imagine."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "membership and app proof",
+          "notes": "The app screen is essential evidence because much of the value is unlocked through insights rather than the hardware alone.",
+          "reuse": "Pair premium device imagery with software evidence whenever the subscription is part of the product story."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "carousel",
+          "title": "Finish and lifestyle gallery",
+          "notes": "The product page benefits from a simple rotating gallery across ring finishes and real-world wear moments.",
+          "fallback": "Keep all gallery images in a linear stack so the product remains understandable without interaction."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "membership-disclosure",
+          "notes": "The page clearly frames membership as part of the value model and states that non-membership use is limited."
+        },
+        {
+          "type": "sizing-kit-guidance",
+          "notes": "Sizing guidance acts like a pre-purchase qualification step rather than a hidden FAQ."
+        },
+        {
+          "type": "payment-options",
+          "notes": "Payment methods are surfaced as part of checkout confidence for a premium wellness device."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Keep the hardware-benefit triad and sizing reassurance above dense FAQ text so the page does not collapse into support-first reading."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Use generous image staging to preserve the ring's premium minimalism while supporting a long reassurance-heavy page."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "The page depends on crisp close-up imagery and app mockups; defer secondary FAQ/support assets behind the first purchase story.",
+        "accessibilityNotes": "Membership terms, battery disclaimers, and FAQ answers need plain text independent of imagery."
+      },
+      "capture": {
+        "date": "2026-06-15",
+        "sourceLinks": ["https://ouraring.com/store/rings/oura-ring-4/silver"],
+        "attribution": "Oura",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "sonos-ace-personal-audio-product-page",
+      "brand": {
+        "name": "Sonos",
+        "sector": "consumer audio",
+        "url": "https://www.sonos.com/"
+      },
+      "page": {
+        "title": "Sonos Ace",
+        "url": "https://www.sonos.com/en-us/shop/sonos-ace",
+        "type": "audio-product"
+      },
+      "why": "A premium personal-audio page that layers acoustic proof, comfort, ecosystem storytelling, bundle commerce, and sustainability details without losing a luxury feel.",
+      "chapters": [
+        {
+          "type": "feature-proof",
+          "title": "Personal listening perfected",
+          "study": "Acoustic proof is broken into digestible benefit beats such as clarity, bass, spatial audio, and lossless playback."
+        },
+        {
+          "type": "design",
+          "title": "A design second to none",
+          "study": "Comfort, controls, fit, and microphone details are sold as tactile product qualities rather than dry specs."
+        },
+        {
+          "type": "ecosystem",
+          "title": "An exclusive entertainment experience",
+          "study": "TV Audio Swap, Dolby Atmos, and TrueCinema elevate the page from standalone headphones to home-theater ecosystem product."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Feature-icon premium hero",
+          "study": "Price, add-to-cart, color choice, and a short icon row communicate the offer quickly without flattening the brand tone.",
+          "reuse": "Use a concise feature icon rail when a premium product needs scannability without becoming commodity e-commerce."
+        },
+        {
+          "type": "chapter",
+          "title": "Acoustic and comfort proof stack",
+          "study": "The page alternates close product detail, lifestyle imagery, and short proof paragraphs to sustain a long premium narrative.",
+          "reuse": "Break dense product proof into alternating sensory chapters when each benefit needs its own emotional framing."
+        },
+        {
+          "type": "commerce",
+          "title": "Bundle and set upsell block",
+          "study": "A personal-entertainment bundle and pair discount create a higher-order purchase path after the product story lands.",
+          "reuse": "Use bundles once the core product narrative is established, not before the buyer understands the base offer."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "headphone detail and 360 product proof",
+          "notes": "Needs crisp close-ups of materials, ear cups, and the overall silhouette in both finishes.",
+          "reuse": "Plan detail crops that reveal materials and fit mechanisms, not just beauty shots."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "comfort and everyday-use scenes",
+          "notes": "Outdoor, cafe, and living-room scenes show the headphones across work, travel, and home entertainment contexts.",
+          "reuse": "Spread lifestyle scenes across multiple use cases when selling a product meant to travel between contexts."
+        },
+        {
+          "type": "video",
+          "role": "home theater and craft storytelling",
+          "notes": "Short videos support the acoustic, comfort, and ecosystem chapters, especially around home-theater immersion.",
+          "reuse": "Reserve motion-heavy media for benefits that are hard to explain with one static render."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "app control proof",
+          "notes": "The Sonos app screen proves EQ and dynamic head-tracking controls that otherwise read as abstract feature claims.",
+          "reuse": "Use app mockups when software tuning is part of the premium hardware value proposition."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Immersion-first chapter progression",
+          "notes": "The page leans on sequential media reveals to move from sound quality to comfort to home-theater ecosystem value.",
+          "fallback": "Keep each chapter fully readable with static images and normal document flow."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "direct-buy",
+          "notes": "Add-to-cart is available immediately without sacrificing the premium narrative."
+        },
+        {
+          "type": "bundle-upsell",
+          "notes": "The page offers a home-theater bundle and a two-headphone set after the main feature story."
+        },
+        {
+          "type": "ecosystem-compatibility",
+          "notes": "Compatibility with Sonos soundbars functions as both reassurance and a cross-sell mechanism."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Prioritize feature icons, battery, and TV-audio-swap proof early so the value survives before long media chapters."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Long-form alternating media chapters need wide spacing so the premium tone survives a dense amount of content."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "The page depends on many videos and large close-up images, so hero media and chapter assets must be carefully deferred.",
+        "accessibilityNotes": "Video-led chapters need readable text equivalents and the compatibility story must remain understandable without motion."
+      },
+      "capture": {
+        "date": "2026-06-15",
+        "sourceLinks": ["https://www.sonos.com/en-us/shop/sonos-ace"],
+        "attribution": "Sonos",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "linear-product-development-system-homepage",
+      "brand": {
+        "name": "Linear",
+        "sector": "product development software",
+        "url": "https://linear.app/"
+      },
+      "page": {
+        "title": "The product development system for teams and agents",
+        "url": "https://linear.app/",
+        "type": "b2b-product-home"
+      },
+      "why": "An AI-era B2B homepage that sells one product through live workflow theater: issue intake, planning, agent collaboration, and proof all feel like parts of the same operating system.",
+      "chapters": [
+        {
+          "type": "platform-claim",
+          "title": "The product development system for teams and agents",
+          "study": "The hero compresses planning, execution, and agent collaboration into one platform promise instead of splitting them into disconnected product categories."
+        },
+        {
+          "type": "operations",
+          "title": "Make product operations self-driving",
+          "study": "The intake chapter turns routing, labeling, prioritization, and feedback capture into a concrete operations story rather than an abstract AI claim."
+        },
+        {
+          "type": "planning",
+          "title": "Define the product direction",
+          "study": "Roadmaps, initiatives, projects, and documents are framed as one navigable planning surface with clear executive and team-level handoffs."
+        },
+        {
+          "type": "collaboration",
+          "title": "Move work forward across teams and agents",
+          "study": "The build chapter demonstrates agent delegation with a realistic task transcript, making AI assistance feel operational instead of decorative."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Live product theater hero",
+          "study": "The opening frame behaves like a miniature product session with issues, reviews, agent actions, and workspace structure visible at once.",
+          "reuse": "Use a live product canvas when the product's speed and information architecture are core proof, not just supporting visuals."
+        },
+        {
+          "type": "workflow",
+          "title": "Intake, plan, and build chapter stack",
+          "study": "Three capability chapters map directly to the buyer's operating loop, so the page teaches a workflow instead of listing features.",
+          "reuse": "Sequence enterprise or SaaS pages around operating stages when one buyer journey spans several jobs to be done."
+        },
+        {
+          "type": "proof",
+          "title": "Customer quote and adoption band",
+          "study": "Short founder and operator quotes plus the 33,000-team claim make taste and scale proof feel immediate.",
+          "reuse": "Pair sharp quote fragments with one concrete adoption number when reputation and momentum both matter."
+        },
+        {
+          "type": "commerce",
+          "title": "Multi-path CTA footer",
+          "study": "Get started, contact sales, open app, and download all remain visible without making the page feel like a pricing wall.",
+          "reuse": "Expose self-serve, sales, and product-entry CTAs together when audiences range from evaluation to active adoption."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "ui-mockup",
+          "role": "core workspace proof",
+          "notes": "The page depends on dense, legible UI scenes showing issue views, roadmaps, docs, and agent actions.",
+          "reuse": "Plan product shots that can hold real hierarchy and text, not just blurred dashboard glamour."
+        },
+        {
+          "type": "activity-demo",
+          "role": "agent and activity transcript proof",
+          "notes": "The build chapter uses a realistic task log and status feed to prove agent collaboration.",
+          "reuse": "Show machine and human actions in one timeline when automations are part of the promise."
+        },
+        {
+          "type": "social-proof",
+          "role": "customer and adoption credibility",
+          "notes": "Short testimonial excerpts and company-name credibility work better here than long case-study summaries.",
+          "reuse": "Use concise social proof when the page pace depends on momentum more than deep testimonial reading."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "product-demo",
+          "title": "Animated workflow canvas",
+          "notes": "The page uses moving product states and agent activity to imply a live operating system rather than a static screenshot reel.",
+          "fallback": "Keep every chapter understandable as still frames with readable copy and controls in DOM order."
+        },
+        {
+          "type": "reveal",
+          "title": "Chapter-by-chapter capability reveals",
+          "notes": "Each major section introduces one operational layer at a time so the product story scales without collapsing into interface noise.",
+          "fallback": "Expose all core claims and CTAs without requiring motion-triggered sequencing."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "self-serve-plus-sales",
+          "notes": "The page supports both immediate signup and longer enterprise evaluation."
+        },
+        {
+          "type": "open-app-handoff",
+          "notes": "An open-app CTA acknowledges existing users without hiding the acquisition path."
+        },
+        {
+          "type": "download-path",
+          "notes": "Desktop download sits alongside the marketing narrative so product depth can convert into install intent directly."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Collapse dense product canvases into shorter story beats and keep the hero claim plus primary signup path visible before long interface sequences."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide interface scenes need enough width to preserve list density, agent transcript legibility, and the feeling of operating inside a real workspace."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Animated product scenes and multi-layer UI mockups should not block first paint or headline readability.",
+        "accessibilityNotes": "Agent activity, roadmap visuals, and testimonial motion need text-first equivalents so the product story survives without animation."
+      },
+      "capture": {
+        "date": "2026-06-16",
+        "sourceLinks": ["https://linear.app/"],
+        "attribution": "Linear",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "framework-laptop-13-pro-developer-laptop-page",
+      "brand": {
+        "name": "Framework",
+        "sector": "modular personal computing",
+        "url": "https://frame.work/"
+      },
+      "page": {
+        "title": "Framework Laptop 13 Pro",
+        "url": "https://frame.work/laptop13pro",
+        "type": "hardware-product"
+      },
+      "why": "A developer-focused hardware page that turns repairability, Linux credibility, and modular ownership into premium product proof instead of niche enthusiast footnotes.",
+      "chapters": [
+        {
+          "type": "platform-claim",
+          "title": "The ultimate developer laptop",
+          "study": "The hero ties battery life, performance, haptics, aluminum build, repairability, and Linux support into one identity statement."
+        },
+        {
+          "type": "benchmark-proof",
+          "title": "Finally, great battery life in a Framework Laptop",
+          "study": "Named benchmark scenarios and footnoted test conditions turn battery claims into engineering-grade proof."
+        },
+        {
+          "type": "ownership",
+          "title": "A laptop that you own",
+          "study": "Customization, repair, and upgrades are given equal narrative weight to the headline specs, which reframes ownership as a product feature."
+        },
+        {
+          "type": "os-proof",
+          "title": "Runs Linux. Really well.",
+          "study": "Ubuntu certification and distro support convert a usual compatibility disclaimer into a front-of-page trust signal for developer buyers."
+        }
+      ],
+      "modules": [
+        {
+          "type": "proof",
+          "title": "Battery benchmark band",
+          "study": "Streaming, web usage, conferencing, and standby metrics establish multiple real-world proof modes instead of one synthetic number.",
+          "reuse": "Use scenario-based benchmarks when technical buyers need to map claims to their own working day."
+        },
+        {
+          "type": "configuration",
+          "title": "Ports and personalization module",
+          "study": "Expansion Cards, bezel options, and component choices make customization legible as a product system.",
+          "reuse": "Show modular parts as a clear kit-of-parts UI when customization is central to the offer."
+        },
+        {
+          "type": "support",
+          "title": "Repair and upgrade ownership block",
+          "study": "QR-code guides, single-tool repair, and Marketplace upgrades keep maintenance in the main sales narrative instead of support documentation.",
+          "reuse": "Promote repair and upgrade flows into primary product proof when longevity is part of the value proposition."
+        },
+        {
+          "type": "commerce",
+          "title": "DIY versus pre-built purchase split",
+          "study": "Two purchase paths let expert buyers choose operating-system control or out-of-box convenience without fragmenting the page.",
+          "reuse": "Offer parallel configuration paths when the audience spans enthusiasts and buyers who want a ready-to-run system."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "hero and materials proof",
+          "notes": "Large studio renders sell the graphite chassis, slim profile, and premium finish from multiple angles.",
+          "reuse": "Plan clean industrial renders when the page must prove both engineering seriousness and premium aesthetics."
+        },
+        {
+          "type": "teardown-detail",
+          "role": "repairability and modular internals",
+          "notes": "Internal shots of memory cards, mainboards, and disassembled parts make the ownership story visible.",
+          "reuse": "Use internal hardware detail when modularity or repair claims are otherwise too abstract."
+        },
+        {
+          "type": "iconography",
+          "role": "port and configuration literacy",
+          "notes": "Port symbols and part labels keep the customization system scannable without forcing shoppers into a spec table immediately.",
+          "reuse": "Build a crisp icon system when buyers compare interchangeable hardware options."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Tabbed long-form product progression",
+          "notes": "Overview, upgrade, specs, and Linux anchors organize a long image-led page into navigable chapters.",
+          "fallback": "Keep all product chapters readable in normal document flow with no dependence on tab or scroll state."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "direct-configure",
+          "notes": "Configure now is repeated throughout the page so long-form proof still has a nearby purchase action."
+        },
+        {
+          "type": "aftermarket-upgrade",
+          "notes": "Marketplace links turn accessories and future upgrades into part of the purchase confidence story."
+        },
+        {
+          "type": "b2b-contact",
+          "notes": "A business-team handoff captures volume buyers without compromising the prosumer narrative."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Keep the developer promise, Linux proof, and ownership modules early so the page still converts before the full media stack loads."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide product renders and internal detail shots need generous spacing so the page can feel premium while carrying dense technical information."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Multiple large renders, internal detail shots, and spec-heavy chapters require careful image loading and footnote handling.",
+        "accessibilityNotes": "Benchmark claims, icon-only port options, and OS-choice modules need text labels and a readable footnote structure."
+      },
+      "capture": {
+        "date": "2026-06-16",
+        "sourceLinks": ["https://frame.work/laptop13pro"],
+        "attribution": "Framework",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "remarkable-paper-pro-digital-paper-product-page",
+      "brand": {
+        "name": "reMarkable",
+        "sector": "digital paper hardware",
+        "url": "https://remarkable.com/"
+      },
+      "page": {
+        "title": "reMarkable Paper Pro",
+        "url": "https://remarkable.com/products/remarkable-paper/pro",
+        "type": "product-commerce"
+      },
+      "why": "A calm premium-product page that sells focus, paper feel, bundles, and software utility in one restrained system instead of splitting emotional hardware storytelling from ecommerce.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "The ultimate paper tablet",
+          "study": "The hero combines tactile product framing, configure CTA, bundle entry, and risk-reversal messaging before deep feature detail."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Now even closer to writing on paper",
+          "study": "Material texture, pen-to-ink distance, and writing realism are explained as sensory proof rather than generic spec bullets."
+        },
+        {
+          "type": "workflow-proof",
+          "title": "Paper with digital powers",
+          "study": "Folders, tags, conversion, sync, and collaboration move the story from object desire into a practical workflow system."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Configure-first premium hero",
+          "study": "Price, configure CTA, included marker, free shipping, and 50-day trial all sit inside a minimal hardware stage.",
+          "reuse": "Use for premium hardware when the first screen has to feel quiet and luxurious while still letting ready buyers act immediately."
+        },
+        {
+          "type": "commerce",
+          "title": "Bundle ladder",
+          "study": "Marker, folio, and keyboard bundles turn accessories into an understandable progression instead of a fragmented accessory shelf.",
+          "reuse": "Package core accessories as guided bundles when they materially change how the product is used."
+        },
+        {
+          "type": "proof",
+          "title": "Feature specification stack",
+          "study": "Feature prose transitions into detailed hardware and software specifications without losing narrative rhythm.",
+          "reuse": "Use a narrative-to-spec handoff when the buyer needs both emotional confidence and technical due diligence."
+        },
+        {
+          "type": "support",
+          "title": "Compare and ecosystem handoff",
+          "study": "Buyer guide, comparison, desktop/mobile apps, and cloud support keep the product inside a broader workflow ecosystem.",
+          "reuse": "Add comparison and ecosystem links when a premium device purchase depends on workflow fit, not just the object itself."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "hero device and bundle photography",
+          "notes": "Studio shots keep the thin profile, reading light, and accessory combinations legible against a quiet background.",
+          "reuse": "Prepare calm high-resolution renders when material feel and silhouette are part of the value proposition."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "screen-level workflow proof",
+          "notes": "Notes, PDFs, annotation menus, and typed-plus-handwritten pages show the device in use without adding noisy chrome.",
+          "reuse": "Use tightly art-directed screen states when software credibility needs to remain visually consistent with premium hardware."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "desk and hand context",
+          "notes": "Desk scenes and hand-held writing images explain scale, posture, and portability better than isolated renders alone.",
+          "reuse": "Include human-scale context when tactile devices need to prove comfort and real-world use."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Quiet chapter progression",
+          "notes": "The page advances through sparse headline-and-image chapters with large pauses, preserving a calm reading tempo.",
+          "fallback": "Keep every chapter readable as simple stacked sections so the experience still works without motion."
+        },
+        {
+          "type": "reveal",
+          "title": "Feature image reveals",
+          "notes": "Large product and UI visuals appear in measured sequence to reinforce the device's premium, deliberate character.",
+          "fallback": "Use static feature panels with preserved hierarchy and CTA order when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "configure-now",
+          "notes": "Configure entry stays prominent from hero through bundle and comparison sections."
+        },
+        {
+          "type": "bundle-upsell",
+          "notes": "Accessory bundles expand average order value by tying each step to a clearer use case, not just price."
+        },
+        {
+          "type": "risk-reversal",
+          "notes": "Free shipping and a 50-day trial reduce hesitation on a high-consideration purchase."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Keep configure CTA, price, and tactile proof images early because the premium story relies on immediate object clarity."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide product imagery and generous whitespace are essential to maintain the page's calm luxury tone instead of feeling like a dense spec catalog."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "Large product photography and screen imagery need responsive sizing and lazy loading so premium calm does not turn into sluggish first paint.",
+        "accessibilityNotes": "Feature benefits, trial terms, and spec comparisons need full text equivalents so tactile proof is understandable without imagery."
+      },
+      "capture": {
+        "date": "2026-06-18",
+        "sourceLinks": [
+          "https://remarkable.com/products/remarkable-paper/pro",
+          "https://remarkable.com/products/remarkable-paper/pro/details/features"
+        ],
+        "attribution": "reMarkable",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "eight-sleep-pod-intelligent-bed-system-homepage",
+      "brand": {
+        "name": "Eight Sleep",
+        "sector": "sleep technology",
+        "url": "https://www.eightsleep.com/"
+      },
+      "page": {
+        "title": "The Intelligent Bed Cooling System",
+        "url": "https://www.eightsleep.com/",
+        "type": "brand-homepage"
+      },
+      "why": "A high-conviction wellness homepage that turns one product system into multiple persona-specific stories, quantified proof, testimonials, and conversion paths without losing a coherent premium identity.",
+      "chapters": [
+        {
+          "type": "system-claim",
+          "title": "A sleep system designed for deeper recovery",
+          "study": "The opening reframes the product as a full-bed system with temperature, elevation, and sound rather than a single gadget."
+        },
+        {
+          "type": "persona-proof",
+          "title": "Whatever your sleep challenge, the Pod meets you there",
+          "study": "Couples, menopausal women, wellness seekers, hot sleepers, athletes, and snorers each get a tailored value story."
+        },
+        {
+          "type": "outcome-proof",
+          "title": "The best sleep you've ever had",
+          "study": "Outcome metrics and clinical-study framing move the page from soft wellness language into measurable trust."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "System explainer hero",
+          "study": "The hero uses one product family explanation to set up cooling, elevation, sound, and whole-bed transformation before narrower persona stories.",
+          "reuse": "Use when one premium system needs to feel bigger than a single SKU without overwhelming visitors on the first screen."
+        },
+        {
+          "type": "solution-grid",
+          "title": "Persona problem grid",
+          "study": "Persona cards translate one technology stack into distinct use cases with dedicated imagery and concise emotional copy.",
+          "reuse": "Segment the page by user problem when the same core product solves very different pain points."
+        },
+        {
+          "type": "proof",
+          "title": "Clinical results band",
+          "study": "Large percent metrics and science framing provide a conversion-grade proof layer before the testimonial carousel.",
+          "reuse": "Surface quantifiable outcomes when premium pricing requires evidence beyond aesthetic storytelling."
+        },
+        {
+          "type": "support",
+          "title": "Testimonial and review stack",
+          "study": "Named quotes, personas, and long-form review snippets make the page feel validated by real routines, not generic brand copy.",
+          "reuse": "Use stacked social proof when the buyer needs reassurance that the product changes daily behavior, not just features."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "lifestyle-photo",
+          "role": "persona-specific bedroom scenes",
+          "notes": "Each persona card uses contextual imagery to show the product in use across different life situations.",
+          "reuse": "Capture tailored lifestyle scenes when the same product needs to read differently for multiple audience segments."
+        },
+        {
+          "type": "data-visual",
+          "role": "quantified sleep outcomes",
+          "notes": "Outcome statistics and sleep metrics visually support the science-forward claims.",
+          "reuse": "Turn performance claims into clear numeric bands when proof has to be memorable at a glance."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "tracking and temperature-control context",
+          "notes": "App and monitoring concepts support the product's promise of adaptive sleep optimization.",
+          "reuse": "Show companion-app evidence when a premium physical product depends on software intelligence."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Persona-led chapter progression",
+          "notes": "The homepage advances from system claim to persona cards, proof metrics, and review loops in a clear vertical story.",
+          "fallback": "All persona cards and proof modules should remain fully legible as static stacked sections."
+        },
+        {
+          "type": "carousel",
+          "title": "Review rotation",
+          "notes": "Testimonials repeat through a carousel-like review rail that keeps the page feeling active without needing heavy interaction.",
+          "fallback": "Present a static subset of named testimonials and preserve persona labels when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "problem-led-conversion",
+          "notes": "The page sells different outcomes to different users while keeping the same core product path."
+        },
+        {
+          "type": "science-backed-premium",
+          "notes": "Clinical studies and quantified outcomes justify the premium positioning before deeper checkout steps."
+        },
+        {
+          "type": "social-proof-loop",
+          "notes": "Named stories and trusted reviews keep validation repeating throughout a long homepage."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Persona stories need to stay short and scannable so users can self-identify quickly before the long proof stack."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "The system benefits from large immersive imagery and enough horizontal room for category contrast between personas."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Large persona photography, proof sections, and repeated review rails require careful image prioritization and duplication control.",
+        "accessibilityNotes": "Metric claims, persona differentiation, and any rotating review content need strong text structure and motion-safe behavior."
+      },
+      "capture": {
+        "date": "2026-06-18",
+        "sourceLinks": ["https://www.eightsleep.com/"],
+        "attribution": "Eight Sleep",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "notion-mail-ai-inbox-product-page",
+      "brand": {
+        "name": "Notion",
+        "sector": "email productivity software",
+        "url": "https://www.notion.com/"
+      },
+      "page": {
+        "title": "Notion Mail",
+        "url": "https://www.notion.com/product/mail",
+        "type": "workflow-product-home"
+      },
+      "why": "A strong AI-product launch reference that sells email as a customizable workflow system, using scenario-led UI proof, low-friction conversion, and creator-style social proof instead of a conventional inbox feature checklist.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "The inbox that thinks like you",
+          "study": "The hero reframes email as a system that organizes itself, drafts replies, and schedules meetings before the page explains any deeper mechanics."
+        },
+        {
+          "type": "scenario-proof",
+          "title": "Hiring, support, travel, and newsletters as first-class views",
+          "study": "Recruiting, support, and cold-email filtering examples make the product feel immediately adaptable to real workflows instead of abstract AI potential."
+        },
+        {
+          "type": "social-proof",
+          "title": "Power-user endorsement loop",
+          "study": "Creator and operator testimonials reinforce that customization, auto-filtering, and view-building are the core reasons to switch."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Free-start hero with working UI stage",
+          "study": "The page puts a free CTA beside a dense inbox mockup so the launch feels both approachable and already operational.",
+          "reuse": "Use when a software launch needs to prove immediate utility on the first screen without looking like a static ad."
+        },
+        {
+          "type": "workflow",
+          "title": "Scenario-led view rail",
+          "study": "Candidate hiring, support triage, travel, and newsletter views translate the same core product into distinct job-to-be-done entry points.",
+          "reuse": "Break one workflow product into labeled scenarios when the buyer needs to picture personal adoption before understanding every feature."
+        },
+        {
+          "type": "ui-proof",
+          "title": "Search, views, calendar, and auto-label stack",
+          "study": "Search, saved views, calendar integration, and auto-labeling are shown together so the product reads like an opinionated workspace, not just a smarter inbox.",
+          "reuse": "Group automation, organization, and scheduling inside one coherent product frame when the value comes from orchestration rather than a single feature."
+        },
+        {
+          "type": "trust",
+          "title": "Social proof feed",
+          "study": "Short testimonial quotes from recognizable operators make the launch feel contemporary and community-validated instead of enterprise-corporate.",
+          "reuse": "Use a compact quote wall when a product wins by word-of-mouth credibility and workflow relatability more than by hard procurement proof."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "ui-mockup",
+          "role": "hero inbox workspace",
+          "notes": "Layered inbox, view, and message states sell the product as a living workspace rather than a flat mailbox screenshot.",
+          "reuse": "Prepare realistic multi-pane UI states when your software value depends on showing relationships between panels and actions."
+        },
+        {
+          "type": "state-illustration",
+          "role": "workflow scenario proof",
+          "notes": "Labeled states for hiring, support, travel, and newsletters show the same interface reconfigured around different operating modes.",
+          "reuse": "Use scenario-specific product states when one interface must feel personal to multiple audiences."
+        },
+        {
+          "type": "testimonial-avatar",
+          "role": "creator-style trust layer",
+          "notes": "Avatars and short quotes keep the trust section lightweight and social-native.",
+          "reuse": "Favor concise testimonial identities when you want validation to feel like product buzz rather than a formal case-study wall."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Scenario-by-scenario progression",
+          "notes": "The page advances from broad claim to concrete workflow examples and then into social proof without collapsing into a long undifferentiated feature list.",
+          "fallback": "Keep every scenario and proof block readable as stacked sections with preserved labels and CTA order."
+        },
+        {
+          "type": "ui-reveal",
+          "title": "Layered workspace reveals",
+          "notes": "Product states are presented as staged UI compositions so the interface feels dynamic even when the message stays focused on workflow clarity.",
+          "fallback": "Expose the same product states as static screenshots with visible headings when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "free-start",
+          "notes": "The page keeps a free-entry CTA close to the product story so adoption feels lightweight."
+        },
+        {
+          "type": "workflow-led-conversion",
+          "notes": "Conversion depends on showing how one inbox becomes several personalized operating views."
+        },
+        {
+          "type": "social-proof-loop",
+          "notes": "Short operator endorsements repeat the idea that customization and auto-filtering are the breakout value."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Scenario labels and the free-start CTA need to surface early because the product pitch depends on immediate workflow recognition."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Multi-pane inbox compositions need enough width to keep search, views, and message context legible in one glance."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "Dense UI mockups and layered product states need responsive image sizing so the page stays crisp without turning the hero into a heavy first paint.",
+        "accessibilityNotes": "Scenario labels, testimonial attributions, and any animated UI reveals need explicit text structure so the workflow story survives without relying on the screenshots."
+      },
+      "capture": {
+        "date": "2026-06-19",
+        "sourceLinks": [
+          "https://www.notion.com/product/mail",
+          "https://mail.notion.so/"
+        ],
+        "attribution": "Notion",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "raycast-productivity-launcher-homepage",
+      "brand": {
+        "name": "Raycast",
+        "sector": "desktop productivity software",
+        "url": "https://www.raycast.com/"
+      },
+      "page": {
+        "title": "Your shortcut to everything",
+        "url": "https://www.raycast.com/",
+        "type": "productivity-platform-home"
+      },
+      "why": "A polished product homepage that sells a desktop tool as an extensible operating layer, balancing launcher fundamentals, premium upgrades, ecosystem breadth, and aspirational user proof without feeling enterprise-heavy.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Your shortcut to everything",
+          "study": "The hero frames Raycast as a fast, ergonomic, reliable launcher before branching into its broader platform story."
+        },
+        {
+          "type": "ecosystem-proof",
+          "title": "Store, Pro, AI, Teams, Developers, Windows",
+          "study": "The navigation and linked surfaces immediately signal that Raycast is more than a single utility: it is a product family with extensions, paid layers, and cross-platform ambition."
+        },
+        {
+          "type": "trust-proof",
+          "title": "Built for professionals like you",
+          "study": "A dense wall of recognizable creators and builders turns the homepage into a taste-and-credibility statement, not just a feature brochure."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Launcher hero with immediate download path",
+          "study": "The hero pairs a terse value claim with Mac and Windows entry points, keeping the product legible for both curious browsers and ready installers.",
+          "reuse": "Use a minimal hero when the category is already known and the page needs to communicate polish, speed, and intent before detail."
+        },
+        {
+          "type": "ecosystem",
+          "title": "Product-family navigation as proof",
+          "study": "Store, Pro, AI, Teams, Developers, iOS, and Windows appear as first-class routes, making the ecosystem breadth part of the marketing surface.",
+          "reuse": "Expose adjacent product surfaces early when your expansion strategy is itself a trust signal."
+        },
+        {
+          "type": "feature-ladder",
+          "title": "Pro capability stack",
+          "study": "AI, Cloud Sync, Clipboard History, Window Management, Notes, and custom themes show how the core launcher grows into a personalized desktop system.",
+          "reuse": "Group premium features as a coherent operating environment when upsell value comes from cumulative workflow depth, not one marquee add-on."
+        },
+        {
+          "type": "trust",
+          "title": "Practitioner testimonial wall",
+          "study": "Quotes and identities from builders, designers, and creators make the page feel like a tool chosen by people with high workflow standards.",
+          "reuse": "Use a dense expert-social-proof section when the product benefits from taste signaling as much as from raw specs."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "ui-mockup",
+          "role": "launcher and feature screenshots",
+          "notes": "Command palette, feature states, and OS-level utilities are shown as crisp desktop moments rather than abstract diagrams.",
+          "reuse": "Favor real interface moments when a desktop product's appeal depends on speed, spatial consistency, and execution quality."
+        },
+        {
+          "type": "avatar-grid",
+          "role": "credibility and community proof",
+          "notes": "Recognizable user portraits make endorsement feel native to product culture instead of bolted on after the fact.",
+          "reuse": "Prepare a dense avatar-and-role wall when your product already has visible advocates whose identity reinforces the brand."
+        },
+        {
+          "type": "theme-preview",
+          "role": "personalization showcase",
+          "notes": "Theme and visual customization previews communicate that the tool can become part of a user's own desktop taste system.",
+          "reuse": "Show personalization states when configuration is part of product delight, not just utility."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "feature-showcase",
+          "title": "Desktop feature progression",
+          "notes": "The page moves through launcher, premium features, and testimonials in a product-tour cadence that keeps the tool feeling broad without becoming noisy.",
+          "fallback": "Keep each feature section readable as a static stacked tour with persistent CTA access."
+        },
+        {
+          "type": "carousel",
+          "title": "Community proof rotation",
+          "notes": "The testimonial surface reads like a living community wall rather than a single frozen endorsement block.",
+          "fallback": "Present a stable subset of named endorsements when motion or auto-rotation is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "download-first",
+          "notes": "The page keeps installation front and center while still routing interested users toward deeper product surfaces."
+        },
+        {
+          "type": "ecosystem-upsell",
+          "notes": "Pro, AI, Teams, and developer surfaces expand the value ladder without interrupting the base product story."
+        },
+        {
+          "type": "expert-social-proof",
+          "notes": "Trust is reinforced by creators and practitioners whose workflow credibility maps cleanly onto the product."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The ecosystem links need to stay scannable because they explain product scope before users commit to downloading."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Desktop screenshots and feature comparisons need enough space to preserve the product's ergonomic, OS-level feel."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Large screenshot sets, community imagery, and multi-surface marketing content need disciplined lazy loading so the page retains its speed-centric brand promise.",
+        "accessibilityNotes": "Feature screenshots, testimonial identities, and theme previews need explicit labels and keyboard-safe structure so the product story is understandable without depending on desktop visuals alone."
+      },
+      "capture": {
+        "date": "2026-06-19",
+        "sourceLinks": [
+          "https://www.raycast.com/",
+          "https://www.raycast.com/pro",
+          "https://www.raycast.com/windows"
+        ],
+        "attribution": "Raycast",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "teenage-engineering-op-xy-sequencer-product-page",
+      "brand": {
+        "name": "Teenage Engineering",
+        "sector": "premium audio hardware",
+        "url": "https://teenage.engineering/"
+      },
+      "page": {
+        "title": "OP-XY",
+        "url": "https://teenage.engineering/products/op-xy",
+        "type": "instrument-product-page"
+      },
+      "why": "A distinctive premium-hardware reference that sells a niche music instrument through monochrome industrial styling, dense capability proof, and a direct buy flow without softening the brand's opinionated voice.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Black instrument as design event",
+          "study": "The hero treats the device itself as the campaign, pairing terse copy with product-first framing instead of lifestyle explanation."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Sequencing workflow and instrument depth",
+          "study": "Capability proof stays close to the product, emphasizing tracks, synth engines, punch-in performance controls, and portability without turning into a dry spec table."
+        },
+        {
+          "type": "commerce",
+          "title": "Buy, details, and accessory continuation",
+          "study": "The launch page flows directly into purchase, specs, and adjacent accessories, making the premium checkout path feel like part of the same authored surface."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Editorial hardware hero",
+          "study": "Large product imagery, short declarative copy, and a dark palette make the page feel like a printed campaign for one object.",
+          "reuse": "Use when a premium device needs to feel singular and collectible before the visitor reads deeper technical proof."
+        },
+        {
+          "type": "chapter",
+          "title": "Capability paragraph beside product proof",
+          "study": "Features are grouped into readable capability bursts instead of a long engineering list, keeping the product page emotional and technical at the same time.",
+          "reuse": "Pair short capability clusters with close product framing when the audience values craft but still needs concrete proof."
+        },
+        {
+          "type": "commerce",
+          "title": "Integrated store handoff",
+          "study": "The product page and store page share language, imagery, and accessories so the transition from inspiration to checkout does not feel like a context switch.",
+          "reuse": "Keep commerce in the same visual system when brand taste is part of why the product commands a premium price."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "full-device hero and gallery views",
+          "notes": "The page depends on clean front, angle, and detail renders that preserve the hardware's black-on-black industrial character.",
+          "reuse": "Prepare multiple product crops when silhouette and finish are doing as much persuasion as the copy."
+        },
+        {
+          "type": "macro-detail",
+          "role": "controls and materials closeups",
+          "notes": "Keys, knobs, ports, and the grayscale display need close detail shots to justify craftsmanship and interface depth.",
+          "reuse": "Capture tactile details when a hardware page needs to sell build quality, not just features."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "display and workflow proof",
+          "notes": "The high-resolution grayscale display and sequencing states reinforce that the product is both instrument and interface.",
+          "reuse": "Show real on-device UI states when the hardware's differentiator includes its operating model."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "reveal",
+          "title": "Product-image progression",
+          "notes": "The page benefits from stepping through angles and details in a controlled sequence rather than showing every image at once.",
+          "fallback": "Keep the gallery readable as a static image stack with visible captions or surrounding context."
+        },
+        {
+          "type": "configuration-flow",
+          "title": "Product-to-store continuation",
+          "notes": "The buy path continues the same narrative with variants, accessory links, and device details rather than dropping into a generic commerce shell.",
+          "fallback": "Expose the same details and accessory links in a simple stacked purchase layout when enhanced transitions are reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "add-to-cart",
+          "notes": "The primary path is a direct add-to-cart flow, which suits a high-intent niche product."
+        },
+        {
+          "type": "accessory-cross-sell",
+          "notes": "Matching wraps, bags, and cables extend the product into a coherent gear ecosystem without overwhelming the main purchase."
+        },
+        {
+          "type": "shipping-reassurance",
+          "notes": "Store language keeps fulfillment and shipping legible so the premium purchase feels concrete, not just aspirational."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Product imagery needs to stay large and legible while details collapse into short scannable sections instead of long uninterrupted copy."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide compositions should preserve the object's silhouette and negative space so the page keeps its gallery-like confidence."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "High-resolution product imagery and gallery states need disciplined lazy loading and responsive crops so the first screen stays fast despite the premium art direction.",
+        "accessibilityNotes": "Any image-led sequence needs text structure that preserves the product story, feature hierarchy, and purchase path without depending on close visual inspection."
+      },
+      "capture": {
+        "date": "2026-06-20",
+        "sourceLinks": [
+          "https://teenage.engineering/products/op-xy",
+          "https://teenage.engineering/store/op-xy"
+        ],
+        "attribution": "Teenage Engineering",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "apple-vision-pro-spatial-computing-product-page",
+      "brand": {
+        "name": "Apple",
+        "sector": "spatial computing hardware",
+        "url": "https://www.apple.com/"
+      },
+      "page": {
+        "title": "Apple Vision Pro",
+        "url": "https://www.apple.com/apple-vision-pro/",
+        "type": "spatial-computing-product-page"
+      },
+      "why": "A strong premium-product reference for selling a new computing category through comfort hardware, immersive use-case chapters, demo booking, and support-heavy commerce rather than a pure technical-spec pitch.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Spatial computing introduction",
+          "study": "The hero frames Vision Pro as a new mode of computing before the page gets into technical anatomy, which helps the category feel experiential rather than abstract."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Fit, audio, optics, and immersion controls",
+          "study": "Comfort hardware, audio, optical inserts, and immersion controls are treated as product chapters, making physical fit part of the core story instead of accessory detail."
+        },
+        {
+          "type": "commerce",
+          "title": "Demo, financing, and support ladder",
+          "study": "The buy surface adds specialist sessions, in-store demos, financing, and setup support so the purchase path feels guided for a high-consideration device."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Category-defining hero with immediate buy and demo paths",
+          "study": "The overview page introduces the device with dual conversion actions so curious visitors can either learn or commit without leaving the category frame.",
+          "reuse": "Use paired demo and purchase actions when the product is expensive, unfamiliar, or best understood through guided experience."
+        },
+        {
+          "type": "chapter",
+          "title": "Hardware anatomy stack",
+          "study": "Band, Light Seal, speakers, crown, and battery are explained as distinct comfort and control systems rather than one technical blob.",
+          "reuse": "Break physical components into short product chapters when ergonomics and setup confidence are major adoption questions."
+        },
+        {
+          "type": "solution-grid",
+          "title": "Use-case ladder across work, media, and memory",
+          "study": "The product story moves through work, entertainment, and personal capture so the device reads like a new environment, not just a headset.",
+          "reuse": "Sequence use cases when a new category needs multiple entry points to feel broadly valuable."
+        },
+        {
+          "type": "support",
+          "title": "Specialist, setup, and AppleCare reassurance",
+          "study": "Buying help, personal setup, and protection plans are presented as first-class modules, which lowers anxiety for a device that needs fit and onboarding.",
+          "reuse": "Surface service and onboarding early when hardware adoption depends on confidence as much as desire."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "device beauty renders and hardware callouts",
+          "notes": "The page relies on polished renders of the headset, band, and battery to make unfamiliar hardware feel refined and understandable.",
+          "reuse": "Prepare component-level renders when new form factors need explanation as well as aspiration."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "spatial interface proof",
+          "notes": "Workspace, media, and environment visuals show how digital content behaves in the product's spatial frame.",
+          "reuse": "Use interface scenes when the product's value depends on situating UI inside a broader environment."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "fit and usage context",
+          "notes": "Human-scale imagery helps the device feel wearable and socially legible, not just technically impressive.",
+          "reuse": "Include real-use context when ergonomic trust matters as much as hardware beauty."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Long-form category reveal",
+          "notes": "The overview page unfolds as a sequence of product, use-case, and hardware chapters so visitors can absorb a new category gradually.",
+          "fallback": "Keep all sections readable as a linear stack with preserved headings and static imagery when motion is reduced."
+        },
+        {
+          "type": "sticky-media",
+          "title": "Immersive visual anchors",
+          "notes": "Large device and interface visuals act as anchors while copy explains hardware and experience details around them.",
+          "fallback": "Use static side-by-side or stacked media blocks when sticky behavior is unavailable."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "demo-booking",
+          "notes": "In-store and guided demo booking is a core conversion path because the device benefits from experiential trust before purchase."
+        },
+        {
+          "type": "financing-and-trade-in",
+          "notes": "Monthly payments and trade-in routes reduce sticker shock and place the product inside familiar Apple purchase behavior."
+        },
+        {
+          "type": "guided-setup",
+          "notes": "Specialist video shopping, personal setup, and AppleCare frame the purchase as an assisted onboarding flow, not a solitary checkout."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The demo and buy actions need to remain near the top because smaller screens make the long category narrative easier to abandon."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide immersive imagery and multi-column hardware explanations need enough space to preserve the category's sense of scale."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Large media, immersive product scenes, and long-form chaptering need careful image loading, section chunking, and LCP discipline so the experience stays premium instead of sluggish.",
+        "accessibilityNotes": "The category story needs explicit text equivalents for hardware callouts, buying guidance, and use-case sequences so motion and large imagery are not carrying the entire explanation."
+      },
+      "capture": {
+        "date": "2026-06-20",
+        "sourceLinks": [
+          "https://www.apple.com/apple-vision-pro/",
+          "https://www.apple.com/shop/buy-vision",
+          "https://www.apple.com/apple-vision-pro/specs/"
+        ],
+        "attribution": "Apple",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "superhuman-ai-productivity-suite-homepage",
+      "brand": {
+        "name": "Superhuman",
+        "sector": "AI productivity software",
+        "url": "https://superhuman.com/"
+      },
+      "page": {
+        "title": "Superhuman: Docs, Mail, and AI That Work Everywhere",
+        "url": "https://superhuman.com/",
+        "type": "ai-productivity-suite-home"
+      },
+      "why": "A strong software-launch reference that sells an AI productivity suite through a conversational hero, a four-product ladder, and trust-heavy product proof instead of a generic SaaS feature wall.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Superpowers, everywhere you work",
+          "study": "The hero uses a simulated work conversation, inbox, and document scene to frame the suite as an AI operating layer rather than a single app."
+        },
+        {
+          "type": "product-family",
+          "title": "Mail, Grammarly, Coda, and Go as one stack",
+          "study": "The page turns four product surfaces into a ladder of capabilities, so breadth itself becomes a proof point instead of a distraction."
+        },
+        {
+          "type": "trust-proof",
+          "title": "Innovative-company logo wall and manifesto turn",
+          "study": "Trust logos and a short narrative turn toward creativity and strategic work make the suite feel premium and aspirational without sounding enterprise-stiff."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Conversational workflow hero",
+          "study": "Scheduling, document editing, and inbox triage appear in one staged interface so the first screen already demonstrates orchestration instead of promise-only copy.",
+          "reuse": "Use a mixed-workflow hero when an AI product has to prove cross-tool usefulness before the visitor will believe the category claim."
+        },
+        {
+          "type": "workflow",
+          "title": "Product-by-product suite ladder",
+          "study": "Mail, Grammarly, Coda, and Go each get a compact benefit stack and dedicated visual state, which keeps the suite broad but still understandable.",
+          "reuse": "Break a multi-product story into short repeated sections when each surface reinforces the same larger platform thesis."
+        },
+        {
+          "type": "proof",
+          "title": "Trusted-by brand rail",
+          "study": "OpenAI, Figma, HubSpot, DoorDash, Expensify, and GEICO logos push the page from startup promise into visible market credibility.",
+          "reuse": "Use a recognizable logo rail early when trust and category legitimacy matter before detailed feature comparison."
+        },
+        {
+          "type": "chapter",
+          "title": "Becoming Superhuman manifesto turn",
+          "study": "A short philosophical section reframes productivity gains as more time for creative and strategic work, giving the suite a higher-order payoff beyond efficiency.",
+          "reuse": "Add one narrative turn when a productivity launch needs emotional altitude after concrete product proof."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "ui-mockup",
+          "role": "cross-app hero workspace",
+          "notes": "The hero depends on a dense multi-pane composition spanning chat, inbox, calendar, and docs states.",
+          "reuse": "Prepare realistic adjacent-tool states when the product value comes from stitching tasks together rather than optimizing one screen."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "product-specific feature frames",
+          "notes": "Each suite product gets a dedicated interface moment with labeled benefits that keep the system legible.",
+          "reuse": "Use one sharp UI state per feature chapter when a product family needs both consistency and contrast."
+        },
+        {
+          "type": "brand-logo-strip",
+          "role": "trust layer",
+          "notes": "A dense logo band gives the homepage social and enterprise weight without requiring case-study detours.",
+          "reuse": "Favor a compact logo strip when social proof needs to stay high-signal and low-friction."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Hero to suite to manifesto progression",
+          "notes": "The page steps from mixed-workflow demo into product sections and then a broader narrative payoff, keeping the long page purposeful.",
+          "fallback": "Keep the same sequence readable as stacked sections with visible product labels and unchanged CTA order."
+        },
+        {
+          "type": "ui-reveal",
+          "title": "Layered interface reveals",
+          "notes": "The interface compositions feel staged and active even when the core narrative remains concise.",
+          "fallback": "Expose the same states as static screenshots with headings and benefit bullets when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "suite-signup",
+          "notes": "A persistent Get Superhuman path keeps the page conversion-first while still allowing deep product reading."
+        },
+        {
+          "type": "contact-sales",
+          "notes": "Sales contact appears alongside self-serve entry points so the homepage can serve both individual and organizational buyers."
+        },
+        {
+          "type": "product-deep-link",
+          "notes": "Learn-more links for each product let the suite story branch without losing the main homepage frame."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The staged workflow hero needs tight prioritization so the conversational example and CTA still land before the interface becomes visually dense."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "The suite story benefits from enough width to preserve side-by-side tool relationships inside each product frame."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Multiple dense UI compositions and a trust-heavy marketing surface need disciplined image sizing so the page keeps its premium feel without sacrificing first paint.",
+        "accessibilityNotes": "The hero conversation, product labels, and trust sections need explicit text hierarchy so the suite story still works without relying on the staged visuals."
+      },
+      "capture": {
+        "date": "2026-06-21",
+        "sourceLinks": [
+          "https://superhuman.com/"
+        ],
+        "attribution": "Superhuman",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "whoop-wearable-health-membership-explainer",
+      "brand": {
+        "name": "WHOOP",
+        "sector": "health and fitness wearable",
+        "url": "https://www.whoop.com/"
+      },
+      "page": {
+        "title": "How WHOOP works",
+        "url": "https://www.whoop.com/au/en/how-it-works/",
+        "type": "wearable-health-membership-explainer"
+      },
+      "why": "A useful wearable-launch reference that explains a subscription hardware system through coaching loops, metric chapters, and tiered memberships rather than a single hardware hero plus spec sheet.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Guidance that keeps you moving forward",
+          "study": "The lead section frames WHOOP as device plus coaching system, not just a tracker, by sequencing wear, measure, guide, and change."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Sleep, recovery, stress, cycle, and heart-health ladders",
+          "study": "Health capabilities are grouped into named chapters that translate biometrics into actionable routines instead of raw measurement bragging."
+        },
+        {
+          "type": "commerce",
+          "title": "Membership tiers and trial path",
+          "study": "The membership page turns the product into a ladder of One, Peak, and Life plans, which makes ongoing service value part of the launch surface."
+        }
+      ],
+      "modules": [
+        {
+          "type": "chapter",
+          "title": "Wear / measure / guide / change system loop",
+          "study": "A four-step introduction makes the device, app, and behavior model understandable before the deeper health sections begin.",
+          "reuse": "Use a short systems loop when a product's value depends on repeated behavior change, not one isolated interaction."
+        },
+        {
+          "type": "proof",
+          "title": "Metric-to-insight chapter stack",
+          "study": "Sleep stages, sleep need, sleep schedule, Healthspan, cycle insights, and ECG are each framed as coaching outcomes rather than disconnected sensors.",
+          "reuse": "Translate raw metrics into named insight chapters when a health or analytics product needs to feel actionable, not merely data-rich."
+        },
+        {
+          "type": "comparison",
+          "title": "Membership lineup ladder",
+          "study": "One, Peak, and Life tiers make price and feature depth legible in one comparison view without forcing a separate checkout context.",
+          "reuse": "Use a clear tier ladder when recurring revenue products need to show capability progression without collapsing into pricing-table noise."
+        },
+        {
+          "type": "support",
+          "title": "First-30-days expectation setting",
+          "study": "A timeline that explains calibration and baseline building reduces uncertainty for a product whose value improves over time.",
+          "reuse": "Add an onboarding-timeframe module when the product requires patience before its full value becomes visible."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "device and membership-stage imagery",
+          "notes": "The system needs clean device visuals that keep the wearable legible while the copy explains ongoing coaching value.",
+          "reuse": "Show hardware plainly when the product is small, subtle, or otherwise easy to lose behind dense health messaging."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "health and coaching screens",
+          "notes": "The page relies on app states and metric panels to turn abstract health ideas into visible progress and guidance.",
+          "reuse": "Use concrete app states when a subscription product's real value lives in interpretation, not only physical hardware."
+        },
+        {
+          "type": "data-visual",
+          "role": "comparison and metric explanation",
+          "notes": "Tier comparisons and health explanations benefit from chart-like or table-like clarity rather than prose alone.",
+          "reuse": "Prepare simple comparison and trend visuals when buyers need to understand system depth at a glance."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "System explainer to medical-feature progression",
+          "notes": "The page unfolds as a long training-and-health narrative, which suits a product that has to educate while it sells.",
+          "fallback": "Keep every section readable as a linear stack with stable headings, numbered steps, and visible CTA blocks."
+        },
+        {
+          "type": "sticky-media",
+          "title": "Metric chapter anchoring",
+          "notes": "Large visuals and chapter markers help the long page avoid feeling like a wall of wellness copy.",
+          "fallback": "Use static media and headings to preserve orientation when sticky behavior is unavailable."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "trial-entry",
+          "notes": "Trial WHOOP and Join now keep commitment lightweight even while the page explains a premium subscription system."
+        },
+        {
+          "type": "membership-tier-upsell",
+          "notes": "Feature escalation across One, Peak, and Life is the main upgrade story instead of accessory-heavy cross-sell."
+        },
+        {
+          "type": "family-and-gifting-branch",
+          "notes": "Family plans and gifting links widen the commerce surface without diluting the main coaching narrative."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The numbered sleep and health chapters need to remain scannable because the product's value is explained cumulatively across many sections."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Membership comparison and long health chapters need enough width to keep device, app, and tier information visually distinct."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "A long sequence of device imagery, app visuals, and comparison content needs aggressive lazy loading so the explainer does not feel medically dense and sluggish.",
+        "accessibilityNotes": "Numbered health guidance, comparison tables, and onboarding timelines need explicit structure so the page remains understandable without depending on image-heavy chaptering."
+      },
+      "capture": {
+        "date": "2026-06-21",
+        "sourceLinks": [
+          "https://www.whoop.com/au/en/how-it-works/",
+          "https://www.whoop.com/au/en/membership/"
+        ],
+        "attribution": "WHOOP",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "polestar-4-electric-coupe-suv-overview",
+      "brand": {
+        "name": "Polestar",
+        "sector": "premium electric vehicle",
+        "url": "https://www.polestar.com/"
+      },
+      "page": {
+        "title": "Polestar 4 coupe",
+        "url": "https://www.polestar.com/us/polestar-4/",
+        "type": "electric-coupe-suv-overview"
+      },
+      "why": "A strong premium-EV reference that blends an incentive-led hero, interior atmosphere, in-car software ecosystem, and sustainability proof into one long-form launch page without collapsing into a sterile spec sheet.",
+      "chapters": [
+        {
+          "type": "offer",
+          "title": "Lease-and-incentive opening",
+          "study": "The page leads with a concrete lease number and combined incentives, so commercial intent is explicit before the deeper product narrative begins."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Aerodynamics, charging, and cabin comfort stack",
+          "study": "Exterior form, charging speed, wrap-around interior, and rear-seat comfort are sequenced as distinct proofs instead of being buried inside one technical spec block."
+        },
+        {
+          "type": "trust",
+          "title": "Ownership and materials reassurance",
+          "study": "Warranty coverage, roadside assistance, OTA updates, charging-network access, and traceable materials keep long-term ownership trust close to the core product story."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Offer-first premium vehicle hero",
+          "study": "The opening section pairs a seasonal offer with a simple category thesis, letting the page serve both ready-to-buy shoppers and visitors still learning what the vehicle is.",
+          "reuse": "Use an offer-led hero when a premium vehicle or hardware page needs to feel commercially live without abandoning brand storytelling."
+        },
+        {
+          "type": "chapter",
+          "title": "Charge-and-go capability chapters",
+          "study": "Charging speed, battery architecture, and charging-standard compatibility appear as short capability beats, which makes technical depth easier to scan.",
+          "reuse": "Break technical ownership questions into short chapters when the buyer needs confidence more than raw engineering density."
+        },
+        {
+          "type": "proof",
+          "title": "Atmospheric interior proof",
+          "study": "Wrap-around seating, planetary lighting themes, and roomy rear-seat language turn the cabin into an emotional differentiator instead of a plain materials gallery.",
+          "reuse": "Elevate interior ambiance into its own proof layer when spatial comfort is part of the product's category argument."
+        },
+        {
+          "type": "support",
+          "title": "Included-with-every-car reassurance rail",
+          "study": "Warranties, roadside assistance, OTA updates, and charging access are grouped as a visible ownership package rather than scattered footer details.",
+          "reuse": "Add an ownership bundle module when support and updates materially affect conversion confidence."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "exterior coupe-SUV staging",
+          "notes": "The page depends on clean vehicle views that make the silhouette and premium stance legible even when pricing and offer copy share the frame.",
+          "reuse": "Prepare wide hero crops and tighter detail shots when a vehicle page has to sell form and practicality at once."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "interior comfort and seat context",
+          "notes": "Interior scenes and cabin framing help the wrap-around design, rear-seat space, and atmosphere read as lived experience, not just copy.",
+          "reuse": "Use interior lifestyle framing when comfort is a buyer-facing proof, not a spec-table footnote."
+        },
+        {
+          "type": "data-visual",
+          "role": "charging and sustainability evidence",
+          "notes": "Charging metrics, carbon-footprint callouts, and material claims benefit from chart-like clarity instead of relying on aspirational prose alone.",
+          "reuse": "Support premium storytelling with simple quantified proof when technical trust is a major sales lever."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Offer to ownership progression",
+          "notes": "The page works as a paced sequence from commercial entry to design, charging, software, and long-term ownership confidence.",
+          "fallback": "Keep every proof chapter readable as a linear stack with preserved offer text, metrics, and support headings when motion is reduced."
+        },
+        {
+          "type": "reveal",
+          "title": "Interior and materials reveals",
+          "notes": "Interior atmosphere and material claims benefit from staged section reveals so the page can slow down after the harder commercial opening.",
+          "fallback": "Use static section transitions with visible headings and non-animated imagery when reveal behavior is unavailable."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "lease-offer",
+          "notes": "Monthly lease framing and combined incentives put the commercial hook directly into the hero instead of hiding it behind a configurator."
+        },
+        {
+          "type": "ownership-reassurance",
+          "notes": "Warranty, roadside assistance, OTA updates, and charging compatibility help the page close anxiety loops that price alone cannot solve."
+        },
+        {
+          "type": "charging-network-proof",
+          "notes": "Charging-standard and adapter context function as commerce support because infrastructure trust affects willingness to convert."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The lease hook, charging proof, and ownership bundle need to remain distinct because the long vehicle narrative can otherwise feel too diffuse on small screens."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide vehicle framing and multi-part interior chapters need enough horizontal space to preserve the contrast between offer-first commerce and slow premium storytelling."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Large vehicle imagery, interior scenes, and long-form chaptering need aggressive lazy loading and section prioritization so the premium surface stays fast enough to trust.",
+        "accessibilityNotes": "Charging metrics, ownership coverage, and material claims need explicit text structure so the page still works when imagery and reveals are not perceivable."
+      },
+      "capture": {
+        "date": "2026-06-23",
+        "sourceLinks": [
+          "https://www.polestar.com/us/polestar-4/"
+        ],
+        "attribution": "Polestar",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "bang-olufsen-beoplay-h100-luxury-headphones-product-page",
+      "brand": {
+        "name": "Bang & Olufsen",
+        "sector": "luxury consumer audio",
+        "url": "https://www.bang-olufsen.com/"
+      },
+      "page": {
+        "title": "Beoplay H100",
+        "url": "https://www.bang-olufsen.com/en/us/headphones/beoplay-h100",
+        "type": "luxury-headphones-product-page"
+      },
+      "why": "A useful luxury-audio reference where premium industrial design, Dolby Atmos-ready sound claims, service reassurance, and limited-edition cues all live inside one restrained product page.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Ultimate noise-cancelling introduction",
+          "study": "The opening frames the product through a single high-confidence claim, which matches luxury pricing better than a crowded feature list."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Immersive sound and built-to-last materials",
+          "study": "Titanium drivers, advanced noise cancellation, and durability language position the headphones as a long-term object, not just a seasonal gadget."
+        },
+        {
+          "type": "commerce",
+          "title": "Warranty, delivery, returns, and stock friction",
+          "study": "Shipping, returns, warranty links, and demand-based stock language keep purchase logistics visible without turning the page into pure checkout chrome."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Luxury claim-plus-product hero",
+          "study": "A sparse premium claim and single product focus make the page feel costly and deliberate before the visitor gets into technical detail.",
+          "reuse": "Use a stripped-down hero when the brand already has enough equity that silence and material confidence sell better than dense copy."
+        },
+        {
+          "type": "proof",
+          "title": "Materials-and-acoustics proof stack",
+          "study": "The page ties titanium drivers, Dolby Atmos optimization, and longevity into one quality argument rather than splitting engineering and luxury into separate stories.",
+          "reuse": "Fuse material and performance proof when a premium device needs to justify both sensory experience and price."
+        },
+        {
+          "type": "proof",
+          "title": "Gallery-led premium detail tour",
+          "study": "The numbered image sequence turns product closeups into a quiet guided tour instead of a loud feature wall.",
+          "reuse": "Use a calm image-led carousel when the physical object itself should do most of the persuasion."
+        },
+        {
+          "type": "support",
+          "title": "Service reassurance cluster",
+          "study": "Delivery, returns, warranty, and payment links sit close to the purchase path, reinforcing that premium commerce includes service, not only product beauty.",
+          "reuse": "Keep service promises adjacent to luxury CTAs when the buyer expects concierge-level certainty."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "hero beauty shots",
+          "notes": "The page relies on polished headphone imagery that can carry the premium feel with minimal surrounding copy.",
+          "reuse": "Invest in quiet, high-resolution hero renders when the product silhouette is a major part of the brand story."
+        },
+        {
+          "type": "macro-detail",
+          "role": "material and hardware closeups",
+          "notes": "Luxury audio pages need closeups that communicate finish, hinge quality, surface texture, and tactile controls without long explanation.",
+          "reuse": "Use macro details when physical craftsmanship is one of the clearest differentiators available."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "premium usage context",
+          "notes": "Selective contextual imagery helps the object feel aspirational without diluting the product-centric composition.",
+          "reuse": "Add sparse lifestyle context when the page should suggest status and atmosphere while keeping the product as the visual lead."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "carousel",
+          "title": "Sequential product gallery",
+          "notes": "The image-driven sequence lets the page present multiple premium angles while keeping the composition restrained.",
+          "fallback": "Expose the same gallery as a static vertical image stack with captions when carousel behavior is unavailable."
+        },
+        {
+          "type": "reveal",
+          "title": "Slow feature and finish reveals",
+          "notes": "A luxury object benefits from slower visual reveals that create breathing room between claims and product details.",
+          "fallback": "Use static feature sections with preserved hierarchy and no hidden content when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "service-reassurance",
+          "notes": "Shipping, returns, warranty, gifts, and payment help the product page feel premium and low-risk before checkout."
+        },
+        {
+          "type": "stock-scarcity",
+          "notes": "Visible order limits and demand-based cancellation language add scarcity and expectation-setting without resorting to aggressive urgency widgets."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Gallery progression and service reassurance need to remain legible because a luxury product page can feel too minimal if the proof is hidden inside swipe-only media."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Generous spacing and large product imagery should keep the product object dominant while support links remain nearby enough to reinforce trust."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "High-resolution product and macro imagery need careful responsive sizing so the page retains its premium calm without becoming image-heavy and slow.",
+        "accessibilityNotes": "The image-led gallery and service cluster need explicit text labels, alt text, and keyboard-friendly navigation so the premium story is not locked behind visuals alone."
+      },
+      "capture": {
+        "date": "2026-06-23",
+        "sourceLinks": [
+          "https://www.bang-olufsen.com/en/us/headphones/beoplay-h100"
+        ],
+        "attribution": "Bang & Olufsen",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "herman-miller-aeron-chair-ergonomic-seating-page",
+      "brand": {
+        "name": "Herman Miller",
+        "sector": "premium ergonomic office furniture",
+        "url": "https://www.hermanmiller.com/"
+      },
+      "page": {
+        "title": "Aeron Chair",
+        "url": "https://www.hermanmiller.com/products/seating/office-chairs/aeron-chair/",
+        "type": "ergonomic-office-chair-product-page"
+      },
+      "why": "A strong premium-furniture reference where design heritage, ergonomic proof, material palette, sustainability, and inclusive sizing are all staged as one coherent product story instead of a dry spec sheet.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Aeron never stops introduction",
+          "study": "The page opens with a film-backed claim that frames Aeron as an evolving icon, which helps an older product feel current without abandoning its history."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Comfort and support deep dive",
+          "study": "8Z Pellicle, PostureFit SL, and Harmonic 2 Tilt are grouped into one ergonomic argument, so technical features read as a complete comfort system rather than isolated bullets."
+        },
+        {
+          "type": "materials",
+          "title": "Palette and material-expression chapter",
+          "study": "The six-color palette gets its own narrative beat, turning finish options into a premium design decision instead of a tiny configurator afterthought."
+        },
+        {
+          "type": "proof",
+          "title": "Sustainability and inclusive sizing proof",
+          "study": "Recycled materials, ocean-bound plastic, and three chair sizes position the product as both responsible and widely usable, widening the page's trust surface."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Film-plus-gallery premium hero",
+          "study": "A cinematic opener sits alongside a multi-angle chair gallery, which keeps the page aspirational before the technical explanation begins.",
+          "reuse": "Pair a quiet brand film with a high-quality product gallery when an iconic object needs atmosphere first and explanation second."
+        },
+        {
+          "type": "proof",
+          "title": "Ergonomic system stack",
+          "study": "Support, recline, and weight distribution are explained as a chain of related benefits rather than as disconnected feature cards.",
+          "reuse": "Group physical-performance features into one system module when the customer needs to understand how multiple parts work together."
+        },
+        {
+          "type": "palette",
+          "title": "Curated finish-expression rail",
+          "study": "Named finishes such as Onyx, Graphite, Nightfall, and Jasper make the color story feel authored, not like an undifferentiated options menu.",
+          "reuse": "Name and stage materials as a compact editorial rail when finish selection is part of the premium appeal."
+        },
+        {
+          "type": "proof",
+          "title": "Inclusive fit module",
+          "study": "Three sizes are presented as a design principle, which turns fit coverage into a differentiator instead of a hidden SKU detail.",
+          "reuse": "Call out sizing philosophy explicitly when inclusion and fit range materially affect conversion."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "multi-angle chair beauty shots",
+          "notes": "The page depends on clean chair renders that show frame geometry, material texture, and silhouette from several angles.",
+          "reuse": "Prepare multiple isolated angles when furniture or industrial products need form and function to remain legible on one page."
+        },
+        {
+          "type": "lifestyle-photo",
+          "role": "workspace context scenes",
+          "notes": "Contextual office scenes help the product feel architectural and lived-in instead of floating as a detached catalog object.",
+          "reuse": "Use wide context photography when a premium object should feel integrated into an environment, not only admired in isolation."
+        },
+        {
+          "type": "detail-closeup",
+          "role": "support and materials proof",
+          "notes": "Close views of the mesh, back support, and finishes reinforce the ergonomic and material claims without requiring heavy copy.",
+          "reuse": "Capture component closeups when physical construction is part of the trust story."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "carousel",
+          "title": "Angle-by-angle product gallery",
+          "notes": "The gallery cycles through multiple views and colorways so the chair can stay visually engaging even though the object category is static.",
+          "fallback": "Render the same views as a labeled vertical image list when carousel controls or scripting are unavailable."
+        },
+        {
+          "type": "video",
+          "title": "Brand-film product introduction",
+          "notes": "The introductory film gives the page a premium cadence before the visitor reaches the denser ergonomic and sustainability sections.",
+          "fallback": "Expose a poster frame plus transcript-adjacent summary when autoplay or embedded video is unavailable."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "fit-reassurance",
+          "notes": "Three size options function as purchase reassurance because fit coverage is one of the key objections in ergonomic-chair buying."
+        },
+        {
+          "type": "finish-upsell",
+          "notes": "Curated named finishes create an upgrade path without relying on aggressive discount or urgency treatments."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The gallery, size proof, and finish names need to remain clearly separated because ergonomic detail gets muddy quickly when the product imagery collapses."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide workspace framing and large product angles help the page balance industrial-design atmosphere with the denser proof sections below."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "High-resolution chair imagery and embedded video need disciplined loading so the page still feels premium instead of sluggish.",
+        "accessibilityNotes": "The gallery and video need keyboard support, descriptive alt text, and clear section headings so ergonomic claims are not trapped in visuals alone."
+      },
+      "capture": {
+        "date": "2026-06-24",
+        "sourceLinks": [
+          "https://www.hermanmiller.com/products/seating/office-chairs/aeron-chair/"
+        ],
+        "attribution": "Herman Miller",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "nothing-phone-3a-smartphone-product-page",
+      "brand": {
+        "name": "Nothing",
+        "sector": "consumer smartphone hardware",
+        "url": "https://intl.nothing.tech/"
+      },
+      "page": {
+        "title": "Phone (3a)",
+        "url": "https://intl.nothing.tech/products/phone-3a",
+        "type": "smartphone-product-page"
+      },
+      "why": "A useful hardware-launch reference where a floating storefront sheet, glyph-led product imagery, and compressed spec storytelling make the purchase path feel like part of the visual identity rather than a separate commerce layer.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Floating buy-sheet introduction",
+          "study": "The opening collapses the hero into a compact frosted panel with three benefit callouts, which makes the product page feel immediate and editorial instead of like a generic PDP."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Battery, memory, and camera proof trio",
+          "study": "2-day battery, RAM booster, and camera language are presented as high-level capability hooks before the visitor has to process deeper specs."
+        },
+        {
+          "type": "variant",
+          "title": "Color and capacity selection beat",
+          "study": "Variant switching stays visually central through the phone crop and terse pickers, so configuration feels like part of the hero rather than a buried dropdown form."
+        },
+        {
+          "type": "trust",
+          "title": "Durability, update, and disclaimer layer",
+          "study": "IP64 guidance, region notes, and six-year update messaging push operational trust into the product narrative instead of leaving it to support docs."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Frosted storefront card",
+          "study": "A sticky glassy panel combines the product name, three capability chips, variant selection, and primary CTA in one compact surface.",
+          "reuse": "Use a single floating purchase card when the page should feel like a campaign object first and a store form second."
+        },
+        {
+          "type": "variant",
+          "title": "Glyph crop variant picker",
+          "study": "The product crop updates alongside color and capacity choices, which makes configuration feel tactile and brand-specific.",
+          "reuse": "Tie variant controls directly to a branded product closeup when the hardware silhouette is part of the selling system."
+        },
+        {
+          "type": "proof",
+          "title": "Compressed capability callout trio",
+          "study": "Three short benefit labels front-load the core story before the visitor reaches the heavier technical details.",
+          "reuse": "Lead with a restrained trio of capability hooks when the product has several strong selling points but the hero cannot tolerate a full spec table."
+        },
+        {
+          "type": "trust",
+          "title": "Long-support and region-notes appendix",
+          "study": "Update policy, charging caveats, and regional capability notes are all visible enough to reduce ambiguity without overwhelming the main buy path.",
+          "reuse": "Surface long-tail trust notes when availability, durability, or update coverage affects buyer confidence."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "glyph-forward hero crops",
+          "notes": "The page relies on sharp phone renders that emphasize the rear glyph language and edge detailing.",
+          "reuse": "Prepare close product crops when the hardware skin itself is a major differentiator."
+        },
+        {
+          "type": "macro-detail",
+          "role": "camera and material closeups",
+          "notes": "A phone page with a camera-first story needs isolated closeups that make the camera system feel premium and legible.",
+          "reuse": "Use component closeups when camera hardware or finish details need to justify attention before specs do."
+        },
+        {
+          "type": "ui-mockup",
+          "role": "AI and software feature proof",
+          "notes": "Essential Space and other software-led claims need clean UI mockups so the product page can sell more than the chassis.",
+          "reuse": "Mix UI captures into hardware pages when the software layer is part of the device's purchase logic."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "sticky-panel",
+          "title": "Persistent floating purchase rail",
+          "notes": "The buy surface behaves like a compact sticky sheet, keeping the primary decision controls close while the visitor explores the page.",
+          "fallback": "Render the same controls as a normal top-of-page stack when sticky behavior is unavailable."
+        },
+        {
+          "type": "variant-swap",
+          "title": "Image-led variant transitions",
+          "notes": "Color and capacity selection are reinforced by product-image swaps and subtle scale behavior, which makes the configuration feel lively without a large configurator.",
+          "fallback": "Swap the still image instantly and keep the chosen variant labels persistent when transitions are reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "availability-signup",
+          "notes": "A sign-up CTA replaces a hard buy-now path, which keeps the page useful even when inventory or rollout timing varies by region."
+        },
+        {
+          "type": "variant-selector",
+          "notes": "Color and capacity are treated as first-class decisions inside the hero, reducing the distance between visual desire and product selection."
+        },
+        {
+          "type": "support-longevity",
+          "notes": "Update-policy and durability notes work as purchase reassurance because they frame the phone as a longer-term ownership decision."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The floating sheet, variant controls, and callout trio need to stay compact enough that the phone image still reads as the page's primary object."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "The wide phone imagery and glass-like purchase panel should preserve a strong object-to-control relationship instead of drifting into a generic ecommerce grid."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Large hardware images, sticky UI, and storefront scripts need careful preload and hydration discipline so the page keeps its crisp feel.",
+        "accessibilityNotes": "Variant controls, sticky purchase UI, and long disclaimer sections need explicit labels and keyboard order so the page remains usable beyond its visual novelty."
+      },
+      "capture": {
+        "date": "2026-06-24",
+        "sourceLinks": [
+          "https://intl.nothing.tech/products/phone-3a"
+        ],
+        "attribution": "Nothing",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "dji-mavic-4-pro-creator-drone-commerce-page",
+      "brand": {
+        "name": "DJI",
+        "sector": "creator drone hardware",
+        "url": "https://www.dji.com/global/"
+      },
+      "page": {
+        "title": "Mavic 4 Pro",
+        "url": "https://www.dji.com/global/mavic-4-pro",
+        "type": "creator-drone-product-page"
+      },
+      "why": "A strong creator-hardware reference where a cinematic hero, a sticky jump rail, purchase-ready bundles, and support surfaces all stay in one page without flattening the sense of flagship spectacle.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Spin Your World hero",
+          "study": "The opening combines a direct buy CTA with a watch-video path so the page can serve both ready-to-purchase buyers and visitors who need to be sold through footage first."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Three-camera flagship proof stack",
+          "study": "The 100MP Hasselblad camera, dual tele cameras, nightscape capture, and transmission claims are grouped into a capability ladder that keeps the product story sharp before the dense specifications begin."
+        },
+        {
+          "type": "support",
+          "title": "Accessories, downloads, and FAQ jump layer",
+          "study": "Support and ownership surfaces sit inside the same sticky navigation system as the sales story, which reduces the usual split between launch page and post-purchase help center."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Dual-path cinematic hero",
+          "study": "The hero pairs a buy-now CTA with a watch-video CTA so the page can pivot between direct conversion and inspiration-led exploration.",
+          "reuse": "Use a split primary action when flagship hardware needs both commerce urgency and high-emotion media discovery."
+        },
+        {
+          "type": "chapter",
+          "title": "Sticky jump rail",
+          "study": "Accessories, compare, specs, video, downloads, and FAQ are exposed as a persistent set of route anchors instead of being hidden below the fold.",
+          "reuse": "Use a sticky chapter rail when one long product page needs to satisfy buying, research, and support intent without a tab overload."
+        },
+        {
+          "type": "proof",
+          "title": "Flagship camera capability stack",
+          "study": "Core imaging claims are presented as a concentrated sequence of high-value proof points anchored by large product media.",
+          "reuse": "Lead with one strong capability ladder when a premium hardware page has a few blockbuster differentiators that should frame the rest of the page."
+        },
+        {
+          "type": "support",
+          "title": "Service-plan reassurance block",
+          "study": "DJI Care and official downloads sit close to the product narrative, turning ownership support into a conversion lever rather than a footer utility.",
+          "reuse": "Surface protection plans and downloads in the main journey when after-sales confidence materially affects purchase intent."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "video",
+          "role": "flagship aerial hero footage",
+          "notes": "The page depends on cinematic sample footage to prove range, gimbal freedom, and camera quality before the visitor reaches dense technical copy.",
+          "reuse": "Budget for high-contrast hero footage when motion itself is the product proof."
+        },
+        {
+          "type": "product-render",
+          "role": "drone and controller beauty shots",
+          "notes": "Large isolated renders are needed to show the airframe, tri-camera cluster, and rotatable controller display cleanly across breakpoints.",
+          "reuse": "Prepare both object-only and hand-held hardware crops when the product spans body, controller, and accessory storytelling."
+        },
+        {
+          "type": "category-image",
+          "role": "accessory and bundle context",
+          "notes": "Accessories and combo packages need their own orderly imagery so the commerce layer reads as a system rather than a single box.",
+          "reuse": "Use organized accessory imagery when bundles and add-ons are part of the main conversion path."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Media-first feature progression",
+          "notes": "Large footage and product images pace the user through hero, feature proof, and support jumps instead of relying on a continuous spec wall.",
+          "fallback": "Keep every chapter statically visible with direct anchor links when motion or sticky transitions are reduced."
+        },
+        {
+          "type": "sticky-media",
+          "title": "Persistent route and media pairing",
+          "notes": "The page keeps navigation anchors and flagship media tightly coupled so the visitor can move between sections without losing purchase context.",
+          "fallback": "Stack the section navigation above the media modules when sticky behavior is unavailable."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "buy-now-and-video",
+          "notes": "A high-intent buy CTA is paired with a watch-video CTA so commerce and inspiration stay adjacent from the first screen."
+        },
+        {
+          "type": "bundle-and-accessories",
+          "notes": "Accessories, combos, and related routes stay visible enough to grow order value without derailing the flagship story."
+        },
+        {
+          "type": "service-plan",
+          "notes": "Protection plans and official downloads provide operational reassurance for a high-consideration creator tool."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The jump rail and dual hero actions need to stay compact enough that the drone image and flagship claims still establish hierarchy immediately."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide footage, long anchor rails, and accessory surfaces need disciplined spacing so the page feels premium instead of like a support portal pasted onto a launch page."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Heavy video, hardware imagery, and sticky navigation demand aggressive lazy loading and asset sizing discipline to preserve launch-page polish.",
+        "accessibilityNotes": "Video-first chapters and jump navigation need strong headings, keyboardable anchors, and text equivalents for the camera claims."
+      },
+      "capture": {
+        "date": "2026-06-25",
+        "sourceLinks": [
+          "https://www.dji.com/global/mavic-4-pro"
+        ],
+        "attribution": "DJI",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "fujifilm-gfx100rf-premium-camera-product-page",
+      "brand": {
+        "name": "Fujifilm",
+        "sector": "premium camera hardware",
+        "url": "https://www.fujifilm-x.com/en-us/"
+      },
+      "page": {
+        "title": "GFX100RF",
+        "url": "https://www.fujifilm-x.com/en-us/products/cameras/gfx100rf/",
+        "type": "premium-camera-product-page"
+      },
+      "why": "A useful camera-launch reference where manifesto copy, tactile control closeups, aspect-ratio storytelling, and sample-led proof make a technical product feel like a crafted object rather than a spec database.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "The One and Only manifesto",
+          "study": "The hero frames the camera through portability, analog control, and emotional making, which gives the launch a clear authorial point of view before the product details expand."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Large-format portability chapter",
+          "study": "Resolution, compactness, and fixed-lens positioning are combined into one ownership argument so the page sells a way of shooting instead of isolated megapixel bragging rights."
+        },
+        {
+          "type": "gallery",
+          "title": "Aspect-ratio and sample-image chapter",
+          "study": "Sample imagery and aspect-ratio framing turn output proof into a creative-system story instead of a flat gallery appendix."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Manifesto-plus-object hero",
+          "study": "A short emotional thesis sits next to precise product imagery so the page feels editorial from the first frame.",
+          "reuse": "Lead with one authored sentence and one hero object crop when a premium tool needs to feel desirable before the deeper proof begins."
+        },
+        {
+          "type": "proof",
+          "title": "Tactile controls close-up rail",
+          "study": "Dials, body materials, and grip details are shown as tactile proof of quality, not just as spec annotations.",
+          "reuse": "Use an object-detail rail when physical touch points are central to the product's identity."
+        },
+        {
+          "type": "gallery",
+          "title": "Aspect-ratio storytelling module",
+          "study": "The page uses output examples to show how the product changes composition choices, not merely how sharp the sensor is.",
+          "reuse": "Turn sample outputs into a compositional lesson when a creative product changes how the user sees the world."
+        },
+        {
+          "type": "comparison",
+          "title": "Overview-to-specifications tab funnel",
+          "study": "Overview, specifications, gallery, accessories, and shop routes keep the page navigable for both inspiration-led and research-led visitors.",
+          "reuse": "Use a tabbed funnel when premium products need editorial breathing room without sacrificing the buyer's path to details."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "product-render",
+          "role": "camera body and lens hero imagery",
+          "notes": "Large object photography is required to show the compact body, fixed lens, and material finish with enough precision to support the premium claim.",
+          "reuse": "Prepare calm, high-resolution object imagery when the industrial design should carry much of the persuasion."
+        },
+        {
+          "type": "macro-detail",
+          "role": "dial, material, and control closeups",
+          "notes": "Closeups of aluminum surfaces and analog controls are essential because the handling story is as important as the sensor story.",
+          "reuse": "Capture physical controls in macro when the interface is a selling surface, not just a utility."
+        },
+        {
+          "type": "category-image",
+          "role": "sample photography and framing proof",
+          "notes": "The page needs a curated set of output images that make aspect ratios and large-format rendering immediately legible.",
+          "reuse": "Use a tightly edited sample gallery when a creative tool's output quality is best demonstrated through finished work."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "reveal",
+          "title": "Measured product-detail reveals",
+          "notes": "Product chapters progress through large stills and calm copy blocks, which keeps the pace luxurious without demanding aggressive motion.",
+          "fallback": "Present the same stills and chapters as a static vertical sequence when reveal behavior is reduced."
+        },
+        {
+          "type": "scroll-chapter",
+          "title": "Editorial sample progression",
+          "notes": "Sample imagery and tactile detail shots are sequenced as a scroll-led story that deepens the product thesis one chapter at a time.",
+          "fallback": "Keep every chapter independently browsable through direct section links and visible headings."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "overview-spec-gallery-shop",
+          "notes": "The page keeps inspiration, specifications, accessories, and shop routes tightly linked so the visitor can switch from desire to research without losing context."
+        },
+        {
+          "type": "sample-led-proof",
+          "notes": "Sample photography acts as the main proof layer, which is more persuasive for a camera buyer than a long early spec dump."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Close-up control shots and sample images need to remain large enough that the tactile story does not collapse into unreadable thumbnails."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide object crops and airy copy blocks are what keep the page feeling like a premium editorial spread instead of a retail table."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "The page relies more on large still imagery than on heavy video, but image compression and progressive loading still matter because the samples do most of the persuasion work.",
+        "accessibilityNotes": "Sample-image chapters and control-detail sections need strong captions and descriptive headings so the craftsmanship story survives without the visuals."
+      },
+      "capture": {
+        "date": "2026-06-25",
+        "sourceLinks": [
+          "https://www.fujifilm-x.com/en-us/products/cameras/gfx100rf/"
+        ],
+        "attribution": "Fujifilm",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "brompton-g-line-folding-bike-product-page",
+      "brand": {
+        "name": "Brompton",
+        "sector": "premium urban mobility",
+        "url": "https://global.brompton.com/"
+      },
+      "page": {
+        "title": "G Line",
+        "url": "https://global.brompton.com/g-line",
+        "type": "folding-bike-product-page"
+      },
+      "why": "A strong mobility-launch reference where comfort, compactness, capability, and folding mechanics are staged as one ownership story instead of a flat bike spec sheet.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "Game-changing comfort",
+          "study": "The opening chapter sells full-size ride feel and all-day comfort before detailed engineering, which makes the page lead with lived experience instead of geometry numbers."
+        },
+        {
+          "type": "feature-proof",
+          "title": "Big on ride feel, compact in size",
+          "study": "Ride quality and foldability are presented together, turning the core tradeoff into the product's main proof point."
+        },
+        {
+          "type": "engineering",
+          "title": "Brompton engineering",
+          "study": "The engineering stack breaks the folding mechanism, towing behavior, luggage system, and long-life build quality into short reusable ownership modules."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "Experience-first mobility hero",
+          "study": "A short promise and outdoor riding imagery frame the bike as a change in daily movement, not just a product category.",
+          "reuse": "Lead premium mobility pages with the felt experience of movement when emotional confidence matters as much as specifications."
+        },
+        {
+          "type": "proof",
+          "title": "Fold-and-tow engineering tile stack",
+          "study": "Short tiles explain folding, rolling, carrying loads, and build toughness without requiring long technical paragraphs.",
+          "reuse": "Use compact engineering tiles when one mechanical innovation needs to become legible to non-expert buyers."
+        },
+        {
+          "type": "comparison",
+          "title": "Simple size-selection explainer",
+          "study": "Three easy sizes turn fit choice into a reassuring step rather than a research burden.",
+          "reuse": "Add a calm size guide when purchase hesitation comes from fit uncertainty rather than feature overload."
+        },
+        {
+          "type": "support",
+          "title": "FAQ and retailer handoff",
+          "study": "Terrain, gears, warranty, and lighting answers sit close to the store CTA so the research and conversion paths stay linked.",
+          "reuse": "Keep high-intent buyer questions near the purchase handoff when the category still benefits from store-led validation."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "lifestyle-photo",
+          "role": "riding context and urban/off-road proof",
+          "notes": "The page relies on real riding scenes to show that the bike can move between parks, cobbles, stations, and compact storage situations.",
+          "reuse": "Capture usage environments that prove versatility instead of relying only on isolated object renders."
+        },
+        {
+          "type": "product-render",
+          "role": "bike silhouette and folded-state proof",
+          "notes": "Clear product shots are needed to communicate the frame, wheel scale, and compact folded footprint.",
+          "reuse": "Prepare both ride-state and folded-state imagery when transformability is part of the core value proposition."
+        },
+        {
+          "type": "macro-detail",
+          "role": "folding, towing, and luggage-system details",
+          "notes": "Closeups of hinges, bag mounting, and handling points make the engineering story believable.",
+          "reuse": "Use mechanical closeups when the buyer needs to trust how the product works, not just how it looks."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "scroll-chapter",
+          "title": "Ride-to-engineering progression",
+          "notes": "The page steps from high-level riding benefits into specific folding and transport behaviors one chapter at a time.",
+          "fallback": "Keep each chapter independently readable with persistent headings and image-first stacking."
+        },
+        {
+          "type": "reveal",
+          "title": "Measured engineering reveals",
+          "notes": "Engineering points arrive as calm image-and-copy reveals rather than high-noise animation, which preserves the premium utility tone.",
+          "fallback": "Present all engineering tiles statically in reading order when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "find-store",
+          "notes": "The primary conversion path is a store handoff, which matches a category where fit and ride feel still matter in person."
+        },
+        {
+          "type": "accessory-ecosystem",
+          "notes": "Bag compatibility and lighting options extend the purchase story into a broader mobility system."
+        },
+        {
+          "type": "warranty-reassurance",
+          "notes": "Durability claims are reinforced by a seven-year frame warranty to reduce long-term ownership anxiety."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "Hero copy, one key riding image, and the store CTA should remain visible before the deeper engineering stack begins."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide riding scenes and engineering tiles need enough room to preserve the contrast between lifestyle promise and mechanical proof."
+        }
+      ],
+      "implementation": {
+        "complexity": "medium-high",
+        "performanceNotes": "The page depends on large riding imagery and object stills, so image loading and responsive crops need to preserve visual confidence without slowing the first chapter.",
+        "accessibilityNotes": "Folding, towing, and sizing claims need text equivalents that explain the behaviors without relying on imagery or motion."
+      },
+      "capture": {
+        "date": "2026-06-26",
+        "sourceLinks": [
+          "https://global.brompton.com/g-line"
+        ],
+        "attribution": "Brompton",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    },
+    {
+      "id": "gopro-hero13-black-action-camera-product-page",
+      "brand": {
+        "name": "GoPro",
+        "sector": "action camera hardware",
+        "url": "https://gopro.com/"
+      },
+      "page": {
+        "title": "HERO13 Black",
+        "url": "https://gopro.com/en/us/shop/cameras/learn/hero13black/CHDHX-131-master.html",
+        "type": "action-camera-product-page"
+      },
+      "why": "A useful creator-commerce reference where modular lenses, ruggedness, capture modes, and accessory upsells are turned into one high-energy camera system instead of a single device page.",
+      "chapters": [
+        {
+          "type": "hero",
+          "title": "World's Most Versatile Camera",
+          "study": "The page opens by selling versatility and system expandability rather than anchoring on one flagship spec."
+        },
+        {
+          "type": "feature-proof",
+          "title": "HB-Series lenses with auto-detect",
+          "study": "Macro, ultra-wide, anamorphic, and ND modules reposition the camera as a configurable toolset for several shooting modes."
+        },
+        {
+          "type": "performance",
+          "title": "Slow motion, waterproofing, and stabilization proof",
+          "study": "Capture rates, durability, and stabilization are sequenced as direct evidence for action use instead of being buried in a long specification table."
+        }
+      ],
+      "modules": [
+        {
+          "type": "hero",
+          "title": "System-first product hero",
+          "study": "The hero frames the camera as a platform with lenses, mounting, and power accessories rather than a one-box purchase.",
+          "reuse": "Lead creator hardware pages with the broader production system when accessories materially change the value proposition."
+        },
+        {
+          "type": "proof",
+          "title": "Lens-mod accordion rail",
+          "study": "Each lens module gets its own proof moment, which keeps specialized use cases understandable without drowning the visitor in jargon.",
+          "reuse": "Use a modular proof rail when one product expands through attachments or configurations with distinct jobs."
+        },
+        {
+          "type": "support",
+          "title": "Power and mounting ecosystem",
+          "study": "Battery, magnetic door, cable kit, and mounting compatibility extend the page from hero feature claims into day-to-day production practicality.",
+          "reuse": "Translate accessory compatibility into ownership confidence when professional or enthusiast buyers care about setup friction."
+        },
+        {
+          "type": "commerce",
+          "title": "Subscription-plus-upgrade stack",
+          "study": "Camera, accessories, and subscription benefits are all kept in view so the page can raise order value without hiding the main product thesis.",
+          "reuse": "Bundle primary hardware, add-ons, and service perks together when the ecosystem is part of the margin story."
+        }
+      ],
+      "mediaAssets": [
+        {
+          "type": "video",
+          "role": "action-footage and feature proof",
+          "notes": "Motion demos are essential for showing slow motion, stabilization, field of view, and waterproof credibility.",
+          "reuse": "Use short proof clips when the product promise depends on motion quality rather than static industrial design alone."
+        },
+        {
+          "type": "product-render",
+          "role": "camera body, lens mods, and mounting ecosystem",
+          "notes": "The page needs clean hardware imagery that keeps the modular system legible at a glance.",
+          "reuse": "Render the base product and every major attachment together when system thinking drives conversion."
+        },
+        {
+          "type": "macro-detail",
+          "role": "magnetic mounting and waterproof hardware details",
+          "notes": "Closeups of ports, lens cover, and mount mechanics make durability and speed-of-setup claims feel concrete.",
+          "reuse": "Use detail crops when functional hardware changes are central to the upgrade story."
+        }
+      ],
+      "motionPatterns": [
+        {
+          "type": "configuration-flow",
+          "title": "Lens-system progression",
+          "notes": "The product narrative moves through lens types and shooting outcomes as a configuration story, not just a list of accessories.",
+          "fallback": "Keep each configuration understandable as a static module with labeled imagery and plain-language copy."
+        },
+        {
+          "type": "reveal",
+          "title": "Spec-proof reveals",
+          "notes": "High-speed capture, waterproofing, stabilization, and HDR are staged as sequential proof beats that maintain page momentum.",
+          "fallback": "Expose all key proofs in DOM order with headings and short supporting copy when motion is reduced."
+        }
+      ],
+      "commercePatterns": [
+        {
+          "type": "module-upsell",
+          "notes": "Lens mods and mounting accessories are positioned as capability extensions, not as disconnected store cross-sells."
+        },
+        {
+          "type": "service-bundle",
+          "notes": "Subscription messaging reinforces the hardware purchase with a broader ownership and media-management layer."
+        }
+      ],
+      "responsiveNotes": [
+        {
+          "breakpoint": "mobile",
+          "notes": "The first screen needs the camera claim, one key image, and the main buy path before long capability modules and action footage."
+        },
+        {
+          "breakpoint": "desktop",
+          "notes": "Wide media areas help lens differences and stabilization demos feel meaningfully distinct rather than like repeated screenshots."
+        }
+      ],
+      "implementation": {
+        "complexity": "high",
+        "performanceNotes": "Multiple videos, high-resolution hardware imagery, and layered commerce modules require disciplined lazy loading so the hero stays fast.",
+        "accessibilityNotes": "Every action clip and modular feature proof needs descriptive copy so the capability story survives without autoplay media."
+      },
+      "capture": {
+        "date": "2026-06-26",
+        "sourceLinks": [
+          "https://gopro.com/en/us/shop/cameras/learn/hero13black/CHDHX-131-master.html"
+        ],
+        "attribution": "GoPro",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "page-and-modules"
+      }
+    }
+  ]
+}

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ServiceNow Horizon Inspired Components</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --surface: #ffffff;
+        --surface-warm: #eef7f3;
+        --fg: #0b1620;
+        --fg-2: #243241;
+        --muted: #5e6b78;
+        --meta: #7b8794;
+        --border: #dce3ea;
+        --border-soft: #edf1f5;
+        --accent: #2f7d5f;
+        --accent-on: #ffffff;
+        --accent-hover: #276a51;
+        --accent-active: #1f5742;
+        --success: #2f7d5f;
+        --warn: #b7791f;
+        --danger: #c93535;
+        --font-display: "ServiceNow Sans", "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+        --font-body: "ServiceNow Sans", "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+        --font-mono: "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 24px;
+        --text-2xl: 34px;
+        --text-3xl: 48px;
+        --text-4xl: 64px;
+        --leading-body: 1.56;
+        --leading-tight: 1.08;
+        --tracking-display: normal;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 88px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 40px;
+        --radius-sm: 8px;
+        --radius-md: 14px;
+        --radius-lg: 24px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 18px 48px rgba(23, 42, 58, 0.12);
+        --focus-ring: 0 0 0 3px rgba(47, 125, 95, 0.24);
+        --motion-fast: 150ms;
+        --motion-base: 220ms;
+        --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+        --container-max: 1180px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .shell {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding: var(--space-8) var(--container-gutter-desktop) var(--section-y-desktop);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding: var(--space-4) var(--space-5);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--elev-ring);
+      }
+      .brand { font-weight: 750; letter-spacing: var(--tracking-display); }
+      .nav { display: flex; gap: var(--space-2); flex-wrap: wrap; color: var(--muted); font-size: var(--text-sm); }
+      .nav span { padding: var(--space-2) var(--space-3); border-radius: var(--radius-pill); }
+      .nav .active { color: var(--accent); background: var(--surface-warm); }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        gap: var(--space-8);
+        align-items: stretch;
+        padding-block: var(--section-y-tablet);
+      }
+      h1, h2, h3 { margin: 0; font-family: var(--font-display); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h1 { font-size: var(--text-4xl); }
+      h2 { font-size: var(--text-2xl); }
+      h3 { font-size: var(--text-xl); }
+      p { margin: 0; color: var(--muted); }
+      .stack > * + * { margin-top: var(--space-4); }
+      .actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+      .button {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 11px 16px;
+        background: var(--surface);
+        color: var(--fg-2);
+        font: inherit;
+        font-weight: 650;
+      }
+      .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+      .button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .panel, .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--elev-ring);
+      }
+      .panel { padding: var(--space-6); }
+      .ai-panel {
+        background: linear-gradient(135deg, var(--surface-warm), #ffffff 62%);
+        border-color: color-mix(in oklab, var(--accent), var(--border) 72%);
+      }
+      .metric-grid, .framework-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+      .card { padding: var(--space-5); }
+      .eyebrow { color: var(--meta); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      .pill { display: inline-flex; border-radius: var(--radius-pill); padding: var(--space-1) var(--space-3); background: var(--surface-warm); color: var(--accent); font-size: var(--text-xs); font-weight: 700; }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--border-soft); padding-top: var(--space-3); margin-top: var(--space-3); }
+      code { font-family: var(--font-mono); color: var(--fg-2); background: var(--border-soft); border-radius: var(--radius-sm); padding: 2px 6px; }
+      @media (max-width: 820px) {
+        .shell { padding-inline: var(--container-gutter-tablet); }
+        .hero, .metric-grid, .framework-grid { grid-template-columns: 1fr; }
+        h1 { font-size: var(--text-3xl); }
+      }
+      @media (max-width: 520px) {
+        .shell { padding-inline: var(--container-gutter-phone); }
+        .topbar { align-items: flex-start; flex-direction: column; }
+        h1 { font-size: var(--text-2xl); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">Horizon Workflows</div>
+        <nav class="nav" aria-label="Example navigation">
+          <span class="active">Design</span>
+          <span>AI</span>
+          <span>Frameworks</span>
+          <span>Resources</span>
+        </nav>
+      </header>
+
+      <section class="hero">
+        <div class="stack">
+          <span class="eyebrow">Experience design system</span>
+          <h1>Craft enterprise work that feels fluid, clear, and connected.</h1>
+          <p>Use modular surfaces, calm guidance, and explicit next steps to help teams configure complex workflows with confidence.</p>
+          <div class="actions">
+            <button class="button primary">Start designing</button>
+            <button class="button">Browse frameworks</button>
+          </div>
+        </div>
+        <aside class="panel ai-panel stack" aria-label="AI guidance panel">
+          <span class="pill">AI guidance</span>
+          <h2>Put assistance near the decision.</h2>
+          <p>Recommendations should summarize context, cite the affected workflow, and leave the final action in the user's hands.</p>
+          <div class="row"><span>Confidence</span><strong>High</strong></div>
+          <div class="row"><span>Next step</span><code>Review impact</code></div>
+        </aside>
+      </section>
+
+      <section class="metric-grid" aria-label="Principle cards">
+        <article class="card stack">
+          <span class="eyebrow">Principle 01</span>
+          <h3>Fluid</h3>
+          <p>Create natural paths between tasks so users can move through work without reorienting.</p>
+        </article>
+        <article class="card stack">
+          <span class="eyebrow">Principle 02</span>
+          <h3>Symphonic</h3>
+          <p>Harmonize varied user needs through shared patterns, predictable structure, and configurable views.</p>
+        </article>
+        <article class="card stack">
+          <span class="eyebrow">Principle 03</span>
+          <h3>Resonant</h3>
+          <p>Use precision, warmth, and polish to make enterprise moments memorable without distraction.</p>
+        </article>
+      </section>
+
+      <section class="framework-grid" aria-label="Framework tiles">
+        <article class="card stack">
+          <span class="pill">Workspace</span>
+          <h3>Configurable operations</h3>
+          <p>Dashboards with data, action, and insight in one surface.</p>
+        </article>
+        <article class="card stack">
+          <span class="pill">Mobile</span>
+          <h3>Field-ready flows</h3>
+          <p>Task-first screens with compressed hierarchy and clear completion.</p>
+        </article>
+        <article class="card stack">
+          <span class="pill">Core UI</span>
+          <h3>Focused administration</h3>
+          <p>Dense configuration views that stay legible and predictable.</p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

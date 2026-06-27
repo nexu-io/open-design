@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Academic CV Lite</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e6e8ea;
+      color: #1e2328;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 10.4pt;
+      line-height: 1.42;
+    }
+    .page {
+      width: min(210mm, calc(100vw - 28px));
+      min-height: 297mm;
+      margin: 24px auto;
+      background: #fffffb;
+      padding: 16mm 18mm;
+      box-shadow: 0 18px 46px rgba(31, 37, 45, 0.16);
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      border-bottom: 3px double #1e2328;
+      padding-bottom: 10px;
+    }
+    h1 { margin: 0; font-size: 25pt; line-height: 1; letter-spacing: 0; }
+    .field { margin: 7px 0 0; font-style: italic; }
+    .contact { text-align: right; font-size: 9.5pt; }
+    .contact p { margin: 0 0 4px; }
+    .body {
+      display: grid;
+      grid-template-columns: 45mm 1fr;
+      gap: 13mm;
+      margin-top: 14px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 9pt;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      color: #314f6b;
+    }
+    section {
+      display: grid;
+      grid-template-columns: 45mm 1fr;
+      gap: 13mm;
+      border-top: 1px solid #c8d0d7;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    section:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+    .entry { margin-bottom: 10px; }
+    .row { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+    h3 { margin: 0; font-size: 11.4pt; }
+    .date { color: #59636d; white-space: nowrap; font-size: 9.3pt; }
+    p { margin: 3px 0; }
+    ul { margin: 5px 0 0 18px; padding: 0; }
+    li { margin: 3px 0; }
+    .pub { padding-left: 18px; text-indent: -18px; margin-bottom: 7px; }
+    .note { color: #59636d; font-size: 9.4pt; }
+    @media print {
+      body { background: #fff; }
+      .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Academic CV lite preview">
+    <header>
+      <div>
+        <h1>Dr. Naomi Rivera</h1>
+        <p class="field">Urban climate adaptation, public infrastructure, environmental policy</p>
+      </div>
+      <div class="contact">
+        <p>naomi.rivera@example.edu</p>
+        <p>Department of Urban Studies</p>
+        <p>Boston, MA</p>
+        <p>orcid.org/0000-0000-0000-0123</p>
+      </div>
+    </header>
+
+    <div class="body">
+      <div>
+        <section>
+          <h2>Research Areas</h2>
+          <div>
+            <p>Climate adaptation planning</p>
+            <p>Heat resilience</p>
+            <p>Infrastructure governance</p>
+            <p>Participatory mapping</p>
+          </div>
+        </section>
+        <section>
+          <h2>Education</h2>
+          <div>
+            <div class="entry">
+              <h3>Ph.D. Urban Planning</h3>
+              <p>Massachusetts Institute of Technology, 2021</p>
+            </div>
+            <div class="entry">
+              <h3>M.P.P.</h3>
+              <p>University of Michigan, 2015</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div>
+        <section>
+          <h2>Appointments</h2>
+          <div>
+            <div class="entry">
+              <div class="row"><h3>Assistant Professor</h3><span class="date">2023 - Present</span></div>
+              <p>Wentworth School of Public Policy</p>
+              <p class="note">Courses in urban analytics, adaptation policy, and infrastructure planning.</p>
+            </div>
+            <div class="entry">
+              <div class="row"><h3>Postdoctoral Fellow</h3><span class="date">2021 - 2023</span></div>
+              <p>Northeast Climate Research Collaborative</p>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Selected Publications</h2>
+          <div>
+            <p class="pub">Rivera, N., Hall, P., and Okafor, I. 2026. "Cooling Corridors and Public Trust in Heat Response Planning." <em>Journal of Urban Climate Policy</em>.</p>
+            <p class="pub">Rivera, N. and Bennett, S. 2024. "Mapping Informal Shade Networks in Dense Neighborhoods." <em>Cities and Environment</em>.</p>
+            <p class="pub">Chen, L., Rivera, N., and Salim, A. 2023. "Infrastructure Maintenance as Adaptation Practice." <em>Planning Review Quarterly</em>.</p>
+          </div>
+        </section>
+
+        <section>
+          <h2>Grants and Awards</h2>
+          <div>
+            <div class="row"><p>Early Career Climate Governance Grant</p><span class="date">2025</span></div>
+            <div class="row"><p>Best Paper, Urban Resilience Association</p><span class="date">2024</span></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Teaching and Service</h2>
+          <div>
+            <ul>
+              <li>Instructor, Data Methods for Urban Policy, 2024-2026.</li>
+              <li>Faculty mentor, Community Mapping Studio, 2025.</li>
+              <li>Reviewer for <em>Urban Affairs Review</em> and <em>Climate Risk Management</em>.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

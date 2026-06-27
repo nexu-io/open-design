@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Animated SVG Logo Draw</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f1e8;
+      --panel: rgba(255, 255, 255, 0.72);
+      --ink: #231d18;
+      --muted: #6f6357;
+      --accent: #d45b2c;
+      --line: rgba(35, 29, 24, 0.14);
+      --shadow: 0 32px 80px rgba(77, 54, 32, 0.14);
+      --radius: 28px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(212, 91, 44, 0.18), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(93, 117, 255, 0.12), transparent 26%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+      display: grid;
+      place-items: center;
+      padding: 32px;
+    }
+
+    .card {
+      width: min(920px, 100%);
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      min-height: 560px;
+    }
+
+    .stage {
+      position: relative;
+      padding: 40px;
+      border-right: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.5), rgba(255,255,255,0.1)),
+        linear-gradient(180deg, rgba(255,255,255,0.35), transparent 60%);
+      overflow: hidden;
+    }
+
+    .eyebrow,
+    .meta {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .eyebrow {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .logo-shell {
+      position: relative;
+      display: grid;
+      place-items: center;
+      height: calc(100% - 28px);
+    }
+
+    .halo {
+      position: absolute;
+      inset: 12% 18%;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, rgba(212, 91, 44, 0.22), transparent 58%),
+        radial-gradient(circle at 70% 35%, rgba(93, 117, 255, 0.18), transparent 26%);
+      filter: blur(30px);
+      opacity: 0.8;
+    }
+
+    .rings {
+      position: absolute;
+      inset: 12% 16%;
+      opacity: 0.42;
+    }
+
+    .rings circle {
+      fill: none;
+      stroke: rgba(35, 29, 24, 0.1);
+      stroke-width: 1;
+    }
+
+    .logo {
+      width: min(540px, 100%);
+      aspect-ratio: 1;
+    }
+
+    .mask-fill {
+      fill: var(--ink);
+    }
+
+    .trail {
+      fill: none;
+      stroke: var(--accent);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 28;
+      stroke-dasharray: 0 1600;
+      stroke-dashoffset: 0;
+      animation: draw-mask 8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+      filter: drop-shadow(0 0 18px rgba(212, 91, 44, 0.18));
+    }
+
+    .understroke {
+      fill: none;
+      stroke: rgba(35, 29, 24, 0.08);
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 36px;
+      background: rgba(255, 255, 255, 0.36);
+    }
+
+    h1 {
+      margin: 18px 0 14px;
+      font-family: "Iowan Old Style", "Palatino Linotype", serif;
+      font-size: clamp(2.2rem, 4vw, 3.8rem);
+      line-height: 0.94;
+      letter-spacing: -0.04em;
+      font-weight: 600;
+      max-width: 8ch;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+      max-width: 34ch;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 28px 0 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    li {
+      padding: 14px 0 0;
+      border-top: 1px solid var(--line);
+      font-size: 0.95rem;
+      line-height: 1.55;
+    }
+
+    li strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.84rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 24px;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 18px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 140ms ease-out;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0) scale(0.98); }
+
+    .hint {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+    }
+
+    .footer strong {
+      display: block;
+      margin-bottom: 6px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+    }
+
+    @keyframes draw-mask {
+      0% {
+        stroke-dasharray: 0 1600;
+        stroke-dashoffset: 0;
+        opacity: 0;
+      }
+      10% {
+        opacity: 1;
+      }
+      40% {
+        stroke-dasharray: 1600 0;
+        stroke-dashoffset: 0;
+      }
+      75% {
+        stroke-dasharray: 1600 0;
+        stroke-dashoffset: -40;
+        opacity: 1;
+      }
+      100% {
+        stroke-dasharray: 0 1600;
+        stroke-dashoffset: -1200;
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 820px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stage {
+        min-height: 420px;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .trail {
+        animation: none;
+        stroke-dasharray: 1600 0;
+        opacity: 1;
+      }
+
+      button { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="card">
+    <div class="grid">
+      <section class="stage">
+        <div class="eyebrow">
+          <span>Micro identity</span>
+          <span>SVG mask draw</span>
+        </div>
+        <div class="logo-shell">
+          <div class="halo" aria-hidden="true"></div>
+          <svg class="rings" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="28"></circle>
+            <circle cx="50" cy="50" r="37"></circle>
+            <circle cx="50" cy="50" r="45"></circle>
+          </svg>
+          <svg class="logo" viewBox="0 0 520 520" role="img" aria-label="Original Open Design monogram example">
+            <defs>
+              <mask id="ink-mask">
+                <rect width="520" height="520" fill="black"></rect>
+                <path
+                  class="trail"
+                  d="M113 283C113 184 176 116 261 116C347 116 409 184 409 282C409 379 350 447 264 447C179 447 113 382 113 283ZM211 169C176 193 156 232 156 283C156 335 176 374 211 396C245 418 283 418 313 400C344 381 364 345 364 283C364 220 344 184 312 166C281 148 244 149 211 169ZM203 259C211 222 236 198 276 198C313 198 342 223 350 261C356 287 352 318 338 347C323 375 299 391 266 391C234 391 213 377 204 352M258 198L258 391"
+                ></path>
+              </mask>
+            </defs>
+            <path
+              class="understroke"
+              d="M113 283C113 184 176 116 261 116C347 116 409 184 409 282C409 379 350 447 264 447C179 447 113 382 113 283ZM211 169C176 193 156 232 156 283C156 335 176 374 211 396C245 418 283 418 313 400C344 381 364 345 364 283C364 220 344 184 312 166C281 148 244 149 211 169ZM203 259C211 222 236 198 276 198C313 198 342 223 350 261C356 287 352 318 338 347C323 375 299 391 266 391C234 391 213 377 204 352M258 198L258 391"
+            ></path>
+            <path
+              class="mask-fill"
+              mask="url(#ink-mask)"
+              d="M113 283C113 184 176 116 261 116C347 116 409 184 409 282C409 379 350 447 264 447C179 447 113 382 113 283ZM211 169C176 193 156 232 156 283C156 335 176 374 211 396C245 418 283 418 313 400C344 381 364 345 364 283C364 220 344 184 312 166C281 148 244 149 211 169ZM203 259C211 222 236 198 276 198C313 198 342 223 350 261C356 287 352 318 338 347C323 375 299 391 266 391C234 391 213 377 204 352M258 198L258 391"
+            ></path>
+          </svg>
+        </div>
+      </section>
+      <section class="panel">
+        <div>
+          <div class="meta">Inspired by signature-stroke SVG logo studies</div>
+          <h1>Animate the mark, not the whole page.</h1>
+          <p>
+            This fixture isolates one durable motion pattern: a masked stroke that draws through an original
+            monogram, resolves crisply, and can replay without turning the surrounding UI into a tech demo.
+          </p>
+          <ul>
+            <li>
+              <strong>Mask, then draw</strong>
+              Keep the visible filled shape stable and animate a thicker stroke inside a mask when you want a drawn line with variable-width character.
+            </li>
+            <li>
+              <strong>Reduced-motion safe</strong>
+              The mark should still read as a complete logo when motion is disabled or never triggered.
+            </li>
+            <li>
+              <strong>One memorable beat</strong>
+              Use this for headers, splash states, or portfolio intros. Don't loop a signature mark across an entire site chrome.
+            </li>
+          </ul>
+          <div class="controls">
+            <button id="replay" type="button">Replay animation</button>
+            <span class="hint">Useful for logo reveals, hero marks, and loading-free identity moments.</span>
+          </div>
+        </div>
+        <div class="footer">
+          <div>
+            <strong>Reusable principle</strong>
+            <div>Small brand motion earns more trust when it teaches the mark rather than decorating it.</div>
+          </div>
+          <div class="meta">Original local fixture</div>
+        </div>
+      </section>
+    </div>
+  </article>
+
+  <script>
+    const replayButton = document.getElementById("replay");
+    const trail = document.querySelector(".trail");
+
+    replayButton.addEventListener("click", () => {
+      trail.style.animation = "none";
+      trail.getBoundingClientRect();
+      trail.style.animation = "";
+    });
+  </script>
+</body>
+</html>

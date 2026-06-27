@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Typographic Engineer Resume</title>
+  <style>
+    :root {
+      --ink: #111318;
+      --muted: #606672;
+      --paper: #fefefe;
+      --line: #d7dbe2;
+      --accent: #5b4bdb;
+      --tint: #f1efff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eceef3;
+      color: var(--ink);
+      font: 13px/1.46 Arial, Helvetica, sans-serif;
+    }
+    .page {
+      width: min(100%, 8.5in);
+      min-height: 11in;
+      margin: 28px auto;
+      background: var(--paper);
+      box-shadow: 0 18px 44px rgba(17, 19, 24, 0.16);
+      padding: 46px;
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1fr 2.1in;
+      gap: 34px;
+      align-items: end;
+      margin-bottom: 30px;
+    }
+    .kicker {
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 6px 0 0;
+      font-size: 48px;
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+    .contact {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      border-left: 4px solid var(--accent);
+      padding-left: 14px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 2.05in 1fr;
+      gap: 34px;
+    }
+    h2 {
+      margin: 0 0 11px;
+      font-size: 12px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    section + section { margin-top: 25px; }
+    .summary {
+      background: var(--tint);
+      padding: 16px;
+      border-radius: 6px;
+      margin: 0;
+      color: #2f3340;
+    }
+    .proof {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .proof div {
+      border-top: 2px solid var(--accent);
+      padding-top: 7px;
+    }
+    .proof strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .proof span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .tag-list {
+      display: grid;
+      gap: 7px;
+    }
+    .tag {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 7px;
+      color: #303642;
+    }
+    .job {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 18px;
+      padding-bottom: 19px;
+      border-bottom: 1px solid var(--line);
+    }
+    .job + .job { margin-top: 19px; }
+    h3 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.12;
+    }
+    .company {
+      color: var(--accent);
+      font-weight: 800;
+      margin-top: 3px;
+    }
+    .date {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    ul {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding-left: 18px;
+      color: #303642;
+    }
+    li + li { margin-top: 5px; }
+    .education {
+      border: 1px solid var(--line);
+      padding: 12px;
+      border-radius: 6px;
+    }
+    @media (max-width: 760px) {
+      .page { margin: 0; padding: 30px; box-shadow: none; }
+      header, .layout, .job { grid-template-columns: 1fr; }
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { background: #fff; }
+      .page { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <div>
+        <div class="kicker">Infrastructure Engineer</div>
+        <h1>Malik Rivera</h1>
+      </div>
+      <address class="contact">
+        <span>malik.rivera@example.com</span>
+        <span>Austin, TX</span>
+        <span>github.com/mrivera-builds</span>
+        <span>+1 512 555 0177</span>
+      </address>
+    </header>
+    <div class="layout">
+      <aside>
+        <section>
+          <h2>Summary</h2>
+          <p class="summary">Infrastructure engineer focused on reliable developer platforms, cost-aware cloud operations, and incident response systems that teams actually use.</p>
+        </section>
+        <section>
+          <h2>Selected Proof</h2>
+          <div class="proof">
+            <div><strong>42%</strong><span>CI time saved</span></div>
+            <div><strong>99.96%</strong><span>service uptime</span></div>
+            <div><strong>$310K</strong><span>annual cloud savings</span></div>
+            <div><strong>8</strong><span>teams onboarded</span></div>
+          </div>
+        </section>
+        <section>
+          <h2>Stack</h2>
+          <div class="tag-list">
+            <span class="tag">Kubernetes, Terraform, AWS</span>
+            <span class="tag">Go, TypeScript, Bash</span>
+            <span class="tag">Postgres, Redis, OpenTelemetry</span>
+            <span class="tag">GitHub Actions, Buildkite</span>
+          </div>
+        </section>
+      </aside>
+      <main>
+        <section>
+          <h2>Experience</h2>
+          <div class="job">
+            <div><h3>Senior Infrastructure Engineer</h3><div class="company">Brightstack Cloud</div></div>
+            <div class="date">2022 - Present</div>
+            <ul>
+              <li>Rebuilt CI caching and test splitting for 180 repositories, reducing median pipeline time from 22 minutes to 12.7 minutes.</li>
+              <li>Introduced service ownership dashboards that made deploy health, error budgets, and runbooks visible in one place.</li>
+              <li>Led cloud rightsizing project that removed idle workloads and saved $310K annually without reducing capacity.</li>
+            </ul>
+          </div>
+          <div class="job">
+            <div><h3>Platform Engineer</h3><div class="company">Copperline Systems</div></div>
+            <div class="date">2019 - 2022</div>
+            <ul>
+              <li>Built Terraform modules for repeatable service environments and cut new-service setup from days to under an hour.</li>
+              <li>Rotated through incident command and authored postmortem practices adopted by engineering leadership.</li>
+            </ul>
+          </div>
+          <div class="job">
+            <div><h3>Site Reliability Associate</h3><div class="company">Fieldnote Apps</div></div>
+            <div class="date">2017 - 2019</div>
+            <ul>
+              <li>Maintained observability checks and on-call tooling for collaboration products serving 900K monthly users.</li>
+            </ul>
+          </div>
+        </section>
+        <section>
+          <h2>Education</h2>
+          <div class="education"><strong>B.S. Computer Science</strong><br>Rio Grande Technical University, 2017</div>
+        </section>
+      </main>
+    </div>
+  </article>
+</body>
+</html>

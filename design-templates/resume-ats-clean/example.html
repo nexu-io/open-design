@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume ATS Clean</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e8ebef;
+      color: #15171a;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.42;
+    }
+    .page {
+      width: min(210mm, calc(100vw - 28px));
+      min-height: 297mm;
+      margin: 24px auto;
+      background: #fff;
+      padding: 17mm 18mm;
+      box-shadow: 0 18px 50px rgba(25, 32, 45, 0.16);
+    }
+    header { border-bottom: 2px solid #1b1d21; padding-bottom: 10px; }
+    h1 { margin: 0; font-size: 25pt; line-height: 1; letter-spacing: 0; }
+    .role { margin: 7px 0 8px; font-size: 12pt; font-weight: 700; }
+    .contact { display: flex; flex-wrap: wrap; gap: 5px 14px; color: #343942; }
+    section { margin-top: 15px; }
+    h2 {
+      margin: 0 0 7px;
+      border-bottom: 1px solid #9aa3ad;
+      padding-bottom: 3px;
+      font-size: 10pt;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    .summary { margin: 0; }
+    .item { margin-top: 10px; }
+    .row { display: flex; justify-content: space-between; gap: 18px; align-items: baseline; }
+    h3 { margin: 0; font-size: 11pt; }
+    .meta { white-space: nowrap; color: #4d5560; font-size: 9.5pt; }
+    .sub { margin-top: 2px; font-weight: 700; color: #30343a; }
+    ul { margin: 5px 0 0 18px; padding: 0; }
+    li { margin: 3px 0; }
+    .skills {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px 22px;
+      margin-top: 3px;
+    }
+    .skills p { margin: 0; }
+    strong { font-weight: 700; }
+    @media print {
+      body { background: #fff; }
+      .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="ATS clean resume preview">
+    <header>
+      <h1>Maya Chen</h1>
+      <p class="role">Operations Program Manager</p>
+      <div class="contact">
+        <span>Seattle, WA</span><span>maya.chen@example.com</span><span>(206) 555-0194</span><span>linkedin.com/in/mayachen</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>Professional Summary</h2>
+      <p class="summary">Operations leader with 8 years of experience improving fulfillment, support, and cross-functional launch workflows. Known for turning ambiguous programs into measurable operating rhythms, reducing handoff errors, and building reporting that helps teams make faster decisions.</p>
+    </section>
+
+    <section>
+      <h2>Experience</h2>
+      <article class="item">
+        <div class="row"><h3>Northstar Home Supply</h3><span class="meta">2022 - Present</span></div>
+        <div class="sub">Senior Operations Program Manager | Seattle, WA</div>
+        <ul>
+          <li>Led a 14-person launch readiness program for 32 regional suppliers, improving on-time partner onboarding from 76% to 94% in two quarters.</li>
+          <li>Built weekly operating reviews for fulfillment, support, and finance teams, reducing unresolved escalation aging by 38%.</li>
+          <li>Standardized exception handling across 5 warehouses and cut manual rework by 1,100 hours annually.</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row"><h3>ParcelWave Logistics</h3><span class="meta">2018 - 2022</span></div>
+        <div class="sub">Operations Analyst, Team Lead | Portland, OR</div>
+        <ul>
+          <li>Owned capacity planning dashboards used by 40+ managers during peak season and improved forecast accuracy by 18%.</li>
+          <li>Coordinated carrier scorecards, quarterly business reviews, and remediation plans for underperforming routes.</li>
+          <li>Promoted to team lead after redesigning intake triage and reducing duplicate tickets by 31%.</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row"><h3>Harbor Retail Group</h3><span class="meta">2016 - 2018</span></div>
+        <div class="sub">Supply Chain Coordinator | Tacoma, WA</div>
+        <ul>
+          <li>Maintained purchase order tracking for 120 vendors and resolved shipment discrepancies with merchandising and finance.</li>
+          <li>Created vendor compliance summaries that became the basis for monthly executive reporting.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>Selected Projects</h2>
+      <article class="item">
+        <div class="row"><h3>Returns Workflow Consolidation</h3><span class="meta">2024</span></div>
+        <ul>
+          <li>Mapped 19 return paths into 6 standardized workflows and partnered with engineering to launch a single intake queue.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>Skills</h2>
+      <div class="skills">
+        <p><strong>Operations:</strong> program governance, SOP design, launch readiness, vendor management</p>
+        <p><strong>Analytics:</strong> SQL basics, Tableau, Excel modeling, KPI design</p>
+        <p><strong>Methods:</strong> root cause analysis, process mapping, change management</p>
+        <p><strong>Tools:</strong> Jira, Asana, Salesforce, Looker, Google Workspace</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Education</h2>
+      <article class="item">
+        <div class="row"><h3>University of Washington</h3><span class="meta">2016</span></div>
+        <div class="sub">B.A. Business Administration</div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

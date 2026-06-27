@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magazine Web PPT Preview</title>
+<style>
+:root{--paper:#ebe5d5;--ink:#151515;--red:#cf4f39;--blue:#1f3f67;--line:rgba(21,21,21,.18)}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--paper);color:var(--ink);font-family:Inter,system-ui,sans-serif;overflow:hidden}
+.deck{height:100vh;display:grid;grid-template-columns:90px 1fr 34%;border:16px solid var(--paper)}
+.rail{border-right:1px solid var(--line);writing-mode:vertical-rl;padding:24px 18px;font:700 11px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:#777}
+.hero{padding:44px 46px;display:flex;flex-direction:column;justify-content:space-between}
+.issue{display:flex;gap:14px;align-items:center}.dot{width:12px;height:12px;border-radius:50%;background:var(--red)}
+h1{font:700 clamp(56px,9vw,118px)/.86 Georgia,serif;letter-spacing:-.06em;margin:0}.accent{color:var(--red);font-style:italic}
+.columns{display:grid;grid-template-columns:1fr 1fr;gap:22px;border-top:1px solid var(--line);padding-top:22px;font-size:15px;line-height:1.5;color:#4b463d}
+.visual{background:#111;color:#eee;padding:28px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.visual:before{content:"";position:absolute;inset:-20%;background:radial-gradient(circle at 30% 20%,rgba(207,79,57,.65),transparent 34%),radial-gradient(circle at 65% 65%,rgba(31,63,103,.72),transparent 38%);filter:blur(10px)}
+.visual>*{position:relative}.number{font:800 124px/.8 Georgia,serif;color:#fff}.caption{font:700 11px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<main class="deck">
+  <aside class="rail">Magazine web ppt / editorial deck</aside>
+  <section class="hero">
+    <div class="issue"><span class="dot"></span><span>Monocle editorial direction</span></div>
+    <h1>One person<br><span class="accent">company</span><br>as a magazine.</h1>
+    <div class="columns"><p>Horizontal swipe rhythm, chapter curtains, serif titles, measured whitespace.</p><p>Designed for talks that need taste, narrative, and one-file HTML portability.</p></div>
+  </section>
+  <section class="visual"><div class="caption">Chapter 01</div><div class="number">AI</div><div class="caption">fluid cover / e-ink contrast</div></section>
+</main>
+</body>
+</html>

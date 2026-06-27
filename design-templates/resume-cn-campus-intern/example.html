@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campus Intern Resume</title>
+  <style>
+    :root {
+      --paper: #ffffff;
+      --ink: #243140;
+      --muted: #6b7785;
+      --line: #dfe7ef;
+      --wash: #eef7ff;
+      --accent: #1683d8;
+      --gold: #b7791f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e7eef5;
+      color: var(--ink);
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+      line-height: 1.48;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      padding: 16mm 17mm;
+      background: var(--paper);
+      box-shadow: 0 20px 48px rgba(26, 42, 58, 0.18);
+    }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      padding-bottom: 14px;
+      border-bottom: 3px solid var(--accent);
+    }
+    h1 {
+      margin: 0;
+      font-size: 29px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .target {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .contact {
+      text-align: right;
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+    .contact div { margin: 2px 0; }
+    .snapshot {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 14px 0 16px;
+    }
+    .stat {
+      border: 1px solid var(--line);
+      background: var(--wash);
+      padding: 8px;
+      min-height: 48px;
+    }
+    .stat b {
+      display: block;
+      color: var(--accent);
+      font-size: 15px;
+      line-height: 1.15;
+    }
+    .stat span {
+      color: var(--muted);
+      font-size: 10.5px;
+    }
+    section { margin-top: 15px; }
+    h2 {
+      margin: 0 0 8px;
+      padding-left: 9px;
+      border-left: 4px solid var(--accent);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    .item {
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+    .item:first-of-type { border-top: 0; padding-top: 0; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: baseline;
+    }
+    h3 { margin: 0; font-size: 13px; }
+    .meta {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    p, li { font-size: 11.8px; }
+    p { margin: 5px 0 0; color: #3c4b5b; }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    .coursework {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .pill {
+      border: 1px solid #bdd8ef;
+      background: #f7fbff;
+      color: #245f91;
+      padding: 3px 7px;
+      font-size: 10.8px;
+    }
+    .honor {
+      color: var(--gold);
+      font-weight: 700;
+    }
+    .two {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 20px;
+    }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Campus intern Chinese resume preview">
+    <header>
+      <div>
+        <h1>林亦然</h1>
+        <div class="target">求职意向：产品运营实习生 / 暑期实习</div>
+      </div>
+      <address class="contact">
+        <div>杭州 · 可每周到岗 4 天</div>
+        <div>linyiran@example.com</div>
+        <div>139-0000-0000</div>
+        <div>作品集：example.com/yiran</div>
+      </address>
+    </header>
+
+    <div class="snapshot">
+      <div class="stat"><b>GPA 3.78</b><span>专业前 12%</span></div>
+      <div class="stat"><b>2 段</b><span>互联网项目经历</span></div>
+      <div class="stat"><b>36%</b><span>社群活动参与提升</span></div>
+      <div class="stat"><b>CET-6</b><span>英语可工作沟通</span></div>
+    </div>
+
+    <section>
+      <h2>教育背景</h2>
+      <article class="item">
+        <div class="row">
+          <h3>浙江大学 / 信息管理与信息系统 本科</h3>
+          <span class="meta">2022.09 - 2026.06</span>
+        </div>
+        <p>主修：用户研究、数据分析、管理信息系统、服务设计。校级一等奖学金 1 次，优秀学生干部 2 次。</p>
+        <div class="coursework">
+          <span class="pill">SQL</span>
+          <span class="pill">问卷设计</span>
+          <span class="pill">A/B 测试基础</span>
+          <span class="pill">Excel 建模</span>
+          <span class="pill">Figma 原型</span>
+        </div>
+      </article>
+    </section>
+
+    <section>
+      <h2>实习与项目</h2>
+      <article class="item">
+        <div class="row">
+          <h3>校园二手平台增长项目 / 项目负责人</h3>
+          <span class="meta">2025.03 - 2025.06</span>
+        </div>
+        <ul>
+          <li>访谈 18 名学生卖家，梳理发布、议价、交付 3 个核心断点，提出可信交易标签方案。</li>
+          <li>设计并执行 2 轮社群活动，新增发布商品 420 件，7 日留存较活动前提升 14 个百分点。</li>
+          <li>搭建周报看板，跟踪曝光、点击、咨询和成交漏斗，形成 6 条可复用运营动作。</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row">
+          <h3>青柠学习 App / 产品运营实习生</h3>
+          <span class="meta">2024.07 - 2024.10</span>
+        </div>
+        <ul>
+          <li>负责新用户打卡活动配置与社群答疑，累计服务 1,800+ 新用户，活动完成率 62%。</li>
+          <li>整理 120 条用户反馈并标注主题，推动课程页新增学习进度提示。</li>
+        </ul>
+      </article>
+    </section>
+
+    <div class="two">
+      <section>
+        <h2>校园经历</h2>
+        <article class="item">
+          <div class="row">
+            <h3>商学院学生会 / 活动部部长</h3>
+            <span class="meta">2023.09 - 2024.06</span>
+          </div>
+          <p>统筹 4 场职业分享会，单场最高报名 260 人；沉淀嘉宾邀约、物料、复盘模板。</p>
+        </article>
+      </section>
+
+      <section>
+        <h2>奖项与证书</h2>
+        <article class="item">
+          <p><span class="honor">校级一等奖学金</span> / 2024</p>
+          <p>全国大学生市场调查大赛省赛三等奖 / 2025</p>
+          <p>CET-6 548；普通话二级甲等</p>
+        </article>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

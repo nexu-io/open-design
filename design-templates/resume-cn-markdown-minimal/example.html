@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markdown Minimal Resume</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #ffffff;
+      --ink: #1f2933;
+      --muted: #65717f;
+      --rule: #d9dee5;
+      --soft: #f6f8fa;
+      --accent: #2d6cdf;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e9edf2;
+      color: var(--ink);
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+      line-height: 1.52;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      padding: 18mm 19mm;
+      background: var(--paper);
+      box-shadow: 0 18px 50px rgba(20, 32, 46, 0.18);
+    }
+    header {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .headline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      color: var(--muted);
+      font-size: 12.5px;
+    }
+    .role {
+      color: var(--accent);
+      font-weight: 700;
+    }
+    section {
+      margin-top: 17px;
+    }
+    h2 {
+      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    h2::before {
+      content: "##";
+      color: var(--accent);
+      font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .item {
+      padding: 9px 0 10px;
+      border-top: 1px solid var(--rule);
+    }
+    .item:first-of-type { border-top: 0; padding-top: 0; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: baseline;
+    }
+    h3 {
+      margin: 0;
+      font-size: 13.5px;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 11.5px;
+      white-space: nowrap;
+    }
+    p {
+      margin: 5px 0 0;
+      font-size: 12px;
+      color: #344151;
+    }
+    ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      font-size: 12px;
+    }
+    li { margin: 3px 0; }
+    .summary {
+      padding: 10px 12px;
+      border: 1px solid var(--rule);
+      background: var(--soft);
+      font-size: 12px;
+    }
+    .skills {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 22px;
+      font-size: 12px;
+    }
+    .skills div {
+      border-top: 1px solid var(--rule);
+      padding-top: 7px;
+    }
+    strong { color: var(--ink); }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: #fff; }
+      .page {
+        margin: 0;
+        width: 210mm;
+        min-height: 297mm;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Markdown minimal Chinese resume preview">
+    <header>
+      <h1>张礼</h1>
+      <div class="headline">
+        <span class="role">前端工程师 / Web Experience Engineer</span>
+        <span>上海</span>
+        <span>zhangli@example.com</span>
+        <span>138-0000-0000</span>
+        <span>github.com/example-zhangli</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>个人简介</h2>
+      <p class="summary">4 年 B 端产品前端经验，关注复杂表单、数据可视化和设计系统落地。擅长把需求拆成可验证的交互状态，曾主导低代码配置台重构，使核心任务完成时间下降 31%。</p>
+    </section>
+
+    <section>
+      <h2>工作经历</h2>
+      <article class="item">
+        <div class="row">
+          <h3>星河云 / 前端工程师</h3>
+          <span class="meta">2023.04 - 至今</span>
+        </div>
+        <ul>
+          <li>负责自动化运营平台前端架构，沉淀 26 个表单与表格复合组件，支撑 8 条业务线复用。</li>
+          <li>重构筛选器状态模型，减少 42% 无效请求，并把首屏交互延迟从 1.8s 降至 0.9s。</li>
+          <li>与设计团队共建组件验收清单，覆盖空态、错误态、加载态和键盘访问。</li>
+        </ul>
+      </article>
+      <article class="item">
+        <div class="row">
+          <h3>青石数据 / Web 开发工程师</h3>
+          <span class="meta">2021.07 - 2023.03</span>
+        </div>
+        <ul>
+          <li>开发企业报表搭建器，支持拖拽布局、图表配置、权限预览和导出。</li>
+          <li>通过虚拟滚动与分片渲染，将 5 万行日志表滚动帧率稳定在 55fps 以上。</li>
+        </ul>
+      </article>
+    </section>
+
+    <section>
+      <h2>项目</h2>
+      <article class="item">
+        <div class="row">
+          <h3>规则编排工作台</h3>
+          <span class="meta">React / TypeScript / Zustand</span>
+        </div>
+        <p>面向运营人员的规则配置工具，支持条件树、版本对比、灰度发布和回滚。上线后周均工单从 47 个降至 18 个。</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>教育</h2>
+      <article class="item">
+        <div class="row">
+          <h3>华东理工大学 / 软件工程 本科</h3>
+          <span class="meta">2017.09 - 2021.06</span>
+        </div>
+      </article>
+    </section>
+
+    <section>
+      <h2>技能</h2>
+      <div class="skills">
+        <div><strong>前端：</strong>React, TypeScript, Vite, CSS Modules</div>
+        <div><strong>工程：</strong>Vitest, Playwright, CI, 性能分析</div>
+        <div><strong>产品：</strong>复杂表单、权限模型、数据可视化</div>
+        <div><strong>协作：</strong>需求拆解、设计评审、技术文档</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

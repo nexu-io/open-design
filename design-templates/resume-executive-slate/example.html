@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Executive Slate</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #dfe4e8;
+      color: #172026;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 10.2pt;
+      line-height: 1.43;
+    }
+    .page {
+      width: min(210mm, calc(100vw - 28px));
+      min-height: 297mm;
+      margin: 24px auto;
+      display: grid;
+      grid-template-columns: 58mm 1fr;
+      background: #f8f7f2;
+      box-shadow: 0 20px 55px rgba(26, 36, 46, 0.2);
+    }
+    aside {
+      background: #27323a;
+      color: #f6f1e8;
+      padding: 16mm 10mm;
+    }
+    .main { padding: 16mm 15mm 15mm; }
+    h1 {
+      margin: 0;
+      font-size: 27pt;
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+    .title { margin: 10px 0 18px; color: #53616c; font-family: Arial, Helvetica, sans-serif; font-weight: 700; }
+    .contact, .rail-section { font-family: Arial, Helvetica, sans-serif; }
+    .contact p, .rail-section p { margin: 0 0 8px; }
+    .rail-section { margin-top: 20px; }
+    .rail-section h2 {
+      margin: 0 0 9px;
+      color: #c8b47b;
+      font-size: 8.8pt;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+    .metric { border-top: 1px solid rgba(246, 241, 232, 0.28); padding-top: 10px; margin-top: 11px; }
+    .metric strong { display: block; color: #fff; font-size: 16pt; font-family: Georgia, "Times New Roman", serif; }
+    .main h2 {
+      margin: 18px 0 8px;
+      color: #27323a;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9pt;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      border-bottom: 1px solid #bcc4c8;
+      padding-bottom: 5px;
+    }
+    .summary { margin: 0; font-size: 11.2pt; }
+    .role { margin-top: 13px; }
+    .row { display: flex; justify-content: space-between; gap: 18px; align-items: baseline; }
+    h3 { margin: 0; font-size: 12.5pt; }
+    .date { color: #66727b; white-space: nowrap; font-family: Arial, Helvetica, sans-serif; font-size: 9.2pt; }
+    .company { margin-top: 2px; color: #53616c; font-family: Arial, Helvetica, sans-serif; font-weight: 700; }
+    ul { margin: 7px 0 0 18px; padding: 0; }
+    li { margin: 4px 0; }
+    .select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .select-grid p { margin: 0; border-left: 3px solid #c8b47b; padding-left: 9px; }
+    @media print {
+      body { background: #fff; }
+      .page { width: auto; min-height: auto; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page" aria-label="Executive slate resume preview">
+    <aside>
+      <section class="contact">
+        <p><strong>Elena Brooks</strong></p>
+        <p>Chicago, IL</p>
+        <p>elena.brooks@example.com</p>
+        <p>(312) 555-0148</p>
+        <p>linkedin.com/in/elenabrooks</p>
+      </section>
+      <section class="rail-section">
+        <h2>Leadership Scope</h2>
+        <div class="metric"><strong>$180M</strong> annual revenue portfolio</div>
+        <div class="metric"><strong>420</strong> global team members</div>
+        <div class="metric"><strong>27%</strong> margin lift over 3 years</div>
+      </section>
+      <section class="rail-section">
+        <h2>Domains</h2>
+        <p>Go-to-market strategy</p>
+        <p>Commercial operations</p>
+        <p>Post-merger integration</p>
+        <p>Board communications</p>
+      </section>
+      <section class="rail-section">
+        <h2>Education</h2>
+        <p>MBA, Kellstadt Graduate School of Business</p>
+        <p>B.S. Industrial Engineering, Purdue University</p>
+      </section>
+    </aside>
+    <section class="main">
+      <h1>Elena Brooks</h1>
+      <p class="title">Chief Operating Officer | B2B SaaS and Services</p>
+      <p class="summary">Executive operator who scales revenue, service quality, and delivery discipline across high-growth software and managed services businesses. Trusted by boards and founders to convert complex transformation mandates into accountable operating systems.</p>
+
+      <h2>Executive Experience</h2>
+      <article class="role">
+        <div class="row"><h3>Chief Operating Officer</h3><span class="date">2021 - Present</span></div>
+        <p class="company">Asterline Systems, Chicago, IL</p>
+        <ul>
+          <li>Rebuilt the operating cadence for a $180M recurring revenue business, aligning product, revenue, delivery, and customer success around a single quarterly planning model.</li>
+          <li>Improved gross margin from 42% to 53% by renegotiating partner delivery terms and consolidating 11 regional support models into 3 shared service pods.</li>
+          <li>Presented monthly performance narratives to the board, tying customer health, capacity, and revenue forecast risk to executive decisions.</li>
+        </ul>
+      </article>
+      <article class="role">
+        <div class="row"><h3>SVP, Commercial Operations</h3><span class="date">2017 - 2021</span></div>
+        <p class="company">Meridian Cloud Services, Austin, TX</p>
+        <ul>
+          <li>Led post-merger integration for 3 acquisitions and delivered $24M in run-rate savings while retaining 91% of strategic accounts.</li>
+          <li>Created the enterprise deal desk and reduced contract cycle time from 29 days to 12 days without increasing approval risk.</li>
+          <li>Sponsored leadership development for 65 directors and senior managers across sales operations, delivery, and support.</li>
+        </ul>
+      </article>
+
+      <h2>Selected Transformation Work</h2>
+      <div class="select-grid">
+        <p><strong>Customer Health Model:</strong> launched renewal risk scoring adopted by every account team and increased save-rate visibility 6 weeks earlier.</p>
+        <p><strong>Service Line Reset:</strong> sunset 14 low-margin offerings and redirected resources toward 4 growth categories.</p>
+      </div>
+
+      <h2>Board-Level Strengths</h2>
+      <ul>
+        <li>Converts noisy operating data into decision-ready executive narratives.</li>
+        <li>Balances growth ambition with delivery realism, margin discipline, and talent capacity.</li>
+        <li>Builds operating systems leaders can sustain after the transformation period ends.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

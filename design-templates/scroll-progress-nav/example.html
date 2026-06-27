@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scroll Progress Nav</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f2efe8;
+      --panel: rgba(255, 255, 255, 0.78);
+      --ink: #1e1a16;
+      --muted: #65584a;
+      --line: rgba(30, 26, 22, 0.12);
+      --accent: #0d8b74;
+      --accent-soft: rgba(13, 139, 116, 0.14);
+      --shadow: 0 28px 70px rgba(61, 49, 35, 0.12);
+      --nav-top: 0%;
+      --nav-height: 12%;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(13, 139, 116, 0.14), transparent 28%),
+        radial-gradient(circle at 85% 10%, rgba(203, 135, 70, 0.12), transparent 22%),
+        linear-gradient(180deg, #f8f6f1 0%, var(--bg) 100%);
+      color: var(--ink);
+    }
+
+    .shell {
+      width: min(1200px, calc(100% - 48px));
+      margin: 32px auto;
+      border: 1px solid rgba(255,255,255,0.72);
+      border-radius: 30px;
+      overflow: hidden;
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 260px 1fr;
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      min-height: 760px;
+      padding: 34px 24px 28px;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.34));
+    }
+
+    .label,
+    .meta {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .summary {
+      margin: 18px 0 32px;
+      font-family: "Iowan Old Style", "Palatino Linotype", serif;
+      font-size: 1.7rem;
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      max-width: 9ch;
+    }
+
+    .nav {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      padding-left: 22px;
+      margin-top: 28px;
+    }
+
+    .nav::before,
+    .nav::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 4px;
+      bottom: 4px;
+      width: 3px;
+      border-radius: 999px;
+    }
+
+    .nav::before {
+      background: rgba(30, 26, 22, 0.08);
+    }
+
+    .nav::after {
+      top: var(--nav-top);
+      height: var(--nav-height);
+      bottom: auto;
+      background: linear-gradient(180deg, var(--accent), #57b49f);
+      box-shadow: 0 0 0 8px var(--accent-soft);
+      transition:
+        top 220ms cubic-bezier(0.23, 1, 0.32, 1),
+        height 220ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .nav a {
+      display: grid;
+      gap: 4px;
+      text-decoration: none;
+      color: inherit;
+      padding: 4px 0;
+    }
+
+    .nav a.active .name {
+      color: var(--ink);
+      transform: translateX(4px);
+    }
+
+    .nav a.active .desc {
+      color: var(--muted);
+    }
+
+    .index {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .name {
+      font-size: 0.98rem;
+      line-height: 1.2;
+      color: rgba(30, 26, 22, 0.72);
+      transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms ease-out;
+    }
+
+    .desc {
+      font-size: 0.83rem;
+      line-height: 1.45;
+      color: rgba(101, 88, 74, 0.84);
+      transition: color 140ms ease-out;
+    }
+
+    .notes {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    main {
+      padding: 44px 44px 24px;
+    }
+
+    .hero {
+      min-height: 58vh;
+      display: grid;
+      align-content: end;
+      padding-bottom: 36px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero h1 {
+      margin: 14px 0 16px;
+      font-family: "Iowan Old Style", "Palatino Linotype", serif;
+      font-size: clamp(3rem, 8vw, 6.6rem);
+      line-height: 0.9;
+      letter-spacing: -0.06em;
+      max-width: 9ch;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 44ch;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.75;
+    }
+
+    section {
+      scroll-margin-top: 28px;
+      min-height: 82vh;
+      padding: 44px 0;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      align-content: start;
+      gap: 20px;
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+      min-height: 70vh;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(1.8rem, 3vw, 3rem);
+      line-height: 1;
+      letter-spacing: -0.05em;
+    }
+
+    .lede {
+      max-width: 56ch;
+      color: var(--muted);
+      line-height: 1.8;
+      font-size: 1rem;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.54);
+      border: 1px solid rgba(30, 26, 22, 0.08);
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.82rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .quote {
+      padding: 24px;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 18px 18px 0;
+      background: rgba(13, 139, 116, 0.07);
+      max-width: 54ch;
+      line-height: 1.75;
+      color: var(--muted);
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: relative;
+        height: auto;
+        min-height: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+
+      main {
+        padding: 28px 24px 18px;
+      }
+
+      .hero {
+        min-height: 0;
+        padding-bottom: 24px;
+      }
+
+      section {
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .shell {
+        width: min(100%, calc(100% - 20px));
+        margin: 10px auto;
+        border-radius: 22px;
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="label">Scroll-linked navigation</div>
+      <div class="summary">Progress belongs beside the sections it describes.</div>
+      <nav class="nav" aria-label="Section progress">
+        <a href="#intro" data-target="intro">
+          <span class="index">01</span>
+          <span class="name">Intent</span>
+          <span class="desc">Why attach progress to the nav instead of a separate bar.</span>
+        </a>
+        <a href="#structure" data-target="structure">
+          <span class="index">02</span>
+          <span class="name">Structure</span>
+          <span class="desc">A fixed rail and short labels preserve orientation at a glance.</span>
+        </a>
+        <a href="#motion" data-target="motion">
+          <span class="index">03</span>
+          <span class="name">Motion</span>
+          <span class="desc">The marker expands across the active span instead of jumping point to point.</span>
+        </a>
+        <a href="#edge-cases" data-target="edge-cases">
+          <span class="index">04</span>
+          <span class="name">Edge cases</span>
+          <span class="desc">Multiple visible sections and short blocks still read clearly.</span>
+        </a>
+        <a href="#reuse" data-target="reuse">
+          <span class="index">05</span>
+          <span class="name">Reuse</span>
+          <span class="desc">Where this pattern helps and where it becomes unnecessary chrome.</span>
+        </a>
+      </nav>
+      <div class="notes">
+        <div class="meta">Preview notes</div>
+        <div>Scroll the page to watch the rail span follow the visible sections.</div>
+        <div>The active marker is driven by IntersectionObserver, not hard-coded scroll math.</div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <div class="label">Reusable micro-widget</div>
+        <h1>Make the navigation itself carry reading progress.</h1>
+        <p>
+          This fixture captures a compact long-form pattern inspired by section-aware progress demos:
+          instead of a detached top bar, the reader sees a sticky local rail that grows across the
+          sections currently in view.
+        </p>
+      </header>
+
+      <section id="intro" data-section>
+        <div class="label">Intent</div>
+        <h2>Local progress feels more grounded than a global meter.</h2>
+        <div class="lede">
+          When the page already has a named section list, progress becomes easier to interpret if it
+          travels through that same list. Readers do not have to map "62%" back to meaning. They can
+          see which named chunks are live right now.
+        </div>
+        <div class="cards">
+          <article class="card">
+            <strong>Best fit</strong>
+            Editorial docs, product case studies, research reports, and launch explainers.
+          </article>
+          <article class="card">
+            <strong>Not a fit</strong>
+            Short landing pages or feeds where a sticky left rail would be heavier than the content.
+          </article>
+        </div>
+      </section>
+
+      <section id="structure" data-section>
+        <div class="label">Structure</div>
+        <h2>Short labels, one rail, and generous spacing do most of the work.</h2>
+        <div class="lede">
+          The pattern works because the labels stay brief. The left side is not a second article; it is a
+          persistent orientation aid. The active marker earns attention through contrast and movement, not
+          through loud color everywhere.
+        </div>
+        <div class="quote">
+          If a reader can understand "where am I?" and "what is next?" without parsing a separate widget,
+          the progress treatment is doing its job.
+        </div>
+      </section>
+
+      <section id="motion" data-section>
+        <div class="label">Motion</div>
+        <h2>Expanding the marker across the visible span reads better than a single dot.</h2>
+        <div class="lede">
+          Long sections often overlap in the viewport. A dot that snaps between anchors can feel jittery,
+          especially on tall screens. A span communicates that the reader is between states and preserves
+          a calmer rhythm while scrolling.
+        </div>
+        <div class="cards">
+          <article class="card">
+            <strong>Entry easing</strong>
+            Use a decisive ease-out on the span movement so the marker settles quickly after each scroll gesture.
+          </article>
+          <article class="card">
+            <strong>Visible range</strong>
+            The active fill can stretch from the first visible section to the last visible section, which makes overlapping content feel intentional.
+          </article>
+        </div>
+      </section>
+
+      <section id="edge-cases" data-section>
+        <div class="label">Edge cases</div>
+        <h2>Overlapping sections, mobile collapse, and very short content need explicit handling.</h2>
+        <div class="lede">
+          The rail should still make sense when two sections are partially visible, when a section is too short
+          to dominate the viewport, or when the layout collapses to one column on mobile. On small screens,
+          the same section list can become a regular in-flow summary instead of a sticky sidebar.
+        </div>
+      </section>
+
+      <section id="reuse" data-section>
+        <div class="label">Reuse</div>
+        <h2>Use it as an orientation device, not as spectacle.</h2>
+        <div class="lede">
+          This pattern is strongest when the content itself is dense enough to warrant help. It does not need
+          oversized animation, glow effects, or a second progress bar elsewhere on the page.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const links = [...document.querySelectorAll(".nav a")];
+    const sections = [...document.querySelectorAll("[data-section]")];
+    const nav = document.querySelector(".nav");
+    const activeIds = new Set();
+
+    function syncNav() {
+      const visible = sections.filter((section) => activeIds.has(section.id));
+      const fallback = sections.find((section) => {
+        const rect = section.getBoundingClientRect();
+        return rect.top <= window.innerHeight * 0.35 && rect.bottom >= window.innerHeight * 0.35;
+      });
+      const activeSections = visible.length ? visible : (fallback ? [fallback] : [sections[0]]);
+
+      links.forEach((link) => {
+        const isActive = activeSections.some((section) => section.id === link.dataset.target);
+        link.classList.toggle("active", isActive);
+      });
+
+      const firstLink = links.find((link) => link.dataset.target === activeSections[0].id);
+      const lastLink = links.find((link) => link.dataset.target === activeSections[activeSections.length - 1].id);
+      if (!firstLink || !lastLink) return;
+
+      const navRect = nav.getBoundingClientRect();
+      const firstRect = firstLink.getBoundingClientRect();
+      const lastRect = lastLink.getBoundingClientRect();
+      const top = firstRect.top - navRect.top + 4;
+      const bottom = lastRect.bottom - navRect.top - 4;
+
+      nav.style.setProperty("--nav-top", `${top}px`);
+      nav.style.setProperty("--nav-height", `${Math.max(18, bottom - top)}px`);
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) activeIds.add(entry.target.id);
+        else activeIds.delete(entry.target.id);
+      });
+      syncNav();
+    }, {
+      threshold: [0.18, 0.35, 0.6]
+    });
+
+    sections.forEach((section) => observer.observe(section));
+    window.addEventListener("resize", syncNav);
+    window.addEventListener("load", syncNav);
+  </script>
+</body>
+</html>

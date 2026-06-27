@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Sidebar Resume</title>
+  <style>
+    :root {
+      --paper: #ffffff;
+      --ink: #222831;
+      --muted: #667085;
+      --line: #e3e7ed;
+      --sidebar: #263238;
+      --sidebar-soft: #34444c;
+      --side-ink: #f5f7f8;
+      --accent: #d7a84f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #e6eaee;
+      color: var(--ink);
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+      line-height: 1.48;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      display: grid;
+      grid-template-columns: 58mm 1fr;
+      background: var(--paper);
+      box-shadow: 0 20px 48px rgba(20, 28, 35, 0.2);
+      overflow: hidden;
+    }
+    aside {
+      background: var(--sidebar);
+      color: var(--side-ink);
+      padding: 16mm 9mm;
+    }
+    .portrait {
+      width: 34mm;
+      height: 42mm;
+      margin: 0 auto 14px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(255, 255, 255, 0.72);
+      background:
+        radial-gradient(circle at 50% 30%, #f1d5b8 0 20%, transparent 21%),
+        radial-gradient(circle at 50% 64%, #f1d5b8 0 28%, transparent 29%),
+        linear-gradient(145deg, #50636c, #2f3f46);
+      color: transparent;
+    }
+    aside h1 {
+      margin: 0;
+      text-align: center;
+      font-size: 25px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .side-title {
+      margin: 7px 0 16px;
+      color: #d8e1e5;
+      text-align: center;
+      font-size: 12px;
+    }
+    aside section {
+      margin-top: 17px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    aside h2 {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 12.5px;
+      letter-spacing: 0;
+    }
+    .side-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 11.2px;
+    }
+    .side-list li { margin: 6px 0; color: #eef3f5; }
+    .tag {
+      display: inline-block;
+      margin: 0 4px 6px 0;
+      padding: 3px 7px;
+      background: var(--sidebar-soft);
+      color: #eef3f5;
+      font-size: 10.5px;
+    }
+    main {
+      padding: 16mm 17mm 16mm 14mm;
+    }
+    .intro {
+      margin: 0 0 15px;
+      padding-bottom: 13px;
+      border-bottom: 2px solid var(--ink);
+      font-size: 12.2px;
+      color: #39424e;
+    }
+    main section { margin-top: 15px; }
+    main h2 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    .item {
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+    .item:first-of-type { border-top: 0; padding-top: 0; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: baseline;
+    }
+    h3 { margin: 0; font-size: 13.2px; }
+    .meta {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    p, li { font-size: 11.8px; }
+    p { margin: 5px 0 0; color: #3b4652; }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    .bar {
+      height: 5px;
+      margin: 5px 0 9px;
+      background: rgba(255, 255, 255, 0.18);
+    }
+    .bar span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+    }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page" aria-label="Photo sidebar Chinese resume preview">
+    <aside>
+      <div class="portrait" aria-label="neutral portrait placeholder">portrait</div>
+      <h1>陈思佳</h1>
+      <div class="side-title">品牌市场 / 内容策划</div>
+
+      <section>
+        <h2>联系信息</h2>
+        <ul class="side-list">
+          <li>广州 · 可到岗</li>
+          <li>chensijia@example.com</li>
+          <li>137-0000-0000</li>
+          <li>作品集：example.com/sijia</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>能力标签</h2>
+        <span class="tag">品牌传播</span>
+        <span class="tag">内容日历</span>
+        <span class="tag">小红书</span>
+        <span class="tag">活动策划</span>
+        <span class="tag">数据复盘</span>
+      </section>
+
+      <section>
+        <h2>语言与工具</h2>
+        <ul class="side-list">
+          <li>英语 CET-6 / 商务邮件</li>
+          <li>Figma、剪映、飞书、Excel</li>
+        </ul>
+        <div class="bar"><span style="width: 88%"></span></div>
+        <div class="bar"><span style="width: 76%"></span></div>
+      </section>
+    </aside>
+
+    <main>
+      <p class="intro">5 年消费品牌内容与活动经验，擅长把产品卖点转化为可传播选题，并通过渠道数据迭代内容节奏。曾负责新品上市整合传播，带来 1,200 万曝光与 18% 电商转化提升。</p>
+
+      <section>
+        <h2>工作经历</h2>
+        <article class="item">
+          <div class="row">
+            <h3>麦芽生活 / 品牌市场主管</h3>
+            <span class="meta">2022.05 - 至今</span>
+          </div>
+          <ul>
+            <li>负责香氛产品线年度内容规划，建立种草、测评、直播切片三类内容模板。</li>
+            <li>统筹 2 次新品上市活动，联动 60+ 达人，首月 GMV 较上一代产品提升 28%。</li>
+            <li>搭建渠道复盘表，按点击率、收藏率、转化率优化选题，低效内容占比下降 35%。</li>
+          </ul>
+        </article>
+        <article class="item">
+          <div class="row">
+            <h3>南枝传媒 / 内容策划</h3>
+            <span class="meta">2019.07 - 2022.04</span>
+          </div>
+          <ul>
+            <li>服务家居、美妆、食品 8 个品牌账号，月均产出 45 篇图文与短视频脚本。</li>
+            <li>沉淀竞品选题库和投放素材库，帮助团队缩短 30% 提案准备时间。</li>
+          </ul>
+        </article>
+      </section>
+
+      <section>
+        <h2>代表项目</h2>
+        <article class="item">
+          <div class="row">
+            <h3>「城市闻香计划」新品上市传播</h3>
+            <span class="meta">2024.03 - 2024.06</span>
+          </div>
+          <p>以城市情绪和通勤场景为创意主线，规划预热、首发、长尾内容。项目累计曝光 1,200 万，品牌搜索指数提升 46%。</p>
+        </article>
+      </section>
+
+      <section>
+        <h2>教育背景</h2>
+        <article class="item">
+          <div class="row">
+            <h3>暨南大学 / 广告学 本科</h3>
+            <span class="meta">2015.09 - 2019.06</span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

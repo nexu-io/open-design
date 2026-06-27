@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume JSON Flat</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e7edf3; color: #17212b; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.44; }
+    .page { width: min(210mm, calc(100vw - 28px)); min-height: 297mm; margin: 24px auto; background: #fbfcfd; padding: 15mm; box-shadow: 0 20px 55px rgba(22,35,48,.16); }
+    header { background: #17212b; color: #fff; padding: 18px; border-radius: 4px; }
+    h1 { margin: 0; font-size: 24pt; }
+    .meta { color: #c8d6e4; margin-top: 5px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    section { background: #fff; border: 1px solid #dbe4ec; border-radius: 4px; padding: 12px; }
+    .wide { grid-column: 1 / -1; }
+    h2 { margin: 0 0 8px; font-size: 9pt; letter-spacing: .12em; text-transform: uppercase; color: #0b6e8f; }
+    h3 { margin: 0; font-size: 10.8pt; }
+    .date { color: #637182; font-size: 9pt; margin: 2px 0 5px; }
+    ul { margin: 5px 0 0 16px; padding: 0; }
+    li { margin: 3px 0; }
+    .kv { display: grid; grid-template-columns: 72px 1fr; gap: 5px; margin: 3px 0; }
+    .key { color: #667486; }
+    .pill { display: inline-block; background: #eaf4f8; color: #0b6e8f; padding: 3px 7px; border-radius: 999px; margin: 0 4px 5px 0; font-size: 9pt; }
+    @media print { body { background: #fff; } .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; } header, section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header><h1>Owen Hart</h1><div class="meta">Product Data Analyst · Remote US · owen.hart@example.com · linkedin.com/in/owenhart</div></header>
+    <div class="grid">
+      <section class="wide"><h2>Basics.summary</h2><p>Analyst who turns product telemetry into launch decisions, retention experiments, and executive-ready narratives. Comfortable owning the path from event design to dashboard adoption.</p></section>
+      <section class="wide"><h2>Work</h2><h3>Ledgerly · Senior Product Analyst</h3><div class="date">2022 - Present</div><ul><li>Defined activation and habit metrics for a fintech onboarding redesign that lifted week-four retention by 11%.</li><li>Built a self-serve funnel library used by product managers in 5 squads.</li></ul><h3>Northwind Cloud · Data Analyst</h3><div class="date">2019 - 2022</div><ul><li>Automated weekly health reports and saved 9 analyst hours per week.</li></ul></section>
+      <section><h2>Skills</h2><span class="pill">SQL</span><span class="pill">dbt</span><span class="pill">Looker</span><span class="pill">Amplitude</span><span class="pill">Python</span><span class="pill">Experimentation</span></section>
+      <section><h2>Education</h2><div class="kv"><span class="key">School</span><span>University of Michigan</span></div><div class="kv"><span class="key">Degree</span><span>BA Economics</span></div><div class="kv"><span class="key">Year</span><span>2019</span></div></section>
+      <section class="wide"><h2>Projects</h2><h3>Metric Dictionary</h3><p>Created a versioned metric glossary and review process that reduced dashboard disagreements during planning.</p></section>
+    </div>
+  </main>
+</body>
+</html>

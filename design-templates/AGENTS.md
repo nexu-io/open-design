@@ -11,6 +11,26 @@ asset packagers, fidelity audits — it belongs under `../skills/`
 instead. See `specs/current/skills-and-design-templates.md` for the
 full split.
 
+## Expanded case libraries
+
+Some design-template entries are structured case libraries rather than a single
+rendering template. Keep their source JSON as the durable data model and make
+`example.html` an original lightweight preview.
+
+- `personal-blog-projects/` captures personal blogs and digital gardens as
+  sites, pages, and blocks.
+- `commercial-product-launches/` captures business-grade product websites and
+  launch campaigns as brands, pages, reusable modules, media asset needs,
+  motion patterns, commerce paths, and responsive art-direction notes. Do not
+  scatter these references into generic landing-page templates unless the
+  source is only useful as one standalone page shape.
+- `product-ui-projects/` captures SaaS consoles, dashboards, admin tools, CRM
+  systems, AI workspaces, and other complex software products as project-level
+  surface suites. Use it when the useful design value spans multiple product
+  pages, flows, states, or components. If fewer than three concrete surfaces
+  were inspected, keep the entry as `captureDepth: single-page-lead` and add it
+  to the backfill queue instead of presenting it as a complete suite.
+
 ## Daemon plumbing
 
 - Listed under `/api/design-templates`. The shape mirrors `/api/skills`
@@ -32,6 +52,19 @@ full split.
    gallery has something to preview.
 3. Optionally drop additional baked samples under `examples/<key>.html`
    to surface them as derived `<parent>:<key>` cards.
+
+For the local `overview.html` catalogue, every visual template should be
+previewable inside a card with a local iframe. Prefer `example.html` for the
+primary preview; when a template is a suite, `examples/*.html` may be used as
+the embedded preview fallback. Do not use an external website URL as the
+embedded template preview.
+
+If you also refresh the root `overview.html` catalogue after adding a
+template, generate card data with `JSON.stringify` or an equivalent
+structured serializer. Do not hand-concatenate JavaScript strings from
+descriptions or font names; copied newlines can break the whole static
+catalogue. Validate that Templates has zero missing local preview paths, then
+use the `overview.html` steps in `../docs/overview.md`.
 
 ## Deck preview navigation contract
 

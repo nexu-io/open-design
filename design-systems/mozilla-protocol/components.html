@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mozilla Protocol reference components</title>
+    <meta
+      name="description"
+      content="Open Design fixture distilling Mozilla Protocol website language without copying official assets or source."
+    />
+    <style>
+:root {
+  --bg: #ffffff;
+  --surface: #f9f9fb;
+  --surface-warm: #ededf0;
+
+  --fg: #000000;
+  --fg-2: #20123a;
+  --muted: #5e5e72;
+  --meta: #6f7787;
+
+  --border: #d7d7db;
+  --border-soft: #ededf0;
+
+  --accent: #0060df;
+  --accent-on: #ffffff;
+  --accent-hover: #0250bb;
+  --accent-active: #054096;
+
+  --success: #008787;
+  --warn: #ffbd4f;
+  --danger: #d70022;
+
+  --font-display: "Mozilla Headline", "Metropolis", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Mozilla Text", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+
+  --leading-body: 1.5;
+  --leading-tight: 1.08;
+  --tracking-display: -0.01em;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 80px;
+  --section-y-tablet: 56px;
+  --section-y-phone: 40px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 8px 24px color-mix(in oklab, var(--fg), transparent 90%);
+
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 68%);
+
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --container-max: 1200px;
+  --container-gutter-desktop: 48px;
+  --container-gutter-tablet: 32px;
+  --container-gutter-phone: 20px;
+}
+    </style>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      a { color: var(--accent); text-underline-offset: 0.16em; }
+      a:hover { color: var(--accent-hover); }
+      a:focus-visible, button:focus-visible, input:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .site-header {
+        border-bottom: 1px solid var(--border-soft);
+        background: var(--bg);
+      }
+      .bar, main {
+        width: min(100%, var(--container-max));
+        margin: 0 auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      .bar {
+        min-height: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-6);
+      }
+      .brand {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: 700;
+      }
+      .nav {
+        display: flex;
+        gap: var(--space-5);
+        font-size: var(--text-sm);
+      }
+      main { padding-block: var(--section-y-desktop); }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+        gap: var(--space-12);
+        align-items: center;
+      }
+      .eyebrow {
+        margin: 0 0 var(--space-3);
+        color: var(--accent);
+        font-size: var(--text-sm);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-4xl); max-width: 740px; }
+      h2 { font-size: var(--text-2xl); margin-bottom: var(--space-5); }
+      h3 { font-size: var(--text-xl); margin-bottom: var(--space-3); }
+      .lead {
+        max-width: 620px;
+        margin-top: var(--space-6);
+        color: var(--fg-2);
+        font-size: var(--text-lg);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        margin-top: var(--space-8);
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: var(--space-3) var(--space-5);
+        border: 2px solid var(--accent);
+        border-radius: var(--radius-md);
+        background: var(--accent);
+        color: var(--accent-on);
+        font-weight: 700;
+        text-decoration: none;
+        transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+      }
+      .button:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-on); }
+      .button.secondary {
+        background: var(--bg);
+        color: var(--accent);
+      }
+      .button.secondary:hover {
+        background: var(--surface);
+        color: var(--accent-hover);
+      }
+      .callout {
+        padding: var(--space-8);
+        border-radius: var(--radius-lg);
+        background: var(--fg-2);
+        color: var(--accent-on);
+      }
+      .callout p { color: color-mix(in oklab, var(--accent-on), transparent 18%); }
+      .callout .button { margin-top: var(--space-6); background: var(--accent-on); border-color: var(--accent-on); color: var(--fg); }
+      .section {
+        margin-top: var(--section-y-desktop);
+        padding: var(--space-8);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-5);
+      }
+      .card {
+        min-height: 220px;
+        padding: var(--space-6);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--bg);
+        box-shadow: var(--elev-ring);
+      }
+      .card p { color: var(--muted); }
+      .form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-3);
+        margin-top: var(--space-5);
+      }
+      label { display: block; margin-bottom: var(--space-2); font-weight: 700; }
+      input {
+        min-height: 44px;
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0 var(--space-3);
+        font: inherit;
+      }
+      .notice {
+        margin-top: var(--space-5);
+        padding: var(--space-4);
+        border-left: 4px solid var(--success);
+        background: var(--bg);
+        color: var(--fg-2);
+      }
+      @media (max-width: 860px) {
+        .bar, main { padding-inline: var(--container-gutter-phone); }
+        main { padding-block: var(--section-y-phone); }
+        .hero, .grid, .form { grid-template-columns: 1fr; }
+        .nav { display: none; }
+        h1 { font-size: 44px; }
+        .section { margin-top: var(--section-y-phone); padding: var(--space-5); }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="bar">
+        <div class="brand">Protocol</div>
+        <nav class="nav" aria-label="Reference sections">
+          <a href="#components">Components</a>
+          <a href="#newsletter">Newsletter</a>
+          <a href="#guidance">Guidance</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Website system</p>
+          <h1 id="page-title">Build clear product pages for a global audience.</h1>
+          <p class="lead">Use direct headings, flexible modules, accessible interactions, and a restrained color system that keeps the message first.</p>
+          <div class="actions">
+            <a class="button" href="#components">Explore components</a>
+            <a class="button secondary" href="#guidance">Read guidance</a>
+          </div>
+        </div>
+        <aside class="callout">
+          <h2>Meaning before decoration</h2>
+          <p>Every card, callout, form, and navigation item should make the content easier to understand or easier to act on.</p>
+          <a class="button" href="#newsletter">Get updates</a>
+        </aside>
+      </section>
+
+      <section class="section" id="components" aria-labelledby="component-title">
+        <h2 id="component-title">Reusable website modules</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Feature card</h3>
+            <p>Use a short title, helpful body copy, and one link. Keep borders quiet and hierarchy clear.</p>
+          </article>
+          <article class="card">
+            <h3>Callout</h3>
+            <p>Reserve dark or tinted sections for information that truly changes the visitor's next step.</p>
+          </article>
+          <article class="card">
+            <h3>Form block</h3>
+            <p>Labels, helper text, error copy, and focus states must stay visible in every layout.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="newsletter" aria-labelledby="newsletter-title">
+        <h2 id="newsletter-title">Product newsletter</h2>
+        <p>Send concise updates about releases, privacy features, and ways to get involved.</p>
+        <form class="form">
+          <div>
+            <label for="email">Email address</label>
+            <input id="email" type="email" placeholder="name@example.com" />
+          </div>
+          <button class="button" type="button">Subscribe</button>
+        </form>
+        <p class="notice" id="guidance">Use plain language and state what happens after the visitor submits the form.</p>
+      </section>
+    </main>
+  </body>
+</html>

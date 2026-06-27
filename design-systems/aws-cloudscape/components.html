@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AWS Cloudscape - reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/aws-cloudscape: cloud operations UI with dense resource tables, white containers, and blue action focus."
+    />
+    <style>
+      :root {
+        --bg: #f2f3f3;
+        --surface: #ffffff;
+        --surface-warm: #f9fafa;
+        --fg: #16191f;
+        --fg-2: #414d5c;
+        --muted: #5f6b7a;
+        --meta: #6b7280;
+        --border: #d5dbdb;
+        --border-soft: #eaeded;
+        --accent: #0972d3;
+        --accent-on: #ffffff;
+        --accent-hover: #033160;
+        --accent-active: #001a37;
+        --success: #037f0c;
+        --warn: #b35c00;
+        --danger: #d91515;
+        --font-display: "Amazon Ember", "Helvetica Neue", Arial, sans-serif;
+        --font-body: "Amazon Ember", "Helvetica Neue", Arial, sans-serif;
+        --font-mono: "Amazon Ember Mono", "SFMono-Regular", Consolas, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 22px;
+        --text-2xl: 28px;
+        --text-3xl: 36px;
+        --text-4xl: 44px;
+        --leading-body: 1.5;
+        --leading-tight: 1.18;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 72px;
+        --section-y-tablet: 56px;
+        --section-y-phone: 40px;
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 12px 32px rgba(22, 25, 31, 0.16);
+        --focus-ring: 0 0 0 3px rgba(9, 114, 211, 0.32);
+        --motion-fast: 120ms;
+        --motion-base: 180ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+        --container-max: 1280px;
+        --container-gutter-desktop: 40px;
+        --container-gutter-tablet: 28px;
+        --container-gutter-phone: 20px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font: var(--text-base) / var(--leading-body) var(--font-body);
+        -webkit-font-smoothing: antialiased;
+      }
+      .page { min-height: 100vh; }
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding: var(--section-y-desktop) var(--container-gutter-desktop);
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        gap: var(--space-6);
+      }
+      .sidebar,
+      .panel,
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--elev-flat);
+      }
+      .sidebar { padding: var(--space-4); align-self: start; }
+      .nav-title {
+        color: var(--meta);
+        font: 700 var(--text-xs) / 1 var(--font-mono);
+        text-transform: uppercase;
+      }
+      .nav-link {
+        display: block;
+        margin-top: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-sm);
+        color: var(--fg-2);
+        text-decoration: none;
+      }
+      .nav-link.active,
+      .nav-link:hover { background: #eef6ff; color: var(--accent); }
+      .stack > * + * { margin-top: var(--space-4); }
+      .page-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-bottom: var(--space-5);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-3xl); }
+      h2 { font-size: var(--text-xl); }
+      h3 { font-size: var(--text-lg); }
+      .lead { color: var(--muted); max-width: 680px; margin-top: var(--space-2); }
+      .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+      .btn {
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0 var(--space-4);
+        background: var(--surface);
+        color: var(--fg);
+        font: 700 var(--text-sm) / 1 var(--font-body);
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .btn:hover { border-color: var(--accent); color: var(--accent); }
+      .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); color: var(--accent-on); }
+      .btn:focus-visible,
+      input:focus-visible,
+      a:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+      }
+      .card { padding: var(--space-4); }
+      .metric { color: var(--muted); font-size: var(--text-sm); }
+      .metric strong {
+        display: block;
+        color: var(--fg);
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .toolbar {
+        display: flex;
+        gap: var(--space-3);
+        align-items: center;
+      }
+      label { color: var(--muted); font-size: var(--text-sm); }
+      input {
+        min-height: 36px;
+        width: 260px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0 var(--space-3);
+        font: inherit;
+      }
+      table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+      th, td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-soft); text-align: left; }
+      th { background: var(--surface-warm); color: var(--fg-2); font-size: var(--text-xs); text-transform: uppercase; }
+      code { font-family: var(--font-mono); font-size: var(--text-xs); }
+      .badge,
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        border-radius: var(--radius-pill);
+        padding: var(--space-1) var(--space-2);
+        font: 700 var(--text-xs) / 1 var(--font-body);
+      }
+      .status::before {
+        width: 7px;
+        height: 7px;
+        border-radius: var(--radius-pill);
+        content: "";
+      }
+      .status.ok { color: var(--success); background: #eefbe9; }
+      .status.ok::before { background: var(--success); }
+      .status.warn { color: var(--warn); background: #fff4df; }
+      .status.warn::before { background: var(--warn); }
+      .status.danger { color: var(--danger); background: #fff1f1; }
+      .status.danger::before { background: var(--danger); }
+      .badge { background: var(--surface-warm); color: var(--fg-2); border: 1px solid var(--border-soft); }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-4);
+        padding: var(--space-4);
+      }
+      .field {
+        padding: var(--space-3);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-sm);
+        background: var(--surface-warm);
+      }
+      .field span { display: block; color: var(--muted); font-size: var(--text-xs); }
+      @media (max-width: 900px) {
+        .container { padding: var(--section-y-tablet) var(--container-gutter-tablet); }
+        .shell { grid-template-columns: 1fr; }
+        .metrics, .detail-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 600px) {
+        .container { padding: var(--section-y-phone) var(--container-gutter-phone); }
+        .page-head, .panel-head, .toolbar { flex-direction: column; align-items: stretch; }
+        input { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="container">
+        <div class="shell">
+          <nav class="sidebar" aria-label="Service navigation">
+            <div class="nav-title">Services</div>
+            <a class="nav-link active" href="#">Resource inventory</a>
+            <a class="nav-link" href="#">Health events</a>
+            <a class="nav-link" href="#">Configuration</a>
+          </nav>
+          <section class="stack" aria-labelledby="cloudscape-title">
+            <div class="page-head">
+              <div>
+                <h1 id="cloudscape-title">Resource inventory</h1>
+                <p class="lead">Monitor cloud resources across accounts, regions, and deployment states.</p>
+              </div>
+              <div class="actions">
+                <button class="btn">Export</button>
+                <button class="btn btn-primary">Create resource</button>
+              </div>
+            </div>
+            <div class="metrics" aria-label="Resource metrics">
+              <article class="card metric"><strong>128</strong>Active resources</article>
+              <article class="card metric"><strong>7</strong>Regions reporting</article>
+              <article class="card metric"><strong>3</strong>Actions required</article>
+            </div>
+            <article class="panel">
+              <div class="panel-head">
+                <h2>Instances</h2>
+                <div class="toolbar">
+                  <label for="filter">Filter</label>
+                  <input id="filter" value="status:running" />
+                </div>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Region</th>
+                    <th>Status</th>
+                    <th>Identifier</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>api-prod-a</td>
+                    <td>us-east-1</td>
+                    <td><span class="status ok">Running</span></td>
+                    <td><code>i-0d9a6c21</code></td>
+                  </tr>
+                  <tr>
+                    <td>jobs-worker-4</td>
+                    <td>us-west-2</td>
+                    <td><span class="status warn">Degraded</span></td>
+                    <td><code>i-1a7c43bf</code></td>
+                  </tr>
+                  <tr>
+                    <td>sync-cache-b</td>
+                    <td>eu-central-1</td>
+                    <td><span class="status danger">Stopped</span></td>
+                    <td><code>i-47bc220e</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+            <article class="panel">
+              <div class="panel-head">
+                <h2>Configuration review</h2>
+                <span class="badge">Pending approval</span>
+              </div>
+              <div class="detail-grid">
+                <div class="field"><span>Policy</span>Least privilege update</div>
+                <div class="field"><span>Owner</span>Platform operations</div>
+                <div class="field"><span>Change window</span>Jun 12, 02:00 UTC</div>
+                <div class="field"><span>Rollback</span>Automated snapshot available</div>
+              </div>
+            </article>
+          </section>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

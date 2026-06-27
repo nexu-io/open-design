@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NHS Design System reference components</title>
+    <meta
+      name="description"
+      content="Open Design fixture for NHS Design System-inspired visual language: blue service header, pale canvas, large readable forms, yellow focus state, and direct public health task components."
+    />
+    <style>
+:root {
+  --bg: #f0f4f5;
+  --surface: #ffffff;
+  --surface-warm: #e8edee;
+  --fg: #212b32;
+  --fg-2: #354b5a;
+  --muted: #4c6272;
+  --meta: #768692;
+  --border: #d8dde0;
+  --border-soft: #e8edee;
+  --accent: #005eb8;
+  --accent-on: #ffffff;
+  --accent-hover: #003f7e;
+  --accent-active: #002f5c;
+  --success: #007f3b;
+  --warn: #ffeb3b;
+  --danger: #d5281b;
+  --font-display: "NHS Frutiger", Frutiger, Arial, Helvetica, sans-serif;
+  --font-body: "NHS Frutiger", Frutiger, Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --text-xs: 14px;
+  --text-sm: 16px;
+  --text-base: 19px;
+  --text-lg: 22px;
+  --text-xl: 26px;
+  --text-2xl: 36px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.55;
+  --leading-tight: 1.12;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 64px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+  --radius-sm: 0;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 4px 0 rgba(33, 43, 50, 0.12);
+  --focus-ring: 0 0 0 4px var(--warn), 0 0 0 6px var(--fg);
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --container-max: 960px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}
+    </style>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .site-header {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .container {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      .header-row {
+        min-height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+      }
+      .service-mark {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-3);
+        color: var(--accent-on);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .mark-box {
+        display: inline-grid;
+        place-items: center;
+        width: 92px;
+        height: 38px;
+        background: var(--accent-on);
+        color: var(--accent);
+        font-size: var(--text-xl);
+        line-height: 1;
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: var(--space-5);
+        font-size: var(--text-sm);
+      }
+      .link {
+        color: inherit;
+        text-underline-offset: 0.16em;
+      }
+      main {
+        padding-block: var(--section-y-desktop);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+        gap: var(--space-8);
+        align-items: start;
+      }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        margin: 0;
+      }
+      h1 {
+        max-width: 11ch;
+        font-size: var(--text-3xl);
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-xl);
+        margin-bottom: var(--space-4);
+      }
+      h3 {
+        font-size: var(--text-lg);
+      }
+      .lead {
+        max-width: 34rem;
+        color: var(--fg-2);
+        font-size: var(--text-xl);
+        margin: var(--space-5) 0 var(--space-8);
+      }
+      .panel, .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+      .panel {
+        padding: var(--space-6);
+        box-shadow: var(--elev-ring);
+      }
+      .stack-4 > * + * {
+        margin-top: var(--space-4);
+      }
+      .field-label {
+        display: block;
+        color: var(--fg);
+        font-weight: 700;
+        margin-bottom: var(--space-2);
+      }
+      .field-hint {
+        color: var(--muted);
+        font-size: var(--text-sm);
+        margin: 0 0 var(--space-2);
+      }
+      .input {
+        width: 100%;
+        min-height: 48px;
+        border: 2px solid var(--muted);
+        border-radius: var(--radius-sm);
+        color: var(--fg);
+        font: inherit;
+        padding: var(--space-2) var(--space-3);
+        background: var(--surface);
+      }
+      .input:focus, .btn:focus, .link:focus, .choice input:focus + span {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        border: 2px solid transparent;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-5);
+        font: 700 var(--text-base) / 1 var(--font-body);
+        text-decoration: none;
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard);
+      }
+      .btn-primary {
+        background: var(--success);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover { background: #005f2f; }
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+      }
+      .card {
+        padding: var(--space-5);
+      }
+      .card + .card {
+        margin-top: var(--space-4);
+      }
+      .tag {
+        display: inline-block;
+        background: var(--surface-warm);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        padding: var(--space-1) var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .status-error {
+        border-left: 8px solid var(--danger);
+      }
+      .status-warning {
+        border-left: 8px solid var(--warn);
+      }
+      .icon-circle {
+        display: inline-grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-pill);
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .kbd {
+        border: 1px solid var(--border);
+        border-bottom-width: 3px;
+        background: var(--surface);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 0 var(--space-1);
+      }
+      .choice {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-height: 44px;
+      }
+      .choice input {
+        width: 24px;
+        height: 24px;
+        accent-color: var(--accent);
+      }
+      .body-small {
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+      @media (max-width: 780px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        main { padding-block: var(--section-y-phone); }
+        .grid { grid-template-columns: 1fr; }
+        .header-row { align-items: flex-start; flex-direction: column; padding-block: var(--space-4); }
+        .nav-links { flex-wrap: wrap; gap: var(--space-3); }
+        h1 { font-size: var(--text-2xl); }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-row">
+        <a class="service-mark" href="#">
+          <span class="mark-box">NHS</span>
+          <span>Patient service</span>
+        </a>
+        <nav class="nav-links" aria-label="Service navigation">
+          <a class="link" href="#">Appointments</a>
+          <a class="link" href="#">Prescriptions</a>
+          <a class="link" href="#">Get help</a>
+        </nav>
+      </div>
+    </header>
+    <main class="container">
+      <section class="grid">
+        <div>
+          <span class="tag">Health service</span>
+          <h1>Book an appointment</h1>
+          <p class="lead">Use simple, direct steps and keep important actions visible for every user.</p>
+          <div class="button-row">
+            <button class="btn btn-primary" type="button">Continue</button>
+            <button class="btn btn-secondary" type="button">Save and come back later</button>
+          </div>
+        </div>
+        <form class="panel stack-4">
+          <div>
+            <label class="field-label" for="nhs-number">NHS number</label>
+            <p class="field-hint">For example, 485 777 3456</p>
+            <input class="input" id="nhs-number" name="nhs-number" autocomplete="off" />
+          </div>
+          <fieldset class="stack-4">
+            <legend class="field-label">Do you know your registered GP practice?</legend>
+            <label class="choice"><input type="radio" name="gp" /><span>Yes</span></label>
+            <label class="choice"><input type="radio" name="gp" /><span>No</span></label>
+          </fieldset>
+        </form>
+      </section>
+      <section class="grid" aria-label="Support cards">
+        <article class="card status-error">
+          <h2>There is a problem</h2>
+          <p>Enter your NHS number or choose that you do not know it.</p>
+          <a class="link" href="#">Go to the missing answer</a>
+        </article>
+        <div>
+          <article class="card status-warning">
+            <h3><span class="icon-circle" aria-hidden="true">!</span> Before you continue</h3>
+            <p>Check that your contact details are up to date. Press <kbd class="kbd">Tab</kbd> to move through fields.</p>
+          </article>
+          <article class="card">
+            <h3>Need urgent help?</h3>
+            <p class="body-small">Call 999 for a life-threatening emergency. Use 111 online for urgent medical help that is not an emergency.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

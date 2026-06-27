@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Reactive Classic</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    :root { --accent: #3157a4; --ink: #1c2430; --muted: #657184; --line: #d7dde7; --paper: #ffffff; }
+    body { margin: 0; background: #e8ebf1; color: var(--ink); font-family: Arial, Helvetica, sans-serif; font-size: 10.3pt; line-height: 1.45; }
+    .page { width: min(210mm, calc(100vw - 28px)); min-height: 297mm; margin: 24px auto; background: var(--paper); padding: 16mm; box-shadow: 0 20px 55px rgba(30,39,58,.16); }
+    header { display: grid; grid-template-columns: 1fr 42mm; gap: 20px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+    h1 { margin: 0; font-size: 28pt; letter-spacing: -0.02em; }
+    .headline { color: var(--accent); font-weight: 700; margin-top: 4px; }
+    .contact { color: var(--muted); font-size: 9.3pt; line-height: 1.5; }
+    .columns { display: grid; grid-template-columns: 1fr 54mm; gap: 18px; margin-top: 14px; }
+    h2 { margin: 0 0 8px; font-size: 9pt; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+    section { margin-bottom: 16px; }
+    h3 { margin: 0; font-size: 11pt; }
+    .meta { color: var(--muted); font-size: 9.2pt; margin: 2px 0 5px; }
+    ul { margin: 5px 0 0 16px; padding: 0; }
+    li { margin: 3px 0; }
+    .side { border-left: 1px solid var(--line); padding-left: 14px; }
+    .bar { height: 5px; background: #e6ebf6; border-radius: 999px; overflow: hidden; margin: 4px 0 9px; }
+    .bar span { display: block; height: 100%; background: var(--accent); }
+    .tag { display: inline-block; border: 1px solid var(--line); padding: 3px 7px; margin: 0 4px 5px 0; border-radius: 4px; }
+    @media print { body { background: #fff; } .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div><h1>Naomi Brooks</h1><div class="headline">Customer Success Manager</div></div>
+      <div class="contact">Chicago, IL<br>naomi.brooks@example.com<br>(312) 555-0138<br>linkedin.com/in/naomibrooks</div>
+    </header>
+    <div class="columns">
+      <div>
+        <section><h2>Profile</h2><p>Customer success leader with 9 years of experience growing enterprise accounts, reducing churn, and turning customer feedback into product priorities.</p></section>
+        <section><h2>Experience</h2><article><h3>OrbitDesk · Senior Customer Success Manager</h3><div class="meta">2021 - Present</div><ul><li>Managed $8.4M ARR across 34 enterprise accounts and maintained 119% net revenue retention.</li><li>Created an onboarding playbook that reduced time-to-value from 41 days to 23 days.</li><li>Partnered with product to prioritize 12 roadmap improvements from customer evidence.</li></ul></article><article><h3>Helpwise · Customer Success Manager</h3><div class="meta">2017 - 2021</div><ul><li>Reduced logo churn by 18% through risk scoring and executive business reviews.</li></ul></article></section>
+        <section><h2>Selected Wins</h2><ul><li>Closed renewal expansion with a Fortune 500 logistics customer worth $1.2M ARR.</li><li>Built a customer-health dashboard adopted by sales, support, and implementation teams.</li></ul></section>
+      </div>
+      <aside class="side">
+        <section><h2>Skills</h2><span class="tag">Renewals</span><span class="tag">QBRs</span><span class="tag">Salesforce</span><span class="tag">Gainsight</span><span class="tag">SQL basics</span></section>
+        <section><h2>Strengths</h2><div>Executive communication</div><div class="bar"><span style="width:92%"></span></div><div>Expansion strategy</div><div class="bar"><span style="width:88%"></span></div><div>Product feedback loops</div><div class="bar"><span style="width:84%"></span></div></section>
+        <section><h2>Education</h2><p><strong>Northwestern University</strong><br>BA Communication<br>2016</p></section>
+        <section><h2>Certifications</h2><p>CSM Level 2<br>Pragmatic Product Foundations</p></section>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

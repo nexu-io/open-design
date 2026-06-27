@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>U.S. Web Design System reference components</title>
+    <meta
+      name="description"
+      content="Open Design fixture distilling USWDS visual language without copying official assets or source."
+    />
+    <style>
+:root {
+  --bg: #ffffff;
+  --surface: #f0f0f0;
+  --surface-warm: #f2e4d4;
+  --fg: #1b1b1b;
+  --fg-2: #3d4551;
+  --muted: #565c65;
+  --meta: #71767a;
+  --border: #dfe1e2;
+  --border-soft: #f0f0f0;
+  --accent: #005ea2;
+  --accent-on: #ffffff;
+  --accent-hover: #1a4480;
+  --accent-active: #162e51;
+  --success: #00a91c;
+  --warn: #ffbe2e;
+  --danger: #d83933;
+  --font-display: "Public Sans", "Source Sans Pro", system-ui, sans-serif;
+  --font-body: "Public Sans", "Source Sans Pro", system-ui, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+  --text-xs: 13px;
+  --text-sm: 15px;
+  --text-base: 16px;
+  --text-lg: 22px;
+  --text-xl: 32px;
+  --text-2xl: 40px;
+  --text-3xl: 56px;
+  --text-4xl: 64px;
+  --leading-body: 1.62;
+  --leading-tight: 1.15;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 8px 24px rgba(27, 27, 27, 0.12);
+  --focus-ring: 0 0 0 4px #2491ff;
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}
+    </style>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      a { color: var(--accent); text-underline-offset: 0.16em; }
+      a:hover { color: var(--accent-hover); }
+      a:focus-visible, button:focus-visible, input:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .banner {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+      }
+      .banner-inner,
+      .header-inner,
+      main {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      .banner-inner {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 40px;
+      }
+      .dot {
+        width: 16px;
+        height: 16px;
+        border-radius: var(--radius-pill);
+        background: var(--accent);
+      }
+      .site-header {
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+      }
+      .header-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 72px;
+        gap: var(--space-4);
+      }
+      .brand {
+        font-weight: 800;
+        letter-spacing: var(--tracking-display);
+      }
+      nav {
+        display: flex;
+        gap: var(--space-4);
+        font-size: var(--text-sm);
+        font-weight: 700;
+      }
+      main {
+        padding-block: var(--section-y-desktop);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 {
+        max-width: 760px;
+        font-size: var(--text-3xl);
+        margin-bottom: var(--space-4);
+      }
+      h2 { font-size: var(--text-xl); margin-bottom: var(--space-4); }
+      h3 { font-size: var(--text-lg); margin-bottom: var(--space-2); }
+      .lead {
+        max-width: 720px;
+        color: var(--fg-2);
+        font-size: var(--text-lg);
+        line-height: 1.35;
+        margin-bottom: var(--space-6);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        margin-bottom: var(--space-8);
+      }
+      .button {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid transparent;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-4);
+        background: var(--accent);
+        color: var(--accent-on);
+        cursor: pointer;
+        font: 700 var(--text-base) / 1 var(--font-body);
+        transition: background-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .button:hover { background: var(--accent-hover); }
+      .button:active { background: var(--accent-active); }
+      .button.secondary {
+        background: var(--bg);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .button.secondary:hover {
+        background: var(--surface);
+        color: var(--accent-hover);
+      }
+      .alert-stack {
+        display: grid;
+        gap: var(--space-3);
+        margin-bottom: var(--space-8);
+      }
+      .alert {
+        border-left: 8px solid var(--accent);
+        background: #e1f3f8;
+        padding: var(--space-4);
+      }
+      .alert.warning {
+        border-left-color: var(--warn);
+        background: #faf3d1;
+      }
+      .alert.error {
+        border-left-color: var(--danger);
+        background: #f8dfe2;
+      }
+      .alert.success {
+        border-left-color: var(--success);
+        background: #ecf3ec;
+      }
+      .alert p { color: var(--fg-2); }
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-8);
+      }
+      .card {
+        display: flex;
+        min-height: 220px;
+        flex-direction: column;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--bg);
+        box-shadow: var(--elev-ring);
+        overflow: hidden;
+      }
+      .card-band {
+        height: 10px;
+        background: var(--accent);
+      }
+      .card-body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-4);
+      }
+      .card-body p { color: var(--fg-2); }
+      .tag {
+        display: inline-flex;
+        align-self: start;
+        border-radius: var(--radius-sm);
+        background: var(--surface-warm);
+        color: #775540;
+        font-size: var(--text-xs);
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        padding: var(--space-1) var(--space-2);
+        text-transform: uppercase;
+      }
+      .form-strip {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: var(--space-1);
+      }
+      input {
+        width: 100%;
+        min-height: 44px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
+        font: inherit;
+      }
+      @media (max-width: 900px) {
+        .banner-inner, .header-inner, main { padding-inline: var(--container-gutter-tablet); }
+        main { padding-block: var(--section-y-tablet); }
+        .card-grid { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 640px) {
+        .banner-inner, .header-inner, main { padding-inline: var(--container-gutter-phone); }
+        main { padding-block: var(--section-y-phone); }
+        .header-inner, nav, .form-strip { align-items: stretch; flex-direction: column; grid-template-columns: 1fr; }
+        h1 { font-size: 40px; }
+        .card-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="banner">
+      <div class="banner-inner">
+        <span class="dot" aria-hidden="true"></span>
+        <span>An official service pattern should clearly identify trust and security context.</span>
+      </div>
+    </div>
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="brand">Agency service</div>
+        <nav aria-label="Primary">
+          <a href="#">Benefits</a>
+          <a href="#">Documents</a>
+          <a href="#">Status</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <h1>Manage required documents for your application</h1>
+      <p class="lead">Track what has been received, review next steps, and respond to requests from the service team.</p>
+      <div class="actions">
+        <button class="button" type="button">Upload document</button>
+        <button class="button secondary" type="button">Review checklist</button>
+      </div>
+
+      <section class="alert-stack" aria-label="Status messages">
+        <div class="alert">
+          <h3>Information</h3>
+          <p>Your case number is ready to use with support staff.</p>
+        </div>
+        <div class="alert warning">
+          <h3>Action needed</h3>
+          <p>Submit proof of address before the review can continue.</p>
+        </div>
+        <div class="alert success">
+          <h3>Submitted</h3>
+          <p>Your identity document was received successfully.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="tasks-title">
+        <h2 id="tasks-title">Application tasks</h2>
+        <div class="card-grid">
+          <article class="card">
+            <div class="card-band"></div>
+            <div class="card-body">
+              <span class="tag">Open</span>
+              <h3>Upload proof of address</h3>
+              <p>Use a recent utility bill, lease, or official statement.</p>
+              <a href="#">View requirements</a>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-band"></div>
+            <div class="card-body">
+              <span class="tag">Review</span>
+              <h3>Check contact details</h3>
+              <p>Make sure the service can reach you about your application.</p>
+              <a href="#">Update details</a>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-band"></div>
+            <div class="card-body">
+              <span class="tag">Complete</span>
+              <h3>Identity document</h3>
+              <p>This item is complete and does not need more information.</p>
+              <a href="#">See receipt</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <form class="form-strip">
+        <div>
+          <label for="case-number">Case number</label>
+          <input id="case-number" value="US-2048-17" />
+        </div>
+        <button class="button" type="button">Search</button>
+      </form>
+    </main>
+  </body>
+</html>

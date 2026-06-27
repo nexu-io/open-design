@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Salesforce Lightning - reference components</title>
+    <style>
+      :root {
+        --bg: #f3f6fb;
+        --surface: #ffffff;
+        --surface-warm: #f8fbff;
+
+        --fg: #181818;
+        --fg-2: #2e3a59;
+        --muted: #5f6a7d;
+        --meta: #747d8c;
+
+        --border: #d8dde6;
+        --border-soft: #e8edf4;
+
+        --accent: #0176d3;
+        --accent-on: #ffffff;
+        --accent-hover: #014486;
+        --accent-active: #032d60;
+
+        --success: #2e844a;
+        --warn: #fe9339;
+        --danger: #ba0517;
+
+        --font-display: "Salesforce Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-body: "Salesforce Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs: 12px;
+        --text-sm: 13px;
+        --text-base: 16px;
+        --text-lg: 20px;
+        --text-xl: 24px;
+        --text-2xl: 32px;
+        --text-3xl: 44px;
+        --text-4xl: 56px;
+
+        --leading-body: 1.5;
+        --leading-tight: 1.2;
+        --tracking-display: 0em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 64px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+
+        --radius-sm: 4px;
+        --radius-md: 4px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 90%);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+        --motion-fast: 140ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+
+        --container-max: 1280px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .app {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding: var(--section-y-desktop) var(--container-gutter-desktop);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-block-end: var(--space-6);
+      }
+      .crumb {
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+      h1, h2, h3 {
+        margin: 0;
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { color: var(--fg); font-size: var(--text-3xl); }
+      h2 { color: var(--fg-2); font-size: var(--text-xl); }
+      h3 { color: var(--fg-2); font-size: var(--text-lg); }
+      p { margin: 0; }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      .btn {
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        padding: var(--space-2) var(--space-4);
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: 600;
+        text-decoration: none;
+        transition: background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible,
+      .tab:focus-visible,
+      .icon-btn:focus-visible,
+      input:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .btn-primary { color: var(--accent-on); background: var(--accent); }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-secondary { color: var(--accent); background: var(--surface); border-color: var(--border); }
+      .btn-secondary:hover { background: var(--surface-warm); border-color: var(--accent); }
+      .layout {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: var(--space-6);
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--elev-flat);
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .card-body {
+        padding: var(--space-4);
+      }
+      .stack > * + * { margin-block-start: var(--space-4); }
+      .nav-list {
+        display: grid;
+        gap: var(--space-1);
+        padding: var(--space-2);
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-sm);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        text-decoration: none;
+      }
+      .nav-item[aria-current="page"] {
+        color: var(--accent);
+        background: var(--surface-warm);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        border-radius: var(--radius-pill);
+        padding: 2px var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--success);
+        background: color-mix(in oklab, var(--success), transparent 88%);
+      }
+      .badge-warn {
+        color: color-mix(in oklab, var(--warn), black 35%);
+        background: color-mix(in oklab, var(--warn), transparent 84%);
+      }
+      .record-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-4);
+      }
+      .metric {
+        padding: var(--space-4);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      .metric strong {
+        display: block;
+        margin-block-start: var(--space-2);
+        color: var(--fg);
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .metric span { color: var(--muted); font-size: var(--text-sm); }
+      .tabs {
+        display: flex;
+        gap: var(--space-4);
+        border-bottom: 1px solid var(--border);
+      }
+      .tab {
+        border: 0;
+        border-bottom: 3px solid transparent;
+        background: transparent;
+        padding: var(--space-3) 0;
+        color: var(--muted);
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: 600;
+      }
+      .tab[aria-selected="true"] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--text-sm);
+      }
+      th, td {
+        padding: var(--space-3);
+        border-bottom: 1px solid var(--border-soft);
+        text-align: left;
+      }
+      th { color: var(--fg-2); font-weight: 600; }
+      td { color: var(--muted); }
+      .field {
+        display: grid;
+        gap: var(--space-2);
+      }
+      label { color: var(--fg-2); font-size: var(--text-sm); font-weight: 600; }
+      input {
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-3);
+        background: var(--surface);
+        color: var(--fg);
+        font: inherit;
+      }
+      .help { color: var(--meta); font-size: var(--text-xs); }
+      @media (max-width: 920px) {
+        .app { padding: var(--section-y-tablet) var(--container-gutter-tablet); }
+        .layout { grid-template-columns: 1fr; }
+        .record-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 560px) {
+        .app { padding: var(--section-y-phone) var(--container-gutter-phone); }
+        .header { align-items: flex-start; flex-direction: column; }
+        h1 { font-size: var(--text-2xl); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <p class="crumb">Sales Cloud / Accounts</p>
+          <h1>Acme Renewal</h1>
+        </div>
+        <div class="actions">
+          <a class="btn btn-secondary" href="./DESIGN.md">View spec</a>
+          <a class="btn btn-primary" href="./tokens.css">Create task</a>
+        </div>
+      </header>
+
+      <div class="layout">
+        <aside class="card" aria-label="Record navigation">
+          <nav class="nav-list">
+            <a class="nav-item" aria-current="page" href="#overview">Overview <span>12</span></a>
+            <a class="nav-item" href="#activity">Activity <span>4</span></a>
+            <a class="nav-item" href="#contacts">Contacts <span>8</span></a>
+            <a class="nav-item" href="#files">Files <span>3</span></a>
+          </nav>
+        </aside>
+
+        <section class="stack">
+          <div class="record-grid" aria-label="Record summary">
+            <article class="metric">
+              <span>Opportunity value</span>
+              <strong>$248K</strong>
+            </article>
+            <article class="metric">
+              <span>Close date</span>
+              <strong>Jun 28</strong>
+            </article>
+            <article class="metric">
+              <span>Status</span>
+              <strong><span class="badge">On track</span></strong>
+            </article>
+          </div>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <h2>Renewal workflow</h2>
+                <p class="help">Tabs, tables, forms, and status all share one token set.</p>
+              </div>
+              <span class="badge badge-warn">Legal review</span>
+            </div>
+            <div class="card-body stack">
+              <div class="tabs" role="tablist" aria-label="Record tabs">
+                <button class="tab" aria-selected="true">Next steps</button>
+                <button class="tab" aria-selected="false">Related lists</button>
+                <button class="tab" aria-selected="false">History</button>
+              </div>
+
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Task</th>
+                    <th>Owner</th>
+                    <th>Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Confirm implementation scope</td>
+                    <td>Solutions</td>
+                    <td>Today</td>
+                  </tr>
+                  <tr>
+                    <td>Send security addendum</td>
+                    <td>Legal</td>
+                    <td>Tomorrow</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="field">
+                <label for="note">Add note</label>
+                <input id="note" placeholder="Summarize the customer update" />
+                <p class="help">Visible labels and blue focus keep dense forms usable.</p>
+              </div>
+            </div>
+          </article>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

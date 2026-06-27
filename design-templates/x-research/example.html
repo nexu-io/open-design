@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X Research Preview</title>
+<style>
+:root{--bg:#f5f7fb;--ink:#0d1117;--muted:#687386;--line:#dce3ef;--blue:#1d9bf0;--red:#d1495b;--green:#2a9d8f}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;padding:34px}
+.board{max-width:1050px;margin:auto;display:grid;grid-template-columns:300px 1fr;gap:20px}
+.query,.stream{background:#fff;border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:0 20px 60px rgba(19,31,54,.1)}
+.label{font:800 11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--blue)}
+h1{font-size:48px;line-height:.96;letter-spacing:-.055em;margin:18px 0}.pill{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:8px 10px;margin:5px 4px 0 0;color:var(--muted);font-size:13px}
+.tweet{border-bottom:1px solid var(--line);padding:18px 0}.tweet:last-child{border-bottom:0}.meta{font:700 11px ui-monospace,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}.tweet p{font-size:18px;line-height:1.45;margin:8px 0}
+.sentiment{display:inline-block;border-radius:999px;padding:5px 8px;font:800 10px ui-monospace,monospace;text-transform:uppercase}.bull{background:rgba(42,157,143,.12);color:var(--green)}.bear{background:rgba(209,73,91,.12);color:var(--red)}.mixed{background:rgba(29,155,240,.12);color:var(--blue)}
+</style>
+</head>
+<body>
+<main class="board">
+  <section class="query"><div class="label">X research brief</div><h1>Public sentiment, grouped by evidence.</h1><span class="pill">$TICKER</span><span class="pill">expert posts</span><span class="pill">launch reaction</span><span class="pill">risk terms</span></section>
+  <section class="stream">
+    <article class="tweet"><div class="meta">Theme 01 / bullish</div><p>Supportive posts cluster around speed, distribution, and product quality.</p><span class="sentiment bull">bullish</span></article>
+    <article class="tweet"><div class="meta">Theme 02 / bearish</div><p>Critical posts focus on valuation, durability, and missing proof points.</p><span class="sentiment bear">bearish</span></article>
+    <article class="tweet"><div class="meta">Synthesis</div><p>Overall read: mixed but improving, with confidence tied to available source coverage.</p><span class="sentiment mixed">mixed</span></article>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Blog Projects Case Library</title>
+  <style>
+    :root {
+      --paper: #f5efe2;
+      --ink: #17130f;
+      --muted: #675f52;
+      --line: rgba(23, 19, 15, 0.16);
+      --soft: #fffaf0;
+      --accent: #c95f43;
+      --blue: #2f5f8f;
+      --green: #557a49;
+      --gold: #b3832f;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+    a { color: inherit; }
+    .wrap { max-width: 1320px; margin: 0 auto; padding: 52px 28px 72px; }
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.7fr);
+      gap: 42px;
+      align-items: end;
+      padding-bottom: 44px;
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow, .meta, .tag, .stat-label {
+      font: 700 11px/1.2 var(--mono);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h1 {
+      margin: 14px 0 18px;
+      font-family: var(--serif);
+      font-size: clamp(44px, 7vw, 92px);
+      line-height: 0.95;
+      max-width: 900px;
+      letter-spacing: -0.02em;
+    }
+    .lead { max-width: 740px; color: var(--muted); font-size: 18px; line-height: 1.65; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .stat {
+      min-height: 120px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 250, 240, 0.58);
+    }
+    .stat strong {
+      display: block;
+      margin-bottom: 8px;
+      font-family: var(--serif);
+      font-size: 40px;
+      line-height: 1;
+    }
+    .section { margin-top: 56px; }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 22px;
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+    }
+    h2 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.05;
+    }
+    .grid { display: grid; gap: 16px; }
+    .sites { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pages, .blocks { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card {
+      min-height: 210px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: var(--soft);
+    }
+    .card h3 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+    .tag {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      padding: 5px 7px;
+      background: rgba(245, 239, 226, 0.72);
+      color: var(--ink);
+      letter-spacing: 0.06em;
+      font-size: 9.5px;
+    }
+    .tag.classic { color: var(--accent); }
+    .tag.build { color: var(--blue); }
+    .tag.cn { color: var(--green); }
+    .url {
+      margin-top: auto;
+      font: 11px/1.4 var(--mono);
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .matrix {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      background: rgba(255, 250, 240, 0.72);
+      padding: 22px;
+    }
+    .panel ul {
+      margin: 14px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    @media (max-width: 980px) {
+      header, .matrix { grid-template-columns: 1fr; }
+      .sites, .pages, .blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 620px) {
+      .sites, .pages, .blocks, .stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <div class="eyebrow">Open Design / Case Library</div>
+        <h1>Personal blogs are systems, not homepages.</h1>
+        <p class="lead">This preview maps the shape of the Personal Blog Projects library: one case stores source links, page-level references, reusable blocks, and implementation notes. The source of truth is <code>references/catalog.json</code>.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><strong>25</strong><span class="stat-label">seed cases</span></div>
+        <div class="stat"><strong>82</strong><span class="stat-label">page refs</span></div>
+        <div class="stat"><strong>48</strong><span class="stat-label">block refs</span></div>
+        <div class="stat"><strong>3</strong><span class="stat-label">views</span></div>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">Sites</div>
+          <h2>Classic authors, Chinese blogs, and buildable starters.</h2>
+        </div>
+        <div class="meta">Each card keeps primary URL + source URL where known.</div>
+      </div>
+      <div class="grid sites">
+        <article class="card">
+          <h3>Maggie Appleton</h3>
+          <p>Digital garden, essays, library, and now page as a coherent authorial system.</p>
+          <div class="tags"><span class="tag classic">classic</span><span class="tag">garden</span><span class="tag">visual essays</span></div>
+          <div class="url">https://maggieappleton.com/</div>
+        </article>
+        <article class="card">
+          <h3>Josh W. Comeau</h3>
+          <p>Interactive developer essays with playful motion, deep article polish, and teaching widgets.</p>
+          <div class="tags"><span class="tag classic">classic</span><span class="tag">interactive</span><span class="tag">MDX-like</span></div>
+          <div class="url">https://www.joshwcomeau.com/</div>
+        </article>
+        <article class="card">
+          <h3>Simon Willison</h3>
+          <p>Dense long-running weblog with tags, search, projects, notes, and open source site code.</p>
+          <div class="tags"><span class="tag classic">classic</span><span class="tag">search</span><span class="tag">Django</span></div>
+          <div class="url">https://simonwillison.net/</div>
+        </article>
+        <article class="card">
+          <h3>阮一峰的网络日志</h3>
+          <p>Chinese technical blog with a durable weekly publication and classic archive rhythm.</p>
+          <div class="tags"><span class="tag cn">zh-CN</span><span class="tag">weekly</span><span class="tag">archive</span></div>
+          <div class="url">https://www.ruanyifeng.com/blog/</div>
+        </article>
+        <article class="card">
+          <h3>Tw93</h3>
+          <p>Chinese indie-maker site connecting blog, weekly, projects, RSS, and open source reference.</p>
+          <div class="tags"><span class="tag cn">zh-CN</span><span class="tag">maker</span><span class="tag">weekly</span></div>
+          <div class="url">https://tw93.fun/</div>
+        </article>
+        <article class="card">
+          <h3>AstroPaper / Quartz / PaperMod</h3>
+          <p>Buildable starters for static blogs and digital gardens: RSS, tags, search, dark mode, and clean article shells.</p>
+          <div class="tags"><span class="tag build">build</span><span class="tag">Astro</span><span class="tag">Hugo</span><span class="tag">garden</span></div>
+          <div class="url">catalog.json contains the full source list</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">Pages</div>
+          <h2>Record the pages where the craft actually lives.</h2>
+        </div>
+        <div class="meta">Home is only one page type.</div>
+      </div>
+      <div class="grid pages">
+        <article class="card"><h3>Home</h3><p>Author identity, latest writing, projects, and subscription routes.</p><div class="tags"><span class="tag">home</span></div></article>
+        <article class="card"><h3>Post</h3><p>Long-form reading shell: metadata, TOC, sidenotes, code, figures, and next links.</p><div class="tags"><span class="tag">post</span></div></article>
+        <article class="card"><h3>Archive</h3><p>Years, tags, issue lists, and dense retrieval patterns for long-running blogs.</p><div class="tags"><span class="tag">archive</span></div></article>
+        <article class="card"><h3>Garden</h3><p>Backlinks, graphs, knowledge maps, and nonlinear navigation.</p><div class="tags"><span class="tag">garden</span></div></article>
+        <article class="card"><h3>Projects</h3><p>Small software/project cards that connect writing to shipped work.</p><div class="tags"><span class="tag">project</span></div></article>
+        <article class="card"><h3>Newsletter</h3><p>Recurring issue archives and subscription surfaces.</p><div class="tags"><span class="tag">newsletter</span></div></article>
+        <article class="card"><h3>Reading List</h3><p>Library pages and references as part of the author's public thinking.</p><div class="tags"><span class="tag">library</span></div></article>
+        <article class="card"><h3>Search</h3><p>Search pages for large personal knowledge bases and technical logs.</p><div class="tags"><span class="tag">search</span></div></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">Blocks</div>
+          <h2>Small patterns worth reusing across new blogs.</h2>
+        </div>
+        <div class="meta">Each block in catalog.json has a reference URL.</div>
+      </div>
+      <div class="grid blocks">
+        <article class="card"><h3>Sidenotes</h3><p>Margin notes and citations that support deep reading without breaking flow.</p></article>
+        <article class="card"><h3>Hover Preview</h3><p>Inline link context for research-heavy pages and digital gardens.</p></article>
+        <article class="card"><h3>Code Playground</h3><p>Interactive controls embedded in an article's explanation path.</p></article>
+        <article class="card"><h3>Weekly List</h3><p>Recurring issues as navigable editorial products.</p></article>
+        <article class="card"><h3>Backlinks</h3><p>Networked-note discovery for garden-style sites.</p></article>
+        <article class="card"><h3>Project Cards</h3><p>Indie-maker artifacts framed as part of the author's identity.</p></article>
+        <article class="card"><h3>RSS Prompt</h3><p>Subscription as a durable independent-web affordance.</p></article>
+        <article class="card"><h3>Theme Config</h3><p>Starter projects expose layout choices through configuration instead of custom code.</p></article>
+      </div>
+    </section>
+
+    <section class="section matrix">
+      <div class="panel">
+        <div class="eyebrow">Capture rule</div>
+        <h2>Always store links.</h2>
+        <ul>
+          <li>Primary site URL and source URL when known.</li>
+          <li>Concrete page URLs for every page-level reference.</li>
+          <li>Concrete block URLs for every reusable pattern.</li>
+          <li>License status and reuse policy for each case.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Reuse rule</div>
+        <h2>Distill, do not mirror.</h2>
+        <ul>
+          <li>Record structure, information architecture, and behavior.</li>
+          <li>Create original previews and component studies.</li>
+          <li>Avoid copying proprietary screenshots, assets, or source code.</li>
+          <li>Mark homepage-only captures honestly.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

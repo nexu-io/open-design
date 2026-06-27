@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fluent 2 - reference components</title>
+    <style>
+      :root {
+        --bg: #f5f5f5;
+        --surface: #ffffff;
+        --surface-warm: #fafafa;
+        --fg: #242424;
+        --fg-2: #424242;
+        --muted: #616161;
+        --meta: #707070;
+        --border: #d1d1d1;
+        --border-soft: #e0e0e0;
+        --accent: #0f6cbd;
+        --accent-on: #ffffff;
+        --accent-hover: #115ea3;
+        --accent-active: #0f548c;
+        --success: #107c10;
+        --warn: #f7630c;
+        --danger: #d13438;
+        --font-display: "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-body: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-mono: "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 14px;
+        --text-lg: 18px;
+        --text-xl: 20px;
+        --text-2xl: 28px;
+        --text-3xl: 40px;
+        --text-4xl: 68px;
+        --leading-body: 1.43;
+        --leading-tight: 1.3;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 72px;
+        --section-y-tablet: 52px;
+        --section-y-phone: 36px;
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 8px 16px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+        --focus-ring: 0 0 0 3px rgba(15, 108, 189, 0.32);
+        --motion-fast: 150ms;
+        --motion-base: 220ms;
+        --ease-standard: cubic-bezier(0.1, 0.9, 0.2, 1);
+        --container-max: 1180px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+      }
+      .rail {
+        background: var(--surface);
+        border-right: 1px solid var(--border-soft);
+        padding: var(--space-5);
+      }
+      .logo {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: 650;
+        margin-bottom: var(--space-6);
+      }
+      .nav {
+        display: grid;
+        gap: var(--space-1);
+      }
+      .nav a {
+        display: flex;
+        align-items: center;
+        min-height: 36px;
+        border-radius: var(--radius-md);
+        padding: 0 var(--space-3);
+        color: var(--fg-2);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .nav a[aria-current="page"] {
+        background: #ebf3fc;
+        color: var(--accent);
+      }
+      .main {
+        padding: var(--space-8) var(--container-gutter-desktop) var(--section-y-desktop);
+      }
+      .command {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-4);
+        align-items: center;
+        margin-bottom: var(--space-8);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1 {
+        font-family: var(--font-display);
+        font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
+        line-height: var(--leading-tight);
+        font-weight: 650;
+      }
+      h2 {
+        font-size: var(--text-xl);
+        line-height: 1.4;
+        font-weight: 650;
+      }
+      h3 {
+        font-size: var(--text-base);
+        line-height: 1.4;
+        font-weight: 650;
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: var(--text-base);
+        margin-top: var(--space-1);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      .btn {
+        min-height: 32px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--fg);
+        padding: 0 var(--space-3);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn.primary:hover { background: var(--accent-hover); }
+      .btn:focus-visible, .input:focus-visible, .tab:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: var(--space-5);
+      }
+      .card, .message, .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+      }
+      .card {
+        padding: var(--space-5);
+      }
+      .card.raised { box-shadow: var(--elev-raised); }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-3);
+        margin-top: var(--space-5);
+      }
+      .kpi {
+        padding: var(--space-4);
+        background: var(--surface-warm);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-soft);
+      }
+      .kpi strong {
+        display: block;
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .kpi span { color: var(--muted); }
+      .message {
+        display: flex;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        margin-top: var(--space-5);
+        border-left: 4px solid var(--accent);
+      }
+      .message strong { display: block; }
+      .message p { color: var(--fg-2); margin-top: var(--space-1); }
+      .panel {
+        padding: var(--space-5);
+      }
+      .field {
+        display: grid;
+        gap: var(--space-1);
+        margin-top: var(--space-4);
+      }
+      .field label {
+        color: var(--fg-2);
+        font-weight: 600;
+      }
+      .input {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--fg);
+        padding: 0 var(--space-3);
+        font: inherit;
+      }
+      .tabs {
+        display: flex;
+        gap: var(--space-1);
+        border-bottom: 1px solid var(--border-soft);
+        margin: var(--space-6) 0 var(--space-4);
+      }
+      .tab {
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--fg-2);
+        padding: var(--space-2) var(--space-3);
+        font: inherit;
+        font-weight: 600;
+      }
+      .tab[aria-selected="true"] {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .list {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      .badge {
+        align-self: start;
+        border-radius: var(--radius-pill);
+        padding: 2px var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: 650;
+        background: var(--surface-warm);
+        color: var(--fg-2);
+      }
+      .badge.success { background: #dff6dd; color: var(--success); }
+      .badge.warn { background: #fff4ce; color: #8a3d00; }
+      .badge.danger { background: #fde7e9; color: var(--danger); }
+      @media (max-width: 900px) {
+        .shell { grid-template-columns: 1fr; }
+        .rail { border-right: 0; border-bottom: 1px solid var(--border-soft); }
+        .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .grid, .kpis { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 560px) {
+        .main { padding-inline: var(--container-gutter-phone); }
+        .command { align-items: flex-start; flex-direction: column; }
+        .nav { grid-template-columns: 1fr 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail">
+        <div class="logo">Fluent workbench</div>
+        <nav class="nav" aria-label="Workspace">
+          <a href="#" aria-current="page">Home</a>
+          <a href="#">Files</a>
+          <a href="#">People</a>
+          <a href="#">Settings</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="command">
+          <div>
+            <h1>Project activity</h1>
+            <p class="subtitle">Neutral surfaces, clear commands, and practical hierarchy.</p>
+          </div>
+          <div class="actions">
+            <button class="btn">Filter</button>
+            <button class="btn primary">New task</button>
+          </div>
+        </header>
+
+        <section class="grid">
+          <article class="card raised">
+            <h2>Summary</h2>
+            <p class="subtitle">Use blue for one primary path and let neutrals do the structural work.</p>
+            <div class="kpis">
+              <div class="kpi"><strong>128</strong><span>Items synced</span></div>
+              <div class="kpi"><strong>24</strong><span>Needs review</span></div>
+              <div class="kpi"><strong>99%</strong><span>Availability</span></div>
+            </div>
+            <div class="message" role="status">
+              <div aria-hidden="true">i</div>
+              <div><strong>Review window open</strong><p>Owners can approve updates until Friday.</p></div>
+            </div>
+          </article>
+
+          <aside class="panel">
+            <h2>Quick edit</h2>
+            <div class="field">
+              <label for="owner">Owner</label>
+              <input class="input" id="owner" value="Design systems" />
+            </div>
+            <div class="field">
+              <label for="status">Status</label>
+              <input class="input" id="status" value="In progress" />
+            </div>
+            <div class="actions" style="margin-top: var(--space-5)">
+              <button class="btn primary">Save</button>
+              <button class="btn">Cancel</button>
+            </div>
+          </aside>
+        </section>
+
+        <section class="card" style="margin-top: var(--space-5)">
+          <h2>Tasks</h2>
+          <div class="tabs" role="tablist" aria-label="Task filters">
+            <button class="tab" role="tab" aria-selected="true">Active</button>
+            <button class="tab" role="tab" aria-selected="false">Blocked</button>
+            <button class="tab" role="tab" aria-selected="false">Done</button>
+          </div>
+          <div class="list">
+            <article class="row"><div><h3>Validate token aliases</h3><p class="subtitle">Confirm color, spacing, and elevation names.</p></div><span class="badge success">Ready</span></article>
+            <article class="row"><div><h3>Check responsive rail</h3><p class="subtitle">Collapse navigation without losing orientation.</p></div><span class="badge warn">Review</span></article>
+            <article class="row"><div><h3>Resolve contrast note</h3><p class="subtitle">Pair color states with visible text.</p></div><span class="badge danger">Blocked</span></article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

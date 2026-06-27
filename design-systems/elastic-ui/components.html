@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elastic UI - reference components</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --surface: #ffffff;
+        --surface-warm: #edf2f7;
+        --fg: #1a1c21;
+        --fg-2: #343741;
+        --muted: #69707d;
+        --meta: #98a2b3;
+        --border: #d3dae6;
+        --border-soft: #e6ebf2;
+        --accent: #0b64dd;
+        --accent-on: #ffffff;
+        --accent-hover: #0054b8;
+        --accent-active: #003f8f;
+        --success: #008a5e;
+        --warn: #f5a700;
+        --danger: #c61e25;
+        --font-display: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-body: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "Roboto Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 24px;
+        --text-2xl: 32px;
+        --text-3xl: 44px;
+        --text-4xl: 56px;
+        --leading-body: 1.5;
+        --leading-tight: 1.14;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 72px;
+        --section-y-tablet: 52px;
+        --section-y-phone: 36px;
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 10px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 8px 20px rgba(52, 55, 65, 0.14), 0 0 1px rgba(52, 55, 65, 0.18);
+        --focus-ring: 0 0 0 3px rgba(11, 100, 221, 0.28);
+        --motion-fast: 120ms;
+        --motion-base: 180ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+        --container-max: 1280px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      button, input, select { font: inherit; }
+      .page {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding: var(--space-6) var(--container-gutter-desktop) var(--section-y-desktop);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+        padding: var(--space-3) var(--space-4);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--elev-ring);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: max-content;
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        font-weight: 700;
+      }
+      .brand-mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background:
+          linear-gradient(135deg, #f5a700 0 34%, transparent 34%),
+          linear-gradient(45deg, #008b87 0 55%, #0b64dd 55%);
+        box-shadow: inset 0 0 0 1px rgba(26, 28, 33, 0.16);
+      }
+      .search {
+        flex: 1;
+        min-width: 220px;
+        max-width: 440px;
+      }
+      .search input, .field select {
+        width: 100%;
+        min-height: 36px;
+        padding: 0 var(--space-3);
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+      }
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+      }
+      .nav a {
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-sm);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .nav a[aria-current="page"] {
+        color: var(--accent);
+        background: #e8f1ff;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: var(--space-6);
+        align-items: start;
+      }
+      .side, .panel, .metric, .callout, .timeline {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+      .side {
+        padding: var(--space-3);
+        position: sticky;
+        top: var(--space-4);
+      }
+      .side h2, .panel h2, .timeline h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        line-height: var(--leading-tight);
+      }
+      .side-list {
+        display: grid;
+        gap: var(--space-1);
+        margin-top: var(--space-3);
+      }
+      .side-item {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+        padding: var(--space-2);
+        border-radius: var(--radius-sm);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        text-decoration: none;
+      }
+      .side-item.active {
+        color: var(--accent);
+        background: #e8f1ff;
+        font-weight: 700;
+      }
+      .main {
+        display: grid;
+        gap: var(--space-5);
+      }
+      .hero {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: var(--space-6);
+      }
+      h1, p { margin: 0; }
+      h1 {
+        max-width: 780px;
+        font-family: var(--font-display);
+        font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      .lead {
+        max-width: 66ch;
+        margin-top: var(--space-3);
+        color: var(--fg-2);
+        font-size: var(--text-lg);
+      }
+      .actions, .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        align-items: center;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        padding: 0 var(--space-3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+        font-weight: 700;
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+      }
+      .btn.primary {
+        color: var(--accent-on);
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .btn.primary:hover { background: var(--accent-hover); }
+      .btn:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .filters {
+        padding: var(--space-3);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+      .field {
+        display: grid;
+        gap: var(--space-1);
+        min-width: 150px;
+      }
+      .field label {
+        color: var(--muted);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+      .metric {
+        padding: var(--space-4);
+      }
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .metric strong {
+        display: block;
+        margin-top: var(--space-2);
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .metric em {
+        display: block;
+        margin-top: var(--space-1);
+        color: var(--meta);
+        font-style: normal;
+        font-size: var(--text-sm);
+      }
+      .panel {
+        overflow: hidden;
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border-soft);
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        background: var(--surface-warm);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      td {
+        font-size: var(--text-sm);
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 2px var(--space-2);
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--border);
+        color: var(--fg-2);
+        background: var(--surface);
+        font-size: var(--text-xs);
+        font-weight: 700;
+      }
+      .tag::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--meta);
+      }
+      .tag.danger::before { background: var(--danger); }
+      .tag.warn::before { background: var(--warn); }
+      .tag.success::before { background: var(--success); }
+      .callout {
+        display: grid;
+        grid-template-columns: 4px 1fr;
+        overflow: hidden;
+      }
+      .callout::before {
+        content: "";
+        background: var(--warn);
+      }
+      .callout-body {
+        padding: var(--space-4);
+      }
+      .callout h3, .timeline h3 {
+        margin: 0;
+        font-size: var(--text-base);
+      }
+      .callout p {
+        margin-top: var(--space-1);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+      }
+      .timeline {
+        padding: var(--space-4);
+      }
+      .events {
+        display: grid;
+        gap: var(--space-3);
+        margin-top: var(--space-4);
+      }
+      .event {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: var(--space-3);
+        padding-bottom: var(--space-3);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .time {
+        color: var(--meta);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+      }
+      @media (max-width: 980px) {
+        .page { padding-inline: var(--container-gutter-tablet); }
+        .topbar, .hero { align-items: flex-start; flex-direction: column; }
+        .workspace { grid-template-columns: 1fr; }
+        .side { position: static; }
+        .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 640px) {
+        .page { padding: var(--space-4) var(--container-gutter-phone) var(--section-y-phone); }
+        .metrics { grid-template-columns: 1fr; }
+        .panel { overflow-x: auto; }
+        .event { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Elastic Ops</div>
+        <label class="search">
+          <input type="search" value="service.name:checkout AND status:error" aria-label="Search query" />
+        </label>
+        <nav class="nav" aria-label="Primary">
+          <a href="#" aria-current="page">Alerts</a>
+          <a href="#">Logs</a>
+          <a href="#">APM</a>
+          <a href="#">Dashboards</a>
+        </nav>
+      </header>
+
+      <div class="workspace">
+        <aside class="side" aria-label="Sections">
+          <h2>Investigations</h2>
+          <div class="side-list">
+            <a class="side-item active" href="#"><span>Critical alerts</span><strong>12</strong></a>
+            <a class="side-item" href="#"><span>Service maps</span><strong>4</strong></a>
+            <a class="side-item" href="#"><span>Saved queries</span><strong>28</strong></a>
+            <a class="side-item" href="#"><span>Maintenance</span><strong>3</strong></a>
+          </div>
+        </aside>
+
+        <section class="main">
+          <div class="hero">
+            <div>
+              <h1>Checkout latency increased across three production regions.</h1>
+              <p class="lead">A dense, panel-first Elastic UI composition for search, observability, and incident analysis.</p>
+            </div>
+            <div class="actions">
+              <button class="btn">Save query</button>
+              <button class="btn primary">Create rule</button>
+            </div>
+          </div>
+
+          <form class="filters">
+            <div class="field">
+              <label for="severity">Severity</label>
+              <select id="severity"><option>Critical and high</option></select>
+            </div>
+            <div class="field">
+              <label for="window">Time range</label>
+              <select id="window"><option>Last 30 minutes</option></select>
+            </div>
+            <div class="field">
+              <label for="region">Region</label>
+              <select id="region"><option>All regions</option></select>
+            </div>
+            <button class="btn primary" type="button">Refresh</button>
+          </form>
+
+          <section class="metrics" aria-label="Metrics">
+            <article class="metric"><span>Error rate</span><strong>4.8%</strong><em>+2.1 pts</em></article>
+            <article class="metric"><span>P95 latency</span><strong>812ms</strong><em>+246ms</em></article>
+            <article class="metric"><span>Affected hosts</span><strong>18</strong><em>3 regions</em></article>
+            <article class="metric"><span>Rules firing</span><strong>7</strong><em>2 new</em></article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Alert stream</h2>
+              <button class="btn">Bulk actions</button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Status</th>
+                  <th scope="col">Rule</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Signal</th>
+                  <th scope="col">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag danger">Critical</span></td>
+                  <td>Checkout API latency threshold</td>
+                  <td><span class="mono">svc-checkout-prod</span></td>
+                  <td>P95 above 750ms for 12 min</td>
+                  <td>2 min ago</td>
+                </tr>
+                <tr>
+                  <td><span class="tag warn">High</span></td>
+                  <td>Payment dependency errors</td>
+                  <td><span class="mono">payments-east-1</span></td>
+                  <td>HTTP 502 spike above baseline</td>
+                  <td>6 min ago</td>
+                </tr>
+                <tr>
+                  <td><span class="tag success">Recovered</span></td>
+                  <td>Indexing delay</td>
+                  <td><span class="mono">events-ingest-03</span></td>
+                  <td>Queue depth normalized</td>
+                  <td>14 min ago</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="callout" aria-label="Warning">
+            <div class="callout-body">
+              <h3>Replica lag is delaying trace correlation.</h3>
+              <p>Keep the alert open until the indexing queue returns to the expected baseline and the latest traces are searchable.</p>
+            </div>
+          </section>
+
+          <section class="timeline">
+            <h2>Event timeline</h2>
+            <div class="events">
+              <article class="event">
+                <span class="time">12:42:18</span>
+                <div><h3>Threshold crossed</h3><p class="lead">Checkout API exceeded the configured latency window.</p></div>
+              </article>
+              <article class="event">
+                <span class="time">12:47:03</span>
+                <div><h3>Dependency spike detected</h3><p class="lead">Payment gateway 502 responses aligned with the checkout latency increase.</p></div>
+              </article>
+            </div>
+          </section>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

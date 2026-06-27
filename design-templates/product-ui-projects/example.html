@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product UI Projects Preview</title>
+<style>
+:root {
+  --bg: #eef1ec;
+  --panel: #fbfbf6;
+  --ink: #1f261f;
+  --muted: #667060;
+  --line: rgba(31, 38, 31, 0.13);
+  --accent: #2f7d68;
+  --accent-soft: #d7ebe3;
+  --warn: #d88641;
+  --shadow: 0 30px 80px -46px rgba(31, 38, 31, 0.35);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); }
+.shell { min-height: 100vh; display: grid; grid-template-columns: 220px 1fr; }
+aside { padding: 22px; border-right: 1px solid var(--line); background: rgba(251, 251, 246, 0.58); }
+.brand { font-weight: 800; letter-spacing: -0.03em; font-size: 22px; margin-bottom: 28px; }
+.nav { display: grid; gap: 8px; }
+.nav span { padding: 10px 12px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+.nav .active { background: var(--ink); color: #fff; }
+main { padding: 24px; display: grid; gap: 18px; }
+.topbar, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.topbar { min-height: 74px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.eyebrow { margin: 0 0 5px; color: var(--muted); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: clamp(25px, 4vw, 40px); letter-spacing: -0.05em; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+button { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-weight: 750; color: var(--ink); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.8fr); gap: 18px; align-items: start; }
+.panel { padding: 18px; }
+.panel h2 { font-size: 15px; letter-spacing: -0.01em; margin-bottom: 14px; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.metric { border: 1px solid var(--line); border-radius: 10px; padding: 13px; background: #fff; }
+.metric strong { display: block; font-size: 25px; letter-spacing: -0.04em; }
+.metric span { color: var(--muted); font-size: 12px; }
+.table { display: grid; gap: 8px; }
+.row { display: grid; grid-template-columns: 1.2fr 0.7fr 0.7fr 92px; gap: 10px; align-items: center; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-size: 13px; }
+.row.header { color: var(--muted); background: transparent; border: 0; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+.pill { display: inline-flex; width: fit-content; border-radius: 999px; padding: 4px 8px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 800; }
+.pill.warn { background: #f4e4d4; color: var(--warn); }
+.stack { display: grid; gap: 12px; }
+.state { border: 1px dashed var(--line); border-radius: 11px; padding: 14px; background: #fff; }
+.state h3 { font-size: 14px; margin-bottom: 7px; }
+.state p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.step { min-height: 92px; border-radius: 11px; padding: 12px; background: var(--ink); color: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+.step span { color: rgba(255,255,255,0.62); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; }
+  aside { display: none; }
+  main { padding: 14px; }
+  .topbar, .grid { display: block; }
+  .actions { margin-top: 14px; }
+  .panel { margin-top: 14px; }
+  .metrics, .flow { grid-template-columns: 1fr; }
+  .row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand">Workflow OS</div>
+    <div class="nav">
+      <span class="active">Dashboard</span>
+      <span>Tasks</span>
+      <span>Reviews</span>
+      <span>Reports</span>
+      <span>Settings</span>
+    </div>
+  </aside>
+  <main>
+    <section class="topbar">
+      <div>
+        <p class="eyebrow">Surface suite reference</p>
+        <h1>Operations dashboard</h1>
+      </div>
+      <div class="actions">
+        <button>Filter</button>
+        <button>Export</button>
+        <button class="primary">New task</button>
+      </div>
+    </section>
+    <section class="grid">
+      <article class="panel">
+        <h2>Queue health</h2>
+        <div class="metrics">
+          <div class="metric"><strong>128</strong><span>Open tasks</span></div>
+          <div class="metric"><strong>94%</strong><span>SLA coverage</span></div>
+          <div class="metric"><strong>18</strong><span>Needs review</span></div>
+        </div>
+        <div class="table">
+          <div class="row header"><span>Work item</span><span>Owner</span><span>Status</span><span>Risk</span></div>
+          <div class="row"><strong>Vendor renewal</strong><span>Ada</span><span class="pill">Ready</span><span>Low</span></div>
+          <div class="row"><strong>Policy review</strong><span>Lin</span><span class="pill warn">Blocked</span><span>High</span></div>
+          <div class="row"><strong>Usage report</strong><span>Mina</span><span class="pill">Queued</span><span>Med</span></div>
+        </div>
+      </article>
+      <div class="stack">
+        <article class="panel">
+          <h2>Review flow</h2>
+          <div class="flow">
+            <div class="step"><span>01</span><strong>Scan queue</strong></div>
+            <div class="step"><span>02</span><strong>Open detail</strong></div>
+            <div class="step"><span>03</span><strong>Resolve</strong></div>
+          </div>
+        </article>
+        <article class="state">
+          <h3>Empty state rule</h3>
+          <p>When a queue is empty, the surface explains what changed and keeps one useful next action visible.</p>
+        </article>
+        <article class="state">
+          <h3>Settings surface rule</h3>
+          <p>Team administration keeps permissions, billing, and integrations in compact rows instead of long forms.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,339 @@
+{
+  "schemaVersion": "od-product-ui-projects/v1",
+  "captured": "2026-06-27",
+  "description": "A project-level product UI case library for SaaS consoles, dashboards, admin tools, CRM systems, AI workspaces, and other multi-surface software products. Entries preserve surfaces, flows, states, components, source links, and local preview paths without copying external product assets.",
+  "indexes": {
+    "views": ["projects", "surfaces", "flows", "states", "components"],
+    "surfaceTypes": ["dashboard", "detail", "settings", "create-edit", "analytics", "billing", "mobile"],
+    "flowTypes": ["onboarding", "create", "review", "configure", "checkout", "team-admin"],
+    "stateTypes": ["empty", "loading", "error", "permission", "success", "dense-data"],
+    "componentTypes": ["nav", "table", "filter", "command-palette", "chart-panel", "activity-feed"]
+  },
+  "backfillTargets": [
+    {
+      "id": "stripe-revenue-platform",
+      "sourceEntry": "commercial-product-launches:stripe-homepage-revenue-platform",
+      "reason": "B2B platform currently captured as a homepage lead; needs dashboard, payments, billing, reporting, and developer surfaces."
+    },
+    {
+      "id": "notion-mail",
+      "sourceEntry": "commercial-product-launches:notion-mail-ai-inbox-product-page",
+      "reason": "Workflow product currently captured as a launch page; needs inbox, composer, settings, automation, and mobile surfaces."
+    },
+    {
+      "id": "superhuman-ai-productivity-suite",
+      "sourceEntry": "commercial-product-launches:superhuman-ai-productivity-suite-homepage",
+      "reason": "Suite product currently captured as a homepage lead; needs mail, docs, AI, command, team, and mobile surfaces."
+    },
+    {
+      "id": "dashboard-template-suite",
+      "sourceEntry": "design-template:dashboard",
+      "reason": "Local dashboard template has one screen and should gain overview, detail, settings, and empty-state examples."
+    },
+    {
+      "id": "social-media-dashboard-suite",
+      "sourceEntry": "design-template:social-media-dashboard",
+      "reason": "Local social dashboard template has one screen and should gain analytics, content detail, calendar, and empty-state examples."
+    },
+    {
+      "id": "saas-landing-suite",
+      "sourceEntry": "design-template:saas-landing",
+      "reason": "Local SaaS landing template has one marketing screen and should gain app dashboard, pricing, onboarding, and settings surfaces."
+    }
+  ],
+  "entries": [
+    {
+      "id": "workflow-os-console-suite",
+      "project": {
+        "name": "Workflow OS Console Suite",
+        "sector": "productivity software",
+        "url": "",
+        "type": "SaaS console"
+      },
+      "preview": "design-templates/product-ui-projects/example.html",
+      "why": "A local reference for how a product UI project should be captured as a suite: dashboard, detail, settings, flows, states, and reusable components are recorded together instead of flattening the product into one representative screen.",
+      "surfaces": [
+        {
+          "type": "dashboard",
+          "title": "Operations dashboard",
+          "url": "",
+          "preview": "design-templates/product-ui-projects/example.html",
+          "study": "Dense metrics, activity, and task queues share one scan rhythm without turning into a decorative landing page.",
+          "reuse": "Use for operational products that need a calm command center."
+        },
+        {
+          "type": "detail",
+          "title": "Task detail",
+          "url": "",
+          "study": "Primary object detail keeps status, timeline, owners, and actions visible around one work item.",
+          "reuse": "Use when records need context and action in the same view."
+        },
+        {
+          "type": "settings",
+          "title": "Team settings",
+          "url": "",
+          "study": "Settings preserve product density through compact rows, grouped permissions, and direct integration controls.",
+          "reuse": "Use for team administration surfaces that should not become long form dumps."
+        }
+      ],
+      "flows": [
+        {
+          "type": "review",
+          "title": "Queue to detail to resolution",
+          "study": "The core flow moves from dashboard scanning to detail review to a final action without losing global context.",
+          "reuse": "Use for approval, triage, and operations workflows."
+        }
+      ],
+      "states": [
+        {
+          "type": "empty",
+          "title": "Empty queue",
+          "study": "The empty state explains what changed and keeps one useful next action visible.",
+          "reuse": "Use for first-run or completed workflow states."
+        },
+        {
+          "type": "dense-data",
+          "title": "High-density table",
+          "study": "Rows preserve object, owner, status, and risk without oversized card treatment.",
+          "reuse": "Use when repeated action matters more than marketing-style display."
+        }
+      ],
+      "components": [
+        {
+          "type": "nav",
+          "title": "Persistent product rail",
+          "study": "A stable left rail keeps surfaces discoverable while the working area changes.",
+          "reuse": "Use for multi-surface consoles with repeated navigation."
+        },
+        {
+          "type": "activity-feed",
+          "title": "Activity and review stack",
+          "study": "Compact stacked panels keep flow status and exceptions visible next to the primary work surface.",
+          "reuse": "Use for collaborative dashboards and review queues."
+        }
+      ],
+      "implementation": {
+        "framework": "static HTML reference",
+        "complexity": "medium"
+      },
+      "capture": {
+        "date": "2026-06-26",
+        "sourceLinks": [
+          "design-templates/product-ui-projects/example.html",
+          "design-templates/dashboard/example.html",
+          "design-templates/social-media-dashboard/example.html"
+        ],
+        "attribution": "Open Design local reference",
+        "reusePolicy": "template",
+        "captureDepth": "surface-suite"
+      }
+    },
+    {
+      "id": "linear-product-development-system",
+      "project": {
+        "name": "Linear",
+        "sector": "product development software",
+        "url": "https://linear.app/",
+        "type": "product development workspace"
+      },
+      "preview": "design-templates/product-ui-projects/example.html",
+      "why": "A high-signal reference for AI-era product operations: triage, issue ownership, project planning, cycles, and analytics all read as one compact operating system instead of separate admin tools.",
+      "surfaces": [
+        {
+          "type": "dashboard",
+          "title": "Triage queue",
+          "url": "https://linear.app/docs/triage",
+          "study": "Cross-team intake, customer support handoff, and issue routing are treated as one dense queue rather than a thin notification feed.",
+          "reuse": "Use for work queues that need fast scanning, ownership, and escalation in the same surface."
+        },
+        {
+          "type": "detail",
+          "title": "Project workspace",
+          "url": "https://linear.app/docs/projects",
+          "study": "Projects keep overview, milestones, docs, and linked issue views close to one execution unit without losing planning context.",
+          "reuse": "Use when feature-sized work needs a durable home between roadmap and issue detail."
+        },
+        {
+          "type": "settings",
+          "title": "Cycle planning controls",
+          "url": "https://linear.app/docs/use-cycles",
+          "study": "Cadence, calendars, capacity, and automations are configured as lightweight controls around a recurring planning rhythm.",
+          "reuse": "Use for recurring planning systems that need guardrails without turning into heavyweight configuration."
+        },
+        {
+          "type": "analytics",
+          "title": "Insights analytics",
+          "url": "https://linear.app/docs/insights",
+          "study": "Real-time issue analytics and custom insights give teams a native analysis surface instead of exporting planning data elsewhere.",
+          "reuse": "Use when operational products need trend visibility inside the primary workspace."
+        }
+      ],
+      "flows": [
+        {
+          "type": "review",
+          "title": "Triage to delegated issue ownership",
+          "study": "New work moves from a shared queue into delegated ownership without breaking the product's compact navigation model.",
+          "reuse": "Use for intake-heavy products that need a clear handoff from queue review to accountable execution."
+        },
+        {
+          "type": "configure",
+          "title": "Project planning into cycle rhythm",
+          "study": "Project scope, cycle settings, and analytics form one closed loop between planning, execution, and follow-up measurement.",
+          "reuse": "Use for products that want planning configuration to feel connected to day-to-day delivery."
+        }
+      ],
+      "states": [
+        {
+          "type": "dense-data",
+          "title": "High-density planning surfaces",
+          "study": "Queues, project lists, and analytics views preserve dense metadata without collapsing into noisy card galleries.",
+          "reuse": "Use when a product's value depends on compact scan rhythm and repeated table-like interaction."
+        }
+      ],
+      "components": [
+        {
+          "type": "nav",
+          "title": "Persistent team-and-object sidebar",
+          "study": "Teams, issues, projects, cycles, and insights stay one click away through a stable navigation spine.",
+          "reuse": "Use for multi-surface work tools that should feel like one operating environment."
+        },
+        {
+          "type": "filter",
+          "title": "Saved views and queue filters",
+          "study": "Filtering is embedded into everyday workflow rather than hidden in an advanced search screen.",
+          "reuse": "Use when every team needs to shape the same data model into different operational views."
+        },
+        {
+          "type": "table",
+          "title": "Compact issue and project lists",
+          "study": "List rows carry status, ownership, timing, and project context without oversized chrome.",
+          "reuse": "Use for products where editing and scanning happen from the same dense list surface."
+        }
+      ],
+      "implementation": {
+        "framework": "Linear web app and docs capture",
+        "complexity": "high"
+      },
+      "capture": {
+        "date": "2026-06-27",
+        "sourceLinks": [
+          "https://linear.app/docs/triage",
+          "https://linear.app/docs/projects",
+          "https://linear.app/docs/use-cycles",
+          "https://linear.app/docs/insights",
+          "https://linear.app/docs/assigning-issues"
+        ],
+        "attribution": "Linear",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "surface-suite"
+      }
+    },
+    {
+      "id": "raycast-productivity-launcher",
+      "project": {
+        "name": "Raycast",
+        "sector": "desktop productivity software",
+        "url": "https://www.raycast.com/",
+        "type": "launcher workspace"
+      },
+      "preview": "design-templates/product-ui-projects/example.html",
+      "why": "A strong reference for turning a keyboard launcher into a multi-surface productivity system: store discovery, AI chat, notes, focus, and team workflows all stay lightweight and command-first.",
+      "surfaces": [
+        {
+          "type": "dashboard",
+          "title": "Extension store",
+          "url": "https://www.raycast.com/store",
+          "study": "Search, browse, and install flows are presented as a lightweight catalog that still feels native to a launcher product.",
+          "reuse": "Use for plugin ecosystems that need discovery without forcing a heavy marketplace shell."
+        },
+        {
+          "type": "detail",
+          "title": "AI chat workspace",
+          "url": "https://www.raycast.com/core-features/ai",
+          "study": "Raycast AI frames chat, commands, and model selection as one assistant surface tied directly to OS-level actions.",
+          "reuse": "Use when conversational AI should feel like an extension of the working environment, not a detached chatbot tab."
+        },
+        {
+          "type": "create-edit",
+          "title": "Notes capture surface",
+          "url": "https://www.raycast.com/core-features/notes",
+          "study": "Meeting notes, todos, and markdown editing are kept frictionless enough to justify capture from anywhere in the system.",
+          "reuse": "Use for quick-entry writing surfaces that must stay faster than opening a full editor."
+        },
+        {
+          "type": "settings",
+          "title": "Team workspace configuration",
+          "url": "https://www.raycast.com/teams",
+          "study": "Shared snippets, quicklinks, and extension templates turn team operations into a managed layer without losing the product's individual speed.",
+          "reuse": "Use for products that expand from personal utility into team-scale workflow standardization."
+        },
+        {
+          "type": "settings",
+          "title": "Focus session controls",
+          "url": "https://www.raycast.com/core-features/focus",
+          "study": "Distraction blocking is packaged as a lightweight mode rather than a separate wellness product, keeping the intervention close to everyday work.",
+          "reuse": "Use for optional focus states that should feel integrated, not bolted on."
+        }
+      ],
+      "flows": [
+        {
+          "type": "create",
+          "title": "Command to capture or AI output",
+          "study": "The launcher routes users quickly into note capture or AI completion without switching mental models.",
+          "reuse": "Use for keyboard-first products that need zero-friction branching into different work modes."
+        },
+        {
+          "type": "team-admin",
+          "title": "Personal utility into team workflow",
+          "study": "Teams adds shared building blocks on top of the personal launcher instead of replacing it with a separate enterprise console.",
+          "reuse": "Use when a solo tool expands into organizational workflow without losing product taste."
+        }
+      ],
+      "states": [
+        {
+          "type": "dense-data",
+          "title": "Search-heavy discovery and command states",
+          "study": "Store results, AI commands, and quick-entry tools stay legible under dense keyboard-driven interaction.",
+          "reuse": "Use when a product's default state is fast search, not long-form browsing."
+        }
+      ],
+      "components": [
+        {
+          "type": "command-palette",
+          "title": "Launcher as primary control surface",
+          "study": "One command surface anchors discovery, invocation, and automation across otherwise different product areas.",
+          "reuse": "Use when many capabilities should feel reachable through one consistent interaction grammar."
+        },
+        {
+          "type": "filter",
+          "title": "Store search and browse controls",
+          "study": "The ecosystem layer uses simple search-first filtering instead of dense faceted chrome.",
+          "reuse": "Use for add-on galleries that should preserve speed and clarity."
+        },
+        {
+          "type": "nav",
+          "title": "Lightweight product family rail",
+          "study": "Store, AI, Teams, and core features read as adjacent tools inside one product family rather than separate brands.",
+          "reuse": "Use for software suites that need breadth without enterprise navigation bloat."
+        }
+      ],
+      "implementation": {
+        "framework": "Raycast product site and feature pages",
+        "complexity": "medium-high"
+      },
+      "capture": {
+        "date": "2026-06-27",
+        "sourceLinks": [
+          "https://www.raycast.com/store",
+          "https://www.raycast.com/core-features/ai",
+          "https://www.raycast.com/core-features/notes",
+          "https://www.raycast.com/teams",
+          "https://www.raycast.com/core-features/focus"
+        ],
+        "attribution": "Raycast",
+        "reusePolicy": "inspiration-only",
+        "captureDepth": "surface-suite"
+      }
+    }
+  ]
+}

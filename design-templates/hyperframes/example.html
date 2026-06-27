@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HyperFrames Preview</title>
+<style>
+:root{--bg:#090a0c;--ink:#f8f3e8;--muted:#9c9689;--gold:#d8b86a;--blue:#76b7ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#090a0c;color:var(--ink);font-family:Inter,system-ui,sans-serif;overflow:hidden}
+.frame{height:100vh;display:grid;place-items:center;position:relative}.frame:before{content:"";position:absolute;inset:-20%;background:radial-gradient(circle at 50% 50%,rgba(118,183,255,.24),transparent 28%),radial-gradient(circle at 42% 48%,rgba(216,184,106,.18),transparent 18%);filter:blur(18px);animation:pulse 5s ease-in-out infinite}
+.canvas{position:relative;width:min(86vw,980px);aspect-ratio:16/9;border:1px solid rgba(255,255,255,.16);background:linear-gradient(135deg,#101318,#050608);box-shadow:0 40px 120px rgba(0,0,0,.6);overflow:hidden}
+.product{position:absolute;inset:18% 38%;border-radius:32px;background:linear-gradient(145deg,#e7dfcf,#8f887c 48%,#f8f3e8);box-shadow:0 30px 70px rgba(216,184,106,.28);animation:float 4s ease-in-out infinite}
+.timeline{position:absolute;left:34px;right:34px;bottom:30px;height:4px;background:rgba(255,255,255,.14)}.timeline:after{content:"";display:block;height:100%;width:46%;background:var(--gold)}
+.caption{position:absolute;left:34px;top:30px;font:800 12px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+h1{position:absolute;left:34px;bottom:58px;font:900 clamp(38px,7vw,84px)/.88 Inter,system-ui,sans-serif;letter-spacing:-.07em;margin:0}
+@keyframes float{50%{transform:translateY(-12px) rotate(-2deg)}}@keyframes pulse{50%{transform:scale(1.08);opacity:.75}}
+</style>
+</head>
+<body>
+<main class="frame">
+  <section class="canvas">
+    <div class="caption">HyperFrames composition / 00:05</div>
+    <div class="product"></div>
+    <h1>Product reveal<br>with timed HTML.</h1>
+    <div class="timeline"></div>
+  </section>
+</main>
+</body>
+</html>

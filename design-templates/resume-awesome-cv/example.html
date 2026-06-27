@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Awesome CV</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #ece8e2; color: #24201c; font-family: Georgia, "Times New Roman", serif; font-size: 10.5pt; line-height: 1.48; }
+    .page { width: min(210mm, calc(100vw - 28px)); min-height: 297mm; margin: 24px auto; background: #fffdf9; padding: 16mm 18mm; box-shadow: 0 20px 55px rgba(50,38,26,.16); }
+    header { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; border-bottom: 2px solid #8b2f3c; padding-bottom: 12px; }
+    h1 { margin: 0; font-size: 29pt; font-weight: 400; letter-spacing: -0.01em; }
+    .title { color: #8b2f3c; font-weight: 700; margin-top: 4px; font-family: Arial, sans-serif; font-size: 10pt; letter-spacing: .08em; text-transform: uppercase; }
+    .contact { text-align: right; font-family: Arial, sans-serif; font-size: 9.2pt; color: #5f5750; }
+    h2 { margin: 18px 0 8px; color: #8b2f3c; font-family: Arial, sans-serif; font-size: 9.5pt; letter-spacing: .16em; text-transform: uppercase; }
+    .item { display: grid; grid-template-columns: 28mm 1fr; gap: 12px; margin: 11px 0; }
+    .date { color: #7a7168; font-family: Arial, sans-serif; font-size: 9pt; }
+    h3 { margin: 0 0 2px; font-size: 12pt; }
+    .org { color: #5f5750; font-style: italic; margin-bottom: 4px; }
+    ul { margin: 4px 0 0 16px; padding: 0; }
+    li { margin: 3px 0; }
+    .summary { font-size: 11pt; margin: 12px 0 0; }
+    .footerline { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-family: Arial, sans-serif; font-size: 9pt; color: #5f5750; }
+    @media print { body { background: #fff; } .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div><h1>Elena Vargas</h1><div class="title">Research Operations Lead</div></div>
+      <div class="contact">elena.vargas@example.com<br>Madrid, ES · +34 600 555 014<br>linkedin.com/in/elenavargas</div>
+    </header>
+    <p class="summary">Research operations leader with 11 years of experience building scalable participant pipelines, governance practices, and insight repositories for product organizations operating across Europe and North America.</p>
+    <section>
+      <h2>Professional Experience</h2>
+      <article class="item"><div class="date">2021 - Present</div><div><h3>Director, Research Operations</h3><div class="org">Northline Software</div><ul><li>Built a centralized research panel of 18,000 qualified participants across 6 markets.</li><li>Reduced study launch time from 19 days to 6 days by standardizing intake, consent, and incentive workflows.</li><li>Partnered with legal and security teams to pass GDPR and SOC 2 audits with no critical findings.</li></ul></div></article>
+      <article class="item"><div class="date">2017 - 2021</div><div><h3>Senior Research Program Manager</h3><div class="org">BrightHealth Labs</div><ul><li>Created a mixed-methods repository that connected 420 studies to roadmap decisions.</li><li>Coached 22 product teams on research planning, synthesis quality, and evidence hygiene.</li></ul></div></article>
+    </section>
+    <section>
+      <h2>Selected Publications</h2>
+      <article class="item"><div class="date">2025</div><div><h3>Operationalizing Consent in Continuous Discovery</h3><div class="org">Design Research Quarterly</div></div></article>
+      <article class="item"><div class="date">2023</div><div><h3>From Repository to Ritual: Making Research Reusable</h3><div class="org">UX Europe Proceedings</div></div></article>
+    </section>
+    <section>
+      <h2>Education</h2>
+      <article class="item"><div class="date">2013</div><div><h3>MSc Human-Computer Interaction</h3><div class="org">University College London</div></div></article>
+    </section>
+    <div class="footerline"><span>Languages: Spanish, English, French</span><span>Tools: Dovetail, Qualtrics, SQL</span><span>Availability: EU remote</span></div>
+  </main>
+</body>
+</html>

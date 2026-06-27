@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Two Column Deedy</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e9ecef; color: #202124; font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.42; }
+    .page { width: min(210mm, calc(100vw - 28px)); min-height: 297mm; margin: 24px auto; background: #fff; padding: 15mm; box-shadow: 0 18px 48px rgba(20,24,30,.16); }
+    header { border-bottom: 1px solid #222; padding-bottom: 10px; margin-bottom: 14px; }
+    h1 { margin: 0; font-size: 31pt; letter-spacing: -0.02em; font-weight: 400; }
+    .subtitle { margin-top: 4px; color: #555; font-size: 11pt; }
+    .layout { display: grid; grid-template-columns: 34% 1fr; gap: 20px; }
+    h2 { margin: 0 0 8px; font-size: 9pt; letter-spacing: .14em; text-transform: uppercase; color: #0f5f7a; border-bottom: 1px solid #c9d6dc; padding-bottom: 4px; }
+    section { margin-bottom: 15px; }
+    .rail p, .rail li { font-size: 9.5pt; }
+    .links, ul { margin: 0; padding: 0; list-style: none; }
+    li { margin: 4px 0; }
+    .item { margin-bottom: 13px; }
+    h3 { margin: 0; font-size: 11.5pt; }
+    .meta { color: #666; font-size: 9.3pt; margin: 2px 0 5px; }
+    .bullets { list-style: disc; padding-left: 16px; }
+    .bullets li { margin: 3px 0; }
+    .chip { display: inline-block; border: 1px solid #c8d3d9; padding: 2px 6px; margin: 0 3px 5px 0; font-size: 8.8pt; }
+    @media print { body { background: #fff; } .page { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Daniel Park</h1>
+      <div class="subtitle">Computer Science Student · Full-Stack Intern · New York, NY</div>
+    </header>
+    <div class="layout">
+      <aside class="rail">
+        <section><h2>Contact</h2><ul class="links"><li>daniel.park@example.com</li><li>github.com/dpark-labs</li><li>linkedin.com/in/dpark</li><li>danielpark.dev</li></ul></section>
+        <section><h2>Education</h2><p><strong>Columbia University</strong><br>BS Computer Science<br>GPA 3.86 / 4.00<br>Expected May 2027</p></section>
+        <section><h2>Coursework</h2><p>Algorithms, Distributed Systems, Databases, HCI, Operating Systems, Machine Learning</p></section>
+        <section><h2>Skills</h2><p><span class="chip">TypeScript</span><span class="chip">React</span><span class="chip">Node.js</span><span class="chip">Postgres</span><span class="chip">Python</span><span class="chip">Docker</span></p></section>
+        <section><h2>Awards</h2><ul><li>Dean's List, 2024-2026</li><li>HackNY Finalist</li><li>ACM ICPC Regional, top 12%</li></ul></section>
+      </aside>
+      <div>
+        <section>
+          <h2>Experience</h2>
+          <article class="item"><h3>Atlas Cloud · Software Engineering Intern</h3><div class="meta">Jun 2025 - Aug 2025 · Platform Team</div><ul class="bullets"><li>Built a React observability console used by 34 internal engineers to inspect deploy health.</li><li>Reduced incident triage time by 28% by grouping logs, traces, and owner metadata into one view.</li><li>Added contract tests around API response shapes, catching 7 regressions before release.</li></ul></article>
+          <article class="item"><h3>Campus Labs · Frontend Developer</h3><div class="meta">Sep 2024 - May 2025 · Part-time</div><ul class="bullets"><li>Shipped a club budget dashboard for 180 student organizations with role-based approvals.</li><li>Improved Lighthouse accessibility score from 72 to 96 by fixing labels, focus states, and contrast.</li></ul></article>
+        </section>
+        <section>
+          <h2>Projects</h2>
+          <article class="item"><h3>QueryTrail</h3><div class="meta">TypeScript, SQLite, Web Workers</div><ul class="bullets"><li>Local-first SQL notebook that saves every query as a reversible timeline.</li><li>Implemented worker-based previews so 100k-row CSV imports keep the UI responsive.</li></ul></article>
+          <article class="item"><h3>PeerGraph</h3><div class="meta">React, D3, Postgres</div><ul class="bullets"><li>Mapped research collaboration networks and surfaced likely reviewers for 1,200 papers.</li></ul></article>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

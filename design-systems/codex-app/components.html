@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex App — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/codex-app. Inspired by public Codex app screenshots; no official app assets are copied."
+    />
+    <style>
+      :root {
+        --bg: #fbfbf8;
+        --surface: #ffffff;
+        --surface-warm: #f4f5f3;
+        --fg: #1f2328;
+        --fg-2: #3f454c;
+        --muted: #6b727c;
+        --meta: #9aa1ab;
+        --border: #d8dee8;
+        --border-soft: #e8edf5;
+        --accent: #2f6feb;
+        --accent-on: #ffffff;
+        --accent-hover: #245dc8;
+        --accent-active: #1f4fb0;
+        --success: #1a7f37;
+        --warn: #bf8700;
+        --danger: #cf222e;
+        --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+        --text-xs: 11px;
+        --text-sm: 12px;
+        --text-base: 13px;
+        --text-lg: 14px;
+        --text-xl: 16px;
+        --text-2xl: 20px;
+        --text-3xl: 28px;
+        --text-4xl: 36px;
+        --leading-body: 1.55;
+        --leading-tight: 1.18;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 48px;
+        --section-y-tablet: 40px;
+        --section-y-phone: 28px;
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 16px 40px rgba(31, 35, 40, 0.08);
+        --focus-ring: 0 0 0 3px rgba(47, 111, 235, 0.18);
+        --motion-fast: 140ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+        --container-max: 1180px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(circle at 12% 0%, rgba(47, 111, 235, 0.13), transparent 26%),
+          radial-gradient(circle at 100% 0%, rgba(124, 92, 255, 0.10), transparent 32%),
+          var(--bg);
+        color: var(--fg);
+        font: 400 var(--text-base) / var(--leading-body) var(--font-body);
+      }
+
+      .stage {
+        min-height: 100vh;
+        padding: var(--space-8);
+        display: grid;
+        place-items: center;
+      }
+
+      .app {
+        width: min(1180px, 100%);
+        min-height: 700px;
+        display: grid;
+        grid-template-columns: 238px minmax(420px, 1fr) minmax(330px, 38%);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--elev-raised);
+        overflow: hidden;
+      }
+
+      .rail {
+        background: #eaf1fb;
+        border-right: 1px solid var(--border);
+        padding: var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+      }
+
+      .traffic {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 24px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--border);
+      }
+
+      .dot:nth-child(1) { background: #ff5f57; }
+      .dot:nth-child(2) { background: #febc2e; }
+      .dot:nth-child(3) { background: #28c840; }
+
+      .nav-group {
+        display: grid;
+        gap: var(--space-1);
+      }
+
+      .label {
+        margin: var(--space-3) var(--space-2) var(--space-1);
+        color: var(--meta);
+        font-size: var(--text-xs);
+        font-weight: 500;
+      }
+
+      .nav-item,
+      .thread-row {
+        min-height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        padding: 0 var(--space-2);
+        border-radius: var(--radius-sm);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+      }
+
+      .nav-item.active,
+      .thread-row.active {
+        background: rgba(47, 111, 235, 0.10);
+        color: var(--fg);
+      }
+
+      .muted { color: var(--muted); }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 18px;
+        padding: 0 6px;
+        border-radius: var(--radius-pill);
+        background: rgba(26, 127, 55, 0.10);
+        color: var(--success);
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .main,
+      .review {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .topbar {
+        height: 46px;
+        border-bottom: 1px solid var(--border-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: 0 var(--space-4);
+      }
+
+      .title {
+        min-width: 0;
+        font-size: var(--text-lg);
+        font-weight: 600;
+        line-height: var(--leading-tight);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      .pill,
+      .icon-btn {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--fg-2);
+        border-radius: var(--radius-sm);
+        font: inherit;
+        font-size: var(--text-xs);
+      }
+
+      .pill {
+        min-height: 28px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 9px;
+      }
+
+      .icon-btn {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+      }
+
+      .pill.primary {
+        background: var(--fg);
+        border-color: var(--fg);
+        color: var(--surface);
+      }
+
+      .thread {
+        flex: 1;
+        padding: var(--space-8) var(--space-5) var(--space-5);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: var(--space-8);
+      }
+
+      .conversation {
+        width: min(690px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: var(--space-6);
+      }
+
+      .bubble-user {
+        justify-self: end;
+        max-width: 340px;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-lg);
+        background: var(--surface-warm);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+      }
+
+      .message h1 {
+        margin: 0 0 var(--space-3);
+        font-size: var(--text-xl);
+        line-height: var(--leading-tight);
+      }
+
+      .message p {
+        margin: 0 0 var(--space-3);
+        color: var(--fg-2);
+      }
+
+      .file-card {
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        background: var(--surface-warm);
+      }
+
+      .file-card-head,
+      .file-row {
+        min-height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 var(--space-3);
+        font-size: var(--text-sm);
+      }
+
+      .file-card-head {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border-soft);
+        font-weight: 600;
+      }
+
+      .file-row + .file-row { border-top: 1px solid var(--border-soft); }
+      .delta-add { color: var(--success); font-variant-numeric: tabular-nums; }
+      .delta-del { color: var(--danger); font-variant-numeric: tabular-nums; }
+
+      .composer {
+        width: min(690px, 100%);
+        margin: 0 auto;
+        min-height: 76px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        padding: var(--space-3);
+        display: grid;
+        gap: var(--space-3);
+      }
+
+      .composer-input {
+        color: var(--meta);
+        font-size: var(--text-sm);
+      }
+
+      .composer-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .review {
+        border-left: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .review-body {
+        flex: 1;
+        overflow: hidden;
+        padding: var(--space-3);
+        display: grid;
+        gap: var(--space-3);
+      }
+
+      .review-file {
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+      }
+
+      .review-file-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 32px;
+        padding: 0 var(--space-3);
+        background: #edf4ff;
+        color: var(--fg-2);
+        font-size: var(--text-xs);
+        font-weight: 600;
+      }
+
+      .code {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        line-height: 1.55;
+      }
+
+      .code-line {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        min-height: 24px;
+      }
+
+      .ln {
+        color: var(--meta);
+        text-align: right;
+        padding-right: var(--space-3);
+        user-select: none;
+      }
+
+      .code-text {
+        padding: 0 var(--space-3);
+        white-space: pre;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .code-line.add { background: rgba(26, 127, 55, 0.13); }
+      .code-line.del { background: rgba(207, 34, 46, 0.11); }
+      .code-line.focus { background: #edf4ff; }
+
+      @media (max-width: 980px) {
+        .stage { padding: var(--space-4); }
+        .app { grid-template-columns: 220px 1fr; }
+        .review { display: none; }
+      }
+
+      @media (max-width: 700px) {
+        .app { grid-template-columns: 1fr; }
+        .rail { display: none; }
+        .thread { padding: var(--space-5) var(--space-4); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="app" aria-label="Codex App inspired workspace fixture">
+        <aside class="rail">
+          <div class="traffic" aria-hidden="true">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+
+          <nav class="nav-group" aria-label="Primary">
+            <div class="nav-item active"><span>New chat</span></div>
+            <div class="nav-item"><span>Search</span></div>
+            <div class="nav-item"><span>Plugins</span></div>
+            <div class="nav-item"><span>Automations</span></div>
+          </nav>
+
+          <div>
+            <div class="label">Pinned</div>
+            <div class="nav-group">
+              <div class="thread-row"><span>Review and triage issues</span><span class="muted">1w</span></div>
+              <div class="thread-row active"><span>Redesign app modern UI</span><span class="muted">1w</span></div>
+              <div class="thread-row"><span>Create flow diagram</span><span class="muted">2w</span></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="label">Projects</div>
+            <div class="nav-group">
+              <div class="thread-row"><span>burger-restaurant</span></div>
+              <div class="thread-row"><span>codex-voxel</span></div>
+              <div class="thread-row"><span>jump-and-run</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:auto" class="nav-item"><span>Settings</span></div>
+        </aside>
+
+        <section class="main">
+          <header class="topbar">
+            <div class="title">Redesign app modern UI</div>
+            <div class="toolbar">
+              <button class="icon-btn" aria-label="Run">▶</button>
+              <button class="pill">Open</button>
+              <button class="pill primary">Commit</button>
+            </div>
+          </header>
+
+          <div class="thread">
+            <div class="conversation">
+              <div class="bubble-user">Redesign the app to be more modern</div>
+              <article class="message">
+                <h1>Updated the interface around an image-led direction.</h1>
+                <p>The new layout gives the workspace a focused command surface while keeping review, Git state, and follow-up changes close to the active thread.</p>
+                <div class="file-card">
+                  <div class="file-card-head">
+                    <span>4 files changed</span>
+                    <span><span class="delta-add">+1506</span> <span class="delta-del">-16</span></span>
+                  </div>
+                  <div class="file-row"><span>index.html</span><span class="delta-add">+324</span></div>
+                  <div class="file-row"><span>src/main.js</span><span class="delta-add">+51</span></div>
+                  <div class="file-row"><span>src/style.css</span><span><span class="delta-add">+23</span> <span class="delta-del">-16</span></span></div>
+                </div>
+              </article>
+            </div>
+
+            <form class="composer">
+              <div class="composer-input">Ask for follow-up changes</div>
+              <div class="composer-actions">
+                <div class="toolbar">
+                  <span class="pill">Work locally</span>
+                  <span class="pill">main</span>
+                </div>
+                <button class="icon-btn" aria-label="Send">↑</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <aside class="review">
+          <header class="topbar">
+            <div class="title">Review</div>
+            <div class="toolbar">
+              <span class="status">+938 -664</span>
+              <button class="icon-btn" aria-label="Expand">↗</button>
+            </div>
+          </header>
+
+          <div class="review-body">
+            <div class="review-file">
+              <div class="review-file-head">
+                <span>index.html</span>
+                <span class="delta-add">+230 -150</span>
+              </div>
+              <div class="code" aria-label="Diff preview">
+                <div class="code-line focus"><span class="ln">1</span><span class="code-text">&lt;!doctype html&gt;</span></div>
+                <div class="code-line del"><span class="ln">7</span><span class="code-text">- &lt;title&gt;Old task surface&lt;/title&gt;</span></div>
+                <div class="code-line add"><span class="ln">7</span><span class="code-text">+ &lt;title&gt;Agent workspace&lt;/title&gt;</span></div>
+                <div class="code-line"><span class="ln">18</span><span class="code-text">&lt;main class="workspace"&gt;</span></div>
+                <div class="code-line add"><span class="ln">24</span><span class="code-text">+ &lt;aside class="review-pane"&gt;</span></div>
+                <div class="code-line add"><span class="ln">25</span><span class="code-text">+   &lt;div class="diff-row added"&gt;</span></div>
+              </div>
+            </div>
+
+            <div class="review-file">
+              <div class="review-file-head">
+                <span>src/style.css</span>
+                <span class="delta-add">+23 -16</span>
+              </div>
+              <div class="code">
+                <div class="code-line add"><span class="ln">41</span><span class="code-text">+ --accent: #2f6feb;</span></div>
+                <div class="code-line add"><span class="ln">42</span><span class="code-text">+ --radius-md: 8px;</span></div>
+                <div class="code-line del"><span class="ln">48</span><span class="code-text">- box-shadow: 0 24px 80px;</span></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

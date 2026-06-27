@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commercial Product Launches Preview</title>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #111111;
+  --muted: #626262;
+  --line: #dedbd3;
+  --paper: #f6f1e7;
+  --panel: #ffffff;
+  --accent: #0b63ce;
+  --charcoal: #191b1f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: var(--paper); }
+main { min-height: 100vh; }
+.hero { min-height: 72vh; display: grid; grid-template-columns: 1.05fr .95fr; align-items: center; gap: 48px; padding: 64px clamp(24px, 6vw, 96px); background: linear-gradient(110deg, #fbfaf7 0%, #e8e3d8 100%); }
+.kicker { font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+h1 { max-width: 780px; margin: 16px 0 20px; font-size: clamp(44px, 8vw, 104px); line-height: .92; letter-spacing: -0.055em; }
+.hero p { max-width: 620px; color: var(--muted); font-size: 18px; line-height: 1.6; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+.actions a { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 20px; border-radius: 999px; text-decoration: none; font-weight: 800; }
+.actions a:first-child { color: #fff; background: var(--accent); }
+.actions a:last-child { color: var(--ink); border: 1px solid var(--line); background: rgba(255,255,255,.56); }
+.stage { aspect-ratio: 1 / 1; border-radius: 34px; background: radial-gradient(circle at 55% 30%, #ffffff 0 14%, #cfd6df 15% 28%, #111 29% 30%, #f7f7f4 31% 100%); position: relative; overflow: hidden; box-shadow: 0 30px 80px -40px rgba(0,0,0,.45); }
+.stage::before { content: ""; position: absolute; inset: 18%; border-radius: 28px; border: 18px solid #202328; background: linear-gradient(135deg, #1b1d22, #343840); box-shadow: inset 0 0 0 2px rgba(255,255,255,.08); }
+.stage::after { content: "PRODUCT MEDIA"; position: absolute; left: 28px; bottom: 28px; color: rgba(255,255,255,.72); font-size: 11px; font-weight: 900; letter-spacing: .18em; }
+.band { padding: 64px clamp(24px, 6vw, 96px); background: var(--charcoal); color: #fff; }
+.band h2 { margin: 0 0 26px; font-size: clamp(32px, 5vw, 64px); line-height: 1; letter-spacing: -0.04em; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.card { min-height: 220px; display: flex; flex-direction: column; justify-content: space-between; padding: 22px; border: 1px solid rgba(255,255,255,.14); border-radius: 20px; background: rgba(255,255,255,.06); }
+.card strong { font-size: 18px; }
+.card span { color: rgba(255,255,255,.64); line-height: 1.5; }
+.commerce { padding: 64px clamp(24px, 6vw, 96px); display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.module { border: 1px solid var(--line); border-radius: 24px; background: var(--panel); padding: 28px; }
+.module h3 { margin: 0 0 10px; font-size: 28px; letter-spacing: -0.03em; }
+.module p { color: var(--muted); line-height: 1.55; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chips span { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+@media (max-width: 820px) {
+  .hero, .commerce { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: 1fr; }
+  .hero { min-height: auto; padding-top: 40px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <div>
+      <div class="kicker">Commercial Product Launches</div>
+      <h1>Plan the whole launch page, not just the hero.</h1>
+      <p>This original preview shows how the case library thinks: narrative first, then product media, motion, conversion, and responsive art direction.</p>
+      <div class="actions">
+        <a href="#modules">View modules</a>
+        <a href="#commerce">Commerce patterns</a>
+      </div>
+    </div>
+    <div class="stage" aria-label="Abstract product media stage"></div>
+  </section>
+
+  <section class="band" id="modules">
+    <h2>Reusable launch modules</h2>
+    <div class="grid">
+      <article class="card"><strong>Page narrative</strong><span>Chapters that move from desire to proof to purchase confidence.</span></article>
+      <article class="card"><strong>Media direction</strong><span>Product renders, macro detail, UI proof, lifestyle imagery, and mobile crops.</span></article>
+      <article class="card"><strong>Motion system</strong><span>Scroll chapters, sticky media, carousels, reveal timing, and reduced-motion fallbacks.</span></article>
+      <article class="card"><strong>Commerce path</strong><span>Buy CTAs, compare links, trade-in, expert help, support, shipping, and returns.</span></article>
+    </div>
+  </section>
+
+  <section class="commerce" id="commerce">
+    <article class="module">
+      <h3>Before coding</h3>
+      <p>Decide the proof sequence and list every media asset each section needs. Commercial polish usually fails when the copy, imagery, and motion are planned separately.</p>
+      <div class="chips"><span>Hero</span><span>Proof</span><span>Compare</span><span>CTA</span></div>
+    </article>
+    <article class="module">
+      <h3>Before launch</h3>
+      <p>Check loading, keyboard access, reduced motion, mobile crop quality, legal notes, and whether purchase reassurance is visible near the decision points.</p>
+      <div class="chips"><span>LCP</span><span>Fallback</span><span>Mobile crops</span><span>Support</span></div>
+    </article>
+  </section>
+</main>
+</body>
+</html>

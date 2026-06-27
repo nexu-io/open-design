@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GOV.UK Design System reference components</title>
+    <meta
+      name="description"
+      content="Open Design fixture distilling GOV.UK public-service visual language without copying official assets or source."
+    />
+    <style>
+:root {
+  --bg: #ffffff;
+  --surface: #f4f8fb;
+  --surface-warm: #f3f3f3;
+  --fg: #0b0c0c;
+  --fg-2: #484949;
+  --muted: #484949;
+  --meta: #1d70b8;
+  --border: #cecece;
+  --border-soft: #d2e2f1;
+  --accent: #00703c;
+  --accent-on: #ffffff;
+  --accent-hover: #005a30;
+  --accent-active: #00401f;
+  --success: #0f7a52;
+  --warn: #ffdd00;
+  --danger: #ca3535;
+  --font-display: "GDS Transport", Arial, sans-serif;
+  --font-body: "GDS Transport", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-xs: 14px;
+  --text-sm: 16px;
+  --text-base: 19px;
+  --text-lg: 24px;
+  --text-xl: 27px;
+  --text-2xl: 36px;
+  --text-3xl: 48px;
+  --text-4xl: 80px;
+  --leading-body: 1.315;
+  --leading-tight: 1.05;
+  --tracking-display: 0;
+  --space-1: 5px;
+  --space-2: 10px;
+  --space-3: 15px;
+  --space-4: 20px;
+  --space-5: 25px;
+  --space-6: 30px;
+  --space-8: 50px;
+  --space-12: 60px;
+  --section-y-desktop: 60px;
+  --section-y-tablet: 50px;
+  --section-y-phone: 40px;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 0 #929191;
+  --focus-ring: 0 0 0 3px var(--warn);
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --container-max: 960px;
+  --container-gutter-desktop: 30px;
+  --container-gutter-tablet: 25px;
+  --container-gutter-phone: 15px;
+}
+    </style>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      a { color: var(--meta); text-decoration-thickness: 1px; text-underline-offset: 0.12em; }
+      a:hover { color: #0f385c; }
+      a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+        outline: 3px solid var(--warn);
+        outline-offset: 0;
+        box-shadow: 0 -2px var(--warn), 0 4px var(--fg);
+      }
+      .topbar {
+        background: var(--fg);
+        color: var(--accent-on);
+        border-bottom: 10px solid var(--meta);
+      }
+      .topbar-inner {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding: var(--space-3) var(--container-gutter-desktop);
+        font-weight: 700;
+      }
+      main {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding: var(--section-y-desktop) var(--container-gutter-desktop);
+      }
+      .service-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 680px) minmax(240px, 1fr);
+        gap: var(--space-8);
+        align-items: start;
+      }
+      .caption {
+        display: block;
+        color: var(--muted);
+        font-size: var(--text-lg);
+        margin-bottom: var(--space-1);
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-3xl); margin-bottom: var(--space-6); }
+      h2 { font-size: var(--text-2xl); margin-bottom: var(--space-4); }
+      h3 { font-size: var(--text-lg); margin-bottom: var(--space-2); }
+      .lead {
+        max-width: 620px;
+        font-size: var(--text-lg);
+        margin-bottom: var(--space-8);
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+        padding: var(--space-5);
+        margin-bottom: var(--space-6);
+      }
+      .form-group { margin-bottom: var(--space-6); }
+      label, legend {
+        display: block;
+        margin-bottom: var(--space-2);
+        font-weight: 700;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: var(--text-sm);
+        margin-bottom: var(--space-2);
+      }
+      input, textarea {
+        width: 100%;
+        max-width: 420px;
+        min-height: 44px;
+        border: 2px solid var(--fg);
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
+        color: var(--fg);
+        background: var(--bg);
+        font: inherit;
+      }
+      .error {
+        border-left: 5px solid var(--danger);
+        padding-left: var(--space-3);
+      }
+      .error-message {
+        color: var(--danger);
+        font-weight: 700;
+        margin-bottom: var(--space-2);
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: var(--space-2) var(--space-4);
+        border: 2px solid transparent;
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+        box-shadow: var(--elev-raised);
+        color: var(--accent-on);
+        cursor: pointer;
+        font: 700 var(--text-base) / 1 var(--font-body);
+      }
+      .button:hover { background: var(--accent-hover); }
+      .button:active { background: var(--accent-active); box-shadow: none; transform: translateY(2px); }
+      .secondary-action {
+        display: inline-block;
+        margin-left: var(--space-4);
+      }
+      .summary {
+        border: 1px solid var(--border);
+        margin-top: var(--space-8);
+      }
+      .summary-row {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr) auto;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        border-top: 1px solid var(--border);
+      }
+      .summary-row:first-child { border-top: 0; }
+      .summary-key { font-weight: 700; }
+      .aside {
+        border-top: 3px solid var(--meta);
+        padding-top: var(--space-3);
+        color: var(--fg-2);
+        font-size: var(--text-sm);
+      }
+      @media (max-width: 800px) {
+        .topbar-inner, main { padding-inline: var(--container-gutter-phone); }
+        main { padding-block: var(--section-y-phone); }
+        .service-layout { grid-template-columns: 1fr; }
+        h1 { font-size: 32px; line-height: 35px; }
+        h2 { font-size: 27px; line-height: 30px; }
+        .summary-row { grid-template-columns: 1fr; }
+        .secondary-action { display: block; margin: var(--space-4) 0 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">Public service</div>
+    </header>
+    <main>
+      <div class="service-layout">
+        <section>
+          <span class="caption">Application step</span>
+          <h1>Check eligibility for support</h1>
+          <p class="lead">Answer these questions so the service can tell you what documents you need before you continue.</p>
+
+          <div class="panel">
+            <h2>Before you start</h2>
+            <p>You will need your reference number and the date you received your notice.</p>
+          </div>
+
+          <form>
+            <div class="form-group">
+              <label for="reference">Reference number</label>
+              <p class="hint" id="reference-hint">For example, AB123456C.</p>
+              <input id="reference" aria-describedby="reference-hint" autocomplete="off" />
+            </div>
+
+            <div class="form-group error">
+              <label for="date">Date on the notice</label>
+              <p class="error-message">Enter the date shown on the notice.</p>
+              <input id="date" aria-invalid="true" />
+            </div>
+
+            <button class="button" type="button">Save and continue</button>
+            <a class="secondary-action" href="#">Save and come back later</a>
+          </form>
+
+          <div class="summary" aria-label="Answer summary">
+            <div class="summary-row">
+              <div class="summary-key">Name</div>
+              <div>Alex Carter</div>
+              <a href="#">Change</a>
+            </div>
+            <div class="summary-row">
+              <div class="summary-key">Address</div>
+              <div>10 High Street, Bristol</div>
+              <a href="#">Change</a>
+            </div>
+          </div>
+        </section>
+        <aside class="aside">
+          <h3>Related guidance</h3>
+          <p>Keep support content short, factual, and close to the task it explains.</p>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>
