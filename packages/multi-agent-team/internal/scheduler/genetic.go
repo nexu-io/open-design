@@ -69,27 +69,41 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 
 	var allResults []*TaskResult
 
-	// 每一代生成 populationSize 个变体
-	// 多 agent：并行分发，每个 agent 最多执行 1 个变体，WaitResult 计时精确
-	// 单 agent：串行执行，避免变体在 taskCh 排队时 WaitResult 已开始计时导致超时
-	serial := len(agentPool) == 1
+	// 每一代生成 populationSize 个变体。
+	// 按 agent 池大小分批（wave），每波最多 len(agentPool) 个变体，
+	// 每个 agent 分配一个变体。Wave 内并行、Wave 间串行，
+	// 确保每个 agent 同一时刻最多执行 1 个变体，避免变体在 taskCh
+	// 排队时 WaitResult 已开始计时导致假超时。
+	waveSize := len(agentPool)
 	for gen := 0; gen < s.generations; gen++ {
-		var (
-			mu         sync.Mutex
-			genResults []*TaskResult
-			wg         sync.WaitGroup
-		)
+		var genResults []*TaskResult
 
-		for i := 0; i < s.populationSize; i++ {
-			idx, generation := i, gen
-			prompt := fmt.Sprintf("[Generation %d, Variant %d]\n%s", generation+1, idx+1, basePrompt)
-			agentID := agentPool[idx%len(agentPool)]
+		for waveStart := 0; waveStart < s.populationSize; waveStart += waveSize {
+			waveEnd := waveStart + waveSize
+			if waveEnd > s.populationSize {
+				waveEnd = s.populationSize
+			}
 
-			if serial {
-				// 单 agent：串行执行，WaitResult 不会因排队而被计时
+			waveCount := waveEnd - waveStart
+			if waveCount == 1 {
+				// 单变体波次直接串行，无需 goroutine 开销
+				idx := waveStart
+				prompt := fmt.Sprintf("[Generation %d, Variant %d]\n%s", gen+1, idx+1, basePrompt)
+				agentID := agentPool[idx%waveSize]
 				result := s.executeVariant(ctx, agentID, prompt, timeout)
 				genResults = append(genResults, result)
-			} else {
+				continue
+			}
+
+			var (
+				mu sync.Mutex
+				wg sync.WaitGroup
+			)
+			for i := 0; i < waveCount; i++ {
+				idx := waveStart + i
+				prompt := fmt.Sprintf("[Generation %d, Variant %d]\n%s", gen+1, idx+1, basePrompt)
+				agentID := agentPool[i] // 每波次内每个 agent 最多一个变体
+
 				wg.Add(1)
 				go func(agent string, p string) {
 					defer wg.Done()
@@ -99,8 +113,6 @@ func (s *GeneticScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([]
 					mu.Unlock()
 				}(agentID, prompt)
 			}
-		}
-		if !serial {
 			wg.Wait()
 		}
 
