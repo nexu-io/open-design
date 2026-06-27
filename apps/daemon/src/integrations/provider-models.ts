@@ -158,7 +158,7 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
     // (GET /api/v1/models?type=llm), not the OpenAI /v1/models route.
     return aihubmixCatalogUrl(baseUrl, 'llm');
   }
-  if (protocol === 'openai' || protocol === 'senseaudio') {
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'nvidia_nim') {
     return appendVersionedApiPath(baseUrl, '/models');
   }
   if (protocol === 'anthropic') {
@@ -176,7 +176,7 @@ function providerModelsHeaders(
   protocol: ConnectionTestProtocol,
   apiKey: string,
 ): Record<string, string> {
-  if (protocol === 'openai' || protocol === 'senseaudio') {
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'nvidia_nim') {
     return { authorization: `Bearer ${apiKey}` };
   }
   if (protocol === 'aihubmix') {
@@ -202,7 +202,7 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   // (e.g. gpt-image-2 → "image_generation,llm") would otherwise leak in. Those
   // belong to the dedicated image/video/audio pickers.
   if (protocol === 'aihubmix') return parseAIHubMixCatalog(data, { chatOnly: true });
-  if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'nvidia_nim') return extractOpenAiModels(data);
   if (protocol === 'anthropic') return extractAnthropicModels(data);
   if (protocol === 'google') return extractGoogleModels(data);
   return [];

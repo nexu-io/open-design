@@ -748,11 +748,12 @@ function inspectProviderCompletion(
   const obj = data && typeof data === 'object' ? data as Record<string, unknown> : null;
   if (!obj) return { valid: false };
 
-  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'aihubmix') {
+  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'aihubmix' || protocol === 'nvidia_nim') {
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
     if (
       // AIHubMix is omitted from the strict response-model check (like Azure):
       // its gateway routes by model name and may echo a normalized id.
+      // NIM also normalises model ids, so skip the strict check.
       (protocol === 'openai' || protocol === 'senseaudio') &&
       enforceResponseModel &&
       responseModel &&
@@ -1105,6 +1106,24 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
             'HTTP-Referer': 'https://opendesign.dev',
             'X-Title': 'Open Design',
           } : {}),
+        },
+        body: {
+          model,
+          ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+        },
+        extractText: extractOpenAIMessageText,
+      };
+    case 'nvidia_nim':
+      // Nvidia NIM is wire-compatible with OpenAI (POST /v1/chat/completions,
+      // Bearer auth, identical body + response shape). NIM may normalise
+      // model ids so the strict response-model check is skipped.
+      return {
+        url: appendVersionedApiPath(baseUrl, '/chat/completions'),
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
         },
         body: {
           model,

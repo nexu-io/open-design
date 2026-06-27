@@ -207,13 +207,14 @@ export type TrackingExecutionMode = 'local_cli' | 'byok';
 // `main` after the v2 doc was published; we forward it verbatim so
 // dashboards can split it out even though the product CSV does not yet
 // list it.
-export type TrackingByokProviderId =
-  | 'anthropic'
-  | 'openai'
-  | 'azure_openai'
-  | 'google_gemini'
-  | 'ollama_cloud'
-  | 'senseaudio';
+export type TrackingByokProviderId = 
+| 'anthropic'
+| 'openai'
+| 'azure_openai'
+| 'google_gemini'
+| 'ollama_cloud'
+| 'senseaudio'
+| 'nvidia_nim';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
@@ -3570,11 +3571,13 @@ export function byokProtocolToTracking(
     case 'ollama':
     case 'ollama_cloud':
       return 'ollama_cloud';
-    case 'senseaudio':
-      return 'senseaudio';
-    default:
-      return null;
-  }
+case 'senseaudio':
+  return 'senseaudio';
+case 'nvidia_nim':
+  return 'nvidia_nim';
+default:
+  return null;
+}
 }
 
 // Code `SettingsSection` from apps/web/src/components/SettingsDialog.tsx
