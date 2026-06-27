@@ -313,6 +313,8 @@ func handleModes(w http.ResponseWriter, r *http.Request) {
 		{"id": "serial", "name": "Serial", "desc": "按阶段链式传递，前段 artifacts 通过 ContextSnapshot 交接"},
 		{"id": "genetic", "name": "Genetic", "desc": "多代进化：并行生成 N 个变体 → 选择 → 最优解传下一代"},
 		{"id": "hybrid", "name": "Hybrid", "desc": "按依赖分层层，同层并行，层间串行传递 artifacts"},
+		{"id": "swarm", "name": "Swarm", "desc": "分身集群：基于遗传算法创建子 Agent 种群，交叉变异进化最优配置"},
+		{"id": "evolution", "name": "Evolution", "desc": "自递归进化：自动学习历史结果，优化 prompt、模型选择和调度参数"},
 	})
 }
 
@@ -503,6 +505,12 @@ func runScheduler(
 		return s.Execute(ctx, plan)
 	case "hybrid":
 		s := scheduler.NewHybridScheduler(pool, b)
+		return s.Execute(ctx, plan)
+	case "swarm":
+		s := scheduler.NewSwarmScheduler(pool, b)
+		return s.Execute(ctx, plan)
+	case "evolution":
+		s := scheduler.NewEvolutionScheduler(pool, b)
 		return s.Execute(ctx, plan)
 	default:
 		return nil, fmt.Errorf("unsupported mode: %s", mode)

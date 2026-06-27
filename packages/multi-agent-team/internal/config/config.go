@@ -96,6 +96,8 @@ func (c *TeamConfig) Validate() error {
 		"hybrid":        true,
 		"cycle":         true,
 		"complementary": true,
+		"swarm":         true, // 分身集群：遗传算法统筹子 Agent
+		"evolution":     true, // 自递归进化：历史驱动 prompt 优化
 	}
 	if !supportedModes[c.Team.Mode] {
 		return &ValidationError{fmt.Sprintf("unsupported mode %q — supported: inheritance, parallel, serial, genetic, hybrid, cycle, complementary", c.Team.Mode)}
