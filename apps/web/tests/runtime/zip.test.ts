@@ -74,14 +74,47 @@ describe('buildZip', () => {
     expect(firstCentral.getUint32(0, true)).toBe(CENTRAL_SIG);
   });
 
-  it('encodes non-ASCII file names as UTF-8 in the local and central headers', async () => {
+  it('flags non-ASCII file names as UTF-8 (bit 11) in the local and central headers', async () => {
     const bytes = await readBytes(buildZip([{ path: '日本.md', content: 'x' }]));
-    const localView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const nameLen = localView.getUint16(26, true);
     const expectedName = new TextEncoder().encode('日本.md');
-    expect(nameLen).toBe(expectedName.length);
-    const nameBytes = bytes.slice(30, 30 + nameLen);
-    expect(Array.from(nameBytes)).toEqual(Array.from(expectedName));
+
+    // Local header: UTF-8 flag (bit 11) set + filename bytes match.
+    const localView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(localView.getUint32(0, true)).toBe(LOCAL_SIG);
+    expect(localView.getUint16(6, true) & 0x0800).toBe(0x0800);
+    const localNameLen = localView.getUint16(26, true);
+    expect(localNameLen).toBe(expectedName.length);
+    expect(Array.from(bytes.slice(30, 30 + localNameLen))).toEqual(Array.from(expectedName));
+
+    // Central header: locate via EOCD, assert UTF-8 flag + filename bytes too.
+    const eocdOffset = findEocd(bytes);
+    expect(eocdOffset).toBeGreaterThan(0);
+    const eocd = new DataView(bytes.buffer, bytes.byteOffset + eocdOffset, 22);
+    const centralOffset = eocd.getUint32(16, true);
+    const centralView = new DataView(
+      bytes.buffer,
+      bytes.byteOffset + centralOffset,
+      bytes.byteLength - centralOffset,
+    );
+    expect(centralView.getUint32(0, true)).toBe(CENTRAL_SIG);
+    expect(centralView.getUint16(8, true) & 0x0800).toBe(0x0800);
+    const centralNameLen = centralView.getUint16(28, true);
+    expect(centralNameLen).toBe(expectedName.length);
+    const centralNameStart = centralOffset + 46;
+    expect(Array.from(bytes.slice(centralNameStart, centralNameStart + centralNameLen))).toEqual(
+      Array.from(expectedName),
+    );
+  });
+
+  it('does not set the UTF-8 flag for pure-ASCII file names', async () => {
+    const bytes = await readBytes(buildZip([{ path: 'a.txt', content: 'x' }]));
+    const localView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(localView.getUint16(6, true) & 0x0800).toBe(0);
+    const eocdOffset = findEocd(bytes);
+    const eocd = new DataView(bytes.buffer, bytes.byteOffset + eocdOffset, 22);
+    const centralOffset = eocd.getUint32(16, true);
+    const centralView = new DataView(bytes.buffer, bytes.byteOffset + centralOffset, 12);
+    expect(centralView.getUint16(8, true) & 0x0800).toBe(0);
   });
 
   it('emits an empty-but-valid archive when given no entries', async () => {
