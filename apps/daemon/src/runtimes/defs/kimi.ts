@@ -14,6 +14,9 @@ export const kimiAgentDef = {
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
+    // Chat runs now require `kimi acp`; do not advertise an install that only
+    // proves `kimi --version` works.
+    requiresModelProbe: true,
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },

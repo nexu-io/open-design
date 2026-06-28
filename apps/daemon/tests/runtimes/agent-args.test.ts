@@ -758,6 +758,7 @@ test('kimi args use ACP and never embed the prompt in argv', () => {
   assert.equal(kimi.eventParser, undefined);
   assert.equal(kimi.mcpDiscovery, undefined);
   assert.equal(kimi.externalMcpInjection, 'acp-merge');
+  assert.equal(kimi.requiresModelProbe, true);
 });
 
 test('kimi args route explicit model selections through ACP session setup', () => {

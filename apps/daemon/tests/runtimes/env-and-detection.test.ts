@@ -505,7 +505,7 @@ test('detectAgents includes sanitized install and docs metadata from split runti
   }
 });
 
-fsTest('detectAgents keeps Kimi available when the installed CLI rejects the legacy acp positional arg', async () => {
+fsTest('detectAgents marks Kimi unavailable when the installed CLI rejects the required acp mode', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-detect-kimi-modern-'));
   try {
     return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
@@ -537,8 +537,7 @@ fsTest('detectAgents keeps Kimi available when the installed CLI rejects the leg
       const kimi = agents.find((agent) => agent.id === 'kimi');
 
       assert.ok(kimi);
-      assert.equal(kimi.available, true);
-      assert.equal(kimi.version, 'kimi 0.6.0');
+      assert.equal(kimi.available, false);
       assert.equal(kimi.models[0]?.id, 'default');
       assert.equal(kimi.models[1]?.id, 'kimi-k2-turbo-preview');
       assert.equal(kimi.models[2]?.id, 'moonshot-v1-8k');

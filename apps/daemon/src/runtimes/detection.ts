@@ -29,7 +29,16 @@ import type {
 type FetchedRuntimeModels = {
   models: RuntimeModelOption[];
   source: RuntimeModelSource;
+  requiredProbeFailed?: boolean;
 };
+
+function fallbackModels(def: RuntimeAgentDef): FetchedRuntimeModels {
+  return {
+    models: def.fallbackModels,
+    source: 'fallback',
+    ...(def.requiresModelProbe ? { requiredProbeFailed: true } : {}),
+  };
+}
 
 function amrModelScopeFromEnv(env: NodeJS.ProcessEnv): string {
   return resolveAmrProfile(env);
@@ -55,15 +64,15 @@ async function fetchModels(
     try {
       const parsed = await def.fetchModels(resolvedBin, env);
       if (!parsed || parsed.length === 0) {
-        return { models: def.fallbackModels, source: 'fallback' };
+        return fallbackModels(def);
       }
       return { models: parsed, source: 'live' };
     } catch {
-      return { models: def.fallbackModels, source: 'fallback' };
+      return fallbackModels(def);
     }
   }
   if (!def.listModels) {
-    return { models: def.fallbackModels, source: 'fallback' };
+    return fallbackModels(def);
   }
   try {
     const { stdout } = await execAgentFile(resolvedBin, def.listModels.args, {
@@ -79,11 +88,11 @@ async function fetchModels(
     // usable list (e.g. cursor-agent's "No models available"); fall back
     // to the static hint so the picker isn't stuck on Default-only.
     if (!parsed || parsed.length === 0) {
-      return { models: def.fallbackModels, source: 'fallback' };
+      return fallbackModels(def);
     }
     return { models: parsed, source: 'live' };
   } catch {
-    return { models: def.fallbackModels, source: 'fallback' };
+    return fallbackModels(def);
   }
 }
 
@@ -234,6 +243,9 @@ async function probe(
     probeAgentAuthStatus(def, launch.launchPath, probeEnv),
   ]);
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
+  if (surfacedModelResult.requiredProbeFailed) {
+    return unavailableAgent(def);
+  }
   if (caps) {
     agentCapabilities.set(def.id, caps);
   }
@@ -272,6 +284,7 @@ function stripFns(
     buildArgs,
     listModels,
     fetchModels,
+    requiresModelProbe,
     fallbackModels,
     helpArgs,
     capabilityFlags,

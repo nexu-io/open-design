@@ -128,6 +128,11 @@ export type RuntimeAgentDef = {
     resolvedBin: string,
     env: RuntimeEnv,
   ) => Promise<RuntimeModelOption[] | null>;
+  // When true, agent detection treats a failed/empty model probe as an
+  // unavailable runtime instead of advertising static fallback models. Use this
+  // when the model probe also verifies the transport that chat runs require
+  // (for example an ACP-only adapter whose run path is `<bin> acp`).
+  requiresModelProbe?: boolean;
   reasoningOptions?: RuntimeReasoningOption[];
   supportsImagePaths?: boolean;
   maxPromptArgBytes?: number;
@@ -222,6 +227,7 @@ export type DetectedAgent = Omit<
   | 'buildArgs'
   | 'listModels'
   | 'fetchModels'
+  | 'requiresModelProbe'
   | 'fallbackModels'
   | 'helpArgs'
   | 'capabilityFlags'
