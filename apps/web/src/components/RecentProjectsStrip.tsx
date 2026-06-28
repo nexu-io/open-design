@@ -709,7 +709,11 @@ async function designSystemCoverFromBrandJson(
   projectId: string,
   knownFiles: ReadonlySet<string>,
 ): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
-  const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
+  if (!knownFiles.has('brand.json')) return null;
+  const raw = await fetchProjectFileText(projectId, 'brand.json', {
+    cache: 'no-store',
+    suppressNotFoundWarning: true,
+  });
   if (!raw) return null;
   let brand: unknown;
   try {

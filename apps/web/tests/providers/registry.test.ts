@@ -19,6 +19,8 @@ import {
   fetchProjectFileText,
   fetchSkillExample,
   isDeployProviderId,
+  projectFilesContain,
+  projectHasFile,
   updateDeployConfig,
   uploadProjectFiles,
   writeProjectTextFileDetailed,
@@ -350,6 +352,19 @@ describe('fetchProjectFileText', () => {
     );
   });
 
+  it('can suppress 404 warnings for optional files', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 404, statusText: 'Not Found' })));
+
+    await expect(
+      fetchProjectFileText('project-1', 'brand.json', {
+        suppressNotFoundWarning: true,
+      }),
+    ).resolves.toBeNull();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('logs thrown fetch errors before returning null', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const error = new Error('network down');
@@ -368,6 +383,36 @@ describe('fetchProjectFileText', () => {
         url: '/api/projects/project-1/raw/diagram.svg',
       }),
     );
+  });
+});
+
+describe('project file presence helpers', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('matches exact project-relative file names and paths', () => {
+    expect(
+      projectFilesContain(
+        [
+          { name: 'brand.json' },
+          { name: 'manifest.json', path: 'fonts/manifest.json' },
+        ] as never,
+        '/fonts/manifest.json',
+      ),
+    ).toBe(true);
+    expect(projectFilesContain([{ name: 'assets/brand.json' }] as never, 'brand.json')).toBe(false);
+  });
+
+  it('checks file presence through the project file index', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ files: [{ name: 'brand.json' }] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(projectHasFile('project-1', 'brand.json')).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/files');
   });
 });
 

@@ -437,6 +437,20 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+.media-provider-connection-note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.media-provider-connection-badge.is-connected {
+  color: #137a3d;
+  background: color-mix(in srgb, #1f9d55 10%, transparent);
+  border-color: color-mix(in srgb, #1f9d55 28%, var(--border));
+}
+.media-provider-connection-badge.is-disconnected {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
 .media-provider-badge {
   align-self: flex-start;
   font-size: 10px;
