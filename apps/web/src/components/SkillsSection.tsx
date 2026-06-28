@@ -18,6 +18,7 @@ import {
   updateSkill,
   type SkillFileEntry,
 } from '../providers/registry';
+import { skillUsePriority } from '../runtime/design-toolbox';
 
 // Functional skills only — design templates render in EntryView's
 // Templates tab and are managed under their own daemon registry. See
@@ -164,17 +165,22 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
 
   const filteredSkills = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return skills.filter((s) => {
-      if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
-      if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
-      if (categoryFilter !== 'all' && s.category !== categoryFilter)
-        return false;
-      if (!q) return true;
-      const hay = `${s.name}\n${localizeSkillName(locale, s)}\n${s.description}\n${localizeSkillDescription(locale, s)}\n${(s.triggers ?? []).join(
-        ' ',
-      )}\n${s.category ?? ''}`;
-      return hay.toLowerCase().includes(q);
-    });
+    return skills
+      .filter((s) => {
+        if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
+        if (sourceFilter !== 'all' && s.source !== sourceFilter) return false;
+        if (categoryFilter !== 'all' && s.category !== categoryFilter)
+          return false;
+        if (!q) return true;
+        const hay = `${s.name}\n${localizeSkillName(locale, s)}\n${s.description}\n${localizeSkillDescription(locale, s)}\n${(s.triggers ?? []).join(
+          ' ',
+        )}\n${s.category ?? ''}`;
+        return hay.toLowerCase().includes(q);
+      })
+      .sort((a, b) =>
+        skillUsePriority(a) - skillUsePriority(b)
+        || localizeSkillName(locale, a).localeCompare(localizeSkillName(locale, b)),
+      );
   }, [skills, modeFilter, sourceFilter, categoryFilter, search, locale]);
 
   const ensureBody = useCallback(

@@ -35,6 +35,84 @@ const GSAP_SKILL = {
   upstream: 'https://github.com/greensock/gsap-skills',
 };
 
+const SEARCH_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: 'search',
+  name: 'Search',
+  description: 'Free-first web search.',
+  triggers: ['search', 'web search', '搜索'],
+  category: 'research',
+};
+
+const DEEP_RESEARCH_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: 'deep-research',
+  name: 'Deep Research',
+  description: 'Multi-pass research.',
+  triggers: ['deep research', '深度研究'],
+  category: 'research',
+};
+
+const LAST30DAYS_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: 'last30days',
+  name: 'Last 30 Days',
+  description: 'Recent-signal research.',
+  triggers: ['last 30 days', '最近30天'],
+  category: 'research',
+};
+
+const FRONTEND_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: 'frontend-skill',
+  name: 'Frontend Skill',
+  description: 'Frontend UI playbook.',
+  triggers: ['frontend', 'ui'],
+  category: 'design-systems',
+};
+
+const BRAINSTORMING_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: 'brainstorming',
+  name: 'Brainstorming',
+  description: 'Structured ideation.',
+  triggers: ['brainstorm', 'ideation'],
+  category: 'creative-direction',
+};
+
+const MOTION_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: 'emilkowalski-motion',
+  name: 'Motion',
+  description: 'Motion polish.',
+  triggers: ['motion', 'animation', '动效'],
+  category: 'animation-motion',
+};
+
+const VIDEO_TEMPLATE_SKILL = {
+  ...DESIGN_TASTE_SKILL,
+  id: '8-bit-orbit-video-template',
+  name: '8-bit Orbit',
+  description: 'Video template.',
+  triggers: ['video'],
+  category: 'video-generation',
+};
+
+const OVERFLOW_PRIORITY_SKILLS = [
+  ['frontend-design', 'Frontend Design', 'design-systems'],
+  ['frontend-dev', 'Frontend Dev', 'design-systems'],
+  ['ui-skills', 'UI Skills', 'design-systems'],
+  ['image-to-code-skill', 'Image to Code', 'web-artifacts'],
+  ['web-artifacts-builder', 'Web Artifacts Builder', 'web-artifacts'],
+  ['artifacts-builder', 'Artifacts Builder', 'web-artifacts'],
+  ['creative-director', 'Creative Director', 'creative-direction'],
+  ['design-brief', 'Design Brief', 'creative-direction'],
+  ['gsap-core', 'GSAP Core', 'animation-motion'],
+  ['gsap-timeline', 'GSAP Timeline', 'animation-motion'],
+  ['gsap-scrolltrigger', 'GSAP ScrollTrigger', 'animation-motion'],
+  ['threejs', 'Three.js', 'web-artifacts'],
+] as const;
+
 const CREATIVE_DIRECTOR_SKILL = {
   ...DESIGN_TASTE_SKILL,
   id: 'creative-director',
@@ -220,6 +298,81 @@ afterEach(() => {
 });
 
 describe('ChatComposer design toolbox', () => {
+  it('front-loads research, frontend, brainstorm, and motion skills in default resources', async () => {
+    const { ref } = renderComposer({
+      skills: [
+        VIDEO_TEMPLATE_SKILL,
+        MOTION_SKILL,
+        BRAINSTORMING_SKILL,
+        FRONTEND_SKILL,
+        LAST30DAYS_SKILL,
+        DEEP_RESEARCH_SKILL,
+        SEARCH_SKILL,
+      ],
+    });
+    await flushMounts();
+
+    openToolbox(ref);
+
+    await waitFor(() => expect(screen.getByText('Search')).toBeTruthy());
+    const rowNames = Array.from(
+      document.body.querySelectorAll('.plus-menu__list .plus-menu__item span'),
+      (node) => node.textContent,
+    );
+    const ordered = [
+      'Search',
+      'Deep Research',
+      'Last 30 Days',
+      'Frontend Skill',
+      'Brainstorming',
+      'Motion',
+    ];
+
+    for (const name of ordered) {
+      expect(rowNames).toContain(name);
+    }
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      const current = ordered[index]!;
+      const next = ordered[index + 1]!;
+      expect(rowNames.indexOf(current)).toBeLessThan(rowNames.indexOf(next));
+    }
+  });
+
+  it('keeps non-skill resources in default resources when priority skills overflow', async () => {
+    const { ref } = renderComposer({
+      skills: [
+        SEARCH_SKILL,
+        DEEP_RESEARCH_SKILL,
+        LAST30DAYS_SKILL,
+        FRONTEND_SKILL,
+        BRAINSTORMING_SKILL,
+        MOTION_SKILL,
+        ...OVERFLOW_PRIORITY_SKILLS.map(([id, name, category]) => ({
+          ...DESIGN_TASTE_SKILL,
+          id,
+          name,
+          description: `${name} priority skill.`,
+          triggers: [id],
+          category,
+        })),
+      ],
+    });
+    await flushMounts();
+
+    openToolbox(ref);
+
+    await waitFor(() => expect(screen.getByText('Search')).toBeTruthy());
+    const rowNames = Array.from(
+      document.body.querySelectorAll('.plus-menu__list .plus-menu__item span'),
+      (node) => node.textContent,
+    );
+    expect(rowNames).toContain('Research Asset Plugin');
+    expect(rowNames).toContain('Figma');
+    expect(rowNames).toContain('index.html');
+    expect(rowNames).toContain('data/proof.csv');
+    expect(rowNames.indexOf('Search')).toBeLessThan(rowNames.indexOf('Research Asset Plugin'));
+  });
+
   it('stages a one-turn follow-up skill without patching the project skill', async () => {
     const onSend = vi.fn();
     const { ref } = renderComposer({ onSend });

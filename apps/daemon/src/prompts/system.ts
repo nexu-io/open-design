@@ -399,22 +399,24 @@ function renderDesignSystemImportModeGuidance(
   return undefined;
 }
 
+type PromptSkillMode =
+  | 'prototype'
+  | 'deck'
+  | 'template'
+  | 'design-system'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'utility';
+
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
   streamFormat?: string | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
-  skillMode?:
-    | 'prototype'
-    | 'deck'
-    | 'template'
-    | 'design-system'
-    | 'image'
-    | 'video'
-    | 'audio'
-    | undefined;
-  skillModes?: Array<'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio'> | undefined;
+  skillMode?: PromptSkillMode | undefined;
+  skillModes?: PromptSkillMode[] | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,

@@ -68,7 +68,17 @@ const SKILL = {
   aggregatesExamples: false,
 };
 
-function makeSkill(overrides: Partial<typeof SKILL>): typeof SKILL {
+function makeSkill(
+  overrides: Partial<typeof SKILL> & {
+    category?: string;
+    displayName?: Record<string, string>;
+    descriptionI18n?: Record<string, string>;
+  },
+): typeof SKILL & {
+  category?: string;
+  displayName?: Record<string, string>;
+  descriptionI18n?: Record<string, string>;
+} {
   return {
     ...SKILL,
     id: overrides.id ?? SKILL.id,
@@ -83,6 +93,9 @@ function makeSkill(overrides: Partial<typeof SKILL>): typeof SKILL {
     hasBody: overrides.hasBody ?? SKILL.hasBody,
     examplePrompt: overrides.examplePrompt ?? SKILL.examplePrompt,
     aggregatesExamples: overrides.aggregatesExamples ?? SKILL.aggregatesExamples,
+    ...(overrides.category ? { category: overrides.category } : {}),
+    ...(overrides.displayName ? { displayName: overrides.displayName } : {}),
+    ...(overrides.descriptionI18n ? { descriptionI18n: overrides.descriptionI18n } : {}),
   };
 }
 
@@ -489,6 +502,45 @@ describe('ChatComposer context pickers', () => {
     expect(skillNames).toContain('Audit Helper 9');
     expect(skillNames.indexOf('Audit Helper 1')).toBeLessThan(skillNames.indexOf('Story Brief'));
     expect(skillNames.indexOf('Audit Helper 9')).toBeLessThan(skillNames.indexOf('Accessibility Review'));
+  });
+
+  it('puts high-frequency research, frontend, brainstorm, and motion skills first', async () => {
+    skills = [
+      makeSkill({ id: '8-bit-orbit-video-template', name: '8-bit Orbit', description: 'Video template.' }),
+      makeSkill({ id: 'brainstorming', name: 'Brainstorming', description: 'Structured ideation.' }),
+      makeSkill({ id: 'last30days', name: 'Last 30 Days', description: 'Recent-signal research.' }),
+      makeSkill({ id: 'frontend-skill', name: 'Frontend Skill', description: 'Frontend UI playbook.' }),
+      makeSkill({ id: 'emilkowalski-motion', name: 'Motion', description: 'Motion polish.' }),
+      makeSkill({ id: 'deep-research', name: 'Deep Research', description: 'Multi-pass research.' }),
+      makeSkill({
+        id: 'search',
+        name: 'Search',
+        description: 'Free-first web search.',
+        displayName: { 'zh-CN': '搜索', en: 'Search' },
+        descriptionI18n: { 'zh-CN': '免费优先的网页搜索。', en: 'Free-first web search.' },
+      }),
+    ];
+    renderComposer({}, { locale: 'zh-CN' });
+    await flushMounts();
+
+    await typeAndSettle('@');
+    fireEvent.click(screen.getByRole('tab', { name: '技能' }));
+
+    await waitFor(() => expect(screen.getByText('搜索')).toBeTruthy());
+    const skillNames = Array.from(
+      screen.getByTestId('mention-popover').querySelectorAll('.mention-item strong'),
+      (node) => node.textContent,
+    );
+
+    expect(skillNames.slice(0, 7)).toEqual([
+      '搜索',
+      'Deep Research',
+      'Last 30 Days',
+      'Frontend Skill',
+      'Brainstorming',
+      'Motion',
+      '8-bit Orbit',
+    ]);
   });
 
   it('applies a plugin from @ search and keeps the plugin token inline', async () => {

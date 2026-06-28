@@ -201,9 +201,15 @@ describe('listSkills', () => {
         [
           '---',
           'name: localized',
+          'display_name_i18n:',
+          '  fr: "Skill localisé"',
+          '  ja: "ローカライズ済みスキル"',
           'zh_name: "本地化技能"',
           'en_name: "Localized Skill"',
           'description: "English fallback description."',
+          'description_i18n:',
+          '  fr: "Description française."',
+          '  ja: "日本語の説明。"',
           'zh_description: "中文描述。"',
           'en_description: "English localized description."',
           'od:',
@@ -222,16 +228,55 @@ describe('listSkills', () => {
         id: 'localized',
         displayName: {
           en: 'Localized Skill',
+          fr: 'Skill localisé',
+          ja: 'ローカライズ済みスキル',
           'zh-CN': '本地化技能',
         },
         descriptionI18n: {
           en: 'English localized description.',
+          fr: 'Description française.',
+          ja: '日本語の説明。',
           'zh-CN': '中文描述。',
         },
         examplePrompt: 'English fallback prompt.',
         examplePromptI18n: {
           'zh-CN': '中文 prompt。',
         },
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves utility mode from SKILL.md frontmatter', async () => {
+    const root = fresh();
+    try {
+      const dir = path.join(root, 'utility-helper');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'SKILL.md'),
+        [
+          '---',
+          'name: utility-helper',
+          'description: "A workflow helper skill."',
+          'od:',
+          '  mode: utility',
+          '  surface: web',
+          '  preview:',
+          '    type: markdown',
+          '---',
+          '',
+          '# Utility helper body',
+          '',
+        ].join('\n'),
+      );
+
+      const skills = await listSkills(root);
+      expect(skills[0]).toMatchObject({
+        id: 'utility-helper',
+        mode: 'utility',
+        surface: 'web',
+        previewType: 'markdown',
       });
     } finally {
       rmSync(root, { recursive: true, force: true });

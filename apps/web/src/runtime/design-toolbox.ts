@@ -87,6 +87,54 @@ export const FEATURED_DESIGN_TOOLBOX_ACTION_IDS: DesignToolboxActionId[] = [
   'visual-polish',
 ];
 
+const HIGH_FREQUENCY_SKILL_IDS = new Map<string, number>([
+  ['search', 0],
+  ['deep-research', 1],
+  ['deepresearch', 1],
+  ['last30days', 2],
+  ['frontend-skill', 10],
+  ['frontend-design', 11],
+  ['frontend-dev', 12],
+  ['ui-skills', 13],
+  ['image-to-code-skill', 14],
+  ['web-artifacts-builder', 15],
+  ['artifacts-builder', 16],
+  ['brainstorming', 20],
+  ['creative-director', 21],
+  ['design-brief', 22],
+  ['emilkowalski-motion', 30],
+  ['gsap-core', 31],
+  ['gsap-timeline', 32],
+  ['gsap-scrolltrigger', 33],
+  ['gsap-react', 34],
+  ['gsap-performance', 35],
+  ['threejs', 40],
+  ['agent-browser', 50],
+  ['figma-generate-design', 51],
+  ['impeccable-design-polish', 60],
+  ['design-review', 61],
+]);
+
+const HIGH_FREQUENCY_CATEGORY_RANK = new Map<string, number>([
+  ['research', 80],
+  ['web-search', 80],
+  ['deep-research', 81],
+  ['recent-research', 82],
+  ['design-systems', 120],
+  ['web-artifacts', 130],
+  ['creative-direction', 140],
+  ['animation-motion', 150],
+]);
+
+export function skillUsePriority(skill: Pick<SkillSummary, 'id' | 'name' | 'category'>): number {
+  const idRank = HIGH_FREQUENCY_SKILL_IDS.get(skill.id);
+  if (idRank !== undefined) return idRank;
+  const nameRank = HIGH_FREQUENCY_SKILL_IDS.get(skill.name);
+  if (nameRank !== undefined) return nameRank;
+  const category = skill.category ?? '';
+  return HIGH_FREQUENCY_CATEGORY_RANK.get(category) ?? 1000;
+}
+
 export function getDesignToolboxAction(id: DesignToolboxActionId): DesignToolboxAction | null {
   return DESIGN_TOOLBOX_ACTIONS.find((action) => action.id === id) ?? null;
 }
@@ -144,7 +192,7 @@ export function skillMatchesQuery(
 ): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [skill.id, skill.name, skill.description, skill.mode, skill.surface ?? '', ...skill.triggers, ...extra]
+  return [skill.id, skill.name, skill.description, skill.mode, skill.surface ?? '', skill.category ?? '', ...skill.triggers, ...extra]
     .join(' ')
     .toLowerCase()
     .includes(q);

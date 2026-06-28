@@ -27,7 +27,15 @@ export const SKILL_ID_ALIASES = Object.freeze({
   "taste-skill": "design-taste-frontend",
 });
 
-type SkillMode = "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";
+type SkillMode =
+  | "image"
+  | "video"
+  | "audio"
+  | "deck"
+  | "design-system"
+  | "template"
+  | "prototype"
+  | "utility";
 type SkillSurface = "web" | "image" | "video" | "audio";
 type SkillPlatform = "desktop" | "mobile" | null;
 type JsonRecord = Record<string, unknown>;
@@ -36,9 +44,11 @@ interface SkillFrontmatter extends JsonRecord {
   name?: unknown;
   zh_name?: unknown;
   en_name?: unknown;
+  display_name_i18n?: unknown;
   description?: unknown;
   zh_description?: unknown;
   en_description?: unknown;
+  description_i18n?: unknown;
   triggers?: unknown;
   od?: JsonRecord & {
     example_prompt?: unknown;
@@ -205,10 +215,15 @@ export async function listSkills(
             : "html";
         const description =
           typeof data.description === "string" ? data.description : "";
-        const displayName = localizedMapFromFields(data.en_name, data.zh_name);
+        const displayName = localizedMapFromFields(
+          data.en_name,
+          data.zh_name,
+          data.display_name_i18n,
+        );
         const descriptionI18n = localizedMapFromFields(
           data.en_description,
           data.zh_description,
+          data.description_i18n,
         );
         const examplePromptI18n = localizedMapFromRecord(data.od?.example_prompt_i18n);
         const parentBody = hasAttachments
@@ -525,8 +540,9 @@ function normalizeBoolHint(value: unknown): boolean | null {
 function localizedMapFromFields(
   enValue: unknown,
   zhValue: unknown,
+  recordValue?: unknown,
 ): Record<string, string> | undefined {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = localizedMapFromRecord(recordValue) ?? {};
   if (typeof enValue === "string" && enValue.trim()) out.en = enValue.trim();
   if (typeof zhValue === "string" && zhValue.trim()) out["zh-CN"] = zhValue.trim();
   return Object.keys(out).length > 0 ? out : undefined;
@@ -607,7 +623,8 @@ function inferMode(body: unknown, description: unknown): SkillMode {
 function normalizeMode(value: unknown, body: unknown, description: unknown): SkillMode {
   if (
     value === "image" || value === "video" || value === "audio" || value === "deck" ||
-    value === "design-system" || value === "template" || value === "prototype"
+    value === "design-system" || value === "template" || value === "prototype" ||
+    value === "utility"
   ) return value;
   return inferMode(body, description);
 }

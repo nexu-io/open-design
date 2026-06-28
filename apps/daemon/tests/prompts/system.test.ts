@@ -302,6 +302,19 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('# Slide deck — fixed framework');
   });
 
+  it('accepts utility skill modes in daemon prompt composition', () => {
+    const prompt = composeSystemPrompt({
+      skillName: 'search',
+      skillMode: 'utility',
+      skillModes: ['utility'],
+      skillBody: 'Use search when current web context is required.',
+    });
+
+    expect(prompt).toContain('## Active skill — search');
+    expect(prompt).not.toContain('## Media generation contract');
+    expect(prompt).not.toContain('# Slide deck — fixed framework');
+  });
+
   it('lets metadata.kind win over conflicting composed skill modes', () => {
     const prompt = composeSystemPrompt({
       skillMode: 'image',
