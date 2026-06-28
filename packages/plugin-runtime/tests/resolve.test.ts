@@ -49,7 +49,7 @@ describe('resolveContext', () => {
       context: { skills: [{ ref: './blog-post' }] },
     });
     const out = resolveContext(manifest, { registry: fullRegistry });
-    expect(out.context.items[0]?.id).toBe('blog-post');
+    expect(out.context.items[0]).toMatchObject({ kind: 'skill', id: 'blog-post' });
     expect(out.warnings).toEqual([]);
   });
 
