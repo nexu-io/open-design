@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PluginManifest } from '@open-design/contracts';
 import { mergeManifests } from '../src/merge';
-import { resolveAppliedPipeline, type ScenarioRegistryEntry } from '../src/pipeline-fallback';
+import { resolveAppliedPipeline } from '../src/pipeline-fallback';
+import type { ScenarioRegistryEntry } from '../src/resolve';
 
 describe('mergeManifests compat dedup and emptiness', () => {
   it('dedupes identical compat paths across layers', () => {
