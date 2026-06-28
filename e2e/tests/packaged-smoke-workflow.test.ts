@@ -236,6 +236,44 @@ describe("packaged smoke workflow", () => {
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 
+  it("[P2] wires the tools-serve suite into the workspace_unit_tests CI scope", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const workspaceUnitTests = sectionBetween(
+      workflow,
+      "  workspace_unit_tests:",
+      "  windows_tools_pack_payload_tests:",
+    );
+
+    // The scopes job exposes the new output, and workspace_unit_tests runs the
+    // tools-serve package suite gated on that scope.
+    expect(scopes).toContain(
+      "tools_serve_tests_required: ${{ steps.detect.outputs.tools_serve_tests_required }}",
+    );
+    expect(workspaceUnitTests).toMatch(
+      /needs\.scopes\.outputs\.tools_serve_tests_required[^\n]*\n\s*pnpm --filter @open-design\/tools-serve test/,
+    );
+
+    // scopes.ts maps tools/serve/* changes onto the new scope and nothing else;
+    // unrelated tools-pack changes trip tools-pack but not tools-serve.
+    await expect(
+      runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, [
+        "tools/serve/src/updater-fixture.ts",
+      ]),
+    ).resolves.toMatchObject({
+      tools_serve_tests_required: true,
+      tools_pack_tests_required: false,
+    });
+    await expect(
+      runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, [
+        "tools/pack/src/config.ts",
+      ]),
+    ).resolves.toMatchObject({
+      tools_serve_tests_required: false,
+      tools_pack_tests_required: true,
+    });
+  });
+
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const blobGuard = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
