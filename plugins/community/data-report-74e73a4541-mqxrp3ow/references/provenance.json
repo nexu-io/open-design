@@ -1,0 +1,19 @@
+{
+  "candidateId": "29a25abd-04f1-48c9-863f-b2627c775406",
+  "projectId": "ad15f2e4-06a4-4b3c-9be0-6a70fe67aff2",
+  "runId": "1e95effa-e8c8-45f7-963c-fd04c217689c",
+  "conversationId": "1cd9b390-9678-493a-a20c-ea80ef085896",
+  "provenance": {
+    "summary": "Detected from .od-skills/data-report-74e73a4541/SKILL.md after a successful run.",
+    "detectedAt": 1782649839012
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": ".od-skills/data-report-74e73a4541/SKILL.md",
+      "label": ".od-skills/data-report-74e73a4541/SKILL.md",
+      "size": 2618,
+      "copied": true
+    }
+  ]
+}
