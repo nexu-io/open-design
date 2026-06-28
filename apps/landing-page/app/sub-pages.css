@@ -1241,12 +1241,18 @@ body.sub-page {
   margin: 0 0 32px;
   border: 1px solid var(--line);
 }
+/* Compact tables (e.g. a decision matrix) cap their width so short cells
+   don't sprawl into dead whitespace. */
+.compare-table-wrap--compact { max-width: 660px; }
+.compare-table-wrap--compact .compare-table { min-width: 0; }
+.compare-table-wrap--compact .compare-table tbody th { width: 62%; }
 .compare-table {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--sans);
   font-size: 14px;
-  min-width: 720px;
+  min-width: 560px;
+  table-layout: auto;
 }
 .compare-table th,
 .compare-table td {
@@ -2901,6 +2907,40 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   line-height: 1.5;
   color: var(--ink-faint);
 }
+/* Image + prose side by side (editorial). Stacks on mobile. */
+.agent-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  margin: 28px 0 10px;
+}
+.agent-split--img-right .agent-split-img { order: 2; }
+.agent-split-img {
+  margin: 0;
+}
+.agent-split-img img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line, rgba(38, 38, 38, 0.12));
+  border-radius: 8px;
+  background: var(--paper-warm);
+}
+.agent-split-img figcaption {
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+.agent-split-text p { margin: 0 0 12px; }
+.agent-split-text p:last-child { margin-bottom: 0; }
+@media (max-width: 720px) {
+  .agent-split { grid-template-columns: 1fr; gap: 16px; }
+  .agent-split--img-right .agent-split-img { order: 0; }
+}
 .agent-code {
   margin: 0 0 18px;
   padding: 16px 18px;
@@ -3534,7 +3574,8 @@ dialog.tpl-share-popover .detail-share-dialog-text {
 /* Hero banner: full-width editorial illustration under the header. The agent's
  * own mark is baked into the illustration's central hub, so no overlay needed. */
 .agent-hero-banner {
-  margin: 28px 0 6px;
+  margin: 22px auto 6px;
+  max-width: 560px;
 }
 .agent-hero-banner > img {
   display: block;
@@ -3595,3 +3636,4 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   .info-page.solution-page .info-section + .info-section,
   .info-page.solution-index-page .info-section + .info-section { margin-top: 0; }
 }
+

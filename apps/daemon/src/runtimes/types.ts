@@ -179,6 +179,26 @@ export type RuntimeAgentDef = {
   // RuntimeContext.hasPriorAssistantTurn comment for why double-context
   // is the discovery-form loop's root cause.
   resumesSessionViaCli?: boolean;
+  // How the resumable session id is obtained, for `resumesSessionViaCli`
+  // adapters. The default (undefined/false) is "specify-style": the daemon
+  // mints `RuntimeContext.newSessionId` and the CLI is told to use it (claude
+  // `--session-id`), so the id the daemon stores is the id it generated. When
+  // `true` the adapter is "capture-style": the CLI generates its OWN session
+  // id and reports it on the stream (codex `thread.started.thread_id`), so the
+  // daemon must capture that id from the parsed stream (surfaced as a
+  // `status` event's `sessionId`) and persist THAT as the resume handle —
+  // `newSessionId` is not passed to the CLI. See server.ts capture-and-store
+  // path and `agent-cli-session-resume.md`.
+  capturesSessionIdFromStream?: boolean;
+  // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
+  // (today only AMR/vela) and supports resuming via `session/load`. The daemon
+  // captures the durable upstream session handle from the ACP session
+  // (`getDurableSessionId()`) and persists THAT, drives `session/load` on a
+  // resume turn, and maps the agent's structured `resume_failed` error onto the
+  // reseed path. Kept distinct from `resumesSessionViaCli` /
+  // `capturesSessionIdFromStream` because the capture + resume transport is the
+  // ACP result, not a `--session-id` flag or a stream `status` event.
+  resumesSessionViaAcpLoad?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
   // null or the synthetic 'default'. Used by adapters whose CLI rejects

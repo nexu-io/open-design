@@ -1,4 +1,10 @@
 .button {
+  /* Center icon + label on one line so a button with an <Icon> child reads as
+     vertically aligned instead of baseline-offset. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font: inherit;
   color: var(--text);
   background: var(--bg-panel);

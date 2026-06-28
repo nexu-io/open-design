@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@open-design/components";
-import { projectKindToTracking } from "@open-design/contracts/analytics";
+import { projectKindFromMetadataToTracking } from "@open-design/contracts/analytics";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackPageView,
@@ -21,7 +21,11 @@ import type {
 } from "../types";
 import { AnimatePresence } from "motion/react";
 import { Icon } from "./Icon";
-import { isDesignSystemProject, isPublishedDesignSystemProject } from "./design-system-project";
+import {
+	isDesignSystemProject,
+	isPublishedDesignSystemProject,
+	resolveProjectDesignSystemId,
+} from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
 
@@ -689,7 +693,7 @@ export function DesignsTab({
 					{filtered.map((item) => {
 						const p = item.project;
 						const skill = skillName(p.skillId);
-						const ds = dsName(p.designSystemId);
+						const ds = dsName(resolveProjectDesignSystemId(p));
 						if (item.type === "live-artifact") {
 							const artifact = item.liveArtifact;
 							const title = liveArtifactCardTitle(p, artifact);
@@ -776,7 +780,7 @@ export function DesignsTab({
 										toggleSelected(p.id);
 									} else {
 										// P0 ui_click area=list element=project_card.
-										const projectKind = projectKindToTracking(p.metadata?.kind, p.metadata?.videoModel);
+										const projectKind = projectKindFromMetadataToTracking(p.metadata);
 										trackProjectsListClick(analytics.track, {
 											page_name: "projects",
 											area: "list",
@@ -818,7 +822,7 @@ export function DesignsTab({
 												setMenuOpenId((cur) => {
 													const nextId = cur === p.id ? null : p.id;
 													if (nextId === p.id) {
-														const projectKind = projectKindToTracking(p.metadata?.kind, p.metadata?.videoModel);
+														const projectKind = projectKindFromMetadataToTracking(p.metadata);
 														trackProjectsListClick(analytics.track, {
 															page_name: "projects",
 															area: "list",
@@ -843,7 +847,7 @@ export function DesignsTab({
 												type="button"
 												role="menuitem"
 												onClick={() => {
-													const projectKind = projectKindToTracking(p.metadata?.kind, p.metadata?.videoModel);
+													const projectKind = projectKindFromMetadataToTracking(p.metadata);
 													trackProjectsMorePopoverClick(analytics.track, {
 														page_name: "projects",
 														area: "projects_more_popover",
@@ -863,7 +867,7 @@ export function DesignsTab({
 												role="menuitem"
 												className="danger"
 												onClick={() => {
-													const projectKind = projectKindToTracking(p.metadata?.kind, p.metadata?.videoModel);
+													const projectKind = projectKindFromMetadataToTracking(p.metadata);
 													trackProjectsMorePopoverClick(analytics.track, {
 														page_name: "projects",
 														area: "projects_more_popover",
@@ -976,7 +980,7 @@ export function DesignsTab({
 									) : (
 										colProjects.map(({ project: p }) => {
 											const skill = skillName(p.skillId);
-											const ds = dsName(p.designSystemId);
+											const ds = dsName(resolveProjectDesignSystemId(p));
 											const designSystemProject = isDesignSystemProject(p);
 											return (
 												<div

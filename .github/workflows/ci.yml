@@ -29,9 +29,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  runners:
+    name: Resolve runner profiles
+    runs-on: ubuntu-24.04
+    outputs:
+      runs_on: ${{ steps.runners.outputs.runs_on }}
+      decision: ${{ steps.runners.outputs.decision }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve runner profiles
+        id: runners
+        env:
+          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+        run: python3 .github/scripts/runners.py
+
   scopes:
     name: Detect validation scopes
-    runs-on: ubuntu-latest
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     outputs:
       ci_mode: ${{ steps.detect.outputs.ci_mode }}
       daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
@@ -117,7 +135,8 @@ jobs:
 
   static_gate:
     name: Static gate
-    runs-on: ubuntu-latest
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 10
     env:
       ACTIONLINT_VERSION: 1.7.12
@@ -197,9 +216,9 @@ jobs:
 
   nix_validation:
     name: Validate Nix flake
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -405,17 +424,22 @@ jobs:
 
   preflight:
     name: Preflight
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium) }}
 
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
@@ -440,7 +464,7 @@ jobs:
 
       - name: Typecheck workspaces
         run: |
-          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies
@@ -451,17 +475,22 @@ jobs:
 
   workspace_unit_tests:
     name: Workspace unit tests
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit) }}
 
       - name: Workspace unit tests
         run: |
@@ -499,9 +528,9 @@ jobs:
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true' }}
-    runs-on: windows-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).windows_tools }}
     timeout-minutes: 20
 
     steps:
@@ -510,23 +539,30 @@ jobs:
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools) }}
 
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   web_workspace_tests:
     name: Web workspace tests
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Prebuild web sidecar declarations
         run: pnpm --filter @open-design/web build:sidecar
@@ -536,23 +572,29 @@ jobs:
 
   e2e_vitest:
     name: E2E Vitest
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -565,9 +607,9 @@ jobs:
 
   playwright_critical:
     name: Playwright critical (${{ matrix.group }})
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -582,14 +624,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -602,29 +650,34 @@ jobs:
 
       - name: Playwright critical
         env:
-          OD_PLAYWRIGHT_WORKERS: "4"
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
 
   ui_p0_smoke:
     name: UI P0 smoke
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -636,8 +689,6 @@ jobs:
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run UI shell smoke
-        env:
-          OD_PLAYWRIGHT_WORKERS: "4"
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
 
       - name: Upload Playwright debug artifact
@@ -655,9 +706,9 @@ jobs:
 
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -668,14 +719,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -687,8 +744,6 @@ jobs:
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run UI P0 domain
-        env:
-          OD_PLAYWRIGHT_WORKERS: "4"
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
 
       - name: Upload Playwright debug artifact
@@ -706,9 +761,9 @@ jobs:
 
   playwright_visual:
     name: Playwright visual (${{ matrix.name }})
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).visual_hot }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -719,14 +774,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -739,7 +800,6 @@ jobs:
         continue-on-error: true
         env:
           OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
-          OD_PLAYWRIGHT_WORKERS: "4"
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -790,9 +850,9 @@ jobs:
 
   docker_pr:
     name: Docker image build
-    needs: [scopes]
+    needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -833,6 +893,7 @@ jobs:
     name: Validate workspace
     needs:
       - scopes
+      - runners
       - static_gate
       - preflight
       - nix_validation
@@ -846,7 +907,7 @@ jobs:
       - playwright_visual
       - docker_pr
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
 
     steps:
@@ -890,52 +951,79 @@ jobs:
           fi
 
       - name: Block merge while the needs-validation label is present
-        # Hard gate: a PR that still carries `needs-validation` must not merge. Fails closed —
-        # any label-lookup error blocks rather than silently waving the merge through. Respects
-        # the skip-validation override implicitly (that override means needs-validation is never
-        # added). On pull_request the labels come straight from the event payload (no API call);
-        # on merge_group we resolve every PR in the queued group.
+        # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
+        # the merge_group (merge-queue) context — never on pull_request. main requires the merge
+        # queue, so every merge passes through merge_group; a needs-validation entry fails this
+        # step there and is ejected from the queue, so it can never land.
+        #
+        # Why not also fail on pull_request: that turns the PR's own required `Validate workspace`
+        # check red, and a deliberately-red required check is indistinguishable from a real CI
+        # failure to everything downstream — it flips the PR's mergeStateStatus to BLOCKED and
+        # reads as ci_status=failure to the review bot, which deadlocks the very QA/validation that
+        # is supposed to clear the label (QA never gets requested → label never removed → blocked
+        # forever). The merge_group run executes on the queue's transient ref, so this failure does
+        # NOT appear in the PR head's status rollup; the PR stays green until the label is cleared.
+        # Fails closed: any label-lookup error blocks rather than silently waving the merge through.
+        # Respects skip-validation implicitly (that override means needs-validation is never added).
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          # Resolving the queued PR via commits/<sha>/pulls is unreliable: the merge queue squashes,
+          # so the queued commits are NEW synthetic SHAs GitHub does not associate back to the PR —
+          # that found nothing and waved a needs-validation PR through (#4736). Enumerate the group's
+          # PRs from three sources and take the union (see below).
+          MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            if printf '%s' "$PR_LABELS" | jq -e 'index("needs-validation")' >/dev/null; then
-              echo "::error::PR still has 'needs-validation' — validate (/explore Pass or manual QA) and remove the label before merging."
+          if [ "$EVENT_NAME" != "merge_group" ]; then
+            echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
+          else
+            # Enumerate EVERY PR in the group from the union of three independent sources, so a
+            # batched group (more than one PR) cannot hide an unchecked PR behind the ref tip:
+            #   1. ref `.../pr-<N>-<sha>` — names the (tip) entry; squash-safe.
+            #   2. each commit subject's trailing `(#N)` — the queue's per-entry squash commit
+            #      carries its own PR number, so this recovers the NON-tip PRs of a batched group.
+            #   3. commits/<sha>/pulls — covers a non-squash queue where commits map back directly.
+            # Sources 2/3 depend on the compare API. Capture it in a REQUIRED assignment (no
+            # `|| true`) so an API failure trips set -e and blocks — otherwise an empty result would
+            # silently fall back to the ref tip and merge a batched needs-validation PR unchecked.
+            # Only grep no-match (an empty set within a SUCCESSFUL response) is tolerated.
+            compare_json="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA")"
+            ref_prs="$(printf '%s\n' "$MERGE_GROUP_REF" | grep -oE 'pr-[0-9]+' | grep -oE '[0-9]+' || true)"
+            msg_prs="$(printf '%s' "$compare_json" | jq -r '.commits[].commit.message | split("\n")[0]' | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' || true)"
+            assoc_prs=""
+            for s in $(printf '%s' "$compare_json" | jq -r '.commits[].sha'); do
+              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"   # required; failure blocks
+              assoc_prs="$(printf '%s\n%s\n' "$assoc_prs" "$pulls")"
+            done
+            prs="$(printf '%s\n%s\n%s\n' "$ref_prs" "$msg_prs" "$assoc_prs" | grep -E '^[0-9]+$' | sort -u || true)"
+            if [ -z "$prs" ]; then
+              echo "::error::could not resolve any PR from merge_group ref '$MERGE_GROUP_REF' / commits — blocking merge (fail closed)."
               exit 1
             fi
-          elif [ "$EVENT_NAME" = "merge_group" ]; then
-            # Fail closed: capture each gh result into a plain assignment so a failed lookup
-            # trips set -e / pipefail and blocks the merge. Do NOT put the gh call in an `if`
-            # condition — a nonzero exit there is swallowed (read as "no label") and waves the
-            # merge through.
-            shas="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" --jq '.commits[].sha')"
-            prs=""
-            for s in $shas; do
-              pulls="$(gh api "repos/$REPO/commits/$s/pulls" --jq '.[].number')"
-              prs="$(printf '%s\n%s\n' "$prs" "$pulls")"
-            done
-            for pr in $(printf '%s\n' "$prs" | sort -u | grep -E '^[0-9]+$'); do
+            for pr in $prs; do
+              # Plain assignment (not in an `if`) so a failed lookup trips set -e / pipefail and
+              # blocks rather than being read as "no label" and waving the merge through.
               labels="$(gh pr view "$pr" --repo "$REPO" --json labels --jq '.labels[].name')"
               if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
                 echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
                 exit 1
               fi
+              echo "PR #$pr: no needs-validation label."
             done
+            echo "No 'needs-validation' label in the queued group ($prs) — clear to merge."
           fi
-          echo "No 'needs-validation' label in scope — clear to merge."
 
   runtime_summary:
     name: Runtime summary
     needs:
+      - runners
       - validate
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
     continue-on-error: true
 

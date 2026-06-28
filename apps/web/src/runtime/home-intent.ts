@@ -12,21 +12,12 @@
 export const HOME_CHIP_INTENT_EVENT = 'od:home-chip-intent';
 
 let pendingChipId: string | null = null;
-let pendingNotice: string | null = null;
-
-export interface HomeChipOptions {
-  /** A one-shot confirmation banner HomeView shows once it consumes the chip —
-   *  e.g. "Using Ramp Brand Kit" after "Use in new chat". Makes an otherwise
-   *  invisible navigate+apply visibly verifiable to the user. */
-  notice?: string;
-}
 
 // Queue a Home composer chip to auto-select on the next Home render, then
 // notify any mounted HomeView. Safe to call before HomeView exists — the
-// pending id (and optional confirmation notice) survives until consumed.
-export function requestHomeChip(chipId: string, options?: HomeChipOptions): void {
+// pending id survives until consumed.
+export function requestHomeChip(chipId: string): void {
   pendingChipId = chipId;
-  pendingNotice = options?.notice ?? null;
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(HOME_CHIP_INTENT_EVENT, { detail: { chipId } }));
   }
@@ -37,14 +28,6 @@ export function consumePendingHomeChip(): string | null {
   const chipId = pendingChipId;
   pendingChipId = null;
   return chipId;
-}
-
-// Read and clear the pending confirmation notice queued alongside the chip.
-// Returns null when none is queued. Consume AFTER consumePendingHomeChip.
-export function consumePendingHomeNotice(): string | null {
-  const notice = pendingNotice;
-  pendingNotice = null;
-  return notice;
 }
 
 // Peek without consuming — lets a consumer bail early (e.g. plugins not yet

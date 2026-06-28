@@ -23,6 +23,7 @@ import type {
   ChatSseStartPayload,
   DaemonAgentPayload,
   AmrModelsResponse,
+  AmrWalletSnapshot,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -766,6 +767,17 @@ export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
     const resp = await fetch('/api/integrations/vela/status');
     if (!resp.ok) return null;
     return (await resp.json()) as VelaLoginStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}): Promise<AmrWalletSnapshot | null> {
+  try {
+    const query = options.refresh ? '?refresh=1' : '';
+    const resp = await fetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AmrWalletSnapshot;
   } catch {
     return null;
   }

@@ -34,12 +34,29 @@ import {
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
+import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 let pendingSecondInstanceFocus = false;
 let showExistingDesktop: (() => void) | null = null;
+
+// Telemetry context for the fatal-exit path. Populated once config + launcher
+// runtime are resolved so the `main().catch` below can report a startup failure
+// even though the daemon (the PostHog host) never came up. Null until then —
+// failures earlier than config resolution simply skip telemetry. See
+// `startup-telemetry.ts` for the zero-startup-side-effect contract.
+let startupTelemetryContext:
+  | {
+      posthogKey: string | null;
+      posthogHost: string | null;
+      appVersion: string | null;
+      namespace: string;
+      source: string;
+      installationRoot: string;
+    }
+  | null = null;
 
 function createPackagedDesktopStamp(namespace: string): SidecarStamp {
   return {
@@ -99,6 +116,20 @@ async function main(): Promise<void> {
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
   const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
+
+  // Arm fatal-exit telemetry now that we know the channel key/version. The
+  // startPackagedSidecars call below is THE failure this covers (daemon/web
+  // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
+  startupTelemetryContext = {
+    posthogKey: activeConfig.posthogKey,
+    posthogHost: activeConfig.posthogHost,
+    appVersion: activeConfig.appVersion,
+    namespace,
+    source: SIDECAR_SOURCES.PACKAGED,
+    // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
+    // daemon child env, not this parent process (see startup-telemetry.ts).
+    installationRoot: paths.installationRoot,
+  };
 
   await ensurePackagedNamespacePaths(paths);
   packagedLogger = createPackagedDesktopLogger(paths);
@@ -224,8 +255,9 @@ async function main(): Promise<void> {
   });
 }
 
-void main().catch((error: unknown) => {
-  if (error instanceof PackagedPathAccessError) {
+void main().catch(async (error: unknown) => {
+  const isPathAccess = error instanceof PackagedPathAccessError;
+  if (isPathAccess) {
     try {
       dialog.showErrorBox(error.title, error.message);
     } catch {
@@ -234,5 +266,25 @@ void main().catch((error: unknown) => {
   }
   packagedLogger?.error("packaged runtime failed", { error });
   console.error("packaged runtime failed", error);
+  // Best-effort crash telemetry on the way out. This is the ONLY new behavior
+  // on the failure path; the happy path never reaches here. reportStartupFailure
+  // self-caps its runtime (Promise.race timeout) and swallows all errors, so it
+  // can neither block nor crash the exit. No-op when telemetry isn't armed yet
+  // or the build has no PostHog key.
+  if (startupTelemetryContext) {
+    await reportStartupFailure({
+      error,
+      isPathAccess,
+      posthogKey: startupTelemetryContext.posthogKey,
+      posthogHost: startupTelemetryContext.posthogHost,
+      distinctId: resolveStartupDistinctId(
+        startupTelemetryContext.namespace,
+        startupTelemetryContext.installationRoot,
+      ),
+      appVersion: startupTelemetryContext.appVersion,
+      namespace: startupTelemetryContext.namespace,
+      source: startupTelemetryContext.source,
+    });
+  }
   process.exit(1);
 });

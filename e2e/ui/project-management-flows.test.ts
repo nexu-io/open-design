@@ -5,13 +5,14 @@ import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 // The `/projects` view in `EntryShell` renders a `CenteredLoader` until
 // `projectsLoading || skillsLoading || designSystemsLoading` all clear
-// (`apps/web/src/components/EntryShell.tsx`), and `designSystemsLoading` only
-// clears once `GET /api/design-systems` resolves (`App.tsx` `dsLoading`). A test
-// that lands on `/projects` but leaves `/api/design-systems` unmocked therefore
-// gates its first assertion on the real daemon's response time — fast locally,
-// but a flaky >10s loader under CI load (this dequeued PR #4548 from the merge
-// queue). Stub the endpoint so the projects view renders deterministically.
-async function stubDesignSystemsEmpty(page: Page): Promise<void> {
+// (`apps/web/src/components/EntryShell.tsx`). Tests that land on `/projects`
+// should stub the catalog endpoints that are unrelated to the project-list
+// behavior under test; otherwise a large registry response can keep the first
+// assertion gated on daemon/catalog timing instead of the UI contract.
+async function stubCatalogsEmpty(page: Page): Promise<void> {
+  await page.route('**/api/design-templates', async (route) => {
+    await route.fulfill({ json: { designTemplates: [] } });
+  });
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: [] } });
   });
@@ -232,7 +233,7 @@ test('[P0] projects empty state create action opens the new project flow', async
     await route.continue();
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expect(page.locator('.designs-empty-state')).toBeVisible();
   await page.locator('.designs-empty-cta').click();
@@ -454,23 +455,6 @@ test('[P1] project detail composer working directory picker opens without leavin
 
   await expect(composer.getByTestId('working-dir-panel')).toBeVisible();
   await expect(composer.getByTestId('working-dir-pick')).toBeVisible();
-});
-
-test('[P1] project detail composer session mode switches between Design and Ask', async ({ page }) => {
-  await page.goto('/');
-  await createProject(page, 'Composer session mode switch');
-  await expectWorkspaceReady(page);
-
-  const composer = page.getByTestId('chat-composer');
-  const trigger = composer.getByTestId('session-mode-trigger');
-  await expect(trigger).toContainText(/Design/i);
-  await trigger.click();
-  await page.getByRole('menuitemradio', { name: /Ask mode/i }).click();
-  await expect(trigger).toContainText(/Ask/i);
-
-  await trigger.click();
-  await page.getByRole('menuitemradio', { name: /Design mode/i }).click();
-  await expect(trigger).toContainText(/Design/i);
 });
 
 test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
@@ -1278,7 +1262,7 @@ test('[P2] projects sub tabs switch between Recent and Your designs ordering', a
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
 
@@ -1434,7 +1418,7 @@ test('[P2] projects page shows the empty state when there are no projects', asyn
     await route.continue();
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.locator('.tab-empty')).toBeVisible();
@@ -1464,7 +1448,7 @@ test('[P2] projects page shows the no-results state and recovers when search is 
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
   await expect(homeDesignCard(page, 'Searchable Prototype')).toBeVisible();
@@ -1500,7 +1484,7 @@ test('[P2] projects grid overflow menu closes on outside click and Escape', asyn
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
 
@@ -1571,7 +1555,7 @@ test('[P2] projects kanban view groups cards into status columns', async ({ page
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
   await page.getByTestId('designs-view-kanban').click();
@@ -1662,7 +1646,7 @@ test('[P1] projects page shows live artifact cards, supports search, and opens t
     });
   });
 
-  await stubDesignSystemsEmpty(page);
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
 

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title data-i18n="extensionName">Open Design Web Clipper</title>
+  </head>
+  <body>
+    <div class="app">
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 93 93" xmlns="http://www.w3.org/2000/svg">
+          <path d="M93 46.19c0 40.35-6.15 46.5-46.5 46.5C6.15 92.69 0 86.54 0 46.19 0 5.84 6.15-.31 46.5-.31 86.85-.31 93 5.84 93 46.19Z" fill="#202020" />
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M46.38 17.5c15.85 0 28.7 12.85 28.7 28.7 0 15.85-12.85 28.7-28.7 28.7H21.5a3.82 3.82 0 0 1-3.82-3.82V46.19c0-15.85 12.85-28.7 28.7-28.7Zm0 5.74c-12.68 0-22.96 10.28-22.96 22.96 0 12.68 10.28 22.96 22.96 22.96 12.68 0 22.96-10.28 22.96-22.96 0-12.68-10.28-22.96-22.96-22.96Z" fill="#fff" />
+          <path d="M44.59 59.66 35.84 36.64a.94.94 0 0 1 1.18-1.19l23.04 8.91c.95.37.69 1.78-.33 1.78H46.36v13.19c0 1.03-1.41 1.29-1.77.33Z" fill="#fff" />
+          <circle cx="70.5" cy="70.5" r="22.5" fill="#202020" />
+          <circle cx="70.5" cy="70.5" r="18" fill="#c96442" />
+          <g fill="#fff">
+            <rect x="59.5" y="65.8" width="22" height="13.4" rx="3.1" />
+            <rect x="64.6" y="62.6" width="7.2" height="4.2" rx="1.3" />
+          </g>
+          <circle cx="70.5" cy="72.7" r="4.2" fill="#c96442" />
+          <circle cx="70.5" cy="72.7" r="1.7" fill="#fff" />
+          <circle cx="77.6" cy="69" r="1.15" fill="#c96442" />
+        </svg>
+      </span>
+      <span class="brand-name">
+        <span class="brand-eyebrow" data-i18n="webClipper">Web Clipper</span>
+        <span class="brand-title">Open Design</span>
+      </span>
+      <span id="status" class="status" data-paired="false">…</span>
+      <span class="info" tabindex="0" role="button" aria-label="What gets captured" data-i18n-aria-label="infoLabel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" /><path d="M12 11v5" /><path d="M12 7.6h.01" />
+        </svg>
+        <span class="tooltip" role="tooltip" data-i18n="infoTooltip">“Capture page” saves a self-contained page copy. “Extract design system” saves a structured design-system HTML asset. Figma JSON must be imported with the OD Figma Import plugin, not dragged into Figma Drafts.</span>
+      </span>
+    </header>
+
+    <main class="body">
+      <section id="capture-block" class="actions">
+        <button id="page" class="action action-primary">
+          <span class="action-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+              <path d="M14 2v5h5" />
+              <path d="M8 13h8" /><path d="M8 17h5" />
+            </svg>
+          </span>
+          <span class="action-text">
+            <span class="action-title" data-i18n="capturePageTitle">Capture page</span>
+            <span class="action-sub" data-i18n="capturePageSub">Full-fidelity snapshot → Library</span>
+          </span>
+          <span class="action-go" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+          </span>
+        </button>
+
+        <div class="action-grid">
+          <button id="shot" class="action">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                <circle cx="12" cy="13" r="3" />
+              </svg>
+            </span>
+            <span class="action-title" data-i18n="screenshot">Screenshot</span>
+          </button>
+          <button id="region" class="action">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 8V5a1 1 0 0 1 1-1h3" /><path d="M16 4h3a1 1 0 0 1 1 1v3" />
+                <path d="M20 16v3a1 1 0 0 1-1 1h-3" /><path d="M8 20H5a1 1 0 0 1-1-1v-3" />
+              </svg>
+            </span>
+            <span class="action-title" data-i18n="region">Region</span>
+          </button>
+          <button id="imgs" class="action">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.5-3.5a2 2 0 0 0-2.8 0L5 21" />
+              </svg>
+            </span>
+            <span class="action-title" data-i18n="pickImages">Pick images</span>
+          </button>
+          <button id="element" class="action">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3.5" /><path d="M12 2v3.5" /><path d="M12 18.5V22" />
+                <path d="M2 12h3.5" /><path d="M18.5 12H22" />
+              </svg>
+            </span>
+            <span class="action-title" data-i18n="pickElement">Pick element</span>
+          </button>
+          <button id="figma" class="action">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="6" x2="2" y2="6" /><line x1="22" y1="18" x2="2" y2="18" />
+                <line x1="6" y1="2" x2="6" y2="22" /><line x1="18" y1="2" x2="18" y2="22" />
+              </svg>
+            </span>
+            <span class="action-title" data-i18n="figmaJson">Figma JSON</span>
+          </button>
+          <button id="system" class="action">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+                <path d="M8 8h8" /><path d="M8 12h3" /><path d="M13 12h3" /><path d="M8 16h8" />
+              </svg>
+            </span>
+            <span class="action-title" data-i18n="extractDesignSystem">Extract design system</span>
+          </button>
+        </div>
+      </section>
+
+      <p id="hint" class="hint" hidden>
+        <span data-i18n-html="hintHtml"><strong>Open Design</strong> isn’t running. Start the app, then reopen this popup — the clipper connects automatically.</span>
+      </p>
+
+      <details id="advanced" class="advanced">
+        <summary data-i18n="advanced">Advanced</summary>
+        <div class="adv-switch">
+          <span class="adv-switch-text">
+            <span data-i18n="onPageBar">On-page bar</span>
+            <em data-i18n="onPageBarSub">floating launcher on the page</em>
+          </span>
+          <button id="toolbar-toggle" type="button" class="switch" role="switch" aria-checked="false" aria-label="Toggle the on-page bar" data-i18n-aria-label="toggleOnPageBar">
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="adv-switch">
+          <span class="adv-switch-text">
+            <span data-i18n="imageHoverButton">Image hover button</span>
+            <em data-i18n="imageHoverButtonSub">tiny save button on each image</em>
+          </span>
+          <button id="image-hover" type="button" class="switch" role="switch" aria-checked="true" aria-label="Toggle the per-image hover capture button" data-i18n-aria-label="toggleImageHover">
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+        </div>
+        <label class="check">
+          <input id="include-images" type="checkbox" checked />
+          <span><span data-i18n="inlineImages">Inline images</span> <em>(<span data-i18n="inlineImagesSub">higher fidelity, larger files</span>)</em></span>
+        </label>
+        <label class="label-field" for="daemon" data-i18n="daemonUrl">Daemon URL</label>
+        <div class="row">
+          <input id="daemon" type="text" placeholder="http://127.0.0.1:7456" />
+          <button id="save-daemon" class="btn-save" data-i18n="save">Save</button>
+        </div>
+      </details>
+
+      <p id="msg" class="msg" role="status"></p>
+      <button id="refresh-page" class="refresh-page" hidden title="Reload this page so Open Design can attach" data-i18n-title="refreshPageTitle">
+        <span class="refresh-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M3 21v-5h5" />
+          </svg>
+        </span>
+        <span data-i18n="refreshPage">Refresh page</span>
+      </button>
+    </main>
+    </div>
+
+    <script src="i18n.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

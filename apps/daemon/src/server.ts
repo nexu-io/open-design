@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -116,6 +116,7 @@ export {
   bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
   looksLikeGeminiJsonEventStream,
+  resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
   resolveChatRunInactivityTimeoutMs,
@@ -204,6 +205,7 @@ import {
   resolveSandboxRuntimeConfig,
 } from './sandbox-mode.js';
 import {
+  buildUserDesignSystemArchive,
   createUserDesignSystem,
   deleteUserDesignSystem,
   digestDesignSystemContext,
@@ -214,6 +216,7 @@ import {
   listUserDesignSystemRevisions,
   readDesignSystem,
   readDesignSystemPackageInfo,
+  readDesignSystemStaticFile,
   readUserDesignSystemFile,
   resolveDesignSystemAssets,
   updateUserDesignSystem,
@@ -222,6 +225,7 @@ import {
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
+import { registerBrandRoutes } from './brand-routes.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -259,7 +263,12 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
-import { composeMemoryBody, extractFromMessage } from './memory.js';
+import {
+  composeMemoryBody,
+  extractFromMessage,
+  listActiveRuleEntries,
+  readMemoryConfig,
+} from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -295,6 +304,7 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
+import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
@@ -320,7 +330,7 @@ import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
-  projectKindToTracking,
+  projectKindFromMetadataToTracking,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -343,7 +353,7 @@ import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
-import { buildDesktopPdfExportInput } from './pdf-export.js';
+import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
@@ -427,6 +437,7 @@ import {
   resolveProjectDir,
   SandboxImportedProjectError,
   sanitizeName,
+  sanitizePath,
   searchProjectFiles,
   resolveProjectDir,
   resolveProjectFilePath,
@@ -479,7 +490,6 @@ import {
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
-  updateAgentSessionStableHash,
   upsertAgentSession,
   upsertDeployment,
   upsertMessage,
@@ -488,7 +498,7 @@ import {
 import {
   computeIncludeStable,
   hashStableInstructions,
-  isClaudeResumeFailure,
+  isAgentResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
@@ -545,7 +555,6 @@ import {
 } from './routes/static-resource.js';
 export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
-import { registerBrandRoutes } from './brand-routes.js';
 import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
@@ -578,7 +587,14 @@ import {
   configuredAllowedOrigins,
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
+  isZeroConfigClipperLibraryRequest,
 } from './origin-validation.js';
+import { registerLibraryRoutes } from './routes/library.js';
+import {
+  libraryExtensionAllowedOrigins,
+  seedLibraryExtensionOrigins,
+} from './library-tokens.js';
+import { listLibraryTokenOrigins } from './library-store.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
@@ -804,9 +820,11 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 // read path so project-membership, size, and CSP guards cannot be bypassed.
 const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
-const BRANDS_DIR = path.join(RUNTIME_DATA_DIR, 'brands');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
+// Brand metadata (brand.json + meta.json per brand) lives here; each brand
+// also registers a `user:<id>` design system under USER_DESIGN_SYSTEMS_DIR.
+const BRANDS_DIR = path.join(RUNTIME_DATA_DIR, 'brands');
 const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
 // Disk cache + same-origin proxy for external preview media (cross-border CDN
 // images/videos referenced by plugin example.html). See plugin-asset-cache.ts.
@@ -831,9 +849,12 @@ const ALL_SKILL_LIKE_ROOTS = [
   SKILLS_DIR,
   DESIGN_TEMPLATES_DIR,
 ];
+// Global OD Library data root — owned, content-addressed assets captured by
+// the clipper / `od library import`. Derived from RUNTIME_DATA_DIR per the
+// daemon data directory contract.
+const LIBRARY_DIR = path.join(RUNTIME_DATA_DIR, 'library');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-fs.mkdirSync(BRANDS_DIR, { recursive: true });
-for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot]) {
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, BRANDS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot, LIBRARY_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
@@ -1452,10 +1473,17 @@ function resolveRunProjectKindForAnalytics({
 }) {
   if (typeof hintProjectKind === 'string') return hintProjectKind;
   if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  // Pass videoModel so a HyperFrames project (kind=video + videoModel=
-  // hyperframes-html) is reported as project_kind=hyperframes, not generic
-  // video. The web-supplied `hintProjectKind` already encodes this when set.
-  return projectKindToTracking(projectMetadata?.kind, projectMetadata?.videoModel);
+  // Brand-extraction backing projects (kind:'brand', importedFrom:
+  // 'brand-extraction') ARE design systems — a brand is one source for a DS,
+  // not a separate object. Report them as design_system so DS-project runs
+  // (creation + later edits) drill down cleanly. See design-system tracking spec §1.
+  if (projectMetadata?.importedFrom === 'brand-extraction') return 'design_system';
+  // Derive straight from the persisted metadata: videoModel splits HyperFrames
+  // (kind=video) out of generic video, and the prototype/other subtype fields
+  // (fidelity / intent / platform) split wireframe/mobile/live_artifact/document
+  // out so the run's project_kind matches the Home card the user picked. The
+  // web-supplied `hintProjectKind` already encodes all of this when set.
+  return projectKindFromMetadataToTracking(projectMetadata);
 }
 
 export function __forTestResolveRunProjectKindForAnalytics(args) {
@@ -2978,6 +3006,14 @@ const pluginUpload = multer({
   },
 });
 
+// Figma `.fig` import — memory storage so the offline decoder gets the raw
+// bytes without a temp-file round-trip. The decoder unzips + kiwi-decodes
+// in-process and writes the snapshot under the project cwd.
+const figmaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },  // community kits run large
+});
+
 const pluginShareTaskStore = createPluginShareTaskStore({
   randomUUID,
   execCommandViaLoginShell,
@@ -3266,6 +3302,7 @@ export function createSseResponse(
 }
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
 // `source` from the runtime context when building the diagnostics export.
@@ -3279,6 +3316,7 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
   port?: number;
@@ -3298,6 +3336,7 @@ export async function startServer({
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
+  desktopArtifactExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
@@ -3330,6 +3369,19 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
+  // Clipper page captures are self-contained HTML with inlined images plus a
+  // Figma IR, which for an image-heavy site (The Economist, news front pages)
+  // runs to tens of MB — far past a normal JSON body. Give the ingest route a
+  // dedicated generous limit so a full-page capture doesn't 413; the rest of the
+  // API stays at the conservative 4mb. Registered first so this parser claims
+  // the ingest body before the global one (express.json is a no-op once a body
+  // has already been read).
+  app.use('/api/library/ingest', express.json({ limit: '128mb' }));
+  // Brand extract-from-html carries the full rendered page DOM (+ collected CSS)
+  // the web read out of the in-app browser tab after the user cleared an anti-bot
+  // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
+  // (registered before the global parser so it claims the body first).
+  app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
@@ -3389,6 +3441,7 @@ export async function startServer({
       listDesignSystems,
       readDesignSystem,
       readDesignSystemPackageInfo,
+      readDesignSystemStaticFile,
       listUserDesignSystemFiles,
       readUserDesignSystemFile,
       linkUserDesignSystemProject,
@@ -3414,6 +3467,7 @@ export async function startServer({
     listAllSkills,
     readAvailableDesignSystem,
     readAvailableDesignSystemPackageInfo,
+    readAvailableDesignSystemStaticFile,
     readDesignSystemWorkspaceTextFile,
     validateProjectDesignSystemId,
     validateProjectSkillId,
@@ -3440,6 +3494,18 @@ export async function startServer({
     // the structured error shape and preflight headers for preview embeds.
     if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
 
+    // Zero-config browser extension: the OD Clipper only needs a liveness probe
+    // plus POST /api/library/ingest. A web page cannot forge a
+    // chrome-extension:// (or moz-extension://) origin, and the daemon is
+    // loopback-bound, so these two bootstrap routes are auto-trusted without a
+    // pairing handshake. Library read routes still fall through to the normal
+    // origin guard.
+    // NOTE: `req.path` here is mount-relative (the `/api` prefix is stripped),
+    // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
+    if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
+      return next();
+    }
+
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
@@ -3461,7 +3527,10 @@ export async function startServer({
     }
 
     const ports = allowedBrowserPorts(resolvedPort);
-    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
+    // Paired browser-extension origins are persisted in library_tokens and
+    // seeded into this in-memory allowlist at boot / on pairing.
+    const allowedOrigins = [...extraAllowedOrigins, ...libraryExtensionAllowedOrigins()];
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, allowedOrigins)) {
       if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
       }
@@ -3469,6 +3538,14 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  // Restore paired browser-extension origins into the in-memory allowlist the
+  // /api origin middleware above consults, so a paired clipper survives daemon
+  // restarts without re-pairing.
+  try {
+    seedLibraryExtensionOrigins(listLibraryTokenOrigins(db));
+  } catch {
+    // best-effort: a fresh db with no library_tokens is fine
+  }
   const pluginInstallation = createPluginInstallationHelpers({
     db,
     installFromLocalFolder,
@@ -3779,6 +3856,7 @@ export async function startServer({
     PROJECT_ROOT,
     PROJECTS_DIR,
     ARTIFACTS_DIR,
+    LIBRARY_DIR,
     BRANDS_DIR,
     RUNTIME_DATA_DIR,
     RUNTIME_DATA_DIR_CANONICAL,
@@ -3885,6 +3963,7 @@ export async function startServer({
     deleteProjectFile,
     writeProjectFile,
     sanitizeName,
+    sanitizePath,
     listTabs,
     setTabs,
   };
@@ -3915,7 +3994,9 @@ export async function startServer({
     buildProjectArchive,
     buildBatchArchive,
     buildDesktopPdfExportInput,
+    buildDesktopArtifactExportInput,
     desktopPdfExporter,
+    desktopArtifactExporter,
     daemonUrlRef,
     sanitizeArchiveFilename,
   };
@@ -4056,6 +4137,56 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
   });
+  // OD Library — global asset registry (clipper ingest, grid, pairing, apply).
+  registerLibraryRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+    conversations: conversationDeps,
+    auth: authDeps,
+  });
+  app.post('/api/projects/:id/figma/import', (req, res) => {
+    figmaUpload.single('file')(req, res, async (err) => {
+      if (err) return sendMulterError(res, err);
+      try {
+        const project = getProject(db, req.params.id);
+        if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const figmaUrl = typeof body.figmaUrl === 'string' ? body.figmaUrl.trim() : '';
+        if (!req.file) {
+          if (figmaUrl) {
+            return sendApiError(
+              res,
+              409,
+              'FIGMA_URL_NEEDS_MIGRATION',
+              'Figma URL imports must run through the Figma migration flow.',
+              { details: { figmaUrl } },
+            );
+          }
+          return sendApiError(res, 400, 'BAD_REQUEST', 'file is required');
+        }
+
+        const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+        const notes = typeof body.notes === 'string' ? body.notes : undefined;
+        const result = await importFigmaFromBytes(req.file.buffer, {
+          cwd: projectRoot,
+          label: decodeMultipartFilename(req.file.originalname || 'figma-import.fig'),
+          notes,
+        });
+        return res.json(result);
+      } catch (caught) {
+        return sendApiError(
+          res,
+          400,
+          'FIGMA_IMPORT_FAILED',
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      }
+    });
+  });
   registerSocialShareRoutes(app, { http: httpDeps });
   registerProjectRoutes(app, {
     db,
@@ -4071,6 +4202,7 @@ export async function startServer({
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
     appConfig: appConfigDeps,
+    agents: agentDeps,
     validation: validationDeps,
   });
   registerTerminalRoutes(app, {
@@ -4129,6 +4261,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
     designSystems: {
+      buildUserDesignSystemArchive,
       createUserDesignSystem,
       deleteUserDesignSystem,
       ensureUserDesignSystemWorkspaceProject,
@@ -4138,6 +4271,7 @@ export async function startServer({
       prepareDesignTokenContractRebuild,
       readAvailableDesignSystem,
       readAvailableDesignSystemPackageInfo,
+      readAvailableDesignSystemStaticFile,
       readDesignSystemWorkspaceTextFile,
       readUserDesignSystemFile,
       renderDesignSystemPreview,
@@ -4156,6 +4290,24 @@ export async function startServer({
     db,
     runs: design.runs,
     randomId,
+    resolveTranscriptAgent: async () => {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      let agentId = typeof config.agentId === 'string' && config.agentId
+        ? config.agentId
+        : null;
+      let detectedAgentName: string | null = null;
+      if (!agentId) {
+        const agents = await detectAgents(config.agentCliEnv ?? {}).catch(() => []);
+        const available = agents.find((agent) => agent.available);
+        agentId = available?.id ?? null;
+        detectedAgentName = available?.name ?? null;
+      }
+      if (!agentId) return null;
+      return {
+        agentId,
+        agentName: getAgentDef(agentId)?.name ?? detectedAgentName ?? agentId,
+      };
+    },
   });
   registerProjectArtifactRoutes(app, {
     http: httpDeps,
@@ -4771,6 +4923,24 @@ export async function startServer({
       console.warn('[memory] composeMemoryBody failed', err);
     }
 
+    // Per-hook switches for the two-loop memory feature. Read alongside the
+    // memory body so the composer can gate the PRE intent-gateway brief and
+    // the POST self-verify scorecard on the same config the settings panel
+    // writes. Read failure falls through to undefined hooks, which the
+    // composer treats as on-by-default — matching the config's default-on
+    // semantics.
+    let memoryHooks: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
+    try {
+      const memCfg = await readMemoryConfig(RUNTIME_DATA_DIR);
+      memoryHooks = {
+        profile: memCfg.profileEnabled,
+        rewrite: memCfg.rewriteEnabled,
+        verify: memCfg.verifyEnabled,
+      };
+    } catch (err) {
+      console.warn('[memory] readMemoryConfig failed', err);
+    }
+
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
     if (appConfigForPrompt?.customInstructions) {
@@ -5027,6 +5197,7 @@ export async function startServer({
       craftBody,
       craftSections,
       memoryBody,
+      memoryHooks,
       metadata,
       template,
       audioVoiceOptions,
@@ -5619,14 +5790,93 @@ export async function startServer({
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
     // create-turn persistence below.
     const agentSupportsSessionResume =
-      def.resumesSessionViaCli === true || def.streamFormat === 'pi-rpc';
+      def.resumesSessionViaCli === true ||
+      def.streamFormat === 'pi-rpc' ||
+      def.resumesSessionViaAcpLoad === true;
+    // Capture-style adapters (codex) mint their OWN session id and report it on
+    // the stream; the daemon captures it here and persists THAT as the resume
+    // handle instead of `agentResumeCtx.newSessionId` (which such CLIs ignore).
+    // Set from the `status` event's `sessionId` in `sendAgentEvent` below.
+    const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
+    let capturedSessionId: string | null = null;
+    // --- Model resolution hoisted above the resume-identity guard ---
+    // The guard (and the persisted `agent_sessions.model`) must key off the
+    // CONCRETE model actually launched, not the raw request token: a user who
+    // picked `default` would otherwise store `default`/null, so changing the
+    // effective default between turns would still pass the guard and resume the
+    // old upstream session under the wrong model (#4704, reported by @nettee).
+    // resolveModelForAgent is hoisted here; the AMR `default`->live-catalog
+    // rewrite is mirrored below so `safeModel` is final before the guard. The
+    // preflight further down stays authoritative for auth/availability and
+    // re-runs the (cached, idempotent) resolution.
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
+    const requestedLiveModelScope = def.id === 'amr'
+      ? resolveAmrProfile({
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        })
+      : null;
+    let safeModel = resolveModelForAgent(
+      def,
+      typeof model === 'string'
+        ? isKnownModel(def, model, requestedLiveModelScope)
+          ? model
+          : sanitizeCustomModel(model)
+        : null,
+      process.env,
+      requestedLiveModelScope,
+    );
+    const safeReasoning =
+      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
+        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+        : null;
+    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
+    const resolvedBin = agentLaunch.selectedPath;
+    if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
+      // Concretize a default/empty model to the live catalog's first entry, the
+      // same rewrite the AMR preflight applies — done here only so the resume
+      // guard sees the launched model. Read-only + cached (hot on follow-up
+      // turns); the preflight below remains the authoritative gate.
+      try {
+        const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
+        const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
+          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
+        });
+        const resumeLiveModels = preferFreshLiveModels(
+          resumeCatalog.models ?? [],
+          getRememberedLiveModels(def.id, requestedLiveModelScope),
+        );
+        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
+        const askedForDefault =
+          typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+        if (!safeModel || safeModel === 'default' || (askedForDefault && !resumeModelIds.has(safeModel))) {
+          safeModel = resumeLiveModels[0]?.id ?? safeModel ?? null;
+          agentOptions.model = safeModel;
+        }
+      } catch {
+        // Degrade silently: keep the requested value. The preflight below records
+        // the probe failure and applies the identical fallback.
+      }
+    }
     const agentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
+            currentModel: safeModel ?? null,
+            currentCwd: effectiveCwd,
+            currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -5781,40 +6031,7 @@ export async function startServer({
       ...(run.analyticsTelemetry ?? {}),
       promptBuildEndAt: Date.now(),
     };
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-    // Per-agent model + reasoning the user picked in the model menu.
-    // Trust the value when it matches the most recent /api/agents listing
-    // (live or fallback). Otherwise allow it through if it passes a
-    // permissive sanitizer — that's the path for user-typed custom model
-    // ids the CLI's listing didn't surface yet.
-    const requestedLiveModelScope = def.id === 'amr'
-      ? resolveAmrProfile({
-          ...process.env,
-          ...(def.env || {}),
-          ...configuredAgentEnv,
-        })
-      : null;
-    let safeModel = resolveModelForAgent(
-      def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
-        : null,
-      process.env,
-      requestedLiveModelScope,
-    );
-    const safeReasoning =
-      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
-        : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    // (model resolution + AMR concretization hoisted above the resume guard)
     const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
@@ -6098,7 +6315,9 @@ export async function startServer({
       );
       const liveSessionId = agentResumeCtx.isResuming
         ? agentResumeCtx.resumeSessionId
-        : agentResumeCtx.newSessionId;
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -6113,6 +6332,9 @@ export async function startServer({
           agentId: def.id,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
         });
       }
       finalizeRetryTelemetry(status, decision, failure, errorCode);
@@ -6297,9 +6519,7 @@ export async function startServer({
       ).catch(() => null);
     }
 
-    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
-    const resolvedBin = agentLaunch.selectedPath;
-
+    // agentLaunch / resolvedBin are resolved above the resume guard (hoisted).
     // Hoisted above the AMR catalog preflight: the empty-catalog branch
     // below calls `sendAmrAccountFailure(...)` to surface AMR_AUTH_REQUIRED
     // for signed-out users, and a `const` declared later in the same outer
@@ -6600,17 +6820,42 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
-        if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
+        // The id to persist for a create turn: capture-style adapters store the
+        // session id the CLI minted and reported on the stream; specify-style
+        // adapters store the daemon-minted id they passed to the CLI. A
+        // capture-style run that never reported an id (CLI died before
+        // `thread.started`) leaves nothing to resume — correct, the next turn
+        // starts fresh and re-seeds the transcript.
+        const createTurnSessionId = agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+        if (!agentResumeCtx.isResuming && createTurnSessionId) {
           upsertAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
-            sessionId: agentResumeCtx.newSessionId,
+            sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
           });
           return;
         }
-        if (agentResumeCtx.isResuming && includeStableInstructions) {
-          updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+        if (agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId) {
+          // Advance the resume identity guard after a successful resume turn:
+          // the conversation grew by this turn, so the cursor must move to the
+          // new max position (otherwise the next turn sees `cursor + 4` and
+          // falsely reseeds). model/cwd are unchanged (they matched on resume);
+          // refresh the stable hash to what the session now holds.
+          upsertAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: agentResumeCtx.resumeSessionId,
+            stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
+          });
         }
       };
     }
@@ -7094,21 +7339,41 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      const memoryOptions = {
+        projectRoot: PROJECT_ROOT,
+        chatAgentId: typeof agentId === 'string' ? agentId : null,
+        chatModel: typeof safeModel === 'string' ? safeModel : null,
+      };
       void import('./memory-llm.js')
-        .then(({ extractWithLLM }) =>
-          extractWithLLM(
+        .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+          const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
             {
               userMessage: userMsg,
               assistantMessage: captured,
             },
-              {
-                projectRoot: PROJECT_ROOT,
-                chatAgentId: typeof agentId === 'string' ? agentId : null,
-                chatModel: typeof safeModel === 'string' ? safeModel : null,
-              },
-            ),
-        )
+            memoryOptions,
+          );
+          // Auto-distill any inline preview feedback (comments / highlights /
+          // drawn marks) from this turn into durable feedback + rule memory.
+          // This closes the "interaction → memory" loop automatically: the
+          // agent no longer has to propose a rule and the user no longer has
+          // to click Keep — a review turn that carried annotations mines
+          // itself in the background and writes straight to the store.
+          const annotationPass =
+            safeCommentAttachments.length > 0
+              ? distillAnnotationsToMemory(
+                  RUNTIME_DATA_DIR,
+                  {
+                    annotations: safeCommentAttachments,
+                    userMessage: userMsg,
+                    assistantMessage: captured,
+                  },
+                  memoryOptions,
+                )
+              : Promise.resolve([]);
+          return Promise.allSettled([generalPass, annotationPass]);
+        })
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
 
@@ -7575,6 +7840,18 @@ export async function startServer({
       // First well-formed decoded stream event = CLI ready for the
       // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
       noteCliReadyAt();
+      // Capture-style resume: codex reports its own thread id on the
+      // `thread.started` status event. Persist the most recent non-empty id we
+      // see so the create-turn store (and the resumable-failure store) use the
+      // CLI's real session handle, not the unused daemon-minted `newSessionId`.
+      if (
+        agentCapturesSessionId &&
+        ev?.type === 'status' &&
+        typeof ev.sessionId === 'string' &&
+        ev.sessionId.length > 0
+      ) {
+        capturedSessionId = ev.sessionId;
+      }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -7764,7 +8041,7 @@ export async function startServer({
         uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
-      const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
+      const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);
       acpSession = attachAcpSession({
         child,
         prompt: composed,
@@ -7775,6 +8052,11 @@ export async function startServer({
         envFormat: def.acpMcpEnvFormat ?? 'array',
         executionProfile,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        // Resume the prior upstream session (drives `session/load`) when the
+        // resume-identity guard says it is safe; otherwise a fresh session/new.
+        ...(def.resumesSessionViaAcpLoad === true && agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? { resumeSessionId: agentResumeCtx.resumeSessionId }
+          : {}),
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
@@ -7797,6 +8079,35 @@ export async function startServer({
               sendAmrAccountFailure(failure);
               return;
             }
+          }
+          // Hold back the `resume_failed` error so the same-turn reseed stays
+          // transparent. When this run is resuming an upstream session via
+          // `session/load` and the agent reports that session is gone, the ACP
+          // bridge has already called `fail()` -> `send('error')` for the failed
+          // load. The child-close handler then clears the stale handle and
+          // re-runs this turn fresh (the resume-target-missing block below), so
+          // forwarding this error would flash an execution failure — and trip
+          // clients that treat an SSE `error` as terminal — a beat before the
+          // invisible recovery. Suppress it and leave a diagnostic instead; the
+          // close handler is the sole authority on whether this turn ends in an
+          // error or a transparent reseed. The `resumeAutoReseeded` guard lets a
+          // second resume failure in one run fall through to the explicit
+          // "resend your message" affordance the close handler emits.
+          if (
+            event === 'error' &&
+            def.resumesSessionViaAcpLoad === true &&
+            agentResumeCtx.isResuming &&
+            agentResumeCtx.resumeSessionId &&
+            !run.resumeAutoReseeded &&
+            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+          ) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'agent_resume_failed_suppressed',
+              agent_id: def.id,
+              reason: 'resume_failed',
+              previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            });
+            return;
           }
           if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
             if (emitTitleFilteredGuardedTextDelta(data.delta)) {
@@ -7901,6 +8212,56 @@ export async function startServer({
       }
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      // Resume-target-missing recovery runs BEFORE the generic fatal/stream-error
+      // short-circuits. The signal arrives differently per adapter: codex reports
+      // "no rollout found for thread id" as a stream `error` event, while AMR/vela
+      // reports a structured `resume_failed` JSON-RPC error that the ACP bridge
+      // turns into a FATAL. Either would otherwise be swallowed by the
+      // `fatal_rpc_error` / `stream_error` paths below and leave the dead session
+      // id stored — so every later turn would retry the same broken resume (#4275
+      // class). Clearing the stale handle here lets the next turn start fresh +
+      // re-seed the full transcript: one cold turn, never a broken conversation.
+      if (
+        !run.cancelRequested &&
+        (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+        agentResumeCtx.isResuming &&
+        run.conversationId &&
+        isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+      ) {
+        // The resumed upstream session is gone (expired / pruned). Clear the dead
+        // handle and TRANSPARENTLY re-run this same turn with a fresh session +
+        // the full transcript rebuilt from the DB — exactly the pre-session-reuse
+        // path. The user sees one (slightly slower) turn, never an error or a
+        // "resend" prompt. Re-spawn reuses the same-run retry machinery; because
+        // the session row is now cleared, the re-spawn resolves isResuming=false
+        // (fresh session, full transcript), so it CANNOT resume-fail again — the
+        // `resumeAutoReseeded` guard is belt-and-suspenders against any loop.
+        clearAgentSession(db, run.conversationId, def.id);
+        if (!run.resumeAutoReseeded) {
+          run.resumeAutoReseeded = true;
+          run.resumeAutoReseededFrom = agentResumeCtx.resumeSessionId ?? null;
+          // Persisted to the per-run events.jsonl that the help → diagnostics
+          // export bundles, so the whole resume → fail → auto-reseed chain is
+          // visible in a support bundle without any user-facing signal.
+          design.runs.emit(run, 'diagnostic', {
+            type: 'agent_resume_auto_reseed',
+            agent_id: def.id,
+            reason: 'resume_failed',
+            previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            stale_session_cleared: true,
+          });
+          scheduleRetryRestart(0);
+          return;
+        }
+        // Unreachable in practice (the reseed runs fresh); if a second resume
+        // failure ever surfaces in one run, fall back to the explicit affordance.
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The previous session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
       if (acpSession?.hasFatalError()) {
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -7936,26 +8297,6 @@ export async function startServer({
           ));
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
-      }
-      if (
-        code !== 0 &&
-        !run.cancelRequested &&
-        def.resumesSessionViaCli === true &&
-        agentResumeCtx.isResuming &&
-        run.conversationId &&
-        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
-      ) {
-        // The stored session id no longer resolves (pruned / machine moved
-        // / ~/.claude cleared). Drop it so the next turn starts a fresh
-        // session seeded with the full transcript, and surface a retryable
-        // error rather than a confusing hard failure.
-        clearAgentSession(db, run.conversationId, def.id);
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
@@ -8241,8 +8582,32 @@ export async function startServer({
             agentId: def.id,
             sessionId: sessionPath,
             stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
           });
         }
+      }
+      // ACP session/load adapters (AMR/vela) report a durable upstream handle
+      // from the ACP session; persist it (under the resume-identity guard) so
+      // the next turn resumes via session/load. A missing handle clears the row
+      // (so a fresh session is opened next turn), mirroring the capture-style
+      // adapters.
+      if (
+        def.resumesSessionViaAcpLoad === true &&
+        status === 'succeeded' &&
+        acpSession &&
+        typeof acpSession.getDurableSessionId === 'function'
+      ) {
+        persistCapturedAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: acpSession.getDurableSessionId(),
+          stablePromptHash: currentStableHash,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
       }
       if (status === 'succeeded') {
         persistDeliveredAgentSessionState();

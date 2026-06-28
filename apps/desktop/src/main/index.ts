@@ -13,6 +13,7 @@ import {
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
   type DesktopEvalInput,
+  type DesktopExportArtifactInput,
   type DesktopExportPdfInput,
   type DesktopScreenshotInput,
   type DesktopStatusSnapshot,
@@ -331,6 +332,7 @@ function installDesktopMenu(
 ): () => void {
   let developMenuVisible = false;
   let lastKnownAmrProfile: AmrEnvironmentProfile = "prod";
+  const developMenuAccelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
 
   const showDevelopMenuError = (message: string, error: unknown): void => {
     const detail = error instanceof Error ? error.message : String(error);
@@ -366,6 +368,23 @@ function installDesktopMenu(
       })
       .catch((error: unknown) => {
         showDevelopMenuError("AMR Environment Profile switch failed", error);
+      });
+  };
+
+  const toggleDevelopMenu = (): void => {
+    if (developMenuVisible) {
+      developMenuVisible = false;
+      rebuild();
+      return;
+    }
+    void readCurrentAmrProfile()
+      .then((profile) => {
+        lastKnownAmrProfile = profile;
+        developMenuVisible = true;
+        rebuild();
+      })
+      .catch((error: unknown) => {
+        showDevelopMenuError("Develop menu unavailable", error);
       });
   };
 
@@ -423,6 +442,12 @@ function installDesktopMenu(
           { role: "reload" },
           { role: "forceReload" },
           { role: "toggleDevTools" },
+          { type: "separator" },
+          {
+            accelerator: developMenuAccelerator,
+            label: developMenuVisible ? "Hide Develop Menu" : "Show Develop Menu",
+            click: toggleDevelopMenu,
+          },
           { type: "separator" },
           { role: "resetZoom" },
           { role: "zoomIn" },
@@ -487,28 +512,14 @@ function installDesktopMenu(
   };
 
   rebuild();
-  const accelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
-  const registered = globalShortcut.register(accelerator, () => {
-    if (developMenuVisible) {
-      developMenuVisible = false;
-      rebuild();
-      return;
-    }
-    void readCurrentAmrProfile()
-      .then((profile) => {
-        lastKnownAmrProfile = profile;
-        developMenuVisible = true;
-        rebuild();
-      })
-      .catch((error: unknown) => {
-        showDevelopMenuError("Develop menu unavailable", error);
-      });
-  });
+  const registered = globalShortcut.register(developMenuAccelerator, toggleDevelopMenu);
   if (!registered) {
-    console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator });
+    console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator: developMenuAccelerator });
   }
   return () => {
-    globalShortcut.unregister(accelerator);
+    if (registered) {
+      globalShortcut.unregister(developMenuAccelerator);
+    }
   };
 }
 
@@ -768,6 +779,8 @@ export async function runDesktopMain(
             return await activeDesktop.click(request.input as DesktopClickInput);
           case SIDECAR_MESSAGES.EXPORT_PDF:
             return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
+          case SIDECAR_MESSAGES.EXPORT_ARTIFACT:
+            return await activeDesktop.exportArtifact(request.input as DesktopExportArtifactInput);
           case SIDECAR_MESSAGES.UPDATE:
             return await updater.handle((request.input as DesktopUpdateInput).action);
         }

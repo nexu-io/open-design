@@ -1,0 +1,60 @@
+---
+/*
+ * First-touch acquisition cookie for cross-app payment attribution.
+ *
+ * The marketing site (open-design.ai) and the vela checkout/wallet page
+ * (served same-origin at open-design.ai/cloud/*) share the open-design.ai
+ * domain. This captures utm_* + the external referrer on landing and stores a
+ * FIRST-TOUCH cookie (`od_attr`) so the checkout page can read it back and
+ * attribute the payment to the originating traffic source — closing the
+ * "external source -> payment" gap (per-channel/per-campaign revenue).
+ *
+ * - Forward-only: only affects traffic after this ships.
+ * - First-touch wins: never overwritten, so the original source survives
+ *   later internal navigation.
+ * - Falls back to the referrer host when no utm is present, so organic
+ *   search (google/bing) is attributed too, not just tagged links.
+ * - Sets nothing for true direct traffic (no utm, no external referrer).
+ *
+ * Injected alongside PostHog on every page. No PostHog dependency.
+ */
+---
+<script is:inline>
+(function () {
+  try {
+    var COOKIE = 'od_attr';
+    // First-touch: if we already captured a source, keep it.
+    if (document.cookie.indexOf(COOKIE + '=') !== -1) return;
+
+    var qs = new URLSearchParams(window.location.search);
+    var get = function (k) { var v = qs.get(k); return v ? String(v).slice(0, 120) : ''; };
+    var utmSource = get('utm_source');
+
+    var ref = '';
+    try {
+      if (document.referrer) {
+        var rh = new URL(document.referrer).hostname;
+        if (rh && rh.indexOf('open-design') === -1) ref = rh.slice(0, 120);
+      }
+    } catch (e) {}
+
+    // Nothing to attribute (direct, no utm, no external referrer) -> skip.
+    if (!utmSource && !ref) return;
+
+    var data = {
+      s: utmSource, m: get('utm_medium'), c: get('utm_campaign'),
+      ct: get('utm_content'), tm: get('utm_term'),
+      ref: ref, lp: (location.pathname || '/').slice(0, 80), t: Date.now()
+    };
+
+    // 30-day first-touch window. Use the apex domain in production so the
+    // same-origin checkout page (open-design.ai/cloud/*) can read it; on
+    // preview/dev hosts fall back to a host-only cookie so it still works.
+    var host = location.hostname || '';
+    var domainAttr = /(^|\.)open-design\.ai$/.test(host) ? ';domain=.open-design.ai' : '';
+    var secure = location.protocol === 'https:' ? ';Secure' : '';
+    document.cookie = COOKIE + '=' + encodeURIComponent(JSON.stringify(data)) +
+      ';path=/;max-age=' + (60 * 60 * 24 * 30) + domainAttr + ';SameSite=Lax' + secure;
+  } catch (e) {}
+})();
+</script>
