@@ -153,21 +153,21 @@ Open Design என்ன மற்றும் என்ன செய்கி�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
+<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
 <sub><b>Entry view</b> — ஒரு திறனைத் தேர், ஒரு வடிவமைப்பு அமைப்பைத் தேர், brief-ஐத் தட்டச்சு செய். Prototypes, dashboards, decks, மொபைல் apps, magazine pages-க்கு ஒரே மேற்பரப்பு.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
+<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
 <sub><b>மொபைல் prototype</b> — pixel-துல்லியமான iPhone 15 Pro chrome, பல-திரை ஓட்டங்கள். Agent ஒருபோதும் phone frame-ஐ மறுவரை செய்வதில்லை; பகிரப்பட்ட device frames <code>assets/frames/</code>-ல் உள்ளன.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
+<img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
 <sub><b>வலை prototype</b> — scrollbars, KPIs, மற்றும் charts உடைய ஒரு editorial dashboard. <code>design-templates/dating-web/</code>-இலிருந்து நேரடியாக render செய்யப்பட்டது.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/gamified-app.png" alt="Gamified app" /><br/>
+<img src="../../docs/screenshots/skills/gamified-app.png" alt="Gamified app" /><br/>
 <sub><b>மொபைல் app prototype</b> — XP ribbons மற்றும் quest விவரம் உடைய ஒரு மூன்று-திரை gamified ஓட்டம். React/Next/Vue-ஆக மாற்ற Cursor / Codex / Claude Code-க்கு நேரடியாக ஒப்படை.</sub>
 </td>
 </tr>
@@ -180,21 +180,21 @@ Live dashboards, decision rooms, KPI walls — ஒரு tweaks panel வழி�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/live-dashboard.png" alt="Live dashboard" /><br/>
+<img src="../../docs/screenshots/skills/live-dashboard.png" alt="Live dashboard" /><br/>
 <sub><b>Live dashboard</b> — அதன் tweaks panel தள்ளுவதற்குத் தகுதியான அளவுருக்களை முன்வைக்கும் ஒரு திருத்தக்கூடிய KPI wall. Agent ஒரு manifest-ஐ வெளியிடுகிறது, மற்றும் iframe reload இல்லாமல் மறு-render ஆகிறது.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/research-decision-room.png" alt="Decision room" /><br/>
+<img src="../../docs/screenshots/skills/research-decision-room.png" alt="Decision room" /><br/>
 <sub><b>Decision room</b> — தயாரிப்பு / ஆராய்ச்சி / ops கூட்டங்களுக்கான ஒரு பல-மூல briefing artifact.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/github-dashboard.png" alt="GitHub dashboard" /><br/>
+<img src="../../docs/screenshots/skills/github-dashboard.png" alt="GitHub dashboard" /><br/>
 <sub><b>GitHub-பாணி dashboard</b> — repo அளவீடுகள் ஒரு live artifact ஆக வழங்கப்படுகின்றன.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/flowai-live-dashboard-template.png" alt="Flow live dashboard" /><br/>
+<img src="../../docs/screenshots/skills/flowai-live-dashboard-template.png" alt="Flow live dashboard" /><br/>
 <sub><b>Flow live-dashboard template</b> — செயலில் உள்ள <code>DESIGN.md</code> மூலம் brand செய்யப்பட்ட ஒரு domain-குறிப்பிட்ட KPI template.</sub>
 </td>
 </tr>
@@ -205,11 +205,11 @@ Live dashboards, decision rooms, KPI walls — ஒரு tweaks panel வழி�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/07-magazine-deck.png" alt="Magazine deck (guizang-ppt)" /><br/>
+<img src="../../docs/screenshots/07-magazine-deck.png" alt="Magazine deck (guizang-ppt)" /><br/>
 <sub><b>Deck பயன்முறை (guizang-ppt)</b> — magazine layouts, WebGL hero, P0/P1/P2 checklists. அதன் அசல் license பாதுகாக்கப்பட்டு <a href="https://github.com/op7418/guizang-ppt-skill"><code>op7418/guizang-ppt-skill</code></a>-இலிருந்து verbatim பணியாற்றப்பட்டது.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/skills/deck-swiss-international.png" alt="Swiss deck" /><br/>
+<img src="../../docs/screenshots/skills/deck-swiss-international.png" alt="Swiss deck" /><br/>
 <sub><b>Swiss International-பாணி deck</b> — grid-நங்கூரமான, monochrome accents. <code>design-templates/html-ppt-*/</code>-ன் கீழ் <b>15 deck templates</b> மற்றும் <b>36 themes</b>-இல் ஒன்று.</sub>
 </td>
 </tr>
