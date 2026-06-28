@@ -418,7 +418,17 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
  * the secret back into the DOM.
  */
 export interface MaskedConfigResponse {
-  providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }>;
+  providers: Record<string, {
+    configured: boolean;
+    source: string;
+    apiKeyTail: string;
+    baseUrl: string;
+    model?: string;
+    connection?: {
+      connected: boolean;
+      source: string;
+    };
+  }>;
   /**
    * Effective alias map plus source attribution. The Settings UI can
    * show "from env" vs "from media-config.json" badges next to each
@@ -443,6 +453,9 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
           ? await resolveXAIOAuthCredential(projectRoot)
           : null
       : null;
+    const codexSubscription = id === 'codex'
+      ? await resolveCodexSubscriptionStatus(projectRoot)
+      : null;
     providers[id] = {
       configured: Boolean(envKey || hasStoredKey || externalCredential?.apiKey),
       source: envKey ? 'env' : hasStoredKey ? 'stored' : externalCredential?.source || 'unset',
@@ -453,6 +466,14 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
       baseUrl: entry.baseUrl || '',
       ...(typeof entry.model === 'string' && entry.model.trim()
         ? { model: entry.model.trim() }
+        : {}),
+      ...(codexSubscription
+        ? {
+            connection: {
+              connected: codexSubscription.available,
+              source: 'codex-subscription',
+            },
+          }
         : {}),
     };
   }

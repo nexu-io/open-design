@@ -15,7 +15,7 @@ import type {
   BrandVoice,
   DesignSystemPackageInfo,
 } from '@open-design/contracts';
-import { designSystemStaticUrl, fetchProjectFileText, projectRawUrl } from '../providers/registry';
+import { designSystemStaticUrl, fetchProjectFileText, projectHasFile, projectRawUrl } from '../providers/registry';
 import { parseDesignMd, type ParsedDesignMd } from './design-md-parse';
 
 // ── shared pure helpers (also re-exported from BrandPreviewCard) ──────────
@@ -501,6 +501,8 @@ export interface DesignKitSource {
   host?: string;
   /** Bump to force a brand.json re-read after an upload writes a module. */
   reloadKey?: number;
+  /** Known presence of brand.json; when omitted, this hook preflights via the project file index. */
+  hasBrandJson?: boolean;
 }
 
 function tryParseBrand(raw: string | null): Brand | null {
@@ -534,6 +536,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     editable,
     host,
     reloadKey,
+    hasBrandJson,
   } = source;
   const [kit, setKit] = useState<DesignKit | null>(null);
   const [loading, setLoading] = useState(false);
@@ -565,8 +568,17 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     void (async () => {
       // Fetch brand.json (richest) and DESIGN.md (fallback) together so the kit
       // resolves in a single async hop — brand.json wins when it is a valid kit.
+      const rawBrandPromise = (async (): Promise<string | null> => {
+        const shouldReadBrand = hasBrandJson ?? await projectHasFile(projectId, 'brand.json');
+        if (!shouldReadBrand) return null;
+        return fetchProjectFileText(projectId, 'brand.json', {
+          cache: 'no-store',
+          cacheBustKey: reloadKey,
+          suppressNotFoundWarning: true,
+        });
+      })();
       const [rawBrand, rawDesignMd] = await Promise.all([
-        fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store', cacheBustKey: reloadKey }),
+        rawBrandPromise,
         body != null
           ? Promise.resolve(body)
           : fetchProjectFileText(projectId, 'DESIGN.md', { cache: 'no-store', cacheBustKey: reloadKey }),
@@ -612,6 +624,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     editable,
     host,
     reloadKey,
+    hasBrandJson,
   ]);
 
   return { kit, loading };

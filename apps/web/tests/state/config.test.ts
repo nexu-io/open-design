@@ -538,6 +538,34 @@ describe('mergeDaemonMediaProviders', () => {
     });
   });
 
+  it('adopts daemon-managed Codex connection status without requiring saved credentials', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {},
+      },
+      {
+        codex: {
+          apiKey: '',
+          baseUrl: '',
+          connection: {
+            connected: true,
+            source: 'codex-subscription',
+          },
+        },
+      },
+    );
+
+    expect(merged.mediaProviders?.codex).toEqual({
+      apiKey: '',
+      baseUrl: '',
+      connection: {
+        connected: true,
+        source: 'codex-subscription',
+      },
+    });
+  });
+
   it('drops stale marker-only local entries when daemon definitively has no stored state', () => {
     const merged = mergeDaemonMediaProviders(
       {
@@ -600,6 +628,19 @@ describe('media provider entry presence helpers', () => {
         model: '',
       }),
     ).toBe(true);
+  });
+
+  it('does not treat daemon connection status as saved provider credentials', () => {
+    expect(
+      isStoredMediaProviderEntryPresent({
+        apiKey: '',
+        baseUrl: '',
+        connection: {
+          connected: true,
+          source: 'codex-subscription',
+        },
+      }),
+    ).toBe(false);
   });
 });
 

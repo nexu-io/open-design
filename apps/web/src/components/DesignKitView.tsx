@@ -29,7 +29,7 @@ import { createPortal } from 'react-dom';
 import { Button, Textarea } from '@open-design/components';
 import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
-import { openExternalUrl, projectRawUrl } from '../providers/registry';
+import { openExternalUrl, projectHasFile, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import {
   fontStack,
@@ -62,6 +62,11 @@ export type DesignKitEditFocusModule = 'logo';
 export interface DesignKitEditFocusRequest {
   module: DesignKitEditFocusModule;
   nonce: number;
+}
+
+interface KitContentsItem {
+  id: string;
+  label: string;
 }
 
 // ── Logo with fallback chain ────────────────────────────────────────
@@ -145,6 +150,7 @@ interface BrandFontManifestFile {
 export function useBrandFonts(
   projectId: string | undefined,
   fonts: { googleFontsUrl?: string }[],
+  hasFontsManifest?: boolean,
 ): void {
   const googleUrls = useMemo(() => {
     const urls = fonts
@@ -172,6 +178,8 @@ export function useBrandFonts(
     let styleEl: HTMLStyleElement | null = null;
     void (async () => {
       try {
+        const shouldReadManifest = hasFontsManifest ?? await projectHasFile(projectId, 'fonts/manifest.json');
+        if (!shouldReadManifest) return;
         const resp = await fetch(projectRawUrl(projectId, 'fonts/manifest.json'), {
           cache: 'no-store',
         });
@@ -205,7 +213,7 @@ export function useBrandFonts(
       cancelled = true;
       if (styleEl) styleEl.remove();
     };
-  }, [projectId]);
+  }, [projectId, hasFontsManifest]);
 }
 
 interface BrandTokenSubset {
@@ -287,6 +295,7 @@ export interface DesignKitViewProps {
   actionBusy?: string | null;
   onActionFeedback?: (tone: DesignKitActionFeedbackTone, message: string) => void;
   editFocusRequest?: DesignKitEditFocusRequest | null;
+  hasFontsManifest?: boolean;
   dataTestId?: string;
 }
 
@@ -316,6 +325,7 @@ function DesignKitViewInner({
   actionBusy,
   onActionFeedback,
   editFocusRequest,
+  hasFontsManifest,
   dataTestId = 'design-kit-view',
 }: DesignKitViewProps) {
   const t = useT();
@@ -358,7 +368,7 @@ function DesignKitViewInner({
   const stickyHeaderRef = useRef<HTMLElement | null>(null);
   const logoSectionRef = useRef<HTMLElement | null>(null);
 
-  useBrandFonts(kit.projectId, kit.fonts);
+  useBrandFonts(kit.projectId, kit.fonts, hasFontsManifest);
 
   const logoCandidates = useMemo(
     () =>
@@ -581,6 +591,8 @@ function DesignKitViewInner({
   const canUpload = Boolean(kit.canUpload && onUploadModule);
   const canEditDesignMd = Boolean(designMd?.canEdit !== false && designMd?.onSave);
   const anyActionBusy = Boolean(actionBusy);
+  const showTypographySection = fonts.length > 0 || (!compact && canUpload);
+  const showImagesSection = samples.length > 0 || canUpload;
   const designMdModules = useMemo<Record<DesignMdModuleId, DesignMdModuleSpec>>(
     () => ({
       identity: {
@@ -623,6 +635,19 @@ function DesignKitViewInner({
     }),
     [t],
   );
+  const contentsItems = !compact && stickyHeader
+    ? [
+        kit.description ? { id: 'identity', label: t('brandDetail.identity') } : null,
+        { id: 'logo', label: t('brandDetail.logo') },
+        showTypographySection ? { id: 'typography', label: t('brandDetail.typography') } : null,
+        colors.length > 0 ? { id: 'palette', label: t('brandDetail.palette') } : null,
+        voice ? { id: 'voice', label: t('brandDetail.voiceTone') } : null,
+        imagery || layout ? { id: 'imagery-layout', label: t('brandDetail.imageryLayout') } : null,
+        showImagesSection ? { id: 'images', label: t('brandDetail.images') } : null,
+        kit.system && dsKitUrl ? { id: 'design-system', label: t('brandDetail.designSystem') } : null,
+        kit.assets && kit.assets.length > 0 ? { id: 'assets', label: t('brandDetail.brandAssets') } : null,
+      ].filter((item): item is KitContentsItem => Boolean(item))
+    : [];
 
   function uploadElementForModule(module: KitUploadModule): DesignSystemEditClickProps['element'] {
     return module === 'logo' ? 'logo_upload' : module === 'font' ? 'font_upload' : 'image_upload';
@@ -1166,11 +1191,33 @@ function DesignKitViewInner({
       </header>
 
       {noticeSlot}
-      {topSlot}
 
-      <>
+      <div className={contentsItems.length > 0 ? styles.contentsLayout : styles.contentStack}>
+        {contentsItems.length > 0 ? (
+          <nav className={styles.contentsRail} aria-label="Design system contents">
+            <span className={styles.contentsTitle}>
+              <Icon name="panel-left" size={12} />
+              Contents
+            </span>
+            <div className={styles.contentsLinks}>
+              {contentsItems.map((item) => (
+                <a key={item.id} href={`#design-kit-section-${item.id}`}>
+                  <span className={styles.contentsDot} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </a>
+              ))}
+            </div>
+          </nav>
+        ) : null}
+        <div className={styles.contentsMain}>
+          {topSlot}
+
           {kit.description ? (
-            <section className={styles.section} aria-label={t('brandDetail.identity')}>
+            <section
+              id="design-kit-section-identity"
+              className={styles.section}
+              aria-label={t('brandDetail.identity')}
+            >
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.identity')}</h3>
                 {moduleActions(designMdModuleActionButtons(designMdModules.identity))}
@@ -1181,6 +1228,7 @@ function DesignKitViewInner({
 
           {!compact ? (
             <section
+              id="design-kit-section-logo"
               ref={logoSectionRef}
               className={[
                 styles.section,
@@ -1262,6 +1310,7 @@ function DesignKitViewInner({
 
           {fonts.length > 0 ? (
             <section
+              id="design-kit-section-typography"
               className={styles.section}
               aria-label={t('brandDetail.typography')}
               onDragOver={handleModuleDragOver}
@@ -1312,6 +1361,7 @@ function DesignKitViewInner({
             </section>
           ) : !compact && canUpload ? (
             <section
+              id="design-kit-section-typography"
               className={styles.section}
               aria-label={t('brandDetail.typography')}
               onDragOver={handleModuleDragOver}
@@ -1326,7 +1376,11 @@ function DesignKitViewInner({
           ) : null}
 
           {colors.length > 0 ? (
-            <section className={styles.section} aria-label={t('brandDetail.palette')}>
+            <section
+              id="design-kit-section-palette"
+              className={styles.section}
+              aria-label={t('brandDetail.palette')}
+            >
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.palette')}</h3>
                 {moduleActions(designMdModuleActionButtons(designMdModules.palette))}
@@ -1365,7 +1419,11 @@ function DesignKitViewInner({
           ) : null}
 
           {!compact && voice ? (
-            <section className={styles.section} aria-label={t('brandDetail.voiceTone')}>
+            <section
+              id="design-kit-section-voice"
+              className={styles.section}
+              aria-label={t('brandDetail.voiceTone')}
+            >
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.voiceTone')}</h3>
                 {moduleActions(designMdModuleActionButtons(designMdModules.voice))}
@@ -1407,7 +1465,11 @@ function DesignKitViewInner({
           ) : null}
 
           {!compact && (imagery || layout) ? (
-            <section className={styles.section} aria-label={t('brandDetail.imageryLayout')}>
+            <section
+              id="design-kit-section-imagery-layout"
+              className={styles.section}
+              aria-label={t('brandDetail.imageryLayout')}
+            >
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.imageryLayout')}</h3>
                 {moduleActions(designMdModuleActionButtons(designMdModules.imageryLayout))}
@@ -1444,8 +1506,9 @@ function DesignKitViewInner({
             </section>
           ) : null}
 
-          {!compact && (samples.length > 0 || canUpload) ? (
+          {!compact && showImagesSection ? (
             <section
+              id="design-kit-section-images"
               className={styles.section}
               aria-label={t('brandDetail.images')}
               onDragOver={handleModuleDragOver}
@@ -1528,7 +1591,11 @@ function DesignKitViewInner({
           ) : null}
 
           {!compact && kit.system && dsKitUrl ? (
-            <section className={styles.section} aria-label={t('brandDetail.designSystem')}>
+            <section
+              id="design-kit-section-design-system"
+              className={styles.section}
+              aria-label={t('brandDetail.designSystem')}
+            >
               <div className={styles.dsHead}>
                 <h3 className={styles.sectionTitle}>{t('brandDetail.designSystem')}</h3>
                 {moduleActions(
@@ -1614,7 +1681,11 @@ function DesignKitViewInner({
           ) : null}
 
           {!compact && kit.assets && kit.assets.length > 0 ? (
-            <section className={styles.section} aria-label={t('brandDetail.brandAssets')}>
+            <section
+              id="design-kit-section-assets"
+              className={styles.section}
+              aria-label={t('brandDetail.brandAssets')}
+            >
               <h3 className={styles.sectionTitle}>{t('brandDetail.brandAssets')}</h3>
               <div className={styles.assets}>
                 {kit.assets.map((a) => (
@@ -1649,7 +1720,8 @@ function DesignKitViewInner({
               </div>
             </section>
           ) : null}
-        </>
+        </div>
+      </div>
 
       {/* Overlays portal to <body> so their z-index resolves in the ROOT
           stacking context. Rendered inline, the DesignKitView host pane traps
