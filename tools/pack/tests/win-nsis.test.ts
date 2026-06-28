@@ -22,6 +22,7 @@ function makeConfig(namespaceRoot: string): ToolPackConfig {
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
+    requireVelaCli: false,
     roots: {
       output: {
         appBuilderRoot: "/unused/builder",
