@@ -56,6 +56,7 @@ jobs:
       web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
       tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
+      tools_serve_tests_required: ${{ steps.detect.outputs.tools_serve_tests_required }}
       nix_validation_required: ${{ steps.detect.outputs.nix_validation_required }}
       ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}
       visual_validation_required: ${{ steps.detect.outputs.visual_validation_required }}
@@ -504,6 +505,9 @@ jobs:
           fi
           if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-pack test
+          fi
+          if [ "${{ needs.scopes.outputs.tools_serve_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/tools-serve test
           fi
 
       - name: Probe watcher environment

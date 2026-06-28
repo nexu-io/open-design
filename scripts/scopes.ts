@@ -10,6 +10,7 @@ type ScopeOutputs = {
   web_tests_required: boolean;
   tools_dev_tests_required: boolean;
   tools_pack_tests_required: boolean;
+  tools_serve_tests_required: boolean;
   nix_validation_required: boolean;
   ui_p0_validation_required: boolean;
   visual_validation_required: boolean;
@@ -62,6 +63,7 @@ function createScopePlan(): ScopePlan {
     web_tests_required: false,
     tools_dev_tests_required: false,
     tools_pack_tests_required: false,
+    tools_serve_tests_required: false,
     nix_validation_required: false,
     ui_p0_validation_required: false,
     visual_validation_required: false,
@@ -82,7 +84,8 @@ function createScopePlan(): ScopePlan {
       outputs.daemon_tests_required ||
       outputs.web_tests_required ||
       outputs.tools_dev_tests_required ||
-      outputs.tools_pack_tests_required
+      outputs.tools_pack_tests_required ||
+      outputs.tools_serve_tests_required
     ) {
       outputs.workspace_validation_required = true;
     }
@@ -96,6 +99,7 @@ function createScopePlan(): ScopePlan {
     outputs.web_tests_required = true;
     outputs.tools_dev_tests_required = true;
     outputs.tools_pack_tests_required = true;
+    outputs.tools_serve_tests_required = true;
     outputs.nix_validation_required = true;
     outputs.ui_p0_validation_required = true;
     outputs.visual_validation_required = true;
@@ -218,6 +222,10 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
     target.tools_dev_tests_required = true;
   }
 
+  if (startsWithAny(file, ["tools/serve/"])) {
+    target.tools_serve_tests_required = true;
+  }
+
   if (
     startsWithAny(file, [
       "tools/pack/",
@@ -239,6 +247,7 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
     target.web_tests_required = true;
     target.tools_dev_tests_required = true;
     target.tools_pack_tests_required = true;
+    target.tools_serve_tests_required = true;
   }
 
   if (isUiP0RelevantFile(file)) {
