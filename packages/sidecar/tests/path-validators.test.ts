@@ -107,7 +107,7 @@ describe("resolveProjectRoot", () => {
 
   it("resolves relative paths against the current working directory", () => {
     expect(resolveProjectRoot("./repo")).toBe(resolve("./repo"));
-    expect(resolveProjectRoot("/repo/product")).toBe("/repo/product");
+    expect(resolveProjectRoot("/repo/product")).toBe(resolve("/repo/product"));
   });
 });
 
