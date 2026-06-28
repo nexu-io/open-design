@@ -1413,6 +1413,20 @@ export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[
   }
 }
 
+/** Return true when a project file list contains the exact relative path. */
+export function projectFilesContain(files: readonly ProjectFile[], name: string): boolean {
+  const target = name.replace(/^\/+/, '');
+  return files.some((file) => {
+    const candidates = [file.path, file.name].filter((value): value is string => Boolean(value));
+    return candidates.some((candidate) => candidate.replace(/^\/+/, '') === target);
+  });
+}
+
+/** Return true when a project contains the exact relative file path. */
+export async function projectHasFile(projectId: string, name: string): Promise<boolean> {
+  return projectFilesContain(await fetchProjectFiles(projectId), name);
+}
+
 export async function fetchProjectFolders(projectId: string): Promise<ProjectFolder[]> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`);
@@ -1669,7 +1683,7 @@ export async function fetchProjectFilePreview(
 export async function fetchProjectFileText(
   projectId: string,
   name: string,
-  options?: { cache?: RequestCache; cacheBustKey?: string | number },
+  options?: { cache?: RequestCache; cacheBustKey?: string | number; suppressNotFoundWarning?: boolean },
 ): Promise<string | null> {
   const url = projectFileUrl(projectId, name);
   const cacheBustKey = options?.cacheBustKey;
@@ -1683,13 +1697,15 @@ export async function fetchProjectFileText(
   try {
     const resp = await fetch(requestUrl, init);
     if (!resp.ok) {
-      console.warn('[fetchProjectFileText] failed:', {
-        name,
-        projectId,
-        status: resp.status,
-        statusText: resp.statusText,
-        url: requestUrl,
-      });
+      if (!(options?.suppressNotFoundWarning && resp.status === 404)) {
+        console.warn('[fetchProjectFileText] failed:', {
+          name,
+          projectId,
+          status: resp.status,
+          statusText: resp.statusText,
+          url: requestUrl,
+        });
+      }
       return null;
     }
     return await resp.text();

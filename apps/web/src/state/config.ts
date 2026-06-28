@@ -637,6 +637,10 @@ interface PublicMediaProviderConfigEntry {
   apiKeyTail?: string;
   baseUrl?: string;
   model?: string;
+  connection?: {
+    connected?: boolean;
+    source?: string;
+  };
 }
 
 interface PublicMediaProviderConfigResponse {
@@ -668,7 +672,7 @@ function hasAnyDaemonManagedMediaProvider(
   providers: Record<string, MediaProviderCredentials> | null | undefined,
 ): boolean {
   if (!providers) return false;
-  return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
+  return Object.values(providers).some((entry) => isDaemonManagedMediaProviderEntryPresent(entry));
 }
 
 function hasRecoverableLocalMediaProviderFields(
@@ -686,6 +690,12 @@ function isMarkerOnlyMediaProviderEntry(
 ): boolean {
   return isStoredMediaProviderEntryPresent(entry)
     && !hasRecoverableLocalMediaProviderFields(entry);
+}
+
+function isDaemonManagedMediaProviderEntryPresent(
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return isStoredMediaProviderEntryPresent(entry) || Boolean(entry?.connection);
 }
 
 export function isStoredMediaProviderEntryPresent(
@@ -780,6 +790,16 @@ export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvid
           : {}),
         ...(typeof entry?.model === 'string' && entry.model.trim()
           ? { model: entry.model.trim() }
+          : {}),
+        ...(entry?.connection && typeof entry.connection.connected === 'boolean'
+          ? {
+              connection: {
+                connected: entry.connection.connected,
+                ...(typeof entry.connection.source === 'string' && entry.connection.source.trim()
+                  ? { source: entry.connection.source.trim() }
+                  : {}),
+              },
+            }
           : {}),
       };
     }
@@ -960,7 +980,7 @@ export function mergeDaemonMediaProviders(
 
   const mediaProviders = { ...(localConfig.mediaProviders ?? {}) };
   for (const [providerId, daemonEntry] of Object.entries(daemonProviders ?? {})) {
-    if (!isStoredMediaProviderEntryPresent(daemonEntry)) continue;
+    if (!isDaemonManagedMediaProviderEntryPresent(daemonEntry)) continue;
     const localEntry = mediaProviders[providerId];
     const preserveLocalPendingEdit = Boolean(
       options?.preserveLocalProviderIds?.has(providerId)

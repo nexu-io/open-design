@@ -238,6 +238,10 @@ export interface MediaProviderCredentials {
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
   source?: string;
+  connection?: {
+    connected: boolean;
+    source?: string;
+  };
 }
 
 export interface ApiProtocolConfig {

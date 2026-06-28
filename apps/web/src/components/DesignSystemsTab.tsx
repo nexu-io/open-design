@@ -23,7 +23,9 @@ import { takeDesignSystemFocus } from '../runtime/brands';
 import {
   deleteDesignSystemDraft,
   fetchDesignSystem,
+  fetchProjectFiles,
   fetchProjectFileText,
+  projectFilesContain,
   projectRawUrl,
   updateDesignSystemDraft,
 } from '../providers/registry';
@@ -851,7 +853,14 @@ function useProjectLogoSrc(projectId: string | undefined): string | null | undef
     }
     let cancelled = false;
     setSrc(undefined);
-    void fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }).then((raw) => {
+    void (async () => {
+      const files = await fetchProjectFiles(projectId);
+      if (!projectFilesContain(files, 'brand.json')) return null;
+      return fetchProjectFileText(projectId, 'brand.json', {
+        cache: 'no-store',
+        suppressNotFoundWarning: true,
+      });
+    })().then((raw) => {
       if (cancelled) return;
       let primary: string | null = null;
       if (raw) {

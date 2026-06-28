@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent as ReactDragEvent,
   type ReactNode,
 } from 'react';
@@ -100,6 +101,11 @@ import {
 } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
+import {
+  designSystemReviewInstanceId,
+  designSystemReviewPreviewHeight,
+  type DesignSystemReviewPreviewDisplay,
+} from './design-system-review-identity';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon, type IconName } from './Icon';
@@ -349,6 +355,13 @@ const BROWSER_TAB_PREFIX = '__browser__:';
 // the rest; switching back to an evicted tab remounts (reloads) it.
 const BROWSER_KEEPALIVE_CAP = 3;
 const SKETCH_AUTOSAVE_DELAY_MS = 800;
+const FILE_RICH_DESIGN_SYSTEM_PREFIXES = [
+  'ui_kits/',
+  'screens/',
+  'screenshots/',
+  'scraps/',
+  'assets/site/',
+] as const;
 
 // Stable empty folder list so the render-phase project-switch reset is
 // idempotent (passing a fresh `[]` each render would re-trigger the reset).
@@ -391,11 +404,18 @@ type DesignSystemSectionStatus =
   | 'needs-work'
   | 'updated';
 type DesignSystemReviewCategory = 'Type' | 'Colors' | 'Spacing' | 'Components' | 'Brand';
+
+function isFileRichDesignSystemPath(name: string): boolean {
+  const normalized = name.replace(/\\/g, '/').replace(/^\/+/, '');
+  return FILE_RICH_DESIGN_SYSTEM_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 interface DesignSystemProjectSection {
   title: string;
   subtitle: string;
   files: string[];
   category: DesignSystemReviewCategory;
+  viewport?: string;
   requiredFile?: string;
 }
 
@@ -487,7 +507,6 @@ interface DesignSystemProjectSectionReview {
   sectionStatusLabel: string;
   reviewTimeLabel: string | null;
 }
-type DesignSystemReviewPreviewDisplay = 'specimen' | 'ui-kit' | 'asset';
 interface DesignSystemCardManifestEntry {
   path: string;
   group?: string;
@@ -624,7 +643,13 @@ export function FileWorkspace({
     fileManagerViewedProjectRef.current = projectId;
     trackPageView(analytics.track, { page_name: 'file_manager' });
   }, [projectId, analytics.track]);
-  const defaultRootTab = designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB;
+  const fileRichDesignSystemProject = Boolean(
+    designSystemProject && files.some((file) => isFileRichDesignSystemPath(file.name)),
+  );
+  const defaultRootTab =
+    designSystemProject && !fileRichDesignSystemProject
+      ? DESIGN_SYSTEM_TAB
+      : DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
   const persistedTabs = tabsState.tabs;
@@ -705,9 +730,11 @@ export function FileWorkspace({
   const openFileRef = useRef<(name: string) => void>(() => {});
   const designFilesNavProjectIdRef = useRef(projectId);
   const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
+  const explicitDesignSystemActivationProjectRef = useRef<string | null>(null);
   if (designFilesNavProjectIdRef.current !== projectId) {
     designFilesNavProjectIdRef.current = projectId;
     designFilesNavRef.current = createDefaultDesignFilesNavState();
+    explicitDesignSystemActivationProjectRef.current = null;
   }
   const onDesignFilesNavStateChange = useCallback((state: DesignFilesNavState) => {
     designFilesNavRef.current = state;
@@ -901,6 +928,16 @@ export function FileWorkspace({
     onTabsStateChange(next);
   }
 
+  useEffect(() => {
+    if (!fileRichDesignSystemProject) return;
+    if (tabsState.active !== DESIGN_SYSTEM_TAB) return;
+    if (explicitDesignSystemActivationProjectRef.current === projectId) return;
+
+    setActiveTab(DESIGN_FILES_TAB);
+    commitTabsState(workspaceTabsState(persistedTabs, DESIGN_FILES_TAB));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileRichDesignSystemProject, persistedTabs, projectId, tabsState.active]);
+
   function setPersistedActive(name: string | null) {
     const nextActive = name ?? defaultRootTab;
     setActiveTab(nextActive);
@@ -971,6 +1008,11 @@ export function FileWorkspace({
     }
     setActiveTab(tabId);
     commitTabsState(workspaceTabsState(persistedTabs, tabId, nextTabs));
+  }
+
+  function setPersistedDesignSystemActive() {
+    explicitDesignSystemActivationProjectRef.current = projectId;
+    setPersistedActive(DESIGN_SYSTEM_TAB);
   }
 
   function openBrowserTab() {
@@ -1090,7 +1132,11 @@ export function FileWorkspace({
   useEffect(() => {
     if (!designSystemEditRequest) return;
     setUploadError(null);
-    setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
+    if (designSystemProject) {
+      setPersistedDesignSystemActive();
+    } else {
+      setPersistedActive(DESIGN_FILES_TAB);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [designSystemEditRequest?.nonce]);
 
@@ -1106,6 +1152,9 @@ export function FileWorkspace({
         name === DESIGN_SYSTEM_TAB && !designSystemProject
           ? DESIGN_FILES_TAB
           : name;
+      if (nextActive === DESIGN_SYSTEM_TAB) {
+        explicitDesignSystemActivationProjectRef.current = projectId;
+      }
       onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
       setActiveTab(nextActive);
       return;
@@ -2472,7 +2521,7 @@ export function FileWorkspace({
               aria-selected={activeTab === DESIGN_SYSTEM_TAB}
               tabIndex={0}
               data-testid="design-system-project-tab"
-              onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
+              onClick={setPersistedDesignSystemActive}
               title={t('dsManager.tabDesignSystem')}
             >
               <span className="tab-icon" aria-hidden>
@@ -3128,6 +3177,11 @@ function DesignSystemProjectPanel({
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
+  const hasBrandJson = useMemo(() => files.some((file) => (file.path ?? file.name) === 'brand.json'), [files]);
+  const hasFontsManifest = useMemo(
+    () => files.some((file) => (file.path ?? file.name) === 'fonts/manifest.json'),
+    [files],
+  );
   function emitDesignSystemProjectEditClick(
     element: DesignSystemEditClickProps['element'],
     module: DesignSystemEditClickProps['module'],
@@ -3160,7 +3214,12 @@ function DesignSystemProjectPanel({
     let cancelled = false;
     void Promise.all([
       readDesignMd(projectId),
-      fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }),
+      hasBrandJson
+        ? fetchProjectFileText(projectId, 'brand.json', {
+            cache: 'no-store',
+            suppressNotFoundWarning: true,
+          })
+        : Promise.resolve(null),
     ]).then(([designMd, brandJson]) => {
       if (cancelled) return;
       setDesignMdBody(designMd);
@@ -3173,7 +3232,7 @@ function DesignSystemProjectPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, kitReloadKey]);
+  }, [projectId, kitReloadKey, hasBrandJson]);
   const kitHost = system.provenance?.sourceUrls?.[0]
     ? hostnameOf(system.provenance.sourceUrls[0])
     : undefined;
@@ -3202,6 +3261,7 @@ function DesignSystemProjectPanel({
     editable,
     host: kitHost,
     reloadKey: kitReloadKey,
+    hasBrandJson,
   });
   async function persistDesignMd(nextBody: string) {
     const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
@@ -3449,7 +3509,7 @@ function DesignSystemProjectPanel({
     .map((group) => ({
       title: group.title,
       items: group.items.map((item) => ({
-        id: `design-system-section-${slugForTestId(`${group.title}:${item.section.title}`)}`,
+        id: `design-system-section-${slugForTestId(designSystemReviewInstanceId(group.title, item.section))}`,
         label: item.section.title,
         statusClass: designSystemSectionStatusClass(item.sectionStatus),
         statusLabel: item.sectionStatusLabel,
@@ -3570,6 +3630,10 @@ function DesignSystemProjectPanel({
     const sectionSlug = slugForTestId(instanceId);
     const sectionAnchorId = `design-system-section-${sectionSlug}`;
     const editableFile = designSystemSectionEditableFile(section, previewFile, fileByName);
+    const previewHeight = designSystemReviewPreviewHeight(section.viewport, item.previewDisplay);
+    const previewStyle = previewHeight
+      ? ({ '--ds-project-inline-preview-height': previewHeight } as CSSProperties)
+      : undefined;
     return (
       <section
         id={sectionAnchorId}
@@ -3722,7 +3786,7 @@ function DesignSystemProjectPanel({
               </div>
             ) : null}
             {previewFile ? (
-              <div className="ds-project-inline-preview">
+              <div className="ds-project-inline-preview" style={previewStyle}>
                 <DesignSystemInlinePreview projectId={projectId} file={previewFile} />
               </div>
             ) : (
@@ -3973,6 +4037,8 @@ function DesignSystemProjectPanel({
           actionBusy={kitActionBusy}
           onActionFeedback={notifyKit}
           editFocusRequest={editFocusRequest}
+          hasFontsManifest={hasFontsManifest}
+          showCover={false}
           dataTestId="design-system-project-kit"
         />
       ) : (
@@ -4178,6 +4244,7 @@ function buildDesignSystemReviewSections(
         title,
         subtitle: manifestEntry?.subtitle?.trim() || designSystemReviewSubtitle(title, category, name),
         category,
+        viewport: manifestEntry?.viewport?.trim() || undefined,
         files: designSystemRelatedFilesForCategory(name, category, names),
       };
     });

@@ -27,8 +27,8 @@ describe('design-system review preview density', () => {
     expect(reviewMain).toContain('width: min(1180px, 100%);');
     expect(group).toContain('grid-template-columns: minmax(0, 1fr);');
     expect(group).toContain('gap: 18px;');
-    expect(inlinePreview).toContain('height: clamp(300px, 36vw, 520px);');
-    expect(uiKitPreview).toContain('height: clamp(560px, 64vw, 920px);');
+    expect(inlinePreview).toContain('height: var(--ds-project-inline-preview-height, clamp(300px, 36vw, 520px));');
+    expect(uiKitPreview).toContain('height: var(--ds-project-inline-preview-height, clamp(560px, 64vw, 920px));');
   });
 
   it('keeps the contents rail separate from the review card stack', () => {
