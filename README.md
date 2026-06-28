@@ -305,7 +305,14 @@ You can use Open Design without ever opening the GUI — call it as a skill, plu
 od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+
+# Hosted equivalent for curl-based setup:
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 ```
+
+`install.sh` is a thin shell wrapper around `od mcp install`; it exists so the
+hosted URL returns shell instead of the landing-page HTML fallback and fails
+fast if your shell resolves a non-Open-Design `od` binary.
 
 > **WSL2 users:** If your coding-agent CLIs run inside WSL2, follow the
 > [`WSL2 setup guide`](docs/wsl-setup.md) first. Linux's `/usr/bin/od` can
