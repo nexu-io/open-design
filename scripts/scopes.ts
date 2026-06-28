@@ -222,7 +222,9 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
     target.tools_dev_tests_required = true;
   }
 
-  if (startsWithAny(file, ["tools/serve/"])) {
+  // tools-serve depends on @open-design/release (packages/release), so a
+  // change there must also run its suite.
+  if (startsWithAny(file, ["tools/serve/", "packages/release/"])) {
     target.tools_serve_tests_required = true;
   }
 

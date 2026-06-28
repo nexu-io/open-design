@@ -272,6 +272,17 @@ describe("packaged smoke workflow", () => {
       tools_serve_tests_required: false,
       tools_pack_tests_required: true,
     });
+
+    // tools-serve imports @open-design/release, so a packages/release change
+    // must run its suite too (release is a shared dep of tools-pack as well).
+    await expect(
+      runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, [
+        "packages/release/src/index.ts",
+      ]),
+    ).resolves.toMatchObject({
+      tools_serve_tests_required: true,
+      tools_pack_tests_required: true,
+    });
   });
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
