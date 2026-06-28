@@ -238,9 +238,9 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 - Invocation: `kimi acp`, using the daemon's shared ACP JSON-RPC transport. Kimi Code 0.20.x exposes prompt mode through `-p/--prompt <prompt>` only; it does not accept `--print`, `--input-format`, or `--output-format` outside prompt mode. The adapter therefore avoids prompt mode entirely so large composed prompts are sent through ACP instead of Windows argv.
 - Streaming: `acp-json-rpc`; the daemon uses the same ACP event path as Devin, Kiro, Kilo, Vibe, and Trae CLI.
-- Models: dynamic through the ACP handshake when available. If detection cannot start `kimi acp` (for example, an older CLI rejects the subcommand), the picker falls back to Kimi's static model hints.
+- Models: dynamic through the ACP handshake when available. If detection cannot start `kimi acp` (for example, an older CLI rejects the subcommand), Kimi is marked unavailable instead of advertising a version-only install that cannot chat. If ACP starts but reports missing authentication, Kimi stays visible with fallback model hints and an auth remediation.
 - Skills: prompt injection only in v1. External MCP servers are forwarded through the ACP launch descriptor with the existing `acp-merge` path.
-- **Gotcha:** Detection still treats older `kimi --version`-only installs as available with fallback models. Those installs may need to upgrade to a Kimi Code build with `kimi acp` before chat runs can use the ACP adapter.
+- **Gotcha:** Kimi now requires ACP support for chat runs. Older `kimi --version`-only installs should upgrade to a Kimi Code build with `kimi acp`; auth-required ACP installs should sign in through the Kimi CLI and rescan.
 
 ### 5.13 DeepSeek TUI
 

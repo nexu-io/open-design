@@ -7,7 +7,11 @@ import {
 } from './models.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
-import { probeAgentAuthStatus } from './auth.js';
+import {
+  classifyAgentServiceFailure,
+  probeAgentAuthStatus,
+  type AgentAuthProbeResult,
+} from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
 import { resolveAmrProfile } from '../integrations/vela.js';
@@ -30,18 +34,46 @@ type FetchedRuntimeModels = {
   models: RuntimeModelOption[];
   source: RuntimeModelSource;
   requiredProbeFailed?: boolean;
+  auth?: AgentAuthProbeResult;
 };
 
-function fallbackModels(def: RuntimeAgentDef): FetchedRuntimeModels {
+function fallbackModels(
+  def: RuntimeAgentDef,
+  options: { requiredProbeFailed?: boolean; auth?: AgentAuthProbeResult } = {},
+): FetchedRuntimeModels {
+  const requiredProbeFailed =
+    options.requiredProbeFailed ?? Boolean(def.requiresModelProbe);
   return {
     models: def.fallbackModels,
     source: 'fallback',
-    ...(def.requiresModelProbe ? { requiredProbeFailed: true } : {}),
+    ...(requiredProbeFailed ? { requiredProbeFailed: true } : {}),
+    ...(options.auth ? { auth: options.auth } : {}),
   };
 }
 
 function amrModelScopeFromEnv(env: NodeJS.ProcessEnv): string {
   return resolveAmrProfile(env);
+}
+
+function errorText(error: unknown): string {
+  const err = error as { message?: unknown; stdout?: unknown; stderr?: unknown };
+  return [err.message, err.stdout, err.stderr]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .join('\n') || String(error || '');
+}
+
+function modelProbeAuthFailure(
+  def: RuntimeAgentDef,
+  error: unknown,
+): AgentAuthProbeResult | null {
+  const text = errorText(error);
+  if (classifyAgentServiceFailure(text) !== 'AGENT_AUTH_REQUIRED') {
+    return null;
+  }
+  return {
+    status: 'missing',
+    message: `${def.name} appears to be installed but is not authenticated. Sign in with the CLI in a terminal, then rescan.`,
+  };
 }
 
 function withRememberedAmrModels(
@@ -52,7 +84,7 @@ function withRememberedAmrModels(
   if (def.id !== 'amr' || modelResult.models.length > 0) return modelResult;
   const rememberedModels = getRememberedLiveModels(def.id, amrModelScopeFromEnv(env));
   if (rememberedModels.length === 0) return modelResult;
-  return { models: rememberedModels, source: 'live' };
+  return { ...modelResult, models: rememberedModels, source: 'live' };
 }
 
 async function fetchModels(
@@ -67,7 +99,13 @@ async function fetchModels(
         return fallbackModels(def);
       }
       return { models: parsed, source: 'live' };
-    } catch {
+    } catch (error) {
+      const auth = def.requiresModelProbe
+        ? modelProbeAuthFailure(def, error)
+        : null;
+      if (auth) {
+        return fallbackModels(def, { requiredProbeFailed: false, auth });
+      }
       return fallbackModels(def);
     }
   }
@@ -249,7 +287,8 @@ async function probe(
   if (caps) {
     agentCapabilities.set(def.id, caps);
   }
-  const authDiagnostic = auth ? buildAuthDiagnostic(def, auth) : null;
+  const surfacedAuth = surfacedModelResult.auth ?? auth;
+  const authDiagnostic = surfacedAuth ? buildAuthDiagnostic(def, surfacedAuth) : null;
   return {
     ...stripFns(def),
     models: surfacedModelResult.models,
@@ -257,10 +296,10 @@ async function probe(
     available: true,
     path: launch.selectedPath,
     version: outcome.version,
-    ...(auth
+    ...(surfacedAuth
       ? {
-          authStatus: auth.status,
-          ...(auth.message ? { authMessage: auth.message } : {}),
+          authStatus: surfacedAuth.status,
+          ...(surfacedAuth.message ? { authMessage: surfacedAuth.message } : {}),
         }
       : {}),
     ...(authDiagnostic ? { diagnostics: [authDiagnostic] } : {}),

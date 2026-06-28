@@ -469,6 +469,36 @@ test('resolveAgentExecutable prefers opencode-cli before desktop opencode fallba
   }
 });
 
+function writeKimiTestCli(dir: string, script: string): string {
+  const scriptPath = join(dir, 'kimi-impl.mjs');
+  writeFileSync(scriptPath, script);
+  if (process.platform === 'win32') {
+    const bin = join(dir, 'kimi.cmd');
+    writeFileSync(
+      bin,
+      [
+        '@echo off',
+        `"${process.execPath}" "%~dp0kimi-impl.mjs" %*`,
+        'exit /b %ERRORLEVEL%',
+        '',
+      ].join('\r\n'),
+    );
+    return bin;
+  }
+  const bin = join(dir, 'kimi');
+  writeFileSync(
+    bin,
+    [
+      '#!/bin/sh',
+      'DIR="$(cd "$(dirname "$0")" && pwd)"',
+      `exec "${process.execPath}" "$DIR/kimi-impl.mjs" "$@"`,
+      '',
+    ].join('\n'),
+  );
+  chmodSync(bin, 0o755);
+  return bin;
+}
+
 test('detectAgents includes sanitized install and docs metadata from split runtime metadata', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agent-install-meta-'));
   try {
@@ -505,15 +535,13 @@ test('detectAgents includes sanitized install and docs metadata from split runti
   }
 });
 
-fsTest('detectAgents marks Kimi unavailable when the installed CLI rejects the required acp mode', async () => {
+test('detectAgents marks Kimi unavailable when the installed CLI rejects the required acp mode', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-detect-kimi-modern-'));
   try {
     return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
-      const kimiBin = join(dir, 'kimi');
-      writeFileSync(
-        kimiBin,
+      writeKimiTestCli(
+        dir,
         [
-          '#!/usr/bin/env node',
           'const args = process.argv.slice(2);',
           "if (args.includes('acp')) {",
           "  console.error('error: too many arguments. Expected 0 arguments but got 1.');",
@@ -528,7 +556,6 @@ fsTest('detectAgents marks Kimi unavailable when the installed CLI rejects the r
           '',
         ].join('\n'),
       );
-      chmodSync(kimiBin, 0o755);
 
       process.env.PATH = dir;
       process.env.OD_AGENT_HOME = dir;
@@ -542,6 +569,54 @@ fsTest('detectAgents marks Kimi unavailable when the installed CLI rejects the r
       assert.equal(kimi.models[1]?.id, 'kimi-k2-turbo-preview');
       assert.equal(kimi.models[2]?.id, 'moonshot-v1-8k');
       assert.equal(kimi.models[3]?.id, 'moonshot-v1-32k');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents keeps Kimi available when ACP starts but requires auth', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-detect-kimi-acp-auth-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      writeKimiTestCli(
+        dir,
+        [
+          'const args = process.argv.slice(2);',
+          "if (args.length === 1 && args[0] === '--version') {",
+          "  console.log('kimi 0.20.0');",
+          '  process.exit(0);',
+          '}',
+          "if (args.length === 1 && args[0] === 'acp') {",
+          "  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: 401, message: 'Authentication required. Run kimi login first.' } }) + '\\n');",
+          '  setTimeout(() => process.exit(1), 1000);',
+          '} else {',
+          "  console.error('unexpected args: ' + JSON.stringify(args));",
+          '  process.exit(1);',
+          '}',
+          '',
+        ].join('\n'),
+      );
+
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const kimi = agents.find((agent) => agent.id === 'kimi');
+
+      assert.ok(kimi);
+      assert.equal(kimi.available, true);
+      assert.equal(kimi.authStatus, 'missing');
+      assert.match(kimi.authMessage ?? '', /Kimi CLI.*not authenticated/);
+      assert.equal(kimi.modelsSource, 'fallback');
+      assert.deepEqual(
+        kimi.models.map((model) => model.id),
+        ['default', 'kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k'],
+      );
+      assert.equal(
+        kimi.diagnostics?.some((diagnostic) => diagnostic.reason === 'auth-missing'),
+        true,
+      );
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

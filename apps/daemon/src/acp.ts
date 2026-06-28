@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import path from 'node:path';
 import type { ExecutionProfile } from '@open-design/contracts';
+import { createCommandInvocation } from '@open-design/platform';
 import {
   createDsmlArtifactTextSuppressor,
   createToolCallTextSuppressor,
@@ -804,10 +805,12 @@ export async function detectAcpModels({
 }: DetectAcpModelsOptions): Promise<ModelOption[]> {
   const effectiveTimeoutMs = resolveAcpTimeoutMs(env, timeoutMs);
   return await new Promise<ModelOption[]>((resolve, reject) => {
-    const child = spawn(bin, args, {
+    const invocation = createCommandInvocation({ command: bin, args, env });
+    const child = spawn(invocation.command, invocation.args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...env },
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
