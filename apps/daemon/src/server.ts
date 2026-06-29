@@ -3449,7 +3449,13 @@ export async function startServer({
 
   const designSystemServices = createDesignSystemServerServices({
     roots: { SKILL_ROOTS, DESIGN_TEMPLATE_ROOTS, ALL_SKILL_LIKE_ROOTS },
-    paths: { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR },
+    paths: {
+      RUNTIME_DATA_DIR,
+      RUNTIME_DATA_DIR_CANONICAL,
+      PROJECTS_DIR,
+      DESIGN_SYSTEMS_DIR,
+      USER_DESIGN_SYSTEMS_DIR,
+    },
     skills: { listSkills, findSkillById },
     designSystems: {
       listDesignSystems,
