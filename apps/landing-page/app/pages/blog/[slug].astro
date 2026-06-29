@@ -98,7 +98,16 @@ let bodyHtmlToRender = localizedBodyHtml;
 let toc: TocEntry[];
 if (localizedBodyHtml) {
   const injected = injectTocIntoHtml(localizedBodyHtml);
-  bodyHtmlToRender = injected.html;
+  // Localize root-relative internal links (e.g. related-post `/blog/...`
+  // anchors) to the current locale so a non-English reader stays on their
+  // locale's routes instead of being dropped back onto the English ones.
+  // `localizedHref` leaves external, mailto/tel, and `#` links untouched, and
+  // is a no-op for the default locale. Only `<a>` carries `href` in post HTML
+  // (`<img>` uses `src`), so matching every `href` attribute is safe.
+  bodyHtmlToRender = injected.html.replace(
+    /href="([^"]+)"/g,
+    (_match, link) => `href="${localizedHref(link, locale)}"`,
+  );
   toc = injected.toc;
 } else {
   toc = tocFromHeadings(headings);
