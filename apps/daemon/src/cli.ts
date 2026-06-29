@@ -128,6 +128,7 @@ const PLUGIN_STRING_FLAGS = new Set([
   'reason',
   'catalog',
   'host',
+  'name',
 ]);
 const PLUGIN_BOOLEAN_FLAGS = new Set([
   'help',
@@ -1429,14 +1430,20 @@ function exitWithStructuredError({ code, message, data }) {
 // would drop the only diagnostic the daemon actually returned to a
 // headless caller.
 async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
+  let raw = '';
   let parsed;
-  try { parsed = await resp.json(); } catch { parsed = {}; }
+  try {
+    raw = await resp.text();
+    parsed = raw ? JSON.parse(raw) : {};
+  } catch {
+    parsed = {};
+  }
   const errorObj =
     typeof parsed?.error === 'string'
       ? { message: parsed.error }
       : parsed?.error;
   const errCode = normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
-  if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
+  if (errCode) {
     exitWithStructuredError({
       code:    errCode,
       message: errorObj?.message ?? `HTTP ${resp.status}`,
@@ -1445,7 +1452,7 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') 
   }
   exitWithStructuredError({
     code:    fallbackCode,
-    message: errorObj?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
+    message: errorObj?.message ?? `HTTP ${resp.status}${raw ? `: ${raw}` : ''}`,
     data:    structuredErrorData(errorObj),
   });
 }
@@ -1485,6 +1492,7 @@ async function runPlugin(args) {
     case 'upgrade':   return runPluginUpgrade(rest);
     case 'uninstall': return runPluginUninstall(rest);
     case 'apply':     return runPluginApply(rest);
+    case 'duplicate': return runPluginDuplicate(rest);
     case 'canon':     return runPluginCanon(rest);
     case 'diff':      return runPluginDiff(rest);
     case 'doctor':    return runPluginDoctor(rest);
@@ -3580,6 +3588,44 @@ async function runPluginApply(rest) {
   }
 }
 
+async function runPluginDuplicate(rest) {
+  const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
+  const id = rest.find((a) => !a.startsWith('-')
+    && a !== flags['daemon-url']
+    && a !== flags.name);
+  if (!id) {
+    console.error('Usage: od plugin duplicate <id> [--name "<project name>"] [--json]');
+    process.exit(2);
+  }
+  const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins/${encodeURIComponent(id)}/duplicate-project`;
+  const body = typeof flags.name === 'string' && flags.name.trim().length > 0
+    ? { name: flags.name.trim() }
+    : {};
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return exitWithStructuredError({
+      code: 'daemon-not-running',
+      message: `Cannot reach daemon at ${await pluginDaemonUrl(flags)}: ${err?.message ?? err}`,
+    });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json().catch(() => ({}));
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+  console.log(`[duplicate] created project ${data.projectId} from ${data.sourcePluginId} -> ${data.relPath}`);
+  if (Array.isArray(data.warnings) && data.warnings.length > 0) {
+    for (const warning of data.warnings) console.log(`[duplicate] warn: ${warning}`);
+  }
+}
+
 function coerceCliValue(raw) {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
@@ -4781,6 +4827,8 @@ function printPluginHelp() {
   od plugin upgrade <id>                  Re-install a plugin from its recorded source.
   od plugin uninstall <id>                Remove a plugin from the registry + on-disk staging.
   od plugin apply <id> [--inputs <json>]  Compute an ApplyResult (preview) for a plugin.
+  od plugin duplicate <id> [--name <n>]   Copy a plugin HTML example into a new project
+                                          without starting an agent run.
   od plugin doctor <id>                   Lint a plugin's manifest, atoms and resolved refs.
   od plugin canon <snapshotId>            Print the canonical system-prompt block for a snapshot.
                                           (--check <file> for byte-equality fixtures.)

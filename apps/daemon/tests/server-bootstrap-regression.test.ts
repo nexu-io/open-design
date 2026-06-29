@@ -92,6 +92,7 @@ describe('server route inventory', () => {
       'POST /api/plugins/:id/uninstall',
       'POST /api/plugins/:id/upgrade',
       'POST /api/plugins/:id/apply',
+      'POST /api/plugins/:id/duplicate-project',
       'POST /api/plugins/:id/share-project',
       'POST /api/plugins/:id/doctor',
       'POST /api/plugins/:id/trust',

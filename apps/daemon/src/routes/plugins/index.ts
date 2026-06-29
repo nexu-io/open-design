@@ -1,4 +1,15 @@
 import type { Express, NextFunction, Request, RequestHandler, Response } from 'express';
+import type {
+  InstalledPluginRecord,
+  PluginDuplicateProjectRequest,
+  PluginDuplicateProjectResponse,
+  Project,
+  ProjectMetadata,
+} from '@open-design/contracts';
+import {
+  duplicatePluginExampleIntoProject,
+  PluginDuplicateProjectError,
+} from '../../plugins/duplicate-project.js';
 import type { PluginShareAction } from '../../services/plugin-share-tasks.js';
 
 export interface RegisterPluginEventRoutesDeps {
@@ -18,8 +29,10 @@ interface SqliteDbLike {
 }
 
 interface InstalledPluginLike {
+  id?: string;
   title?: string;
   manifest?: Record<string, unknown>;
+  fsPath?: string;
   capabilitiesGranted?: string[];
   appliedPlugin?: { capabilitiesGranted?: string[]; [key: string]: unknown };
   assistantMessageId?: string;
@@ -69,6 +82,7 @@ interface PluginRouteHelpers {
     snapshot(task: PluginShareTaskLike, since?: number): unknown;
   };
   applyBakedPreviews(plugins: InstalledPluginLike[], previewsDir: string): unknown;
+  assembleExample(templateHtml: string, slidesHtml: string, title: string): string;
   sendMulterError(res: Response, err: unknown): unknown;
   decodeMultipartFilename(name: string): string;
   installOrUpgradePlugin(req: Request, res: Response, mode: 'install' | 'upgrade'): Promise<unknown>;
@@ -92,6 +106,14 @@ interface PluginRouteHelpers {
 export interface RegisterPluginRoutesDeps {
   db: SqliteDbLike;
   paths: { PROJECTS_DIR: string; PLUGIN_REGISTRY_ROOTS: string[]; PLUGIN_LOCKFILE_PATH: string };
+  ids: { randomId(): string };
+  projectStore: {
+    insertProject(db: SqliteDbLike, project: unknown): Project | null;
+    getProject(db: SqliteDbLike, id: string): Project | null;
+  };
+  conversations: {
+    insertConversation(db: SqliteDbLike, conversation: unknown): unknown;
+  };
   plugins: {
     listInstalledPlugins: (db: SqliteDbLike) => InstalledPluginLike[];
     getInstalledPlugin: (db: SqliteDbLike, id: string) => InstalledPluginLike | null;
@@ -145,7 +167,7 @@ export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEven
 }
 
 export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
-  const { db, paths, plugins, helpers } = deps;
+  const { db, paths, ids, projectStore, conversations, plugins, helpers } = deps;
   app.get('/api/plugins', async (_req, res) => { try { res.json({ plugins: helpers.applyBakedPreviews(plugins.listInstalledPlugins(db), helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.get('/api/plugins/:id', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/upload-zip', (req, res) => helpers.pluginUpload.single('file')(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const file = req.file; if (!file?.buffer) return res.status(400).json({ error: 'file is required' }); const result = await helpers.pluginInstallation.stageUploadedPluginZip(file.buffer, `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`); res.status((result as { ok?: boolean }).ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
@@ -154,6 +176,78 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
   app.post('/api/plugins/:id/uninstall', async (req, res) => { try { const result = await plugins.uninstallPlugin(db, req.params.id, paths.PLUGIN_REGISTRY_ROOTS); if (!result.ok && !result.removedFolder) return res.status(404).json({ error: 'plugin not found', warning: result.warning }); res.json(result); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/upgrade', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'upgrade'));
   app.post('/api/plugins/:id/apply', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}; const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {}; const grantCaps = Array.isArray(body.grantCaps) ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string') : []; const locale = typeof body.locale === 'string' ? body.locale : undefined; const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe }); if (grantCaps.length > 0) { const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]); computed.result.capabilitiesGranted = Array.from(merged); computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged); } res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest }); } catch (err: unknown) { if (err instanceof plugins.MissingInputError) return res.status(422).json({ error: 'missing_inputs', fields: err.fields }); res.status(500).json({ error: String(err) }); } });
+  app.post('/api/plugins/:id/duplicate-project', helpers.requireLocalDaemonRequest, async (req, res) => {
+    try {
+      const pluginId = Array.isArray(req.params.id) ? req.params.id[0] ?? '' : req.params.id ?? '';
+      const plugin = plugins.getInstalledPlugin(db, pluginId);
+      if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: 'plugin not found' } });
+      if (typeof plugin.id !== 'string' || typeof plugin.fsPath !== 'string') {
+        return res.status(422).json({ error: { code: 'plugin-not-duplicable', message: 'plugin record is missing a filesystem source' } });
+      }
+      const body = req.body && typeof req.body === 'object'
+        ? req.body as PluginDuplicateProjectRequest
+        : {};
+      const projectName = typeof body.name === 'string' && body.name.trim().length > 0
+        ? body.name.trim().slice(0, 120)
+        : `${plugin.title || plugin.id}`;
+      const now = Date.now();
+      const projectId = ids.randomId();
+      const conversationId = ids.randomId();
+      const metadata: ProjectMetadata = {
+        kind: 'prototype',
+        templateId: `plugin:${plugin.id}`,
+        templateLabel: plugin.title || plugin.id,
+        duplicatedFromPluginId: plugin.id,
+        skipDiscoveryBrief: true,
+      };
+      const duplicate = await duplicatePluginExampleIntoProject({
+        plugin: plugin as InstalledPluginRecord,
+        projectsRoot: paths.PROJECTS_DIR,
+        projectId,
+        metadata,
+        assembleExample: helpers.assembleExample,
+      });
+      metadata.duplicatedFromPluginEntry = duplicate.sourceEntry;
+      metadata.entryFile = duplicate.relPath;
+      const project = projectStore.insertProject(db, {
+        id: projectId,
+        name: projectName,
+        skillId: null,
+        designSystemId: null,
+        pendingPrompt: null,
+        metadata,
+        createdAt: now,
+        updatedAt: now,
+      });
+      conversations.insertConversation(db, {
+        id: conversationId,
+        projectId,
+        title: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const loadedProject = projectStore.getProject(db, projectId) ?? project;
+      if (!loadedProject) return res.status(500).json({ error: { code: 'project-load-failed', message: 'created project could not be loaded' } });
+      const response: PluginDuplicateProjectResponse = {
+        ok: true,
+        projectId,
+        conversationId,
+        relPath: duplicate.relPath,
+        project: loadedProject,
+        sourcePluginId: plugin.id,
+        sourceEntry: duplicate.sourceEntry,
+        copiedFiles: duplicate.copiedFiles,
+        skippedFiles: duplicate.skippedFiles,
+        warnings: duplicate.warnings,
+      };
+      res.status(201).json(response);
+    } catch (err: unknown) {
+      if (err instanceof PluginDuplicateProjectError) {
+        return res.status(err.status).json({ error: { code: err.code, message: err.message } });
+      }
+      res.status(500).json({ error: { code: 'plugin-duplicate-failed', message: err instanceof Error ? err.message : String(err) } });
+    }
+  });
   app.post('/api/plugins/:id/share-project', async (req, res) => helpers.handleShareProject(req, res));
   app.post('/api/plugins/:id/doctor', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); res.json(plugins.doctorPlugin(plugin, registry, { connectorProbe })); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/trust', async (req, res) => helpers.handlePluginTrust(req, res));

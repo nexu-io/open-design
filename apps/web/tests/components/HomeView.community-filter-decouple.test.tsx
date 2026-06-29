@@ -15,7 +15,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
 
-function makeHomePlugin(id: string, mode: string) {
+function makeHomePlugin(
+  id: string,
+  mode: string,
+  preview?: Record<string, unknown>,
+) {
   return {
     id,
     title: id,
@@ -32,7 +36,12 @@ function makeHomePlugin(id: string, mode: string) {
       title: id,
       version: '1.0.0',
       description: `${id} fixture`,
-      od: { kind: 'scenario', taskKind: 'new-generation', mode },
+      od: {
+        kind: 'scenario',
+        taskKind: 'new-generation',
+        mode,
+        ...(preview ? { preview } : {}),
+      },
     },
   };
 }
@@ -40,6 +49,13 @@ function makeHomePlugin(id: string, mode: string) {
 const PLUGINS = [
   makeHomePlugin('example-web-prototype', 'prototype'),
   makeHomePlugin('example-simple-deck', 'deck'),
+];
+
+const DUPLICABLE_PLUGINS = [
+  makeHomePlugin('example-html-prototype', 'prototype', {
+    type: 'html',
+    entry: './example.html',
+  }),
 ];
 
 function ariaSelected(testId: string): string | null {
@@ -94,5 +110,57 @@ describe('HomeView community filter decoupling', () => {
     // And the gallery's own pills still work locally.
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
     expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
+  });
+
+  it('opens duplicated gallery examples at the copied entry file', async () => {
+    const onOpenProject = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: DUPLICABLE_PLUGINS }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        typeof url === 'string' &&
+        url === '/api/plugins/example-html-prototype/duplicate-project' &&
+        init?.method === 'POST'
+      ) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            projectId: 'duplicated-project',
+            conversationId: 'duplicated-conversation',
+            relPath: 'index.html',
+            project: { id: 'duplicated-project', name: 'Duplicated' },
+            sourcePluginId: 'example-html-prototype',
+            sourceEntry: 'example.html',
+            copiedFiles: 1,
+            skippedFiles: 0,
+            warnings: [],
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <I18nProvider initial="en">
+        <HomeView
+          projects={[]}
+          onSubmit={() => undefined}
+          onOpenProject={onOpenProject}
+          onViewAllProjects={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('plugins-home-duplicate-example-html-prototype'));
+
+    await waitFor(() => {
+      expect(onOpenProject).toHaveBeenCalledWith('duplicated-project', 'index.html');
+    });
   });
 });

@@ -12,7 +12,7 @@ import {
 } from "react";
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
-import { useI18n, useT } from '../i18n';
+import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
 import {
@@ -33,7 +33,8 @@ import type {
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
 import { WorkingDirPicker } from './WorkingDirPicker';
-import { patchProject } from "../state/projects";
+import { duplicatePluginAsProject, patchProject } from "../state/projects";
+import { navigate } from '../router';
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
 import { listPlugins } from "../state/projects";
@@ -382,7 +383,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     },
     ref
   ) {
-    const t = useT();
+    const { locale, t } = useI18n();
     const analytics = useAnalytics();
     const activeFileContext =
       projectMetadata?.importedFrom === 'folder' && activeProjectFileName
@@ -466,6 +467,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       useState<AppliedPluginSnapshot | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
     const inlineBackedPluginRef = useRef<{ id: string; label: string } | null>(null);
+    async function duplicateDetailsPlugin(record: InstalledPluginRecord) {
+      try {
+        const result = await duplicatePluginAsProject(record.id, {
+          name: localizePluginTitle(locale, record),
+        });
+        setDetailsRecord(null);
+        navigate({
+          kind: 'project',
+          projectId: result.projectId,
+          conversationId: result.conversationId,
+          fileName: result.relPath,
+        });
+      } catch {
+        onShowToast?.(t('pluginCard.duplicateFailed'));
+      }
+    }
     // Consolidated "tools" popover — a single dropdown anchored to the
     // leading sliders icon that hosts project context, MCP, Import actions,
     // and a shortcut to open the full Settings dialog. Replaces the previous
@@ -2640,6 +2657,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               await pluginsSectionRef.current?.applyById(record.id, record);
               setDetailsRecord(null);
             }}
+            onDuplicate={(record) => void duplicateDetailsPlugin(record)}
             hideUseAction
           />
         ) : null}

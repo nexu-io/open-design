@@ -4411,6 +4411,7 @@ export async function startServer({
   const pluginRouteHelpers = {
     PLUGIN_PREVIEWS_DIR,
     applyBakedPreviews,
+    assembleExample,
     pluginUpload,
     pluginInstallation,
     sendMulterError,
@@ -4624,6 +4625,9 @@ export async function startServer({
   registerPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    ids: idDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     plugins: {
       listInstalledPlugins,
       getInstalledPlugin,
@@ -4673,6 +4677,9 @@ export async function startServer({
   registerProjectPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    ids: idDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     plugins: {
       listInstalledPlugins,
       getInstalledPlugin,

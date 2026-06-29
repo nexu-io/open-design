@@ -134,6 +134,7 @@ import {
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
+  duplicatePluginAsProject,
   fetchAppliedPluginSnapshot,
   getTemplate,
   installGeneratedPluginFolder,
@@ -188,6 +189,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
+import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -6298,6 +6300,27 @@ export function ProjectView({
     const record = plugins.find((plugin) => plugin.id === normalizedId);
     if (record) setContextPluginDetails(record);
   }, []);
+  const handleDuplicateContextPlugin = useCallback(async (record: InstalledPluginRecord) => {
+    try {
+      const result = await duplicatePluginAsProject(record.id, {
+        name: localizePluginTitle(locale, record),
+      });
+      setContextPluginDetails(null);
+      navigate({
+        kind: 'project',
+        projectId: result.projectId,
+        conversationId: result.conversationId,
+        fileName: result.relPath,
+      });
+    } catch {
+      setProjectActionsToast({
+        message: t('pluginCard.duplicateFailed'),
+        details: null,
+        tone: 'error',
+        ttlMs: 3000,
+      });
+    }
+  }, [locale, t]);
   const handleOpenContextDesignSystemDetails = useCallback((system: DesignSystemSummary) => {
     setContextDesignSystemDetails(system);
   }, []);
@@ -6813,6 +6836,7 @@ export function ProjectView({
           record={contextPluginDetails}
           onClose={() => setContextPluginDetails(null)}
           onUse={() => setContextPluginDetails(null)}
+          onDuplicate={(record) => void handleDuplicateContextPlugin(record)}
           isApplying={false}
           hideUseAction
         />

@@ -1680,16 +1680,17 @@ function AppInner() {
     });
   }, [beginProjectListRequest, rememberLocalProject, reconcileFetchedProjects]);
 
-  const handleOpenProject = useCallback(async (id: string): Promise<boolean> => {
+  const handleOpenProject = useCallback(async (id: string, fileName?: string): Promise<boolean> => {
+    const routeFileName = fileName ?? null;
     if (projectsRef.current.some((project) => project.id === id)) {
-      navigate({ kind: 'project', projectId: id, fileName: null });
+      navigate({ kind: 'project', projectId: id, fileName: routeFileName });
       return true;
     }
     try {
       const project = await getProject(id);
       if (project) {
         setProjects((curr) => [project, ...curr.filter((candidate) => candidate.id !== project.id)]);
-        navigate({ kind: 'project', projectId: id, fileName: null });
+        navigate({ kind: 'project', projectId: id, fileName: routeFileName });
         return true;
       }
       const request = beginProjectListRequest();
@@ -1699,7 +1700,7 @@ function AppInner() {
         ? undefined
         : list.find((candidate) => candidate.id === id);
       if (fetchedProject) {
-        navigate({ kind: 'project', projectId: id, fileName: null });
+        navigate({ kind: 'project', projectId: id, fileName: routeFileName });
         return true;
       }
     } catch {

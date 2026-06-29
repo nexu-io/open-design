@@ -506,6 +506,43 @@
   background: #fff;
   overflow: hidden;
 }
+.plugins-home__gallery-actions {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+.plugins-home__card--gallery:hover .plugins-home__gallery-actions,
+.plugins-home__card--gallery:focus-within .plugins-home__gallery-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.plugins-home__gallery-actions .plugins-home__action {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+.plugins-home__gallery-actions .plugins-home__action span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* PreviewSurface fills the fixed-height gallery frame instead of its
    default 4/3 aspect box. */
 .plugins-home__card--gallery .plugins-home__preview {
@@ -1083,12 +1120,41 @@ button.plugins-home__use-menu-item:focus-visible {
   opacity: 0.55;
   cursor: progress;
 }
+.plugins-home__gallery-actions .plugins-home__action--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-panel);
+}
+.plugins-home__gallery-actions .plugins-home__action--primary:hover:not(:disabled),
+.plugins-home__gallery-actions .plugins-home__action--primary:focus-visible {
+  background: color-mix(in srgb, var(--accent) 88%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 88%, #fff);
+  color: var(--bg-panel);
+}
+.plugins-home__gallery-actions .plugins-home__action--secondary {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(17, 17, 17, 0.12);
+  color: #111;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.plugins-home__gallery-actions .plugins-home__action--secondary:hover:not(:disabled),
+.plugins-home__gallery-actions .plugins-home__action--secondary:focus-visible {
+  background: #fff;
+  border-color: rgba(17, 17, 17, 0.18);
+  color: #111;
+}
 
 /* Touch/coarse-pointer fallback — overlays should be visible
    without hover so phone/tablet users can still see metadata. */
 @media (hover: none) {
   .plugins-home__card-overlay {
     opacity: 1;
+    pointer-events: auto;
+  }
+  .plugins-home__gallery-actions {
+    opacity: 1;
+    transform: translateY(0);
     pointer-events: auto;
   }
 }
