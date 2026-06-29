@@ -12,8 +12,8 @@ import { listDesignSystems } from './design-systems/index.js';
 
 /** @typedef {{ source: 'github', url: string } | { source: 'local', path: string }} InstallTarget */
 
-const GITHUB_URL_RE = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
-const SAFE_NAME_RE = /^[a-zA-Z0-9_.-]+$/;
+export const GITHUB_URL_RE = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
+export const SAFE_NAME_RE = /^[a-zA-Z0-9_.-]+$/;
 
 export function sanitizeRepoName(url) {
   const trimmed = url.replace(/\/+$/, '');
