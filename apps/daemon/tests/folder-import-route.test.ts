@@ -77,6 +77,36 @@ describe('POST /api/import/folder', () => {
     }
   }
 
+  async function withDesktopAuthRequired<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.env.OD_REQUIRE_DESKTOP_AUTH;
+    process.env.OD_REQUIRE_DESKTOP_AUTH = '1';
+    resetDesktopAuthForTests();
+    try {
+      return await run();
+    } finally {
+      if (previous == null) delete process.env.OD_REQUIRE_DESKTOP_AUTH;
+      else process.env.OD_REQUIRE_DESKTOP_AUTH = previous;
+      resetDesktopAuthForTests();
+    }
+  }
+
+  async function createManagedProject(): Promise<string> {
+    const projectId = `managed-${randomBytes(4).toString('hex')}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Managed Project',
+        skillId: null,
+        designSystemId: null,
+        projectLocationId: 'default',
+      }),
+    });
+    expect(resp.status).toBe(200);
+    return projectId;
+  }
+
   it('creates a project rooted at the submitted folder', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -361,6 +391,73 @@ describe('POST /api/import/folder', () => {
     expect(replaceResp.status).toBe(400);
     const body = (await replaceResp.json()) as { error?: { message?: string } };
     expect(body.error?.message).toMatch(/unsupported field: source_reference/i);
+  });
+
+  it('allows desktop-auth working-dir replacement under a configured project location without a token', async () => {
+    await withDesktopAuthRequired(async () => {
+      const locationRoot = makeFolder();
+      const target = path.join(locationRoot, 'forge-backed-project');
+      await mkdir(target);
+      await writeFile(path.join(target, 'index.html'), '<!doctype html>');
+      const locationResp = await fetch(`${baseUrl}/api/project-locations`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locations: [{ id: 'forge-design', name: 'Forge Design', path: locationRoot }],
+        }),
+      });
+      expect(locationResp.status).toBe(200);
+      const projectId = await createManagedProject();
+
+      const replaceResp = await fetch(`${baseUrl}/api/projects/${projectId}/working-dir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseDir: target }),
+      });
+      expect(replaceResp.status).toBe(200);
+      const body = (await replaceResp.json()) as {
+        project: {
+          metadata?: {
+            baseDir?: string;
+            fromTrustedPicker?: true;
+            importedFrom?: string;
+            projectLocationId?: string;
+          };
+        };
+      };
+      expect(body.project.metadata?.baseDir).toBe(await realpath(target));
+      expect(body.project.metadata?.importedFrom).toBe('project-location');
+      expect(body.project.metadata?.projectLocationId).toBe('forge-design');
+      expect(body.project.metadata?.fromTrustedPicker).toBeUndefined();
+    });
+  });
+
+  it('rejects configured-location working-dir replacement when the selected folder resolves outside the location', async () => {
+    await withDesktopAuthRequired(async () => {
+      const locationRoot = makeFolder();
+      const outside = makeFolder();
+      await writeFile(path.join(outside, 'index.html'), '<!doctype html>');
+      const linkPath = path.join(locationRoot, 'escaped-project');
+      symlinkSync(outside, linkPath, 'dir');
+      const locationResp = await fetch(`${baseUrl}/api/project-locations`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locations: [{ id: 'forge-design', name: 'Forge Design', path: locationRoot }],
+        }),
+      });
+      expect(locationResp.status).toBe(200);
+      const projectId = await createManagedProject();
+
+      const replaceResp = await fetch(`${baseUrl}/api/projects/${projectId}/working-dir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseDir: linkPath }),
+      });
+      expect(replaceResp.status).toBe(403);
+      const body = (await replaceResp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/configured project location/i);
+    });
   });
 
   it('clears scratch provenance when replacing a working directory without new provenance', async () => {

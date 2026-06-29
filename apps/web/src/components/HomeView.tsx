@@ -1285,7 +1285,7 @@ export function HomeView({
     setContextWorkspaceItems((current) => current.filter((item) => item.id !== id));
   }
 
-  async function handlePickWorkingDir() {
+  async function handlePickWorkingDir(): Promise<boolean> {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
     if (isOpenDesignHostAvailable()) {
@@ -1294,11 +1294,11 @@ export function HomeView({
         setWorkingDir(result.baseDir);
         setWorkingDirToken(result.token);
         void rememberRecentDir(result.baseDir);
-        return result.baseDir;
+        return true;
       }
       // The user explicitly cancelled the host picker — respect that and do
       // not pop a second dialog.
-      if ('canceled' in result && result.canceled) return null;
+      if ('canceled' in result && result.canceled) return false;
       // The host is present but could not service the pick (mixed-version
       // upgrade where the preload lacks `project.pickWorkingDir`, or a host
       // error). We must NOT fall back to openFolderDialog() here: the browser
@@ -1309,7 +1309,7 @@ export function HomeView({
       setError(
         `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
       );
-      return null;
+      return false;
     }
     // Pure web path: no desktop host, so there is no token gate — the raw
     // browser folder path is the expected, working input.
@@ -1318,9 +1318,15 @@ export function HomeView({
       setWorkingDir(picked);
       setWorkingDirToken(null);
       void rememberRecentDir(picked);
-      return picked;
+      return true;
     }
-    return null;
+    return false;
+  }
+
+  function submitManualWorkingDir(dir: string) {
+    setWorkingDir(dir);
+    setWorkingDirToken(null);
+    void rememberRecentDir(dir);
   }
 
   async function handlePickLocalCodeDir() {
@@ -2067,6 +2073,7 @@ export function HomeView({
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}
         onPickLocalCodeDir={handlePickLocalCodeDir}
+        onSubmitManualWorkingDir={submitManualWorkingDir}
         onSelectRecentWorkingDir={(dir) => {
           setWorkingDir(dir);
           // Recents come from the browser-side picker only; they carry no
