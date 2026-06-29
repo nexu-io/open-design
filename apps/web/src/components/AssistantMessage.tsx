@@ -32,6 +32,12 @@ import {
   stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
+import {
+  splitOnOdCards,
+  stripTrailingOpenOdCard,
+  type OdCard,
+} from "@open-design/contracts";
+import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
@@ -40,11 +46,12 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
-import { NextStepActions } from "./NextStepActions";
+import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
+import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
   isTodoWriteToolName,
   unfinishedTodosFromEvents,
@@ -270,6 +277,10 @@ interface Props {
   projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  // Client-side confirm for a <od-card type="brand-browser-assist"> button: read
+  // the unblocked browser DOM and re-extract the brand. Excluded from the memo
+  // comparison (routed through ChatPane's stable callbacks ref).
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -309,10 +320,16 @@ interface Props {
   // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepAiOptimize?: () => void;
+  nextStepAiOptimizeBusy?: boolean;
+  onNextStepCreateDesign?: () => void;
+  nextStepCreateDesignBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
   toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
+  nextStepVariant?: NextStepActionsVariant;
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
@@ -351,6 +368,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   // More → Design toolbox global resources.
   'toolboxSkillNames',
   'nextStepSkills',
+  'nextStepVariant',
   // Live streaming tool input changes identity on every `tool_input_delta`.
   // ChatPane passes it only to the streaming row (undefined elsewhere), so
   // comparing it re-renders just that row as the card grows — without it the
@@ -393,6 +411,7 @@ function AssistantMessageImpl({
   projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
@@ -410,19 +429,26 @@ function AssistantMessageImpl({
   hasDesignSystemContext = false,
   onArtifactShare,
   onToolboxAction,
+  onNextStepPromptAction,
+  onNextStepAiOptimize,
+  nextStepAiOptimizeBusy,
+  onNextStepCreateDesign,
+  nextStepCreateDesignBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
   toolboxSkillNames,
+  nextStepVariant = 'default',
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
+  const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
   // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
   // we strip TodoWrite tool-groups out of the per-message flow to avoid the
   // same task list rendering twice.
   const settledUseIds = useMemo(
-    () => new Set(events.filter((e) => e.kind === "tool_use").map((e) => e.id)),
-    [events],
+    () => new Set(displayEvents.filter((e) => e.kind === "tool_use").map((e) => e.id)),
+    [displayEvents],
   );
   // Live code boxes (Write/Edit streaming) append after everything else.
   const liveCodeBlocks = useMemo<Block[]>(() => {
@@ -437,7 +463,7 @@ function AssistantMessageImpl({
   }, [streaming, liveToolInput, settledUseIds]);
   // Compose the block list, then run the strip/suppress pipeline once.
   const blocks = useMemo(() => {
-    const rawBlocks = [...buildBlocks(events), ...liveCodeBlocks];
+    const rawBlocks = [...buildBlocks(displayEvents), ...liveCodeBlocks];
     return placeConversationTodoCard(
       stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
       {
@@ -445,8 +471,8 @@ function AssistantMessageImpl({
         input: conversationTodoInput,
       },
     );
-  }, [events, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
-  const fileOps = useMemo(() => deriveFileOps(events), [events]);
+  }, [displayEvents, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
+  const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
     () =>
@@ -592,6 +618,9 @@ function AssistantMessageImpl({
   // start so switching project tabs or remounting the message cannot restart it.
   const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
   const preparing = streaming && !hasContent;
+  const preparingStatus = preparing && events.some((e) => e.kind === "status" && e.label === "thinking")
+    ? "thinking"
+    : "preparing";
 
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
@@ -610,21 +639,13 @@ function AssistantMessageImpl({
         <span className="role-name">{roleName}</span>
       </div>
       <div className="assistant-flow">
-        {fileOps.length > 0 ? (
-          <FileOpsSummary
-            entries={fileOps}
-            streaming={streaming}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
               <ProseBlock
                 key={i}
                 text={b.text}
-                hideRecoveredHtmlFallback={message.agentId === "grok-build" && !streaming}
+                hideRecoveredHtmlFallback={(message.agentId === "grok-build" || message.agentId === "claude") && !streaming}
                 assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
@@ -633,8 +654,11 @@ function AssistantMessageImpl({
                 suppressDirectionForms={suppressDirectionForms}
                 onOpenQuestions={onOpenQuestions}
                 projectId={projectId}
+                conversationId={conversationId}
+                runId={message.runId ?? null}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
+                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
               />
             );
           if (b.kind === "thinking")
@@ -687,6 +711,14 @@ function AssistantMessageImpl({
           }
           return null;
         })}
+        {fileOps.length > 0 ? (
+          <FileOpsSummary
+            entries={fileOps}
+            streaming={streaming}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
         {!streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
@@ -757,6 +789,7 @@ function AssistantMessageImpl({
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
                   preparing,
+                  preparingStatus,
                   copyMarkdown,
                   onFork: canFork ? onForkFromMessage : undefined,
                   forking,
@@ -773,6 +806,7 @@ function AssistantMessageImpl({
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
                 preparing={preparing}
+                preparingStatus={preparingStatus}
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
@@ -786,12 +820,18 @@ function AssistantMessageImpl({
             fileName={isLast ? nextStepArtifactName : null}
             onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
             onToolboxAction={isLast ? onToolboxAction : undefined}
+            onPromptAction={isLast ? onNextStepPromptAction : undefined}
+            onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
+            aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
+            onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
+            createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
             onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}
             toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
+            variant={nextStepVariant}
           />
         ) : null}
       </div>
@@ -955,6 +995,7 @@ interface AssistantFooterProps {
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
   // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
+  preparingStatus?: "preparing" | "thinking";
   copyMarkdown?: string;
   onFork?: () => void;
   forking?: boolean;
@@ -973,6 +1014,7 @@ function AssistantFooter({
   hasUnfinishedTodos,
   hasEmptyResponse,
   preparing = false,
+  preparingStatus = "preparing",
   copyMarkdown,
   onFork,
   forking = false,
@@ -1011,7 +1053,9 @@ function AssistantFooter({
       <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
         {streaming
           ? preparing
-            ? t("assistant.statusPreparing")
+            ? preparingStatus === "thinking"
+              ? t("assistant.statusThinking")
+              : t("assistant.statusPreparing")
             : t("assistant.workingLabel")
           : hasEmptyResponse
           ? t("assistant.emptyResponseLabel")
@@ -1883,8 +1927,11 @@ function ProseBlock({
   suppressDirectionForms,
   onOpenQuestions,
   projectId,
+  conversationId,
+  runId,
   projectFileNames,
   onRequestOpenFile,
+  onBrandBrowserAssistConfirm,
 }: {
   text: string;
   hideRecoveredHtmlFallback?: boolean;
@@ -1895,9 +1942,12 @@ function ProseBlock({
   nextUserContent?: string;
   suppressDirectionForms: boolean;
   projectId?: string | null;
+  conversationId?: string | null;
+  runId?: string | null;
   projectFileNames?: Set<string>;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onRequestOpenFile?: (name: string) => void;
+  onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
@@ -1907,14 +1957,15 @@ function ProseBlock({
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; we surface a banner for it instead. The actual
-  // form streams into the right-hand Questions tab.
-  const { text: visibleText, hadOpenForm } = useMemo(
-    () =>
-      isLastAssistant && streaming
-        ? stripTrailingOpenQuestionForm(cleaned)
-        : { text: cleaned, hadOpenForm: false },
-    [cleaned, isLastAssistant, streaming],
-  );
+  // form streams into the right-hand Questions tab. A not-yet-closed
+  // `<od-card>{…` block is stripped the same way so its raw JSON doesn't flash
+  // before the close tag arrives (the card renders inline once complete).
+  const { text: visibleText, hadOpenForm } = useMemo(() => {
+    if (!(isLastAssistant && streaming)) return { text: cleaned, hadOpenForm: false };
+    const form = stripTrailingOpenQuestionForm(cleaned);
+    const card = stripTrailingOpenOdCard(form.text);
+    return { text: card.text, hadOpenForm: form.hadOpenForm };
+  }, [cleaned, isLastAssistant, streaming]);
   // While an `<artifact type="text/html">` is still streaming (no closing tag
   // yet), surface its body in a live code panel instead of leaking the raw
   // tag + half-written HTML as Markdown text. Once it closes, stripArtifact
@@ -1938,33 +1989,37 @@ function ProseBlock({
       onRequestOpenFile(path);
     };
   }, [onRequestOpenFile, projectFileNames, projectId]);
-  // Each text segment is further split on `<system-reminder>` blocks so
-  // those render as their own collapsible chip instead of raw markup.
-  const renderable = segments.flatMap(
-    (
-      seg,
-      idx
-    ): Array<
-      | { key: string; kind: "text"; text: string }
-      | { key: string; kind: "reminder"; text: string }
-      | { key: string; kind: "form"; form: QuestionForm }
-      | { key: string; kind: "suppressed-direction" }
-    > => {
-      if (seg.kind === "form") {
-        if (suppressDirectionForms && isDirectionForm(seg.form)) {
-          return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
-        }
-        return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+  // Each text segment is further split on `<od-card>` blocks (so memory cards
+  // render inline, composing with the surrounding question-form handling) and
+  // then on `<system-reminder>` blocks (so those render as their own
+  // collapsible chip instead of raw markup). Splitting od-cards BEFORE
+  // system-reminders keeps a card's JSON body out of the reminder scanner.
+  type Renderable =
+    | { key: string; kind: "text"; text: string }
+    | { key: string; kind: "reminder"; text: string }
+    | { key: string; kind: "form"; form: QuestionForm }
+    | { key: string; kind: "od-card"; card: OdCard }
+    | { key: string; kind: "suppressed-direction" };
+  const renderable = segments.flatMap((seg, idx): Renderable[] => {
+    if (seg.kind === "form") {
+      if (suppressDirectionForms && isDirectionForm(seg.form)) {
+        return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
       }
-      if (seg.text.trim().length === 0) return [];
-      const sub = splitSystemReminders(seg.text);
-      return sub.map((s, j) => ({
-        key: `t-${idx}-${j}`,
+      return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
+    }
+    if (seg.text.trim().length === 0) return [];
+    return splitOnOdCards(seg.text).flatMap((cardSeg, c): Renderable[] => {
+      if (cardSeg.kind === "card") {
+        return [{ key: `c-${idx}-${c}`, kind: "od-card", card: cardSeg.card }];
+      }
+      if (cardSeg.text.trim().length === 0) return [];
+      return splitSystemReminders(cardSeg.text).map((s, j) => ({
+        key: `t-${idx}-${c}-${j}`,
         kind: s.kind,
         text: s.text,
       }));
-    }
-  );
+    });
+  });
   if (renderable.length === 0 && !live) return null;
   return (
     <div className="prose-block" data-stream-cursor={showStreamCursor && !live ? "true" : undefined}>
@@ -1977,6 +2032,22 @@ function ProseBlock({
             <Fragment key={seg.key}>
               {renderMarkdown(seg.text, { onLinkClick })}
             </Fragment>
+          );
+        }
+        if (seg.kind === "od-card") {
+          return (
+            <OdCardView
+              key={seg.key}
+              card={seg.card}
+              onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
+              instanceScope={[
+                projectId ?? "no-project",
+                conversationId ?? "no-conversation",
+                runId ?? "no-run",
+                assistantMessageId,
+                seg.key,
+              ].join(":")}
+            />
           );
         }
         if (seg.kind === "suppressed-direction") {

@@ -196,7 +196,7 @@ The rebuilt-core release: **everything is a plugin**, **headless by default**, *
 - **Updater hardening** through the preview cycle — release validation, deferred installer on Windows, applied-state clearing, download / install handoff hardening, smoke-recovery. ([#2565], [#2575], [#2592], [#2595], [#2677], [#2687], [#2700])
 - **Desktop updater UI flow** — new in-app updater popup.
 - **Packaged update apply observations** captured for telemetry / debugging. ([#2429])
-- **Nightly + preview package identity** so beta installs don't collide with stable. ([#2437])
+- **Prerelease + preview package identity** so beta installs don't collide with stable. ([#2437])
 - **macOS Dock icon stays put** when desktop-pet window opens. ([#2413])
 - **Refresh Open Design app visuals** — new app icons, logo, brand glyphs. ([#2436])
 - **Linux packaged client parity smoke coverage.**
@@ -257,7 +257,7 @@ The rebuilt-core release: **everything is a plugin**, **headless by default**, *
 #### Desktop & packaging
 - macOS Dock icon stays put when desktop-pet window opens. ([#2413])
 - Align Windows smoke update root with portable installs. ([#2376])
-- Nightly release smoke identity. ([#2446])
+- Prerelease release smoke identity. ([#2446])
 - Improve desktop updater ready UI. ([#2403])
 - Forward proxy env vars to packaged sidecars.
 - Detect mise-installed npm package bins.
@@ -442,7 +442,7 @@ A memory-plus-UI release: **auto-memory store** carries agent context across run
 ### Internal
 
 - Stabilize extended Playwright coverage. ([#1341])
-- Expand nightly UI and desktop regression coverage. ([#1256])
+- Expand prerelease UI and desktop regression coverage. ([#1256])
 - Harden e2e smoke and release reports. ([#1140])
 - Expand entry and settings automation coverage. ([#954])
 - Refreshed generated GitHub metrics SVG and contributors wall. ([#1115], [#1117], [#1183], [#1188], [#1328], [#1330])
@@ -453,11 +453,11 @@ A memory-plus-UI release: **auto-memory store** carries agent context across run
   - **`od plugin events snapshot/stats` + tail filters (Phase 4).** Extends §3.II1 with: `GET /api/plugins/events/snapshot` for non-SSE one-shot reads (dashboards that don't want a live connection); `GET /api/plugins/events/stats` returns a `summarisePluginEvents()` rollup (counts byKind, byPluginId — skipping empty ids — plus oldest/newest at + id range); `--kind <k>` and `--plugin-id <id>` filter flags work on both `od plugin events tail` (client-side post-render) and the new `od plugin events snapshot` subcommand. CLI pretty-prints the stats rollup with sorted-key counts for byte-determinism.
   - **More plugin event producer hooks (Phase 4).** Extends §3.II1 with: `installPlugin` accepts `eventKind: 'installed' | 'upgraded'` so the upgrade route distinguishes the operation in the live tail; `POST /api/plugins/:id/trust` emits `plugin.trust-changed`; `POST /api/applied-plugins/prune` emits `plugin.snapshot-pruned` when anything was actually removed; `POST /api/marketplaces/:id/refresh` emits `plugin.marketplace-refreshed`. Each hook is best-effort and never blocks the underlying mutation if the ring buffer throws.
   - **Plugin event ring buffer + SSE tail (Phase 4).** New `apps/daemon/src/plugins/events.ts` ships an in-memory FIFO ring buffer (capped at 1000 entries, monotonic ids, fan-out subscribers) for plugin lifecycle events: `plugin.installed` / `.upgraded` / `.uninstalled` / `.trust-changed` / `.applied` / `.snapshot-pruned` / `.marketplace-refreshed`. Producer hooks landed on the installer (install + uninstall). New `GET /api/plugins/events` SSE route emits the backlog on connect (with optional `?since=<id>` trim) then forwards live events. CLI: `od plugin events tail [-f] [--since <id>] [--json]` — non-follow mode drains backlog + exits; `-f` keeps the stream open for ops dashboards.
-  - **`od plugin doctor --strict` + verify strict propagation (Phase 4).** New `--strict` flag on `od plugin doctor` promotes warnings to failures (exit 4 distinguishes 'strict failed' from doctor errors at exit 1). The `verifyPlugin()` orchestrator gains a matching `strict: true` config knob that flows through `.od-verify.json` so plugins can lock 'no warnings allowed' as a one-line CI policy.
+  - **`od plugin doctor --strict` + verify strict propagation (Phase 4).** New `--strict` flag on `od plugin doctor` promotes warnings to failures (exit 4 distinguishes 'strict failed' from doctor errors at exit 1). The `verifyPlugin()` orchestrator gains a matching `strict: true` config knob that flows through the plugin verify config file so plugins can lock 'no warnings allowed' as a one-line CI policy.
   - **`od daemon db verify` SQLite integrity check (Phase 5).** New `verifySqliteIntegrity()` pure helper wraps PRAGMA `integrity_check` (or `quick_check` with `--quick`) + PRAGMA `foreign_key_check`. Returns a structured `{ ok, mode, issues[], elapsedMs, generatedAt }` report with issues tagged `kind='integrity' | 'foreign_key'`. Loopback-only `POST /api/daemon/db/verify` route + `od daemon db verify [--quick]` CLI subcommand — exit 0 on ok=true, 4 on any issue, so CI can wire it into a pre-deploy check.
   - **`od daemon db vacuum` (Phase 5).** New loopback-only `POST /api/daemon/db/vacuum` runs SQLite VACUUM and reports before/after sizes + reclaimed bytes + elapsed ms. Useful after large delete batches (snapshot prune, plugin uninstall) shrink rows but leave space allocated to the file. CLI: `od daemon db vacuum [--json]`.
   - **`od daemon db status` SQLite inventory (Phase 5).** New `inspectSqliteDatabase()` pure helper + `GET /api/daemon/db` route returns a structured report: `kind` ('sqlite'), file location, size on disk (primary + WAL + SHM), schema version (`user_version` PRAGMA), and per-table row counts (system tables excluded, lexicographic order). CLI: `od daemon db status [--json]` lets ops sanity-check deployments at a glance + compare expected-vs-actual table rosters across daemon upgrades.
-  - **`od plugin verify <id>` CI meta-command (Phase 4).** New `verifyPlugin()` pure orchestrator aggregates `doctor` + `simulate` + `canon --check` into one pass/fail report. Reads `<plugin-folder>/.od-verify.json` (or `--config <path>`) so plugin authors commit their CI checks into their repo. Each check resolves to `passed | failed | skipped | unsupported`; aggregate passes iff every enabled check is passed or skipped (`unsupported` bubbles up as a fail to keep CI honest). One-liner CI workflow: `od plugin verify my-plugin` — exit 0 on pass, 4 on fail, 2 on CLI/config error.
+  - **`od plugin verify <id>` CI meta-command (Phase 4).** New `verifyPlugin()` pure orchestrator aggregates `doctor` + `simulate` + `canon --check` into one pass/fail report. Reads the plugin verify config file (or `--config <path>`) so plugin authors commit their CI checks into their repo. Each check resolves to `passed | failed | skipped | unsupported`; aggregate passes iff every enabled check is passed or skipped (`unsupported` bubbles up as a fail to keep CI honest). One-liner CI workflow: `od plugin verify my-plugin` — exit 0 on pass, 4 on fail, 2 on CLI/config error.
   - **`od plugin simulate <id>` pipeline dry-run (Phase 4).** New `simulatePipeline({ pipeline, signals, iterationCap? })` pure helper walks every stage in a plugin's pipeline against caller-supplied signals (constant snapshot OR per-iteration generator function) and reports `outcome ∈ { single | converged | cap | unparsable }` per stage plus aggregate `outcome ∈ { all-converged | all-single | mixed | cap-hit | unparsable }`. Companion `parseSignalKv()` parses repeatable `-s key=value` CLI flags into the closed `UntilSignals` vocabulary with typo guards. CLI: `od plugin simulate <pluginId> [-s key=value ...] [--cap <n>] [--json]` — exit 4 on cap-hit/unparsable so CI can hook this into a pipeline check.
   - **`od plugin stats` inventory health report (Phase 4).** New `pluginInventoryStats()` + `snapshotInventoryStats()` pure helpers aggregate installed-plugin counts (by `sourceKind` / `trust` / `taskKind`, bundled vs. third-party split, plugins with elevated capabilities — `fs:write` / `subprocess` / `bash` / `network` / `connector:*`) and snapshot health (status breakdown, project / run linkage, oldest / newest applied timestamps). New `GET /api/plugins/stats` route + `od plugin stats [--json]` CLI subcommand for at-a-glance fleet audit.
   - **`od plugin canon --check <expected-file>` byte-equality fixtures (Phase 4).** New `--check` mode on `od plugin canon` compares the canon output against an on-disk fixture and exits 4 on mismatch with a per-line diff preview. Lets plugin authors commit `renderPluginBlock()` regression fixtures into their own `tests/` without writing a fresh test harness.
@@ -591,7 +591,7 @@ A connectivity-and-iteration release: Open Design becomes a fully bidirectional 
 - Expose Gemini 3 preview models and Gemini 2.5 Flash Lite in the picker. ([#986])
 - Add GPT-5.1 entries to the Codex picker. ([#946])
 - Expand Codex picker coverage. ([#757])
-- Stable nightly promotion gate for `[codex]`. ([#962])
+- Stable prerelease promotion gate for `[codex]`. ([#962])
 - `VP_HOME` environment variable support in agent resolution. ([#859])
 - Auto-rebuild `better-sqlite3` on Node.js ABI mismatch postinstall. ([#813])
 - Increase agent inactivity timeout. ([#1071])
@@ -649,7 +649,7 @@ A connectivity-and-iteration release: Open Design becomes a fully bidirectional 
 
 #### MCP & connectors
 - MCP install snippet survives daemon port changes. ([#846])
-- Pin `OD_DATA_DIR` in `/api/mcp/install-info` env so the macOS-packaged MCP server stops EPERM'ing on `.od/projects`. ([#857])
+- Pin the daemon data directory in `/api/mcp/install-info` env so the macOS-packaged MCP server stops failing on managed project storage. ([#857])
 - Reserve clearance for the MCP server Copy button so it stops overlapping the snippet. ([#847])
 - Give the MCP server Copy button a solid surface so it reads against the code block. ([#840])
 - Stable curated tool count in the connector card badge. ([#767])
@@ -866,7 +866,7 @@ A minor release focused on iteration: live-data dashboards graduate to a first-c
 
 ### Documentation
 
-- Documented `OD_DATA_DIR` and migration from `.od/` to the Desktop app. ([#570])
+- Documented daemon data directory migration to the Desktop app. ([#570])
 - Added Chinese (Simplified) QUICKSTART. ([#578])
 - Backported missing zh-TW README sections from the English README. ([#586])
 - Synced and improved the Korean README. ([#619])

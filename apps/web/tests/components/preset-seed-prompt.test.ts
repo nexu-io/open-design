@@ -43,7 +43,7 @@ const fallback = () => 'fallback seed';
 describe('examplePresetSeedPrompt', () => {
   it('prefers the curated description over a generator-facing build-spec query head (en)', () => {
     const record = fixture({
-      id: 'dreamcore-landing',
+      id: 'build-spec-example',
       description:
         'Immersive single-page parallax landing: a sticky viewport zooms a portal image toward you on scroll.',
       query: {
@@ -57,7 +57,7 @@ describe('examplePresetSeedPrompt', () => {
 
   it('prefers the curated description over a raw-HTML query head (en)', () => {
     const record = fixture({
-      id: 'aerocore',
+      id: 'raw-html-example',
       description: 'Premium scroll-cinematic aerospace propulsion marketing site.',
       query: {
         en: '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="UTF-8" />\n</head>\n\n<body>...</body>',
@@ -70,7 +70,7 @@ describe('examplePresetSeedPrompt', () => {
 
   it('prefers the curated description over a query head that dangles "as described below" (en)', () => {
     const record = fixture({
-      id: 'orbis-nft',
+      id: 'dangling-spec-example',
       description: 'Dark space-themed NFT collection landing page with a liquid-glass UI.',
       query: {
         en: 'Create an NFT landing page called "Orbis.Nft" with 4 sections. Recreate it exactly as described below.\n\n## Sections\n...',
@@ -103,7 +103,7 @@ describe('examplePresetSeedPrompt', () => {
 
   it('keeps the zh description-first behavior', () => {
     const record = fixture({
-      id: 'dreamcore-landing',
+      id: 'localized-description-example',
       description: '沉浸式视差落地页。',
       query: { 'zh-CN': '构建梦核风格的沉浸式视差落地页（详见 en 字段的完整规格说明，以 en 为准）。' },
     });

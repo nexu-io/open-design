@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -53,6 +54,8 @@ import {
   useAIHubMixAudioModels,
 } from '../media/aihubmix-image-models';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
+import { useBrandsByDesignSystemId } from '../runtime/brands';
+import { BrandPreviewCard } from './BrandPreviewCard';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
@@ -1532,6 +1535,7 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const deleteTemplateTitleId = useId();
   const [confirmDelete, setConfirmDelete] = useState<
     { id: string; name: string } | null
   >(null);
@@ -1597,41 +1601,36 @@ function TemplatePicker({
         </div>
       )}
       {confirmDelete ? (
-        <div
-          className="modal-backdrop"
-          onClick={deleting ? undefined : closeConfirm}
+        <Dialog
+          className="modal-confirm"
+          role="alertdialog"
+          onClose={deleting ? undefined : closeConfirm}
+          ariaLabelledBy={deleteTemplateTitleId}
         >
-          <div
-            className="modal modal-confirm"
-            onClick={(e) => e.stopPropagation()}
-            role="alertdialog"
-            aria-modal="true"
-          >
-            <h2>{t('newproj.deleteTemplateTitle')}</h2>
-            <p className="modal-confirm-message">
-              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+          <DialogTitle id={deleteTemplateTitleId}>{t('newproj.deleteTemplateTitle')}</DialogTitle>
+          <DialogDescription className="modal-confirm-message">
+            {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+          </DialogDescription>
+          {deleteError ? (
+            <p className="modal-confirm-error" role="alert">
+              {t('newproj.deleteTemplateError')}
             </p>
-            {deleteError ? (
-              <p className="modal-confirm-error" role="alert">
-                {t('newproj.deleteTemplateError')}
-              </p>
-            ) : null}
-            <div className="row">
-              <button type="button" onClick={closeConfirm} disabled={deleting}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="primary danger"
-                autoFocus
-                disabled={deleting}
-                onClick={runDelete}
-              >
-                {t('newproj.deleteTemplateConfirmCta')}
-              </button>
-            </div>
-          </div>
-        </div>
+          ) : null}
+          <DialogFooter className="row">
+            <button type="button" onClick={closeConfirm} disabled={deleting}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="primary danger"
+              autoFocus
+              disabled={deleting}
+              onClick={runDelete}
+            >
+              {t('newproj.deleteTemplateConfirmCta')}
+            </button>
+          </DialogFooter>
+        </Dialog>
       ) : null}
     </div>
   );
@@ -2001,8 +2000,15 @@ function DesignSystemPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+
+  // Upgrade the popover's thin list to the rich Brand Kit card whenever the
+  // hovered / selected row is a finalized brand (`user:<id>` design system).
+  // Fetched lazily on first open; non-brand systems are absent and the popover
+  // stays a plain list. See `DesignSystemPicker.tsx` for the same wiring.
+  const brandsByDesignSystem = useBrandsByDesignSystemId(open);
 
   const byId = useMemo(() => {
     const map = new Map<string, DesignSystemSummary>();
@@ -2044,7 +2050,10 @@ function DesignSystemPicker({
   }, [ordered, query]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setHoveredId(null);
+      return;
+    }
     const t = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(t);
   }, [open]);
@@ -2098,6 +2107,12 @@ function DesignSystemPicker({
   const primary = primaryId ? byId.get(primaryId) ?? null : null;
   const extraCount = Math.max(0, selectedIds.length - 1);
   const isDefault = !!primary && primary.id === defaultDesignSystemId;
+
+  // The hovered row wins over the current selection so scrubbing the list
+  // previews each brand; falling back to the primary pick keeps the rich card
+  // visible while the pointer rests outside the list.
+  const previewId = hoveredId ?? primaryId;
+  const previewBrand = previewId ? brandsByDesignSystem.get(previewId) ?? null : null;
 
   if (loading && designSystems.length === 0) {
     return (
@@ -2209,6 +2224,8 @@ function DesignSystemPicker({
                     multi={multi}
                     order={order}
                     onClick={() => toggle(d.id)}
+                    onMouseEnter={() => setHoveredId(d.id)}
+                    onMouseLeave={() => setHoveredId(null)}
                     avatar={<DesignSystemAvatar system={d} />}
                     title={d.title}
                     badge={
@@ -2241,6 +2258,15 @@ function DesignSystemPicker({
           ) : null}
         </div>
       ) : null}
+      {open && previewBrand ? (
+        <aside
+          className="ds-picker-brand-flyout"
+          data-testid="new-project-ds-brand-flyout"
+          aria-label={t('brandDetail.identity')}
+        >
+          <BrandPreviewCard variant="compact" summary={previewBrand} />
+        </aside>
+      ) : null}
     </div>
   );
 }
@@ -2250,6 +2276,8 @@ function DsPickerItem({
   multi,
   order,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
   avatar,
   title,
   subtitle,
@@ -2259,6 +2287,8 @@ function DsPickerItem({
   multi: boolean;
   order?: number;
   onClick: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   avatar: React.ReactNode;
   title: string;
   subtitle: string;
@@ -2271,6 +2301,9 @@ function DsPickerItem({
       aria-selected={active}
       className={`ds-picker-item${active ? ' active' : ''}`}
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onFocus={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <span className="ds-picker-item-avatar">{avatar}</span>
       <span className="ds-picker-item-text">
@@ -2479,7 +2512,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
+    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
@@ -2516,6 +2549,8 @@ function MediaModelCards({
       providerId: string;
       providerLabel: string;
       status: 'configured' | 'integrated' | 'unsupported';
+      sortIndex: number;
+      sortPriority: number;
       models: MediaModel[];
     }> = [];
     for (const model of models) {
@@ -2523,9 +2558,7 @@ function MediaModelCards({
       const providerId = provider?.id ?? model.provider;
       if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
-      const configured =
-        provider?.credentialsRequired === false ||
-        isStoredMediaProviderEntryPresent(entry);
+      const configured = provider?.credentialsRequired !== false && isStoredMediaProviderEntryPresent(entry);
       let group = out.find((g) => g.providerId === providerId);
       if (!group) {
         group = {
@@ -2536,13 +2569,15 @@ function MediaModelCards({
             : provider?.integrated
               ? 'integrated'
               : 'unsupported',
+          sortIndex: out.length,
+          sortPriority: configured ? 0 : provider?.credentialsRequired === false ? 1 : 2,
           models: [],
         };
         out.push(group);
       }
       group.models.push(model);
     }
-    return out;
+    return out.sort((a, b) => a.sortPriority - b.sortPriority || a.sortIndex - b.sortIndex);
   }, [models, mediaProviders]);
 
   const selected = useMemo(() => {

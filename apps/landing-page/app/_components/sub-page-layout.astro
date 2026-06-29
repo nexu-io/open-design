@@ -19,8 +19,7 @@ import '../sub-pages.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from './favicon-links.astro';
-import GoogleAnalytics from './google-analytics.astro';
-import PostHogAnalytics from './posthog-analytics.astro';
+import SiteAnalytics from './site-analytics.astro';
 import ResourceHints from './resource-hints.astro';
 import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
@@ -28,7 +27,7 @@ import LocaleSwitcherScript from './locale-switcher-script.astro';
 import PreciseLazyload from './precise-lazyload.astro';
 import TemplateCardAutoplay from './template-card-autoplay.astro';
 import SiteFooter from './site-footer.astro';
-import { heroImage } from '../image-assets';
+import { ogDefaultImage } from '../image-assets';
 import {
   LANDING_LOCALES,
   alternateLinksForPath,
@@ -38,12 +37,22 @@ import {
 } from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
+import { clampDescription } from '../_lib/clamp-description';
 
 export interface Props {
   title: string;
   description: string;
   active?: HeaderProps['active'];
   ogImage?: string;
+  /** Optional comma-separated meta keywords. Emitted only when provided. */
+  keywords?: string;
+  /**
+   * Suppress the on-load locale auto-redirect for THIS page while keeping it
+   * fully localized (hreflang alternates + working language switcher). Unlike
+   * `localeCanonicalOnly`, the page still has per-locale variants; we just
+   * don't bounce a (e.g.) zh-preference visitor off the URL they clicked.
+   */
+  suppressLocaleAutoRedirect?: boolean;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
   /**
    * Set on pages that are NOT generated per-locale (e.g. plugin detail pages,
@@ -60,9 +69,14 @@ const {
   description,
   active = 'home',
   ogImage,
+  keywords,
   jsonLd,
   localeCanonicalOnly = false,
+  suppressLocaleAutoRedirect = false,
 } = Astro.props;
+// Clamp the meta/OG/Twitter description to a search-friendly length (the full
+// string still flows into JSON-LD untouched).
+const metaDescription = clampDescription(description);
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
@@ -80,9 +94,10 @@ const alternateLinks = localeCanonicalOnly
 const xDefaultHref = new URL(altEntries[0]!.hrefPath, Astro.site).toString();
 // Absolute URL for the social share card: og:image / twitter:image are read
 // by external crawlers outside the page-origin context, so a same-origin path
-// like `/hero-home.png?v=2` is unreliable for rich previews. `new URL()`
-// leaves an already-absolute `ogImage` untouched.
-const og = new URL(ogImage ?? heroImage, Astro.site).toString();
+// is unreliable for rich previews. The default is the site-wide OG card
+// (`ogDefaultImage`, already an absolute R2 URL); `new URL()` leaves an
+// already-absolute `ogImage` override untouched.
+const og = new URL(ogImage ?? ogDefaultImage, Astro.site).toString();
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
@@ -105,13 +120,15 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
   lang={localeDef.htmlLang}
   dir={localeDef.dir}
   data-locale-canonical={localeCanonicalOnly ? 'true' : undefined}
+  data-locale-autoredirect={suppressLocaleAutoRedirect ? 'off' : undefined}
 >
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#efe7d2" />
     <title>{title}</title>
-    <meta name="description" content={description} />
+    <meta name="description" content={metaDescription} />
+    {keywords && <meta name="keywords" content={keywords} />}
     <link rel="canonical" href={canonical} />
     {alternateLinks.map((entry) => (
       <link rel="alternate" hreflang={entry.hreflang} href={entry.href} />
@@ -121,13 +138,12 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <FaviconLinks />
     <ResourceHints />
 
-    <GoogleAnalytics />
-    <PostHogAnalytics />
+    <SiteAnalytics />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
     <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={og} />
     <meta property="og:locale" content={localeDef.ogLocale} />
@@ -137,7 +153,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
+    <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={og} />
 
     {ldArray.map((data) => (

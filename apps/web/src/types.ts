@@ -3,6 +3,7 @@ import type {
   AgentDiagnostic,
   AgentFixIntent,
   AgentCliEnvPrefs,
+  AgentCliEnvIntentPrefs,
   AgentModelPrefs,
   AgentTestRequest,
   AppVersionInfo,
@@ -261,6 +262,7 @@ export interface ApiProtocolConfig {
 // declared model (`'default'` — let the CLI pick).
 export type AgentModelChoice = AgentModelPrefs;
 export type AgentCliEnvConfig = AgentCliEnvPrefs;
+export type AgentCliEnvIntentConfig = AgentCliEnvIntentPrefs;
 
 export type AppTheme = 'system' | 'light' | 'dark';
 
@@ -400,6 +402,9 @@ export interface AppConfig {
   agentModels?: Record<string, AgentModelChoice>;
   // Per-agent non-secret CLI config locations injected into detection and runs.
   agentCliEnv?: AgentCliEnvConfig;
+  // Per-agent marker that says an API key was saved as an explicit Local CLI
+  // environment override, not as an older proxy-only credential.
+  agentCliEnvIntent?: AgentCliEnvIntentConfig;
   // Caps the upstream completion length in API mode. Defaults to 8192 when
   // unset; raise it for providers (e.g. MiMo) that allow longer responses.
   maxTokens?: number;

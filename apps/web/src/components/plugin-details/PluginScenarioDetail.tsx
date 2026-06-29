@@ -8,6 +8,7 @@
 // (backdrop, header, byline, hero, footer with Use plugin CTA).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dialog } from '@open-design/components';
 import type {
   InstalledPluginRecord,
   PluginManifest,
@@ -25,6 +26,7 @@ interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onDuplicate?: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
 }
@@ -33,6 +35,7 @@ export function PluginScenarioDetail({
   record,
   onClose,
   onUse,
+  onDuplicate,
   isApplying,
   hideUseAction,
 }: Props) {
@@ -41,17 +44,9 @@ export function PluginScenarioDetail({
   // The text/scenario fallback modal gets the same split "Use plugin /
   // Replicate this content" affordance as the HTML/design/media variants, so a
   // scenario plugin with an `od.useCase.query` still offers use-with-query.
-  const useMenu = buildPluginUseMenu(record, onUse, t);
+  const useMenu = buildPluginUseMenu(record, onUse, t, onDuplicate);
   const [useMenuOpen, setUseMenuOpen] = useState(false);
   const useMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   useEffect(() => {
     if (!useMenuOpen) return;
@@ -85,19 +80,17 @@ export function PluginScenarioDetail({
   const tags = manifest.tags ?? [];
 
   return (
-    <div
-      className="plugin-details-modal-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${record.title} details`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Dialog
+      backdropClassName="plugin-details-modal-backdrop"
+      className="plugin-details-modal"
+      includeChromeClassName={false}
+      ariaLabel={`${record.title} details`}
+      onClose={onClose}
+      closeOnEscape
       data-testid="plugin-details-modal"
       data-plugin-id={record.id}
       data-detail-variant="scenario"
     >
-      <div className="plugin-details-modal">
         <header className="plugin-details-modal__head">
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
@@ -220,7 +213,6 @@ export function PluginScenarioDetail({
             </button>
           )}
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -8,7 +8,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - Contribution and environment: `CONTRIBUTING.md`, `docs/i18n/CONTRIBUTING.zh-CN.md`.
 - Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
-- Directory-level agent guidance: `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+- Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
 
 ## Workspace directories
@@ -29,7 +29,7 @@ This file is the single source of truth for agents entering this repository. Rea
 ## Inactive or placeholder directories
 
 - `apps/nextjs` and `packages/shared` have been removed; do not recreate or reference them.
-- `.od/`, `.tmp/`, Playwright reports, and agent scratch directories are local runtime data and must stay out of git.
+- Local runtime data, `.tmp/`, Playwright reports, and agent scratch directories must stay out of git. For daemon-managed data paths, read and follow **Daemon data directory contract** below; do not restate or improvise path conventions elsewhere.
 
 # Development workflow
 
@@ -55,19 +55,105 @@ This file is the single source of truth for agents entering this repository. Rea
 - Ports are governed by `tools-dev` flags: `--daemon-port` and `--web-port`.
 - `tools-dev` exports `OD_PORT` for the web proxy target and `OD_WEB_PORT` for the web listener; do not use `NEXT_PORT`.
 
+## Daemon data directory contract
+
+This section is the only repository-wide source of truth for daemon-managed
+data paths. Every README, guide, deployment note, and operational handoff that
+mentions daemon data paths must point here instead of restating the rules.
+
+This boundary is strict. Do not introduce concrete filesystem examples for the
+daemon data directory, recommended data directory, shared data directory,
+deployment mount, or example data directory. If existing code exposes a legacy
+fallback, treat it as implementation detail or a known escape candidate, not as
+a documentation pattern to copy. If a change needs a data-path rule that is not
+covered here, request a core-maintainer decision in the PR instead of inventing
+a new convention.
+
+The daemon has one active data-root truth source:
+
+- On daemon startup, `apps/daemon/src/server.ts` resolves `OD_DATA_DIR` into
+  `RUNTIME_DATA_DIR`.
+- All daemon-owned data paths must derive from `RUNTIME_DATA_DIR` or from a
+  constant derived from it, such as `PROJECTS_DIR` or `ARTIFACTS_DIR`.
+- `PROJECTS_DIR` is the managed-project root. Imported-folder projects are the
+  explicit exception: they use `metadata.baseDir` for the user-selected
+  external workspace.
+- `ARTIFACTS_DIR`, SQLite, app config, memory, MCP config/tokens, automation
+  state, plugin state, connector credentials, generated files, logs owned by
+  sandbox mode, and agent runtime homes are daemon data and must remain under
+  the resolved daemon data root unless this file names a specific exception.
+- Agent subprocesses receive the resolved daemon data root as `OD_DATA_DIR`.
+  They must inherit the daemon's truth source instead of guessing their own
+  data path.
+
+Development propagation:
+
+- `tools-dev` owns sidecar runtime/log/ipc namespacing.
+- `tools-dev --namespace <name>` does not, by itself, define daemon data
+  isolation.
+- A development run that needs an isolated daemon data root must pass
+  `OD_DATA_DIR` into the daemon process environment. After that, the daemon
+  resolves it once and all daemon data paths flow from `RUNTIME_DATA_DIR`.
+
+Packaged propagation:
+
+- `tools-pack` / `apps/packaged` own packaged channel and namespace layout.
+- Packaged code resolves the final namespace-scoped daemon data root before
+  spawning the daemon.
+- The packaged daemon receives that final data root as `OD_DATA_DIR`; daemon
+  code must not infer packaged data paths from app names, Electron `userData`,
+  ports, channel names, or namespace names.
+
+Sanctioned exceptions:
+
+- `OD_MEDIA_CONFIG_DIR` is a narrow override for `media-config.json` only. It
+  is not a second daemon data root.
+- `OD_LEGACY_DATA_DIR` is a migration source for legacy data import only. It is
+  not an active daemon data root.
+- External tool homes such as `CODEX_HOME` are integration inputs, not daemon
+  data roots. The daemon must not describe them as Open Design runtime data.
+- Agent/project-cwd skill staging aliases are not daemon data roots.
+- Manifest metadata keys and CSS identifiers are semantic namespaces, not
+  filesystem path conventions.
+
+Known escape candidates that must not be reused:
+
+- Module-level defaults that point at a cwd-relative legacy data directory.
+- Helper defaults such as `defaultRegistryRoots()` that recompute a data root
+  from `process.env.OD_DATA_DIR` or a cwd fallback instead of receiving
+  `RUNTIME_DATA_DIR`.
+- `openDatabase(projectRoot)` calls that rely on its fallback instead of
+  passing the resolved data root.
+- Script help text or examples that suggest concrete legacy data directories.
+
+Do not extend these escape patterns. When a fix is obvious, route the path
+through `RUNTIME_DATA_DIR` or an explicit data-root argument. When it is not
+obvious, block the PR and request core-maintainer guidance.
+
 ## Root command boundary
 
 - Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-serve`.
 - Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
 
+## GitHub automation boundary
+
+Read `.github/AGENTS.md` before editing `.github/workflows/`, `.github/scripts/`, `.github/actions/`, PR follow-on automation, `workflow_run` trusted writes, CI handoff artifacts, or the workflow topology checks that guard those surfaces.
+
+CI-related GitHub automation uses a two-layer architecture:
+
+- Business layer workflows own product or validation decisions. `ci.yml` is the main low-privilege PR, merge-queue, and manual validation workflow. It detects scope, runs checks, and produces typed handoff artifacts.
+- Atomic capability workflows own reusable trusted operations. `comment.atom.yml` publishes pure text PR comments, `autofix.atom.yml` applies same-repository patches, and `report.atom.yml` materializes advanced comments that need trusted dependencies, secrets, or report generation before upsert.
+
+Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml` or `bar.autofix.atom.yml` without first trying to express the flow as a `ci.yml` producer plus the existing `comment`, `autofix`, or `report` capability. Keep artifact naming, storage layout, and parser behavior centralized in `.github/scripts/handoff.py`; do not let individual workflows invent parallel handoff conventions.
+
 ## Release channel model
 
 - `beta` is the daily R&D/development validation channel. It is optimized for fast development feedback and is not part of the stable promotion gate.
-- `nightly` is the internal validation channel for stable delivery. Stable releases remain gated by validated nightly artifacts.
+- `prerelease` is the internal validation channel for stable delivery. Stable releases remain gated by validated prerelease artifacts.
 - `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
-- `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on nightly only.
-- Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, and preview uses `Open Design Preview`. Do not ship beta or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
+- `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on prerelease only.
+- Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Do not ship beta, prerelease, or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
 - Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `Open Design Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
 
 ## Boundary constraints
@@ -181,9 +267,12 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
 - For agent-stream / parser changes (`apps/daemon/src/claude-stream.ts`, `json-event-stream.ts`, `qoder-stream.ts`, etc.), replay a recorded session through the mock CLIs in `mocks/` to verify event shapes round-trip without burning provider budget. PATH-overlay activation: `export PATH="$PWD/mocks/bin:$PATH" OD_MOCKS_TRACE=<8-char-id> OD_MOCKS_NO_DELAY=1`. See `mocks/README.md` for the trace catalog and selection knobs.
-- Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. `nix/pnpm-deps.nix` is a generated lock artifact; use `pnpm nix:update-hash` only when intentionally maintaining Nix packaging, then re-run `nix flake check --print-build-logs --keep-going`. Contributors without Nix can rely on the PR `Validate workspace` gate, which now uploads or auto-applies the generated hash-only fix when possible.
+- Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. `nix/pnpm-deps.nix` is a generated lock artifact; use `pnpm nix:update-hash` only when intentionally maintaining Nix packaging, then re-run `nix flake check --print-build-logs --keep-going`. Contributors without Nix can rely on the PR `Validate workspace` gate, which now uploads or auto-applies the generated hash-only fix when possible. A stale Nix hash is advisory on pull_request and never blocks the PR — the `nix_validation` job refreshes the hash via autofix while keeping the PR check green, and the hash is only enforced as a hard gate at merge time (`merge_group` and manual full runs fail closed).
 - Before marking regular work ready, run at least `pnpm guard` and `pnpm typecheck`, plus the package-scoped tests/builds that match the files changed. Do not use or add root `pnpm test`/`pnpm build` aliases.
 - For local web runtime loops, prefer `pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
+- For e2e tests that need a tools-dev daemon/web runtime, use the shared tools-dev harness under `e2e/lib/tools-dev/` and the framework suite adapters (`e2e/lib/playwright/suite.ts`, `e2e/lib/vitest/suite.ts`). Do not hand-spawn `tools-dev` from test cases or duplicate lifecycle helpers under framework-specific folders.
+- Playwright UI tests must import `test`/`expect` from `@/playwright/suite`, not directly from `@playwright/test`; type-only imports from `@playwright/test` remain fine. The suite owns one isolated tools-dev daemon/web/data root per Playwright worker. Do not add a shared-runtime fallback; set Playwright workers to `1` when constrained.
+- Playwright suite code must not own workspace prebuild policy. CI and callers keep the existing prebuild steps; `tools-dev` daemon freshness checks are only a fallback guard.
 - On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
 - Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
 - Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
@@ -265,15 +354,6 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 ## How are sidecar-proto, sidecar, and platform split?
 
 `@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
-
-## Where is data written?
-
-The daemon writes `.od/` by default: SQLite at `.od/app.sqlite`, agent CWDs under `.od/projects/<id>/`, saved renders under `.od/artifacts/`, and credentials at `.od/media-config.json`. Two env vars override the storage root, in order:
-
-1. `OD_DATA_DIR=<dir>` — relocates *all* daemon runtime data to `<dir>` (used by Playwright for test isolation, and by the packaged daemon and the Home Manager / NixOS modules to point the daemon at a writable directory when the install root is read-only). The path is resolved with `~/` expansion and relative paths anchored to `<projectRoot>`.
-2. `OD_MEDIA_CONFIG_DIR=<dir>` — narrower override that relocates *only* `media-config.json`. Same resolution semantics. Most installs do not need this; it exists for setups that want to keep API credentials in a different location from the rest of the runtime data.
-
-Default precedence is OD_MEDIA_CONFIG_DIR > OD_DATA_DIR > `<projectRoot>/.od`.
 
 ## When is `pnpm install` required?
 

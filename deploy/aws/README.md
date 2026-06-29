@@ -11,7 +11,7 @@ The template provisions a robust, fault-tolerant, and secure architecture for Op
 *   **Compute:** AWS ECS running on serverless Fargate instances in the private subnets. To protect the file-based SQLite database from concurrent network write corruption, the service hard-codes a single-instance baseline (DesiredCount: 1). However, it leverages the multi-AZ networking primitives for Active-Passive fault tolerance: if a task or zone fails, ECS automatically reschedules the container in the healthy AZ. The task definition includes:
     *   The **Open Design** app container.
     *   An **Nginx Auth Proxy** sidecar container that securely attaches the Open Design API Token to incoming `/api/` requests.
-*   **Storage:** Amazon Elastic File System (EFS) is mounted to the Fargate containers to durably store the Open Design `.od` SQLite database and file artifacts. It is configured with deletion protection (`Retain`) to prevent accidental data loss.
+*   **Storage:** Amazon Elastic File System (EFS) is mounted to the Fargate containers for persistent daemon storage. Before documenting or changing the mount, you MUST read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. This README MUST NOT restate it. EFS is configured with deletion protection (`Retain`) to prevent accidental data loss.
 *   **Security:**
     *   **Secrets Manager:** Securely stores the Open Design API Token, preventing it from being exposed in plain text.
     *   **Security Groups:** Restrict traffic flow. The ALB requires an explicitly configured CIDR — ensure this is your VPN or corporate range to avoid unintended public exposure. Fargate only accepts traffic from the ALB; EFS only accepts traffic from Fargate.
@@ -42,7 +42,7 @@ When deploying the CloudFormation stack, you can customize the following paramet
 | `CustomDomainName` | *(Optional)* Your custom domain name (e.g., `design.yourcompany.com`). If provided, you must manually create a DNS CNAME/Alias record pointing to the ALB after deployment. If blank, the default ALB DNS name is used over HTTP. | *None* |
 | `AcmCertificateArn` | *(Optional)* The ARN of your AWS Certificate Manager (ACM) certificate. **Required** if `CustomDomainName` is provided. | *None* |
 | `ProxyPort` | The dynamic port used by the Nginx proxy and exposed to the Load Balancer. Must be >= 1024 (unprivileged container). | `8080` |
-| `AppStoragePath` | The container path where the `.od` SQLite directory is mounted via EFS. | `/app/.od` |
+| `AppStoragePath` | Persistent daemon storage path. Before setting or documenting it, you MUST read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. | See root contract |
 
 ## Deployment
 

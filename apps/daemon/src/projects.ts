@@ -14,24 +14,25 @@ import {
   inferLegacyManifest,
   parsePersistedManifest,
   validateArtifactManifestInput,
-} from './artifact-manifest.js';
+} from './artifacts/manifest.js';
 import {
   ArtifactRegressionError,
   STUB_GUARDED_MANIFEST_KINDS,
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
-} from './artifact-stub-guard.js';
+} from './artifacts/stub-guard.js';
 import {
   assertArtifactPublicationAllowed,
   isPublicationGuardedArtifactKind,
-} from './artifact-publication-guard.js';
-import { normalizeArtifactRuntimeImports } from './artifact-runtime-compat.js';
+} from './artifacts/publication-guard.js';
+import { normalizeArtifactRuntimeImports } from './artifacts/runtime-compat.js';
 import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
 import {
   isSandboxImportedProjectRootAllowed,
   isSandboxModeEnabled,
   SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE,
 } from './sandbox-mode.js';
+import { isOrchestratorScratchWorkspace } from './workspace-contract.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
@@ -77,6 +78,7 @@ export function assertSandboxProjectRootAvailable(metadata?) {
   if (
     isSandboxModeEnabled(process.env) &&
     hasExternalProjectRoot(metadata) &&
+    !isOrchestratorScratchWorkspace(metadata) &&
     !isSandboxImportedProjectRootAllowed(metadata.baseDir)
   ) {
     throw new SandboxImportedProjectError();
@@ -85,6 +87,7 @@ export function assertSandboxProjectRootAvailable(metadata?) {
 
 function usesExternalProjectRoot(metadata?) {
   if (!hasExternalProjectRoot(metadata)) return false;
+  if (isOrchestratorScratchWorkspace(metadata)) return true;
   if (!isSandboxModeEnabled(process.env)) return true;
   return isSandboxImportedProjectRootAllowed(metadata.baseDir);
 }

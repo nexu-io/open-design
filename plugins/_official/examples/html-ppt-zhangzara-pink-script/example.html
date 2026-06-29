@@ -2,25 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Pink Script — After Hours</title>
+<title>Pink Script — Open Design</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="assets/deck-stage.js"></script>
 <style>
   :root{
-    --ink: #060507;
-    --ink-2: #0F0D11;
     --paper: #F5EDF1;
     --pink: #ED3D8C;
-    --pink-2: #FF66A8;
-    --pink-deep: #B81D67;
     --line: rgba(237,61,140,.32);
-    --mute: rgba(245,237,241,.55);
+    --mute: rgba(245,237,241,.62);
     --hair: rgba(245,237,241,.14);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: #000; font-family: "Inter", system-ui, sans-serif; color: var(--paper); }
+  html, body { background: #000; font-family: "Instrument Sans", system-ui, sans-serif; color: var(--paper); }
 
   /* --- shared slide chrome ----------------------------------------- */
   deck-stage > section.slide {
@@ -64,35 +60,7 @@
   .footer .pageno { color: var(--paper); white-space: nowrap; flex-shrink: 0; }
   .footer .pageno em { color: var(--pink); font-style: normal; }
 
-  /* shared display script */
-  .script {
-    font-family: "Instrument Serif", serif;
-    font-style: italic;
-    font-weight: 400;
-    color: var(--pink);
-    letter-spacing: -.01em;
-    line-height: 1.05;
-    padding-bottom: .12em;
-  }
-  .script.huge   { font-size: 540px; }
-  .script.giant  { font-size: 360px; }
-  .script.large  { font-size: 220px; }
-  .script.med    { font-size: 140px; }
-  .script.sm     { font-size: 88px; }
-
-  /* sans display */
-  .sans-display {
-    font-family: "Inter", sans-serif; font-weight: 300;
-    text-transform: uppercase; letter-spacing: .04em;
-    color: var(--paper);
-  }
-  .mono { font-family: "JetBrains Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
-
-  /* hairline pink rule */
-  .rule { height: 1px; background: var(--pink); opacity: .45; }
-  .rule.thin { opacity: .25; background: var(--paper); }
-
-  /* ============== 1. COVER · AFTER HOURS =================== */
+  /* ============== 1. COVER · OPEN DESIGN =================== */
   .s-cover .stage {
     position: absolute; left: 60px; right: 60px; top: 180px; bottom: 360px;
     display: flex; align-items: center; justify-content: center;
@@ -108,11 +76,6 @@
     padding-bottom: .12em;
   }
   .s-cover .title .l2 { display: block; padding-left: 180px; color: var(--paper); }
-  .s-cover .sub {
-    font-family: "Inter", sans-serif; font-weight: 300; font-size: 28px; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--paper); opacity: .85; margin-top: 28px;
-  }
-  .s-cover .sub em { color: var(--pink); font-style: normal; }
   .s-cover .lower { position: absolute; left: 60px; right: 60px; bottom: 160px; display: flex; justify-content: space-between; align-items: end; gap: 32px; }
   .s-cover .lower .col { display: flex; flex-direction: column; gap: 6px; }
   .s-cover .lower .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
@@ -127,7 +90,7 @@
   .s-toc .row { display: grid; grid-template-columns: 110px 1fr 200px; gap: 32px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid var(--hair); }
   .s-toc .row .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
   .s-toc .row .title { font-family: "Instrument Serif", serif; font-style: italic; font-size: 56px; color: var(--paper); line-height: 1.05; }
-  .s-toc .row .desc { font-family: "Inter", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.4; font-style: normal; }
+  .s-toc .row .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.4; font-style: normal; }
   .s-toc .row .meta { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); text-align: right; }
   .s-toc .row.cur .num, .s-toc .row.cur .title { color: var(--pink); }
 
@@ -137,14 +100,14 @@
   .s-stats .left .kicker { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .18em; text-transform: uppercase; color: var(--pink); }
   .s-stats .left h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; line-height: 1.06; color: var(--paper); padding-bottom: .1em; }
   .s-stats .left h2 em { color: var(--pink); font-style: italic; }
-  .s-stats .left p { font-family: "Inter", sans-serif; font-size: 24px; line-height: 1.55; color: var(--paper); opacity: .75; max-width: 36ch; font-weight: 300; }
+  .s-stats .left p { font-family: "Instrument Sans", sans-serif; font-size: 24px; line-height: 1.55; color: var(--paper); opacity: .75; max-width: 36ch; font-weight: 400; }
   .s-stats .right { display: flex; flex-direction: column; gap: 18px; padding-top: 0; }
   .s-stats .stat { display: grid; grid-template-columns: 240px 1fr; align-items: center; gap: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--hair); }
   .s-stats .stat:last-child { border-bottom: 0; padding-bottom: 0; }
   .s-stats .stat .figure { font-family: "Instrument Serif", serif; font-style: italic; font-size: 116px; line-height: .9; color: var(--pink); display: flex; align-items: baseline; }
   .s-stats .stat .figure sup { font-size: 36px; color: var(--paper); vertical-align: top; margin-left: 4px; line-height: 1; align-self: flex-start; padding-top: 18px; }
   .s-stats .stat .meta .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
-  .s-stats .stat .meta .desc { font-family: "Inter", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.45; font-weight: 300; }
+  .s-stats .stat .meta .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.45; font-weight: 400; }
 
   /* ============== 4. MOVEMENTS · SECTION DIVIDER =========== */
   .s-section .body { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
@@ -159,7 +122,7 @@
   .s-section .right { position: absolute; right: 100px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 18px; max-width: 380px; }
   .s-section .right .kicker { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); }
   .s-section .right h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 88px; line-height: 1.06; color: var(--paper); padding-bottom: .1em; }
-  .s-section .right p  { font-family: "Inter", sans-serif; font-size: 24px; line-height: 1.55; color: var(--mute); font-weight: 300; }
+  .s-section .right p  { font-family: "Instrument Sans", sans-serif; font-size: 24px; line-height: 1.55; color: var(--mute); font-weight: 400; }
 
   /* ============== 5. THE CURVE · CHART ===================== */
   .s-chart .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 80px; }
@@ -182,18 +145,18 @@
   }
   .s-chart .callout .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 120px; line-height: .9; color: var(--pink); }
   .s-chart .callout .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
-  .s-chart .callout .desc { font-family: "Inter", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.4; font-weight: 300; }
+  .s-chart .callout .desc { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.4; font-weight: 400; }
 
   /* ============== 6. PROCESS · DIAGRAM ===================== */
   .s-process .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 60px; }
   .s-process .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 156px; line-height: 1.04; color: var(--paper); max-width: 12ch; padding-bottom: .1em; }
   .s-process .head h2 em { color: var(--pink); font-style: italic; }
-  .s-process .head .lead { font-family: "Inter", sans-serif; font-size: 26px; color: var(--mute); max-width: 40ch; line-height: 1.55; font-weight: 300; padding-bottom: 18px; }
+  .s-process .head .lead { font-family: "Instrument Sans", sans-serif; font-size: 26px; color: var(--mute); max-width: 40ch; line-height: 1.55; font-weight: 400; padding-bottom: 18px; }
   .s-process .row { position: absolute; left: 60px; right: 60px; top: 540px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
   .s-process .step { position: relative; display: flex; flex-direction: column; gap: 18px; padding: 26px 0; border-top: 1px solid var(--pink); }
   .s-process .step .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 96px; color: var(--pink); line-height: .8; }
   .s-process .step h3 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 38px; color: var(--paper); line-height: 1.05; }
-  .s-process .step p { font-family: "Inter", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 300; }
+  .s-process .step p { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 400; }
   .s-process .step .arr {
     position: absolute; right: -16px; top: 60px; width: 24px; height: 24px;
     color: var(--pink); pointer-events: none;
@@ -208,7 +171,7 @@
   .s-matrix .head h2 em { color: var(--pink); font-style: italic; }
   .s-matrix .head .source { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); padding-bottom: 18px; max-width: 30ch; line-height: 1.5; text-align: right; }
   .s-matrix .table { position: absolute; left: 60px; right: 60px; top: 460px; bottom: 140px; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; grid-auto-rows: 1fr; }
-  .s-matrix .cell { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; font-family: "Inter", sans-serif; font-size: 22px; line-height: 1.4; color: var(--paper); font-weight: 300; }
+  .s-matrix .cell { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; font-family: "Instrument Sans", sans-serif; font-size: 22px; line-height: 1.4; color: var(--paper); font-weight: 400; }
   .s-matrix .cell.colhead { background: transparent; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); border-bottom-color: var(--pink); }
   .s-matrix .cell.label { font-family: "Instrument Serif", serif; font-style: italic; font-size: 32px; color: var(--paper); }
   .s-matrix .cell.us { background: rgba(237,61,140,.08); color: var(--paper); }
@@ -237,84 +200,70 @@
   .s-cta .step { display: flex; flex-direction: column; gap: 16px; padding-top: 22px; border-top: 1px solid var(--pink); }
   .s-cta .step .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
   .s-cta .step h3 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 44px; color: var(--paper); line-height: 1.05; }
-  .s-cta .step p { font-family: "Inter", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 300; }
+  .s-cta .step p { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 400; }
   .s-cta .qr { display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
   .s-cta .qr .box { width: 180px; height: 180px; background: var(--paper); padding: 12px; }
   .s-cta .qr .box svg { width: 100%; height: 100%; }
   .s-cta .qr .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
   .s-cta .qr .url { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .04em; color: var(--pink); }
 
-  /* ============== 10. THE SYSTEM · DESIGN SYSTEM ============ */
-  .s-system .body { position: absolute; inset: 140px 60px 140px 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
-  .s-system .head { position: absolute; left: 60px; right: 60px; top: 140px; }
-  .s-system .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; color: var(--paper); }
-  .s-system .head h2 em { color: var(--pink); font-style: italic; }
-  .s-system .body { top: 320px; }
-  .s-system .panel { display: flex; flex-direction: column; gap: 22px; padding-top: 22px; border-top: 1px solid var(--pink); }
-  .s-system .panel h3 { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); }
-  .s-system .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  .s-system .swatch { display: flex; flex-direction: column; gap: 8px; }
-  .s-system .swatch .chip { aspect-ratio: 1; border: 1px solid var(--hair); }
-  .s-system .swatch .name { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .08em; color: var(--paper); }
-  .s-system .swatch .hex { font-family: "JetBrains Mono", monospace; font-size: 22px; color: var(--mute); }
-  .s-system .typespec { display: flex; flex-direction: column; gap: 14px; }
-  .s-system .typerow { display: grid; grid-template-columns: 240px 1fr; gap: 24px; align-items: baseline; padding-bottom: 12px; border-bottom: 1px dashed var(--hair); }
-  .s-system .typerow .meta { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .08em; color: var(--mute); text-transform: uppercase; }
-  .s-system .typerow .sample { color: var(--paper); }
-  .s-system .typerow .sample.script { font-family: "Instrument Serif", serif; font-style: italic; color: var(--pink); }
-  .s-system .typerow .sample.disp { font-family: "Instrument Serif", serif; font-style: italic; }
-  .s-system .typerow .sample.body { font-family: "Inter", sans-serif; font-weight: 300; }
-  .s-system .typerow .sample.mono { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: .12em; }
-  .s-system .rules { display: flex; flex-direction: column; gap: 12px; }
-  .s-system .rules .item { display: grid; grid-template-columns: 64px 1fr; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--hair); }
-  .s-system .rules .item .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 48px; color: var(--pink); line-height: .9; }
-  .s-system .rules .item p { font-family: "Inter", sans-serif; font-size: 22px; color: var(--paper); line-height: 1.45; font-weight: 300; }
-  .s-system .rules .item p strong { color: var(--pink); font-weight: 500; font-style: italic; font-family: "Instrument Serif", serif; font-size: 26px; padding-right: 6px; }
+  /* entrance: stagger rise on the active slide's direct children */
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+  section.slide[data-deck-active] > * { animation: rise .6s cubic-bezier(.16,1,.3,1) both; }
+  section.slide[data-deck-active] > :nth-child(2) { animation-delay: .06s; }
+  section.slide[data-deck-active] > :nth-child(3) { animation-delay: .12s; }
+  section.slide[data-deck-active] > :nth-child(4) { animation-delay: .18s; }
+  section.slide[data-deck-active] > :nth-child(5) { animation-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    section.slide[data-deck-active] > * { animation: none; }
+  }
+  @media print {
+    section.slide > * { opacity: 1 !important; animation: none !important; }
+  }
 </style>
 </head>
 <body>
 <deck-stage>
 
-  <!-- ============== 1. COVER · AFTER HOURS ===================== -->
+  <!-- ============== 1. COVER · OPEN DESIGN ===================== -->
   <section class="slide s-cover" data-label="01 Cover" data-om-validate="false">
     <div class="runner">
-      <span class="brand">Maison Nocturne</span>
-      <span>Vol. XIV · A/W 2026</span>
+      <span class="brand">Open Design</span>
+      <span>The Field Report · 2026</span>
     </div>
     <div class="stage">
-      <div class="pre">A Field Report on Late-Night Couture</div>
+      <div class="pre">Open-Source · Local · Agent-Driven</div>
       <div class="title-wrap">
-        <div class="title">After<span class="l2">Hours.</span></div>
+        <div class="title">Open<span class="l2">Design.</span></div>
       </div>
-      <div class="sub" style="margin:0"></div>
     </div>
     <div class="lower">
       <div class="col">
-        <div class="lab">Edition</div>
-        <div class="val">No. 14</div>
+        <div class="lab">License</div>
+        <div class="val">Apache-2.0</div>
       </div>
       <div class="col">
-        <div class="lab">Director</div>
-        <div class="val alt">L. Marchetti</div>
+        <div class="lab">Runtime</div>
+        <div class="val alt">Runs Locally</div>
       </div>
       <div class="col">
-        <div class="lab">Locale</div>
-        <div class="val alt">Paris · 11<sup style="font-size:.5em">e</sup></div>
+        <div class="lab">Keys</div>
+        <div class="val alt">BYOK</div>
       </div>
       <div class="col">
-        <div class="lab">Date</div>
-        <div class="val">May 2026</div>
+        <div class="lab">Sign-up</div>
+        <div class="val">None</div>
       </div>
     </div>
     <div class="footer">
-      <span>Maison Nocturne · Confidential</span>
+      <span>github.com/nexu-io/open-design</span>
       <span class="pageno"><em>01</em> / 09</span>
     </div>
   </section>
 
   <!-- ============== 2. THE INDEX ============================== -->
   <section class="slide s-toc" data-label="02 The Index" data-om-validate="false">
-    <div class="runner"><span class="brand">After Hours</span><span>The Index</span></div>
+    <div class="runner"><span class="brand">Open Design</span><span>The Index</span></div>
     <div class="body">
       <h1>The<br><span class="small">Index.</span></h1>
       <div class="rows">
@@ -322,15 +271,15 @@
           <div class="num">01</div>
           <div>
             <div class="title">By the Numbers</div>
-            <div class="desc">Five figures that shape the season.</div>
+            <div class="desc">Five figures from the public ledger.</div>
           </div>
           <div class="meta">Stats · pp. 14</div>
         </div>
         <div class="row cur">
           <div class="num">02</div>
           <div>
-            <div class="title">Movements</div>
-            <div class="desc">A study in cuts, color, and silhouette.</div>
+            <div class="title">The Why</div>
+            <div class="desc">Setting frontier AI design free.</div>
           </div>
           <div class="meta">Section · pp. 22</div>
         </div>
@@ -338,7 +287,7 @@
           <div class="num">03</div>
           <div>
             <div class="title">The Curve</div>
-            <div class="desc">Twelve weeks of after-hours behavior.</div>
+            <div class="desc">Twelve weeks of community growth.</div>
           </div>
           <div class="meta">Chart · pp. 36</div>
         </div>
@@ -346,7 +295,7 @@
           <div class="num">04</div>
           <div>
             <div class="title">The Field</div>
-            <div class="desc">Where we sit among the houses we admire.</div>
+            <div class="desc">Open Design beside the closed alternatives.</div>
           </div>
           <div class="meta">Matrix · pp. 48</div>
         </div>
@@ -354,78 +303,78 @@
           <div class="num">05</div>
           <div>
             <div class="title">Voices &amp; Encore</div>
-            <div class="desc">Critics, clients, and what comes next.</div>
+            <div class="desc">The community, and how to start.</div>
           </div>
           <div class="meta">pp. 60–72</div>
         </div>
       </div>
     </div>
-    <div class="footer"><span>Maison Nocturne</span><span class="pageno"><em>02</em> / 09</span></div>
+    <div class="footer"><span>Open Design</span><span class="pageno"><em>02</em> / 09</span></div>
   </section>
 
   <!-- ============== 3. BY THE NUMBERS ========================= -->
   <section class="slide s-stats" data-label="03 By the Numbers" data-om-validate="false">
-    <div class="runner"><span class="brand">Chapter 01</span><span>By the Numbers · A/W26</span></div>
+    <div class="runner"><span class="brand">Chapter 01</span><span>By the Numbers · 2026</span></div>
     <div class="body">
       <div class="left">
         <div class="kicker">By the Numbers</div>
         <div>
-          <h2>A season<br>told in<br><em>five</em> figures.</h2>
+          <h2>A platform<br>told in<br><em>five</em> figures.</h2>
         </div>
-        <p>Read top to bottom. Every figure was reported by atelier directors during the eight-week previewing window and represents the house ledger only.</p>
+        <p>Read top to bottom. Every figure is the public ledger of an Apache-2.0 project — the stars, the contributors, and the ecosystem around them.</p>
       </div>
       <div class="right">
         <div class="stat">
-          <div class="figure">42<sup>%</sup></div>
+          <div class="figure">60<sup>K+</sup></div>
           <div class="meta">
-            <div class="lab">Couture · Repeat Clients</div>
-            <div class="desc">Patrons who returned within ninety days for a second commission.</div>
+            <div class="lab">GitHub Stars</div>
+            <div class="desc">Open source under Apache-2.0 — fork, self-host, and commercial use all allowed.</div>
           </div>
         </div>
         <div class="stat">
-          <div class="figure">3.8<sup>×</sup></div>
+          <div class="figure">300<sup>+</sup></div>
           <div class="meta">
-            <div class="lab">Atelier Throughput</div>
-            <div class="desc">Pieces released per machinist per week, measured against the prior Spring book.</div>
+            <div class="lab">Contributors</div>
+            <div class="desc">A community building the platform in the open, one pull request at a time.</div>
           </div>
         </div>
         <div class="stat">
-          <div class="figure">€1.4<sup>M</sup></div>
+          <div class="figure">217<sup>+</sup></div>
           <div class="meta">
-            <div class="lab">Average Ticket · Vault</div>
-            <div class="desc">Mean spend per private appointment in the Vault programme this quarter.</div>
+            <div class="lab">Plugins</div>
+            <div class="desc">Prototypes, slides, posters, dashboards — the ecosystem keeps compounding.</div>
           </div>
         </div>
         <div class="stat">
-          <div class="figure">86<sup>%</sup></div>
+          <div class="figure">129</div>
           <div class="meta">
-            <div class="lab">Reservation Rate</div>
-            <div class="desc">Show seats filled before the public window opened.</div>
+            <div class="lab">Design Systems</div>
+            <div class="desc">Imported from GitHub, Figma, or local files, ready to steer every generation.</div>
           </div>
         </div>
         <div class="stat">
-          <div class="figure">07</div>
+          <div class="figure">21</div>
           <div class="meta">
-            <div class="lab">New Cities, A/W</div>
-            <div class="desc">Markets opened with a flagship boutique since the prior season.</div>
+            <div class="lab">Coding Agents</div>
+            <div class="desc">Auto-detected from PATH with zero config — Claude Code, Codex, Cursor, and more.</div>
           </div>
         </div>
       </div>
     </div>
-    <div class="footer"><span>Source · Atelier Ledger Q1</span><span class="pageno"><em>03</em> / 09</span></div>
+    <div class="footer"><span>Source · Public GitHub Ledger</span><span class="pageno"><em>03</em> / 09</span></div>
   </section>
 
   <!-- ============== 4. MOVEMENTS · SECTION DIVIDER ============= -->
   <section class="slide s-section" data-label="04 Movements" data-om-validate="false">
-    <div class="runner"><span class="brand">Chapter 02</span><span>Movements</span></div>
-    <div class="label-l">Maison Nocturne · Vol. XIV</div>
+    <div class="runner"><span class="brand">Chapter 02</span><span>The Why</span></div>
+    <div class="label-l">Open Design · Field Report</div>
     <div class="body">
       <div class="num">02</div>
     </div>
     <div class="right">
-      <div class="kicker">Movements</div>
-      <h2>A study<br>in cuts<br>&amp; color.</h2>
-      <p>Three silhouettes carry the season — the column, the cape, and the cinch. Each is annotated in the chapters that follow.</p>
+      <div class="kicker">The Why</div>
+      <h2>Design,<br>set<br>free.</h2>
+      <p>In April 2026, Claude Design proved an LLM can truly design. Yet it is closed-source, paid, and cloud-only — one model, no BYOK. Open Design sets that capability free.</p>
     </div>
     <div class="footer"><span>Chapter 02 of 05</span><span class="pageno"><em>04</em> / 09</span></div>
   </section>
@@ -434,20 +383,20 @@
   <section class="slide s-chart" data-label="05 The Curve" data-om-validate="false">
     <div class="runner"><span class="brand">Chapter 03</span><span>The Curve</span></div>
     <div class="head">
-      <h2>Twelve weeks of <em>after-hours</em><br>behavior.</h2>
+      <h2>Twelve weeks of <em>community</em><br>growth.</h2>
       <div class="legend">
-        <div class="li"><i></i>House · A/W26</div>
-        <div class="li b"><i></i>Sector benchmark</div>
+        <div class="li"><i></i>Open Design · Stars</div>
+        <div class="li b"><i></i>OSS benchmark</div>
       </div>
     </div>
     <div class="callout">
-      <div class="num">+38<span style="font-size:.5em;color:var(--paper)">%</span></div>
-      <div class="lab">Week 09 inflection</div>
-      <div class="desc">After the editorial dropped, walk-ins to the rue Saint-Honoré flagship doubled within seventy-two hours.</div>
+      <div class="num">60K<span style="font-size:.5em;color:var(--paper)">+</span></div>
+      <div class="lab">GitHub Stars</div>
+      <div class="desc">After launch hit the front page, stars compounded week over week — 300+ contributors joined along the way.</div>
     </div>
     <div class="plotwrap">
       <div class="yax">
-        <span>200</span><span>150</span><span>100</span><span>50</span><span>0</span>
+        <span>60K</span><span>45K</span><span>30K</span><span>15K</span><span>0</span>
       </div>
       <div class="plot">
         <div class="gline" style="top:0%"></div>
@@ -471,7 +420,7 @@
         <span>W01</span><span>W02</span><span>W03</span><span>W04</span><span>W05</span><span>W06</span><span>W07</span><span>W08</span><span style="color:var(--pink)">W09</span><span>W10</span><span>W11</span><span>W12</span>
       </div>
     </div>
-    <div class="footer"><span>Source · House register · Index FY25=100</span><span class="pageno"><em>05</em> / 09</span></div>
+    <div class="footer"><span>Source · GitHub Stars · Demo Curve</span><span class="pageno"><em>05</em> / 09</span></div>
   </section>
 
   <!-- ============== 6. PROCESS · DIAGRAM ====================== -->
@@ -479,47 +428,47 @@
     <div class="runner"><span class="brand">Chapter 04</span><span>The Method</span></div>
     <div class="head">
       <h2>The<br><em>method.</em></h2>
-      <div class="lead">From sketchbook to runway in five movements. The atelier's tempo is dictated by the cloth, never the calendar.</div>
+      <div class="lead">From idea to delivery in five movements. The agent reads your context; you direct the work — all on your own machine.</div>
     </div>
     <div class="row">
       <div class="step">
         <div class="n">01</div>
-        <h3>Brief</h3>
-        <p>The house director and head couturier convene with three muses to set the season's mood.</p>
+        <h3>Start</h3>
+        <p>Describe your goal in one sentence, or pick a starting point from a template or plugin.</p>
         <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
       </div>
       <div class="step">
         <div class="n">02</div>
-        <h3>Pattern</h3>
-        <p>Toiles cut in calico. Each silhouette is fitted three times before approval is granted on the floor.</p>
+        <h3>Direction</h3>
+        <p>Set the visual direction. Palette, type, and spacing flow into generation automatically.</p>
         <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
       </div>
       <div class="step">
         <div class="n">03</div>
-        <h3>Atelier</h3>
-        <p>Cloth is cut on the bias. Hand-stitched seams. No piece leaves the atelier without two signatures.</p>
+        <h3>Generate</h3>
+        <p>The agent reads full context and produces real runnable files, previewed and edited in a sandbox.</p>
         <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
       </div>
       <div class="step">
         <div class="n">04</div>
-        <h3>Fitting</h3>
-        <p>Private appointments held by candlelight in the Vault. Clients touch the cloth before the look is final.</p>
+        <h3>Ship</h3>
+        <p>Hand off to engineering, or turn the artifact into a marketing video with HyperFrames.</p>
         <svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M14 5l7 7-7 7"/></svg>
       </div>
       <div class="step">
         <div class="n">05</div>
-        <h3>Runway</h3>
-        <p>Twelve looks shown. The collection is sold by appointment for ninety days before the public window opens.</p>
+        <h3>Memory</h3>
+        <p>Every choice becomes context for the next run. The system lands closer to your taste each time.</p>
       </div>
     </div>
     <div class="timeline">
-      <span>Wk 01–02 <em>Brief</em></span>
-      <span>Wk 03–06 <em>Pattern</em></span>
-      <span>Wk 07–10 <em>Atelier</em></span>
-      <span>Wk 11–12 <em>Fitting</em></span>
-      <span>Wk 13 <em>Runway</em></span>
+      <span>Step 01 <em>Start</em></span>
+      <span>Step 02 <em>Direction</em></span>
+      <span>Step 03 <em>Generate</em></span>
+      <span>Step 04 <em>Ship</em></span>
+      <span>Step 05 <em>Memory</em></span>
     </div>
-    <div class="footer"><span>Atelier Method · House Standard</span><span class="pageno"><em>06</em> / 09</span></div>
+    <div class="footer"><span>The Method · Open Design</span><span class="pageno"><em>06</em> / 09</span></div>
   </section>
 
   <!-- ============== 7. THE FIELD · COMPARISON MATRIX ========== -->
@@ -527,40 +476,40 @@
     <div class="runner"><span class="brand">Chapter 05</span><span>The Field</span></div>
     <div class="head">
       <h2>The<br><em>field</em>, in five rows.</h2>
-      <div class="source">Sourced · house registers, public filings, three trade press indices · A/W 2026</div>
+      <div class="source">Open Design beside the closed alternatives · public pricing · 2026</div>
     </div>
     <div class="table">
       <div class="cell colhead">Dimension</div>
-      <div class="cell colhead" style="color:var(--pink)">Maison Nocturne</div>
-      <div class="cell colhead">House A</div>
-      <div class="cell colhead">House B</div>
+      <div class="cell colhead" style="color:var(--pink)">Open Design</div>
+      <div class="cell colhead">Claude Design</div>
+      <div class="cell colhead">Cloud Tools</div>
 
-      <div class="cell label">Atelier model</div>
-      <div class="cell us"><span class="pill solid">In-house · Paris</span></div>
-      <div class="cell"><span class="pill">Hybrid · 2 cities</span></div>
-      <div class="cell"><span class="pill dim">Outsourced</span></div>
+      <div class="cell label">Source</div>
+      <div class="cell us"><span class="pill solid">Apache-2.0 · Open</span></div>
+      <div class="cell"><span class="pill dim">Closed</span></div>
+      <div class="cell"><span class="pill dim">Closed</span></div>
 
-      <div class="cell label">Lead time</div>
-      <div class="cell us">13 weeks, hand-stitched</div>
-      <div class="cell">9 weeks, partial machine</div>
-      <div class="cell">6 weeks, full machine</div>
+      <div class="cell label">Where it runs</div>
+      <div class="cell us">Locally, on your machine</div>
+      <div class="cell">Cloud only</div>
+      <div class="cell">Cloud only</div>
 
-      <div class="cell label">Vault programme</div>
-      <div class="cell us"><span class="pill solid">Yes · invitation</span></div>
-      <div class="cell"><span class="pill dim">No</span></div>
-      <div class="cell"><span class="pill">By appointment</span></div>
+      <div class="cell label">Model &amp; agents</div>
+      <div class="cell us"><span class="pill solid">21 agents · BYOK</span></div>
+      <div class="cell"><span class="pill dim">One model</span></div>
+      <div class="cell"><span class="pill">Vendor models</span></div>
 
-      <div class="cell label">Repeat client share</div>
-      <div class="cell us"><strong style="color:var(--pink);font-family:'Instrument Serif';font-style:italic;font-size:32px">42%</strong></div>
-      <div class="cell">28%</div>
-      <div class="cell">19%</div>
+      <div class="cell label">Monthly cost</div>
+      <div class="cell us"><strong style="color:var(--pink);font-family:'Instrument Serif';font-style:italic;font-size:32px">~$73</strong></div>
+      <div class="cell">$500</div>
+      <div class="cell">Seat-based</div>
 
-      <div class="cell label" style="border-bottom:0">Public window</div>
-      <div class="cell us" style="border-bottom:0">90 days post-show</div>
-      <div class="cell" style="border-bottom:0">30 days post-show</div>
-      <div class="cell" style="border-bottom:0">Same day</div>
+      <div class="cell label" style="border-bottom:0">Self-hosting</div>
+      <div class="cell us" style="border-bottom:0">Fork · self-host · commercial</div>
+      <div class="cell" style="border-bottom:0">Not available</div>
+      <div class="cell" style="border-bottom:0">Not available</div>
     </div>
-    <div class="footer"><span>Comparison · A/W 2026 disclosed</span><span class="pageno"><em>07</em> / 09</span></div>
+    <div class="footer"><span>Monthly cost vs. Claude Design · −80%</span><span class="pageno"><em>07</em> / 09</span></div>
   </section>
 
   <!-- ============== 8. VOICES · QUOTE ========================= -->
@@ -569,19 +518,19 @@
     <div class="body">
       <div class="left">
         <div class="qmark">"</div>
-        <div class="lab">Voices · Issue 14</div>
+        <div class="lab">Voices · Community</div>
       </div>
       <div class="right">
         <blockquote>
-          The house dresses you for an <em>evening</em> that hasn't begun. You leave the fitting and somewhere a room is already <em>waiting</em>.
+          File-system semantics plus <em>git-diffable</em> design artifacts — design is finally under <em>version control</em>.
         </blockquote>
         <div class="attr">
-          <div class="who">— Camille Aubry</div>
-          <div class="role">Editor-in-chief · Le Soir Parisien</div>
+          <div class="who">— Indie Developer</div>
+          <div class="role">Open Design Community</div>
         </div>
       </div>
     </div>
-    <div class="footer"><span>Voices · Le Soir Parisien</span><span class="pageno"><em>08</em> / 09</span></div>
+    <div class="footer"><span>Voices · Open Design Community</span><span class="pageno"><em>08</em> / 09</span></div>
   </section>
 
   <!-- ============== 9. ENCORE · CTA =========================== -->
@@ -590,23 +539,23 @@
     <div class="body">
       <div class="top">
         <div class="pre">An invitation</div>
-        <h2><em>Encore.</em><br>The list opens<br>this Friday.</h2>
+        <h2><em>Encore.</em><br>Frontier AI design,<br>back on your desk.</h2>
       </div>
       <div class="bottom">
         <div class="step">
           <div class="n">01</div>
-          <h3>Reserve</h3>
-          <p>Hold a Vault appointment for the week of 24 May. Couture only.</p>
+          <h3>Download</h3>
+          <p>Get Open Design for macOS or Windows. It runs locally — no sign-up required.</p>
         </div>
         <div class="step">
           <div class="n">02</div>
-          <h3>Preview</h3>
-          <p>Three looks shown by candlelight in the rue Saint-Honoré room.</p>
+          <h3>Plug in</h3>
+          <p>Your coding agents are auto-detected from PATH, zero config. Bring your own keys.</p>
         </div>
         <div class="step">
           <div class="n">03</div>
-          <h3>Commission</h3>
-          <p>One piece commissioned to your measure, delivered before September.</p>
+          <h3>Create</h3>
+          <p>From idea to prototypes, slides, and HTML video — the full workflow on your machine.</p>
         </div>
         <div class="qr">
           <div class="box">
@@ -631,27 +580,27 @@
               </g>
             </svg>
           </div>
-          <div class="lab">Scan to reserve</div>
-          <div class="url">nocturne.house/aw26</div>
+          <a class="lab" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Star on GitHub</a>
+          <div class="url">nexu-io/open-design</div>
         </div>
       </div>
     </div>
-    <div class="footer"><span>RSVP closes 22 May · Strict</span><span class="pageno"><em>09</em> / 09</span></div>
+    <div class="footer"><span>Open · Local · Agent-native</span><span class="pageno"><em>09</em> / 09</span></div>
   </section>
 
 </deck-stage>
 
 <script type="application/json" id="speaker-notes">
 [
-  "Cover slide. After Hours, an editorial-style deck for a fashion house presentation. Italic script display type, hot pink on deep black with a subtle radial spotlight and film grain.",
-  "The Index. Five chapters laid out as an editorial table of contents.",
-  "By the Numbers. Five hero figures, italic script numerals on pink, supporting copy in Inter Light.",
-  "Movements. The big 02 acts as the section divider, mirrored by a small kicker and copy on the right.",
-  "The Curve. A line chart with one pink hero series and a dashed white benchmark, plus a callout block for the inflection.",
-  "Process. Five steps with italic numerals, divider rules, and a horizontal timeline.",
-  "The Field. Comparison matrix using the pink-tinted column to spotlight our house.",
-  "Voices. Pull quote in italic script, with one or two phrases pinked for emphasis.",
-  "Encore. The CTA — three steps and a QR code in paper-on-ink."
+  "Cover slide. Open Design, the open-source, local, agent-driven design platform — presented editorial-style. Italic script display type, hot pink on deep black with a subtle radial spotlight and film grain.",
+  "The Index. Five chapters laid out as an editorial table of contents: numbers, the why, growth, the field, and how to start.",
+  "By the Numbers. Five hero figures from the public ledger: 60K+ stars, 300+ contributors, 217+ plugins, 129 design systems, 21 coding agents.",
+  "The Why. The big 02 acts as the section divider — Claude Design proved LLMs can design, but it is closed, paid, and cloud-only. Open Design sets that capability free.",
+  "The Curve. A line chart of community growth with one pink hero series and a dashed OSS benchmark, plus a callout for 60K+ GitHub stars.",
+  "The Method. Five steps from idea to delivery: start, direction, generate, ship, memory.",
+  "The Field. Comparison matrix using the pink-tinted column to spotlight Open Design — Apache-2.0, local, BYOK, ~$73 vs $500 a month.",
+  "Voices. Pull quote from the community — git-diffable design artifacts put design under version control.",
+  "Encore. The CTA — download, plug in your agents, create; QR points to the GitHub repo."
 ]
 </script>
 </body>

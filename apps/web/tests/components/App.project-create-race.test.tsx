@@ -52,7 +52,7 @@ vi.mock('../../src/components/EntryView', () => ({
       ok: true;
       projectId: string;
     }) => Promise<void> | void;
-    onOpenProject: (id: string) => void;
+    onOpenProject: (id: string) => Promise<boolean> | boolean | void;
     onRefreshAgents: () => void | Promise<void>;
     agents: AgentInfo[];
     projects: Project[];
@@ -105,6 +105,9 @@ vi.mock('../../src/components/EntryView', () => ({
       <button type="button" onClick={() => void onRefreshAgents()}>
         Refresh agents
       </button>
+      <button type="button" onClick={() => void onOpenProject('project-missing')}>
+        Open missing project
+      </button>
       <div data-testid="entry-agent-list">
         {agents.map((agent) => (
           <span key={agent.id} data-testid={`entry-agent-${agent.id}`}>
@@ -132,13 +135,16 @@ vi.mock('../../src/components/ProjectView', () => ({
     onBack,
     onProjectsRefresh,
     project,
+    routeConversationId,
   }: {
     onBack: () => void;
     onProjectsRefresh: () => Promise<void>;
     project: Project;
+    routeConversationId?: string | null;
   }) => (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
+      <span data-testid="project-route-conversation">{routeConversationId ?? 'none'}</span>
       <button type="button" onClick={onBack}>
         Back to projects
       </button>
@@ -893,5 +899,69 @@ describe('App project creation routing', () => {
     // The handoff failed, so the staged attachments must NOT be uploaded into
     // the managed `.od/projects/<id>` root the user did not pick.
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a toast instead of silently bouncing when opening a missing project', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockResolvedValue(null);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain(
+        'This project has been deleted or no longer exists.',
+      );
+    });
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByTestId('project-view')).toBeNull();
+  });
+
+  it('opens the seeded brand extraction conversation after creating a design system', async () => {
+    const brandProject: Project = {
+      id: 'brand-acme',
+      name: 'acme.com Design System',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1778244000000,
+      updatedAt: 1778244000000,
+      metadata: { kind: 'brand', importedFrom: 'brand-extraction', brandId: 'acme' },
+    };
+    window.history.replaceState(null, '', '/design-systems/create');
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockResolvedValue(brandProject);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, _init?: unknown) => {
+        if (typeof input === 'string' && input === '/api/brands') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: 'acme',
+              projectId: brandProject.id,
+              conversationId: 'conv-brand-acme',
+              sourceUrl: 'https://acme.com/',
+              status: 'extracting',
+            }),
+          } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }),
+    );
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByPlaceholderText('https://github.com/org/repo'), {
+      target: { value: 'https://acme.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /continue to generation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /extract design system/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-brand-acme');
+    });
+    expect(window.location.pathname).toBe(`/projects/${brandProject.id}/conversations/conv-brand-acme`);
   });
 });

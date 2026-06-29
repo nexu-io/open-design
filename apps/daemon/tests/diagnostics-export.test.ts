@@ -228,4 +228,25 @@ describe('diagnostics export handler — run event logs', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('warns when runsDir is set but no per-run event logs were found', async () => {
+    // An empty/absent runs dir adds no manifest file entries, so without an
+    // explicit warning an empty bundle is indistinguishable from a healthy run
+    // — exactly the gap that made an AMR loop look like "nothing happened."
+    const runsDir = join(tmpdir(), `od-diag-empty-runs-${randomUUID()}`);
+    const handler = createDiagnosticsExportHandler({
+      runtime: null,
+      projectRoot: '/tmp/test-project',
+      runsDir,
+    });
+    const res = mockResponse();
+    await handler({} as never, res as never, () => undefined);
+
+    expect(res.capturedStatus).toBe(200);
+    const zip = await JSZip.loadAsync(res.capturedPayload!);
+    const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
+      warnings: string[];
+    };
+    expect(manifest.warnings.some((w) => w.includes('No per-run event logs found'))).toBe(true);
+  });
 });

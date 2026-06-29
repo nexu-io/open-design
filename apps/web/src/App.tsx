@@ -7,10 +7,11 @@ import {
   trackProjectCreateResult,
 } from './analytics/events';
 import { deriveUploadCohort } from './analytics/upload-tracking';
+import { setPendingDesignSystemCreateEntry } from './analytics/ds-create-entry';
 import { detectClientType } from './analytics/identity';
 import {
   deriveConfigureGlobals,
-  projectKindToTracking,
+  projectKindFromMetadataToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
 import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
@@ -21,6 +22,7 @@ import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { Toast } from './components/Toast';
+import { CenteredLoader } from './components/Loading';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
@@ -119,6 +121,7 @@ import type {
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const AMR_AGENT_ID = 'amr';
 const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+const AGENT_FOCUS_REFRESH_THROTTLE_MS = 10_000;
 
 export function shouldSyncMediaProvidersOnSave(
   mediaProviders: AppConfig['mediaProviders'],
@@ -346,6 +349,7 @@ function AppInner() {
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-od-app-mounted', '1');
+      document.querySelectorAll('.od-loading-shell').forEach((node) => node.remove());
     }
   }, []);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
@@ -359,6 +363,7 @@ function AppInner() {
   // this the failure was swallowed and the user believed their folder was in
   // effect while the project actually stayed in the managed root.
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
+  const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
@@ -368,6 +373,7 @@ function AppInner() {
   const amrModelsRef = useRef<AmrModelsResponse | null>(null);
   const amrPollGenerationRef = useRef(0);
   const agentStreamRequestSeqRef = useRef(0);
+  const agentFocusRefreshLastRunRef = useRef(Date.now());
   const [amrPollRestartToken, setAmrPollRestartToken] = useState(0);
   const [providerModelsCache, setProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
@@ -384,6 +390,10 @@ function AppInner() {
     Record<string, DesignSystemGenerationJob>
   >({});
   const [projects, setProjects] = useState<Project[]>([]);
+  const projectsRef = useRef<Project[]>(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
   const [petTaskCenter, setPetTaskCenter] = useState<PetTaskCenter>({
     running: [],
     queued: [],
@@ -1041,6 +1051,12 @@ function AppInner() {
     reconcileFetchedProjects(list, request);
   }, [beginProjectListRequest, reconcileFetchedProjects]);
 
+  const refreshProjectsStrict = useCallback(async () => {
+    const request = beginProjectListRequest();
+    const list = await listProjects({ throwOnError: true });
+    reconcileFetchedProjects(list, request);
+  }, [beginProjectListRequest, reconcileFetchedProjects]);
+
   const refreshDesignSystems = useCallback(async () => {
     const list = await fetchDesignSystems();
     setDesignSystems(list);
@@ -1141,11 +1157,12 @@ function AppInner() {
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
-      const next = { ...config, mode };
+      const next = { ...latestPersistedConfigRef.current, mode };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   // Quick theme switch from the settings dropdown in the entry view.
@@ -1157,6 +1174,14 @@ function AppInner() {
   const handleThemeChange = useCallback(
     (theme: AppConfig['theme']) => {
       const next = { ...config, theme };
+      // Apply to the DOM synchronously inside the click handler so the theme
+      // flips instantly. Otherwise the visible switch waits on the (heavier)
+      // React re-render of the whole tree before the layout effect re-applies
+      // it — which reads as a perceptible lag after the click.
+      applyAppearanceToDocument({
+        theme: theme ?? 'system',
+        accentColor: config.accentColor,
+      });
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
@@ -1166,28 +1191,31 @@ function AppInner() {
 
   const handleAgentChange = useCallback(
     (agentId: string) => {
-      const next = { ...config, agentId };
+      const next = { ...latestPersistedConfigRef.current, agentId };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string }) => {
-      const prev = config.agentModels?.[agentId] ?? {};
+      const current = latestPersistedConfigRef.current;
+      const prev = current.agentModels?.[agentId] ?? {};
       const merged = { ...prev, ...choice };
       const nextAgentModels = {
-        ...(config.agentModels ?? {}),
+        ...(current.agentModels ?? {}),
         [agentId]: merged,
       };
-      const next = { ...config, agentModels: nextAgentModels };
+      const next = { ...current, agentModels: nextAgentModels };
+      latestPersistedConfigRef.current = next;
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
     },
-    [config],
+    [],
   );
 
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
@@ -1271,6 +1299,29 @@ function AppInner() {
   );
 
   useEffect(() => {
+    if (!daemonLive || agentsLoading) return;
+
+    const refreshIfDue = () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - agentFocusRefreshLastRunRef.current < AGENT_FOCUS_REFRESH_THROTTLE_MS) return;
+      agentFocusRefreshLastRunRef.current = now;
+      void refreshAgents();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshIfDue();
+    };
+
+    window.addEventListener('focus', refreshIfDue);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refreshIfDue);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [agentsLoading, daemonLive, refreshAgents]);
+
+  useEffect(() => {
     const handleAppConfigChanged = () => {
       void fetchDaemonConfig().then((daemonConfig) => {
         const next = clearStaleAmrModelChoiceOnProfileChange(
@@ -1343,7 +1394,7 @@ function AppInner() {
             area: 'new_project',
             project_source: 'create_button',
             project_id: null,
-            project_kind: projectKindToTracking(kind),
+            project_kind: projectKindFromMetadataToTracking(input.metadata),
             fidelity,
             result: 'failed',
             error_code: errorCode,
@@ -1360,7 +1411,7 @@ function AppInner() {
             area: 'new_project',
             project_source: 'create_button',
             project_id: null,
-            project_kind: projectKindToTracking(kind, input.metadata?.videoModel),
+            project_kind: projectKindFromMetadataToTracking(input.metadata),
             fidelity,
             ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
             ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
@@ -1440,7 +1491,7 @@ function AppInner() {
           area: 'new_project',
           project_source: 'create_button',
           project_id: result.project.id,
-          project_kind: projectKindToTracking(kind, input.metadata?.videoModel),
+          project_kind: projectKindFromMetadataToTracking(input.metadata),
           fidelity,
           ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
           ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
@@ -1501,6 +1552,21 @@ function AppInner() {
       return true;
     },
     [analytics.track, rememberLocalProject],
+  );
+
+  const handleCreateProjectFromDesignSystem = useCallback(
+    async (designSystemId: string) => {
+      await handleCreateProject({
+        name: t('common.untitled'),
+        skillId: null,
+        designSystemId,
+        metadata: {
+          kind: 'prototype',
+          nameSource: 'generated',
+        },
+      });
+    },
+    [handleCreateProject, t],
   );
 
   const handleCreatePluginShareProject = useCallback(
@@ -1614,9 +1680,37 @@ function AppInner() {
     });
   }, [beginProjectListRequest, rememberLocalProject, reconcileFetchedProjects]);
 
-  const handleOpenProject = useCallback((id: string) => {
-    navigate({ kind: 'project', projectId: id, fileName: null });
-  }, []);
+  const handleOpenProject = useCallback(async (id: string, fileName?: string): Promise<boolean> => {
+    const routeFileName = fileName ?? null;
+    if (projectsRef.current.some((project) => project.id === id)) {
+      navigate({ kind: 'project', projectId: id, fileName: routeFileName });
+      return true;
+    }
+    try {
+      const project = await getProject(id);
+      if (project) {
+        setProjects((curr) => [project, ...curr.filter((candidate) => candidate.id !== project.id)]);
+        navigate({ kind: 'project', projectId: id, fileName: routeFileName });
+        return true;
+      }
+      const request = beginProjectListRequest();
+      const list = await listProjects();
+      reconcileFetchedProjects(list, request);
+      const fetchedProject = locallyDeletedProjectIdsRef.current.has(id)
+        ? undefined
+        : list.find((candidate) => candidate.id === id);
+      if (fetchedProject) {
+        navigate({ kind: 'project', projectId: id, fileName: routeFileName });
+        return true;
+      }
+    } catch {
+      // Fall through to the same visible missing-project state. The daemon can
+      // return 404 or transiently fail while reconciling a deleted backing
+      // project; either way the user needs feedback instead of a silent bounce.
+    }
+    setProjectOpenError(t('project.missing'));
+    return false;
+  }, [beginProjectListRequest, reconcileFetchedProjects, t]);
 
   useEffect(() => {
     if (!config.pet?.enabled || !daemonLive) {
@@ -1718,12 +1812,7 @@ function AppInner() {
   // Settings → Design Systems call back through these handlers after
   // every successful mutation; we drop any pool entry whose project
   // depends on the affected id — active or parked — so the next mount
-  // recomposes the system prompt with the new body. A ref tracks
-  // projects so the callback is stable across renders.
-  const projectsRef = useRef<Project[]>(projects);
-  useEffect(() => {
-    projectsRef.current = projects;
-  }, [projects]);
+  // recomposes the system prompt with the new body.
 
   const handleSkillsChanged = useCallback(
     (affectedSkillId?: string) => {
@@ -1777,22 +1866,35 @@ function AppInner() {
     });
   }, []);
 
-  const activeProject =
+  const loadedActiveProject =
     route.kind === 'project'
       ? (projects.find((p) => p.id === route.projectId) ?? null)
       : null;
+  const routeProjectPlaceholder = useMemo<Project | null>(() => {
+    if (route.kind !== 'project') return null;
+    const now = Date.now();
+    return {
+      id: route.projectId,
+      name: 'Untitled',
+      skillId: null,
+      designSystemId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }, [route]);
+  const activeProject = loadedActiveProject ?? routeProjectPlaceholder;
 
   // Deep-linked route to a project we don't have yet (e.g. after a refresh
   // that finishes after the project list comes back). Fetch it in the
   // background so the view can render rather than bouncing to home.
   useEffect(() => {
     if (route.kind !== 'project') return;
-    if (activeProject) return;
+    if (loadedActiveProject) return;
     if (!projects.length && !daemonLive) return;
     if (projects.some((p) => p.id === route.projectId)) return;
     let cancelled = false;
     (async () => {
-      const project = await getProject(route.projectId);
+      const project = await getProject(route.projectId).catch(() => null);
       if (cancelled) return;
       if (project) {
         setProjects((curr) => {
@@ -1805,7 +1907,7 @@ function AppInner() {
         return;
       }
       const request = beginProjectListRequest();
-      const list = await listProjects();
+      const list = await listProjects().catch(() => []);
       if (cancelled) return;
       const applied = reconcileFetchedProjects(list, request);
       if (!applied) return;
@@ -1816,13 +1918,14 @@ function AppInner() {
       const knownLocalProject =
         staleRequest && pendingLocalProjectIdsRef.current.has(route.projectId);
       if (!fetchedProject && !knownLocalProject) {
+        setProjectOpenError(t('project.missing'));
         navigate({ kind: 'home', view: 'home' }, { replace: true });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [route, activeProject, projects, daemonLive, beginProjectListRequest, reconcileFetchedProjects]);
+  }, [route, loadedActiveProject, projects, daemonLive, beginProjectListRequest, reconcileFetchedProjects, t]);
 
   const openSettings = useCallback((
     section: SettingsSection = 'execution',
@@ -1950,10 +2053,15 @@ function AppInner() {
   // a fresh template list. The template store is global — if they just
   // saved a template inside a project, returning home should reflect it
   // immediately in the From-template tab without forcing a page reload.
+  // Same rationale for design systems: a brand extraction (or any in-project
+  // design-system creation) registers a `user:<id>` system out of band, so the
+  // Design systems tab must re-fetch to show it — and the brand-ready prompt
+  // relies on the new system being present so it can preselect it.
   useEffect(() => {
     if (route.kind !== 'home') return;
     void refreshTemplates();
-  }, [route.kind, refreshTemplates]);
+    void refreshDesignSystems();
+  }, [route.kind, refreshTemplates, refreshDesignSystems]);
 
   // Existing card grids (DesignsTab, ProjectView), pickers (NewProjectPanel,
   // ChatComposer mention) all look skills up by id without caring whether
@@ -2005,7 +2113,18 @@ function AppInner() {
   // EntryView / ProjectView split so the discovery surface stays
   // independent of any active project.
   let appMain: ReactNode;
-  if (route.kind === 'marketplace') {
+  const pendingFirstRunOnboardingRoute =
+    route.kind === 'home' &&
+    route.view === 'home' &&
+    config.onboardingCompleted !== true &&
+    !daemonConfigLoaded;
+  if (pendingFirstRunOnboardingRoute) {
+    appMain = (
+      <div className="entry-shell entry-shell--no-header">
+        <CenteredLoader label={t('entry.loadingWorkspace')} />
+      </div>
+    );
+  } else if (route.kind === 'marketplace') {
     appMain = <MarketplaceView />;
   } else if (route.kind === 'marketplace-detail') {
     appMain = <PluginDetailView pluginId={route.pluginId} />;
@@ -2013,14 +2132,15 @@ function AppInner() {
     appMain = (
       <DesignSystemCreationFlow
         onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
-        onCreated={(projectId, project) => {
+        designSystems={enabledDS}
+        onCreated={(projectId, project, conversationId) => {
           if (project) {
             setProjects((curr) => [
               project,
               ...curr.filter((p) => p.id !== project.id),
             ]);
           }
-          navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+          navigate({ kind: 'project', projectId, conversationId: conversationId ?? null, fileName: null });
         }}
         onProjectPrepared={(project) => {
           setProjects((curr) => [
@@ -2041,7 +2161,7 @@ function AppInner() {
         config={config}
         agents={agents}
         onBack={() => navigate({ kind: 'home', view: 'design-systems' })}
-        onOpenProject={(projectId) => navigate({ kind: 'project', projectId, conversationId: null, fileName: null })}
+        onOpenProject={(projectId) => void handleOpenProject(projectId)}
         onSetDefault={handleChangeDefaultDesignSystem}
         onSystemsRefresh={refreshDesignSystems}
         onProjectsRefresh={refreshProjects}
@@ -2083,8 +2203,10 @@ function AppInner() {
         onTouchProject={handleTouchProject}
         onProjectChange={handleProjectChange}
         onProjectsRefresh={refreshProjects}
+        onDeleteProject={handleDeleteProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onDesignSystemsRefresh={refreshDesignSystems}
+        onCreateProjectFromDesignSystem={handleCreateProjectFromDesignSystem}
       />
     );
   } else {
@@ -2127,8 +2249,12 @@ function AppInner() {
         onOpenLiveArtifact={handleOpenLiveArtifact}
         onDeleteProject={handleDeleteProject}
         onRenameProject={handleRenameProject}
+        onProjectsRefresh={refreshProjectsStrict}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
-        onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
+        onCreateDesignSystem={() => {
+          setPendingDesignSystemCreateEntry('design_systems_page');
+          navigate({ kind: 'design-system-create' });
+        }}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
         onDesignSystemsRefresh={refreshDesignSystems}
         onPersistComposioKey={handleConfigPersistComposioKey}
@@ -2212,6 +2338,14 @@ function AppInner() {
           message={workingDirError}
           role="alert"
           onDismiss={() => setWorkingDirError(null)}
+        />
+      ) : null}
+      {projectOpenError ? (
+        <Toast
+          message={projectOpenError}
+          role="alert"
+          tone="error"
+          onDismiss={() => setProjectOpenError(null)}
         />
       ) : null}
       {/* First-run privacy consent banner. It waits for daemon config

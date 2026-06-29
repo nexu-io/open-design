@@ -81,6 +81,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   composio: {},
   agentModels: {},
   agentCliEnv: {},
+  agentCliEnvIntent: {},
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
   orbit: DEFAULT_ORBIT,
@@ -92,7 +93,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   // remains the one-click opt-out. Without these defaults the gate at
   // `daemon/src/analytics.ts` (`if (telemetry?.metrics !== true) return`)
   // dropped every event fired during onboarding because no consent
-  // existed yet — observed live on the nightly.10 QA run, which left
+  // existed yet — observed live on the prerelease.10 QA run, which left
   // zero `page_view pn=onboarding` rows on PostHog despite the user
   // completing the flow.
   telemetry: { metrics: true, content: true },
@@ -419,6 +420,7 @@ export function loadConfig(): AppConfig {
       composio: { ...(parsed.composio ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
+      agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
@@ -668,7 +670,12 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'privacyDecisionAt',
 ]);
 
-const AGENT_CLI_SECRET_ENV_KEYS = new Set(['ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'OPENAI_API_KEY']);
+const AGENT_CLI_SECRET_ENV_KEYS = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+]);
 
 function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
   if (!agentCliEnv) return agentCliEnv;
@@ -716,6 +723,7 @@ export function mergeDaemonConfig(
     };
   }
   next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
+  next.agentCliEnvIntent = daemonConfig.agentCliEnvIntent ?? {};
   if (daemonConfig.disabledSkills !== undefined) {
     next.disabledSkills = daemonConfig.disabledSkills;
   }
@@ -880,6 +888,7 @@ export async function syncConfigToDaemon(
     agentId: config.agentId,
     agentModels: config.agentModels,
     agentCliEnv: config.agentCliEnv,
+    agentCliEnvIntent: config.agentCliEnvIntent,
     skillId: config.skillId,
     designSystemId: config.designSystemId,
     disabledSkills: config.disabledSkills,

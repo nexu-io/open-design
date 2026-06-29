@@ -24,7 +24,7 @@
     "en": "Social Media Matrix Tracker Template"
   },
   "version": "0.1.0",
-  "description": "社媒矩阵数据追踪面板模板（Social Media Matrix Tracker）。\nUse when users ask for a cinematic, data-dense social media analytics dashboard\nwith multi-platform metrics, interactive charts, hover insights, range compare,\nand dark/light theme switching in a single HTML artifact.",
+  "description": "Social Media Matrix Tracker template. Use when users ask for a cinematic, data-dense social media analytics dashboard with multi-platform metrics, interactive charts, hover insights, range compare, and dark/light theme switching in a single HTML artifact.",
   "description_i18n": {
     "zh-CN": "社媒矩阵数据追踪面板模板（Social Media Matrix Tracker）。适用于需要电影级、数据密集型社交媒体分析仪表板的场景，支持多平台指标、交互式图表、悬停洞察、范围对比和深浅主题切换，单个 HTML 文件即可实现。",
     "zh-TW": "社群媒體矩陣數據追蹤面板範本（Social Media Matrix Tracker）。適用於需要電影級、數據密集型社群媒體分析儀表板的場景，支援多平台指標、互動式圖表、懸停洞察、範圍比較和深淺主題切換，單一 HTML 檔案即可實現。",
@@ -43,7 +43,7 @@
     "ar": "قالب لوحة تتبع بيانات مصفوفة وسائل التواصل الاجتماعي (Social Media Matrix Tracker). لإنشاء لوحات تحليلية سينمائية كثيفة البيانات مع مقاييس متعددة المنصات ورسوم بيانية تفاعلية ورؤى عند التمرير ومقارنة النطاقات والتبديل بين السمة الفاتحة والداكنة في ملف HTML واحد.",
     "tr": "Sosyal medya matrisi veri takip paneli şablonu (Social Media Matrix Tracker). Multi-platform metrikler, etkileşimli grafikler, hover içgörüler, aralık karşılaştırması ve koyu/açık tema geçişi ile sinematik, veri yoğun sosyal medya analitik panoları oluşturmak için tek bir HTML dosyasında.",
     "uk": "Шаблон панелі відстеження даних матриці соціальних мереж (Social Media Matrix Tracker). Для створення кінематографічних, насичених даними аналітичних дашбордів соцмереж з мультиплатформними метриками, інтерактивними графіками, спливаючими підказками, порівнянням діапазонів та перемиканням темної/світлої теми в одному HTML-файлі.",
-    "en": "社媒矩阵数据追踪面板模板（Social Media Matrix Tracker）。\nUse when users ask for a cinematic, data-dense social media analytics dashboard\nwith multi-platform metrics, interactive charts, hover insights, range compare,\nand dark/light theme switching in a single HTML artifact."
+    "en": "Social Media Matrix Tracker template. Use when users ask for a cinematic, data-dense social media analytics dashboard with multi-platform metrics, interactive charts, hover insights, range compare, and dark/light theme switching in a single HTML artifact."
   },
   "license": "MIT",
   "author": {

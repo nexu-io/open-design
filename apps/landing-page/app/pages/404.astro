@@ -1,0 +1,66 @@
+---
+/*
+ * 404 — not found.
+ *
+ * Astro emits this as `404.html`; Cloudflare Pages serves it with a real
+ * 404 status for any unmatched route, replacing the previous soft-404
+ * (unknown URLs were returning the homepage with a 200). Single static
+ * file, so the copy stays in English.
+ */
+import Layout from '../_components/sub-page-layout.astro';
+import { localizedHref } from '../i18n';
+
+const href = (path: string) => localizedHref(path, 'en');
+---
+
+<Layout
+  title="Page not found — Open Design"
+  description="The page you’re looking for doesn’t exist. Explore Open Design’s tutorials, plugins, and docs instead."
+>
+  <article class="notfound">
+    <span class="notfound-code">404</span>
+    <h1 class="notfound-h1">This page wandered off.</h1>
+    <p class="notfound-lead">
+      The page you’re looking for doesn’t exist or has moved. Here’s where to head next.
+    </p>
+    <div class="notfound-links">
+      <a class="btn btn-primary" href={href('/')}>Back to home →</a>
+      <a class="btn btn-ghost" href={href('/plugins/')}>Browse plugins</a>
+      <a class="btn btn-ghost" href={href('/tutorials/')}>Tutorials</a>
+    </div>
+  </article>
+
+  <style>
+    .notfound {
+      max-width: 640px;
+      padding: 40px 0 80px;
+    }
+    .notfound-code {
+      display: block;
+      font-size: 80px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--ui-brand, #63fe13);
+    }
+    .notfound-h1 {
+      margin: 16px 0 0;
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink, #262626);
+    }
+    .notfound-lead {
+      margin: 16px 0 0;
+      font-size: 17px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .notfound-links {
+      display: flex;
+      gap: 14px;
+      margin-top: 32px;
+      flex-wrap: wrap;
+    }
+  </style>
+</Layout>

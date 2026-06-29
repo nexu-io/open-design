@@ -1,4 +1,5 @@
-export const MANUAL_EDIT_DISCOVERY_SELECTOR = 'main, nav, section, article, header, footer, div, h1, h2, h3, p, a, button, img, strong, span';
+export const MANUAL_EDIT_DISCOVERY_SELECTOR =
+  'main, nav, section, article, aside, header, footer, div, h1, h2, h3, h4, h5, h6, p, a, button, img, ul, ol, li, dl, dt, dd, table, thead, tbody, tfoot, tr, td, th, caption, blockquote, figure, figcaption, label, summary, pre, code, strong, em, b, i, small, mark, span';
 export const MANUAL_EDIT_SOURCE_PATH_ATTR = 'data-od-source-path';
 export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-sandbox-shim]',
@@ -9,6 +10,8 @@ export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-edit-bridge-style]',
   '[data-od-deck-fix]',
 ].join(',');
+
+export type ManualEditKind = 'text' | 'link' | 'image' | 'container';
 
 export function manualEditDomPathForElement(el: Element): string {
   const parts: number[] = [];
@@ -40,7 +43,125 @@ export function isMeaningfulManualEditElement(el: Element, rect: Pick<DOMRect, '
 }
 
 export function isSourceMappableManualEditElement(el: Element): boolean {
+  if (isManualEditHostNode(el)) return false;
   return el.hasAttribute('data-od-id') || el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
+}
+
+/**
+ * A "text leaf" carries visible text and has NO element children, so a click
+ * can drop a caret and the committed text round-trips through the source
+ * patcher. This — not the tag name — is what makes a bare `<div>Title</div>`,
+ * an `<li>`, a `<td>`, or an `<h4>` editable, exactly like a `<p>`.
+ *
+ * Elements with element children (even inline ones like `<strong>`/`<a>`) are
+ * deliberately NOT text leaves: `applyManualEditPatch` rejects a `set-text`
+ * patch whenever the target `hasElementChildren`, so offering a caret there
+ * would let the user type and then fail to persist. Those stay containers
+ * (style-only) until the patcher can persist nested markup.
+ */
+export function manualEditElementIsTextLeaf(el: Element): boolean {
+  const text = (el.textContent || '').trim();
+  if (!text) return false;
+  return el.children.length === 0;
+}
+
+/**
+ * Classify what a click on an element should do in manual edit mode. `text`
+ * and `link` drop a text caret (and still expose styles); `container` and
+ * `image` only select for styling. An explicit `data-od-edit` attribute always
+ * wins so authored markup can opt a node in or out.
+ */
+export function manualEditKindForElement(el: Element): ManualEditKind {
+  const explicit = el.getAttribute('data-od-edit');
+  if (explicit) return explicit as ManualEditKind;
+  const tag = el.tagName ? el.tagName.toLowerCase() : '';
+  if (tag === 'a') return 'link';
+  if (tag === 'img') return 'image';
+  if (manualEditElementIsTextLeaf(el)) return 'text';
+  return 'container';
+}
+
+export function buildManualEditKeyboardGuard(): string {
+  return `<script data-od-edit-keyboard-guard>(function(){
+  window.__odEditGuard = window.__odEditGuard || { editingEl: null };
+  function shouldBlock(){
+    var el = window.__odEditGuard && window.__odEditGuard.editingEl;
+    return el && el.isConnected;
+  }
+  function captureFromOptions(options){
+    if (options == null) return false;
+    if (typeof options === 'boolean') return options;
+    return !!(options && options.capture);
+  }
+  function onceFromOptions(options){
+    if (options == null) return false;
+    if (typeof options === 'boolean') return false;
+    return !!(options && options.once);
+  }
+  function signalFromOptions(options){
+    if (options == null) return null;
+    if (typeof options === 'boolean') return null;
+    return (options && options.signal) || null;
+  }
+  function removeWrappedEntry(wrapped, handler){
+    for (var i = wrapped.length - 1; i >= 0; i--) {
+      if (wrapped[i].handler === handler) {
+        wrapped.splice(i, 1);
+        return;
+      }
+    }
+  }
+  function patchTarget(target){
+    var originalAdd = target.addEventListener.bind(target);
+    var originalRemove = target.removeEventListener.bind(target);
+    var wrapped = []; // [{ original, handler, capture }] so removeEventListener can map back to the registered wrapper
+    target.addEventListener = function(type, listener, options){
+      if (type === 'keydown' && typeof listener === 'function') {
+        var capture = captureFromOptions(options);
+        for (var i = 0; i < wrapped.length; i++) {
+          if (wrapped[i].original === listener && wrapped[i].capture === capture) return;
+        }
+        var once = onceFromOptions(options);
+        var signal = signalFromOptions(options);
+        if (signal && signal.aborted) {
+          // Already aborted — browser will not register the listener; skip bookkeeping entirely
+          return originalAdd(type, listener, options);
+        }
+        var handler = function(ev){
+          if (once) removeWrappedEntry(wrapped, handler);
+          if (shouldBlock() && (window.__odEditGuard.editingEl === ev.target || window.__odEditGuard.editingEl.contains(ev.target))) {
+            return;
+          }
+          return listener.call(this, ev);
+        };
+        wrapped.push({ original: listener, handler: handler, capture: capture });
+        if (signal) {
+          signal.addEventListener('abort', function(){
+            removeWrappedEntry(wrapped, handler);
+          });
+        }
+        return originalAdd(type, handler, options);
+      }
+      return originalAdd(type, listener, options);
+    };
+    target.removeEventListener = function(type, listener, options){
+      if (type === 'keydown' && typeof listener === 'function') {
+        var capture = captureFromOptions(options);
+        for (var i = wrapped.length - 1; i >= 0; i--) {
+          var entry = wrapped[i];
+          if (entry.original === listener && entry.capture === capture) {
+            originalRemove(type, entry.handler, options);
+            wrapped.splice(i, 1);
+            return;
+          }
+        }
+      }
+      return originalRemove(type, listener, options);
+    };
+  }
+  patchTarget(document);
+  patchTarget(window);
+})();</script>`;
 }
 
 export function buildManualEditBridge(enabled: boolean): string {
@@ -73,10 +194,82 @@ export function buildManualEditBridge(enabled: boolean): string {
     return generated || 'unknown';
   }
   function isSourceMappable(el){
-    return !!(el && el.hasAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr)));
+    if (!el || !el.hasAttribute || isHostNode(el)) return false;
+    return !!(el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr));
+  }
+  function markBrandKitTarget(el, id, kind, label){
+    if (!el || !el.setAttribute || isHostNode(el)) return;
+    if (!el.hasAttribute('data-od-id')) el.setAttribute('data-od-id', id);
+    if (kind && !el.hasAttribute('data-od-edit')) el.setAttribute('data-od-edit', kind);
+    if (label && !el.hasAttribute('data-od-label')) el.setAttribute('data-od-label', label);
+  }
+  function markBrandKitOne(selector, id, kind, label){
+    markBrandKitTarget(document.querySelector(selector), id, kind, label);
+  }
+  function annotateBrandKitRuntimeTargets(){
+    if (!document.getElementById('od-brand-payload')) return;
+    markBrandKitOne('.kit-head', 'brand-header', 'container', 'Brand header');
+    markBrandKitOne('.kit-title', 'brand-name', 'text');
+    markBrandKitOne('.kit-tagline', 'brand-tagline', 'text');
+    markBrandKitOne('.kit-source', 'brand-source', 'link');
+    markBrandKitOne('.head-actions', 'brand-header-actions', 'container');
+    markBrandKitOne('.logo-empty', 'brand-logo-empty', 'container', 'Logo empty state');
+    markBrandKitOne('.logo-stage', 'brand-logo-stage', 'container', 'Logo stage');
+    markBrandKitOne('#logo-img', 'brand-logo-img', 'image');
+    markBrandKitOne('.logo-notes', 'brand-logo-notes', 'text');
+    Array.prototype.forEach.call(document.querySelectorAll('.logo-thumb'), function(el, i){ markBrandKitTarget(el, 'brand-logo-thumb-' + i, 'image'); });
+    markBrandKitOne('.fonts', 'brand-fonts', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.font-tile'), function(el, i){
+      markBrandKitTarget(el, 'brand-font-tile-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.ag'), 'brand-font-sample-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.ft-name'), 'brand-font-name-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.ft-role'), 'brand-font-role-' + i, 'text');
+    });
+    markBrandKitOne('.kit-hero', 'brand-hero-image', 'container');
+    markBrandKitOne('.kit-hero img', 'brand-hero-img', 'image');
+    Array.prototype.forEach.call(document.querySelectorAll('.type-row'), function(el, i){
+      markBrandKitTarget(el, 'brand-type-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.type-label'), 'brand-type-label-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.type-font'), 'brand-type-font-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.type-sample'), 'brand-type-sample-' + i, 'text');
+    });
+    markBrandKitOne('.palette', 'brand-palette', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.swatch'), function(el, i){
+      markBrandKitTarget(el, 'brand-color-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.hex'), 'brand-color-hex-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.swatch-name'), 'brand-color-name-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.swatch-role'), 'brand-color-role-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.swatch-usage'), 'brand-color-usage-' + i, 'text');
+    });
+    markBrandKitOne('.voice-tone', 'brand-voice-tone', 'text');
+    markBrandKitOne('.vocab .use .v', 'brand-voice-vocab-use', 'text');
+    markBrandKitOne('.vocab .avoid .v', 'brand-voice-vocab-avoid', 'text');
+    Array.prototype.forEach.call(document.querySelectorAll('.chips .chip'), function(el, i){ markBrandKitTarget(el, 'brand-voice-adjective-' + i, 'text'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.pillars li span:last-child'), function(el, i){ markBrandKitTarget(el, 'brand-voice-pillar-' + i, 'text'); });
+    markBrandKitOne('.imagery', 'brand-imagery-card', 'container');
+    markBrandKitOne('.imagery p:first-child', 'brand-imagery-style', 'text');
+    markBrandKitOne('.gallery', 'brand-images-section', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.shot'), function(el, i){
+      markBrandKitTarget(el, 'brand-image-' + i, 'container');
+      markBrandKitTarget(el.querySelector('img'), 'brand-image-img-' + i, 'image');
+      markBrandKitTarget(el.querySelector('.shot-cap'), 'brand-image-caption-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.shot-kind'), 'brand-image-kind-' + i, 'text');
+    });
+    markBrandKitOne('.ds-frame-wrap', 'brand-system-section', 'container');
+    markBrandKitOne('.assets', 'brand-assets-section', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.asset'), function(el, i){
+      markBrandKitTarget(el, 'brand-asset-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.asset-name'), 'brand-asset-name-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.asset-desc'), 'brand-asset-desc-' + i, 'text');
+    });
   }
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
+  }
+  function isTextLeaf(el){
+    var text = (el.textContent || '').trim();
+    if (!text) return false;
+    return el.children.length === 0;
   }
   function inferKind(el){
     var explicit = el.getAttribute('data-od-edit');
@@ -84,8 +277,8 @@ export function buildManualEditBridge(enabled: boolean): string {
     var tag = el.tagName ? el.tagName.toLowerCase() : '';
     if (tag === 'a') return 'link';
     if (tag === 'img') return 'image';
-    if (['section','main','nav','div','article','header','footer'].indexOf(tag) >= 0) return 'container';
-    return 'text';
+    if (isTextLeaf(el)) return 'text';
+    return 'container';
   }
   function labelFor(el, id, kind){
     var explicit = el.getAttribute('data-od-label');
@@ -161,10 +354,11 @@ export function buildManualEditBridge(enabled: boolean): string {
       styles: stylesFor(el),
       isLayoutContainer: isLayoutContainer(el),
       isHidden: hidden,
-      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
+      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-id="path-[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
     };
   }
   function allTargets(){
+    annotateBrandKitRuntimeTargets();
     var nodes = document.body ? document.body.querySelectorAll(discoverySelector) : [];
     var targets = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -198,6 +392,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (el) el.setAttribute('data-od-edit-selected', 'true');
   }
   function closestTarget(event){
+    annotateBrandKitRuntimeTargets();
     var el = event.target;
     while (el && el !== document.documentElement) {
       if (el !== document.body && el !== document.documentElement && isSourceMappable(el) && isDiscoveryTarget(el)) {
@@ -237,45 +432,73 @@ export function buildManualEditBridge(enabled: boolean): string {
       sel.addRange(range);
     } catch (e) {}
   }
+  var guard = window.__odEditGuard || null;
+  // A single in-flight inline text edit. The session is deliberately NOT tied
+  // to iframe blur: moving the pointer to the host's floating inspector blurs
+  // the iframe, and committing/ending on blur is exactly the #3646 focus-loss
+  // bug. The session ends only on an explicit action — Enter, Escape, picking
+  // another target, clicking empty background, leaving edit mode, or an
+  // od-edit-text-finish message from the host.
+  var activeTextEdit = null;
+  function postTextSession(el, active, extra){
+    if (!el) return;
+    window.parent.postMessage(Object.assign({
+      type: 'od-edit-text-session',
+      id: stableId(el),
+      active: !!active
+    }, extra || {}), '*');
+  }
+  function finishActiveTextEdit(commit){
+    if (!activeTextEdit) return false;
+    var session = activeTextEdit;
+    activeTextEdit = null;
+    var el = session.el;
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('data-od-editing');
+    el.removeEventListener('keydown', session.onKey);
+    if (guard) guard.editingEl = null;
+    var value = (el.textContent || '').trim();
+    var changed = value !== session.originalText.trim();
+    if (commit && changed) {
+      window.parent.postMessage({
+        type: 'od-edit-text-commit',
+        id: stableId(el),
+        value: value
+      }, '*');
+    } else if (!commit) {
+      el.textContent = session.originalText;
+    }
+    postTextSession(el, false, { committed: !!commit, changed: changed });
+    return true;
+  }
   function makeEditable(el, clickEvent){
-    if (!el || el.getAttribute('contenteditable') === 'true') return;
+    if (!el) return;
+    if (activeTextEdit && activeTextEdit.el === el) {
+      placeCaretFromClick(clickEvent, el);
+      return;
+    }
+    if (activeTextEdit) finishActiveTextEdit(true);
+    if (el.getAttribute('contenteditable') === 'true') return;
     var originalText = el.textContent || '';
     clearSelectedTarget();
     el.setAttribute('contenteditable', 'plaintext-only');
     el.setAttribute('data-od-editing', 'true');
+    if (guard) guard.editingEl = el;
     try { el.focus(); } catch (e) {}
     placeCaretFromClick(clickEvent, el);
-    function finish(commit){
-      el.removeAttribute('contenteditable');
-      el.removeAttribute('data-od-editing');
-      el.removeEventListener('blur', onBlur);
-      el.removeEventListener('keydown', onKey);
-      var value = (el.textContent || '').trim();
-      if (commit && value !== originalText.trim()) {
-        window.parent.postMessage({
-          type: 'od-edit-text-commit',
-          id: stableId(el),
-          value: value
-        }, '*');
-      } else if (!commit) {
-        el.textContent = originalText;
-      }
-    }
-    function onBlur(){ finish(true); }
     function onKey(ev){
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
-        finish(true);
-        try { el.blur(); } catch (e) {}
+        finishActiveTextEdit(true);
       }
       if (ev.key === 'Escape') {
         ev.preventDefault();
-        finish(false);
-        try { el.blur(); } catch (e) {}
+        finishActiveTextEdit(false);
       }
     }
-    el.addEventListener('blur', onBlur);
+    activeTextEdit = { el: el, originalText: originalText, onKey: onKey };
     el.addEventListener('keydown', onKey);
+    postTextSession(el, true);
   }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }
@@ -325,7 +548,12 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (ev.data.type === 'od-edit-mode') {
       enabled = !!ev.data.enabled;
       document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
-      if (!enabled) clearSelectedTarget();
+      if (!enabled) {
+        // Leaving edit mode commits the pending inline edit rather than
+        // dropping it (the #3647 exit-path regression).
+        finishActiveTextEdit(true);
+        clearSelectedTarget();
+      }
       if (enabled) setTimeout(postTargets, 0);
       return;
     }
@@ -343,6 +571,10 @@ export function buildManualEditBridge(enabled: boolean): string {
       applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version);
       return;
     }
+    if (ev.data.type === 'od-edit-text-finish') {
+      finishActiveTextEdit(ev.data.commit !== false);
+      return;
+    }
   });
   document.addEventListener('click', function(ev){
     if (!enabled) return;
@@ -352,10 +584,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = closestTarget(ev);
     if (!el) {
       // Clicking empty canvas (no source-mapped ancestor) is the gesture for
-      // page-level styles; the host decides whether to surface the card.
+      // page-level styles; commit any in-flight edit first so the host and
+      // iframe stay in sync, then let the host decide whether to surface the
+      // page-styles card.
+      if (activeTextEdit) finishActiveTextEdit(true);
       window.parent.postMessage({ type: 'od-edit-background' }, '*');
       return;
     }
+    // Switching to a different target commits the in-flight edit first, so the
+    // previous edit is never silently dropped.
+    if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     if (kind === 'text' || kind === 'link') {
@@ -365,14 +603,26 @@ export function buildManualEditBridge(enabled: boolean): string {
   }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;
+    // While editing, hovering must not retarget the inspector or surface a new
+    // affordance — that's the other half of the #3646 instability.
+    if (activeTextEdit) return;
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     var el = closestTarget(ev);
     if (!el) return;
     postHoverTarget(el);
   }, true);
   window.addEventListener('resize', postTargets);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
-  else setTimeout(postTargets, 0);
+  function bootEditBridge(){
+    annotateBrandKitRuntimeTargets();
+    postTargets();
+    var brandRoot = document.getElementById('root') || document.body;
+    if (window.MutationObserver && brandRoot && document.getElementById('od-brand-payload')) {
+      new MutationObserver(function(){ annotateBrandKitRuntimeTargets(); postTargets(); })
+        .observe(brandRoot, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEditBridge);
+  else setTimeout(bootEditBridge, 0);
   document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
 })();</script>`;
 }
@@ -382,10 +632,10 @@ export function buildManualEditBridgeStyle(): string {
 html[data-od-edit-mode] body * { cursor: pointer !important; }
 html[data-od-edit-mode] [data-od-id],
 html[data-od-edit-mode] [data-od-runtime-id],
-html[data-od-edit-mode] [data-od-source-path] { outline: 1px dashed rgba(37, 99, 235, 0.35); outline-offset: 3px; }
+html[data-od-edit-mode] [data-od-source-path] { outline: 1px dashed rgba(37, 99, 235, 0.35) !important; outline-offset: 3px !important; }
 html[data-od-edit-mode] [data-od-id]:hover,
 html[data-od-edit-mode] [data-od-runtime-id]:hover,
-html[data-od-edit-mode] [data-od-source-path]:hover { outline: 2px solid #2563eb; }
+html[data-od-edit-mode] [data-od-source-path]:hover { outline: 2px solid #2563eb !important; outline-offset: 3px !important; }
 html[data-od-edit-mode] [data-od-edit-selected] {
   outline: 2px solid #2563eb !important;
   outline-offset: 4px;

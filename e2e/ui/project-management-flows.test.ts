@@ -1,7 +1,22 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request, Route } from '@playwright/test';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
+
+// The `/projects` view in `EntryShell` renders a `CenteredLoader` until
+// `projectsLoading || skillsLoading || designSystemsLoading` all clear
+// (`apps/web/src/components/EntryShell.tsx`). Tests that land on `/projects`
+// should stub the catalog endpoints that are unrelated to the project-list
+// behavior under test; otherwise a large registry response can keep the first
+// assertion gated on daemon/catalog timing instead of the UI contract.
+async function stubCatalogsEmpty(page: Page): Promise<void> {
+  await page.route('**/api/design-templates', async (route) => {
+    await route.fulfill({ json: { designTemplates: [] } });
+  });
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: [] } });
+  });
+}
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
@@ -55,6 +70,37 @@ const DESIGN_SYSTEMS = [
     swatches: ['#EAF4F4', '#5EAAA8', '#05668D', '#0B132B'],
   },
 ];
+
+async function stubEmptyProjectsNewProjectData(page: Page): Promise<void> {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({ json: { skills: TAB_SKILLS } });
+  });
+  await page.route('**/api/connectors', async (route) => {
+    await route.fulfill({ json: { connectors: [] } });
+  });
+  await page.route('**/api/connectors/status', async (route) => {
+    await route.fulfill({ json: { statuses: {} } });
+  });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+}
+
+async function openNewProjectFromEmptyProjects(page: Page): Promise<void> {
+  await page.goto('/projects');
+  await expect(page.locator('.designs-empty-state')).toBeVisible();
+  await page.locator('.designs-empty-cta').click();
+
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
 
 const TAB_SKILLS = [
   skillSummary('prototype-skill', 'Prototype Skill', 'prototype', 'web', ['prototype']),
@@ -218,6 +264,7 @@ test('[P0] projects empty state create action opens the new project flow', async
     await route.continue();
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expect(page.locator('.designs-empty-state')).toBeVisible();
   await page.locator('.designs-empty-cta').click();
@@ -229,12 +276,8 @@ test('[P0] projects empty state create action opens the new project flow', async
 });
 
 test('[P1] design system multi-select stores primary and inspiration metadata', async ({ page }) => {
-  await page.route('**/api/design-systems', async (route) => {
-    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
-  });
-
-  await page.goto('/');
-  await openNewProjectPanel(page);
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system multi select metadata');
   await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
@@ -268,12 +311,8 @@ test('[P1] design system multi-select stores primary and inspiration metadata', 
 });
 
 test('[P1] design system picker searches and switches the single selected system', async ({ page }) => {
-  await page.route('**/api/design-systems', async (route) => {
-    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
-  });
-
-  await page.goto('/');
-  await openNewProjectPanel(page);
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system single switch flow');
   await expect(page.getByTestId('design-system-trigger')).toBeVisible();
@@ -297,6 +336,92 @@ test('[P1] design system picker searches and switches the single selected system
     };
   };
   expect(body.designSystemId).toBe('data-mist');
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
+});
+
+test('[P1] design system picker can clear the default system before creating a project', async ({ page }) => {
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill('Design system clear create flow');
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
+
+  await page.getByTestId('design-system-trigger').click();
+  await page.getByRole('option', { name: /None.*freeform/i }).click();
+
+  await expect(page.getByTestId('design-system-trigger')).toContainText('None');
+  await expect(page.getByTestId('design-system-trigger')).not.toContainText('Nexu Soft Tech');
+
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBeNull();
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
+});
+
+test('[P1] stale daemon default design system is not posted when creating a project', async ({ page }) => {
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        json: {
+          config: {
+            onboardingCompleted: true,
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+            mode: 'daemon',
+            agentId: 'codex',
+            skillId: null,
+            designSystemId: 'stale-design-system',
+            agentModels: { codex: { model: 'default' } },
+            agentCliEnv: {},
+          },
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          mode: 'daemon',
+          agentId: 'codex',
+          skillId: null,
+          designSystemId: 'stale-design-system',
+          agentModels: { codex: { model: 'default' } },
+          agentCliEnv: {},
+        },
+      },
+    });
+  });
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill('Stale design system default flow');
+
+  await expect(page.getByTestId('design-system-trigger')).toContainText('None');
+  await expect(page.getByTestId('design-system-trigger')).not.toContainText('stale-design-system');
+
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBeNull();
+  expect(body.designSystemId).not.toBe('stale-design-system');
   expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
@@ -439,23 +564,6 @@ test('[P1] project detail composer working directory picker opens without leavin
 
   await expect(composer.getByTestId('working-dir-panel')).toBeVisible();
   await expect(composer.getByTestId('working-dir-pick')).toBeVisible();
-});
-
-test('[P1] project detail composer session mode switches between Design and Ask', async ({ page }) => {
-  await page.goto('/');
-  await createProject(page, 'Composer session mode switch');
-  await expectWorkspaceReady(page);
-
-  const composer = page.getByTestId('chat-composer');
-  const trigger = composer.getByTestId('session-mode-trigger');
-  await expect(trigger).toContainText(/Design/i);
-  await trigger.click();
-  await page.getByRole('menuitemradio', { name: /Ask mode/i }).click();
-  await expect(trigger).toContainText(/Ask/i);
-
-  await trigger.click();
-  await page.getByRole('menuitemradio', { name: /Design mode/i }).click();
-  await expect(trigger).toContainText(/Design/i);
 });
 
 test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
@@ -610,6 +718,84 @@ test('[P0] @critical project detail composer BYOK model switch persists from the
   }, STORAGE_KEY)).toMatchObject({
     mode: 'api',
     model: 'gpt-4o-mini',
+  });
+});
+
+test('[P0] @critical project detail composer keeps Local CLI and BYOK model choices isolated', async ({ page }) => {
+  test.setTimeout(60_000);
+  const config = {
+    mode: 'daemon',
+    apiKey: 'sk-openai-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-2024-05-13',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    mediaProviders: {},
+    agentModels: { codex: { model: 'default' } },
+    agentCliEnv: {},
+  };
+
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: config },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ config: body }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ config }),
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Composer model mode isolation');
+  await expectWorkspaceReady(page);
+
+  const { menu, claudeButton } = await openComposerAgentMenu(page);
+  await claudeButton.click();
+  const localModelSelect = menu.locator('.avatar-model-section [role="combobox"]').first();
+  await localModelSelect.click();
+  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await expect(localModelSelect).toContainText(/Sonnet/i);
+
+  await menu.getByRole('button', { name: /API · BYOK|Use API/i }).click();
+  const byokModelSelect = menu.locator('.avatar-model-section [role="combobox"]').first();
+  await expect(byokModelSelect).toContainText('gpt-4o-2024-05-13');
+  await byokModelSelect.click();
+  await page.getByTestId('avatar-byok-model-popover').getByRole('option', { name: /^gpt-4o-mini$/i }).click();
+  await expect(byokModelSelect).toContainText('gpt-4o-mini');
+
+  await menu.getByRole('button', { name: /Local CLI|Use local|本机 CLI|本地 CLI/i }).click();
+  await expect(claudeButton).toHaveAttribute('aria-current', 'true');
+  await expect(localModelSelect).toContainText(/Sonnet/i);
+  await expect.poll(async () => page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, STORAGE_KEY)).toMatchObject({
+    mode: 'daemon',
+    agentId: 'claude',
+    model: 'gpt-4o-mini',
+    agentModels: {
+      claude: { model: 'sonnet' },
+    },
   });
 });
 
@@ -1185,6 +1371,7 @@ test('[P2] projects sub tabs switch between Recent and Your designs ordering', a
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
 
@@ -1340,6 +1527,7 @@ test('[P2] projects page shows the empty state when there are no projects', asyn
     await route.continue();
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.locator('.tab-empty')).toBeVisible();
@@ -1369,6 +1557,7 @@ test('[P2] projects page shows the no-results state and recovers when search is 
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
   await expect(homeDesignCard(page, 'Searchable Prototype')).toBeVisible();
@@ -1404,6 +1593,7 @@ test('[P2] projects grid overflow menu closes on outside click and Escape', asyn
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
 
@@ -1474,6 +1664,7 @@ test('[P2] projects kanban view groups cards into status columns', async ({ page
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
   await page.getByTestId('designs-view-kanban').click();
@@ -1564,6 +1755,7 @@ test('[P1] projects page shows live artifact cards, supports search, and opens t
     });
   });
 
+  await stubCatalogsEmpty(page);
   await page.goto('/projects');
   await expectDesignsView(page);
 

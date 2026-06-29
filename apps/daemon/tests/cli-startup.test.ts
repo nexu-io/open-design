@@ -16,6 +16,7 @@ describe('CLI startup boundaries', () => {
     ['doctor', ['doctor', '--help']],
     ['config', ['config', 'get', 'apiProtocol', '--daemon-url', 'http://127.0.0.1:9']],
     ['diagnostics', ['diagnostics', 'export', '--daemon-url', 'http://127.0.0.1:9']],
+    ['amr', ['amr', 'status', '--daemon-url', 'http://127.0.0.1:9']],
   ])('initializes flag constants before dispatching od %s', async (_name, args) => {
     let output = '';
     try {
@@ -37,6 +38,7 @@ describe('CLI startup boundaries', () => {
     expect(output).not.toContain('before initialization');
     expect(output).not.toContain('CONFIG_STRING_FLAGS');
     expect(output).not.toContain('DIAGNOSTICS_STRING_FLAGS');
+    expect(output).not.toContain('AMR_STRING_FLAGS');
   });
 
   it('keeps od daemon start alive until SIGTERM and reports the actual listening port', async () => {
@@ -203,6 +205,67 @@ describe('CLI startup boundaries', () => {
         url: '/api/tools/media/generate',
         authorization: 'Bearer run-token',
       },
+    ]);
+  });
+
+  it('prints AMR wallet status JSON through the daemon wallet endpoint', async () => {
+    const seen: Array<{ method: string | undefined; url: string | undefined }> = [];
+    const server = http.createServer((req, res) => {
+      seen.push({ method: req.method, url: req.url });
+      req.resume();
+      if (req.method === 'GET' && req.url === '/api/integrations/vela/wallet?refresh=1') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'available',
+          profile: 'local',
+          user: { email: 'amr@example.com' },
+          balanceUsd: '0.1000',
+          updatedAt: '2026-06-23T06:05:18.782Z',
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'vela_api',
+        }));
+        return;
+      }
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unexpected' }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const daemonUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'amr',
+          'status',
+          '--daemon-url',
+          daemonUrl,
+          '--refresh',
+          '--json',
+        ],
+        {
+          cwd: daemonRoot,
+          env: { ...process.env },
+        },
+      );
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        status: 'available',
+        user: { email: 'amr@example.com' },
+        balanceUsd: '0.1000',
+        source: 'vela_api',
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(seen).toEqual([
+      { method: 'GET', url: '/api/integrations/vela/wallet?refresh=1' },
     ]);
   });
 });

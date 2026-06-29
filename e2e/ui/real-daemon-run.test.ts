@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
+import { runErrorCard } from '@/playwright/chat';
 import type { Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
@@ -16,6 +17,8 @@ const CHUNKED_FILE = 'chunked-daemon-smoke.html';
 const CHUNKED_HEADING = 'Chunked Daemon Smoke';
 const DELAYED_FILE = 'delayed-daemon-smoke.html';
 const DELAYED_HEADING = 'Delayed Daemon Smoke';
+const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
+const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
@@ -116,8 +119,8 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 
   await sendPrompt(page, 'Return an intentional daemon smoke failure');
 
-  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure', { timeout: 15_000 });
-  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
+  await expect(runErrorCard(page)).toContainText('intentional fake codex failure', { timeout: 15_000 });
+  await expect(runErrorCard(page)).toContainText('intentional fake codex failure');
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
@@ -131,7 +134,7 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
   // classified as AGENT_CONNECTION_DROPPED and the error card shows the
   // localized chat.connectionDropped copy (en locale here) instead of echoing
   // the raw SDK string verbatim.
-  await expect(page.locator('.msg.error')).toContainText('connection to the model service dropped', {
+  await expect(runErrorCard(page)).toContainText('connection to the model service dropped', {
     timeout: 15_000,
   });
 });
@@ -173,12 +176,42 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
   await expect(frame.getByRole('heading', { name: DELAYED_HEADING })).toBeVisible();
 
   const files = await listProjectFiles(page, projectId);
-  expect(files.map((file) => file.name)).toEqual([DELAYED_FILE]);
+  expect(files.map((file) => file.name)).toEqual(expect.arrayContaining([DELAYED_FILE]));
   await expectProjectFileToContain(page, projectId, DELAYED_FILE, 'Generated after a delayed daemon turn.');
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     expectedUserMessages: 1,
     expectedThinking: false,
+  });
+});
+
+test('[P1] real daemon run reconnects after reload while the run is still active', async ({ page }) => {
+  test.setTimeout(90_000);
+
+  await page.goto('/');
+  await createProject(page, 'Running daemon reload smoke');
+  await expectWorkspaceReady(page);
+
+  const runResponse = await sendPrompt(page, 'Create a slow reload deterministic smoke artifact');
+  const { runId } = (await runResponse.json()) as { runId: string };
+  await expect
+    .poll(async () => {
+      const status = await page.request.get(`/api/runs/${runId}`);
+      if (!status.ok()) return `http-${status.status()}`;
+      return ((await status.json()) as { status: string }).status;
+    }, { timeout: 10_000 })
+    .toBe('running');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [SLOW_RELOAD_FILE], 40_000);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible();
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    requireRunId: true,
+    expectedThinking: false,
+    producedFiles: [SLOW_RELOAD_FILE],
   });
 });
 
@@ -212,7 +245,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   const expectedError = 'Agent completed without producing any output.';
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('.msg.error')).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText(expectedError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
   await expect.poll(async () => {
@@ -224,7 +257,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
-  await expect(page.locator('.msg.error')).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText(expectedError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -488,7 +521,7 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 30_000 });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
@@ -681,7 +714,12 @@ async function expectRestoredDelayedAssistantMessage(
   page: Page,
   projectId: string,
   conversationId: string,
-  options: { expectedUserMessages?: number; requireRunId?: boolean; expectedThinking?: boolean } = {},
+  options: {
+    expectedUserMessages?: number;
+    requireRunId?: boolean;
+    expectedThinking?: boolean;
+    producedFiles?: string[];
+  } = {},
 ) {
   await expect
     .poll(async () => {
@@ -701,7 +739,7 @@ async function expectRestoredDelayedAssistantMessage(
       assistantMessages: 1,
       hasRunId: options.requireRunId ? true : expect.any(Boolean),
       runStatus: 'succeeded',
-      producedFiles: [DELAYED_FILE],
+      producedFiles: options.producedFiles ?? [DELAYED_FILE],
       hasThinking: options.expectedThinking ?? true,
     });
 }

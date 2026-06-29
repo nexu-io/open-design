@@ -258,11 +258,11 @@ ALTER TABLE artifacts DROP COLUMN critique_score;
 | --- | --- | --- |
 | `critique_score` | `REAL` | Final composite. `NULL` for legacy artifacts. |
 | `critique_rounds_json` | `TEXT` | Compact summary per round: `[{n, composite, mustFix, decision}]`. Bounded; full transcript on disk. |
-| `critique_transcript_path` | `TEXT` | Relative path under `.od/artifacts/<artifactId>/`. The stored value is the relative path; absolute resolution is daemon-side only. |
+| `critique_transcript_path` | `TEXT` | Relative path under daemon-managed artifact storage. The stored value is the relative path; absolute resolution is daemon-side only. This spec MUST NOT define daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. |
 | `critique_status` | `TEXT` | Constrained by `CHECK` clause. `legacy` marks artifacts produced before the feature shipped. |
 | `critique_protocol_version` | `INTEGER` | Pin which `parsers/v{n}.ts` to use for replay. |
 
-Transcripts are written to `.od/artifacts/<artifactId>/transcript.ndjson` (one `PanelEvent` per line). Files larger than 256 KiB are gzipped to `transcript.ndjson.gz`. The orchestrator chooses the format at write time; the replay path detects the format by extension.
+Transcripts are written through daemon-managed artifact storage (one `PanelEvent` per line). Files larger than 256 KiB are gzipped. The orchestrator chooses the format at write time; the replay path detects the format by extension. This spec MUST NOT define daemon data paths.
 
 ## UI surface
 
@@ -413,7 +413,7 @@ Reopening an artifact loads the badge from SQLite columns. Clicking expand trigg
 | User Interrupt | `POST /api/projects/:id/critique/:runId/interrupt` | cascade `SIGTERM`, persist partial state, ship best-so-far if any round closed, otherwise mark `interrupted` with no final. |
 | CLI process crash | spawn handle exits non-zero before `<SHIP>` | persist partial transcript, mark `failed` with `rounds_json.cause`, emit `critique.failed`, never silently retry. |
 | Daemon restart mid-run | next boot scans SQLite for rows in state `running` older than `totalTimeoutMs` | mark `interrupted` with `rounds_json.recoveryReason = "daemon_restart"`. Never auto-resume. |
-| Adapter unsupported | adapter fails conformance test in nightly CI | adapter marked `critique:degraded` in adapter registry with 24h TTL. UI shows the degraded banner once per session per adapter. |
+| Adapter unsupported | adapter fails conformance test in prerelease CI | adapter marked `critique:degraded` in adapter registry with 24h TTL. UI shows the degraded banner once per session per adapter. |
 
 ### Failure-mode rate targets and recovery
 
@@ -490,7 +490,7 @@ A Grafana dashboard ships in `tools/dev/dashboards/critique.json` with three def
 | Surface | Threat | Mitigation |
 | --- | --- | --- |
 | `<ARTIFACT>` body | XSS in shipped HTML | Existing sandboxed iframe pattern with `sandbox` and CSP headers. No new surface. |
-| Transcript on disk | Path traversal via stored path | The SQLite column stores a relative path; the daemon resolves under `.od/artifacts/<artifactId>/`; no user-supplied component reaches the resolver. |
+| Transcript on disk | Path traversal via stored path | The SQLite column stores a relative path; the daemon resolves under daemon-managed artifact storage; no user-supplied component reaches the resolver. |
 | Brand `DESIGN.md` content in prompt | Prompt injection from a malicious system | DESIGN.md is wrapped in a `<BRAND_SOURCE>` block whose framing instructs the agent to treat it as data. Same defence as the existing skill loader. |
 | Score and must-fix from agent stdout | Log injection (newlines, ANSI) | Parser strips ANSI; logs JSON-encode every value; UI renders as text only. |
 | Pathological agent output | DoS via unbounded buffers | `parserMaxBlockBytes`, `perRoundTimeoutMs`, `totalTimeoutMs` are bounded and config-driven. Orchestrator enforces hard kill. |
@@ -506,7 +506,7 @@ A separate security review pass runs through the `code-reviewer` agent before me
 | Golden-file fixtures | vitest with `__fixtures__/critique/v1/*.txt` | Each adapter has at least one happy and two malformed transcripts on disk. |
 | Component | RTL + jsdom | Every reducer phase rendered at least once. |
 | Integration | vitest + sqlite memory + http mock | End-to-end happy path plus five failure modes. |
-| Adapter conformance | nightly e2e against live adapters | Each of 12 CLIs plus BYOK proxy must pass canonical brief. |
+| Adapter conformance | prerelease e2e against live adapters | Each of 12 CLIs plus BYOK proxy must pass canonical brief. |
 | Playwright e2e | `e2e/critique-theater.spec.ts` | Theater renders within 200 ms, Esc triggers Interrupt, replay scrub at 60 fps. |
 | Visual regression | Playwright `toHaveScreenshot()` | Each Theater state captured at 375 / 768 / 1280 viewports. |
 | A11y self-test | axe-playwright | Theater UI passes WCAG AA. |

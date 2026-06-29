@@ -1,0 +1,520 @@
+/* Rich "Add assets" zone for the design-system create flow: a real
+ * drop / click / paste target, a "Select from library" affordance, and a
+ * thumbnail grid with click-to-enlarge preview. Owns only its own surface;
+ * it sits inside the shared `.ds-resource-card` row's right column. */
+
+.root {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.input {
+  display: none;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 104px;
+  padding: 18px 16px;
+  border: 1.5px dashed color-mix(in srgb, var(--border-strong) 70%, var(--accent) 30%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--bg-panel) 18%);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Children are decorative — keep them out of the drag hit-test so the
+ * container is the only drag target (no dragleave flicker over children). */
+.drop > * {
+  pointer-events: none;
+}
+.drop:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-subtle));
+  color: var(--text);
+}
+.drop:focus-visible {
+  outline: 0;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dropActive {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-subtle));
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+
+.dropIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  color: var(--accent);
+}
+.dropTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dropLink {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dropHint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: -2px;
+}
+.altText {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.libraryBtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.libraryBtn:hover {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+.libraryBtn .od-icon {
+  color: var(--accent);
+}
+
+.grid {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 12px;
+}
+.tile {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.tileMain {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  cursor: zoom-in;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.tileMain:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color, #000) 10%, transparent);
+}
+.tileMain:disabled {
+  cursor: default;
+}
+.tileMain:disabled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: var(--bg-subtle);
+}
+
+/* Typed glyph: an icon over an extension badge, tinted per file family so a
+ * PDF, font, deck, or audio file each reads distinctly instead of as a blank
+ * "FILE" box. */
+.glyph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--bg-panel)), var(--bg-subtle));
+}
+.glyph[data-kind='pdf'] {
+  color: #c0392b;
+  background: linear-gradient(135deg, color-mix(in srgb, #c0392b 12%, var(--bg-panel)), var(--bg-subtle));
+}
+.glyph[data-kind='audio'] {
+  color: #8e44ad;
+  background: linear-gradient(135deg, color-mix(in srgb, #8e44ad 12%, var(--bg-panel)), var(--bg-subtle));
+}
+.glyph[data-kind='slides'] {
+  color: #d97706;
+  background: linear-gradient(135deg, color-mix(in srgb, #d97706 12%, var(--bg-panel)), var(--bg-subtle));
+}
+.glyph[data-kind='html'],
+.glyph[data-kind='text'] {
+  color: #2563eb;
+  background: linear-gradient(135deg, color-mix(in srgb, #2563eb 12%, var(--bg-panel)), var(--bg-subtle));
+}
+.ext {
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Font specimen: render the brand typeface itself as the thumbnail. */
+.fontThumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--text-strong);
+  background: var(--bg-panel);
+}
+
+/* HTML mini-render: a sandboxed iframe laid out at 4× the tile, scaled to 25%,
+ * so the whole page shows zoomed-out. Non-interactive (pointer-events off). */
+.frameThumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+.htmlThumb {
+  width: 400%;
+  height: 400%;
+  border: 0;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  pointer-events: none;
+  background: #fff;
+}
+
+/* Text snippet: the first lines, monospace, clipped to the tile. */
+.textThumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 7px 8px;
+  overflow: hidden;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 8px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+}
+.remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 58%, transparent);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), background-color 140ms ease;
+}
+.tile:hover .remove,
+.remove:focus-visible {
+  opacity: 1;
+}
+.remove:hover {
+  background: var(--danger, #c0392b);
+}
+.caption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* --- lightbox ------------------------------------------------------------ */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: color-mix(in srgb, #000 64%, transparent);
+  backdrop-filter: blur(3px);
+  animation: ds-asset-fade 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.lightboxInner {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 0;
+  width: min(940px, 92vw);
+  max-width: 92vw;
+  max-height: 88vh;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-panel);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+}
+
+/* The stage holds whichever kind-specific preview is active and bounds it to
+ * the space above the 52px meta bar. */
+.lightboxStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  max-height: calc(88vh - 52px);
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+.lightboxStage[data-kind='font'],
+.lightboxStage[data-kind='text'],
+.lightboxStage[data-kind='audio'],
+.lightboxStage[data-kind='other'] {
+  background: var(--bg-panel);
+}
+
+.lightboxImg {
+  display: block;
+  max-width: 100%;
+  max-height: calc(88vh - 52px);
+  object-fit: contain;
+  background:
+    repeating-conic-gradient(color-mix(in srgb, var(--text-muted) 8%, transparent) 0% 25%, transparent 0% 50%)
+    50% / 22px 22px;
+}
+.lightboxVideo {
+  display: block;
+  max-width: 100%;
+  max-height: calc(88vh - 52px);
+  background: #000;
+}
+.lightboxFrame {
+  width: min(940px, 92vw);
+  height: calc(88vh - 52px);
+  border: 0;
+  background: #fff;
+}
+
+/* Audio: a centered icon over the native player. */
+.lightboxAudio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  width: min(560px, 88vw);
+  padding: 48px 28px;
+}
+.lightboxAudioIcon {
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  border-radius: 999px;
+  color: #8e44ad;
+  background: color-mix(in srgb, #8e44ad 12%, var(--bg-subtle));
+}
+.lightboxAudioPlayer {
+  width: 100%;
+}
+
+/* Font specimen at multiple sizes. */
+.lightboxFont {
+  width: min(820px, 90vw);
+  max-height: calc(88vh - 52px);
+  overflow: auto;
+  padding: 36px 40px;
+  color: var(--text-strong);
+  text-align: left;
+}
+.lightboxFontHero {
+  font-size: clamp(56px, 12vw, 120px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.lightboxFontPangram {
+  margin-top: 18px;
+  font-size: clamp(20px, 4vw, 34px);
+  line-height: 1.3;
+  color: var(--text);
+}
+.lightboxFontScale {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* Text preview: scrollable monospace snippet. */
+.lightboxText {
+  width: min(820px, 90vw);
+  max-height: calc(88vh - 52px);
+  margin: 0;
+  padding: 22px 26px;
+  overflow: auto;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  background: var(--bg-panel);
+}
+
+/* Fallback card for formats with no inline preview (e.g. .pptx, .key). */
+.lightboxFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 56px 40px;
+  text-align: center;
+}
+.lightboxFallbackGlyph {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  border-radius: 18px;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+  background: var(--bg-subtle);
+}
+.lightboxFallbackGlyph[data-kind='slides'] {
+  color: #d97706;
+}
+.lightboxFallbackName {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-strong);
+  word-break: break-word;
+}
+.lightboxFallbackMeta {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.lightboxFallbackHint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-faint, var(--text-muted));
+}
+.lightboxBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 8px 0 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.lightboxName {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+.lightboxMeta {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.lightboxClose {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.lightboxClose:hover {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+@keyframes ds-asset-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

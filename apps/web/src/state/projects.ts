@@ -15,6 +15,7 @@ import type {
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
+  PluginDuplicateProjectResponse,
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
@@ -33,13 +34,17 @@ import type {
 export type { PluginInstallOutcome } from '@open-design/contracts';
 export type { PluginShareAction } from '@open-design/contracts';
 
-export async function listProjects(): Promise<Project[]> {
+export async function listProjects(options?: { throwOnError?: boolean }): Promise<Project[]> {
   try {
     const resp = await fetch('/api/projects');
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      if (options?.throwOnError) throw new Error(`projects ${resp.status}`);
+      return [];
+    }
     const json = (await resp.json()) as { projects: Project[] };
     return json.projects ?? [];
-  } catch {
+  } catch (err) {
+    if (options?.throwOnError) throw err;
     return [];
   }
 }
@@ -691,6 +696,28 @@ export async function listPlugins(
 export function isVisiblePlugin(plugin: InstalledPluginRecord): boolean {
   const od = (plugin.manifest?.od ?? {}) as Record<string, unknown>;
   return od.hidden !== true;
+}
+
+export async function duplicatePluginAsProject(
+  pluginId: string,
+  input: { name?: string } = {},
+): Promise<PluginDuplicateProjectResponse> {
+  const resp = await fetch(
+    `/api/plugins/${encodeURIComponent(pluginId)}/duplicate-project`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(await readErrorMessage(resp));
+  }
+  const json = (await resp.json()) as PluginDuplicateProjectResponse;
+  if (!json?.ok || !json.projectId) {
+    throw new Error('Could not duplicate this template.');
+  }
+  return json;
 }
 
 interface PluginInstallEvent {

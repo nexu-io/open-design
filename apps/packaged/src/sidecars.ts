@@ -23,6 +23,7 @@ import {
 } from "@open-design/sidecar";
 import {
   createProcessStampArgs,
+  isProcessAlive,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
   stopProcesses,
@@ -98,6 +99,11 @@ function resolveSidecarEntry(packageName: string, exportName: string): string {
 
 function logPathFor(paths: PackagedNamespacePaths, app: AppKey): string {
   return join(paths.logsRoot, app, "latest.log");
+}
+
+async function appendSidecarLifecycleLog(logPath: string, message: string): Promise<void> {
+  await mkdir(dirname(logPath), { recursive: true });
+  await appendFile(logPath, `${message}\n`, "utf8").catch(() => undefined);
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -180,7 +186,7 @@ export async function waitForStatus<T>(
   ipcPath: string,
   isReady: (status: T) => boolean,
   timeoutMs = DAEMON_STATUS_TIMEOUT_MS,
-  watch: { child: { exitCode: number | null; signalCode: NodeJS.Signals | null; once: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void; off: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void }; logPath: string } | null = null,
+  watch: { child: { exitCode: number | null; pid?: number; signalCode: NodeJS.Signals | null; once: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void; off: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void }; logPath: string } | null = null,
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
@@ -211,6 +217,21 @@ export async function waitForStatus<T>(
           { type: SIDECAR_MESSAGES.STATUS },
           { timeoutMs: 800 },
         );
+        const statusPid = typeof (status as { pid?: unknown }).pid === "number"
+          ? (status as { pid: number }).pid
+          : null;
+        if (watch?.child.pid != null) {
+          if (statusPid == null) {
+            lastError = new Error(`sidecar status did not include pid for spawned pid ${watch.child.pid}`);
+            await sleep(150);
+            continue;
+          }
+          if (statusPid !== watch.child.pid) {
+            lastError = new Error(`sidecar status pid ${statusPid} did not match spawned pid ${watch.child.pid}`);
+            await sleep(150);
+            continue;
+          }
+        }
         if (isReady(status)) return status;
       } catch (error) {
         lastError = error;
@@ -225,6 +246,41 @@ export async function waitForStatus<T>(
     );
   } finally {
     watch?.child.off('exit', onChildExit);
+  }
+}
+
+async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): Promise<void> {
+  let status: { pid?: number | null } | null = null;
+  try {
+    status = await requestJsonIpc<{ pid?: number | null }>(
+      ipcPath,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 350 },
+    );
+  } catch {
+    return;
+  }
+
+  const pid = typeof status.pid === "number" ? status.pid : null;
+  await appendSidecarLifecycleLog(
+    logPath,
+    `[open-design packaged] existing sidecar endpoint detected ipc=${ipcPath} pid=${pid ?? "unknown"}; requesting shutdown before relaunch`,
+  );
+  try {
+    await requestJsonIpc(ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 800 });
+  } catch (error) {
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] existing sidecar shutdown request failed ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (pid != null && pid !== process.pid && isProcessAlive(pid)) {
+    const exited = await waitForProcessExit(pid, 2500);
+    await appendSidecarLifecycleLog(
+      logPath,
+      `[open-design packaged] existing sidecar endpoint ${exited ? "exited" : "still-running"} ipc=${ipcPath} pid=${pid}`,
+    );
   }
 }
 
@@ -355,6 +411,7 @@ export function buildPackagedDaemonSpawnEnv(
 
 async function spawnSidecarChild(options: {
   app: AppKey;
+  electronNodeCommand: string | null;
   entryPath: string;
   env: NodeJS.ProcessEnv;
   nodeCommand: string | null;
@@ -375,6 +432,11 @@ async function spawnSidecarChild(options: {
   } satisfies SidecarStamp;
   const logPath = logPathFor(options.paths, options.app);
   const logHandle = await openLog(logPath);
+  await retireExistingSidecarEndpoint(ipcPath, logPath);
+  const usesElectronAsNode = options.nodeCommand == null;
+  const command = options.nodeCommand
+    ?? options.electronNodeCommand
+    ?? await resolvePackagedElectronNodeCommand();
   const childEnv = createSidecarLaunchEnv({
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -388,11 +450,10 @@ async function spawnSidecarChild(options: {
       ...options.env,
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),
-      ...(options.nodeCommand == null ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      ...(usesElectronAsNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
     },
     stamp,
   });
-  const command = options.nodeCommand ?? (await resolvePackagedElectronNodeCommand());
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
@@ -413,9 +474,7 @@ async function spawnSidecarChild(options: {
 }
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
-  const appendLifecycleLog = async (message: string): Promise<void> => {
-    await appendFile(child.logPath, `${message}\n`, "utf8").catch(() => undefined);
-  };
+  const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
   await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
   try {
     await requestJsonIpc(child.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1200 });
@@ -440,6 +499,7 @@ export async function startPackagedSidecars(
     amrProfile: string | null;
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
+    electronNodeCommand: string | null;
     nodeCommand: string | null;
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
@@ -457,6 +517,15 @@ export async function startPackagedSidecars(
     webSidecarEntry: string | null;
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
+    /**
+     * Boot-progress hook, fired at each sidecar bring-up boundary: the
+     * `"-spawning"` edge just before a child is spawned, and the `"-ready"`
+     * edge once it reports a usable URL. The Electron entry forwards these to
+     * the splash status line so a slow cold boot shows which phase is underway
+     * (and visibly advances the step counter the moment each long native wait
+     * clears) instead of a frozen frame; headless callers omit it.
+     */
+    onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
   },
 ): Promise<PackagedSidecarHandle> {
   await mkdir(paths.namespaceRoot, { recursive: true });
@@ -472,6 +541,7 @@ export async function startPackagedSidecars(
   const children: ManagedSidecarChild[] = [];
 
   try {
+    options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
       entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
@@ -485,6 +555,7 @@ export async function startPackagedSidecars(
         posthogKey: options.posthogKey,
         posthogHost: options.posthogHost,
       }),
+      electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,
@@ -502,7 +573,9 @@ export async function startPackagedSidecars(
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    options.onPhase?.("daemon-ready");
 
+    options.onPhase?.("web-spawning");
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
       entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
@@ -513,6 +586,7 @@ export async function startPackagedSidecars(
         OD_WEB_OUTPUT_MODE: options.webOutputMode,
         PORT: "0",
       },
+      electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,
       paths,
       runtime,
@@ -521,8 +595,11 @@ export async function startPackagedSidecars(
     const webStatus = await waitForStatus<WebStatusSnapshot>(
       web.ipcPath,
       (status) => status.url != null,
+      DAEMON_STATUS_TIMEOUT_MS,
+      { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");
+    options.onPhase?.("web-ready");
 
     return {
       daemon: daemonStatus,

@@ -6,15 +6,16 @@ import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../_components/favicon-links.astro';
-import GoogleAnalytics from '../_components/google-analytics.astro';
-import PostHogAnalytics from '../_components/posthog-analytics.astro';
+import SiteAnalytics from '../_components/site-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import {
   heroBgImage,
   heroBgSrcset,
-  heroImage,
+  ogDefaultImage,
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
 } from '../image-assets';
 import {
   LANDING_LOCALES,
@@ -28,12 +29,15 @@ import {
 } from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
+import { clampDescription } from '../_lib/clamp-description';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const { title, description } = getHomeSeo(locale, counts);
+// Clamp the meta/OG/Twitter description; the full string still feeds JSON-LD.
+const metaDescription = clampDescription(description);
 const canonical = new URL(localePath(locale), Astro.site).toString();
 const origin = Astro.site?.toString() ?? 'https://open-design.ai/';
 const logoUrl = new URL('/android-chrome-512x512.png', Astro.site).toString();
@@ -47,7 +51,7 @@ const RELEASES_URL = `${REPO_URL}/releases`;
 const ISSUES_URL = `${REPO_URL}/issues`;
 const DOCS_URL = `${REPO_URL}#readme`;
 const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
-const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
+const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const OFFICIAL_URL = `${origin}official/`;
 
 const websiteSchema = {
@@ -149,7 +153,7 @@ const matterRuntime = readFileSync(
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#efe7d2" />
     <title>{title}</title>
-    <meta name="description" content={description} />
+    <meta name="description" content={metaDescription} />
     <link rel="canonical" href={canonical} />
     {alternateLinks.map((entry) => (
       <link rel="alternate" hreflang={entry.hreflang} href={entry.href} />
@@ -159,8 +163,7 @@ const matterRuntime = readFileSync(
     <FaviconLinks />
     <ResourceHints />
 
-    <GoogleAnalytics />
-    <PostHogAnalytics />
+    <SiteAnalytics />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
@@ -182,9 +185,12 @@ const matterRuntime = readFileSync(
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
     <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={new URL(heroImage, Astro.site).toString()} />
+    <meta property="og:image" content={ogDefaultImage} />
+    <meta property="og:image:width" content={String(OG_IMAGE_WIDTH)} />
+    <meta property="og:image:height" content={String(OG_IMAGE_HEIGHT)} />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:locale" content={localeDef.ogLocale} />
     {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
       <meta property="og:locale:alternate" content={entry.ogLocale} />
@@ -192,8 +198,8 @@ const matterRuntime = readFileSync(
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={new URL(heroImage, Astro.site).toString()} />
+    <meta name="twitter:description" content={metaDescription} />
+    <meta name="twitter:image" content={ogDefaultImage} />
 
     {/*
      * Single @graph JSON-LD block — WebSite + Organization +
@@ -260,11 +266,17 @@ const matterRuntime = readFileSync(
               const blur = 11;
               const blend = 'difference';
               const inset = Math.min(w, h) * (borderRatio * 0.5);
+              // Opaque black (#000), NOT transparent (#0000): a transparent->red
+              // stop interpolates with straight alpha, so over black the R
+              // channel comes out quadratic (255*t^2) and its 0.5 neutral point
+              // lands at ~29% instead of 50%, shifting the refraction to one
+              // side. Opaque stops give a linear ramp centered at 50%. (Mirror
+              // of the same map builder in _components/header-enhancer.astro.)
               const svg =
                 '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
                   '<defs>' +
-                    '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
-                    '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+                    '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+                    '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
                   '</defs>' +
                   '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
                   '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +
@@ -369,6 +381,15 @@ const matterRuntime = readFileSync(
               .then((n) => {
                 if (typeof n === 'number' && n > 0) {
                   for (const slot of contribSlots) slot.textContent = String(n);
+                  // Feed the same live total into the "贡献者" stat card. Updating
+                  // `data-countup-to` retargets the roll-up if it hasn't run yet;
+                  // setting the text keeps the fallback correct (and fixes the
+                  // value if the roll already finished before this resolved).
+                  const card = document.querySelector('[data-github-contributors-countup]');
+                  if (card) {
+                    card.dataset.countupTo = String(n);
+                    card.textContent = String(n) + (card.dataset.countupSuffix || '');
+                  }
                 }
               })
               .catch(() => {});
@@ -1162,10 +1183,29 @@ const matterRuntime = readFileSync(
             const stickyH = sticky ? sticky.offsetHeight : window.innerHeight;
             return Math.max(1, scrolly.offsetHeight - stickyH);
           };
+          // Below 880px the section is no longer pinned (`.cap-sticky` is
+          // `position: static`), so `range()` collapses to ~1px and the
+          // scroll-driven reel would push every frame to translateY(0),
+          // stacking all four images. On mobile we hand control to click +
+          // CSS: clear the inline reel transforms so the `.is-active`
+          // translateY rule alone decides which frame shows.
+          const isMobile = () => window.innerWidth <= 880;
           let activeStep = -1;
           let ticking = false;
+          const setActive = (idx) => {
+            activeStep = idx;
+            steps.forEach((s, k) => s.classList.toggle('is-active', k === idx));
+            frames.forEach((f, k) => f.classList.toggle('is-active', k === idx));
+          };
           const update = () => {
             ticking = false;
+            if (isMobile()) {
+              frames.forEach((f) => {
+                f.style.transform = '';
+                f.style.zIndex = '';
+              });
+              return;
+            }
             const r = range();
             const scrolled = Math.min(Math.max(-scrolly.getBoundingClientRect().top, 0), r);
             // Continuous progress 0..(n-1). The reel position tracks the scroll
@@ -1179,11 +1219,7 @@ const matterRuntime = readFileSync(
               f.style.transform = `translateY(${ty}%)`;
             });
             const idx = Math.min(Math.max(Math.round(p), 0), n - 1);
-            if (idx !== activeStep) {
-              activeStep = idx;
-              steps.forEach((s, k) => s.classList.toggle('is-active', k === idx));
-              frames.forEach((f, k) => f.classList.toggle('is-active', k === idx));
-            }
+            if (idx !== activeStep) setActive(idx);
           };
           const onScroll = () => {
             if (!ticking) {
@@ -1195,6 +1231,10 @@ const matterRuntime = readFileSync(
           window.addEventListener('resize', onScroll);
           steps.forEach((s, i) => {
             s.addEventListener('click', () => {
+              if (isMobile()) {
+                setActive(i);
+                return;
+              }
               const targetY =
                 window.scrollY + scrolly.getBoundingClientRect().top + (i / span) * range();
               window.scrollTo({ top: targetY, behavior: 'smooth' });
@@ -1275,6 +1315,11 @@ const matterRuntime = readFileSync(
           window.addEventListener('resize', onScroll);
           labels.forEach((label, i) => {
             label.addEventListener('click', () => {
+              // Click → scroll the pin to the matching frame only makes sense
+              // while the section is pinned (desktop). On mobile there's no pin
+              // and the CSS :checked rules switch panels in place, so scrolling
+              // here would just shove the page up/down for no reason.
+              if (!pinned()) return;
               const frac = n > 1 ? (i / (n - 1)) * STACK_END : 0;
               const targetY =
                 window.scrollY +
@@ -1383,6 +1428,11 @@ const matterRuntime = readFileSync(
             if (ev.key === 'Escape') setNavOpen(false);
           });
         })();
+        // Product and Resources are category-label <button class="nav-trigger">
+        // triggers (not links, so they never navigate) whose dropdown is
+        // revealed by the same pure-CSS :hover / :focus-within rule as the hub
+        // menus — no JS needed (works on first paint / JS-disabled, and on
+        // touch via focus). See header-enhancer.astro.
         enhanceDragIcon();
         enhanceWire();
         enhanceStatementReveal();

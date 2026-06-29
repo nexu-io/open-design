@@ -14,11 +14,14 @@ jobs:
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
       - name: Generate Open Design bot token
         id: open-design-bot-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3.2.0
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
           owner: nexu-io
           repositories: open-design
@@ -63,14 +66,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          svg="/metrics_renders/github-metrics.svg"
-          if [ ! -s "$svg" ]; then
-            echo "Expected metrics SVG not found at $svg" >&2
+          raw_svg="/metrics_renders/github-metrics.svg"
+          svg="$RUNNER_TEMP/github-metrics.svg"
+          if [ ! -s "$raw_svg" ]; then
+            echo "Expected metrics SVG not found at $raw_svg" >&2
             exit 1
           fi
-          node <<'NODE'
+          cp "$raw_svg" "$svg"
+          SVG_PATH="$svg" node <<'NODE'
           const fs = require('node:fs');
-          const svg = '/metrics_renders/github-metrics.svg';
+          const svg = process.env.SVG_PATH;
+          if (!svg) throw new Error('SVG_PATH is required');
           let content = fs.readFileSync(svg, 'utf8');
           content = content.replace(
             /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="[^"]+" height="[^"]+"([^>]*)>/,
@@ -103,19 +109,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          svg="/metrics_renders/github-metrics.svg"
+          svg="$RUNNER_TEMP/github-metrics.svg"
           if [ ! -s "$svg" ]; then
             echo "Expected metrics SVG not found at $svg" >&2
             exit 1
           fi
-          endpoint="${CLOUDFLARE_R2_REPOSITORY_ASSETS_URL%/}"
-          bucket="$CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET"
           key="resources/images/github-metrics.svg"
-          aws --endpoint-url "$endpoint" s3api put-object \
-            --bucket "$bucket" \
+          node --experimental-strip-types .github/scripts/r2.ts put-object \
+            --endpoint "$CLOUDFLARE_R2_REPOSITORY_ASSETS_URL" \
+            --bucket "$CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET" \
             --key "$key" \
-            --body "$svg" \
+            --file "$svg" \
             --content-type "image/svg+xml" \
             --cache-control "public, max-age=300" \
-            --no-cli-pager
-          echo "Published ${CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN%/}/$key"
+            --public-origin "$CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN"

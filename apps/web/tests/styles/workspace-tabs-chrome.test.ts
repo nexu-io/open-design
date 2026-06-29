@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const shellCss = readFileSync(new URL('../../src/styles/shell.css', import.meta.url), 'utf8');
 const routinesCss = readFileSync(new URL('../../src/styles/viewer/routines.css', import.meta.url), 'utf8');
+const composioCss = readFileSync(new URL('../../src/styles/viewer/composio.css', import.meta.url), 'utf8');
 const entryLayoutCss = readFileSync(new URL('../../src/styles/home/entry-layout.css', import.meta.url), 'utf8');
 
 function cssDeclarations(css: string, selector: string): string {
@@ -79,7 +80,9 @@ describe('workspace tabs chrome styles', () => {
     const activeProjectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-active');
     const tabSeparator = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab + .workspace-tab::before');
     const main = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab__main');
+    const popover = cssDeclarations(shellCss, '.workspace-tabs-popover');
     const preview = cssDeclarations(shellCss, '.workspace-tab-preview');
+    const presentOverlay = cssDeclarations(composioCss, '.present-overlay');
     const projectChrome = cssDeclarations(
       routinesCss,
       '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
@@ -105,6 +108,9 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(sharedStrip, 'overflow-y')).toBe('hidden');
     expect(ruleValue(tabSeparator, 'display')).toBe('none');
     expect(ruleValue(main, 'z-index')).toBe('2');
+    expect(Number(ruleValue(popover, 'z-index'))).toBeGreaterThan(
+      Number(ruleValue(presentOverlay, 'z-index')),
+    );
     expect(ruleValue(preview, 'box-sizing')).toBe('border-box');
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::before');
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::after');
@@ -133,6 +139,32 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(hoverTab, 'background')).toContain('calc(100% - 2px)');
     expect(ruleValue(hoverTab, 'border-color')).toBe('transparent');
     expect(ruleValue(hoverTab, 'box-shadow')).toContain('inset 0 0 0 1px');
+  });
+
+  it('keeps the pinned Home tab opaque on hover/focus so crowded tabs cannot bleed through (#4446)', () => {
+    // The generic inactive-hover rule paints a translucent panel wash
+    // (color-mix(… 78%, transparent)) sized to calc(100% - 2px). Its specificity
+    // (0,4,0) outranks the pinned base rule (0,3,0) and sits later in the
+    // cascade, so without a pinned-specific override the sticky Home tab loses
+    // its opaque background on hover/focus and horizontally-scrolled project
+    // tabs bleed through it. The pinned tab needs its own hover/focus rule that
+    // re-lays the opaque tab-bar background under that wash.
+    const pinnedHover = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tab.is-pinned:not(.is-active):hover',
+    );
+    const pinnedFocus = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tab.is-pinned:not(.is-active):focus-within',
+    );
+
+    for (const block of [pinnedHover, pinnedFocus]) {
+      const background = ruleValue(block, 'background');
+      // Opaque base layer keeps scrolled tabs from bleeding through…
+      expect(background).toContain('var(--workspace-tab-bar-bg)');
+      // …while the translucent hover wash still rides on top for the affordance.
+      expect(background).toContain('calc(100% - 2px)');
+    }
   });
 
   it('gives dragged tabs physical collision feedback', () => {

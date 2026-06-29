@@ -9,6 +9,7 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
+  pnpmDepsSrc ? src,
   workspacePaths,
   makeWrapper,
   python3,
@@ -26,12 +27,17 @@
 #   are already wired.
 #
 # pnpm version note:
-#   `package.json` declares `engines.pnpm: ">=10.33.2 <11"` and pnpm
-#   enforces this on `pnpm install` (regardless of `engine-strict`).
-#   nixpkgs currently ships 10.33.0, which is rejected. The flake
-#   overrides `pkgs.pnpm_10` to fetch the 10.33.2 tarball from npm —
-#   see flake.nix for the override and how to bump the hash when
-#   `packageManager` advances.
+#   `package.json` declares `engines.pnpm` and pnpm enforces it on
+#   `pnpm install` (regardless of `engine-strict`). The nixpkgs
+#   default `pnpm` is generally incompatible — older than the
+#   floor or newer than the ceiling depending on which nixpkgs
+#   the consumer follows. The flake overrides `pkgs.pnpm_10` to
+#   the exact tarball pinned by `packageManager` (see flake.nix
+#   for the override + hash bump). This derivation uses
+#   `pnpm_10` for both phases: in `nativeBuildInputs` so the
+#   install-phase `pnpmConfigHook` resolves it from PATH, and
+#   `pnpm = pnpm_10` to `fetchPnpmDeps` to override its
+#   `pkgs.pnpm` default.
 #
 # Workspace siblings the daemon depends on are built in dependency order
 # before the daemon itself; tsc emits each package's dist/, which is what
@@ -61,9 +67,13 @@ in
       pkg-config
     ];
 
+    # `fetchPnpmDeps` defaults to `pkgs.pnpm`; pin to the flake's
+    # `pnpm_10` so the dep-fetch matches the install phase.
     pnpmDeps = fetchPnpmDeps {
-      inherit (finalAttrs) pname version src;
+      inherit (finalAttrs) pname version;
+      src = pnpmDepsSrc;
       hash = pnpmDepsHash;
+      pnpm = pnpm_10;
       pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };
@@ -148,6 +158,26 @@ in
       # just apps/daemon.
       cp -r . $out/lib/open-design/
 
+      # Runtime package exports point at dist/. Keep workspace package
+      # manifests for Node resolution and prune source/test/build config files
+      # before Nix fixup scans the output tree.
+      for target in ${lib.escapeShellArgs workspacePaths}; do
+        if [ "$target" = "apps/daemon" ]; then
+          find "$out/lib/open-design/$target" -mindepth 1 -maxdepth 1 \
+            ! -name dist \
+            ! -name bin \
+            ! -name node_modules \
+            ! -name package.json \
+            -exec rm -rf {} +
+        else
+          find "$out/lib/open-design/$target" -mindepth 1 -maxdepth 1 \
+            ! -name dist \
+            ! -name node_modules \
+            ! -name package.json \
+            -exec rm -rf {} +
+        fi
+      done
+
       # Root devDependencies expose non-daemon workspaces via pnpm symlinks,
       # but the daemon derivation intentionally filters those sources out
       # when they are not needed at runtime. Prune the dangling symlinks from
@@ -157,9 +187,11 @@ in
         $out/lib/open-design/node_modules/@open-design/components \
         $out/lib/open-design/node_modules/@open-design/tools-dev \
         $out/lib/open-design/node_modules/@open-design/tools-pack \
+        $out/lib/open-design/node_modules/@open-design/tools-release \
         $out/lib/open-design/node_modules/@open-design/tools-serve \
         $out/lib/open-design/node_modules/.bin/tools-dev \
         $out/lib/open-design/node_modules/.bin/tools-pack \
+        $out/lib/open-design/node_modules/.bin/tools-release \
         $out/lib/open-design/node_modules/.bin/tools-serve
 
       chmod +x $out/lib/open-design/apps/daemon/dist/cli.js

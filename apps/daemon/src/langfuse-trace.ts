@@ -23,6 +23,7 @@ import {
   buildPromptStackFlatMetadata,
   promptStackWithoutContent,
   structuredPromptStackInput,
+  type PromptTelemetrySection,
   type PromptStackTelemetry,
 } from './prompt-telemetry.js';
 import type {
@@ -47,6 +48,7 @@ const SESSION_ID_MAX = 200; // Langfuse drops sessionIds longer than this.
 const HARD_BATCH_MAX_BYTES = 1024 * 1024;
 const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 const DEFAULT_FETCH_RETRIES = 1;
+const PROMPT_STACK_BLAME_MAX_SECTIONS = 8;
 let missingTelemetrySinkWarned = false;
 
 export interface LangfuseConfig {
@@ -203,6 +205,16 @@ export interface InputTextSnapshotManifestEntry extends TraceSafeObjectManifestB
   type: 'text';
 }
 
+export interface TraceObjectSummary {
+  new_file_count: number;
+  modified_file_count: number;
+  recovered_file_count: number;
+  candidate_file_count: number;
+  uploaded_file_count: number;
+  skipped_file_count: number;
+  skip_reasons: Record<string, number>;
+}
+
 export interface ToolCallSummary {
   id: string;
   name: string;
@@ -241,7 +253,7 @@ export interface RuntimeInfo {
   arch?: string;
   /** Open Design app version reported by the daemon. */
   appVersion?: string;
-  /** Build channel (development / nightly / beta / stable). */
+  /** Build channel (development / prerelease / beta / stable). */
   appChannel?: string;
   /** Whether the daemon is running inside a packaged build. */
   packaged?: boolean;
@@ -258,6 +270,16 @@ export interface TurnInfo {
   skillId?: string;
   /** Design system id selected for this turn (if any). */
   designSystemId?: string;
+  /** sha256 digest of the injected design-system prompt context. */
+  designSystemDigest?: string;
+  /** Source that supplied the effective design-system selection. */
+  designSystemSelectionSource?: string;
+  /** Resume-session stable prompt cache diagnostics. */
+  promptCache?: {
+    stablePromptHash: string;
+    hit: boolean;
+    missReason: string | null;
+  };
 }
 
 export interface ReportContext {
@@ -272,6 +294,7 @@ export interface ReportContext {
   artifactManifest?: ArtifactManifestEntry[];
   inputTextSnapshotManifest?: InputTextSnapshotManifestEntry[];
   manifestCompleteness?: ObjectManifestCompleteness;
+  traceObjectSummary?: TraceObjectSummary;
   tools?: ToolCallSummary[];
   agentEvents?: AgentEventSummary[];
   eventsSummary: EventsSummary;
@@ -631,6 +654,140 @@ function buildCostBreakdown(ctx: ReportContext): Record<string, unknown> {
   };
 }
 
+function cleanNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function sectionAttributionBytes(section: PromptTelemetrySection): number {
+  return cleanNumber(section.redactedBytes) ?? cleanNumber(section.rawBytes) ?? 0;
+}
+
+function redactedContentBytes(section: PromptTelemetrySection): number {
+  return Buffer.byteLength(section.redactedContent ?? '', 'utf8');
+}
+
+function allocateProportionalTokens(
+  total: number | undefined,
+  sections: Array<{ section: PromptTelemetrySection; weightBytes: number }>,
+): Map<PromptTelemetrySection, number> {
+  const out = new Map<PromptTelemetrySection, number>();
+  const cleanTotal = cleanNumber(total);
+  if (cleanTotal === undefined || cleanTotal <= 0) return out;
+  const totalWeight = sections.reduce((sum, item) => sum + item.weightBytes, 0);
+  if (totalWeight <= 0) return out;
+
+  let assigned = 0;
+  let largest: { section: PromptTelemetrySection; tokens: number } | null = null;
+  for (const item of sections) {
+    const exact = (cleanTotal * item.weightBytes) / totalWeight;
+    const rounded = Math.floor(exact);
+    out.set(item.section, rounded);
+    assigned += rounded;
+    if (!largest || item.weightBytes > sectionAttributionBytes(largest.section)) {
+      largest = { section: item.section, tokens: rounded };
+    }
+  }
+  const remainder = Math.round(cleanTotal) - assigned;
+  if (largest && remainder > 0) {
+    out.set(largest.section, (out.get(largest.section) ?? 0) + remainder);
+  }
+  return out;
+}
+
+function buildPromptStackBlameMetadata(
+  promptStack: PromptStackTelemetry | undefined,
+  usage: MessageSummary['usage'] | undefined,
+  timings: RunTimingAnalytics | undefined,
+): Record<string, unknown> {
+  if (!promptStack || promptStack.sections.length === 0) return {};
+  const weightedSections = promptStack.sections
+    .map((section) => ({
+      section,
+      weightBytes: sectionAttributionBytes(section),
+    }))
+    .filter((item) => item.weightBytes > 0);
+  if (weightedSections.length === 0) return {};
+
+  const totalBytes = weightedSections.reduce((sum, item) => sum + item.weightBytes, 0);
+  const sorted = [...weightedSections].sort(
+    (a, b) => b.weightBytes - a.weightBytes || a.section.ordinal - b.section.ordinal,
+  );
+  const cacheCreationBySection = allocateProportionalTokens(
+    usage?.cacheCreationInputTokens,
+    weightedSections,
+  );
+  const cacheReadBySection = allocateProportionalTokens(
+    usage?.cacheReadInputTokens,
+    weightedSections,
+  );
+  const inputEffectiveBySection = allocateProportionalTokens(
+    usage?.inputTokensEffective ?? usage?.inputTokens,
+    weightedSections,
+  );
+  const uncachedBySection = allocateProportionalTokens(
+    usage?.uncachedInputTokens,
+    weightedSections,
+  );
+
+  const sectionRow = ({ section, weightBytes }: { section: PromptTelemetrySection; weightBytes: number }) => {
+    const share = totalBytes > 0 ? weightBytes / totalBytes : 0;
+    return {
+      kind: section.kind,
+      ordinal: section.ordinal,
+      contentMode: section.contentMode,
+      rawBytes: section.rawBytes,
+      redactedBytes: section.redactedBytes,
+      redactedContentBytes: redactedContentBytes(section),
+      attributionBytes: weightBytes,
+      attributionShare: Number(share.toFixed(6)),
+      truncated: section.truncated,
+      ...(section.truncationReason ? { truncationReason: section.truncationReason } : {}),
+      estimatedInputEffectiveTokens: inputEffectiveBySection.get(section) ?? undefined,
+      estimatedCacheCreationInputTokens: cacheCreationBySection.get(section) ?? undefined,
+      estimatedCacheReadInputTokens: cacheReadBySection.get(section) ?? undefined,
+      estimatedUncachedInputTokens: uncachedBySection.get(section) ?? undefined,
+    };
+  };
+
+  const primary = sorted[0]!;
+  const primaryShare = totalBytes > 0 ? primary.weightBytes / totalBytes : 0;
+  return {
+    promptStack_topSectionsByBytes: sorted
+      .slice(0, PROMPT_STACK_BLAME_MAX_SECTIONS)
+      .map(sectionRow),
+    cacheCreationTokensBySection: sorted
+      .filter(({ section }) => (cacheCreationBySection.get(section) ?? 0) > 0)
+      .map(({ section, weightBytes }) => ({
+        kind: section.kind,
+        ordinal: section.ordinal,
+        attributionBytes: weightBytes,
+        estimatedCacheCreationInputTokens: cacheCreationBySection.get(section) ?? 0,
+      })),
+    promptStack_ttftAttribution: {
+      method: 'proportional_by_prompt_section_redacted_bytes',
+      estimation_warning:
+        'Provider reports aggregate prompt/cache tokens only; section token values are estimates for diagnosis, not billing truth.',
+      time_to_first_token_ms: timings?.time_to_first_token_ms,
+      spawn_to_first_token_ms: timings?.spawn_to_first_token_ms,
+      totalAttributionBytes: totalBytes,
+      sectionCount: weightedSections.length,
+      primarySectionKind: primary.section.kind,
+      primarySectionOrdinal: primary.section.ordinal,
+      primarySectionAttributionBytes: primary.weightBytes,
+      primarySectionAttributionShare: Number(primaryShare.toFixed(6)),
+      primarySectionEstimatedInputEffectiveTokens:
+        inputEffectiveBySection.get(primary.section) ?? undefined,
+      primarySectionEstimatedCacheCreationInputTokens:
+        cacheCreationBySection.get(primary.section) ?? undefined,
+      primarySectionEstimatedCacheReadInputTokens:
+        cacheReadBySection.get(primary.section) ?? undefined,
+      cacheTokenSource: usage?.cacheTokenSource,
+    },
+  };
+}
+
 function durationMs(startedAt: number, endedAt: number): number {
   return Math.max(0, Math.round(endedAt - startedAt));
 }
@@ -760,8 +917,14 @@ function buildSemanticPhaseDiagnostics(ctx: ReportContext): Record<string, unkno
         : { duration_ms: null, status: 'unmeasured' };
   };
   addMeasured('prompt-build', marks.promptBuildStartAt, marks.promptBuildEndAt);
+  addMeasured('launch-preflight', marks.launchPreflightStartAt, marks.launchPreflightEndAt);
+  addMeasured('process-spawn', marks.processSpawnStartedAt, marks.processSpawnedAt);
+  addMeasured('stdin-write', marks.stdinWriteStartAt, marks.stdinWriteEndAt);
+  addMeasured('runtime-init-to-first-model-event', marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt, marks.firstModelEventAt);
+  addMeasured('runtime-init-to-first-token', marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt, marks.firstTokenAt);
   addMeasured('agent-call', marks.modelCallStartAt, ctx.run.endedAt);
   addMeasured('stream-output', marks.firstTokenAt, marks.finalizeStartAt ?? ctx.run.endedAt);
+  addMeasured('artifact-write', marks.firstArtifactWriteAt, marks.finalizeStartAt ?? ctx.run.endedAt);
   addMeasured('finalize', marks.finalizeStartAt, ctx.run.endedAt);
   return {
     measured,
@@ -840,6 +1003,8 @@ function buildTimingSpanBodies(
           model: ctx.turn?.model ?? 'unknown',
           skill_id: ctx.turn?.skillId ?? null,
           design_system_id: ctx.turn?.designSystemId ?? null,
+          design_system_digest: ctx.turn?.designSystemDigest ?? null,
+          prompt_cache_hit: ctx.turn?.promptCache?.hit ?? null,
           user_request_available: Boolean(ctx.message.prompt),
           attachment_refs:
             objectRefSummary(cappedManifestEntries(ctx.attachmentManifest)) ?? [],
@@ -859,6 +1024,23 @@ function buildTimingSpanBodies(
       metadata: { boundary: 'promptBuildStartAt -> promptBuildEndAt' },
     },
     {
+      name: 'launch-preflight',
+      start: marks.launchPreflightStartAt,
+      end: marks.launchPreflightEndAt,
+      input: {
+        phase: 'launch-preflight',
+        from: 'promptBuildEndAt',
+        to: 'processSpawnStartedAt',
+      },
+      output: {
+        status:
+          marks.launchPreflightEndAt === undefined
+            ? 'unmeasured'
+            : 'ready_to_spawn',
+      },
+      metadata: { boundary: 'launchPreflightStartAt -> launchPreflightEndAt' },
+    },
+    {
       name: 'spawn',
       start: marks.processSpawnStartedAt,
       end: marks.processSpawnedAt,
@@ -876,6 +1058,52 @@ function buildTimingSpanBodies(
       metadata: {
         boundary: 'processSpawnStartedAt -> processSpawnedAt',
       },
+    },
+    {
+      name: 'stdin-write',
+      start: marks.stdinWriteStartAt,
+      end: marks.stdinWriteEndAt,
+      input: {
+        phase: 'stdin-write',
+        prompt_input_format: 'redacted',
+      },
+      output: {
+        status:
+          marks.stdinWriteEndAt === undefined ? 'unmeasured' : 'prompt_sent',
+      },
+      metadata: { boundary: 'stdinWriteStartAt -> stdinWriteEndAt' },
+    },
+    {
+      name: 'runtime-init-to-first-model-event',
+      start: marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt,
+      end: marks.firstModelEventAt,
+      input: {
+        phase: 'runtime-init-to-first-model-event',
+        from: 'stdinWriteEndAt',
+        to: 'firstModelEventAt',
+      },
+      output: {
+        status:
+          marks.firstModelEventAt === undefined
+            ? 'unmeasured'
+            : 'first_model_event_seen',
+      },
+      metadata: { boundary: 'stdinWriteEndAt/modelCallStartAt/processSpawnedAt -> firstModelEventAt' },
+    },
+    {
+      name: 'runtime-init-to-first-token',
+      start: marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt,
+      end: marks.firstTokenAt,
+      input: {
+        phase: 'runtime-init-to-first-token',
+        from: 'stdinWriteEndAt',
+        to: 'firstTokenAt',
+      },
+      output: {
+        status:
+          marks.firstTokenAt === undefined ? 'unmeasured' : 'first_token_seen',
+      },
+      metadata: { boundary: 'stdinWriteEndAt/modelCallStartAt/processSpawnedAt -> firstTokenAt' },
     },
     {
       name: opts.modelCallName ?? 'agent-call',
@@ -916,6 +1144,24 @@ function buildTimingSpanBodies(
         artifact_blocks_redacted: true,
       },
       metadata: { boundary: 'firstTokenAt -> finalizeStartAt' },
+    },
+    {
+      name: 'artifact-write',
+      start: marks.firstArtifactWriteAt,
+      end: marks.finalizeStartAt ?? runEnd,
+      input: {
+        phase: 'artifact-write',
+        from: 'firstArtifactWriteAt',
+        to: 'finalizeStartAt',
+      },
+      output: {
+        status:
+          marks.firstArtifactWriteAt === undefined
+            ? 'not_seen'
+            : 'artifact_write_seen',
+        artifact_count: ctx.artifacts.length,
+      },
+      metadata: { boundary: 'firstArtifactWriteAt -> finalizeStartAt' },
     },
     {
       name: 'finalize',
@@ -1101,6 +1347,11 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   const promptStackFlatMetadata = promptStack
     ? buildPromptStackFlatMetadata(promptStack)
     : {};
+  const promptStackBlameMetadata = buildPromptStackBlameMetadata(
+    promptStack,
+    ctx.message.usage,
+    ctx.run.timings,
+  );
   const generationInput = promptStack
     ? structuredPromptStackInput(promptStack)
     : inputText;
@@ -1139,6 +1390,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     artifact_manifest_truncated: artifactManifestTruncated,
     input_text_snapshot_manifest: inputTextSnapshotManifest,
     input_text_snapshot_manifest_truncated: inputTextSnapshotManifestTruncated,
+    trace_object_summary: ctx.traceObjectSummary,
     manifest_completeness: wantsArtifacts
       ? (ctx.manifestCompleteness ?? 'unavailable')
       : undefined,
@@ -1148,6 +1400,11 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     reasoning: ctx.turn?.reasoning,
     skillId: ctx.turn?.skillId,
     designSystemId: ctx.turn?.designSystemId,
+    designSystemDigest: ctx.turn?.designSystemDigest,
+    designSystemSelectionSource: ctx.turn?.designSystemSelectionSource,
+    stablePromptHash: ctx.turn?.promptCache?.stablePromptHash,
+    stablePromptCacheHit: ctx.turn?.promptCache?.hit,
+    stablePromptCacheMissReason: ctx.turn?.promptCache?.missReason,
     appVersion: ctx.runtime?.appVersion,
     appChannel: ctx.runtime?.appChannel,
     packaged: ctx.runtime?.packaged,
@@ -1157,6 +1414,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     arch: ctx.runtime?.arch,
     clientType: ctx.runtime?.clientType,
     ...promptStackFlatMetadata,
+    ...promptStackBlameMetadata,
   };
 
   // Generation-level model parameters mirror the Langfuse schema so the UI
@@ -1250,6 +1508,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           cost_breakdown: costBreakdown,
           performance_diagnostics: performanceDiagnostics,
           ...promptStackFlatMetadata,
+          ...promptStackBlameMetadata,
         },
       },
     });
@@ -1278,6 +1537,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           cost_breakdown: costBreakdown,
           performance_diagnostics: performanceDiagnostics,
           ...promptStackFlatMetadata,
+          ...promptStackBlameMetadata,
           reason: 'no_model_generation',
         },
       },

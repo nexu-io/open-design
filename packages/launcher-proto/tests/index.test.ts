@@ -6,11 +6,14 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   LauncherProtocolError,
   buildLauncherAfterQuitArgs,
+  compareLauncherVersions,
   parseLauncherAfterQuitArgs,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   selectLauncherRuntimeTarget,
+  validateLauncherCleanupDescriptor,
   validateLauncherRuntimeDescriptor,
+  type LauncherCleanupDescriptor,
   type LauncherRuntimeDescriptor,
 } from "../src/index.js";
 
@@ -26,6 +29,13 @@ describe("launcher protocol paths", () => {
     expect(paths.downloadsRoot).toBe(join(paths.namespaceRoot, "updates", "downloads"));
     expect(paths.stagingRoot).toBe(join(paths.namespaceRoot, "updates", "staging"));
     expect(paths.releasesRoot).toBe(join(paths.namespaceRoot, "updates", "releases"));
+  });
+
+  it("resolves the self-hosted betas launcher channel", () => {
+    const paths = resolveLauncherPaths({ channel: "betas", namespace: "release-betas-win", root });
+
+    expect(paths.namespaceRoot).toBe(join(root, "launcher", "channels", "betas", "namespaces", "release-betas-win"));
+    expect(paths.runtimePath).toBe(join(paths.namespaceRoot, "runtime.json"));
   });
 
   it("resolves payload version paths without allowing path traversal", () => {
@@ -127,5 +137,53 @@ describe("launcher runtime descriptors", () => {
         lastSuccessful: null,
       },
     })).toEqual({ reason: "no-runtime-target", selected: false });
+  });
+});
+
+describe("launcher cleanup descriptors", () => {
+  const cleanup: LauncherCleanupDescriptor = {
+    channel: "beta",
+    currentVersion: "0.8.1-beta.3",
+    namespace: "release-beta",
+    updatedAt: "2026-06-18T00:00:00.000Z",
+    version: LAUNCHER_SCHEMA_VERSION,
+    versions: [
+      {
+        generation: 2,
+        reason: "older-than-bound-package",
+        state: "deprecated",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+        version: "0.8.1-beta.2",
+      },
+      {
+        generation: 0,
+        reason: "current-bound-package",
+        state: "retained",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+        version: "0.8.1-beta.3",
+      },
+    ],
+  };
+
+  it("validates channel, namespace, states, reasons, and version path segments", () => {
+    expect(validateLauncherCleanupDescriptor(cleanup, { channel: "beta", namespace: "release-beta" })).toEqual(cleanup);
+    expect(() => validateLauncherCleanupDescriptor(cleanup, { channel: "stable", namespace: "release-beta" })).toThrow(LauncherProtocolError);
+    expect(() => validateLauncherCleanupDescriptor({
+      ...cleanup,
+      versions: [{ ...cleanup.versions[0]!, version: "../0.8.1-beta.2" }],
+    }, { channel: "beta", namespace: "release-beta" })).toThrow(LauncherProtocolError);
+  });
+});
+
+describe("launcher version comparison", () => {
+  it("orders stable, prerelease, beta nightly, and dotted nightly versions", () => {
+    expect(compareLauncherVersions("1.0.1", "1.0.0")).toBe(1);
+    expect(compareLauncherVersions("1.0.0", "1.0.0")).toBe(0);
+    expect(compareLauncherVersions("1.0.0-beta.2", "1.0.0-beta.1")).toBe(1);
+    expect(compareLauncherVersions("1.0.0-beta-nightly.2", "1.0.0-beta-nightly.1")).toBe(1);
+    expect(compareLauncherVersions("1.0.0-nightly.10", "1.0.0-nightly.2")).toBe(1);
+    expect(compareLauncherVersions("1.0.0.nightly.2", "1.0.0.nightly.1")).toBe(1);
+    expect(compareLauncherVersions("1.0.0", "1.0.0-beta.9")).toBe(1);
+    expect(compareLauncherVersions("1.0.0-beta.1", "1.0.0")).toBe(-1);
   });
 });

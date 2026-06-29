@@ -61,6 +61,7 @@ export const DEFAULT_SCENARIO_PLUGIN_BY_KIND: Record<ProjectKind, DefaultScenari
   // "headline + subtitle + absolute footer" collision).
   deck:      'example-simple-deck',
   template:  'od-new-generation',
+  brand:     'od-new-generation',
   image:     'od-media-generation',
   video:     'od-media-generation',
   audio:     'od-media-generation',

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
+  amrWalletValueLabel,
   canFetchProviderModels,
   canRunProviderConnectionTest,
   deriveComposioCredentialState,
@@ -293,6 +294,81 @@ describe('SettingsDialog custom model picker state', () => {
   });
 });
 
+describe('SettingsDialog AMR wallet display state', () => {
+  it('shows re-auth guidance when the daemon reports missing or rejected wallet credentials', () => {
+    expect(
+      amrWalletValueLabel({
+        balance: null,
+        loadingLabel: 'Loading',
+        ready: true,
+        snapshot: {
+          status: 'unavailable',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'unavailable',
+          error: {
+            code: 'unauthorized',
+            message: 'AMR wallet authorization expired. Sign in again to refresh wallet access.',
+          },
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('AMR wallet authorization expired. Sign in again to refresh wallet access.');
+
+    expect(
+      amrWalletValueLabel({
+        balance: null,
+        loadingLabel: 'Loading',
+        ready: true,
+        snapshot: {
+          status: 'unavailable',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'unavailable',
+          error: {
+            code: 'missing_control_key',
+            message: 'Sign in again to refresh AMR wallet credentials.',
+          },
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('Sign in again to refresh AMR wallet credentials.');
+  });
+
+  it('keeps transient wallet failures on the temporary-unavailable copy', () => {
+    expect(
+      amrWalletValueLabel({
+        balance: null,
+        loadingLabel: 'Loading',
+        ready: true,
+        snapshot: {
+          status: 'unavailable',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: null,
+          updatedAt: null,
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'unavailable',
+          error: {
+            code: 'network',
+            message: 'AMR wallet balance is temporarily unavailable.',
+          },
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('Balance temporarily unavailable');
+  });
+});
+
 describe('SettingsDialog API Base URL validation', () => {
   it('accepts public http/https URLs and loopback local providers', () => {
     expect(isValidApiBaseUrl('https://api.openai.com/v1')).toBe(true);
@@ -363,6 +439,86 @@ describe('SettingsDialog agent CLI env settings', () => {
     expect(next.agentCliEnv).toEqual({
       codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
     });
+    expect(next.agentCliEnvIntent).toEqual({});
+  });
+
+  it('marks API key env values as explicit CLI overrides', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'codex',
+      'CODEX_API_KEY',
+      '  sk-codex  ',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-alt', CODEX_API_KEY: 'sk-codex' },
+    });
+    expect(next.agentCliEnvIntent).toEqual({
+      codex: { apiKeyOverride: true },
+    });
+  });
+
+  it('keeps the API key override marker when clearing a base URL with a key present', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        codex: {
+          CODEX_API_KEY: 'sk-codex',
+          OPENAI_BASE_URL: 'https://proxy.example/openai',
+        },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'codex',
+      'OPENAI_BASE_URL',
+      '',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      codex: { CODEX_API_KEY: 'sk-codex' },
+    });
+    expect(next.agentCliEnvIntent).toEqual({
+      codex: { apiKeyOverride: true },
+    });
+  });
+
+  it('removes the API key override marker when the last auth key is cleared', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        claude: {
+          CLAUDE_CONFIG_DIR: '~/.claude-2',
+          ANTHROPIC_API_KEY: 'sk-anthropic',
+        },
+      },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'claude',
+      'ANTHROPIC_API_KEY',
+      '',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+    });
+    expect(next.agentCliEnvIntent).toEqual({});
   });
 
   it('removes empty per-agent CLI env entries', () => {

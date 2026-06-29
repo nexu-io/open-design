@@ -1,10 +1,12 @@
 import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
-import type { DesignSystemSummary } from './design-systems.js';
+import type { DesignSystemSummary } from './design-systems/index.js';
 import type { RoutineRoutesService } from './routes/routine.js';
+import type { OpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
+  getPublicBaseUrl?: (...args: any[]) => string;
   isLocalSameOrigin: (...args: any[]) => boolean;
   requireLocalDaemonRequest: (...args: any[]) => any;
   resolvedPortRef: { current: number };
@@ -15,12 +17,17 @@ export interface HttpDeps {
 
 export interface PathDeps {
   ARTIFACTS_DIR: string;
+  BRANDS_DIR: string;
   BUNDLED_PETS_DIR: string;
+  CRAFT_DIR: string;
   DESIGN_SYSTEMS_DIR: string;
   // Bundled rendering catalogue (see specs/current/skills-and-design-templates.md).
   // Distinct from SKILLS_DIR so the EntryView Templates surface and the
   // Settings → Skills surface stay decoupled.
   DESIGN_TEMPLATES_DIR: string;
+  // Global OD Library data root for owned, content-addressed assets
+  // (derived from RUNTIME_DATA_DIR). See apps/daemon/src/library.ts.
+  LIBRARY_DIR: string;
   OD_BIN: string;
   PROJECT_ROOT: string;
   PROJECTS_DIR: string;
@@ -36,6 +43,7 @@ export interface PathDeps {
 }
 
 export interface ResourceDeps {
+  FIRST_PARTY_ATOMS?: Array<any>;
   listAllDesignSystems: () => Promise<Array<DesignSystemSummary & { source?: string }>>;
   listAllSkills: () => Promise<Array<SkillInfo & { source?: string }>>;
   // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates
@@ -84,6 +92,10 @@ export interface TelemetryDeps {
     customReason: string;
     scoreMetadata?: Record<string, unknown>;
   }) => Promise<{ status: 'accepted' | 'skipped_consent' | 'skipped_no_sink' }>;
+  reportRunCompletionTelemetryFallback: (...args: any[]) => any;
+  resolveRunProjectKindForAnalytics: (...args: any[]) => any;
+  runArtifactBaselines: any;
+  runRetryEventsForAnalytics: (...args: any[]) => any;
 }
 
 export interface ServerContext {
@@ -113,17 +125,20 @@ export interface ServerContext {
   nativeDialogs: any;
   research: any;
   mcp: any;
+  plugins: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
   projectPreviewScopes: ProjectPreviewScopeDeps;
-  telemetry?: TelemetryDeps;
+  telemetry: TelemetryDeps;
   validation: any;
   finalize: any;
   handoff: any;
   chat: any;
+  messages: any;
   agents: any;
   critique: any;
-  lifecycle?: {
+  openDesignPublicMetadata: OpenDesignPublicMetadataService;
+  lifecycle: {
     isDaemonShuttingDown: () => boolean;
   };
 }

@@ -3,22 +3,26 @@ import type {
   ApplyResult,
   ChatSessionMode,
   InstalledPluginRecord,
+  ProjectKind,
   ProjectMetadata,
 } from '@open-design/contracts';
 import {
   applyPlugin,
+  duplicatePluginAsProject,
   listPlugins,
   renderPluginBriefTemplate,
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { TrustBadge } from './TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../runtime/plugin-source';
 import { useAnalytics } from '../analytics/provider';
 import { trackPluginLoopClick } from '../analytics/events';
+import { navigate } from '../router';
 
 export interface PluginLoopSubmit {
   prompt: string;
@@ -43,7 +47,7 @@ export interface PluginLoopSubmit {
   // Null means the caller did not stamp an explicit kind. HomeView's
   // free-form fallback uses `other` and binds the hidden od-default
   // router plugin so the agent asks for the exact task type in-chat.
-  projectKind?: 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other' | null;
+  projectKind?: ProjectKind | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;
   // Single-use desktop token minted for `workingDir` when the folder was
@@ -69,7 +73,7 @@ interface ActivePlugin {
 }
 
 export function PluginLoopHome({ onSubmit }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +109,10 @@ export function PluginLoopHome({ onSubmit }: Props) {
     });
   }, [plugins]);
 
-  async function usePlugin(record: InstalledPluginRecord) {
+  async function usePlugin(
+    record: InstalledPluginRecord,
+    action: PluginUseAction = 'use-with-query',
+  ) {
     setPendingApplyId(record.id);
     setError(null);
     const result = await applyPlugin(record.id, { locale });
@@ -120,11 +127,29 @@ export function PluginLoopHome({ onSubmit }: Props) {
     }
     setActive({ record, result, inputs });
     const query = result.query || resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
-    if (query) {
+    if (action === 'use-with-query' && query) {
       setPrompt(renderPluginBriefTemplate(query, inputs));
     }
     setDetailsRecord(null);
     requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  async function duplicatePlugin(record: InstalledPluginRecord) {
+    setError(null);
+    try {
+      const result = await duplicatePluginAsProject(record.id, {
+        name: localizePluginTitle(locale, record),
+      });
+      setDetailsRecord(null);
+      navigate({
+        kind: 'project',
+        projectId: result.projectId,
+        conversationId: result.conversationId,
+        fileName: result.relPath,
+      });
+    } catch {
+      setError(t('pluginCard.duplicateFailed'));
+    }
   }
 
   function openDetails(record: InstalledPluginRecord) {
@@ -347,7 +372,8 @@ export function PluginLoopHome({ onSubmit }: Props) {
         <PluginDetailsModal
           record={detailsRecord}
           onClose={closeDetails}
-          onUse={(record) => void usePlugin(record)}
+          onUse={(record, action) => void usePlugin(record, action)}
+          onDuplicate={(record) => void duplicatePlugin(record)}
           isApplying={pendingApplyId === detailsRecord.id}
         />
       ) : null}

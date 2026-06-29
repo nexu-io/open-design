@@ -356,7 +356,7 @@ Au-delà de ça :
 - **Un seul sujet par PR.** Ajouter un Skill, refactorer le parser et bumper une
   dépendance : ce sont trois PR.
 - **Titre impératif + scope.** `add dating-web skill`,
-  `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
+  `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`.
 - **Utilisez le template de PR.** Remplissez chaque section de
   [`.github/pull_request_template.md`](../../.github/pull_request_template.md) — Why,
   What users will see, Surface area, Screenshots (si UI), Bug fix verification
@@ -454,7 +454,7 @@ dans les [Discussions][discussions] / sur [Discord][discord], et le reste
 se fait tout seul.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/qhbcCH8Am4
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 

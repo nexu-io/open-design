@@ -12,7 +12,7 @@ import {
 } from "react";
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
-import { useI18n, useT } from '../i18n';
+import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
 import {
@@ -23,19 +23,18 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
   trackComposerBarClick,
-  trackComposerSessionModeClick,
   trackDesignToolboxClick,
   trackFileUploadResult,
 } from '../analytics/events';
-import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import type {
   ComposerBarClickProps,
   DesignToolboxClickProps,
 } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists } from "../providers/registry";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
 import { WorkingDirPicker } from './WorkingDirPicker';
-import { patchProject } from "../state/projects";
+import { duplicatePluginAsProject, patchProject } from "../state/projects";
+import { navigate } from '../router';
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
 import { listPlugins } from "../state/projects";
@@ -43,6 +42,7 @@ import type { AppConfig, ChatAttachment, ChatCommentAttachment, Project, Project
 import type {
   ContextItem,
   AppliedPluginSnapshot,
+  ChatAnalyticsEntryFrom,
   ChatSessionMode,
   ConnectorDetail,
   InstalledPluginRecord,
@@ -53,8 +53,11 @@ import type {
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon, type IconName } from "./Icon";
-import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { LibraryPicker } from './LibraryPicker';
+import { FigmaImportModal } from './FigmaImportModal';
+import { assetTitle, elementMetaOf } from './LibraryAssetMeta';
+import type { LibraryAsset, LibraryElementMeta } from '@open-design/contracts';
 import {
   DESIGN_TOOLBOX_ACTIONS,
   designToolboxActionBadge,
@@ -87,6 +90,8 @@ import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverl
 import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
 import { listenForConnectorsChanged } from './connectors-events';
 import { fetchConnectorCatalogSnapshot } from './connectors-state';
+import { PlaceholderCarousel } from './home-hero/PlaceholderCarousel';
+import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -165,6 +170,8 @@ interface Props {
   onSessionModeChange?: (mode: ChatSessionMode) => void;
   sendDisabled?: boolean;
   initialDraft?: string;
+  composerPlaceholder?: string;
+  placeholderScenarios?: ReadonlyArray<PlaceholderScenario>;
   draftStorageKey?: string;
   // Lazy ensure — the composer calls this before its first upload, so the
   // project folder exists on disk before files land in it. Returns the
@@ -308,6 +315,10 @@ export interface ChatSendMeta {
   // for this run only is composed with the extra skill bodies, without
   // touching the project's persistent `skillId`.
   skillIds?: string[];
+  /** Overrides the run_created / run_finished `entry_from` analytics prop for
+   *  this send (e.g. 'mark' when the turn is sent from the Mark draw overlay).
+   *  Behavior never depends on it; it only shapes PostHog props. */
+  entryFrom?: ChatAnalyticsEntryFrom;
 }
 
 /**
@@ -330,6 +341,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onSessionModeChange,
       sendDisabled = false,
       initialDraft,
+      composerPlaceholder,
+      placeholderScenarios = [],
       draftStorageKey,
       onEnsureProject,
       commentAttachments = [],
@@ -370,7 +383,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     },
     ref
   ) {
-    const t = useT();
+    const { locale, t } = useI18n();
     const analytics = useAnalytics();
     const activeFileContext =
       projectMetadata?.importedFrom === 'folder' && activeProjectFileName
@@ -378,6 +391,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         : null;
     const activeFileDisplayName = activeFileContext ? lastPathSegment(activeFileContext) : null;
     const [draft, setDraft] = useState(() => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "");
+    const [placeholderScenario, setPlaceholderScenario] = useState<PlaceholderScenario | null>(null);
     const composerRootRef = useRef<HTMLDivElement | null>(null);
     // Synchronous mirror of `draft`. Event handlers that mutate the draft off
     // a captured render closure (notably the annotation listener, where two
@@ -393,8 +407,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // 2026-05-20 04:08 for the rationale.
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
     const nextAttachmentOrderRef = useRef(0);
+    const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+    const [figmaModalOpen, setFigmaModalOpen] = useState(false);
     const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
     const streamingAnnotationSendPendingRef = useRef(false);
+    // Remembers the entry_from that the deferred streaming send must carry once
+    // it flushes. The Mark draw-overlay tags 'mark' synchronously; without this
+    // the flush effect would report the run as the default composer entry.
+    const streamingAnnotationSendEntryFromRef = useRef<ChatSendMeta['entryFrom']>(undefined);
     const [streamingAnnotationSendPending, setStreamingAnnotationSendPendingState] = useState(false);
     // Skills the user has @-mentioned for this turn. We dedupe on id and
     // strip the chip when the user removes the corresponding `@<skill>`
@@ -447,6 +467,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       useState<AppliedPluginSnapshot | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
     const inlineBackedPluginRef = useRef<{ id: string; label: string } | null>(null);
+    async function duplicateDetailsPlugin(record: InstalledPluginRecord) {
+      try {
+        const result = await duplicatePluginAsProject(record.id, {
+          name: localizePluginTitle(locale, record),
+        });
+        setDetailsRecord(null);
+        navigate({
+          kind: 'project',
+          projectId: result.projectId,
+          conversationId: result.conversationId,
+          fileName: result.relPath,
+        });
+      } catch {
+        onShowToast?.(t('pluginCard.duplicateFailed'));
+      }
+    }
     // Consolidated "tools" popover — a single dropdown anchored to the
     // leading sliders icon that hosts project context, MCP, Import actions,
     // and a shortcut to open the full Settings dialog. Replaces the previous
@@ -471,6 +507,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const applyDesignToolboxActionRef = useRef<(action: DesignToolboxAction) => void>(() => {});
     // Same latest-closure trick for picking a skill by id from the next-step card.
     const applyDesignToolboxSkillByIdRef = useRef<(skillId: string) => void>(() => {});
+    // Best-effort entry_from carried from a guided Next-step action: the card
+    // only seeds the composer, so the tag is stashed here and consumed by the
+    // next `sendComposedTurn` (then cleared). An explicit meta.entryFrom always
+    // wins over this pending value.
+    const pendingEntryFromRef = useRef<ChatAnalyticsEntryFrom | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // The project's working directory: the local folder the agent can read
@@ -936,9 +977,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         applyDesignToolboxAction: (id: DesignToolboxActionId) => {
           const action = getDesignToolboxAction(id);
           if (!action) return;
+          pendingEntryFromRef.current = 'next_step';
           applyDesignToolboxActionRef.current(action);
         },
         applyDesignToolboxSkill: (skillId: string) => {
+          pendingEntryFromRef.current = 'next_step';
           applyDesignToolboxSkillByIdRef.current(skillId);
         },
         openDesignToolbox: () => {
@@ -1030,7 +1073,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ...attachments,
             ]
           : attachments;
-      onSend(prompt, nextAttachments, nextCommentAttachments, meta);
+      // Apply a pending Next-step tag if the caller didn't set its own
+      // entry_from, then clear it so it only colours the immediate next send.
+      const pendingEntryFrom = pendingEntryFromRef.current;
+      pendingEntryFromRef.current = null;
+      const effectiveMeta: ChatSendMeta | undefined =
+        pendingEntryFrom && !meta?.entryFrom
+          ? { ...(meta ?? {}), entryFrom: pendingEntryFrom }
+          : meta;
+      onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
       reset();
       return true;
     }
@@ -1355,6 +1406,65 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    // "Select from library" (资源库): copy each chosen asset into the project's
+    // design files and stage it as an attachment chip, mirroring how the native
+    // file picker materializes uploads into the project on attach. The apply
+    // call records a provenance back-link so the registry knows the asset was
+    // consumed.
+    async function addAssetsFromLibrary(assets: LibraryAsset[]) {
+      if (assets.length === 0) return;
+      const id = await ensureProject();
+      if (!id) return;
+      setUploading(true);
+      setUploadError(null);
+      const orderStart = reserveAttachmentOrders(assets.length);
+      try {
+        const applied: ChatAttachment[] = [];
+        // Element-pick captures carry their picked node's markup; collect it so
+        // we can drop the HTML straight into the composer input (the image still
+        // attaches as a normal reference).
+        const elementBlocks: string[] = [];
+        let failed = 0;
+        for (const asset of assets) {
+          const res = await applyLibraryAsset(asset.id, id);
+          if (!res?.relPath) {
+            failed += 1;
+            continue;
+          }
+          applied.push({
+            path: res.relPath,
+            name: assetTitle(asset),
+            kind: asset.kind === 'image' ? 'image' : 'file',
+          });
+          const element = elementMetaOf(asset);
+          if (element?.hasHtml) {
+            const html = await fetchLibraryAssetElementHtml(asset.id);
+            if (html) elementBlocks.push(formatElementHtmlBlock(asset, element, html));
+          }
+        }
+        if (applied.length > 0) {
+          appendOrderedStagedAttachments(assignChatAttachmentOrders(applied, orderStart));
+        }
+        if (elementBlocks.length > 0) {
+          const existing = editorRef.current?.getText() ?? '';
+          editorRef.current?.insertText((existing.trim() ? '\n\n' : '') + elementBlocks.join('\n\n'));
+          editorRef.current?.focus();
+        }
+        if (failed > 0) {
+          setUploadError(
+            applied.length > 0
+              ? `Added ${applied.length} item(s), but ${failed} failed.`
+              : `Could not add ${failed} item(s) from the library.`,
+          );
+        }
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setUploadError(`Could not add from library (${detail}).`);
+      } finally {
+        setUploading(false);
+      }
+    }
+
     async function uploadClipboardImagesFromAsyncClipboard() {
       if (!navigator.clipboard?.read) return false;
       try {
@@ -1485,7 +1595,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
               const attachments = sortChatAttachmentsByOrder([...staged, ...uploaded]);
               const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-              sendComposedTurn(prompt, attachments, nextCommentAttachments, queueMeta(currentRunContextMeta()));
+              // Mark draw-overlay → run: tag entry_from='mark' so the dashboard
+              // separates annotation-driven runs from plain composer sends.
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...queueMeta(currentRunContextMeta()), entryFrom: 'mark' });
               ack({ ok: true });
               return;
             }
@@ -1493,6 +1605,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             if (detail.action === 'send') {
               if (streaming) {
                 appendAnnotationToComposer();
+                // Carry entry_from='mark' through the deferred send so the
+                // flush effect below reports the run as a Mark annotation
+                // rather than the default composer entry.
+                streamingAnnotationSendEntryFromRef.current = 'mark';
                 setStreamingAnnotationSendPending(true);
                 ack({ ok: true });
                 return;
@@ -1505,7 +1621,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
               const attachments = sortChatAttachmentsByOrder([...staged, ...uploaded]);
               const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-              sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
+              // Mark draw-overlay → run: tag entry_from='mark' so the dashboard
+              // separates annotation-driven runs from plain composer sends.
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...currentRunContextMeta(), entryFrom: 'mark' });
               ack({ ok: true });
               return;
             }
@@ -1550,7 +1668,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // handler writes draftRef synchronously, so the ref is authoritative even
       // if this effect's render closure predates the last accumulation.
       const prompt = draftRef.current.trim();
-      sendComposedTurn(prompt, staged, currentCommentAttachments(), currentRunContextMeta());
+      // Consume the entry_from captured when the send was deferred (Mark
+      // draw-overlay sets 'mark'); clear it so a later plain send is unaffected.
+      const pendingEntryFrom = streamingAnnotationSendEntryFromRef.current;
+      streamingAnnotationSendEntryFromRef.current = undefined;
+      const baseMeta = currentRunContextMeta();
+      const meta = pendingEntryFrom ? { ...baseMeta, entryFrom: pendingEntryFrom } : baseMeta;
+      sendComposedTurn(prompt, staged, currentCommentAttachments(), meta);
     }, [
       commentAttachments,
       draft,
@@ -1946,7 +2070,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         reset();
         return;
       }
-      if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) return;
+      if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) {
+        const placeholderPrompt = placeholderSubmittable && placeholderScenario
+          ? placeholderScenario.text.trim()
+          : '';
+        if (!placeholderPrompt) return;
+        sendComposedTurn(placeholderPrompt, [], [], contextMeta);
+        return;
+      }
       sendComposedTurn(prompt, staged, nextCommentAttachments, contextMeta);
     }
 
@@ -2059,8 +2190,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         .filter((s) => skillMatchesQuery(s, mentionQuery))
         .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery));
     }, [mention, mentionQuery, skills, stagedSkills]);
+    const liveCommentAttachments = currentCommentAttachments();
+    const placeholderCarouselActive =
+      !streaming
+      && !sendDisabled
+      && !activeFileContext
+      && placeholderScenarios.length > 0
+      && draft.trim().length === 0
+      && staged.length === 0
+      && liveCommentAttachments.length === 0
+      && !mention
+      && !slash;
+    const placeholderSubmittable =
+      placeholderCarouselActive && Boolean(placeholderScenario?.text.trim());
     const hasComposerPayload =
-      draft.trim().length > 0 || staged.length > 0 || currentCommentAttachments().length > 0;
+      draft.trim().length > 0
+      || staged.length > 0
+      || liveCommentAttachments.length > 0
+      || placeholderSubmittable;
     const showStopButton = streaming && !hasComposerPayload;
     const showSendButton = !streaming || hasComposerPayload;
 
@@ -2184,9 +2331,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               placeholder={
                 activeFileDisplayName
                   ? t('chat.activeFilePlaceholder', { file: activeFileDisplayName })
-                  : t('chat.composerPlaceholder')
+                  : placeholderCarouselActive
+                    ? ''
+                    : composerPlaceholder ?? t('chat.composerPlaceholder')
               }
-              title={activeFileDisplayName ?? t('chat.composerPlaceholder')}
+              title={activeFileDisplayName ?? composerPlaceholder ?? t('chat.composerPlaceholder')}
               knownEntities={composerMentionEntities}
               onChange={handleEditorChange}
               onTrigger={handleEditorTrigger}
@@ -2199,6 +2348,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 activeId: mention ? `mention-opt-${mentionIndex}` : null,
               }}
             />
+            {placeholderScenarios.length > 0 ? (
+              <PlaceholderCarousel
+                scenarios={placeholderScenarios}
+                active={placeholderCarouselActive}
+                onScenarioChange={setPlaceholderScenario}
+              />
+            ) : null}
           </div>
           <CaretFloatingLayer
             caret={caretRect}
@@ -2308,6 +2464,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 fileInputRef.current?.click();
               }}
               attachLoading={uploading}
+              onSelectFromLibrary={() => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'library',
+                });
+                setLibraryPickerOpen(true);
+              }}
+              onImportFigma={projectId ? () => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'figma_import',
+                });
+                setFigmaModalOpen(true);
+              } : undefined}
               toolboxLabel={t('chat.designToolbox.title')}
               renderToolbox={(close) => (
                 <DesignToolboxPanel
@@ -2412,22 +2584,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {leadingAccessory}
             <span className="composer-spacer" />
             {footerAccessory}
-            <SessionModeToggle
-              mode={sessionMode}
-              onChange={(next) => {
-                if (next !== sessionMode) {
-                  trackComposerSessionModeClick(analytics.track, {
-                    page_name: 'chat_panel',
-                    area: 'chat_composer',
-                    element: 'session_mode_toggle',
-                    mode_before: sessionModeToTracking(sessionMode),
-                    mode_after: sessionModeToTracking(next),
-                    ...(projectId ? { project_id: projectId } : {}),
-                  });
-                }
-                onSessionModeChange?.(next);
-              }}
-            />
             {showStopButton ? (
               <button
                 type="button"
@@ -2473,9 +2629,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               invalid={workingDirMissing}
               recentDirs={recentDirs}
               onOpen={() => void checkWorkingDir()}
-              onPickDirectory={() => void handlePickWorkingDir()}
-              onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
-              onClear={() => void clearWorkingDir()}
+              onPickDirectory={() => {
+                // Fire on the click itself (intent), matching the home
+                // composer's working_dir* elements so one dashboard counts the
+                // action across both surfaces.
+                trackComposerBar({ element: 'working_dir' });
+                void handlePickWorkingDir();
+              }}
+              onSelectRecent={(dir) => {
+                trackComposerBar({ element: 'working_dir_recent' });
+                void setWorkingDirFolder(dir);
+              }}
+              onClear={() => {
+                trackComposerBar({ element: 'working_dir_clear' });
+                void clearWorkingDir();
+              }}
             />
           </div>
         ) : null}
@@ -2489,7 +2657,34 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               await pluginsSectionRef.current?.applyById(record.id, record);
               setDetailsRecord(null);
             }}
+            onDuplicate={(record) => void duplicateDetailsPlugin(record)}
             hideUseAction
+          />
+        ) : null}
+        {libraryPickerOpen ? (
+          <LibraryPicker
+            onClose={() => setLibraryPickerOpen(false)}
+            onConfirm={(assets) => addAssetsFromLibrary(assets)}
+          />
+        ) : null}
+        {figmaModalOpen && projectId ? (
+          <FigmaImportModal
+            onClose={() => setFigmaModalOpen(false)}
+            resolveProjectId={async () => projectId}
+            onImported={(result) => {
+              // Prefill the composer with the reshape prompt; the user reviews
+              // and sends to build the page from the decoded snapshot.
+              setDraft(result.suggestedPrompt);
+              editorRef.current?.setText(result.suggestedPrompt);
+              editorRef.current?.focus();
+            }}
+            onFigmaUrl={(url, notes) => {
+              const prompt = `Migrate the Figma file at ${url} into a responsive webpage using its design system.${notes ? ` ${notes}` : ''}`;
+              setDraft(prompt);
+              editorRef.current?.setText(prompt);
+              editorRef.current?.focus();
+              setFigmaModalOpen(false);
+            }}
           />
         ) : null}
       </div>
@@ -2622,6 +2817,31 @@ function buildComposerMentionEntities({
 
 function isFiniteAttachmentOrder(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+// Upper bound on element markup folded into the composer input so a huge node's
+// outerHTML can't swamp the prompt; the screenshot still attaches in full.
+const MAX_ELEMENT_HTML_CHARS = 8000;
+
+/**
+ * Render a captured element's markup as a composer-input block: a one-line
+ * descriptor (selector + rendered size) followed by a fenced HTML code block.
+ * Used when an element-pick library asset is pulled into the chat so the user
+ * sees — and can edit — the element's HTML inline before sending.
+ */
+function formatElementHtmlBlock(
+  asset: LibraryAsset,
+  element: LibraryElementMeta,
+  html: string,
+): string {
+  const descriptor = element.selector || element.tag || assetTitle(asset);
+  const size = element.width && element.height ? ` · ${element.width}×${element.height}` : '';
+  const trimmed = html.trim();
+  const body =
+    trimmed.length > MAX_ELEMENT_HTML_CHARS
+      ? `${trimmed.slice(0, MAX_ELEMENT_HTML_CHARS)}\n<!-- …truncated -->`
+      : trimmed;
+  return `Captured element ${descriptor}${size}\n\n\`\`\`html\n${body}\n\`\`\``;
 }
 
 function normalizeChatAttachmentOrders(attachments: ChatAttachment[]): ChatAttachment[] {

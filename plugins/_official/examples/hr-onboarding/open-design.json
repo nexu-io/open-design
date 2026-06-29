@@ -24,7 +24,7 @@
     "en": "Hr Onboarding"
   },
   "version": "0.1.0",
-  "description": "A new-hire onboarding plan as a single page — first week schedule,\nbuddy + manager intro, learning track, equipment checklist, and \"you're\nset when…\" outcomes. Use when the brief mentions \"onboarding\",\n\"new hire\", \"first week plan\", or \"入职\".",
+  "description": "A new-hire onboarding plan as a single page — first week schedule, buddy + manager intro, learning track, equipment checklist, and \"you're set when…\" outcomes. Use when the brief mentions \"onboarding\", \"new hire\", \"first week plan\", or \"入职\".",
   "description_i18n": {
     "zh-CN": "单页新员工入职计划——第一周日程安排、伙伴+经理介绍、学习路径、设备清单以及'完成标志'目标。当需求提及'入职'、'新员工'、'第一周计划'或'onboarding'时使用。",
     "zh-TW": "單頁新進員工入職計畫——第一週日程安排、夥伴+主管介紹、學習路徑、設備清單以及「完成標誌」目標。當需求提及「入職」、「新進員工」、「第一週計畫」或「onboarding」時使用。",
@@ -43,7 +43,7 @@
     "ar": "خطة تأهيل الموظفين الجدد في صفحة واحدة — جدول الأسبوع الأول، تعريف بالزميل + المدير، مسار التعلم، قائمة المعدات، ونتائج 'أنت جاهز عندما…'. استخدمها عند ذكر 'التأهيل'، 'موظف جديد'، 'خطة الأسبوع الأول'، أو '入职'.",
     "tr": "Tek sayfalık yeni işe alım onboarding planı — ilk hafta programı, buddy + yönetici tanıtımı, öğrenme yolu, ekipman kontrol listesi ve 'hazırsınız, çünkü…' sonuçları. Brief'te 'onboarding', 'yeni işe alım', 'ilk hafta planı' veya '入职' geçtiğinde kullanın.",
     "uk": "План адаптації нових співробітників на одній сторінці — розклад першого тижня, знайомство з наставником і керівником, навчальний трек, чеклист обладнання та критерії 'ви готові, коли…'. Використовуйте при згадуванні 'онбордінг', 'новий співробітник', 'план першого тижня' або '入职'.",
-    "en": "A new-hire onboarding plan as a single page — first week schedule,\nbuddy + manager intro, learning track, equipment checklist, and \"you're\nset when…\" outcomes. Use when the brief mentions \"onboarding\",\n\"new hire\", \"first week plan\", or \"入职\"."
+    "en": "A new-hire onboarding plan as a single page — first week schedule, buddy + manager intro, learning track, equipment checklist, and \"you're set when…\" outcomes. Use when the brief mentions \"onboarding\", \"new hire\", \"first week plan\", or \"入职\"."
   },
   "license": "MIT",
   "author": {

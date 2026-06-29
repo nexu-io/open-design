@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   resolveLocalizedText,
@@ -21,6 +22,7 @@ import {
 import {
   addPluginMarketplace,
   applyPlugin,
+  duplicatePluginAsProject,
   installPluginSource,
   listPluginMarketplaces,
   listPlugins,
@@ -46,6 +48,7 @@ import { localizePluginDescription, localizePluginTitle } from './plugins-home/l
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { AnimatePresence } from 'motion/react';
+import { navigate } from '../router';
 
 type PluginsTab = 'installed' | 'available' | 'sources' | 'team';
 
@@ -130,6 +133,7 @@ export function PluginsView({
   const [activeTab, setActiveTab] = useState<PluginsTab>('installed');
   const [importOpen, setImportOpen] = useState(false);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
+  const [pendingDuplicatePluginId, setPendingDuplicatePluginId] = useState<string | null>(null);
   const [pendingInstallEntry, setPendingInstallEntry] = useState<string | null>(null);
   const [pendingSourceAction, setPendingSourceAction] = useState<string | null>(null);
   const [pendingShareAction, setPendingShareAction] = useState<{
@@ -218,6 +222,30 @@ export function PluginsView({
       ok: true,
       message: `${record.title} is ready. Use it from Home with @ search or pick it from the gallery.`,
     });
+  }
+
+  async function handleDuplicatePlugin(record: InstalledPluginRecord) {
+    setPendingDuplicatePluginId(record.id);
+    setNotice(null);
+    try {
+      const result = await duplicatePluginAsProject(record.id, {
+        name: localizePluginTitle(locale, record),
+      });
+      setDetailsRecord(null);
+      navigate({
+        kind: 'project',
+        projectId: result.projectId,
+        conversationId: result.conversationId,
+        fileName: result.relPath,
+      });
+    } catch {
+      setNotice({
+        ok: false,
+        message: t('pluginCard.duplicateFailed'),
+      });
+    } finally {
+      setPendingDuplicatePluginId(null);
+    }
   }
 
   async function handleCreatePluginShareTask(
@@ -381,6 +409,7 @@ export function PluginsView({
             loading={false}
             activePluginId={activePlugin?.record.id ?? null}
             pendingApplyId={pendingApplyId}
+            pendingDuplicateId={pendingDuplicatePluginId}
             pendingShareAction={pendingShareAction}
             onUse={(record, action) => {
               trackPluginsInstalledTabClick(analytics.track, {
@@ -409,6 +438,7 @@ export function PluginsView({
               }
               void handleUsePlugin(record, action);
             }}
+            onDuplicate={(record) => void handleDuplicatePlugin(record)}
             onOpenDetails={(record) => {
               trackPluginsInstalledTabClick(analytics.track, {
                 page_name: 'plugins',
@@ -544,7 +574,8 @@ export function PluginsView({
           <PluginDetailsModal
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
-            onUse={(record) => void handleUsePlugin(record, 'use')}
+            onUse={(record, action) => void handleUsePlugin(record, action)}
+            onDuplicate={(record) => void handleDuplicatePlugin(record)}
             isApplying={pendingApplyId === detailsRecord.id}
           />
         ) : null}
@@ -618,17 +649,14 @@ function PluginShareConfirmModal({
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
 
   return (
-    <div
-      className="plugin-details-modal-backdrop plugin-share-confirm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${actionTitle} for ${sourceRecord.title}`}
-      onClick={(event) => {
-        if (!pending && event.target === event.currentTarget) onClose();
-      }}
+    <Dialog
+      backdropClassName="plugin-details-modal-backdrop plugin-share-confirm"
+      className="plugin-details-modal plugin-share-confirm__panel"
+      includeChromeClassName={false}
+      ariaLabel={`${actionTitle} for ${sourceRecord.title}`}
+      onClose={pending ? undefined : onClose}
       data-testid="plugin-share-confirm-modal"
     >
-      <div className="plugin-details-modal plugin-share-confirm__panel">
         <header className="plugin-details-modal__head">
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
@@ -734,8 +762,7 @@ function PluginShareConfirmModal({
             {pending ? 'Starting…' : details.confirmLabel}
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
