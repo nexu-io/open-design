@@ -1201,6 +1201,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     return locations.some((location) => !location.builtIn && projectBelongsToLocation(project, location));
   }
 
+  async function removeProjectStorage(project: any): Promise<void> {
+    const metadata = project?.metadata;
+    const baseDir = typeof metadata?.baseDir === 'string' ? path.normalize(metadata.baseDir) : null;
+    if (baseDir && path.isAbsolute(baseDir)) {
+      const locations = await configuredProjectLocations();
+      const isManagedProjectLocationDir = locations.some(
+        (location) => !location.builtIn && projectBelongsToLocation(project, location),
+      );
+      if (isManagedProjectLocationDir) {
+        await rm(baseDir, { recursive: true, force: true });
+        return;
+      }
+    }
+    await removeProjectDir(PROJECTS_DIR, project.id);
+  }
+
   async function resolveCreateProjectLocationId(explicitProjectLocationId: unknown): Promise<string> {
     if (typeof explicitProjectLocationId === 'string' && explicitProjectLocationId.trim()) {
       return explicitProjectLocationId.trim();
@@ -2098,8 +2114,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
+      const project = getProject(db, req.params.id);
       dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      if (project) await removeProjectStorage(project).catch(() => {});
+      else await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
