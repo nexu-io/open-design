@@ -453,6 +453,39 @@ function withSkillRootPreamble(body: string, dir: string): string {
   return preamble + body;
 }
 
+/**
+ * Build a compact system-prompt reference that points the agent at the staged
+ * skill directory instead of inlining the full SKILL.md body. Used as a
+ * fallback for argv-only adapters (e.g. Kimi) when the composed prompt would
+ * otherwise exceed the OS argv budget.
+ */
+export function buildExternalizedSkillReference(args: {
+  skillName: string;
+  skillDir: string;
+  composedSkill?: boolean;
+  skillBody?: string;
+}): string {
+  const folder = skillCwdAliasSegment(args.skillDir);
+  const relPath = `${SKILLS_CWD_ALIAS}/${folder}/SKILL.md`;
+  const header = args.composedSkill
+    ? `## Composed skill — ${args.skillName}`
+    : `## Active skill — ${args.skillName}`;
+  const sideFiles = args.skillBody
+    ? collectReferencedSideFiles(args.skillBody)
+    : [];
+  const sideFilesNote =
+    sideFiles.length > 0
+      ? ` Side files are in the same directory: ${sideFiles
+          .map((f) => `\`${f}\``)
+          .join(', ')}.`
+      : ' Side files are in the same directory.';
+  return (
+    `${header}\n\n` +
+    `This skill's full workflow is staged at \`${relPath}\`. ` +
+    `Read that file and follow its instructions exactly.${sideFilesNote}`
+  );
+}
+
 function collectReferencedSideFiles(body: string): string[] {
   const files = new Set<string>();
   const matches = body.matchAll(/\b(?:assets|references)\/[A-Za-z0-9._-]+\b/g);

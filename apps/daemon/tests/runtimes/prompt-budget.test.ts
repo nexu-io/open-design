@@ -162,6 +162,62 @@ test('Kimi prompt mode declares and enforces an argv-byte budget', () => {
   assert.equal(checkPromptArgvBudget(kimi, 'hello'), null);
 });
 
+// Kimi does not support a stdin sentinel or prompt-file flag, so the composed
+// prompt must travel as a single `-p <prompt>` argv argument. Windows keeps the
+// conservative CreateProcess budget, but POSIX ceilings are far higher; allow
+// larger prompts there so the default design router and other context-heavy
+// skills don't false-positive as "prompt too long".
+test('Kimi uses a higher argv-byte budget on POSIX while keeping Windows conservative', () => {
+  assert.equal(kimi.maxPromptArgBytes, 30_000);
+  assert.equal(kimi.maxPromptArgBytesPosix, 120_000);
+
+  // A 104 KB prompt like the default design router composes: over the Windows
+  // budget, under the POSIX budget, so it must pass on POSIX and fail on Windows.
+  const contextHeavyPrompt = 'x'.repeat(104_000);
+  assert.equal(
+    checkPromptArgvBudget(kimi, contextHeavyPrompt, 'darwin'),
+    null,
+    'macOS must allow ~104 KB Kimi argv prompts',
+  );
+  assert.equal(
+    checkPromptArgvBudget(kimi, contextHeavyPrompt, 'linux'),
+    null,
+    'Linux must allow ~104 KB Kimi argv prompts (under MAX_ARG_STRLEN)',
+  );
+  const win = checkPromptArgvBudget(kimi, contextHeavyPrompt, 'win32');
+  assert.ok(win, 'Windows must still reject ~104 KB Kimi argv prompts');
+  assert.equal(win.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.equal(win.limit, 30_000);
+
+  // Runaway prompts still fail fast on POSIX. Linux keeps the conservative
+  // ceiling (its MAX_ARG_STRLEN per-arg cap is a hard ~128 KB), so a 150 KB
+  // prompt must fail there.
+  const huge = 'x'.repeat(150_000);
+  assert.ok(
+    checkPromptArgvBudget(kimi, huge, 'linux'),
+    'Linux must still flag a 150 KB Kimi argv prompt',
+  );
+
+  // macOS correction (H7, 2026-06-27): `getconf ARG_MAX` on macOS is 1 MB
+  // (the prior \"256 KB\" comment was stale) and there is no Linux-style
+  // per-arg cap, so the cross-platform 120 KB budget was false-rejecting real
+  // projects. The default design router (~104 KB) plus accumulated chat
+  // history lands at 120-138 KB; darwin must now ALLOW that band.
+  const macOsRealWorld = 'x'.repeat(138_000);
+  assert.equal(
+    checkPromptArgvBudget(kimi, macOsRealWorld, 'darwin'),
+    null,
+    'macOS must allow the 120-138 KB default-router + history band',
+  );
+  // ...while still failing fast on a genuinely runaway prompt above the
+  // darwin 256 KiB ceiling.
+  const darwinRunaway = 'x'.repeat(300_000);
+  assert.ok(
+    checkPromptArgvBudget(kimi, darwinRunaway, 'darwin'),
+    'macOS must still flag a >256 KiB runaway Kimi argv prompt',
+  );
+});
+
 test('checkPromptArgvBudget is a no-op for Grok Build because it uses prompt files', () => {
   assert.equal(grokBuild.promptViaFile, true);
   assert.equal(grokBuild.maxPromptArgBytes, undefined);

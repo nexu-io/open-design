@@ -1241,6 +1241,79 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('externalizes heavy skill bodies for argv-only adapters when the inline prompt would overflow argv', async () => {
+    const projectId = `project-${randomUUID()}`;
+    const skillId = `heavy-test-skill-${randomUUID()}`;
+    const userSkillsDir = resolve(process.env.OD_DATA_DIR ?? tmpdir(), 'skills');
+    const skillDir = resolve(userSkillsDir, skillId);
+    const skillMdPath = resolve(skillDir, 'SKILL.md');
+    const heavyBody = 'HEAVY_SKILL_MARKER '.repeat(20_000);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      skillMdPath,
+      [
+        '---',
+        `name: ${skillId}`,
+        'description: Heavy test skill for argv budget fallback',
+        '---',
+        '',
+        '# Heavy test skill',
+        '',
+        heavyBody,
+      ].join('\n'),
+      'utf8',
+    );
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Heavy skill argv fallback project',
+      }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const fakeAgentScript = `
+const args = process.argv.slice(2);
+const pIndex = args.indexOf('-p');
+const prompt = pIndex >= 0 && pIndex + 1 < args.length ? args[pIndex + 1] : '';
+const checks = [
+  !prompt.includes(${JSON.stringify(heavyBody)}) ? 'skill-body-externalized' : 'skill-body-inlined',
+  prompt.includes('.od-skills/') && prompt.includes(${JSON.stringify(skillId)}) ? 'references-staged-skill' : 'missing-staged-skill-ref',
+];
+console.log(JSON.stringify({ type: 'step_start' }));
+console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`;
+
+    try {
+      await withFakeAgent(
+        'kimi',
+        fakeAgentScript,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'kimi',
+              projectId,
+              message: 'use the heavy skill',
+              skillIds: [skillId],
+            }),
+          });
+          const body = await response.text();
+          expect(response.ok).toBe(true);
+          expect(body).toContain('skill-body-externalized');
+          expect(body).toContain('references-staged-skill');
+        },
+      );
+    } finally {
+      rmSync(skillDir, { recursive: true, force: true });
+    }
+  });
+
   it('propagates the composed skill mode for ad-hoc-only deck skills', async () => {
     await withFakeAgent(
       'opencode',

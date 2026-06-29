@@ -771,6 +771,21 @@ test('kimi args pass explicit model selections through prompt mode', () => {
   ]);
 });
 
+test('kimi args isolate skill discovery to a daemon-controlled directory', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'kimi-skills-dir-test-'));
+  const expectedSkillsDir = join(tmp, '.od', 'kimi-skills');
+  const args = kimi.buildArgs('hello', [], [], {}, { cwd: tmp });
+
+  try {
+    assert.ok(args.includes('--skills-dir'), 'expected --skills-dir flag');
+    const skillsDirIndex = args.indexOf('--skills-dir') + 1;
+    assert.equal(args[skillsDirIndex], expectedSkillsDir);
+    assert.ok(existsSync(expectedSkillsDir), 'expected skills dir to be created');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {
   assert.ok(kilo.fetchModels, 'kilo must define fetchModels');
   const result = await kilo.fetchModels('/nonexistent/kilo', {}).catch(() => null);

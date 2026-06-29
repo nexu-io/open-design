@@ -131,6 +131,12 @@ export type RuntimeAgentDef = {
   reasoningOptions?: RuntimeReasoningOption[];
   supportsImagePaths?: boolean;
   maxPromptArgBytes?: number;
+  // Optional higher argv budget on POSIX. Use this when an adapter must
+  // keep the Windows budget conservative (CreateProcess ~32 KB) but can
+  // safely accept a larger single argv argument on Linux/macOS
+  // (Linux MAX_ARG_STRLEN ~128 KB; macOS ARG_MAX ≥ 256 KB). When omitted,
+  // POSIX falls back to the universal POSIX_ARGV_PROMPT_BUDGET floor.
+  maxPromptArgBytesPosix?: number;
   mcpDiscovery?: string;
   // How the daemon forwards the user's `.od/mcp-config.json` external MCP
   // servers to this runtime at spawn time. The shape of the injection

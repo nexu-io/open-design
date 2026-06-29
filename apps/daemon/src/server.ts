@@ -183,6 +183,7 @@ export {
 } from './desktop-auth.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
+  buildExternalizedSkillReference,
   findSkillById,
   listSkills,
   resolveSkillId,
@@ -4715,6 +4716,7 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
+    externalizeSkillBodies = false,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -4787,6 +4789,15 @@ export async function startServer({
     // (project override, env override, rollout phase default) decide.
     let skillCritiquePolicy: SkillCritiquePolicy = null;
     let critiqueSkillId = effectiveCanonicalSkillId;
+    // Track resolved skills so we can either inline their SKILL.md bodies or,
+    // for argv-only adapters that would exceed the OS argv budget, externalize
+    // them as staged-file references the agent reads at runtime.
+    const skillEntries: Array<{
+      name: string;
+      dir: string;
+      body: string;
+      composed: boolean;
+    }> = [];
     const registerSkillMode = (
       mode: NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']> | null | undefined,
     ) => {
@@ -4823,7 +4834,12 @@ export async function startServer({
       const allSkills = await loadAllSkills();
       const skill = findSkillById(allSkills, effectiveSkillId);
       if (skill) {
-        skillBody = skill.body;
+        skillEntries.push({
+          name: skill.name,
+          dir: skill.dir,
+          body: skill.body,
+          composed: false,
+        });
         skillName = skill.name;
         registerPrimarySkillMode(skill.mode);
         registerSkillDir(skill.dir);
@@ -4835,14 +4851,11 @@ export async function startServer({
           skillCraftRequires = skill.craftRequires;
       }
     }
-    let composedSkillBlocks = '';
     if (adHocSkillIds.length > 0) {
       const allSkills = await loadAllSkills();
       const seen = new Set(
         effectiveCanonicalSkillId ? [String(effectiveCanonicalSkillId)] : [],
       );
-      const blocks = [];
-      const baseBody = skillBody && skillBody.trim().length > 0 ? skillBody : '';
       for (const id of adHocSkillIds) {
         const canonicalId = resolveSkillId(id);
         if (typeof canonicalId !== 'string' || canonicalId.length === 0) continue;
@@ -4850,6 +4863,12 @@ export async function startServer({
         seen.add(canonicalId);
         const extra = findSkillById(allSkills, id);
         if (!extra) continue;
+        skillEntries.push({
+          name: extra.name || id,
+          dir: extra.dir,
+          body: extra.body || '',
+          composed: true,
+        });
         registerSkillDir(extra.dir);
         registerSkillMode(extra.mode);
         if (!effectiveCanonicalSkillId && adHocSkillIds.length === 1) {
@@ -4864,18 +4883,6 @@ export async function startServer({
           for (const craft of extra.craftRequires) {
             if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
           }
-        }
-        blocks.push(
-          `\n\n---\n\n## Composed skill — ${extra.name || id}\n\n${(extra.body || '').trim()}`,
-        );
-      }
-      if (blocks.length > 0) {
-        composedSkillBlocks = blocks.join('');
-        skillBody = baseBody + composedSkillBlocks;
-        if (!skillName) {
-          skillName = adHocSkillIds.length === 1
-            ? findSkillById(allSkills, adHocSkillIds[0])?.name ?? null
-            : 'composed';
         }
       }
     }
@@ -4902,7 +4909,18 @@ export async function startServer({
             const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
             const local = await loadPluginLocalSkill(plugin);
             if (local) {
-              skillBody = local.body + composedSkillBlocks;
+              const localEntry = {
+                name: local.name,
+                dir: local.dir,
+                body: local.body,
+                composed: false,
+              };
+              const primaryIdx = skillEntries.findIndex((e) => !e.composed);
+              if (primaryIdx >= 0) {
+                skillEntries[primaryIdx] = localEntry;
+              } else {
+                skillEntries.unshift(localEntry);
+              }
               skillName = local.name;
               activeSkillDir = local.dir;
               registerSkillDir(local.dir);
@@ -4913,6 +4931,47 @@ export async function startServer({
         console.warn(
           `[plugins] pluginSkillBody load failed: ${err?.message ?? err}`,
         );
+      }
+    }
+
+    let composedSkillBlocks = '';
+    if (externalizeSkillBodies && skillEntries.length > 0) {
+      // argv-only adapter fallback: don't inline bulky SKILL.md bodies; point
+      // the agent at the staged copy it can read with its file tool. This
+      // keeps the composed argv prompt under budget while preserving every
+      // instruction the skill would have provided inline.
+      skillBody = skillEntries
+        .map((entry) =>
+          buildExternalizedSkillReference({
+            skillName: entry.name,
+            skillDir: entry.dir,
+            composedSkill: entry.composed,
+            skillBody: entry.body,
+          })
+        )
+        .join('\n\n---\n\n');
+      skillName =
+        skillEntries.length === 1 ? skillEntries[0].name : 'composed';
+      activeSkillDir = skillEntries[0]?.dir ?? null;
+    } else if (skillEntries.length > 0) {
+      // Existing inline path: concatenate primary and ad-hoc skill bodies.
+      const primary = skillEntries.find((e) => !e.composed);
+      const composed = skillEntries.filter((e) => e.composed);
+      skillBody = primary ? primary.body : '';
+      if (composed.length > 0) {
+        composedSkillBlocks = composed
+          .map(
+            (entry) =>
+              `\n\n---\n\n## Composed skill — ${entry.name}\n\n${entry.body.trim()}`,
+          )
+          .join('');
+        skillBody = skillBody + composedSkillBlocks;
+      }
+      if (!skillName) {
+        skillName =
+          skillEntries.length === 1
+            ? skillEntries[0].name
+            : 'composed';
       }
     }
 
@@ -5668,29 +5727,29 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
-    const {
+    const composeDaemonSystemPromptArgs = {
+      agentId,
+      projectId,
+      skillId,
+      skillIds,
+      designSystemId,
+      streamFormat: def?.streamFormat ?? 'plain',
+      locale,
+      sessionMode: runSessionMode,
+      connectedExternalMcp,
+      mediaExecution: run?.mediaExecution,
+      // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
+      // prompt composer can splice in `## Active stage` blocks.
+      // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
+      appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
+    };
+    let {
       prompt: daemonSystemPrompt,
       activeSkillDirs,
       critiqueShouldRun,
       designSystemSelection,
       promptTelemetryParts,
-    } =
-      await composeDaemonSystemPrompt({
-        agentId,
-        projectId,
-        skillId,
-        skillIds,
-        designSystemId,
-        streamFormat: def?.streamFormat ?? 'plain',
-        locale,
-        sessionMode: runSessionMode,
-        connectedExternalMcp,
-        mediaExecution: run?.mediaExecution,
-        // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
-        // prompt composer can splice in `## Active stage` blocks.
-        // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
-        appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
-      });
+    } = await composeDaemonSystemPrompt(composeDaemonSystemPromptArgs);
 
     run.designSystemId = designSystemSelection?.id ?? null;
     run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
@@ -5972,9 +6031,9 @@ export async function startServer({
       safeImages,
       amrStagedImages,
     );
-    const composed = [
-      instructionPrompt
-        ? `# Instructions (read first)\n\n${formOverride}${instructionPrompt}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
+    const buildComposedFromInstruction = (instruction: string): string => [
+      instruction
+        ? `# Instructions (read first)\n\n${formOverride}${instruction}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
         : cwdHint
           ? `# Instructions\n\n${formOverride}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
           : linkedDirsHint
@@ -5987,14 +6046,18 @@ export async function startServer({
         ? `\n\n${promptImagePaths.map((p) => `@${p}`).join(' ')}`
         : '',
     ].join('');
-    run.promptTelemetry = buildPromptStackTelemetry({
-      composedPrompt: composed,
+    const buildRunPromptTelemetry = (
+      systemPrompt: string,
+      parts: typeof promptTelemetryParts,
+      composedPrompt: string,
+    ) => buildPromptStackTelemetry({
+      composedPrompt,
       sections: [
         { kind: 'formOverride', content: formOverride },
         // Phase 1 explicitly needs redactedContent for these aggregate prompts:
         // they are the quickest way to inspect the system context sent to the
         // model when diagnosing Langfuse traces.
-        { kind: 'daemonSystemPrompt', content: daemonSystemPrompt },
+        { kind: 'daemonSystemPrompt', content: systemPrompt },
         { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
         { kind: 'researchCommandContract', content: researchCommandContract },
         { kind: 'runContextPrompt', content: runContextPrompt },
@@ -6002,14 +6065,14 @@ export async function startServer({
         { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
         { kind: 'echoGuard', content: ECHO_GUARD },
         { kind: 'userRequest', content: userRequestPrompt },
-        { kind: 'skillPrompt', content: promptTelemetryParts?.skillPrompt },
+        { kind: 'skillPrompt', content: parts?.skillPrompt },
         {
           kind: 'designSystemPrompt',
-          content: promptTelemetryParts?.designSystemPrompt,
+          content: parts?.designSystemPrompt,
         },
         {
           kind: 'pluginStagePrompt',
-          content: promptTelemetryParts?.pluginStagePrompt,
+          content: parts?.pluginStagePrompt,
         },
         { kind: 'cwdHint', content: cwdHint, metadata: cwd ? [cwd] : [] },
         {
@@ -6034,6 +6097,58 @@ export async function startServer({
         },
       ],
     });
+    let composed = buildComposedFromInstruction(instructionPrompt);
+    run.promptTelemetry = buildRunPromptTelemetry(
+      daemonSystemPrompt,
+      promptTelemetryParts,
+      composed,
+    );
+
+    // argv-only adapters (Kimi, DeepSeek TUI) cannot receive prompts via stdin,
+    // so the entire composed prompt must fit in one argv argument. If a heavy
+    // skill or long history pushes us over the budget, fall back to staging the
+    // skill bodies as files and referencing them in the system prompt. This
+    // preserves the user's chosen agent and every instruction the skill would
+    // have provided inline.
+    const isArgvOnlyAdapter =
+      typeof def?.maxPromptArgBytes === 'number' && def?.promptViaStdin !== true;
+    let promptBudgetError = checkPromptArgvBudget(def, composed);
+    if (promptBudgetError && isArgvOnlyAdapter) {
+      const externalized = await composeDaemonSystemPrompt({
+        ...composeDaemonSystemPromptArgs,
+        externalizeSkillBodies: true,
+      });
+      daemonSystemPrompt = externalized.prompt;
+      activeSkillDirs = externalized.activeSkillDirs;
+      critiqueShouldRun = externalized.critiqueShouldRun;
+      designSystemSelection = externalized.designSystemSelection;
+      promptTelemetryParts = externalized.promptTelemetryParts;
+      const externalizedInstructionPrompt = composeLiveInstructionPrompt({
+        daemonSystemPrompt: includeStableInstructions ? daemonSystemPrompt : '',
+        runtimeToolPrompt: includeStableInstructions ? runtimeToolPrompt : '',
+        clientSystemPrompt: clientInstructionPrompt,
+        finalPromptOverride: codexImagegenOverride,
+      });
+      composed = buildComposedFromInstruction(externalizedInstructionPrompt);
+      run.promptTelemetry = buildRunPromptTelemetry(
+        daemonSystemPrompt,
+        promptTelemetryParts,
+        composed,
+      );
+      promptBudgetError = checkPromptArgvBudget(def, composed);
+    }
+    if (promptBudgetError) {
+      design.runs.emit(
+        run,
+        'error',
+        createSseErrorPayload(
+          promptBudgetError.code,
+          promptBudgetError.message,
+          { retryable: false },
+        ),
+      );
+      return design.runs.finish(run, 'failed', 1, null);
+    }
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
       promptBuildEndAt: Date.now(),
@@ -6491,27 +6606,6 @@ export async function startServer({
           err && err.message ? err.message : err,
         );
       }
-    }
-
-    // Pre-flight the composed prompt against any argv-byte budget the
-    // adapter declared (only DeepSeek TUI today — its CLI doesn't accept
-    // a `-` stdin sentinel, so the prompt has to ride argv). Doing this
-    // before bin resolution means the test harness pins the guard
-    // independently of whether the adapter binary happens to be on PATH
-    // in the CI environment, and the user gets the actionable
-    // adapter-named error even if /api/agents hadn't refreshed yet.
-    const promptBudgetError = checkPromptArgvBudget(def, composed);
-    if (promptBudgetError) {
-      design.runs.emit(
-        run,
-        'error',
-        createSseErrorPayload(
-          promptBudgetError.code,
-          promptBudgetError.message,
-          { retryable: false },
-        ),
-      );
-      return design.runs.finish(run, 'failed', 1, null);
     }
 
     let mmdRouteLaunchEnv = null;

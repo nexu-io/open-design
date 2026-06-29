@@ -30,12 +30,34 @@ function promptArgvBudgetMessage(
 // message instead of a generic spawn E2BIG.
 const POSIX_ARGV_PROMPT_BUDGET = 100_000;
 
+// macOS correction (H7): `getconf ARG_MAX` on macOS is 1 MB (total argv+env)
+// and there is NO Linux-style 128 KB MAX_ARG_STRLEN per-arg cap, so the
+// cross-platform 120 KB Kimi POSIX budget false-rejects normal macOS projects
+// (default design router ~104 KB + chat history => 120-138 KB). On darwin we
+// raise the floor to 256 KiB (~25% of ARG_MAX, huge headroom, still safe).
+// Linux keeps the conservative ceiling because its per-arg cap is a hard
+// kernel limit; Windows is unaffected (guarded post-buildArgs).
+const DARWIN_ARGV_PROMPT_BUDGET = 262_144;
+
 function resolveArgvPromptBudget(
   maxPromptArgBytes: number,
+  maxPromptArgBytesPosix: number | undefined,
   platform: NodeJS.Platform,
 ): number {
   if (platform === 'win32') return maxPromptArgBytes;
-  return Math.max(maxPromptArgBytes, POSIX_ARGV_PROMPT_BUDGET);
+  // Platform floor: darwin gets the macOS-correct ceiling (256 KiB), every
+  // other POSIX keeps the conservative 100 KB floor (Linux 128 KB hard cap).
+  const posixFloor =
+    platform === 'darwin'
+      ? Math.max(DARWIN_ARGV_PROMPT_BUDGET, POSIX_ARGV_PROMPT_BUDGET)
+      : POSIX_ARGV_PROMPT_BUDGET;
+  // Adapters may declare a higher POSIX-specific budget while keeping the
+  // Windows budget conservative. Keep the platform floor as a default
+  // so runaway prompts still fail fast with an actionable message.
+  if (typeof maxPromptArgBytesPosix === 'number') {
+    return Math.max(maxPromptArgBytesPosix, posixFloor);
+  }
+  return Math.max(maxPromptArgBytes, posixFloor);
 }
 
 export function checkPromptArgvBudget(
@@ -48,7 +70,11 @@ export function checkPromptArgvBudget(
     typeof composed === 'string' ? composed : '',
     'utf8',
   );
-  const limit = resolveArgvPromptBudget(def.maxPromptArgBytes, platform);
+  const limit = resolveArgvPromptBudget(
+    def.maxPromptArgBytes,
+    def.maxPromptArgBytesPosix,
+    platform,
+  );
   if (bytes <= limit) return null;
   return {
     code: 'AGENT_PROMPT_TOO_LARGE',
