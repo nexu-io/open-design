@@ -308,6 +308,10 @@ import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import {
+  createRunLifecycleTracer,
+  runLifecycleMarkersForStreamEvent,
+} from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
@@ -5334,10 +5338,8 @@ export async function startServer({
   };
 
   const startChatRun = async (chatBody, run) => {
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      startChatRunStartedAt: Date.now(),
-    };
+    const lifecycle = createRunLifecycleTracer(run);
+    lifecycle.mark('chat_run_started');
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -5363,10 +5365,7 @@ export async function startServer({
       context,
       titleGeneration,
     } = chatBody;
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildStartAt: Date.now(),
-    };
+    lifecycle.mark('prompt_build_start');
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -6034,10 +6033,8 @@ export async function startServer({
         },
       ],
     });
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildEndAt: Date.now(),
-    };
+    lifecycle.mark('prompt_build_end');
+    lifecycle.mark('launch_preflight_start');
     // (model resolution + AMR concretization hoisted above the resume guard)
     const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
     // Accumulates the agent's visible text this run so the close handler can
@@ -6057,6 +6054,16 @@ export async function startServer({
     let clarifyingQuestionText = '';
     let visibleAssistantText = '';
     const send = (event, data) => {
+      const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
+      if (lifecycleMarkers.firstModelEventType) {
+        lifecycle.markFirstModelEvent(lifecycleMarkers.firstModelEventType);
+      }
+      if (lifecycleMarkers.firstVisibleOutput) {
+        lifecycle.mark('first_visible_output');
+      }
+      if (lifecycleMarkers.firstArtifactWrite) {
+        lifecycle.mark('first_artifact_write');
+      }
       if (
         event === 'agent' &&
         data &&
@@ -6156,6 +6163,7 @@ export async function startServer({
       run.error = null;
       run.errorCode = null;
       run.stdinOpen = false;
+      lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
@@ -6244,10 +6252,7 @@ export async function startServer({
       return 'unknown';
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
-      };
+      lifecycle.mark('finalize_start');
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -7204,10 +7209,8 @@ export async function startServer({
         args,
         env,
       });
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        processSpawnStartedAt: Date.now(),
-      };
+      lifecycle.mark('launch_preflight_end');
+      lifecycle.mark('process_spawn_start');
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
@@ -7219,10 +7222,7 @@ export async function startServer({
         // breaks paths containing spaces (issue #315).
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        processSpawnedAt: Date.now(),
-      };
+      lifecycle.mark('process_spawned');
       run.child = child;
       run.childPid = typeof child.pid === 'number' ? child.pid : null;
       run.processGroupId =
@@ -7600,10 +7600,8 @@ export async function startServer({
     ]);
     const noteFirstTokenAt = (timestamp = Date.now()) => {
       if (run.analyticsTelemetry?.firstTokenAt) return;
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        firstTokenAt: timestamp,
-      };
+      lifecycle.mark('first_token', timestamp);
+      lifecycle.mark('first_visible_output', timestamp);
     };
     // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
     // `cliReadyAt` is the first well-formed adapter output and is stamped for
@@ -8634,9 +8632,11 @@ export async function startServer({
     });
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        modelCallStartAt: Date.now(),
+      lifecycle.mark('model_call_start');
+      lifecycle.mark('stdin_write_start');
+      const markStdinWriteEnd = (err?: Error | null) => {
+        if (err) return;
+        lifecycle.mark('stdin_write_end');
       };
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
@@ -8653,7 +8653,7 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8');
+          child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -8662,7 +8662,7 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8');
+        child.stdin.end(composed, 'utf8', markStdinWriteEnd);
       }
     }
   };
