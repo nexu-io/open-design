@@ -36,7 +36,8 @@ const OVERRIDES: Record<string, number> = {
   // ids (many with `-cloud` suffixes), so the bare model-id lookups never
   // match. Add overrides so chat doesn't silently clip at 8192 tokens.
   // 131072 (128k) is a safe floor for all Ollama Cloud models.
-  'cogito-2.1:671b': 131072,
+  // Exception: cogito-2.1:671b caps at 65536 (confirmed via upstream 400).
+  'cogito-2.1:671b': 65536,
   'deepseek-v3.1:671b': 163840,
   'deepseek-v3.2': 163840,
   'devstral-2:123b': 131072,
