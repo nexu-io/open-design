@@ -205,6 +205,16 @@ export interface InputTextSnapshotManifestEntry extends TraceSafeObjectManifestB
   type: 'text';
 }
 
+export interface TraceObjectSummary {
+  new_file_count: number;
+  modified_file_count: number;
+  recovered_file_count: number;
+  candidate_file_count: number;
+  uploaded_file_count: number;
+  skipped_file_count: number;
+  skip_reasons: Record<string, number>;
+}
+
 export interface ToolCallSummary {
   id: string;
   name: string;
@@ -284,6 +294,7 @@ export interface ReportContext {
   artifactManifest?: ArtifactManifestEntry[];
   inputTextSnapshotManifest?: InputTextSnapshotManifestEntry[];
   manifestCompleteness?: ObjectManifestCompleteness;
+  traceObjectSummary?: TraceObjectSummary;
   tools?: ToolCallSummary[];
   agentEvents?: AgentEventSummary[];
   eventsSummary: EventsSummary;
@@ -1379,6 +1390,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     artifact_manifest_truncated: artifactManifestTruncated,
     input_text_snapshot_manifest: inputTextSnapshotManifest,
     input_text_snapshot_manifest_truncated: inputTextSnapshotManifestTruncated,
+    trace_object_summary: ctx.traceObjectSummary,
     manifest_completeness: wantsArtifacts
       ? (ctx.manifestCompleteness ?? 'unavailable')
       : undefined,
