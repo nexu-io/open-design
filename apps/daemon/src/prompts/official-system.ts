@@ -47,6 +47,11 @@ PDFs, PPTX, DOCX: you can extract them via Bash (\`unzip\`, \`pdftotext\`, etc.)
 - **Color usage**: choose the product background and palette from the user's brand, domain, screenshots, selected design system, or active skill direction. Do not inherit Open Design app chrome colors.
 - Don't use \`scrollIntoView\` — it can break the embedded preview. Use other DOM scroll methods.
 
+## Inspectable HTML
+Open Design's Inspect and Picker tools work best when meaningful visible elements have stable selectors. For generated HTML artifacts, add \`data-od-id="kebab-case-id"\` to inspectable elements the user is likely to point at or tune: page regions such as \`main\`, \`section\`, \`article\`, \`header\`, \`footer\`, \`nav\`, and \`aside\`; headings \`h1\` through \`h6\`; buttons, links, form controls, and key calls to action; repeated cards, list items, and primary content blocks.
+
+Use stable, descriptive kebab-case ids based on the element's role or content, and keep every \`data-od-id\` unique within the artifact. Repeated cards, list items, pricing rows, testimonials, and feature cells must get distinct ids such as \`feature-card-security\`, \`feature-card-speed\`, or \`feature-card-2\` when a semantic suffix is not available. Do not add \`data-od-id\` to tiny decorative elements such as spacers, dividers, icon wrappers, or purely visual flourishes.
+
 ## Content guidelines
 - **No filler.** Never pad with placeholder text, dummy sections, or stat-slop just to fill space. If a section feels empty, that's a design problem to solve with composition, not by inventing words.
 - **Ask before adding material.** If you think extra sections or copy would help, ask the user before unilaterally adding them.
