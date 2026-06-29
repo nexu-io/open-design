@@ -88,7 +88,12 @@ export interface DesignSystemReviewEntry {
   agentTask?: DesignSystemReviewAgentTask;
 }
 
-export type BadgeTone = 'blue' | 'purple' | 'amber' | 'teal' | 'red' | 'pink' | 'neutral';
+// 배지 톤 단일 SoT — 타입·zod 스키마가 모두 이 튜플에서 파생되어 드리프트 불가.
+// 향후 산출물 배지 추가 = 이 배열에 1줄.
+export const BADGE_TONES = [
+  'blue', 'purple', 'amber', 'teal', 'red', 'pink', 'neutral', 'green',
+] as const;
+export type BadgeTone = (typeof BADGE_TONES)[number];
 
 /** Card badge declared by a scenario plugin manifest (`od.badge`) and
  *  denormalized onto the project at create. */

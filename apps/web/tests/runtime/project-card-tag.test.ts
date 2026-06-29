@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { BADGE_TONES } from '@marketing-ax/contracts';
 import { projectCategory, resolveProjectBadge, TONE_CLASS } from '../../src/runtime/project-card-tag';
 
 const proj = (metadata: any, extra: any = {}): any => ({
@@ -21,6 +22,14 @@ describe('resolveProjectBadge', () => {
   it('defaults to neutral when tone omitted', () => {
     expect(resolveProjectBadge(proj({ kind: 'prototype', badge: { label: 'X' } })))
       .toEqual({ label: 'X', toneClass: TONE_CLASS.neutral });
+  });
+  it('returns the green tone class for a green badge', () => {
+    expect(resolveProjectBadge(proj({ kind: 'prototype', badge: { label: '네이버 블로그', tone: 'green' } })))
+      .toEqual({ label: '네이버 블로그', toneClass: TONE_CLASS.green });
+  });
+  it('TONE_CLASS covers every BADGE_TONES entry (no tuple↔map drift)', () => {
+    for (const tone of BADGE_TONES) expect(TONE_CLASS[tone]).toBeTruthy();
+    expect(Object.keys(TONE_CLASS).length).toBe(BADGE_TONES.length);
   });
 });
 

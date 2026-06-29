@@ -1,0 +1,72 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-naver-blog",
+  "title": "Naver Blog",
+  "title_i18n": {
+    "zh-CN": "Naver Blog", "zh-TW": "Naver Blog", "ja": "Naver Blog", "ko": "네이버 블로그",
+    "de": "Naver Blog", "fr": "Naver Blog", "ru": "Naver Blog", "es": "Naver Blog",
+    "pt-BR": "Naver Blog", "it": "Naver Blog", "vi": "Naver Blog", "pl": "Naver Blog",
+    "id": "Naver Blog", "nl": "Naver Blog", "ar": "Naver Blog", "tr": "Naver Blog",
+    "uk": "Naver Blog", "en": "Naver Blog"
+  },
+  "version": "0.1.0",
+  "description": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+  "description_i18n": {
+    "zh-CN": "Naver SmartEditor 博客文章（HTML）生成器。品牌无关的 7 步工作流：采访用户、收集一手来源、起草文章方案、进入确认门控、生成一篇可直接粘贴到 SmartEditor 的 HTML 文章，并按渠道+品牌规则自检。适用于任何 '네이버 블로그'、'naver blog'、'블로그 포스팅'、'블로그 글' 或 'blog post' 请求。",
+    "zh-TW": "Naver SmartEditor 部落格文章（HTML）產生器。品牌無關的 7 步工作流：訪談使用者、蒐集第一手來源、草擬文章方案、進入確認關卡、產生一篇可直接貼到 SmartEditor 的 HTML 文章，並依渠道+品牌規則自我檢查。適用於任何 '네이버 블로그'、'naver blog'、'블로그 포스팅'、'블로그 글' 或 'blog post' 請求。",
+    "ja": "Naver スマートエディタのブログ記事（HTML）プロデューサー。ブランド非依存の 7 ステップワークフロー：ユーザーにインタビューし、一次情報を集め、記事プランを起草し、確認ゲートを通し、SmartEditor に貼り付け可能な HTML 記事を 1 本生成し、チャネル+ブランドのルールで自己レビューします。'네이버 블로그'、'naver blog'、'블로그 포스팅'、'블로그 글'、'blog post' のいずれのリクエストにも使用します。",
+    "ko": "네이버 SmartEditor 블로그 글(HTML) 제작기. 브랜드 무관 7단계 워크플로우: 사용자를 인터뷰하고, 1차 출처를 수집하고, 기획안을 작성해 컨펌 게이트를 거친 뒤 SmartEditor에 붙여넣기 가능한 HTML 글 1편을 생성하고, 채널+브랜드 규칙으로 자가검수한다. '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', 'blog post' 요청 어디에나 사용한다.",
+    "de": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "fr": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "ru": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "es": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "pt-BR": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "it": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "vi": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "pl": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "id": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "nl": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "ar": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "tr": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "uk": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request.",
+    "en": "Naver SmartEditor blog post (HTML) producer. Brand-agnostic 7-step workflow: interviews the user, gathers primary sources, drafts a post plan, gates confirmation, produces one paste-ready SmartEditor HTML article, and self-reviews against channel + brand rules. Use for any '네이버 블로그', 'naver blog', '블로그 포스팅', '블로그 글', or 'blog post' request."
+  },
+  "license": "MIT",
+  "author": { "name": "Open Design", "url": "https://github.com/nexu-io" },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/naver-blog",
+  "tags": ["example", "first-party", "prototype", "marketing", "naver", "blog", "korea", "html"],
+  "compat": { "agentSkills": [{ "path": "./SKILL.md" }] },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "badge": { "label": "네이버 블로그", "tone": "green" },
+    "surface": "web",
+    "preview": { "type": "html", "entry": "./example.html" },
+    "useCase": {
+      "query": {
+        "en": "Produce a Naver SmartEditor blog post about {{topic}} for {{audience}}. Run the naver-blog interview to capture topic, audience, category, target keyword and tone; gather primary sources; draft a post plan; gate it for confirmation; then produce one paste-ready SmartEditor HTML article.",
+        "ko": "{{audience}} 대상으로 {{topic}}에 관한 네이버 SmartEditor 블로그 글을 제작한다. naver-blog 인터뷰로 주제·독자·카테고리·타겟 키워드·톤을 받고, 1차 출처를 수집해 기획안을 작성하고 컨펌 게이트를 거친 뒤 SmartEditor 붙여넣기용 HTML 글 1편을 생성한다."
+      },
+      "exampleOutputs": [{ "path": "./example.html", "title": "Naver Blog" }]
+    },
+    "inputs": [
+      { "name": "topic", "label": "Topic", "type": "string", "required": true, "placeholder": "정형외과 실비 청구 범위", "default": "blog topic" },
+      { "name": "keyword", "label": "Target keyword", "type": "string", "required": false, "placeholder": "정형외과 실비 청구 도수치료" }
+    ],
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "designSystem": { "ref": "bodoc" },
+      "assets": [
+        "./example.html",
+        "./references/blog-structure.md",
+        "./references/worked-example.md"
+      ]
+    },
+    "pipeline": { "stages": [{ "id": "generate", "atoms": ["file-write", "live-artifact"] }] },
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}

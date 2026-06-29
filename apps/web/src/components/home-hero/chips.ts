@@ -13,7 +13,7 @@
 //   - `id` — stable React key + test selector.
 //   - `label` — English copy. Localisation can layer on later by
 //     swapping this for a Dict lookup; keeping it inline lets the
-//     rail ship without burning through 17 locale files for two
+//     rail ship without burning through 19 locale files for two
 //     new strings (see plan §B / open questions).
 //   - `icon` — name from the shared Icon registry.
 //   - `action` — discriminated union the HomeView dispatcher matches
@@ -34,7 +34,8 @@ import type { IconName } from '../Icon';
 export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
   | 'example-hyperframes'
-  | 'example-braze-iam';
+  | 'example-braze-iam'
+  | 'example-naver-blog';
 
 export type ChipAction =
   | {
@@ -155,6 +156,19 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     // interview, so the manifest exposes only the editable `{{audience}}`
     // slot; Home renders that placeholder inline.
     action: { kind: 'apply-scenario', pluginId: 'example-braze-iam', projectKind: 'prototype' },
+  },
+  {
+    id: 'naver-blog',
+    label: 'Naver Blog',
+    icon: 'file',
+    group: 'create',
+    hint: 'Author a Naver SmartEditor blog post: interview → research → plan → confirm → paste-ready HTML.',
+    // Naver Blog binds to the bundled `example-naver-blog` scenario plugin
+    // (ships SKILL.md, example.html, and the structure/worked-example references),
+    // activating the full interview → research → plan → confirm → produce
+    // workflow. group:'create' (deferApply + suppressPromptUpdate). The explicit
+    // pluginId is required so the green "네이버 블로그" badge stamps at create.
+    action: { kind: 'apply-scenario', pluginId: 'example-naver-blog', projectKind: 'prototype' },
   },
   {
     id: 'image',
