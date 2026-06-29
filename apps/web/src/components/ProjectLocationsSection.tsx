@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { ProjectLocation } from '@open-design/contracts';
 import type { AppConfig } from '../types';
 import {
@@ -44,6 +44,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [drafts, setDrafts] = useState<DraftLocation[]>(cfg.projectLocations ?? []);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [manualPath, setManualPath] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const draftsRef = useRef<DraftLocation[]>(drafts);
@@ -138,10 +139,8 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     return result;
   }
 
-  async function handleAddFolder() {
-    setError(null);
-    setStatus(null);
-    const selected = await openProjectLocationFolderDialog();
+  async function addLocationPath(locationPath: string) {
+    const selected = locationPath.trim();
     if (!selected) {
       setStatus(t('settings.projectLocationsNoFolderSelected'));
       return;
@@ -155,7 +154,24 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     setDrafts(next);
     const saved = await save(next);
     if (!saved) setDrafts(previous);
-    else await runScan();
+    else {
+      setManualPath('');
+      await runScan();
+    }
+  }
+
+  async function handleAddFolder() {
+    setError(null);
+    setStatus(null);
+    const selected = await openProjectLocationFolderDialog();
+    await addLocationPath(selected ?? '');
+  }
+
+  async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStatus(null);
+    await addLocationPath(manualPath);
   }
 
   async function removeDraft(index: number) {
@@ -221,6 +237,26 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
           </div>
         ))}
       </div>
+
+      <form className="project-location-manual" onSubmit={handleManualSubmit}>
+        <label className="project-location-manual-label" htmlFor="project-location-manual-path">
+          {t('settings.designSystemsProjectPath')}
+        </label>
+        <div className="project-location-manual-row">
+          <input
+            id="project-location-manual-path"
+            className="project-location-manual-input"
+            type="text"
+            value={manualPath}
+            onChange={(event) => setManualPath(event.currentTarget.value)}
+            placeholder="/home/abhishek/forge/design"
+            disabled={loading || saving}
+          />
+          <button type="submit" className="icon-btn project-location-manual-submit" disabled={loading || saving || !manualPath.trim()}>
+            {t('common.save')}
+          </button>
+        </div>
+      </form>
 
       <button
         type="button"

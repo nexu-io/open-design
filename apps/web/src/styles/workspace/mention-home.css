@@ -1482,10 +1482,46 @@
   color: var(--text-muted);
   font-size: 11px;
 }
+.project-location-manual {
+  display: grid;
+  gap: 8px;
+  max-width: 680px;
+}
+.project-location-manual-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.project-location-manual-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.project-location-manual-input {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+}
+.project-location-manual-input:focus {
+  border-color: var(--accent-soft);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 28%, transparent);
+}
+.project-location-manual-submit {
+  height: 34px;
+  justify-content: center;
+}
 .project-location-add { align-self: flex-start; }
 @media (max-width: 720px) {
   .project-location-edit { grid-template-columns: 1fr; align-items: stretch; }
   .project-location-default-control { justify-self: start; }
+  .project-location-manual-row { grid-template-columns: 1fr; }
 }
 .settings-section-connectors { gap: 16px; }
 /* Credentials sit above the catalog now; the divider lives under the field
