@@ -95,6 +95,10 @@ describe('listPromptTemplates', () => {
       path.join(root, 'image', 'no-source.json'),
       JSON.stringify(makeTemplate({ id: 'no-src', source: undefined })),
     );
+    await writeFile(
+      path.join(root, 'image', 'no-title.json'),
+      JSON.stringify(makeTemplate({ id: 'no-title', title: '' })),
+    );
     expect(await listPromptTemplates(root)).toEqual([]);
   });
 
