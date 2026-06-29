@@ -346,6 +346,17 @@ export interface ProjectLocationsResponse {
   removedProjectIds?: string[];
 }
 
+export interface ProjectLocationFolderBrowserEntry {
+  name: string;
+  path: string;
+}
+
+export interface ProjectLocationFolderBrowserResponse {
+  path: string;
+  parentPath: string | null;
+  entries: ProjectLocationFolderBrowserEntry[];
+}
+
 export interface UpdateProjectLocationsRequest {
   locations: Array<{ id?: string; name?: string; path: string }>;
 }

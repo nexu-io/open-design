@@ -1,17 +1,10 @@
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-
-export interface ProjectLocationFolderBrowserEntry {
-  name: string;
-  path: string;
-}
-
-export interface ProjectLocationFolderBrowserResponse {
-  path: string;
-  parentPath: string | null;
-  entries: ProjectLocationFolderBrowserEntry[];
-}
+import type {
+  ProjectLocationFolderBrowserEntry,
+  ProjectLocationFolderBrowserResponse,
+} from '@open-design/contracts';
 
 export interface ProjectLocationFolderBrowserOptions {
   rootPath?: string;

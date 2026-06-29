@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectLocation, ScanProjectLocationsResponse } from '@open-design/contracts';
 import { ProjectLocationsSection } from '../../src/components/ProjectLocationsSection';
 import { I18nProvider } from '../../src/i18n';
+import { zhCN } from '../../src/i18n/locales/zh-CN';
+import type { Locale } from '../../src/i18n/types';
 import type { AppConfig } from '../../src/types';
 
 const {
@@ -69,19 +71,19 @@ const baseConfig = {
   defaultProjectLocationId: 'default',
 } satisfies AppConfig;
 
-function renderSection(config: AppConfig = baseConfig) {
+function renderSection(config: AppConfig = baseConfig, locale: Locale = 'en') {
   const setCfg = vi.fn();
   const onProjectsRefresh = vi.fn();
   render(
-    <I18nProvider initial="en">
+    <I18nProvider initial={locale}>
       <ProjectLocationsSection cfg={config} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
     </I18nProvider>,
   );
   return { setCfg, onProjectsRefresh };
 }
 
-async function findEnabledAddFolderButton() {
-  const button = await screen.findByRole('button', { name: /Add folder/i });
+async function findEnabledAddFolderButton(name: string | RegExp = /Add folder/i) {
+  const button = await screen.findByRole('button', { name });
   await waitFor(() => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
   });
@@ -209,6 +211,32 @@ describe('ProjectLocationsSection', () => {
     expect(scanProjectLocationsMock).toHaveBeenCalledTimes(1);
     expect(setCfg).toHaveBeenCalledWith(expect.any(Function));
     expect(onProjectsRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('localizes the in-app folder browser controls', async () => {
+    fetchProjectLocationsMock.mockResolvedValue([builtInLocation]);
+    openProjectLocationFolderDialogMock.mockResolvedValue(null);
+    browseProjectLocationFoldersMock.mockResolvedValue({
+      path: '/home/abhishek',
+      parentPath: '/home',
+      entries: [],
+    });
+
+    renderSection(baseConfig, 'zh-CN');
+
+    fireEvent.click(await findEnabledAddFolderButton(zhCN['settings.projectLocationsAddFolder']));
+    fireEvent.click(screen.getByRole('button', { name: zhCN['settings.projectLocationsBrowseFolders'] }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: zhCN['settings.projectLocationsBrowserDialogLabel'] })).toBeTruthy();
+    });
+    expect(screen.getByText(zhCN['settings.projectLocationsBrowserTitle'])).toBeTruthy();
+    expect(screen.getByRole('button', { name: zhCN['settings.projectLocationsBrowserParentFolder'] })).toBeTruthy();
+    expect(screen.getByRole('button', { name: zhCN['settings.projectLocationsBrowserUseFolder'] })).toBeTruthy();
+    expect(screen.getByText(zhCN['settings.projectLocationsBrowserEmpty'])).toBeTruthy();
+    expect(screen.queryByText('Choose folder')).toBeNull();
+    expect(screen.queryByText('Parent folder')).toBeNull();
+    expect(screen.queryByText('Use this folder')).toBeNull();
   });
 
   it('does not show no-folder-selected status when a work base is already configured', async () => {

@@ -11,6 +11,7 @@ import {
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
   type ProjectFileVersionWarning,
+  type ProjectLocationFolderBrowserResponse,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
@@ -1293,7 +1294,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     try {
       const requestedPath = typeof req.query?.path === 'string' ? req.query.path : null;
       const rootPath = await projectLocationBrowseRoot();
-      res.json(await browseProjectLocationFolders(requestedPath, rootPath ? { rootPath } : undefined));
+      const body: ProjectLocationFolderBrowserResponse =
+        await browseProjectLocationFolders(requestedPath, rootPath ? { rootPath } : undefined);
+      res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message ?? err));
     }
