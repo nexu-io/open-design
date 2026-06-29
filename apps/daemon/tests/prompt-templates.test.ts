@@ -102,6 +102,19 @@ describe('listPromptTemplates', () => {
     expect(await listPromptTemplates(root)).toEqual([]);
   });
 
+  it('skips a file whose id does not match its filename', async () => {
+    // The list exposes `id` and readPromptTemplate resolves `${id}.json`; if a
+    // file's id drifts from its filename the gallery would advertise a template
+    // the detail endpoint immediately 404s. Both paths must reject it.
+    await writeFile(
+      path.join(root, 'image', 'real-name.json'),
+      JSON.stringify(makeTemplate({ id: 'different-id' })),
+    );
+    expect(await listPromptTemplates(root)).toEqual([]);
+    expect(await readPromptTemplate(root, 'image', 'different-id')).toBeNull();
+    expect(await readPromptTemplate(root, 'image', 'real-name')).toBeNull();
+  });
+
   it('skips malformed JSON without throwing', async () => {
     await writeFile(path.join(root, 'image', 'bad.json'), '{not json');
     await writeFile(

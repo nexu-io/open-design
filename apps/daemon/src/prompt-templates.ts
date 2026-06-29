@@ -108,6 +108,14 @@ function validateTemplate(raw: unknown, expectedSurface: PromptTemplateSurface, 
     console.warn(`prompt-templates: ${fileName} missing source.repo / license`);
     return null;
   }
+  // The list exposes `id` and readPromptTemplate() resolves `${id}.json`, so an
+  // id that drifts from its filename would advertise a template the detail
+  // endpoint can't open. Reject the mismatch during scan/read.
+  const expectedId = fileName.replace(/\.json$/, '');
+  if (raw.id !== expectedId) {
+    console.warn(`prompt-templates: ${fileName} id=${raw.id} ≠ filename`);
+    return null;
+  }
   const template: PromptTemplate = {
     id: raw.id,
     surface: expectedSurface,
