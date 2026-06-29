@@ -1913,6 +1913,7 @@ async function testAgentConnectionInternal(
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
   let promptFile: PreparedPromptFile | null = null;
+  let connectionTestAgentLogPath: string | undefined;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
@@ -2066,6 +2067,16 @@ async function testAgentConnectionInternal(
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
+      // Antigravity: allocate a per-run --log-file path so the silent-
+      // exit guard below can read the actual upstream error (e.g.
+      // Windows path issue, missing brain directory) and surface it in
+      // the test result detail. Mirrors the chat-route pattern at
+      // apps/daemon/src/server.ts:6693.
+      const agentLogFilePath =
+        def.id === 'antigravity'
+          ? path.join(os.tmpdir(), `od-agy-conn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`)
+          : undefined;
+      if (agentLogFilePath) connectionTestAgentLogPath = agentLogFilePath;
       args = def.buildArgs(
         SMOKE_PROMPT,
         [],
@@ -2074,6 +2085,7 @@ async function testAgentConnectionInternal(
         {
           cwd: tempDir,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
+          ...(agentLogFilePath ? { agentLogFilePath } : {}),
         },
       );
       // Connection tests should validate the adapter's core CLI path, not
@@ -2422,6 +2434,25 @@ async function testAgentConnectionInternal(
         !rawStdoutTail &&
         !stderrTail
       ) {
+        // Read the agy --log-file to extract the actual upstream error
+        // (e.g. Windows path issue, missing brain directory) and
+        // surface it in the test result detail. Strip the agy Go log
+        // prefix (timestamp / pid / source-file) so the user sees just
+        // the actionable message.
+        let agyLogError = '';
+        if (connectionTestAgentLogPath) {
+          try {
+            const logContent = await fsp.readFile(connectionTestAgentLogPath, 'utf8');
+            const lines = logContent.split('\n');
+            const lastError = lines.filter((l) => /^E\d{4}\s/.test(l)).pop();
+            if (lastError) {
+              agyLogError = lastError.replace(
+                /^E\d{4}\s+[\d:.]+?\s+\d+\s+[\w._-]+:\d+\]\s*/,
+                '',
+              );
+            }
+          } catch { /* log file missing or unreadable — fall through */ }
+        }
         console.warn(
           `[test:agent] ${def.name} → antigravity_silent_exit: ${redactSecrets(rawDetail)}`,
         );
@@ -2431,8 +2462,9 @@ async function testAgentConnectionInternal(
           latencyMs,
           model,
           agentName: def.name,
-          detail:
-            'Antigravity CLI exited without producing output. The daemon piped agy\'s `--log-file` to a temporary path with the upstream reason. Check the daemon-run log for details, or run `agy` alone in a terminal to verify the CLI is functional, then retry the test.',
+          detail: agyLogError
+            ? `Antigravity CLI exited without producing output.\n\nagy: ${agyLogError}`
+            : 'Antigravity CLI exited without producing output. Run `agy` alone in a terminal to verify the CLI is functional, then retry the test.',
           diagnostics: buildDiagnostics({
             phase: 'connection_smoke_test',
             exitCode: winner.code,
@@ -2576,6 +2608,11 @@ async function testAgentConnectionInternal(
     await promptFile?.cleanup().catch(() => {
       // Best-effort cleanup; the OS reaps /tmp eventually.
     });
+    if (connectionTestAgentLogPath) {
+      await fsp.unlink(connectionTestAgentLogPath).catch(() => {
+        // Best-effort cleanup.
+      });
+    }
   }
 }
 
