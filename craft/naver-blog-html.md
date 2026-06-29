@@ -126,9 +126,11 @@ If a list would be ≥3 rows of "X → Y" mapping, use a `<table>` instead:
 
 ## 10. Emoji budget
 
-Section headings: **0 emoji.** Body: **3–12 total, ≤2 per section.**
+Emoji may sit at a **heading's end** or a body/list position; keep them sparse and
+purposeful. Budget: **≤1 per heading, ≤2 per section, ≤12 per article.** Whether emoji are
+functional-only (`🔍 ⚠️ 💡 📋 ✅`) or expressive is a **brand voice** decision — see DESIGN.md.
 
-**Checklist item (fails lint):** any emoji in a heading; >12 body emoji; >2 in one section.
+**Checklist item (fails lint):** >1 emoji in a heading; >12 per article; >2 in one section.
 
 ---
 
@@ -204,16 +206,16 @@ Brand-specific voice (persona, greeting, banned phrases) lives in DESIGN.md.
 | 7 | `<hr>` dividers | missing between sections / trailing |
 | 8 | Quote = heading | `<blockquote>` with prose |
 | 9 | Comparison table | ≥3-row X→Y as `<ul>` |
-| 10 | Emoji budget | emoji in heading; >12 body; >2/section |
+| 10 | Emoji budget | >1 emoji/heading; >12/article; >2/section |
 | 11 | Disclaimer last | missing / not last |
 | 13 | Length | body < 1,500 chars |
 
 **Compliant HTML (excerpt):**
 
 ```html
-<blockquote style="border-left:5px solid #000;padding:8px 0 8px 14px;margin:24px 0 16px 0;"><strong>실비 청구, 어디까지 될까요?</strong></blockquote>
-<p>안녕하세요! 진료받고 나서 "이거 실비 되나?" 헷갈리신 적 있으실 거예요 😊</p>
-<p>특히 <span style="color:#dc3545;font-weight:bold;">비급여 항목</span>은 주의가 필요한데요.</p>
+<blockquote style="border-left:5px solid #000;padding:8px 0 8px 14px;margin:24px 0 16px 0;"><strong>실손 세대별 도수치료 한도 🔍</strong></blockquote>
+<p>도수치료 실비는 실손 세대에 따라 보장 한도가 다릅니다. 1~2세대는 비교적 넓게 적용되지만, 4세대부터는 횟수·금액 제한이 붙어요.</p>
+<p>특히 <span style="color:#dc3545;font-weight:bold;">비급여 항목</span>은 세대별 자기부담률이 달라 청구 전 확인이 필요합니다.</p>
 <hr style="border:0;border-top:1px solid #e5e5e5;margin:24px 0;">
 ```
 
