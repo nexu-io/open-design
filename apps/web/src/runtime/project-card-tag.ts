@@ -31,6 +31,7 @@ export const TONE_CLASS: Record<BadgeTone, string> = {
   red: 'badge-tone-red',
   pink: 'badge-tone-pink',
   neutral: 'badge-tone-neutral',
+  green: 'badge-tone-green',
 };
 
 // manifest에 badge가 선언된 경우 label + toneClass를 반환한다.

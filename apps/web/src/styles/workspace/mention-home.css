@@ -566,6 +566,7 @@
 .design-card-tag.badge-tone-amber { color: #b15e00; background: rgba(255, 159, 64, 0.14); border-color: rgba(255, 159, 64, 0.32); }
 .design-card-tag.badge-tone-teal { color: #1c8a73; background: rgba(28, 138, 115, 0.12); border-color: rgba(28, 138, 115, 0.28); }
 .design-card-tag.badge-tone-red { color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--bg-panel)); border-color: color-mix(in srgb, var(--red) 34%, transparent); }
+.design-card-tag.badge-tone-green { color: #0a7d43; background: rgba(3, 199, 90, 0.12); border-color: rgba(3, 199, 90, 0.28); }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in {
