@@ -55,6 +55,9 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [folderBrowser, setFolderBrowser] = useState<ProjectLocationFolderBrowserResponse | null>(null);
   const draftsRef = useRef<DraftLocation[]>(drafts);
   const manualPathInputRef = useRef<HTMLInputElement | null>(null);
+  const noFolderSelectedStatus = t('settings.projectLocationsNoFolderSelected');
+  const hasConfiguredDraft = drafts.some((draft) => draft.path.trim().length > 0);
+  const visibleStatus = status === noFolderSelectedStatus && hasConfiguredDraft ? null : status;
 
   useEffect(() => {
     draftsRef.current = drafts;
@@ -151,7 +154,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   }
 
   function setNoFolderSelectedStatus() {
-    setStatus(hasConfiguredWorkBase() ? null : t('settings.projectLocationsNoFolderSelected'));
+    setStatus(hasConfiguredWorkBase() ? null : noFolderSelectedStatus);
   }
 
   async function addLocationPath(locationPath: string) {
@@ -214,7 +217,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         setStatus(
           hasConfiguredWorkBase()
             ? null
-            : `${t('settings.projectLocationsNoFolderSelected')} ${t('settings.projectLocationsManualPlaceholder')}`,
+            : `${noFolderSelectedStatus} ${t('settings.projectLocationsManualPlaceholder')}`,
         );
         manualPathInputRef.current?.focus();
         manualPathInputRef.current?.select();
@@ -380,7 +383,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         </div>
       ) : null}
 
-      {status ? <p className="settings-rescan-status">{status}</p> : null}
+      {visibleStatus ? <p className="settings-rescan-status">{visibleStatus}</p> : null}
       {error ? <p className="settings-rescan-status error">{error}</p> : null}
     </section>
   );

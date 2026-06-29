@@ -80,6 +80,14 @@ function renderSection(config: AppConfig = baseConfig) {
   return { setCfg, onProjectsRefresh };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('ProjectLocationsSection', () => {
   afterEach(() => {
     cleanup();
@@ -178,5 +186,24 @@ describe('ProjectLocationsSection', () => {
     await waitFor(() => {
       expect(screen.queryByText('No folder selected.')).toBeNull();
     });
+  });
+
+  it('clears stale no-folder-selected status after configured work bases load', async () => {
+    const locations = deferred<ProjectLocation[]>();
+    fetchProjectLocationsMock.mockReturnValue(locations.promise);
+
+    renderSection();
+
+    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    fireEvent.submit(pathInput.closest('form')!);
+
+    expect(screen.getByText('No folder selected.')).toBeTruthy();
+
+    locations.resolve([builtInLocation, forgeLocation]);
+
+    await waitFor(() => {
+      expect(screen.getByText('/home/abhishek/forge/design')).toBeTruthy();
+    });
+    expect(screen.queryByText('No folder selected.')).toBeNull();
   });
 });
