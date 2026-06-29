@@ -1,0 +1,26 @@
+{
+  "candidateId": "3ff95704-5ab9-4213-b06a-dc00e3706515",
+  "projectId": "brand-shopify-b20aa5",
+  "runId": "fec57220-378c-4381-9433-53f6164c5c68",
+  "conversationId": "0cf4fecc-dab8-4c3a-a37f-2a1a4a94da5e",
+  "provenance": {
+    "summary": "Detected from context/input-DESIGN.md, SKILL.md after a successful run.",
+    "detectedAt": 1782747520597
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 17667,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 2665,
+      "copied": true
+    }
+  ]
+}
