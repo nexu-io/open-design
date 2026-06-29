@@ -146,10 +146,18 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     return result;
   }
 
+  function hasConfiguredWorkBase() {
+    return draftsRef.current.some((draft) => draft.path.trim().length > 0);
+  }
+
+  function setNoFolderSelectedStatus() {
+    setStatus(hasConfiguredWorkBase() ? null : t('settings.projectLocationsNoFolderSelected'));
+  }
+
   async function addLocationPath(locationPath: string) {
     const selected = locationPath.trim();
     if (!selected) {
-      setStatus(t('settings.projectLocationsNoFolderSelected'));
+      setNoFolderSelectedStatus();
       return;
     }
     if (draftsRef.current.some((draft) => draft.path === selected)) {
@@ -203,7 +211,11 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     if (!selected) {
       const opened = await openFolderBrowser();
       if (!opened) {
-        setStatus(`${t('settings.projectLocationsNoFolderSelected')} ${t('settings.projectLocationsManualPlaceholder')}`);
+        setStatus(
+          hasConfiguredWorkBase()
+            ? null
+            : `${t('settings.projectLocationsNoFolderSelected')} ${t('settings.projectLocationsManualPlaceholder')}`,
+        );
         manualPathInputRef.current?.focus();
         manualPathInputRef.current?.select();
       }

@@ -160,4 +160,23 @@ describe('ProjectLocationsSection', () => {
     expect(setCfg).toHaveBeenCalledWith(expect.any(Function));
     expect(onProjectsRefresh).toHaveBeenCalledTimes(2);
   });
+
+  it('does not show no-folder-selected status when a work base is already configured', async () => {
+    fetchProjectLocationsMock.mockResolvedValue([builtInLocation, forgeLocation]);
+
+    renderSection({
+      ...baseConfig,
+      projectLocations: [{ id: forgeLocation.id, name: forgeLocation.name, path: forgeLocation.path }],
+      defaultProjectLocationId: forgeLocation.id,
+    });
+
+    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    expect(screen.getByText('/home/abhishek/forge/design')).toBeTruthy();
+
+    fireEvent.submit(pathInput.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.queryByText('No folder selected.')).toBeNull();
+    });
+  });
 });
