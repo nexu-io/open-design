@@ -1499,6 +1499,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   };
   const existing = getProject(db, projectId);
   const projectMetadata: ProjectMetadata = { ...(existing?.metadata ?? {}), ...finalizeMetadata };
+  const projectName = `${brand.name || meta.sourceUrl} Design System`;
   await syncBrandFilesToProject({
     brandsRoot,
     projectsRoot,
@@ -1528,7 +1529,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
 
   if (existing) {
     updateProject(db, projectId, {
-      name: `${brand.name || meta.sourceUrl} Design System`,
+      name: projectName,
       skillId: existing.skillId ?? null,
       designSystemId,
       pendingPrompt: existing.pendingPrompt ?? null,
@@ -1536,6 +1537,20 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
       customInstructions: existing.customInstructions ?? null,
       updatedAt: Date.now(),
     });
+    const projectBaseDir = typeof projectMetadata.baseDir === 'string'
+      ? path.normalize(projectMetadata.baseDir)
+      : null;
+    if (projectBaseDir && path.isAbsolute(projectBaseDir)) {
+      await writeProjectManifest(projectBaseDir, {
+        schemaVersion: 1,
+        id: projectId,
+        name: projectName,
+        createdAt: existing.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
+        skillId: existing.skillId ?? null,
+        designSystemId,
+      });
+    }
   }
   throwIfProgrammaticExtractionNotCurrent(opts);
 
