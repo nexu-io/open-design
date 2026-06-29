@@ -1,14 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { readAppConfig } from '../app-config.js';
-import { validateLinkedDirs } from '../linked-dirs.js';
 import {
-  BUILT_IN_PROJECT_LOCATION_ID,
-  allProjectLocations,
   createLocationProjectDir,
+  defaultExternalProjectLocationForRuntime,
   writeProjectManifest,
-  type ProjectLocation,
 } from '../project-locations.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -149,47 +145,6 @@ export function createDesignSystemServerServices({
     ];
   }
 
-  function pathRelative(from: string, to: string): string {
-    return path.relative(from, to);
-  }
-
-  function isInsideOrSame(relative: string): boolean {
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-  }
-
-  function locationOverlapsDaemonData(locationPath: string): boolean {
-    const runtimeDir = paths.RUNTIME_DATA_DIR_CANONICAL || paths.RUNTIME_DATA_DIR;
-    const projectsDir = path.join(runtimeDir, 'projects');
-    return [
-      pathRelative(runtimeDir, locationPath),
-      pathRelative(locationPath, runtimeDir),
-      pathRelative(projectsDir, locationPath),
-      pathRelative(locationPath, projectsDir),
-    ].some(isInsideOrSame);
-  }
-
-  async function configuredProjectLocations(): Promise<ProjectLocation[]> {
-    const config = await readAppConfig(paths.RUNTIME_DATA_DIR);
-    const all = allProjectLocations(paths.PROJECTS_DIR, config.projectLocations);
-    const valid = all[0] ? [all[0]] : [];
-    for (const location of all.slice(1)) {
-      const validated = validateLinkedDirs([location.path]);
-      if (validated.error) continue;
-      const canonical = validated.dirs?.[0];
-      if (!canonical || locationOverlapsDaemonData(canonical)) continue;
-      valid.push({ ...location, path: canonical });
-    }
-    return valid;
-  }
-
-  async function defaultExternalProjectLocation(): Promise<ProjectLocation | null> {
-    const config = await readAppConfig(paths.RUNTIME_DATA_DIR);
-    const defaultId = config.defaultProjectLocationId;
-    if (!defaultId || defaultId === BUILT_IN_PROJECT_LOCATION_ID) return null;
-    const locations = await configuredProjectLocations();
-    return locations.find((location) => location.id === defaultId && !location.builtIn) ?? null;
-  }
-
   async function readAvailableDesignSystem(id: string) {
     if (typeof id === 'string' && id.startsWith('user:')) {
       return designSystems.readDesignSystem(paths.USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
@@ -301,7 +256,12 @@ export function createDesignSystemServerServices({
     let externalProjectLocationId: string | null = null;
     const existing = projects.getProject(dbHandle, projectId);
     if (!existing) {
-      const location = await defaultExternalProjectLocation();
+      const locationOptions = {
+        dataDir: paths.RUNTIME_DATA_DIR,
+        projectsDir: paths.PROJECTS_DIR,
+        ...(paths.RUNTIME_DATA_DIR_CANONICAL ? { dataDirCanonical: paths.RUNTIME_DATA_DIR_CANONICAL } : {}),
+      };
+      const location = await defaultExternalProjectLocationForRuntime(locationOptions);
       if (location) {
         externalProjectDir = await createLocationProjectDir(location, projectId);
         externalProjectLocationId = location.id;
