@@ -1357,7 +1357,7 @@ a.avatar-item:visited {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -10px;
+  left: -2px;
   right: -10px;
   cursor: col-resize;
 }
