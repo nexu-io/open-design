@@ -48,6 +48,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const draftsRef = useRef<DraftLocation[]>(drafts);
+  const manualPathInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     draftsRef.current = drafts;
@@ -164,6 +165,12 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     setError(null);
     setStatus(null);
     const selected = await openProjectLocationFolderDialog();
+    if (!selected) {
+      setStatus(`${t('settings.projectLocationsNoFolderSelected')} ${t('settings.projectLocationsManualPlaceholder')}`);
+      manualPathInputRef.current?.focus();
+      manualPathInputRef.current?.select();
+      return;
+    }
     await addLocationPath(selected ?? '');
   }
 
@@ -244,6 +251,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         </label>
         <div className="project-location-manual-row">
           <input
+            ref={manualPathInputRef}
             id="project-location-manual-path"
             className="project-location-manual-input"
             type="text"
