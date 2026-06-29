@@ -116,10 +116,16 @@ export async function readAppConfig(page: Page) {
 }
 
 export async function seedBrowserConfig(page: Page, value: Record<string, unknown>) {
+  const payload = { key: STORAGE_KEY, config: value };
   await page.addInitScript(
     ({ key, config }) => {
       window.localStorage.setItem(key, JSON.stringify(config));
     },
-    { key: STORAGE_KEY, config: value },
+    payload,
   );
+  await page.evaluate(({ key, config }) => {
+    window.localStorage.setItem(key, JSON.stringify(config));
+  }, payload).catch(() => {
+    // Some pre-navigation pages do not expose localStorage yet; the init script above covers the next load.
+  });
 }

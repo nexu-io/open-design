@@ -44,12 +44,9 @@ async function stubCatalogsEmpty(page: import('@playwright/test').Page) {
 test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AMR selected', async ({ page }) => {
   await stubCatalogsEmpty(page);
   const root = join(tmpdir(), `open-design-amr-logout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-  const successVelaBin = await writeFakeVelaBin(join(root, 'bin-success'), {
-    assistantText: 'Hello from the e2e fake vela.',
-    requireLoginConfig: false,
-  });
   const reloginVelaBin = await writeFakeVelaBin(join(root, 'bin-relogin'), {
     failAuthAtPrompt: true,
+    requireLoginConfig: false,
   });
   await mkdir(root, { recursive: true });
   let loggedIn = true;
@@ -92,7 +89,7 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
       amr: { model: 'default', reasoning: 'default' },
     },
     agentCliEnv: {
-      amr: { VELA_BIN: successVelaBin },
+      amr: { VELA_BIN: reloginVelaBin },
     },
   };
 

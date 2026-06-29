@@ -288,7 +288,9 @@ test.describe('Automations page', () => {
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');
     await modal.getByLabel('Automation title').fill('Weekly digest');
+    await expect(modal.getByLabel('Automation title')).toHaveValue('Weekly digest');
     await modal.getByTestId('automation-modal-prompt').fill('Summarize GitHub and design activity.');
+    await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize GitHub and design activity.');
     await modal.getByRole('button', { name: 'Create' }).click();
 
     await expect(view.getByText('Weekly digest')).toBeVisible();
@@ -530,6 +532,269 @@ test.describe('Automations page', () => {
         mode: 'create_each_run',
       },
     });
+  });
+
+  test('[P1] edits an existing automation and persists updated schedule, prompt, and target', async ({ page }) => {
+    await seedAutomationsBase(page);
+
+    const now = Date.now();
+    const projects = [
+      { id: 'proj-1', name: 'Routine Test Project' },
+      { id: 'proj-2', name: 'Launch Room' },
+    ];
+    let routines: Array<Record<string, unknown>> = [
+      {
+        id: 'routine-edit-1',
+        name: 'Daily digest',
+        prompt: 'Summarize GitHub and design activity.',
+        schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+        target: { mode: 'create_each_run' },
+        enabled: true,
+        nextRunAt: now + 3600_000,
+        lastRun: null,
+        createdAt: now - 60_000,
+        updatedAt: now - 60_000,
+      },
+    ];
+    const patchBodies: Array<Record<string, unknown>> = [];
+
+    await page.route('**/api/projects', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ projects }),
+      });
+    });
+
+    await page.route('**/api/routines', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ routines }),
+      });
+    });
+
+    await page.route('**/api/routines/routine-edit-1', async (route) => {
+      if (route.request().method() !== 'PATCH') {
+        await route.fulfill({ status: 404, body: '{}' });
+        return;
+      }
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      patchBodies.push(payload);
+      const updated = {
+        ...routines[0],
+        ...payload,
+        enabled: true,
+        nextRunAt: now + 7200_000,
+        updatedAt: now,
+      };
+      routines = [updated];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ routine: updated }),
+      });
+    });
+
+    await page.route('**/api/automation-templates', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ proposals: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-source-packets?limit=3', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ packets: [] }),
+      });
+    });
+
+    const view = await gotoAutomations(page);
+    const row = view.getByTestId('automation-row-routine-edit-1');
+    await row.getByRole('button', { name: 'Edit' }).click();
+
+    const modal = page.getByTestId('automation-modal');
+    await expect(modal).toHaveAttribute('aria-label', 'Edit automation');
+    await expect(modal.getByLabel('Automation title')).toHaveValue('Daily digest');
+    await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize GitHub and design activity.');
+
+    await modal.getByRole('button', { name: /New project each run/i }).click();
+    await modal.getByRole('button', { name: 'Launch Room' }).click();
+    await expect(modal.getByRole('button', { name: /Launch Room/i })).toBeVisible();
+
+    await modal.getByRole('button', { name: /Daily/i }).click();
+    await page.getByRole('tab', { name: 'Weekdays' }).click();
+    await page.locator('.automation-popover--schedule input[type="time"]').fill('10:30');
+    await page.locator('.automation-popover--schedule select').selectOption('UTC');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(modal.getByRole('button', { name: /Weekdays.*10:30 AM.*UTC/i })).toBeVisible();
+
+    await modal.getByLabel('Automation title').fill('Launch digest');
+    await modal.getByTestId('automation-modal-prompt').fill('Summarize launch readiness and open blockers.');
+    await expect(modal.getByLabel('Automation title')).toHaveValue('Launch digest');
+    await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize launch readiness and open blockers.');
+
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await expect.poll(() => patchBodies.length).toBe(1);
+    expect(patchBodies[0]).toMatchObject({
+      name: 'Launch digest',
+      prompt: 'Summarize launch readiness and open blockers.',
+      schedule: {
+        kind: 'weekdays',
+        time: '10:30',
+        timezone: 'UTC',
+      },
+      target: {
+        mode: 'reuse',
+        projectId: 'proj-2',
+      },
+    });
+
+    await expect(row).toContainText('Launch digest');
+    await expect(row).toContainText('Weekdays at 10:30 AM');
+    await expect(row).toContainText('Launch Room');
+    await expect(row).toContainText('Summarize launch readiness and open blockers.');
+  });
+
+  test('[P1] creates a reuse-project automation and opens the reused project after Run', async ({ page }) => {
+    await seedAutomationsBase(page);
+
+    const projects = [
+      { id: 'proj-1', name: 'Routine Test Project' },
+      { id: 'proj-run', name: 'Existing Launch Project' },
+    ];
+    let routines: Array<Record<string, unknown>> = [];
+    const createBodies: Array<Record<string, unknown>> = [];
+
+    await page.route('**/api/projects', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ projects }),
+      });
+    });
+
+    await page.route('**/api/routines', async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ routines }),
+        });
+        return;
+      }
+      if (method === 'POST') {
+        const payload = route.request().postDataJSON() as Record<string, unknown>;
+        createBodies.push(payload);
+        const routine = {
+          id: 'routine-reuse-1',
+          name: payload.name,
+          prompt: payload.prompt,
+          schedule: payload.schedule,
+          target: payload.target,
+          enabled: true,
+          nextRunAt: Date.now() + 3600_000,
+          lastRun: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        routines = [routine];
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ routine }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 404, body: '{}' });
+    });
+
+    await page.route('**/api/automation-templates', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ proposals: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-source-packets?limit=3', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ packets: [] }),
+      });
+    });
+
+    await page.route('**/api/routines/routine-reuse-1/run', async (route) => {
+      const startedAt = Date.now();
+      const lastRun = {
+        runId: 'run-reuse-1',
+        status: 'queued',
+        trigger: 'manual',
+        startedAt,
+        projectId: 'proj-run',
+        conversationId: 'conv-reuse',
+        agentRunId: 'agent-run-reuse-1',
+      };
+      routines = [{ ...routines[0], lastRun }];
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          routine: routines[0],
+          run: lastRun,
+          projectId: 'proj-run',
+          conversationId: 'conv-reuse',
+          agentRunId: 'agent-run-reuse-1',
+        }),
+      });
+    });
+
+    const view = await gotoAutomations(page);
+    await view.getByRole('button', { name: 'New automation' }).click();
+    const modal = page.getByTestId('automation-modal');
+    await modal.getByLabel('Automation title').fill('Reuse launch project');
+    await modal.getByTestId('automation-modal-prompt').fill('Append launch readiness notes.');
+
+    await modal.getByRole('button', { name: /New project each run/i }).click();
+    await modal.getByRole('button', { name: 'Existing Launch Project' }).click();
+    await expect(modal.getByRole('button', { name: /Existing Launch Project/i })).toBeVisible();
+    await modal.getByRole('button', { name: 'Create' }).click();
+
+    await expect.poll(() => createBodies.length).toBe(1);
+    expect(createBodies[0]).toMatchObject({
+      name: 'Reuse launch project',
+      prompt: 'Append launch readiness notes.',
+      target: {
+        mode: 'reuse',
+        projectId: 'proj-run',
+      },
+    });
+
+    const row = view.getByTestId('automation-row-routine-reuse-1');
+    await expect(row).toContainText('Existing Launch Project');
+    await row.getByRole('button', { name: 'Run' }).click();
+    await expect(page).toHaveURL(/\/projects\/proj-run/);
   });
 
   test('[P1] keeps saved automations ordered by newest createdAt first', async ({ page }) => {

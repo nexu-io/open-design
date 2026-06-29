@@ -94,6 +94,11 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
   // Empty input can still run the active placeholder-carousel suggestion.
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
+  await expect(page.getByTestId('working-dir-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
+  await expect(page.getByTestId('home-hero-blank-project')).toBeVisible();
   const createTabs = page.getByTestId('home-hero-type-tabs');
   await expect(createTabs).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
@@ -175,13 +180,14 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-integrations')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('plugins-home-pill-category-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
   await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
 });
 
@@ -197,7 +203,9 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
   await expect(home.getByTestId('plugins-home-section')).toBeVisible();
   await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-templates-hint')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
   await ensureRailOpen(page);
