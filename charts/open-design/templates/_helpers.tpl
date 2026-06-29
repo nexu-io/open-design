@@ -50,3 +50,32 @@ Selector labels used by Services and HPAs.
 app.kubernetes.io/name: {{ include "open-design.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Create the service account name.
+*/}}
+{{- define "open-design.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "open-design.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Name of the Secret containing runtime credentials.
+*/}}
+{{- define "open-design.secretName" -}}
+{{- default (include "open-design.fullname" .) .Values.secret.existingSecret }}
+{{- end }}
+
+{{/*
+Secret key names for runtime credentials.
+*/}}
+{{- define "open-design.apiTokenKey" -}}
+{{- default "OD_API_TOKEN" .Values.secret.apiTokenKey }}
+{{- end }}
+
+{{- define "open-design.postgresPasswordKey" -}}
+{{- default "OD_PG_PASSWORD" .Values.secret.postgresPasswordKey }}
+{{- end }}

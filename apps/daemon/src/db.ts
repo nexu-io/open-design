@@ -13,8 +13,10 @@ import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
+import { resolveDaemonDbConfig } from './storage/daemon-db.js';
+import { openPostgresCompatDatabase, type PostgresCompatDatabase } from './storage/postgres-sync-db.js';
 
-type SqliteDb = Database.Database;
+type SqliteDb = Database.Database | PostgresCompatDatabase;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
 type ChatSessionMode = 'design' | 'chat';
@@ -30,10 +32,25 @@ function rows(value: unknown[]): DbRow[] {
   return value.map((item) => row(item) ?? {});
 }
 
-export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: string } = {}): SqliteDb {
+function transaction<T>(db: SqliteDb, fn: () => T): () => T {
+  return (db.transaction as (callback: () => T) => () => T)(fn);
+}
+
+export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: string } = {}): Database.Database {
+  const config = resolveDaemonDbConfig();
+  if (config.kind === 'postgres') {
+    const key = `postgres://${config.postgres?.user}@${config.postgres?.host}:${config.postgres?.port}/${config.postgres?.database}`;
+    if (dbInstance && dbFile === key) return dbInstance as Database.Database;
+    if (dbInstance) closeDatabase();
+    const db = openPostgresCompatDatabase(config);
+    migrate(db);
+    dbInstance = db;
+    dbFile = key;
+    return db as unknown as Database.Database;
+  }
   const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, '.od');
   const file = path.join(dir, 'app.sqlite');
-  if (dbInstance && dbFile === file) return dbInstance;
+  if (dbInstance && dbFile === file) return dbInstance as Database.Database;
   if (dbInstance) closeDatabase();
   fs.mkdirSync(dir, { recursive: true });
   const db = new Database(file);
@@ -368,10 +385,10 @@ function migrate(db: SqliteDb): void {
   if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
     db.exec(`ALTER TABLE tabs_state ADD COLUMN state_json TEXT`);
   }
-  migrateCritique(db);
-  migrateMediaTasks(db);
-  migrateLibrary(db);
-  migratePlugins(db);
+  migrateCritique(db as Database.Database);
+  migrateMediaTasks(db as Database.Database);
+  migrateLibrary(db as Database.Database);
+  migratePlugins(db as Database.Database);
 }
 
 function migratePreviewCommentsSlideKey(db: SqliteDb): void {
@@ -1972,7 +1989,7 @@ export function insertScheduledRoutineRun(db: SqliteDb, r: DbRow, slotAt: number
         agent_run_id, started_at, completed_at, summary, error, error_code)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     const claim = insertClaim.run(r.routineId, slotAt, Date.now());
     if (claim.changes === 0) return false;
     insertRun.run(
@@ -2123,7 +2140,7 @@ export function setTabs(
       ? { tabs: stateOrNames, active: activeName }
       : stateOrNames,
   ) ?? { tabs: [], active: null };
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     db.prepare(
       `INSERT INTO tabs_state (project_id, updated_at, state_json)
        VALUES (?, ?, ?)

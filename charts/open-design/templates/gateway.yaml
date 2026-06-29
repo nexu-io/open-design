@@ -1,0 +1,23 @@
+{{- if .Values.gateway.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "open-design.fullname" . }}
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className | quote }}
+  listeners:
+    - name: {{ .Values.gateway.listenerName | quote }}
+      hostname: {{ .Values.gateway.hostname | quote }}
+      port: {{ .Values.gateway.listenerPort }}
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.tlsSecretName | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+{{- end }}

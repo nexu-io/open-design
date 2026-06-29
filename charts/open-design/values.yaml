@@ -1,4 +1,5 @@
-# Safety constraint for SQLite data consistency
+# Safety constraint for local-file data consistency. Postgres-backed
+# metadata storage still uses the PVC for generated project artifacts.
 replicaCount: 1
 
 commonLabels:
@@ -20,6 +21,26 @@ config:
   webPort: 7456
   bindHost: "127.0.0.1"
   apiToken: "secure-default-token-change-me"
+
+secret:
+  existingSecret: ""
+  apiTokenKey: OD_API_TOKEN
+  postgresPasswordKey: OD_PG_PASSWORD
+
+database:
+  kind: sqlite
+  postgres:
+    host: ""
+    port: 5432
+    database: ""
+    user: ""
+    password: ""
+    sslMode: require
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
 
 service:
   type: ClusterIP
@@ -49,6 +70,25 @@ ingress:
   #  - secretName: open-design-tls
   #    hosts:
   #      - open-design.local
+
+gateway:
+  enabled: false
+  className: traefik
+  hostname: open-design.local
+  listenerName: open-design-https
+  listenerPort: 8443
+  tlsSecretName: open-design-tls
+  httpRedirect:
+    enabled: false
+    parentGateway:
+      name: traefik
+      namespace: traefik
+      sectionName: web
+
+networkPolicy:
+  enabled: false
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: traefik
 
 resources:
   limits:

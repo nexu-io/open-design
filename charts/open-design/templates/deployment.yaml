@@ -19,10 +19,13 @@ spec:
       annotations:
           checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
           checksum/proxy-config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
+          {{- if not .Values.secret.existingSecret }}
           checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+          {{- end }}
       labels:
         {{- include "open-design.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "open-design.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -45,8 +48,8 @@ spec:
             - name: PROXY_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
-                  key: OD_API_TOKEN
+                  name: {{ include "open-design.secretName" . }}
+                  key: {{ include "open-design.apiTokenKey" . }}
           volumeMounts:
             - name: proxy-template
               mountPath: /etc/nginx/templates
@@ -71,8 +74,15 @@ spec:
             - name: OD_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
-                  key: OD_API_TOKEN
+                  name: {{ include "open-design.secretName" . }}
+                  key: {{ include "open-design.apiTokenKey" . }}
+            {{- if eq .Values.database.kind "postgres" }}
+            - name: OD_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "open-design.secretName" . }}
+                  key: {{ include "open-design.postgresPasswordKey" . }}
+            {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:

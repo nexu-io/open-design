@@ -11,6 +11,14 @@ data:
   PROXY_PORT: {{ .Values.authProxy.port | quote }}
   NODE_ENV: {{ .Values.config.nodeEnv | quote }}
   NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
+  OD_DAEMON_DB: {{ .Values.database.kind | quote }}
+{{- if eq .Values.database.kind "postgres" }}
+  OD_PG_HOST: {{ .Values.database.postgres.host | quote }}
+  OD_PG_PORT: {{ .Values.database.postgres.port | quote }}
+  OD_PG_DATABASE: {{ .Values.database.postgres.database | quote }}
+  OD_PG_USER: {{ .Values.database.postgres.user | quote }}
+  OD_PG_SSL_MODE: {{ .Values.database.postgres.sslMode | quote }}
+{{- end }}
 {{- $publicBaseUrl := .Values.config.publicBaseUrl }}
 {{- if and (not $publicBaseUrl) .Values.ingress.enabled .Values.ingress.hosts }}
   {{- if eq (len .Values.ingress.hosts) 1 }}
@@ -26,6 +34,9 @@ data:
   {{- else if gt (len .Values.ingress.hosts) 1 }}
     {{- fail "CRITICAL ERROR: Multiple ingress hosts configured. You must explicitly set config.publicBaseUrl to define the canonical origin for OAuth callbacks." }}
   {{- end }}
+{{- end }}
+{{- if and (not $publicBaseUrl) .Values.gateway.enabled .Values.gateway.hostname }}
+  {{- $publicBaseUrl = printf "https://%s" .Values.gateway.hostname }}
 {{- end }}
 {{- if $publicBaseUrl }}
   OD_PUBLIC_BASE_URL: {{ $publicBaseUrl | quote }}
@@ -51,9 +62,13 @@ data:
       {{- fail "CRITICAL ERROR: service.type is set to LoadBalancer or NodePort but config.allowedOrigins is empty. You must explicitly configure config.allowedOrigins when exposing the service directly without an Ingress." }}
     {{- else }}
       {{- /* Synthesize default local origins for port-forwarding when Ingress is disabled */ -}}
-      {{- $localProxy := printf "http://localhost:%v" .Values.authProxy.port }}
-      {{- $localSvc := printf "http://localhost:%v" .Values.service.port }}
-      {{- $origins = printf "%s,%s" $localProxy $localSvc }}
+      {{- if and .Values.gateway.enabled .Values.gateway.hostname }}
+        {{- $origins = printf "https://%s" .Values.gateway.hostname }}
+      {{- else }}
+        {{- $localProxy := printf "http://localhost:%v" .Values.authProxy.port }}
+        {{- $localSvc := printf "http://localhost:%v" .Values.service.port }}
+        {{- $origins = printf "%s,%s" $localProxy $localSvc }}
+      {{- end }}
     {{- end }}
   {{- end }}
   OD_ALLOWED_ORIGINS: {{ $origins | quote }}

@@ -1,0 +1,48 @@
+{{- if .Values.gateway.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "open-design.fullname" . }}
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+spec:
+  hostnames:
+    - {{ .Values.gateway.hostname | quote }}
+  parentRefs:
+    - name: {{ include "open-design.fullname" . }}
+      sectionName: {{ .Values.gateway.listenerName | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "open-design.fullname" . }}
+          port: {{ .Values.service.port }}
+---
+{{- if .Values.gateway.httpRedirect.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "open-design.fullname" . }}-http-redirect
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+spec:
+  hostnames:
+    - {{ .Values.gateway.hostname | quote }}
+  parentRefs:
+    - name: {{ .Values.gateway.httpRedirect.parentGateway.name | quote }}
+      namespace: {{ .Values.gateway.httpRedirect.parentGateway.namespace | quote }}
+      sectionName: {{ .Values.gateway.httpRedirect.parentGateway.sectionName | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}
+{{- end }}

@@ -9,9 +9,9 @@
 //
 // Today's resolver simply records the operator's choice; the
 // existing better-sqlite3 path is the only reachable backend.
-// `OD_DAEMON_DB=postgres` returns a stub that throws when used so
-// a misconfigured operator sees a clear error instead of silently
-// dropping writes onto a non-existent backend.
+// `OD_DAEMON_DB=postgres` selects the Postgres-backed compatibility
+// adapter used by container deployments that cannot rely on a local
+// SQLite file.
 
 export type DaemonDbKind = 'sqlite' | 'postgres';
 
@@ -23,9 +23,7 @@ export interface DaemonDbConfig {
     port:     number;
     database: string;
     user:     string;
-    // Password / connection string are looked up at runtime from the
-    // matching secret manager; we never read them through env at this
-    // layer.
+    password?: string;
     sslMode?: 'disable' | 'require' | 'verify-full';
   };
 }
@@ -45,6 +43,7 @@ export function resolveDaemonDbConfig(env?: Record<string, string | undefined>):
     const portStr = e.OD_PG_PORT ?? '5432';
     const database = e.OD_PG_DATABASE ?? '';
     const user = e.OD_PG_USER ?? '';
+    const password = e.OD_PG_PASSWORD ?? '';
     const sslMode = e.OD_PG_SSL_MODE === 'disable' || e.OD_PG_SSL_MODE === 'verify-full'
       ? e.OD_PG_SSL_MODE
       : 'require';
@@ -54,15 +53,17 @@ export function resolveDaemonDbConfig(env?: Record<string, string | undefined>):
         'OD_PG_PORT defaults to 5432; OD_PG_SSL_MODE defaults to "require".',
       );
     }
+    const postgres: NonNullable<DaemonDbConfig['postgres']> = {
+      host,
+      port: Number.parseInt(portStr, 10) || 5432,
+      database,
+      user,
+      sslMode,
+    };
+    if (password) postgres.password = password;
     return {
       kind: 'postgres',
-      postgres: {
-        host,
-        port:     Number.parseInt(portStr, 10) || 5432,
-        database,
-        user,
-        sslMode,
-      },
+      postgres,
     };
   }
   if (kind !== 'sqlite' && kind !== '') {
