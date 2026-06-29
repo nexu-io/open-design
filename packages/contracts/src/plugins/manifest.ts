@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BADGE_TONES } from '../api/projects.js';
 
 // `open-design.json` schema (v1). Mirrors docs/schemas/open-design.plugin.v1.json
 // with one addition: this Zod schema is permissive on the top level so adapter
@@ -165,7 +166,7 @@ export const PluginManifestSchema = z.object({
     scenario: z.string().optional(),
     badge: z.object({
       label: z.string().min(1).max(40),
-      tone: z.enum(['blue', 'purple', 'amber', 'teal', 'red', 'pink', 'neutral']).optional(),
+      tone: z.enum(BADGE_TONES).optional(),
     }).optional(),
     engineRequirements: z.object({
       od: z.string().optional(),
