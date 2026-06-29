@@ -8364,6 +8364,28 @@ export async function startServer({
           ));
           return finishWithRetryDecision('failed', 0, signal);
         }
+        // Antigravity handoff-drop guard: agy print-mode runs that
+        // exit cleanly with a bare `no_text` token on stdout/stderr
+        // (1.0.4+ handoff dropped the upstream result) must not fall
+        // through to `succeeded` — the chat would show no reply and
+        // the user has no actionable signal. Surface as a retryable
+        // AGENT_EXECUTION_FAILED. Exact trim match is intentional:
+        // a substring/regex match would false-fire on legitimate
+        // assistant text that happens to mention the token (e.g.
+        // "processed no_text signal and recovered"). (issue #3536;
+        // PR #3840 reviewer feedback.)
+        if (
+          def.id === 'antigravity' &&
+          (agentStdoutTail.trim() === 'no_text' ||
+            agentStderrTail.trim() === 'no_text')
+        ) {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'Antigravity CLI exited with a `no_text` handoff signal — the upstream result was dropped. Retry the run, switch models in agy\'s TUI, or update agy to the latest version.',
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
       }
       // Plain-stream empty-output guard: plain agents send raw stdout
       // chunks without structured event tracking. Detect auth failures
@@ -8400,25 +8422,34 @@ export async function startServer({
           : null;
         const isAntigravityQuota =
           def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
-        // Antigravity-only fallback: if neither classifier matched but
-        // the run was silent, lean on the empirical observation that
-        // an empty agy print-mode exit almost always means
-        // missing-OAuth (the only other silent path is quota, which
-        // the log-file check above already caught).
-        const useAntigravityAuthFallback =
+        // Antigravity-only fallback: when an agy print-mode run exits 0
+        // with no stdout AND neither auth nor quota/upstream signal
+        // appears in the log file, surface a retryable
+        // AGENT_EXECUTION_FAILED rather than the blanket
+        // AGENT_AUTH_REQUIRED the previous version returned. Real
+        // agy 1.0.13+ exits silently for many reasons (missing brain
+        // folder, upstream timeout, model-not-selected), not just
+        // missing OAuth — telling the user to re-login when their
+        // login is valid is a dead end. The auth path is still
+        // reachable when the log file carries the
+        // "You are not logged into Antigravity" line (handled above
+        // by classifyAgentAuthFailure) or when stdout carries the
+        // OAuth prompt (handled by Guard 3 above). (issue #3536;
+        // see adjacent: apps/daemon/src/connectionTest.ts:2384 has
+        // the same blind spot in the smoke probe.)
+        const isAntigravitySilentExit =
           !authFailure && !serviceFailure && def.id === 'antigravity';
-        const errorCode =
-          authFailure || useAntigravityAuthFallback
-            ? 'AGENT_AUTH_REQUIRED'
-            : isAntigravityQuota
-              ? 'RATE_LIMITED'
-              : 'AGENT_EXECUTION_FAILED';
+        const errorCode = authFailure
+          ? 'AGENT_AUTH_REQUIRED'
+          : isAntigravityQuota
+            ? 'RATE_LIMITED'
+            : 'AGENT_EXECUTION_FAILED';
         const msg = authFailure
           ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
           : isAntigravityQuota
             ? antigravityQuotaGuidance()
-            : useAntigravityAuthFallback
-              ? antigravityAuthGuidance()
+            : isAntigravitySilentExit
+              ? `Antigravity CLI exited without producing output. Open agy in a terminal to inspect state, switch models, or update agy, then retry this chat. The agy --log-file may contain more detail.`
               : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
         send('error', createSseErrorPayload(
           errorCode,

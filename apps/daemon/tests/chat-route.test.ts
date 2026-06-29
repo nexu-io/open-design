@@ -2116,6 +2116,152 @@ process.exit(0);
     );
   });
 
+  it('reports a silent Antigravity exit as AGENT_EXECUTION_FAILED instead of AGENT_AUTH_REQUIRED (issue #3536)', async () => {
+    // Real agy 1.0.13+ exits cleanly with no stdout, no stderr, and a
+    // log file that does not contain a recoverable auth / quota /
+    // upstream signal when the brain folder is missing, the selected
+    // model is unreachable, or the upstream times out. The previous
+    // blanket fallback surfaced this as AGENT_AUTH_REQUIRED, which
+    // told the user to re-login even when their login was valid. After
+    // the fix the run is reported as a retryable AGENT_EXECUTION_FAILED
+    // so the chat surfaces an actionable message instead of an auth
+    // path the user cannot act on. (issue #3536; reviewer feedback on
+    // PR #3840.)
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+// No stdout, no stderr, exit 0 — matches the real agy -p - "hello"
+// shape on machines where the brain folder or upstream is unreachable.
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        // Must NOT surface auth guidance when there is no auth signal.
+        expect(eventsBody).not.toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).not.toContain('open a terminal and run `agy` once');
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('Antigravity CLI exited without producing output');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('surfaces an Antigravity bare `no_text` handoff drop as AGENT_EXECUTION_FAILED (issue #3536)', async () => {
+    // Antigravity CLI versions can emit a bare `no_text` token on
+    // stdout when the upstream handoff drops the result. Without a
+    // typed classification the run falls through as succeeded and the
+    // chat shows no reply. The guard uses exact trim match (not a
+    // regex) so legitimate assistant text mentioning the token does
+    // not false-fire. (PR #3840 reviewer feedback.)
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write('no_text\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_EXECUTION_FAILED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('does not classify Antigravity stdout mentioning "no_text" as a failure (issue #3536)', async () => {
+    // Exact-trim-match guard: legitimate assistant text containing the
+    // token (e.g. an assistant reporting "processed no_text signal
+    // and recovered") must NOT be misclassified as
+    // AGENT_EXECUTION_FAILED. The buffered Gemini parser sees init +
+    // message + result, so the run goes through the normal success
+    // path. (PR #3840 reviewer feedback.)
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'message', role: 'assistant', content: 'processed no_text signal and recovered', delta: true }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 8 } }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).not.toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).not.toContain('AGENT_AUTH_REQUIRED');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
   it('preserves the first buffered stdout timestamp for Antigravity Gemini assistant text', () => {
     const timestamp = bufferedAntigravityGeminiFirstTokenAt(
       [{
