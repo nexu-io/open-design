@@ -561,7 +561,7 @@ export function loadConfig(): AppConfig {
       ...DEFAULT_CONFIG,
       ...parsed,
       apiProtocolConfigs: { ...(parsed.apiProtocolConfigs ?? {}) },
-      mediaProviders: { ...(parsed.mediaProviders ?? {}) },
+      mediaProviders: stripMediaProviderConnectionState(parsed.mediaProviders) ?? {},
       composio: { ...(parsed.composio ?? {}) },
       agentModels: { ...(parsed.agentModels ?? {}) },
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
@@ -861,8 +861,25 @@ function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['
   return sanitized;
 }
 
+function stripMediaProviderConnectionState(
+  mediaProviders: AppConfig['mediaProviders'],
+): AppConfig['mediaProviders'] {
+  if (!mediaProviders) return mediaProviders;
+  return Object.fromEntries(
+    Object.entries(mediaProviders).map(([providerId, entry]) => {
+      const persistedEntry = { ...entry };
+      delete persistedEntry.connection;
+      return [providerId, persistedEntry];
+    }),
+  );
+}
+
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
+  const sanitized: AppConfig = {
+    ...config,
+    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
+    mediaProviders: stripMediaProviderConnectionState(config.mediaProviders),
+  };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }

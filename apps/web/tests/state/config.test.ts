@@ -1212,6 +1212,33 @@ describe('loadConfig', () => {
     expect(loadConfig().orbit?.time).toBe(DEFAULT_CONFIG.orbit?.time);
   });
 
+  it('drops stale daemon-derived media provider connection state from loaded config', () => {
+    const savedConfig: Partial<AppConfig> = {
+      mediaProviders: {
+        codex: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '',
+          baseUrl: '',
+          source: 'codex-subscription',
+          connection: {
+            connected: true,
+            source: 'codex-subscription',
+          },
+        },
+      },
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    expect(loadConfig().mediaProviders?.codex).toEqual({
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '',
+      baseUrl: '',
+      source: 'codex-subscription',
+    });
+  });
+
   it('returns defaults for malformed localStorage JSON', () => {
     store.set('open-design:config', '{broken-json');
 
@@ -1238,6 +1265,48 @@ describe('saveConfig', () => {
     expect(saved.installationId).toBeUndefined();
     expect(saved.privacyDecisionAt).toBeUndefined();
     expect(saved.telemetry).toBeUndefined();
+  });
+
+  it('keeps daemon-derived media provider connection state out of localStorage', () => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        codex: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '',
+          baseUrl: '',
+          source: 'codex-subscription',
+          connection: {
+            connected: true,
+            source: 'codex-subscription',
+          },
+        },
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-image-1',
+        },
+      },
+    });
+
+    const saved = JSON.parse(store.get('open-design:config') ?? '{}');
+    expect(saved.mediaProviders.codex).toEqual({
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '',
+      baseUrl: '',
+      source: 'codex-subscription',
+    });
+    expect(saved.mediaProviders.openai).toEqual({
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '1234',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-image-1',
+    });
   });
 
   it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {
