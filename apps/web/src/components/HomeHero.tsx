@@ -205,7 +205,8 @@ interface Props {
   showActivePluginChip?: boolean;
   workingDir?: string | null;
   recentDirs?: string[];
-  onPickWorkingDir?: () => void;
+  onPickWorkingDir?: () => void | boolean | Promise<void | boolean>;
+  onSubmitManualWorkingDir?: (dir: string) => void | Promise<void>;
   onSelectRecentWorkingDir?: (dir: string) => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
@@ -324,6 +325,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     workingDir = null,
     recentDirs = [],
     onPickWorkingDir,
+    onSubmitManualWorkingDir,
     onSelectRecentWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
@@ -1709,8 +1711,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   area: 'chat_composer',
                   element: 'working_dir',
                 });
-                onPickWorkingDir();
+                return onPickWorkingDir();
               }}
+              onSubmitManualPath={onSubmitManualWorkingDir}
               onSelectRecent={(dir) => {
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',

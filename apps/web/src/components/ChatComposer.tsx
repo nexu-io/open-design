@@ -1715,13 +1715,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function handleLinkFolder() {
-      if (!projectId) return;
+      if (!projectId || !projectMetadata) {
+        onShowToast?.(t('homeWorkingDir.applyFailed'));
+        return;
+      }
       const selected = await openFolderDialog();
       if (!selected) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const existing = base.linkedDirs ?? [];
+      const existing = projectMetadata.linkedDirs ?? [];
       if (existing.includes(selected)) return;
-      const metadata: ProjectMetadata = { ...base, linkedDirs: [...existing, selected] };
+      const metadata: ProjectMetadata = { ...projectMetadata, linkedDirs: [...existing, selected] };
       const result = await patchProject(projectId, { metadata });
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }
@@ -1731,9 +1733,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // read-only awareness for the agent (→ `--add-dir`), not a Design Files
     // import, and `baseDir` is never touched.
     async function setWorkingDirFolder(dir: string) {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = { ...base, linkedDirs: [dir] };
+      if (!projectId || !projectMetadata) {
+        onShowToast?.(t('homeWorkingDir.applyFailed'));
+        return;
+      }
+      const metadata: ProjectMetadata = { ...projectMetadata, linkedDirs: [dir] };
       const result = await patchProject(projectId, { metadata });
       // The daemon rejects stale/inaccessible/system dirs with
       // INVALID_LINKED_DIR (patchProject → null). Only commit the selection
@@ -1747,14 +1751,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onProjectMetadataChange?.(result.metadata);
       void rememberRecentDir(dir);
     }
-    async function handlePickWorkingDir() {
+    async function handlePickWorkingDir(): Promise<boolean> {
       const selected = await openFolderDialog();
-      if (selected) await setWorkingDirFolder(selected);
+      if (!selected) return false;
+      await setWorkingDirFolder(selected);
+      return true;
     }
     async function clearWorkingDir() {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = { ...base, linkedDirs: [] };
+      if (!projectId || !projectMetadata) return;
+      const metadata: ProjectMetadata = { ...projectMetadata, linkedDirs: [] };
       const result = await patchProject(projectId, { metadata });
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }
@@ -2664,8 +2669,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 // composer's working_dir* elements so one dashboard counts the
                 // action across both surfaces.
                 trackComposerBar({ element: 'working_dir' });
-                void handlePickWorkingDir();
+                return handlePickWorkingDir();
               }}
+              onSubmitManualPath={(dir) => setWorkingDirFolder(dir)}
               onSelectRecent={(dir) => {
                 trackComposerBar({ element: 'working_dir_recent' });
                 void setWorkingDirFolder(dir);

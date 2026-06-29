@@ -21,7 +21,7 @@ import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
-export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
+export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation' | 'appConfig'> {}
 
 export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps) {
   const { db } = ctx;
@@ -29,7 +29,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { importUpload } = ctx.uploads;
   const { fs, path } = ctx.node;
   const { randomId } = ctx.ids;
-  const { PROJECTS_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
+  const { PROJECTS_DIR, RUNTIME_DATA_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
   const { importClaudeDesignZip, projectDir, detectEntryFile } = ctx.imports;
   const {
     consumedImportNonces,
@@ -42,6 +42,26 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
   const { validateProjectDesignSystemId } = ctx.validation;
+  const { readAppConfig } = ctx.appConfig;
+
+  function isStrictChildOf(root: string, child: string): boolean {
+    const relative = path.relative(root, child);
+    return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+  }
+
+  async function configuredProjectLocationForInput(inputPath: string): Promise<{ id: string; path: string } | null> {
+    const config = await readAppConfig(RUNTIME_DATA_DIR);
+    const locations = Array.isArray(config.projectLocations) ? config.projectLocations : [];
+    const normalizedInput = path.normalize(inputPath);
+    for (const location of locations) {
+      if (!location || typeof location.id !== 'string' || typeof location.path !== 'string') continue;
+      const normalizedLocation = path.normalize(location.path);
+      if (isStrictChildOf(normalizedLocation, normalizedInput)) {
+        return { id: location.id, path: normalizedLocation };
+      }
+    }
+    return null;
+  }
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -132,8 +152,13 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         );
       }
       const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
+      const trimmedInput = baseDir.trim();
+      if (!path.isAbsolute(path.normalize(trimmedInput))) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+      }
+      const configuredLocation = await configuredProjectLocationForInput(trimmedInput);
       let trustedPickerImport = false;
-      if (isDesktopAuthGateActive()) {
+      if (isDesktopAuthGateActive() && !configuredLocation) {
         const secret = desktopAuthSecret();
         if (secret == null) {
           return sendApiError(
@@ -171,10 +196,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         trustedPickerImport = true;
       }
 
-      const trimmedInput = baseDir.trim();
-      if (!path.isAbsolute(path.normalize(trimmedInput))) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
-      }
       let normalizedPath: string;
       try {
         normalizedPath = await fs.promises.realpath(trimmedInput);
@@ -199,6 +220,19 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
+      let projectLocationId: string | null = null;
+      if (configuredLocation) {
+        const canonicalLocationPath = await fs.promises.realpath(configuredLocation.path).catch(() => null);
+        if (!canonicalLocationPath || !isStrictChildOf(canonicalLocationPath, normalizedPath)) {
+          return sendApiError(
+            res,
+            403,
+            'FORBIDDEN',
+            'folder must be inside a configured project location or picked with desktop auth',
+          );
+        }
+        projectLocationId = configuredLocation.id;
+      }
       const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
         : sandboxImportedProjectRootUnavailableReason(normalizedPath);
@@ -208,14 +242,19 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
-      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
-        existingMeta;
+      const {
+        orchestratorWorkspace: _existingOrchestratorWorkspace,
+        projectLocationId: _existingProjectLocationId,
+        fromTrustedPicker: _existingFromTrustedPicker,
+        ...preservedMeta
+      } = existingMeta;
       const nextMeta = {
         ...preservedMeta,
         kind: existingMeta.kind ?? 'prototype',
         baseDir: normalizedPath,
-        importedFrom: 'folder' as const,
+        importedFrom: projectLocationId ? 'project-location' as const : 'folder' as const,
         entryFile,
+        ...(projectLocationId ? { projectLocationId } : {}),
         ...(normalizedOrchestratorWorkspace
           ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
           : {}),
