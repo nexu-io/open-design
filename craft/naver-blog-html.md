@@ -36,6 +36,12 @@ heading not wrapped in `<blockquote><strong>`.
 Do not emit a wrapping `<div>` with `font-family`/`font-size` — Naver ignores it.
 The user applies font manually (Ctrl+A → 나눔고딕 13pt) after paste.
 
+> The Marketing AX viewer's **"네이버용 서식 복사"** button automates this: on copy it
+> inlines `font-family`/`font-size` on each *block* element (`<p>`/`<li>`/`<td>`/
+> `<blockquote>`/`<strong>`) — never a wrapper `<div>` — so a Naver paste keeps
+> 나눔고딕 13px with no manual step. The generated artifact still omits font (this rule
+> stands); the button is a paste-time clipboard convenience, not an artifact change.
+
 **Checklist item (fails lint):** a top-level `<div style="font-...">` wrapping the body.
 
 ---

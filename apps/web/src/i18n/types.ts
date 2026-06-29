@@ -2687,6 +2687,9 @@ export interface Dict {
   'fileViewer.screenshotClipboardDenied': string;
   'fileViewer.screenshotPreviewLoading': string;
   'fileViewer.screenshotCaptureFailed': string;
+  'fileViewer.copyForNaver': string;
+  'fileViewer.copyForNaverDone': string;
+  'fileViewer.copyForNaverFailed': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;
   'fileViewer.exportPptxBusy': string;
