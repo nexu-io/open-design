@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail, ProjectLocationPrefs } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { modalOverlay, modalContent } from '../motion';
 import type {
@@ -35,6 +35,8 @@ interface Props {
   templates: ProjectTemplate[];
   onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
+  projectLocations?: ProjectLocationPrefs[];
+  defaultProjectLocationId?: string | null;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -72,6 +74,8 @@ function NewProjectModalBody({
   templates,
   onDeleteTemplate,
   promptTemplates,
+  projectLocations,
+  defaultProjectLocationId,
   mediaProviders,
   connectors,
   connectorsLoading,
@@ -170,6 +174,8 @@ function NewProjectModalBody({
             templates={templates}
             {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
             promptTemplates={promptTemplates}
+            {...(projectLocations ? { projectLocations } : {})}
+            {...(defaultProjectLocationId ? { defaultProjectLocationId } : {})}
             {...(mediaProviders ? { mediaProviders } : {})}
             {...(connectors ? { connectors } : {})}
             {...(typeof connectorsLoading === 'boolean' ? { connectorsLoading } : {})}

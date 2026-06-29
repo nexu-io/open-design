@@ -263,6 +263,39 @@ describe('NewProjectPanel design system defaults', () => {
     );
   });
 
+  it('sends the selected project storage location when creating a project', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        promptTemplates={[]}
+        projectLocations={[
+          { id: 'forge-design', name: 'Forge Design', path: '/home/abhishek/forge/design' },
+        ]}
+        defaultProjectLocationId="default"
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Save to'), {
+      target: { value: 'forge-design' },
+    });
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Location payload' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Location payload',
+        projectLocationId: 'forge-design',
+      }),
+    );
+  });
+
   it('clears design system metadata when freeform is selected in multi mode', () => {
     const onCreate = vi.fn();
     render(
