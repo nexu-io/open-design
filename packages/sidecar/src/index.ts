@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer as createNetServer, type Server } from "node:net";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 export type SidecarStampShape = {
   app: string;
@@ -563,6 +564,12 @@ export async function createJsonIpcServer({
   await prepareIpcPath(socketPath);
   const server = createNetServer((socket) => {
     let buffer = "";
+    // Decode UTF-8 across chunk boundaries: a multibyte character (e.g. CJK,
+    // 3 bytes) can be split across two `data` events. `chunk.toString()` per
+    // chunk would turn each half into U+FFFD, corrupting the payload (observed
+    // as `???`/`◆?◆?◆?` in exported CJK artifacts). StringDecoder holds an
+    // incomplete trailing sequence until the next chunk completes it.
+    const decoder = new StringDecoder("utf8");
     const traceId = nextJsonIpcTraceId();
     const startedAt = process.hrtime.bigint();
     traceJsonIpc("server.connection", { socketPath, traceId });
@@ -588,7 +595,7 @@ export async function createJsonIpcServer({
         socketPath,
         traceId,
       });
-      buffer += chunk.toString();
+      buffer += decoder.write(chunk);
       const newlineIndex = buffer.indexOf("\n");
       if (newlineIndex < 0) return;
       const frame = buffer.slice(0, newlineIndex);
@@ -680,6 +687,9 @@ export async function requestJsonIpc<T = any>(
     const startedAt = process.hrtime.bigint();
     let settled = false;
     let buffer = "";
+    // See the server reader above: decode UTF-8 across chunk boundaries so a
+    // multibyte character split across two `data` events is not corrupted.
+    const decoder = new StringDecoder("utf8");
     const messageSummary = summarizeJsonIpcMessage(payload);
     traceJsonIpc("client.connect_start", { message: messageSummary, socketPath, timeoutMs, traceId });
     const settle = (callback: () => void) => {
@@ -742,7 +752,7 @@ export async function requestJsonIpc<T = any>(
         socketPath,
         traceId,
       });
-      buffer += chunk.toString();
+      buffer += decoder.write(chunk);
       const newlineIndex = buffer.indexOf("\n");
       if (newlineIndex < 0) return;
       socket.end();

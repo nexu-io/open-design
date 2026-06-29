@@ -3022,6 +3022,12 @@ export interface Dict {
   'fileViewer.exportImage': string;
   'fileViewer.exportPptxImages': string;
   'fileViewer.exportPptxEditable': string;
+  'fileViewer.exportPptxEditableHint': string;
+  'fileViewer.exportPptxModalSubtitle': string;
+  'fileViewer.exportPptxScreenshot': string;
+  'fileViewer.exportPptxScreenshotHint': string;
+  'fileViewer.exportPptxConfirm': string;
+  'fileViewer.exportPptxRecommended': string;
   'fileViewer.exportingProgress': string;
   'fileViewer.exportSlideProgress': string;
   'fileViewer.exportingElapsed': string;

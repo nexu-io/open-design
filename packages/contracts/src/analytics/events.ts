@@ -254,6 +254,7 @@ export type TrackingArtifactKind =
 // tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).
 export type TrackingExportFormat =
   | 'pdf'
+  | 'pptx'
   | 'zip'
   | 'html'
   | 'image'

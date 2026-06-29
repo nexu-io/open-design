@@ -1,5 +1,12 @@
 // @ts-nocheck
-import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type {
+  DesktopExportArtifactInput,
+  DesktopExportArtifactResult,
+  DesktopExportPdfInput,
+  DesktopExportPdfResult,
+  DesktopRenderSlidesInput,
+  DesktopRenderSlidesResult,
+} from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -3306,6 +3313,7 @@ export function createSseResponse(
 }
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+export type DesktopSlideRenderer = (input: DesktopRenderSlidesInput) => Promise<DesktopRenderSlidesResult>;
 export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
@@ -3322,6 +3330,7 @@ export interface DaemonRuntimeContext {
 export interface StartServerOptions {
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
+  desktopSlideRenderer?: DesktopSlideRenderer | null;
   host?: string;
   port?: number;
   returnServer?: boolean;
@@ -3340,6 +3349,7 @@ export async function startServer({
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
+  desktopSlideRenderer = null,
   desktopArtifactExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
@@ -4000,6 +4010,7 @@ export async function startServer({
     buildDesktopPdfExportInput,
     buildDesktopArtifactExportInput,
     desktopPdfExporter,
+    desktopSlideRenderer,
     desktopArtifactExporter,
     daemonUrlRef,
     sanitizeArchiveFilename,
@@ -4370,6 +4381,8 @@ export async function startServer({
     db,
     http: httpDeps,
     paths: pathDeps,
+    node: nodeDeps,
+    ids: idDeps,
     projectStore: projectStoreDeps,
     exports: projectExportDeps,
     projectFiles: projectFileDeps,

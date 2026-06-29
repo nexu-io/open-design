@@ -70,15 +70,21 @@ import {
   exportAsPdf,
   exportProjectAsHtml,
   exportProjectAsPdf,
+  exportProjectAsPptx,
   exportProjectAsZip,
+  exportProjectImageDataUrl,
+  exportProjectScreenshotPdf,
   copyImageDataUrlToClipboard,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
   captureHostIframeSnapshot,
   imageDataUrlToBlob,
+  isOpenDesignHostAvailable,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
+  planDeckImageCapture,
   requestPreviewSnapshot,
+  sourceLooksLikeExportableDeck,
   type ExportProgress,
   type ImageExportFormat,
 } from '../runtime/exports';
@@ -4464,6 +4470,7 @@ function HtmlViewer({
   const fireShareExport = (
     format:
       | 'pdf'
+      | 'pptx'
       | 'zip'
       | 'html'
       | 'image'
@@ -4509,7 +4516,7 @@ function HtmlViewer({
         { requestId },
       );
     };
-    const toastFormats = new Set(['pdf', 'zip', 'html', 'image', 'markdown']);
+    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
     // Programmatic exports compute in-browser and can take a while (one render
     // per deck slide), so the loading toast ticks every second with elapsed time
     // and — once at least one slide is captured — a live ETA derived from the
@@ -4548,9 +4555,10 @@ function HtmlViewer({
       renderLoadingToast();
       ticker = setInterval(renderLoadingToast, 1000);
     }
-    const failToast = () => {
+    const failToast = (err?: unknown) => {
       stopTicker();
-      if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportFailed'), tone: 'error' });
+      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportFailed');
+      if (toastFormats.has(format)) setExportToast({ message, tone: 'error' });
     };
     try {
       const out = fn();
@@ -4568,7 +4576,7 @@ function HtmlViewer({
           },
           (err) => {
             finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
-            failToast();
+            failToast(err);
           },
         );
       } else {
@@ -4583,7 +4591,7 @@ function HtmlViewer({
       }
     } catch (err) {
       finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
-      failToast();
+      failToast(err);
     }
   };
   // Feeds per-slide capture progress into the ref the loading-toast ticker reads
@@ -4949,6 +4957,7 @@ function HtmlViewer({
   const templateNameId = useId();
   const templateDescriptionId = useId();
   const imageExportTitleId = useId();
+  const pptxExportTitleId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -5046,13 +5055,10 @@ function HtmlViewer({
   const [deployActionToast, setDeployActionToast] = useState<string | null>(null);
   const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
   const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
-  const [imageExportBusy, setImageExportBusy] = useState(false);
-  const [imageExportPreparing, setImageExportPreparing] = useState(false);
   const [imageExportError, setImageExportError] = useState<string | null>(null);
-  const [imageExportSavedToast, setImageExportSavedToast] = useState<{ message: string; details: string } | null>(null);
-  const [imageExportPreparedBlob, setImageExportPreparedBlob] = useState<{ format: ImageExportFormat; blob: Blob } | null>(null);
+  const [pptxExportModalOpen, setPptxExportModalOpen] = useState(false);
+  const [pptxExportMode, setPptxExportMode] = useState<'editable' | 'screenshot'>('editable');
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
-  const imageExportPrepareIdRef = useRef(0);
   // Threads the share-popover click → artifact_export_result(image) pair, the
   // same correlation other export formats get via fireShareExport. The image
   // export is a separate modal flow, so it owns its own request id / start.
@@ -5071,6 +5077,7 @@ function HtmlViewer({
   // cancelled, whether it ends in a save or a modal dismiss.
   const templateExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
+  const imageExportInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
   >(null);
@@ -5305,6 +5312,11 @@ function HtmlViewer({
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
+  // Extra deck signal for EXPORT only. Runtime-managed decks (`<deck-stage>` /
+  // `data-screen-label`) need deck capture even when the viewer's nav bridge
+  // cannot drive them. Plain `.slide` is intentionally excluded: ordinary pages
+  // use it for carousels/testimonials and must export as full pages.
+  const structuredDeckExportSignal = sourceLooksLikeExportableDeck(source);
   const livePreviewSource = inlinedSource ?? source;
   // Annotation modes that should hold the preview still while open. Manual
   // Edit is handled by its own freeze just below; these are the non-edit
@@ -7728,7 +7740,13 @@ function HtmlViewer({
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const artifactKind = file.artifactManifest?.kind ?? file.artifactKind ?? null;
   const rendererId = file.artifactManifest?.renderer ?? null;
-  const isDeckArtifact = isDeck || artifactKind === 'deck' || rendererId === 'deck-html' || file.kind === 'presentation';
+  const isDeckArtifact =
+    isDeck ||
+    projectKind === 'slide_deck' ||
+    artifactKind === 'deck' ||
+    rendererId === 'deck-html' ||
+    file.kind === 'presentation';
+  const deckExportSignal = isDeckArtifact || structuredDeckExportSignal;
   const isMarkdownArtifact =
     artifactKind === 'markdown-document' ||
     rendererId === 'markdown' ||
@@ -7740,6 +7758,11 @@ function HtmlViewer({
     rendererId === 'html';
   const canShare = source !== null && isShareableArtifact;
   const canDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
+  // PPTX export is slide-based, so show it only for explicit decks plus
+  // structured deck runtimes. Do not key this off plain `.slide`: ordinary
+  // parallax/long pages may use that class but must remain page-mode exports.
+  const showPptxExport = canShare && deckExportSignal;
+  const canPptx = showPptxExport && !streaming;
   const showMarkdownExport = source !== null && isMarkdownArtifact;
   const showImageExport = canShare;
 
@@ -7828,7 +7851,9 @@ function HtmlViewer({
     setDownloadMenuOpen(false);
     setDeployMenuOpen((v) => !v);
   };
-  const captureExportImageSnapshot = useCallback(async () => {
+  const captureExportImageSnapshot = useCallback(async (
+    options?: { wholeDeck?: boolean },
+  ) => {
     // The host compositor grabs on-screen pixels, so any transient hover chrome
     // over the preview leaks into the capture. The screenshot control's own
     // tooltip is already dismissed by TooltipLayer's pointerdown/click listener,
@@ -7837,11 +7862,47 @@ function HtmlViewer({
     // in the browser screenshot flow (DesignBrowserPanel).
     await waitForAnimationFrame();
     await waitForAnimationFrame();
-    // Prefer the desktop compositor screenshot of the visible preview region:
-    // it returns the real rendered pixels (fonts, external CSS, gradients,
-    // images) and is never tainted, so it cannot produce the black/blank frames
-    // the in-iframe SVG-foreignObject bridge does. Works for both srcDoc and
-    // URL-load previews. Falls through to the bridge on pure web (no host).
+    // Prefer the daemon's off-screen render (desktop only): viewport-independent
+    // and, rendering the artifact alone in a hidden window, it can never capture
+    // Open Design's own UI. `wholeDeck` (Export as image) stitches every slide
+    // top-to-bottom into one long image — matching the slide count the viewer
+    // reports; otherwise (Copy screenshot, Mark/Draw capture) it grabs the
+    // CURRENT slide, mirroring what's on screen. An ordinary page is its
+    // full-page capture either way.
+    if (isOpenDesignHostAvailable() && projectId && file.name) {
+      // Deck-vs-page uses `deckExportSignal` — broader than the viewer's nav
+      // signal — so runtime-managed decks (`<deck-stage>` / `data-screen-label`,
+      // no literal `.slide`) export as a deck instead of a single page-mode shot
+      // of slide 1. The vector-PDF fallback below uses the SAME signal, so an
+      // artifact exports identically with or without a desktop host.
+      const wholeDeck = options?.wholeDeck === true;
+      // For a CURRENT-slide capture we need the active slide index, which only
+      // exists when the viewer tracks it. Runtime-managed decks have no
+      // active-slide bridge (slideState===null); for those the off-screen path
+      // would always grab slide 0, so plan to skip it and fall through to the
+      // visible host snapshot (= the slide on screen). Whole-deck / pages /
+      // tracked `.slide` decks still render off-screen.
+      const trackedActive = slideState?.active ?? htmlPreviewSlideState.get(previewStateKey)?.active ?? null;
+      const plan = planDeckImageCapture({ deck: deckExportSignal, wholeDeck, trackedActive });
+      if (plan.useOffscreen) {
+        const rendered = await exportProjectImageDataUrl({
+          projectId,
+          fileName: file.name,
+          deck: deckExportSignal,
+          ...(plan.index != null ? { index: plan.index } : {}),
+        });
+        if (rendered.ok) return rendered.snapshot;
+        // A semantic failure (e.g. "page is too tall — export as PDF") must surface,
+        // NOT silently downgrade to a partial visible-viewport screenshot. Only when
+        // the off-screen renderer is genuinely unavailable do we fall through.
+        if ('error' in rendered) throw new Error(rendered.error);
+      }
+    }
+
+    // Fallback: desktop compositor screenshot of the visible preview region.
+    // Returns real rendered pixels and is never tainted, unlike the in-iframe
+    // SVG-foreignObject bridge. Used on pure web (no host) or if the render
+    // above is unavailable. Works for both srcDoc and URL-load previews.
     const visibleIframe = iframeRef.current ?? srcDocPreviewIframeRef.current;
     const hostSnapshot = await captureHostIframeSnapshot(visibleIframe);
     if (hostSnapshot) return hostSnapshot;
@@ -7887,6 +7948,11 @@ function HtmlViewer({
     srcDocShellReady,
     useLazySrcDocTransport,
     useUrlLoadPreview,
+    deckExportSignal,
+    slideState?.active,
+    previewStateKey,
+    projectId,
+    file.name,
   ]);
 
   const handleCopyScreenshot = useCallback(async () => {
@@ -7915,44 +7981,20 @@ function HtmlViewer({
       );
     } catch (err) {
       console.warn('[handleCopyScreenshot] failed:', err);
-      setExportToast({ message: t('fileViewer.screenshotCaptureFailed'), tone: 'error' });
+      // Surface a semantic failure message (e.g. "page is too tall — export as
+      // PDF") rather than a generic one when the renderer gave us a reason.
+      const message = err instanceof Error && err.message ? err.message : t('fileViewer.screenshotCaptureFailed');
+      setExportToast({ message, tone: 'error' });
     } finally {
       screenshotInFlightRef.current = false;
     }
   }, [captureExportImageSnapshot, t]);
 
-  const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
-    const prepareId = imageExportPrepareIdRef.current + 1;
-    imageExportPrepareIdRef.current = prepareId;
-    setImageExportPreparing(true);
-    setImageExportError(null);
-    setImageExportPreparedBlob(null);
-    try {
-      let dataUrl = imageExportSnapshotDataUrlRef.current;
-      if (!dataUrl) {
-        const snap = await captureExportImageSnapshot();
-        if (!snap) throw new Error('Snapshot capture returned null');
-        dataUrl = snap.dataUrl;
-        imageExportSnapshotDataUrlRef.current = dataUrl;
-      }
-      const blob = await imageDataUrlToBlob(dataUrl, format);
-      if (blob.size <= 0) throw new Error('Snapshot capture produced an empty image');
-      if (imageExportPrepareIdRef.current === prepareId) {
-        setImageExportPreparedBlob({ format, blob });
-      }
-    } catch (err) {
-      console.warn('[exportAsImage] failed to prepare snapshot:', err);
-      if (imageExportPrepareIdRef.current === prepareId) {
-        setImageExportError(t('fileViewer.exportImageFailed'));
-      }
-    } finally {
-      if (imageExportPrepareIdRef.current === prepareId) {
-        setImageExportPreparing(false);
-      }
-    }
-  }, [captureExportImageSnapshot, t]);
-
   const openImageExportModal = async () => {
+    // Don't reopen while an export is still running: reopening resets the shared
+    // request/result bookkeeping refs, which would mis-attribute or drop the
+    // in-flight export's analytics result.
+    if (imageExportInFlightRef.current) return;
     flushSync(() => {
       setDownloadMenuOpen(false);
     });
@@ -7976,17 +8018,14 @@ function HtmlViewer({
       { requestId },
     );
     setImageExportError(null);
-    setImageExportPreparedBlob(null);
     imageExportSnapshotDataUrlRef.current = null;
-    await waitForAnimationFrame();
-    await waitForAnimationFrame();
+    // Just open the modal. Rendering happens on Save, after the user picks a
+    // format — not eagerly on open.
     setImageExportModalOpen(true);
-    void prepareImageExportBlob(imageExportFormat);
   };
 
   const changeImageExportFormat = (format: ImageExportFormat) => {
     setImageExportFormat(format);
-    void prepareImageExportBlob(format);
   };
 
   // Component-scoped so both the save flow and the modal Cancel button can
@@ -8018,43 +8057,71 @@ function HtmlViewer({
   };
 
   async function handleImageExportSave() {
-    const prepared = imageExportPreparedBlob;
-    if (!prepared || prepared.format !== imageExportFormat) {
-      setImageExportError(t('fileViewer.exportImageFailed'));
-      fireImageExportResult('failed', 'BLOB_NOT_READY');
-      return;
-    }
-    setImageExportBusy(true);
+    // Single-shot guard: closing the modal is async, so a fast double-click /
+    // Enter-repeat on Save could otherwise enqueue two concurrent exports
+    // (duplicate captures, downloads, and result bookkeeping) before the first
+    // re-render removes the button.
+    if (imageExportInFlightRef.current) return;
+    imageExportInFlightRef.current = true;
+    // Unify with the PPTX/PDF flow: close the modal and surface progress through
+    // the same portaled, viewport-centered export toast instead of an in-modal
+    // spinner + a separate (non-portaled, off-center) saved toast.
     setImageExportError(null);
+    setImageExportModalOpen(false);
+    setExportToast({ message: t('fileViewer.exportStarted'), tone: 'loading' });
+    // Let the modal unmount before capturing so the web-only host-compositor
+    // snapshot can't catch the overlay (the desktop off-screen renderer ignores
+    // it either way).
+    await waitForAnimationFrame();
+    await waitForAnimationFrame();
     try {
-      const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
-      if (!target) {
-        // Not a terminal state: the modal stays open so the user can retry or
-        // Cancel. The cancelled result is emitted by the Cancel button.
+      let dataUrl = imageExportSnapshotDataUrlRef.current;
+      if (!dataUrl) {
+        // Export as image of a deck = the whole deck stitched into one long
+        // image (every slide), matching the count the viewer reports. Copy
+        // screenshot keeps the current slide.
+        const snap = await captureExportImageSnapshot({ wholeDeck: true });
+        if (!snap) {
+          setExportToast({ message: t('fileViewer.exportImageFailed'), tone: 'error' });
+          fireImageExportResult('failed', 'CAPTURE_FAILED');
+          return;
+        }
+        dataUrl = snap.dataUrl;
+        imageExportSnapshotDataUrlRef.current = dataUrl;
+      }
+      const blob = await imageDataUrlToBlob(dataUrl, imageExportFormat);
+      if (blob.size <= 0) {
+        setExportToast({ message: t('fileViewer.exportImageFailed'), tone: 'error' });
+        fireImageExportResult('failed', 'EMPTY_IMAGE');
         return;
       }
-      const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
-      if (target.method === 'download' && imageExportFormat === 'png' && preparedDataUrl) {
-        downloadImageDataUrl(preparedDataUrl, target.filename);
-      } else {
-        await target.save(prepared.blob);
+      const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
+      if (!target) {
+        // User dismissed the save picker — clear the loading toast.
+        setExportToast(null);
+        fireImageExportResult('cancelled');
+        return;
       }
-      setImageExportModalOpen(false);
+      if (target.method === 'download' && imageExportFormat === 'png' && dataUrl) {
+        downloadImageDataUrl(dataUrl, target.filename);
+      } else {
+        await target.save(blob);
+      }
       fireImageExportResult('success');
-      setImageExportSavedToast({
-        message: target.method === 'picker'
-          ? t('fileViewer.exportImageSaved')
-          : t('fileViewer.exportImageDownloadStarted'),
-        details: target.method === 'picker'
-          ? target.filename
-          : t('fileViewer.exportImageDownloadDetails', { filename: target.filename }),
+      setExportToast({
+        message:
+          target.method === 'picker'
+            ? t('fileViewer.exportImageSaved')
+            : t('fileViewer.exportImageDownloadStarted'),
+        tone: 'success',
       });
     } catch (err) {
       console.warn('[exportAsImage] failed to save snapshot:', err);
-      setImageExportError(t('fileViewer.exportImageFailed'));
+      const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportImageFailed');
+      setExportToast({ message, tone: 'error' });
       fireImageExportResult('failed', err instanceof Error ? err.name : 'UNKNOWN');
     } finally {
-      setImageExportBusy(false);
+      imageExportInFlightRef.current = false;
     }
   }
   const creationSortedSideComments = useMemo(
@@ -9026,18 +9093,69 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setDownloadMenuOpen(false);
-                      fireShareExport('pdf', () => exportProjectAsPdf({
-                        deck: effectiveDeck,
-                        fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck, onProgress: onExportProgress }),
-                        filePath: file.name,
-                        projectId,
-                        title: exportTitle,
-                      }));
+                      // Pixel-perfect screenshot PDF (matches the preview, same
+                      // renderer as image/PPTX). Chosen over Chromium's vector
+                      // printToPDF because that path drops CJK glyphs in the
+                      // packaged runtime (no embedded fonts) — unacceptable for a
+                      // Chinese-first product. Falls back to the vector/browser
+                      // print path on web or on failure.
+                      fireShareExport('pdf', async () => {
+                        if (isOpenDesignHostAvailable()) {
+                          const res = await exportProjectScreenshotPdf({
+                            projectId,
+                            fileName: file.name,
+                            title: exportTitle,
+                            // Broader deck signal than the viewer's nav so
+                            // runtime-managed decks (<deck-stage>) paginate per
+                            // slide; the vector fallback below uses the SAME
+                            // signal, so an artifact exports identically with or
+                            // without a desktop host (no per-host divergence).
+                            deck: deckExportSignal,
+                          });
+                          if (res.ok) return;
+                          // A SEMANTIC failure (bad deck routing, unreadable
+                          // renderer output, renderer 502, …) must surface — NOT
+                          // silently downgrade to the vector PDF, which can
+                          // reintroduce the CJK-glyph / fidelity bugs the
+                          // screenshot path exists to avoid. Only a genuinely
+                          // unavailable renderer (no host / 501 / transport)
+                          // falls through to the vector path below.
+                          if (!('unavailable' in res)) throw new Error(res.error);
+                        }
+                        await exportProjectAsPdf({
+                          deck: deckExportSignal,
+                          fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: deckExportSignal, onProgress: onExportProgress }),
+                          filePath: file.name,
+                          projectId,
+                          title: exportTitle,
+                        });
+                      });
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
                     <span>{t('fileViewer.exportPdf')}</span>
                   </button>
+                  {showPptxExport ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      disabled={!canPptx}
+                      title={
+                        streaming
+                          ? t('fileViewer.exportPptxBusy')
+                          : t('fileViewer.exportPptxHint')
+                      }
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        setPptxExportMode('editable');
+                        setPptxExportModalOpen(true);
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
+                      <span>{t('fileViewer.exportPptx')}</span>
+                    </button>
+                  ) : null}
                   {showImageExport ? (
                     <button
                       type="button"
@@ -9492,8 +9610,99 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
-      {imageExportModalOpen && typeof document !== 'undefined' ? createPortal(
+      {pptxExportModalOpen && typeof document !== 'undefined' ? createPortal(
         <div className="modal-backdrop viewer-modal-backdrop image-export-backdrop" role="presentation">
+          <div
+            className="modal deploy-modal image-export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={pptxExportTitleId}
+          >
+            <div className="modal-head">
+              <div className="kicker">PPTX</div>
+              <h2 id={pptxExportTitleId}>{t('fileViewer.exportPptx')}</h2>
+              <p className="subtitle">{t('fileViewer.exportPptxModalSubtitle')}</p>
+            </div>
+            <div className="deploy-form image-export-form">
+              <fieldset className="image-export-format-field">
+                <legend>{t('fileViewer.exportImageFormatLabel')}</legend>
+                <div className="pptx-export-mode-options">
+                  {([
+                    {
+                      value: 'editable' as const,
+                      title: t('fileViewer.exportPptxEditable'),
+                      hint: t('fileViewer.exportPptxEditableHint'),
+                      recommended: true,
+                    },
+                    {
+                      value: 'screenshot' as const,
+                      title: t('fileViewer.exportPptxScreenshot'),
+                      hint: t('fileViewer.exportPptxScreenshotHint'),
+                      recommended: false,
+                    },
+                  ]).map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`pptx-export-mode-option${pptxExportMode === opt.value ? ' active' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="pptx-export-mode"
+                        value={opt.value}
+                        checked={pptxExportMode === opt.value}
+                        onChange={() => setPptxExportMode(opt.value)}
+                      />
+                      <span className="pptx-export-mode-head">
+                        <span className="pptx-export-mode-title">{opt.title}</span>
+                        {opt.recommended ? (
+                          <span className="pptx-export-mode-badge">{t('fileViewer.exportPptxRecommended')}</span>
+                        ) : null}
+                      </span>
+                      <span className="pptx-export-mode-desc">{opt.hint}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                onClick={() => setPptxExportModalOpen(false)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={!canPptx}
+                onClick={() => {
+                  const editable = pptxExportMode === 'editable';
+                  setPptxExportModalOpen(false);
+                  fireShareExport('pptx', async () => {
+                    const res = await exportProjectAsPptx({
+                      projectId,
+                      fileName: file.name,
+                      title: exportTitle,
+                      deck: true,
+                      editable,
+                    });
+                    if (!res.ok) throw new Error('error' in res ? res.error : t('fileViewer.exportPptxNa'));
+                  });
+                }}
+              >
+                {t('fileViewer.exportPptxConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+      {imageExportModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div
+          className="modal-backdrop viewer-modal-backdrop image-export-backdrop"
+          role="presentation"
+        >
           <div
             className="modal deploy-modal image-export-modal"
             role="dialog"
@@ -9506,7 +9715,7 @@ function HtmlViewer({
               <p className="subtitle">{t('fileViewer.exportImageModalSubtitle')}</p>
             </div>
             <div className="deploy-form image-export-form">
-              <fieldset className="image-export-format-field" disabled={imageExportBusy}>
+              <fieldset className="image-export-format-field">
                 <legend>{t('fileViewer.exportImageFormatLabel')}</legend>
                 <div className="image-export-format-options">
                   {IMAGE_EXPORT_FORMAT_OPTIONS.map((option) => (
@@ -9538,7 +9747,6 @@ function HtmlViewer({
               <button
                 type="button"
                 className="ghost-link button-like"
-                disabled={imageExportBusy}
                 onClick={() => {
                   // User dismissed the image export modal without saving —
                   // close the ui_click(image)→result funnel as cancelled.
@@ -9552,12 +9760,11 @@ function HtmlViewer({
               <button
                 type="button"
                 className="viewer-action primary"
-                disabled={imageExportBusy || imageExportPreparing || !imageExportPreparedBlob}
                 onClick={() => {
                   void handleImageExportSave();
                 }}
               >
-                {imageExportBusy ? t('fileViewer.exportImageSaving') : t('common.save')}
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -9973,16 +10180,6 @@ function HtmlViewer({
           onDismiss={() => setDeployActionToast(null)}
         />,
         document.body,
-      ) : null}
-      {imageExportSavedToast ? (
-        <Toast
-          message={imageExportSavedToast.message}
-          details={imageExportSavedToast.details}
-          tone="success"
-          placement="top"
-          ttlMs={3600}
-          onDismiss={() => setImageExportSavedToast(null)}
-        />
       ) : null}
       {shareGuideToast && typeof document !== 'undefined' ? createPortal(
         <Toast

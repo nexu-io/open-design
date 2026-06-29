@@ -45,6 +45,12 @@ export const DECK_PRINT_CSS = `
     transform: none !important;
     position: relative !important;
     overflow: hidden !important;
+    /* Decks commonly show one slide at a time via opacity; without this the
+       inactive slides print as blank pages. */
+    opacity: 1 !important;
+    visibility: visible !important;
+    animation: none !important;
+    transition: none !important;
   }
   .slide:last-child, [data-screen-label]:last-child { page-break-after: auto; break-after: auto; }
   .deck-counter, .deck-hint, .deck-nav,
@@ -79,6 +85,7 @@ export async function exportPdfFromHtml(input: DesktopExportPdfInput): Promise<D
   try {
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPrintableDocument(input))}`);
     await waitForPrintableContent(window);
+    if (input.deck) await unhideDeckSlidesForPrint(window);
     const pageSize = input.deck ? DECK_PAGE_SIZE : await inferPageSize(window);
     const pdf = await window.webContents.printToPDF(printToPdfOptions(pageSize));
     await writeFile(save.filePath, pdf);
@@ -268,6 +275,25 @@ function injectPrintStylesheet(doc: string, css: string): string {
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
   return `${tag}${doc}`;
+}
+
+// Marks every deck slide "active" before printing so the deck's own
+// `.slide.active` styling applies to ALL slides, not just the one its runtime
+// left active. Decks commonly gate visibility with
+// `.slide:not(.active){display:none!important}` (specificity 0,2,0); the host
+// DECK_PRINT_CSS `.slide{}` rule (0,1,0) loses that cascade, so without this the
+// vector PDF collapses to a single page (only the active slide). Mirrors the
+// active-class set the screenshot path toggles in deck-capture's showSlide.
+// `[data-deck-active]` shadow-DOM decks are handled by their own `@media print`.
+async function unhideDeckSlidesForPrint(window: BrowserWindow): Promise<void> {
+  try {
+    await window.webContents.executeJavaScript(
+      `(function(){document.querySelectorAll('.slide, [data-screen-label], .deck-slide, .ppt-slide').forEach(function(el){['active','visible','is-active','current'].forEach(function(c){el.classList.add(c)});});})()`,
+      true,
+    );
+  } catch {
+    // Best-effort — print proceeds even if the un-gate fails.
+  }
 }
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {

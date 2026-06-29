@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
@@ -16,6 +16,9 @@ import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
+import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
+import { exportRoutePath } from './export-cli-routing.js';
 import {
   AGENT_SLUGS,
   isAgentSlug,
@@ -325,30 +328,27 @@ const SUBCOMMAND_MAP = {
   'design-systems': runDesignSystems,
   craft: runCraft,
   diagnostics: runDiagnostics,
+  export: runExport,
   status: runStatus,
   version: runVersion,
   doctor: runDoctor,
   config: runConfig,
   library: runLibrary,
   figma: runFigma,
-  export: runExport,
 };
 
 const EXPORT_STRING_FLAGS = new Set([
-  'daemon-url', 'project', 'format', 'out', 'image-format', 'title', 'file',
+  'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file',
 ]);
-const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck']);
-const EXPORT_FORMATS = ['pdf', 'image'];
-// Mirrors EXPORT_IMAGE_FORMATS in packages/contracts. The desktop renderer
-// (Electron nativeImage) can only encode PNG/JPEG, so WebP is rejected here
-// with a clear error instead of silently downgrading to PNG.
-const EXPORT_IMAGE_FORMATS = ['png', 'jpeg'];
+const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck', 'page', 'no-deck']);
+// EXPORT_FORMATS / EXPORT_IMAGE_FORMATS are the shared contract DTO (single
+// source of truth for the web/daemon/CLI export surface), imported above.
 
 function printExportHelp() {
   console.log(`Usage:
   od export <file> --project <id> --format <fmt> [options]
 
-Programmatic export of an HTML/deck artifact to PDF or image. Runs
+Programmatic export of an HTML/deck artifact to PDF, image, or PPTX. Runs
 entirely from the rendered design (no model/agent calls). Rasterization uses
 the desktop runtime's bundled Chromium, so a desktop/packaged runtime must be
 reachable; otherwise the command reports that the renderer is unavailable.
@@ -361,13 +361,15 @@ Options:
   --out <path>             Write the file here (defaults to the suggested name)
   --image-format <fmt>     png | jpeg (for --format image)
   --deck                   Treat the artifact as a multi-slide deck
+  --page, --no-deck        Treat the artifact as a normal scrollable page
   --title <title>          Title used for metadata / default filename
   --json                   Print a machine-readable result envelope
   --daemon-url <url>       Override daemon URL
 
 Examples:
   od export index.html --project p1 --format pdf --out page.pdf
-  od export slide.html --project p1 --format image --image-format png --out slide.png`);
+  od export slide.html --project p1 --format image --image-format png --out slide.png
+  od export deck.html --project p1 --format pptx --out deck.pptx`);
 }
 
 async function runExport(args) {
@@ -384,35 +386,64 @@ async function runExport(args) {
   }
   const pos = positionalArgs(args, EXPORT_STRING_FLAGS);
   const file = flags.file || pos[0];
-  const projectId = flags.project;
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
   const format = flags.format;
   if (!file || !projectId || !format) {
     printExportHelp();
     process.exit(2);
   }
-  if (!EXPORT_FORMATS.includes(format)) {
+  if (!(EXPORT_FORMATS as readonly string[]).includes(format)) {
     console.error(`invalid --format: ${format} (expected ${EXPORT_FORMATS.join(' | ')})`);
     process.exit(2);
   }
-  if (flags['image-format'] && !EXPORT_IMAGE_FORMATS.includes(flags['image-format'])) {
+  if (flags['image-format'] && !(EXPORT_IMAGE_FORMATS as readonly string[]).includes(flags['image-format'])) {
     console.error(`invalid --image-format: ${flags['image-format']} (expected ${EXPORT_IMAGE_FORMATS.join(' | ')})`);
     process.exit(2);
   }
+  if (flags['image-format'] && format !== 'image') {
+    console.error('--image-format is only valid with --format image');
+    process.exit(2);
+  }
   const base = await cliDaemonBaseUrl(flags);
-  const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/export`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      fileName: file,
+  // All three formats rasterize through the desktop screenshot renderer so the
+  // CLI matches the UI exactly. In particular `pdf` uses `/export/pdf-image`
+  // (one raster page per deck slide / per viewport for a page) — NOT the generic
+  // `/export` vector `printToPDF` path, which drops CJK glyphs in the packaged
+  // runtime and is the bug this feature exists to avoid.
+  const exportPath = exportRoutePath(format);
+  let deckMode;
+  try {
+    deckMode = resolveExportCliDeckMode({
       format,
       deck: flags.deck === true,
-      ...(flags['image-format'] ? { imageFormat: flags['image-format'] } : {}),
-      ...(flags.title ? { title: flags.title } : {}),
-    }),
+      page: flags.page === true,
+      noDeck: flags['no-deck'] === true,
+    });
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(2);
+  }
+  const requestBody = buildExportCliRequestBody({
+    fileName: file,
+    format,
+    deck: deckMode,
+    ...(format === 'image' && flags['image-format'] ? { imageFormat: flags['image-format'] } : {}),
+    ...(flags.title ? { title: flags.title } : {}),
   });
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/${exportPath}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
   if (!resp.ok) return structuredHttpFailure(resp);
   const buffer = Buffer.from(await resp.arrayBuffer());
-  let out = flags.out;
+  let out = flags.out || flags.output;
   if (!out) {
     const cd = resp.headers.get('content-disposition') || '';
     const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
@@ -425,14 +456,16 @@ async function runExport(args) {
     if (!out) {
       const ext = format === 'image'
         ? (flags['image-format'] === 'jpeg' ? 'jpg' : 'png')
-        : 'pdf';
+        : format === 'pptx' ? 'pptx' : 'pdf';
       out = `artifact.${ext}`;
     }
   }
   const { writeFile } = await import('node:fs/promises');
   await writeFile(out, buffer);
   if (flags.json) {
-    return process.stdout.write(JSON.stringify({ ok: true, out, bytes: buffer.length, format }, null, 2) + '\n');
+    return process.stdout.write(
+      JSON.stringify(buildExportCliResultEnvelope({ path: out, bytes: buffer.length, format }), null, 2) + '\n',
+    );
   }
   console.log(`wrote ${out} (${buffer.length} bytes)`);
 }
@@ -546,8 +579,8 @@ function printRootHelp() {
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
-  od export <file> --project <id> --format <pdf|image> [--out <path>]
-      Programmatically export an HTML/deck artifact to PDF or image
+  od export <file> --project <id> --format <pdf|image|pptx> [--out <path>]
+      Programmatically export an HTML/deck artifact to PDF, image, or PPTX
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
       the desktop runtime's bundled Chromium.
 

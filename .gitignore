@@ -43,6 +43,9 @@ apps/web/playwright/
 
 tsconfig.tsbuildinfo
 
+# Generated from the checked-in compressed vendor source during postinstall.
+apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js
+
 **/.claude-sessions/*
 
 .cursor/

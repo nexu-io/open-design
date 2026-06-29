@@ -1,8 +1,9 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -43,6 +44,22 @@ function resolvePackageManagerInvocation() {
 }
 
 const packageManager = resolvePackageManagerInvocation();
+
+function materializeDomToPptxBundle() {
+  const vendorDir = resolve(repoRoot, "apps", "desktop", "vendor", "dom-to-pptx");
+  const compressedBundle = resolve(vendorDir, "dom-to-pptx.bundle.js.gz");
+  const bundle = resolve(vendorDir, "dom-to-pptx.bundle.js");
+
+  if (!existsSync(compressedBundle)) {
+    return;
+  }
+
+  mkdirSync(vendorDir, { recursive: true });
+  writeFileSync(bundle, gunzipSync(readFileSync(compressedBundle)));
+  process.stdout.write("postinstall: materialized dom-to-pptx browser bundle\n");
+}
+
+materializeDomToPptxBundle();
 
 function availableBuildTargets() {
   const targets = [];
