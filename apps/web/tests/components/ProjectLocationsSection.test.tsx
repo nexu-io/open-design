@@ -80,12 +80,17 @@ function renderSection(config: AppConfig = baseConfig) {
   return { setCfg, onProjectsRefresh };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((nextResolve) => {
-    resolve = nextResolve;
+async function findEnabledAddFolderButton() {
+  const button = await screen.findByRole('button', { name: /Add folder/i });
+  await waitFor(() => {
+    expect((button as HTMLButtonElement).disabled).toBe(false);
   });
-  return { promise, resolve };
+  return button;
+}
+
+async function openAddLocationForm() {
+  fireEvent.click(await findEnabledAddFolderButton());
+  return screen.findByRole('textbox', { name: 'Project path' });
 }
 
 describe('ProjectLocationsSection', () => {
@@ -101,7 +106,10 @@ describe('ProjectLocationsSection', () => {
 
     const { setCfg, onProjectsRefresh } = renderSection();
 
-    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    await findEnabledAddFolderButton();
+    expect(screen.queryByRole('textbox', { name: 'Project path' })).toBeNull();
+
+    const pathInput = await openAddLocationForm();
     fireEvent.change(pathInput, { target: { value: '/home/abhishek/forge/design' } });
     fireEvent.submit(pathInput.closest('form')!);
 
@@ -116,7 +124,33 @@ describe('ProjectLocationsSection', () => {
     expect(onProjectsRefresh).toHaveBeenCalledTimes(2);
   });
 
-  it('opens an in-app folder browser when the native folder picker returns no path', async () => {
+  it('fills the add-folder input from a native folder picker when it returns a path', async () => {
+    fetchProjectLocationsMock.mockResolvedValue([builtInLocation]);
+    openProjectLocationFolderDialogMock.mockResolvedValue('/home/abhishek/forge/design');
+    updateProjectLocationsMock.mockResolvedValue([builtInLocation, forgeLocation]);
+    scanProjectLocationsMock.mockResolvedValue(scanResult);
+
+    renderSection();
+
+    await openAddLocationForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse folders' }));
+
+    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    await waitFor(() => {
+      expect((pathInput as HTMLInputElement).value).toBe('/home/abhishek/forge/design');
+    });
+    expect(updateProjectLocationsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(updateProjectLocationsMock).toHaveBeenCalledWith([
+        { path: '/home/abhishek/forge/design' },
+      ]);
+    });
+  });
+
+  it('fills the add-folder input from the in-app folder browser when the native picker returns no path', async () => {
     fetchProjectLocationsMock.mockResolvedValue([builtInLocation]);
     openProjectLocationFolderDialogMock.mockResolvedValue(null);
     browseProjectLocationFoldersMock
@@ -140,8 +174,8 @@ describe('ProjectLocationsSection', () => {
 
     const { setCfg, onProjectsRefresh } = renderSection();
 
-    await screen.findByRole('textbox', { name: 'Project path' });
-    fireEvent.click(screen.getByRole('button', { name: /Add folder/i }));
+    await openAddLocationForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Browse folders' }));
 
     await waitFor(() => {
       expect(openProjectLocationFolderDialogMock).toHaveBeenCalledTimes(1);
@@ -158,6 +192,14 @@ describe('ProjectLocationsSection', () => {
       expect(screen.getByText('/home/abhishek/forge/design')).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }));
+
+    const pathInput = screen.getByRole('textbox', { name: 'Project path' });
+    await waitFor(() => {
+      expect((pathInput as HTMLInputElement).value).toBe('/home/abhishek/forge/design');
+    });
+    expect(updateProjectLocationsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
       expect(updateProjectLocationsMock).toHaveBeenCalledWith([
@@ -178,9 +220,9 @@ describe('ProjectLocationsSection', () => {
       defaultProjectLocationId: forgeLocation.id,
     });
 
-    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
     expect(screen.getByText('/home/abhishek/forge/design')).toBeTruthy();
 
+    const pathInput = await openAddLocationForm();
     fireEvent.submit(pathInput.closest('form')!);
 
     await waitFor(() => {
@@ -188,22 +230,14 @@ describe('ProjectLocationsSection', () => {
     });
   });
 
-  it('clears stale no-folder-selected status after configured work bases load', async () => {
-    const locations = deferred<ProjectLocation[]>();
-    fetchProjectLocationsMock.mockReturnValue(locations.promise);
+  it('does not show no-folder-selected status after an empty add attempt', async () => {
+    fetchProjectLocationsMock.mockResolvedValue([builtInLocation]);
 
     renderSection();
 
-    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    const pathInput = await openAddLocationForm();
     fireEvent.submit(pathInput.closest('form')!);
 
-    expect(screen.getByText('No folder selected.')).toBeTruthy();
-
-    locations.resolve([builtInLocation, forgeLocation]);
-
-    await waitFor(() => {
-      expect(screen.getByText('/home/abhishek/forge/design')).toBeTruthy();
-    });
     expect(screen.queryByText('No folder selected.')).toBeNull();
   });
 });

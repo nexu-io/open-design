@@ -1485,7 +1485,7 @@
 .project-location-manual {
   display: grid;
   gap: 8px;
-  max-width: 680px;
+  max-width: 760px;
 }
 .project-location-manual-label {
   color: var(--text-muted);
@@ -1494,9 +1494,15 @@
 }
 .project-location-manual-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+}
+.project-location-browse {
+  width: 34px;
+  height: 34px;
+  justify-content: center;
+  padding-inline: 0;
 }
 .project-location-manual-input {
   min-width: 0;
@@ -1516,6 +1522,12 @@
 .project-location-manual-submit {
   height: 34px;
   justify-content: center;
+  gap: 4px;
+}
+.project-location-manual-cancel {
+  height: 34px;
+  justify-content: center;
+  gap: 4px;
 }
 .project-location-add { align-self: flex-start; }
 .project-location-browser {
@@ -1593,7 +1605,9 @@
 @media (max-width: 720px) {
   .project-location-edit { grid-template-columns: 1fr; align-items: stretch; }
   .project-location-default-control { justify-self: start; }
-  .project-location-manual-row { grid-template-columns: 1fr; }
+  .project-location-manual-row { grid-template-columns: auto minmax(0, 1fr); }
+  .project-location-manual-submit,
+  .project-location-manual-cancel { width: 100%; }
   .project-location-browser-head { grid-template-columns: 1fr; }
   .project-location-browser-entry { grid-template-columns: auto minmax(0, 1fr); }
   .project-location-browser-entry code { grid-column: 2; }

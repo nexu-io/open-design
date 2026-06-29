@@ -46,6 +46,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [drafts, setDrafts] = useState<DraftLocation[]>(cfg.projectLocations ?? []);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [addingLocation, setAddingLocation] = useState(false);
   const [manualPath, setManualPath] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +57,15 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const draftsRef = useRef<DraftLocation[]>(drafts);
   const manualPathInputRef = useRef<HTMLInputElement | null>(null);
   const noFolderSelectedStatus = t('settings.projectLocationsNoFolderSelected');
-  const hasConfiguredDraft = drafts.some((draft) => draft.path.trim().length > 0);
-  const visibleStatus = status === noFolderSelectedStatus && hasConfiguredDraft ? null : status;
+  const visibleStatus = status === noFolderSelectedStatus ? null : status;
 
   useEffect(() => {
     draftsRef.current = drafts;
   }, [drafts]);
+
+  useEffect(() => {
+    if (addingLocation) manualPathInputRef.current?.focus();
+  }, [addingLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,34 +153,34 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     return result;
   }
 
-  function hasConfiguredWorkBase() {
-    return draftsRef.current.some((draft) => draft.path.trim().length > 0);
-  }
-
   function setNoFolderSelectedStatus() {
-    setStatus(hasConfiguredWorkBase() ? null : noFolderSelectedStatus);
+    setStatus(null);
   }
 
-  async function addLocationPath(locationPath: string) {
+  async function addLocationPath(locationPath: string): Promise<boolean> {
     const selected = locationPath.trim();
     if (!selected) {
       setNoFolderSelectedStatus();
-      return;
+      manualPathInputRef.current?.focus();
+      return false;
     }
     if (draftsRef.current.some((draft) => draft.path === selected)) {
       setStatus(t('settings.projectLocationsDuplicate'));
-      return;
+      return false;
     }
     const previous = draftsRef.current;
     const next = [...previous, { path: selected }];
     setDrafts(next);
     const saved = await save(next);
-    if (!saved) setDrafts(previous);
-    else {
-      setManualPath('');
-      setFolderBrowserOpen(false);
-      await runScan();
+    if (!saved) {
+      setDrafts(previous);
+      return false;
     }
+    setManualPath('');
+    setAddingLocation(false);
+    setFolderBrowserOpen(false);
+    await runScan();
+    return true;
   }
 
   async function loadFolderBrowser(folderPath?: string | null): Promise<boolean> {
@@ -203,28 +207,35 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   async function handleFolderBrowserUse() {
     const selected = folderBrowser?.path;
     if (!selected) return;
+    setManualPath(selected);
     setFolderBrowserOpen(false);
-    await addLocationPath(selected);
+    setAddingLocation(true);
+    manualPathInputRef.current?.focus();
   }
 
   async function handleAddFolder() {
+    setAddingLocation(true);
     setError(null);
     setStatus(null);
-    const selected = await openProjectLocationFolderDialog();
+    setFolderBrowserOpen(false);
+  }
+
+  async function handleBrowseForLocation() {
+    setError(null);
+    setStatus(null);
+    setAddingLocation(true);
+    const selected = await openProjectLocationFolderDialog().catch(() => null);
     if (!selected) {
       const opened = await openFolderBrowser();
       if (!opened) {
-        setStatus(
-          hasConfiguredWorkBase()
-            ? null
-            : `${noFolderSelectedStatus} ${t('settings.projectLocationsManualPlaceholder')}`,
-        );
         manualPathInputRef.current?.focus();
         manualPathInputRef.current?.select();
       }
       return;
     }
-    await addLocationPath(selected ?? '');
+    setManualPath(selected.trim());
+    setFolderBrowserOpen(false);
+    manualPathInputRef.current?.focus();
   }
 
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
@@ -232,6 +243,14 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     setError(null);
     setStatus(null);
     await addLocationPath(manualPath);
+  }
+
+  function handleCancelAddLocation() {
+    setAddingLocation(false);
+    setManualPath('');
+    setStatus(null);
+    setFolderBrowserOpen(false);
+    setFolderBrowserError(null);
   }
 
   async function removeDraft(index: number) {
@@ -298,36 +317,53 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         ))}
       </div>
 
-      <form className="project-location-manual" onSubmit={handleManualSubmit}>
-        <label className="project-location-manual-label" htmlFor="project-location-manual-path">
-          {t('settings.designSystemsProjectPath')}
-        </label>
-        <div className="project-location-manual-row">
-          <input
-            ref={manualPathInputRef}
-            id="project-location-manual-path"
-            className="project-location-manual-input"
-            type="text"
-            value={manualPath}
-            onChange={(event) => setManualPath(event.currentTarget.value)}
-            placeholder={t('settings.projectLocationsManualPlaceholder')}
-            disabled={loading || saving}
-          />
-          <button type="submit" className="icon-btn project-location-manual-submit" disabled={loading || saving || !manualPath.trim()}>
-            {t('common.save')}
-          </button>
-        </div>
-      </form>
-
-      <button
-        type="button"
-        className="icon-btn project-location-add"
-        onClick={handleAddFolder}
-        disabled={loading || saving}
-      >
-        <Icon name="plus" size={12} />
-        {t('settings.projectLocationsAddFolder')}
-      </button>
+      {addingLocation ? (
+        <form className="project-location-manual" onSubmit={handleManualSubmit}>
+          <label className="project-location-manual-label sr-only" htmlFor="project-location-manual-path">
+            {t('settings.designSystemsProjectPath')}
+          </label>
+          <div className="project-location-manual-row">
+            <button
+              type="button"
+              className="icon-btn project-location-browse"
+              onClick={handleBrowseForLocation}
+              disabled={loading || saving || folderBrowserLoading}
+              aria-label="Browse folders"
+              title="Browse folders"
+            >
+              <Icon name="folder" size={14} />
+            </button>
+            <input
+              ref={manualPathInputRef}
+              id="project-location-manual-path"
+              className="project-location-manual-input"
+              type="text"
+              value={manualPath}
+              onChange={(event) => setManualPath(event.currentTarget.value)}
+              placeholder={t('settings.projectLocationsManualPlaceholder')}
+              disabled={loading || saving}
+            />
+            <button type="submit" className="icon-btn project-location-manual-submit" disabled={loading || saving || !manualPath.trim()}>
+              <Icon name="check" size={12} />
+              {t('common.save')}
+            </button>
+            <button type="button" className="icon-btn project-location-manual-cancel" onClick={handleCancelAddLocation} disabled={saving}>
+              <Icon name="close" size={12} />
+              {t('common.cancel')}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="icon-btn project-location-add"
+          onClick={handleAddFolder}
+          disabled={loading || saving}
+        >
+          <Icon name="plus" size={12} />
+          {t('settings.projectLocationsAddFolder')}
+        </button>
+      )}
 
       {folderBrowserOpen ? (
         <div className="project-location-browser" role="dialog" aria-label="Choose project location">
