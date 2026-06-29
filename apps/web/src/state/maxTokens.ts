@@ -38,8 +38,9 @@ const OVERRIDES: Record<string, number> = {
   // 131072 (128k) is a safe floor for all Ollama Cloud models.
   'cogito-2.1:671b': 131072,
   'deepseek-v3.1:671b': 163840,
-  'deepseek-v3.2': 163840,
+  'deepseek-v3.1:671b-cloud': 163840,
   'devstral-2:123b': 131072,
+
   'devstral-small-2:24b': 131072,
   'gemini-3-flash-preview': 131072,
   'gemma3:4b': 131072,
@@ -52,6 +53,8 @@ const OVERRIDES: Record<string, number> = {
   'glm-5.1': 131072,
   'gpt-oss:20b': 131072,
   'gpt-oss:120b': 131072,
+  'gpt-oss:20b-cloud': 131072,
+  'gpt-oss:120b-cloud': 131072,
   'kimi-k2:1t': 131072,
   'kimi-k2-thinking': 131072,
   'kimi-k2.5': 131072,
@@ -67,6 +70,7 @@ const OVERRIDES: Record<string, number> = {
   'nemotron-3-nano:30b': 131072,
   'nemotron-3-super': 131072,
   'qwen3-coder:480b': 262144,
+  'qwen3-coder:480b-cloud': 262144,
   'qwen3-coder-next': 131072,
   'qwen3-next:80b': 131072,
   'qwen3-vl:235b': 131072,
