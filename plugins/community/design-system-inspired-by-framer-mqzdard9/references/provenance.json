@@ -1,0 +1,19 @@
+{
+  "candidateId": "60eeab11-1a52-4a22-b818-f8e8d711ac86",
+  "projectId": "brand-shopify-b20aa5",
+  "runId": "dc639425-a771-4b94-b9b9-47da328dfcbf",
+  "conversationId": "0cf4fecc-dab8-4c3a-a37f-2a1a4a94da5e",
+  "provenance": {
+    "summary": "Detected from context/input-DESIGN.md after a successful run.",
+    "detectedAt": 1782745687576
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 17667,
+      "copied": true
+    }
+  ]
+}
