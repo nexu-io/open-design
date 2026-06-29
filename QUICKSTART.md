@@ -62,19 +62,11 @@ From the repository root:
    cp .env.example .env
    ```
 
-2. Generate a secure token:
+2. Start the service:
 
    ```bash
-   openssl rand -hex 32
+   docker compose up -d
    ```
-
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
-
-Then start the service:
-
-```bash
-docker compose up -d
-```
 
 Open the app in your browser:
 
@@ -129,7 +121,7 @@ Create a `deploy/.env` file to override the default configuration. Start from th
 cp deploy/.env.example deploy/.env
 ```
 
-Edit `deploy/.env` to set your own token and adjust other values as needed:
+Edit `deploy/.env` to adjust values as needed:
 
 ```env
 # Port exposed on the host
@@ -144,8 +136,11 @@ OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 # Docker image tag
 OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 
-# Required API token for daemon security
-# Generate one with: openssl rand -hex 32
+# Recommended unless OPEN_DESIGN_DISABLE_API_AUTH=1 is set behind a trusted,
+# already-authenticated reverse proxy.
+# NOTE: For local Docker development (where OPEN_DESIGN_PORT is bound to 127.0.0.1),
+# LEAVE THIS BLANK. Setting it will break the local web UI due to Docker's network NAT.
+# Only generate a token (`openssl rand -hex 32`) if you are hosting remotely.
 OD_API_TOKEN=
 ```
 
