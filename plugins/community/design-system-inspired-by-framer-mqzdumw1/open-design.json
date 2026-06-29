@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-inspired-by-framer-mqzdumw1",
+  "title": "Design System Inspired by Framer",
+  "version": "0.1.0",
+  "description": "> Category: Design & Creative > Website builder. Bold black and blue, motion-first, design-forward.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
