@@ -226,3 +226,10 @@
 - 플랜 독립검증 = plan-reviewer(APPROVE-WITH-CHANGES) + Explore 6-fact verify 병렬. 자가편집 확증편향 재발: 내가 주입한 사실오류 3건(import db.js→registry.js / icon 'file-text'→없음, 유효=file / "critique.ts 없음"→실제 src/critique.ts 존재) self-review 통과, agent가 전부 포착 (출처: 2-에이전트 교차검증)
 - 정정 = F1~F3(명백 버그, 양 에이전트 검증) 즉시 + F4(discovery 라우트 검증, 스펙 §14) + F5(Task2 red-spec→regression 라벨정정+완전성가드) + F6(drift 가드 서브트리 목록 동등성). F7(line-number) prose 앵커로 보류 (출처: plan-reviewer findings)
 - blockquote 보더 #000(style SSoT) 채택, #333(2차 소스)는 플래그. 16 비-CJK 로케일 chip i18n = 영문 폴백(Braze 선례), CJK만 네이티브 (출처: 도메인 digest 충돌 + 플랜 결정)
+
+## 2026-06-29 — P2 Naver-blog 구현 완료 + designSystem 바인딩 갭 발견·수정
+- 실행방식 = subagent-driven-development: fresh implementer/task + 독립 task-reviewer + 최종 whole-branch 리뷰(opus). Task 1~8 전부 1-pass Approved(수정 dispatch 0). 근거: 자가편집 확증편향 회피, green-sequencing 순서 강제 (출처: HANDOFF P2 Naver-blog 구현)
+- designSystem 바인딩 갭 = **지정(metadata)≠전달(컬럼)**: 매니페스트 ref:bodoc → apply가 metadata.designSystemId=bodoc 생성하나 project 컬럼 미반영, run-start(server.ts:7581)는 컬럼/run-param만 읽어 bodoc DESIGN.md 미주입 → 칩/CLI가 범용 글 생성. braze 포함 모든 designSystem.ref 시나리오 플러그인 공통 pre-existing 갭 (출처: 사용자 질문 발단 라이브 추적)
+- 갭 fix = 서버사이드 resolve(배지 메커니즘 대칭): create 핸들러가 resolveStampDesignSystemId(db,pluginId)=pickDesignSystemId(manifest)로 ref resolve → 컬럼 세팅. web-only(metadata→컬럼) 미채택 — CLI dual-track 깨짐. 컬럼이 단일 진실원. 명시 body.designSystemId 우선 (출처: 사용자 승인 "서버사이드 resolve")
+- bodoc 특화 검증 = 라이브 produce E2E(코드추적만으로 끝내지 않음): claude agent produce 1회 → brief.md가 design-systems/bodoc/DESIGN.md §11 명시 인용, "안녕하세요 보닥입니다!" 페르소나·서비스4종·금지어준수·craft준수 확인 (출처: 라이브 produce runId dc8887a6)
+- 캐리 Minor 전부 accept-as-followup(최종 opus 리뷰 판정), T8 stale 주석만 무료 fix. fix 3 Minor 비차단 (출처: 최종 whole-branch 리뷰)
