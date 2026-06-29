@@ -104,4 +104,21 @@ describe('ProjectLocationsSection', () => {
     expect(setCfg).toHaveBeenCalledWith(expect.any(Function));
     expect(onProjectsRefresh).toHaveBeenCalledTimes(2);
   });
+
+  it('focuses the manual path input when the native folder picker returns no path', async () => {
+    fetchProjectLocationsMock.mockResolvedValue([builtInLocation]);
+    openProjectLocationFolderDialogMock.mockResolvedValue(null);
+
+    renderSection();
+
+    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    fireEvent.click(screen.getByRole('button', { name: /Add folder/i }));
+
+    await waitFor(() => {
+      expect(openProjectLocationFolderDialogMock).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(pathInput);
+    });
+    expect(screen.getByText('No folder selected. Enter a folder path')).toBeTruthy();
+    expect(updateProjectLocationsMock).not.toHaveBeenCalled();
+  });
 });
