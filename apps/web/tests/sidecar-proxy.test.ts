@@ -1,6 +1,8 @@
+import { request as createHttpRequest, createServer as createHttpServer, type IncomingHttpHeaders } from 'node:http';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
 
 import { describe, expect, it } from 'vitest';
 
@@ -8,6 +10,7 @@ import {
   createStandaloneBackendEnv,
   createStandaloneParentMonitorImport,
   createStandaloneServerArgs,
+  createDaemonProxyHandler,
   normalizeDaemonProxyOriginHeader,
   resolveDaemonProxyTarget,
   resolveNextBundlerOptions,
@@ -15,6 +18,36 @@ import {
   resolveStandaloneServerEntry,
   startWebSidecar,
 } from '../sidecar/server';
+
+const DEV_CLIENT_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+
+type HttpResponseSnapshot = {
+  body: string;
+  headers: IncomingHttpHeaders;
+};
+
+async function requestFromServer(origin: string, path: string): Promise<HttpResponseSnapshot> {
+  return await new Promise<HttpResponseSnapshot>((resolveRequest, rejectRequest) => {
+    const request = createHttpRequest(new URL(path, origin), (response) => {
+      response.setEncoding('utf8');
+      let body = '';
+      response.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      response.on('end', () => {
+        resolveRequest({ body, headers: response.headers });
+      });
+    });
+    request.on('error', rejectRequest);
+    request.end();
+  });
+}
+
+async function closeHttpServer(server: ReturnType<typeof createHttpServer>): Promise<void> {
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
+  });
+}
 
 describe('resolveDaemonProxyTarget', () => {
   it('proxies allowlisted relative paths to the daemon origin', () => {
@@ -34,6 +67,37 @@ describe('resolveDaemonProxyTarget', () => {
 
   it('rejects non-daemon paths', () => {
     expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/settings')).toBeNull();
+  });
+});
+
+describe('createDaemonProxyHandler', () => {
+  it('prevents stale browser caching for Next static chunks', async () => {
+    const server = createHttpServer(createDaemonProxyHandler(
+      null,
+      async (_request, response) => {
+        response.setHeader('Cache-Control', 'max-age=14400, must-revalidate');
+        response.end('chunk');
+      },
+      { preventStaticAssetBrowserCache: true },
+    ));
+    await new Promise<void>((resolveListen) => {
+      server.listen(0, '127.0.0.1', resolveListen);
+    });
+    const address = server.address() as AddressInfo;
+
+    try {
+      const response = await requestFromServer(
+        `http://127.0.0.1:${address.port}`,
+        '/_next/static/chunks/app/%5B%5B...slug%5D%5D/page.js',
+      );
+
+      expect(response.body).toBe('chunk');
+      expect(response.headers['cache-control']).toBe(DEV_CLIENT_CACHE_CONTROL);
+      expect(response.headers.pragma).toBe('no-cache');
+      expect(response.headers.expires).toBe('0');
+    } finally {
+      await closeHttpServer(server);
+    }
   });
 });
 
