@@ -725,9 +725,13 @@ function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
       const name = file.path ?? file.name;
       return file.kind === 'image' || /\.(svg|png|jpe?g|webp|gif)$/iu.test(name);
     });
+  const exactLogo = logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === 'assets/logo.svg');
+  if (exactLogo) return exactLogo;
+  const logoLike = logoCandidates.filter((file) =>
+    /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name));
   return (
-    logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === 'assets/logo.svg') ??
-    logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
+    logoLike.find((file) => !isFaviconPath(file.path ?? file.name)) ??
+    logoLike[0] ??
     null
   );
 }
@@ -749,7 +753,6 @@ async function designSystemCoverFromBrandJson(
   projectId: string,
   knownFiles: ReadonlySet<string>,
 ): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
-  if (!knownFiles.has('brand.json')) return null;
   const raw = await fetchProjectFileText(projectId, 'brand.json', {
     cache: 'no-store',
     suppressNotFoundWarning: true,
@@ -786,7 +789,7 @@ async function designSystemCoverFromBrandJson(
       typeof candidate === 'string' &&
       knownFiles.has(candidate) &&
       isRasterOrSvgImage(candidate) &&
-      !/(^|\/)favicon[-.]/iu.test(candidate),
+      !isFaviconPath(candidate),
   );
   if (nonFaviconLogo) return { kind: 'logo', name: nonFaviconLogo };
   if (typeof logo?.primary === 'string' && knownFiles.has(logo.primary) && isRasterOrSvgImage(logo.primary)) {
@@ -803,4 +806,8 @@ function imageSampleRank(kind: unknown): number {
 
 function isRasterOrSvgImage(path: string): boolean {
   return /\.(svg|png|jpe?g|webp|gif)$/iu.test(path);
+}
+
+function isFaviconPath(path: string): boolean {
+  return /(^|\/)favicon[-.]/iu.test(path);
 }
