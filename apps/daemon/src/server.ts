@@ -8442,20 +8442,27 @@ export async function startServer({
           : isAntigravityQuota
             ? 'RATE_LIMITED'
             : 'AGENT_EXECUTION_FAILED';
-        // Antigravity-aware message: when agy exits 0 with no stdout
-        // (any reason — auth, quota, upstream drop, brain-folder
-        // missing, prompt-not-delivered), surface actionable guidance
-        // keyed on the classified reason. The blanket "expired session"
-        // message was empirically wrong — many users reporting #3536
-        // confirmed agy works in a terminal but not from OD. Without
-        // reading agy's log file or stderr stdout we cannot distinguish
-        // the root cause, so the message tells the user to inspect the
-        // daemon-run log file directly.
+        // Antigravity-aware message: when agy exits 0 with no
+        // stdout, surface whether auth / quota matched, and
+        // otherwise extract the last error line from the agy log
+        // file so the user sees the actual upstream reason (e.g.
+        // Windows path issue, missing brain directory, upstream
+        // timeout) instead of a generic "exited without output."
+        // The previous version always emitted the auth guidance,
+        // which was empirically wrong for many #3536 reporters.
+        const antigravityLogTail = (() => {
+          if (def.id !== 'antigravity' || !agentLogFilePath) return '';
+          try {
+            const lines = combinedDetail.split('\n');
+            const lastError = lines.filter((l) => /^E\d{4}\s/.test(l)).pop();
+            return lastError ? `\n\nagy reported: ${lastError.trim()}` : '';
+          } catch { return ''; }
+        })();
         const msg = authFailure
-          ? authFailure.message ?? antigravityAuthGuidance()
+          ? (authFailure.message ?? antigravityAuthGuidance()) + antigravityLogTail
           : isAntigravityQuota
-            ? antigravityQuotaGuidance()
-            : `Antigravity CLI exited without producing output. The daemon piped agy's \`--log-file\` to a temporary path that should contain the upstream reason. Check the daemon-run log file for details — its path is available in the daemon log output for this run — or run \`agy\` alone in a terminal to verify the CLI is functional, then retry this chat.`;
+            ? antigravityQuotaGuidance() + antigravityLogTail
+            : `Antigravity CLI exited without producing output.${antigravityLogTail}${antigravityLogTail ? '' : ' Check the agy --log-file for details — its path is in the daemon-run log output for this run.'}`;
         send('error', createSseErrorPayload(
           errorCode,
           msg,
