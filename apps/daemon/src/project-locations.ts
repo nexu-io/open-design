@@ -1,7 +1,8 @@
 import { lstat, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { ProjectLocationPrefs } from './app-config.js';
+import { readAppConfig, type ProjectLocationPrefs } from './app-config.js';
 import { expandHomePrefix } from './home-expansion.js';
+import { validateLinkedDirs } from './linked-dirs.js';
 import { isSafeId } from './projects.js';
 
 export const BUILT_IN_PROJECT_LOCATION_ID = 'default';
@@ -21,6 +22,12 @@ export interface ProjectManifest {
   designSystemId?: string | null;
 }
 
+export interface RuntimeProjectLocationOptions {
+  dataDir: string;
+  dataDirCanonical?: string;
+  projectsDir: string;
+}
+
 export function builtInProjectLocation(projectsDir: string): ProjectLocation {
   return {
     id: BUILT_IN_PROJECT_LOCATION_ID,
@@ -32,6 +39,51 @@ export function builtInProjectLocation(projectsDir: string): ProjectLocation {
 
 export function allProjectLocations(projectsDir: string, external: ProjectLocationPrefs[] | undefined): ProjectLocation[] {
   return [builtInProjectLocation(projectsDir), ...(external ?? [])];
+}
+
+function pathRelative(from: string, to: string): string {
+  return path.relative(from, to);
+}
+
+function isInsideOrSame(relative: string): boolean {
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+export function locationOverlapsRuntimeData(locationPath: string, options: RuntimeProjectLocationOptions): boolean {
+  const runtimeDir = options.dataDirCanonical || options.dataDir;
+  const projectsDir = path.join(runtimeDir, 'projects');
+  return [
+    pathRelative(runtimeDir, locationPath),
+    pathRelative(locationPath, runtimeDir),
+    pathRelative(projectsDir, locationPath),
+    pathRelative(locationPath, projectsDir),
+  ].some(isInsideOrSame);
+}
+
+export async function configuredProjectLocationsForRuntime(
+  options: RuntimeProjectLocationOptions,
+): Promise<ProjectLocation[]> {
+  const config = await readAppConfig(options.dataDir);
+  const all = allProjectLocations(options.projectsDir, config.projectLocations);
+  const valid = all[0] ? [all[0]] : [];
+  for (const location of all.slice(1)) {
+    const validated = validateLinkedDirs([location.path]);
+    if (validated.error) continue;
+    const canonical = validated.dirs?.[0];
+    if (!canonical || locationOverlapsRuntimeData(canonical, options)) continue;
+    valid.push({ ...location, path: canonical });
+  }
+  return valid;
+}
+
+export async function defaultExternalProjectLocationForRuntime(
+  options: RuntimeProjectLocationOptions,
+): Promise<ProjectLocation | null> {
+  const config = await readAppConfig(options.dataDir);
+  const defaultId = config.defaultProjectLocationId;
+  if (!defaultId || defaultId === BUILT_IN_PROJECT_LOCATION_ID) return null;
+  const locations = await configuredProjectLocationsForRuntime(options);
+  return locations.find((location) => location.id === defaultId && !location.builtIn) ?? null;
 }
 
 export function locationProjectDir(location: ProjectLocation, projectId: string): string {
