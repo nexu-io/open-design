@@ -8455,7 +8455,15 @@ export async function startServer({
           try {
             const lines = combinedDetail.split('\n');
             const lastError = lines.filter((l) => /^E\d{4}\s/.test(l)).pop();
-            return lastError ? `\n\nagy reported: ${lastError.trim()}` : '';
+            if (!lastError) return '';
+            // Strip timestamp / pid / source-file prefix (agy Go log
+            // format: "EMMDD hh:mm:ss.sss pid file.go:line] message")
+            // so the surfaced text is just the actionable message.
+            const msg = lastError.replace(
+              /^E\d{4}\s+[\d:.]+?\s+\d+\s+[\w._-]+:\d+\]\s*/,
+              '',
+            );
+            return `\n\nagy: ${msg}`;
           } catch { return ''; }
         })();
         const msg = authFailure
