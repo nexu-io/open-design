@@ -11,6 +11,7 @@ import {
   createStandaloneParentMonitorImport,
   createStandaloneServerArgs,
   createDaemonProxyHandler,
+  isLikelyDocumentNavigationRequest,
   normalizeDaemonProxyOriginHeader,
   resolveDaemonProxyTarget,
   resolveNextBundlerOptions,
@@ -98,6 +99,61 @@ describe('createDaemonProxyHandler', () => {
     } finally {
       await closeHttpServer(server);
     }
+  });
+
+  it('clears browser cache on dev document navigations', async () => {
+    const server = createHttpServer(createDaemonProxyHandler(
+      null,
+      async (_request, response) => {
+        response.setHeader('Cache-Control', 'no-cache, must-revalidate');
+        response.setHeader('content-type', 'text/html; charset=utf-8');
+        response.end('<!doctype html>');
+      },
+      { preventStaticAssetBrowserCache: true },
+    ));
+    await new Promise<void>((resolveListen) => {
+      server.listen(0, '127.0.0.1', resolveListen);
+    });
+    const address = server.address() as AddressInfo;
+
+    try {
+      const response = await new Promise<HttpResponseSnapshot>((resolveRequest, rejectRequest) => {
+        const request = createHttpRequest(
+          new URL('/settings/project-locations', `http://127.0.0.1:${address.port}`),
+          { headers: { accept: 'text/html,application/xhtml+xml' } },
+          (serverResponse) => {
+            serverResponse.setEncoding('utf8');
+            let body = '';
+            serverResponse.on('data', (chunk: string) => {
+              body += chunk;
+            });
+            serverResponse.on('end', () => {
+              resolveRequest({ body, headers: serverResponse.headers });
+            });
+          },
+        );
+        request.on('error', rejectRequest);
+        request.end();
+      });
+
+      expect(response.body).toBe('<!doctype html>');
+      expect(response.headers['cache-control']).toBe(DEV_CLIENT_CACHE_CONTROL);
+      expect(response.headers['clear-site-data']).toBe('"cache"');
+      expect(response.headers.pragma).toBe('no-cache');
+      expect(response.headers.expires).toBe('0');
+    } finally {
+      await closeHttpServer(server);
+    }
+  });
+
+  it('does not treat static chunk requests as document navigations', () => {
+    const request = {
+      method: 'GET',
+      url: '/_next/static/chunks/app/layout.js',
+      headers: { accept: 'text/html' },
+    } as Parameters<typeof isLikelyDocumentNavigationRequest>[0];
+
+    expect(isLikelyDocumentNavigationRequest(request)).toBe(false);
   });
 });
 

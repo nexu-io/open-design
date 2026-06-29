@@ -43,6 +43,7 @@ const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
 const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
 const DEV_CLIENT_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate";
+const DEV_CLIENT_CLEAR_SITE_DATA = '"cache"';
 const SHUTDOWN_TIMEOUT_MS = 3000;
 const STANDALONE_READINESS_POLL_MS = 150;
 const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
@@ -279,37 +280,52 @@ export function isNextStaticAssetRequest(requestUrl: string | undefined): boolea
   }
 }
 
-function devNoStoreHeaders(): OutgoingHttpHeaders {
+export function isLikelyDocumentNavigationRequest(request: IncomingMessage): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  if (isNextStaticAssetRequest(request.url)) return false;
+  const accept = firstHeaderValue(request.headers.accept);
+  return accept?.includes("text/html") === true;
+}
+
+function devNoStoreHeaders(options: { clearSiteData?: boolean } = {}): OutgoingHttpHeaders {
   return {
     "Cache-Control": DEV_CLIENT_CACHE_CONTROL,
     Pragma: "no-cache",
     Expires: "0",
+    ...(options.clearSiteData === true ? { "Clear-Site-Data": DEV_CLIENT_CLEAR_SITE_DATA } : {}),
   };
 }
 
-function mergeDevNoStoreHeaders(headers: OutgoingHttpHeaders | undefined): OutgoingHttpHeaders {
-  return { ...(headers ?? {}), ...devNoStoreHeaders() };
+function mergeDevNoStoreHeaders(
+  headers: OutgoingHttpHeaders | undefined,
+  options: { clearSiteData?: boolean } = {},
+): OutgoingHttpHeaders {
+  return { ...(headers ?? {}), ...devNoStoreHeaders(options) };
 }
 
 function withDevNoStoreWriteHeadArgs(
   statusCode: number,
   statusMessageOrHeaders?: string | OutgoingHttpHeaders,
   headers?: OutgoingHttpHeaders,
+  options: { clearSiteData?: boolean } = {},
 ): WriteHeadOverrideArgs {
   if (typeof statusMessageOrHeaders === "string") {
-    return [statusCode, statusMessageOrHeaders, mergeDevNoStoreHeaders(headers as OutgoingHttpHeaders | undefined)];
+    return [statusCode, statusMessageOrHeaders, mergeDevNoStoreHeaders(headers as OutgoingHttpHeaders | undefined, options)];
   }
-  return [statusCode, mergeDevNoStoreHeaders(statusMessageOrHeaders as OutgoingHttpHeaders | undefined)];
+  return [statusCode, mergeDevNoStoreHeaders(statusMessageOrHeaders as OutgoingHttpHeaders | undefined, options)];
 }
 
-function installDevNoStoreHeaderOverride(response: ServerResponse): void {
-  for (const [key, value] of Object.entries(devNoStoreHeaders())) {
+function installDevNoStoreHeaderOverride(
+  response: ServerResponse,
+  options: { clearSiteData?: boolean } = {},
+): void {
+  for (const [key, value] of Object.entries(devNoStoreHeaders(options))) {
     if (value == null) continue;
     response.setHeader(key, value);
   }
   const originalWriteHead = response.writeHead.bind(response) as WriteHeadOverride;
   response.writeHead = ((statusCode: number, statusMessageOrHeaders?: string | OutgoingHttpHeaders, headers?: OutgoingHttpHeaders) => {
-    const patchedArgs = withDevNoStoreWriteHeadArgs(statusCode, statusMessageOrHeaders, headers);
+    const patchedArgs = withDevNoStoreWriteHeadArgs(statusCode, statusMessageOrHeaders, headers, options);
     if (patchedArgs.length === 3) {
       return originalWriteHead(patchedArgs[0], patchedArgs[1], patchedArgs[2]);
     }
@@ -958,8 +974,12 @@ export function createDaemonProxyHandler(
       return;
     }
 
-    if (options.preventStaticAssetBrowserCache === true && isNextStaticAssetRequest(request.url)) {
-      installDevNoStoreHeaderOverride(response);
+    if (options.preventStaticAssetBrowserCache === true) {
+      if (isNextStaticAssetRequest(request.url)) {
+        installDevNoStoreHeaderOverride(response);
+      } else if (isLikelyDocumentNavigationRequest(request)) {
+        installDevNoStoreHeaderOverride(response, { clearSiteData: true });
+      }
     }
 
     void fallback(request, response).catch((error: unknown) => {
