@@ -18,6 +18,7 @@ import {
   listInstalledPlugins,
   resolvePluginSnapshot,
 } from './plugins/index.js';
+import { pickDesignSystemId } from './plugins/apply.js';
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { readAnalyticsContext } from './analytics.js';
@@ -766,6 +767,20 @@ export function resolveStampBadge(
   return getInstalledPlugin(db, pluginId)?.manifest?.od?.badge as ProjectBadge | undefined;
 }
 
+/**
+ * Design-system binding: badge 스탬프와 동일한 방식으로 플러그인 매니페스트의
+ * od.context.designSystem.ref를 읽어 반환한다. 명시적 body.designSystemId 없이
+ * 플러그인 chip/CLI로 프로젝트를 만들어도 브랜드 design system이 자동으로 주입되도록.
+ */
+export function resolveStampDesignSystemId(
+  db: Parameters<typeof getInstalledPlugin>[0],
+  pluginId: string | null | undefined,
+): string | undefined {
+  if (!pluginId) return undefined;
+  const manifest = getInstalledPlugin(db, pluginId)?.manifest;
+  return manifest ? pickDesignSystemId(manifest) : undefined;
+}
+
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
@@ -1168,6 +1183,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               : null);
       // resolveStampBadge는 export된 순수 헬퍼 — snapshot resolve 결과와 독립적.
       const stampedBadge = resolveStampBadge(db, effectiveBadgePluginId);
+      // Design-system binding: badge 스탬프와 동일한 방식. body.designSystemId가 없을 때
+      // effectiveBadgePluginId의 manifest od.context.designSystem.ref를 폴백으로 사용해
+      // chip/CLI 양쪽이 동일하게 브랜드 design system을 주입받도록 한다.
+      // 명시적 body.designSystemId는 항상 우선; ref가 없거나 유효하지 않으면 null 유지.
+      let effectiveDesignSystemId = normalizedDesignSystemId;
+      if (!effectiveDesignSystemId && effectiveBadgePluginId) {
+        const pinnedDesignSystemId = resolveStampDesignSystemId(db, effectiveBadgePluginId);
+        if (pinnedDesignSystemId) {
+          const pinnedValidation = await validateProjectDesignSystemId(pinnedDesignSystemId);
+          if (pinnedValidation.ok) effectiveDesignSystemId = pinnedValidation.id;
+        }
+      }
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -1222,14 +1249,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             createdAt: now,
             updatedAt: now,
             skillId: normalizedSkillId,
-            designSystemId: normalizedDesignSystemId,
+            designSystemId: effectiveDesignSystemId,
           });
         }
         project = insertProject(db, {
           id,
           name: name.trim(),
           skillId: normalizedSkillId,
-          designSystemId: normalizedDesignSystemId,
+          designSystemId: effectiveDesignSystemId,
           pendingPrompt: pendingPrompt || null,
           metadata: projectMetadata,
           customInstructions:
