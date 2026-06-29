@@ -2125,6 +2125,7 @@ export const ko: Dict = {
   'fileViewer.copyForNaver': '네이버용 서식 복사',
   'fileViewer.copyForNaverDone': '네이버 서식으로 복사됨 — 에디터에 바로 붙여넣기 하세요',
   'fileViewer.copyForNaverFailed': '복사할 수 없습니다. 다시 시도해 주세요.',
+  'fileViewer.copyCode': '소스 복사',
   'fileViewer.exportPdf': 'PDF로 내보내기',
   'fileViewer.exportPdfAllSlides': 'PDF로 내보내기 (모든 슬라이드)',
   'fileViewer.exportPptxBusy': '현재 작업이 끝날 때까지 기다려 주세요.',

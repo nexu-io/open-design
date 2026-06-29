@@ -2125,6 +2125,7 @@ export const zhCN: Dict = {
   'fileViewer.copyForNaver': '复制为 Naver 格式',
   'fileViewer.copyForNaverDone': '已复制为 Naver 格式 — 可直接粘贴到编辑器',
   'fileViewer.copyForNaverFailed': '无法复制，请重试',
+  'fileViewer.copyCode': '复制源代码',
   'fileViewer.exportPdf': '导出为 PDF',
   'fileViewer.exportPdfAllSlides': '导出为 PDF（全部幻灯片）',
   'fileViewer.exportPptxBusy': '请等待当前任务完成。',

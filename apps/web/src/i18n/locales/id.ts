@@ -2125,6 +2125,7 @@ export const id: Dict = {
   'fileViewer.copyForNaver': 'Salin untuk Naver',
   'fileViewer.copyForNaverDone': 'Disalin dengan format Naver — tempel langsung ke editor',
   'fileViewer.copyForNaverFailed': 'Tidak dapat menyalin. Silakan coba lagi.',
+  'fileViewer.copyCode': 'Salin kode',
   'fileViewer.exportPdf': 'Ekspor PDF',
   'fileViewer.exportPdfAllSlides': 'Ekspor PDF semua slide',
   'fileViewer.exportPptxBusy': 'Mengekspor PPTX...',

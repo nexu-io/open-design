@@ -2125,6 +2125,7 @@ export const ru: Dict = {
   'fileViewer.copyForNaver': 'Копировать для Naver',
   'fileViewer.copyForNaverDone': 'Скопировано с форматированием Naver — вставьте сразу в редактор',
   'fileViewer.copyForNaverFailed': 'Не удалось скопировать. Пожалуйста, попробуйте снова.',
+  'fileViewer.copyCode': 'Копировать код',
   'fileViewer.exportPdf': 'Экспорт в PDF',
   'fileViewer.exportPdfAllSlides': 'Экспорт в PDF (все слайды)',
   'fileViewer.exportPptxBusy': 'Дождитесь окончания текущего хода.',

@@ -2125,6 +2125,7 @@ export const ar: Dict = {
   'fileViewer.copyForNaver': 'نسخ بتنسيق Naver',
   'fileViewer.copyForNaverDone': 'تم النسخ بتنسيق Naver — الصقه مباشرةً في المحرّر',
   'fileViewer.copyForNaverFailed': 'تعذّر النسخ. يُرجى المحاولة مرة أخرى.',
+  'fileViewer.copyCode': 'نسخ الكود',
   'fileViewer.exportPdf': 'تصدير كـ PDF',
   'fileViewer.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',
   'fileViewer.exportPptxBusy': 'انتظر انتهاء الدور الحالي.',

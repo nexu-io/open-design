@@ -2125,6 +2125,7 @@ export const fa: Dict = {
   'fileViewer.copyForNaver': 'کپی برای Naver',
   'fileViewer.copyForNaverDone': 'با قالب‌بندی Naver کپی شد — مستقیماً در ویرایشگر بچسبانید',
   'fileViewer.copyForNaverFailed': 'کپی ممکن نشد. لطفاً دوباره تلاش کنید.',
+  'fileViewer.copyCode': 'کپی کد',
   'fileViewer.exportPdf': 'صادرکردن به PDF',
   'fileViewer.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
   'fileViewer.exportPptxBusy': 'منتظر پایان نوبت فعلی باشید.',

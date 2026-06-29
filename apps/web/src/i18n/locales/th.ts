@@ -2125,6 +2125,7 @@ export const th: Dict = {
   'fileViewer.copyForNaver': 'คัดลอกสำหรับ Naver',
   'fileViewer.copyForNaverDone': 'คัดลอกพร้อมการจัดรูปแบบสำหรับ Naver แล้ว — วางลงในตัวแก้ไขได้เลย',
   'fileViewer.copyForNaverFailed': 'ไม่สามารถคัดลอกได้ โปรดลองอีกครั้ง',
+  'fileViewer.copyCode': 'คัดลอกโค้ด',
   'fileViewer.exportPdf': 'เปลี่ยนฟอร์แมตเอาไปเป็น PDF',
   'fileViewer.exportPdfAllSlides': 'ดาวน์โหลดทั้งหน้าเป็น PDF',
   'fileViewer.exportPptxBusy': 'ต้องให้ทำระบบของปัจจุบันจนสำเร็จก่อน',

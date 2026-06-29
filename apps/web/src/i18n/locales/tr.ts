@@ -2125,6 +2125,7 @@ export const tr: Dict = {
   'fileViewer.copyForNaver': 'Naver için kopyala',
   'fileViewer.copyForNaverDone': 'Naver biçimlendirmesiyle kopyalandı — doğrudan düzenleyiciye yapıştırın',
   'fileViewer.copyForNaverFailed': 'Kopyalanamadı. Lütfen tekrar deneyin.',
+  'fileViewer.copyCode': 'Kodu kopyala',
   'fileViewer.exportPdf': 'PDF olarak dışa aktar',
   'fileViewer.exportPdfAllSlides': 'PDF olarak dışa aktar (tüm slaytlar)',
   'fileViewer.exportPptxBusy': 'Güncel sıranın bitmesini bekleyin.',

@@ -2125,6 +2125,7 @@ export const hu: Dict = {
   'fileViewer.copyForNaver': 'Másolás Naverhez',
   'fileViewer.copyForNaverDone': 'Naver formázással másolva — illessze be közvetlenül a szerkesztőbe',
   'fileViewer.copyForNaverFailed': 'A másolás nem sikerült. Kérjük, próbálja újra.',
+  'fileViewer.copyCode': 'Forráskód másolása',
   'fileViewer.exportPdf': 'Exportálás PDF-ként',
   'fileViewer.exportPdfAllSlides': 'Exportálás PDF-ként (minden dia)',
   'fileViewer.exportPptxBusy': 'Várj, amíg az aktuális kör befejeződik.',

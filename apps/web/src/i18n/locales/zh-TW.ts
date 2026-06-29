@@ -2125,6 +2125,7 @@ export const zhTW: Dict = {
   'fileViewer.copyForNaver': '複製為 Naver 格式',
   'fileViewer.copyForNaverDone': '已以 Naver 格式複製 — 可直接貼到編輯器',
   'fileViewer.copyForNaverFailed': '無法複製，請再試一次。',
+  'fileViewer.copyCode': '複製原始碼',
   'fileViewer.exportPdf': '匯出為 PDF',
   'fileViewer.exportPdfAllSlides': '匯出為 PDF（全部投影片）',
   'fileViewer.exportPptxBusy': '請等待當前任務完成。',
