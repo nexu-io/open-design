@@ -2276,6 +2276,36 @@ async function testAgentConnectionInternal(
         );
       const exitedCleanly =
         (winner.code === 0 && !winner.signal) || acpForcedShutdown || claudeCompletedTurn;
+      const stderrTail = sink.getStderrTail().trim();
+      const rawStdoutTail = sink.getRawStdoutTail().trim();
+      // Antigravity `no_text` handoff-drop guard: must run BEFORE the
+      // visible-text success path, because the connection probe's
+      // visible-text path would otherwise treat the bare `no_text`
+      // token as successful assistant output. Exact trim match — not
+      // a regex — so legitimate stdout mentioning the token does not
+      // false-fire. (issue #3536; mirrors the chat-route guard in
+      // apps/daemon/src/server.ts:8367+.)
+      const noTextHandoff =
+        rawStdoutTail === 'no_text' || stderrTail === 'no_text';
+      if (input.agentId === 'antigravity' && exitedCleanly && noTextHandoff) {
+        console.warn(
+          `[test:agent] ${def.name} → antigravity_no_text_handoff: stdout=${redactSecrets(rawStdoutTail)} stderr=${redactSecrets(stderrTail)}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail:
+            'Antigravity CLI exited with a `no_text` handoff signal — the upstream result was dropped. Retry the test, switch models in agy\'s TUI, or update agy to the latest version.',
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
       if (visibleText) {
         const rawSample = truncateSample(visibleText);
         const exitInfo = { code: winner.code, signal: winner.signal };
@@ -2284,8 +2314,6 @@ async function testAgentConnectionInternal(
         }
         if (exitedCleanly) return resultFromAgentText(visibleText, exitInfo);
       }
-      const stderrTail = sink.getStderrTail().trim();
-      const rawStdoutTail = sink.getRawStdoutTail().trim();
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && exitedCleanly && rawStdoutTail) {
         const recoveredText = extractOpenCodeTextFromRawStdout(rawStdoutTail).trim();
         if (recoveredText) {
@@ -2366,6 +2394,47 @@ async function testAgentConnectionInternal(
           detail: claudeDiagnostic.detail,
           diagnostics: buildDiagnostics({
             phase: 'spawn',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
+      // Antigravity silent-exit guard: real agy 1.0.13+ exits cleanly
+      // with no stdout / no stderr for many reasons (missing brain
+      // folder, upstream timeout, model-not-selected). Without a
+      // typed classification the smoke probe falls through to
+      // `kind: 'unknown'` with a bare "exit 0" detail — the Settings
+      // UI renders that as "Test failed: exit 0" (English) or
+      // "Échec du test : exit 0" (French), the exact text from the
+      // issue screenshot. Surface an antigravity-specific actionable
+      // detail instead. The `no_text` handoff-drop shape is handled
+      // earlier in this function (BEFORE the visible-text success
+      // path); the auth path is still reachable when stdout or the
+      // log file carries the actual auth signal (handled above by
+      // classifyAgentAuthFailure). (issue #3536; mirrors the
+      // chat-route guard in apps/daemon/src/server.ts:8367+.)
+      if (
+        input.agentId === 'antigravity' &&
+        exitedCleanly &&
+        !visibleText &&
+        !auth &&
+        !claudeDiagnostic &&
+        !rawStdoutTail &&
+        !stderrTail
+      ) {
+        console.warn(
+          `[test:agent] ${def.name} → antigravity_silent_exit: ${redactSecrets(rawDetail)}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail:
+            'Antigravity CLI exited without producing output. Open agy in a terminal to inspect state, switch models, or update agy, then retry the test. The agy --log-file may contain more detail.',
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
             exitCode: winner.code,
             signal: winner.signal,
           }),
