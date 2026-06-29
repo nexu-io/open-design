@@ -1038,6 +1038,8 @@ export function EntryShell({
         templates={templates}
         {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
         promptTemplates={promptTemplates}
+        projectLocations={config.projectLocations}
+        defaultProjectLocationId={config.defaultProjectLocationId}
         mediaProviders={config.mediaProviders}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
