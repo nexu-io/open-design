@@ -1,0 +1,47 @@
+{
+  "candidateId": "2d1519a6-45b4-47b7-a79f-9e4f3a09f817",
+  "projectId": "ds-overview-claude-com-is-design-system",
+  "runId": "68a78129-7c23-4a8b-9e9b-abd22fb1569e",
+  "conversationId": "7b7447b1-9082-4876-bc4a-c8236d7145af",
+  "provenance": {
+    "summary": "Detected from DESIGN.md, README.md, SKILL.md, ui_kits/app/README.md, context/source-context.md after a successful run.",
+    "detectedAt": 1782770612937
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "DESIGN.md",
+      "label": "DESIGN.md",
+      "size": 22581,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 7622,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 11503,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 2600,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 33606,
+      "copied": true
+    }
+  ]
+}

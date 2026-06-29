@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "claude.com-design-system-mqzrlkp6",
+  "title": "Claude.com Design System",
+  "version": "0.1.0",
+  "description": "> Category: Marketing / Editorial > Surface: web > Status: Live — claude.ai",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
