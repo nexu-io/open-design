@@ -3908,7 +3908,58 @@
   white-space: nowrap;
 }
 
+/* Workspace / team-edition entry. Neutral white-panel chip matching the
+   GitHub-star / Discord pills next to it; keeps its label visible (unlike the
+   icon-only discord/use-everywhere chips) because guiding the click is the
+   whole point. Tokens resolve in both light and dark themes. */
+.entry-workspace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out), transform 120ms var(--ease-out);
+  white-space: nowrap;
+}
+.entry-workspace-chip:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.entry-workspace-chip:active {
+  transform: scale(0.98);
+}
+.entry-workspace-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.entry-workspace-chip__icon {
+  color: var(--text-strong);
+  flex: 0 0 auto;
+}
+.entry-workspace-chip__label {
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
 @media (max-width: 700px) {
+  .entry-workspace-chip__label {
+    display: none;
+  }
+  .entry-workspace-chip {
+    padding: 0 9px;
+  }
   .entry-star-badge__label {
     display: none;
   }

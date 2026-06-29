@@ -27,6 +27,7 @@ import type { AppConfig, AppTheme } from '../types';
 import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPresence';
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
+import { enterpriseUrl } from './enterpriseUrl';
 
 const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
 const X_URL = 'https://x.com/OpenDesignHQ';
@@ -338,6 +339,27 @@ export function EntrySettingsMenu({
 
           <div className="entry-settings-menu__divider" aria-hidden />
 
+          <a
+            className="entry-settings-menu__item"
+            href={enterpriseUrl(locale)}
+            target="_blank"
+            rel="noreferrer noopener"
+            role="menuitem"
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'workspace_teams',
+              });
+              setOpen(false);
+            }}
+          >
+            <span className="entry-settings-menu__item-icon" aria-hidden>
+              <Icon name="sparkles" size={14} />
+            </span>
+            <span>{t('entry.workspaceTeamsLabel')}</span>
+            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+          </a>
           <a
             className="entry-settings-menu__item"
             href={DISCORD_URL}

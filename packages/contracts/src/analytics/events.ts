@@ -1163,7 +1163,7 @@ export interface HelpPopoverClickProps {
 export interface HomeToolbarClickProps {
   page_name: 'home';
   area: 'toolbar';
-  element: 'star' | 'execution_settings' | 'use_everywhere' | 'settings';
+  element: 'star' | 'execution_settings' | 'use_everywhere' | 'workspace_teams' | 'settings';
 }
 
 export interface ExecutionSettingsPopoverClickProps {
@@ -1204,6 +1204,7 @@ export interface SettingsPopoverClickProps {
     | 'language_select'
     | 'appearance'
     | 'share_channel'
+    | 'workspace_teams'
     | 'join_discord'
     | 'follow_x'
     | 'follow_threads'

@@ -97,7 +97,10 @@ export interface HeaderProps {
     | 'stories'
     | 'tutorials'
     | 'download'
-    | 'community';
+    | 'community'
+    // Standalone landing pages (e.g. /enterprise/) that intentionally do not
+    // belong under any top-nav tab — pass this so no tab renders as active.
+    | 'enterprise';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
