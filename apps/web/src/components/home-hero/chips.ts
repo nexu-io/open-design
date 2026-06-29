@@ -13,7 +13,7 @@
 //   - `id` — stable React key + test selector.
 //   - `label` — English copy. Localisation can layer on later by
 //     swapping this for a Dict lookup; keeping it inline lets the
-//     rail ship without burning through 17 locale files for two
+//     rail ship without burning through 19 locale files for two
 //     new strings (see plan §B / open questions).
 //   - `icon` — name from the shared Icon registry.
 //   - `action` — discriminated union the HomeView dispatcher matches
