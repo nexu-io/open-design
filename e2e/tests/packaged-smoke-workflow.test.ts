@@ -85,6 +85,41 @@ async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promis
   });
 }
 
+// Pull the two jq programs that the `validate` job's "Check workspace validation jobs" step runs
+// (the blanket failure scan and the required-jobs scan) straight out of ci.yml, so the gate logic
+// under test stays the real workflow source rather than a reimplementation. Both are invoked as
+// `jq -r --arg event "$EVENT_NAME" '<program>'` and contain no single quotes, so the program is the
+// text between the opening and the next `'`.
+function extractValidateGateJqPrograms(workflow: string): { failures: string; requiredMisses: string } {
+  const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
+  const programs = [...validate.matchAll(/jq -r --arg event "\$EVENT_NAME" '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
+  expect(programs).toHaveLength(2);
+  return { failures: programs[0] ?? "", requiredMisses: programs[1] ?? "" };
+}
+
+function runValidateGateJq(program: string, eventName: string, needs: unknown): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile("jq", ["-r", "--arg", "event", eventName, program], { encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) {
+        reject(Object.assign(error, { stdout, stderr }));
+        return;
+      }
+      resolve(stdout.trim());
+    });
+    child.stdin?.end(JSON.stringify(needs));
+  });
+}
+
+// Mirrors the bash gate decision: the step exits non-zero when either jq program emits any line.
+async function validateGatePasses(workflow: string, eventName: string, needs: unknown): Promise<boolean> {
+  const { failures, requiredMisses } = extractValidateGateJqPrograms(workflow);
+  const [failureLines, missLines] = await Promise.all([
+    runValidateGateJq(failures, eventName, needs),
+    runValidateGateJq(requiredMisses, eventName, needs),
+  ]);
+  return failureLines === "" && missLines === "";
+}
+
 async function runReleaseStableForFailure(env: Record<string, string>): Promise<string> {
   try {
     await execFileAsync(process.execPath, ["--experimental-strip-types", releaseStableScriptPath], {
@@ -531,6 +566,49 @@ describe("packaged smoke workflow", () => {
       run_nix_validation: true,
       run_ui_p0: true,
     });
+  });
+
+  it("[P2] keeps the Validate workspace gate Nix-advisory on PRs and enforced at merge", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
+
+    // The gate must read the event so it can treat a red nix_validation differently per surface.
+    expect(validate).toContain("EVENT_NAME: ${{ github.event_name }}");
+    expect(validate).toContain('select(.key != "nix_validation" or $event != "pull_request")');
+    expect(validate).toContain('when($out.run_nix_validation == "true" and $event != "pull_request"; ["nix_validation"])');
+
+    const baseOutputs = {
+      run_nix_validation: "true",
+      run_preflight: "false",
+      run_workspace_unit_tests: "false",
+      run_windows_tools_pack_payload_tests: "false",
+      run_web_workspace_tests: "false",
+      run_e2e_vitest: "false",
+      run_playwright_critical: "false",
+      run_ui_p0: "false",
+      run_playwright_visual: "false",
+      run_docker_build: "false",
+    };
+    const needsWithFailedNix = {
+      scopes: { result: "success", outputs: baseOutputs },
+      static_gate: { result: "success" },
+      nix_validation: { result: "failure" },
+    };
+
+    // A stale/failed Nix hash is advisory on pull_request: the gate still passes while autofix heals it.
+    await expect(validateGatePasses(workflow, "pull_request", needsWithFailedNix)).resolves.toBe(true);
+    // ...but it is a hard gate at merge time and on manual full runs — fail closed, never reaching main.
+    await expect(validateGatePasses(workflow, "merge_group", needsWithFailedNix)).resolves.toBe(false);
+    await expect(validateGatePasses(workflow, "workflow_dispatch", needsWithFailedNix)).resolves.toBe(false);
+
+    // The PR exception is scoped to Nix only — any other failed required job still fails the gate on a PR.
+    const needsWithFailedWeb = {
+      scopes: { result: "success", outputs: { ...baseOutputs, run_web_workspace_tests: "true" } },
+      static_gate: { result: "success" },
+      nix_validation: { result: "success" },
+      web_workspace_tests: { result: "failure" },
+    };
+    await expect(validateGatePasses(workflow, "pull_request", needsWithFailedWeb)).resolves.toBe(false);
   });
 
   it("[P2] routes default CI through cost-sensitive runner tiers", async () => {

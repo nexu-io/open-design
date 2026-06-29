@@ -419,7 +419,15 @@ jobs:
           esac
 
       - name: Fail when Nix validation fails
-        if: ${{ steps.flake_check.outcome == 'failure' }}
+        # Enforced everywhere EXCEPT pull_request. A stale `nix/pnpm-deps.nix` hash is the routine,
+        # self-healing consequence of any `pnpm-lock.yaml` change: the steps above already regenerate
+        # the hash and hand it to `autofix.atom.yml`, which pushes the refresh back to the PR branch.
+        # Failing the job on the PR turns a transient, auto-fixed hash drift into a red required-ish
+        # check that reads as a real CI failure downstream (BLOCKED mergeStateStatus / ci_status=failure
+        # to the review bot) — the same deadlock the `needs-validation` gate documents below. So the PR
+        # check stays green while the autofix lands, and the real gate runs at merge time: merge_group
+        # (and manual full runs) still fail closed, so a genuinely broken Nix build can never reach main.
+        if: ${{ steps.flake_check.outcome == 'failure' && github.event_name != 'pull_request' }}
         run: exit 1
 
   preflight:
@@ -914,17 +922,25 @@ jobs:
       - name: Check workspace validation jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          # `nix_validation` is advisory on pull_request and enforced only at merge time (see the
+          # `Fail when Nix validation fails` step). The gate honors that split below: on pull_request a
+          # red Nix job is ignored, on merge_group / manual full runs it is a hard requirement.
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           echo "$NEEDS_JSON" | jq .
-          failures="$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"')"
+          failures="$(echo "$NEEDS_JSON" | jq -r --arg event "$EVENT_NAME" '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | select(.key != "nix_validation" or $event != "pull_request")
+            | "\(.key)=\(.value.result)"')"
           if [ -n "$failures" ]; then
             echo "Workspace validation failed:"
             echo "$failures"
             exit 1
           fi
 
-          required_misses="$(echo "$NEEDS_JSON" | jq -r '
+          required_misses="$(echo "$NEEDS_JSON" | jq -r --arg event "$EVENT_NAME" '
             . as $needs |
             ($needs.scopes.outputs // {}) as $out |
             def when($condition; $jobs): if $condition then $jobs else [] end;
@@ -938,7 +954,7 @@ jobs:
               + when($out.run_playwright_critical == "true"; ["playwright_critical"])
               + when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])
               + when($out.run_playwright_visual == "true"; ["playwright_visual"])
-              + when($out.run_nix_validation == "true"; ["nix_validation"])
+              + when($out.run_nix_validation == "true" and $event != "pull_request"; ["nix_validation"])
               + when($out.run_docker_build == "true"; ["docker_pr"])
             )[]
             | select(($needs[.].result // "missing") != "success")
