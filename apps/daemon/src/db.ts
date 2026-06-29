@@ -634,6 +634,85 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
   return latestByProject;
 }
 
+export function listLatestConversationRunStatuses(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT m.conversation_id AS conversationId,
+              m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+              m.position AS position
+         FROM messages m
+        WHERE m.run_status IS NOT NULL
+        ORDER BY updatedAt DESC, m.position DESC`,
+    )
+    .all() as DbRow[];
+  const latestByConversation = new Map<string, DbRow>();
+  for (const row of rows) {
+    if (!latestByConversation.has(row.conversationId)) {
+      latestByConversation.set(row.conversationId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return latestByConversation;
+}
+
+export function listFirstConversationRunStatuses(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT m.conversation_id AS conversationId,
+              m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+              m.position AS position
+         FROM messages m
+        WHERE m.run_status IS NOT NULL
+          AND m.run_id IS NOT NULL
+        ORDER BY m.position ASC`,
+    )
+    .all() as DbRow[];
+  const firstByConversation = new Map<string, DbRow>();
+  for (const row of rows) {
+    if (!firstByConversation.has(row.conversationId)) {
+      firstByConversation.set(row.conversationId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return firstByConversation;
+}
+
+export function listLatestRunStatuses(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+              m.position AS position
+         FROM messages m
+        WHERE m.run_status IS NOT NULL
+          AND m.run_id IS NOT NULL
+        ORDER BY updatedAt DESC, m.position DESC`,
+    )
+    .all() as DbRow[];
+  const latestByRun = new Map<string, DbRow>();
+  for (const row of rows) {
+    if (!latestByRun.has(row.runId)) {
+      latestByRun.set(row.runId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return latestByRun;
+}
+
 export function listProjectsAwaitingInput(db: SqliteDb) {
   const rows = db
     .prepare(
@@ -672,6 +751,41 @@ export function listProjectsAwaitingInput(db: SqliteDb) {
     )
     .all() as DbRow[];
   return new Set((rows as DbRow[]).map((row: DbRow) => row.projectId));
+}
+
+export function listConversationsAwaitingInput(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT latest.conversationId
+         FROM (
+           SELECT m.conversation_id AS conversationId,
+                  m.created_at AS createdAt,
+                  m.position AS position,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY m.conversation_id
+                    ORDER BY m.created_at DESC, m.position DESC
+                  ) AS rowNum
+             FROM messages m
+            WHERE m.role = 'assistant'
+              AND (
+                LOWER(m.content) LIKE '%<question-form%'
+                OR LOWER(m.content) LIKE '%<ask-question%'
+              )
+         ) latest
+        WHERE latest.rowNum = 1
+          AND NOT EXISTS (
+            SELECT 1
+              FROM messages reply
+             WHERE reply.conversation_id = latest.conversationId
+               AND reply.role = 'user'
+               AND (
+                 reply.created_at > latest.createdAt
+                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
+               )
+          )`,
+    )
+    .all() as DbRow[];
+  return new Set((rows as DbRow[]).map((row: DbRow) => row.conversationId));
 }
 
 export function getProject(db: SqliteDb, id: string) {
