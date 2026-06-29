@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-perplexity",
+  "title": "Perplexity AI",
+  "title_i18n": {
+    "zh-CN": "Perplexity AI",
+    "zh-TW": "Perplexity AI",
+    "ja": "Perplexity AI",
+    "ko": "Perplexity AI",
+    "de": "Perplexity AI",
+    "fr": "Perplexity AI",
+    "ru": "Perplexity AI",
+    "es": "Perplexity AI",
+    "pt-BR": "Perplexity AI",
+    "it": "Perplexity AI",
+    "vi": "Perplexity AI",
+    "pl": "Perplexity AI",
+    "id": "Perplexity AI",
+    "nl": "Perplexity AI",
+    "ar": "Perplexity AI",
+    "tr": "Perplexity AI",
+    "uk": "Perplexity AI",
+    "en": "Perplexity AI"
+  },
+  "version": "0.1.0",
+  "description": "Conversational AI search engine. Deep-dark canvas, sharp typography, single violet accent, dense information hierarchy.",
+  "description_i18n": {
+    "zh-CN": "对话式 AI 搜索引擎。深邃暗色画布、锐利字体、单一紫罗兰强调色、高密度信息层级。",
+    "zh-TW": "對話式 AI 搜尋引擎。深邃暗色畫布、銳利字體、單一紫羅蘭強調色、高密度資訊層級。",
+    "ja": "対話型AI検索エンジン。深いダークキャンバス、シャープなタイポグラフィ、単一のバイオレットアクセント、高密度な情報階層。",
+    "ko": "대화형 AI 검색 엔진. 깊은 다크 캔버스, 선명한 타이포그래피, 단일 바이올렛 강조색, 고밀도 정보 계층.",
+    "de": "Dialogorientierte KI-Suchmaschine. Tiefdunkle Leinwand, scharfe Typografie, einzelner violetter Akzent, dichte Informationshierarchie.",
+    "fr": "Moteur de recherche IA conversationnel. Toile très sombre, typographie nette, unique accent violet, hiérarchie d'information dense.",
+    "ru": "Разговорная ИИ-поисковая система. Глубокий тёмный холст, чёткая типографика, единственный фиолетовый акцент, плотная информационная иерархия.",
+    "es": "Motor de búsqueda de IA conversacional. Lienzo muy oscuro, tipografía nítida, único acento violeta, jerarquía de información densa.",
+    "pt-BR": "Mecanismo de busca de IA conversacional. Tela profundamente escura, tipografia nítida, único acento violeta, hierarquia de informação densa.",
+    "it": "Motore di ricerca AI conversazionale. Tela molto scura, tipografia nitida, singolo accento viola, gerarchia delle informazioni densa.",
+    "vi": "Công cụ tìm kiếm AI hội thoại. Nền tối sâu, kiểu chữ sắc nét, một điểm nhấn tím, phân cấp thông tin dày đặc.",
+    "pl": "Konwersacyjna wyszukiwarka AI. Głęboko ciemne tło, ostra typografia, pojedynczy fioletowy akcent, gęsta hierarchia informacji.",
+    "id": "Mesin pencari AI percakapan. Kanvas gelap pekat, tipografi tajam, satu aksen ungu, hierarki informasi padat.",
+    "nl": "Conversationele AI-zoekmachine. Diepdonker canvas, scherpe typografie, enkele violette accentkleur, dichte informatiehiërarchie.",
+    "ar": "محرك بحث ذكاء اصطناعي حواري. لوحة داكنة عميقة، طباعة حادة، لمسة بنفسجية واحدة، تسلسل هرمي كثيف للمعلومات.",
+    "tr": "Sohbet temelli yapay zekâ arama motoru. Derin koyu tuval, keskin tipografi, tek mor vurgu, yoğun bilgi hiyerarşisi.",
+    "uk": "Розмовна пошукова система зі ШІ. Глибоке темне полотно, чітка типографіка, єдиний фіолетовий акцент, щільна інформаційна ієрархія.",
+    "en": "Conversational AI search engine. Deep-dark canvas, sharp typography, single violet accent, dense information hierarchy."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Perplexity AI design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Perplexity AI design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "perplexity",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
