@@ -8437,20 +8437,25 @@ export async function startServer({
         // OAuth prompt (handled by Guard 3 above). (issue #3536;
         // see adjacent: apps/daemon/src/connectionTest.ts:2384 has
         // the same blind spot in the smoke probe.)
-        const isAntigravitySilentExit =
-          !authFailure && !serviceFailure && def.id === 'antigravity';
         const errorCode = authFailure
           ? 'AGENT_AUTH_REQUIRED'
           : isAntigravityQuota
             ? 'RATE_LIMITED'
             : 'AGENT_EXECUTION_FAILED';
+        // Antigravity-aware message: when agy exits 0 with no stdout
+        // (any reason — auth, quota, upstream drop, brain-folder
+        // missing, prompt-not-delivered), surface actionable guidance
+        // keyed on the classified reason. The blanket "expired session"
+        // message was empirically wrong — many users reporting #3536
+        // confirmed agy works in a terminal but not from OD. Without
+        // reading agy's log file or stderr stdout we cannot distinguish
+        // the root cause, so the message tells the user to inspect the
+        // daemon-run log file directly.
         const msg = authFailure
-          ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
+          ? authFailure.message ?? antigravityAuthGuidance()
           : isAntigravityQuota
             ? antigravityQuotaGuidance()
-            : isAntigravitySilentExit
-              ? `Antigravity CLI exited without producing output. Open agy in a terminal to inspect state, switch models, or update agy, then retry this chat. The agy --log-file may contain more detail.`
-              : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
+            : `Antigravity CLI exited without producing output. The daemon piped agy's \`--log-file\` to a temporary path that should contain the upstream reason. Check the daemon-run log file for details — its path is available in the daemon log output for this run — or run \`agy\` alone in a terminal to verify the CLI is functional, then retry this chat.`;
         send('error', createSseErrorPayload(
           errorCode,
           msg,

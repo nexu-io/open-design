@@ -2432,7 +2432,7 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail:
-            'Antigravity CLI exited without producing output. Open agy in a terminal to inspect state, switch models, or update agy, then retry the test. The agy --log-file may contain more detail.',
+            'Antigravity CLI exited without producing output. The daemon piped agy\'s `--log-file` to a temporary path with the upstream reason. Check the daemon-run log for details, or run `agy` alone in a terminal to verify the CLI is functional, then retry the test.',
           diagnostics: buildDiagnostics({
             phase: 'connection_smoke_test',
             exitCode: winner.code,
