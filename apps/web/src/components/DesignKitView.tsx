@@ -1194,10 +1194,10 @@ function DesignKitViewInner({
 
       <div className={contentsItems.length > 0 ? styles.contentsLayout : styles.contentStack}>
         {contentsItems.length > 0 ? (
-          <nav className={styles.contentsRail} aria-label="Design system contents">
+          <nav className={styles.contentsRail} aria-label={t('ds.contentsAriaLabel')}>
             <span className={styles.contentsTitle}>
               <Icon name="panel-left" size={12} />
-              Contents
+              {t('ds.contentsLabel')}
             </span>
             <div className={styles.contentsLinks}>
               {contentsItems.map((item) => (

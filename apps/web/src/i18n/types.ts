@@ -456,6 +456,12 @@ export interface Dict {
   'settings.mediaProviderReloadSuccess': string;
   'settings.mediaProviderLoadError': string;
   'settings.mediaProviderComingSoonHint': string;
+  'settings.mediaProviderConnectionConnected': string;
+  'settings.mediaProviderConnectionDisconnected': string;
+  'settings.mediaProviderConnectionConnectedTitle': string;
+  'settings.mediaProviderConnectionDisconnectedTitle': string;
+  'settings.mediaProviderConnectionConnectedNote': string;
+  'settings.mediaProviderConnectionDisconnectedNote': string;
   'settings.privacy': string;
   'settings.privacyHint': string;
   'settings.privacyConsentKicker': string;
@@ -548,6 +554,7 @@ export interface Dict {
   'settings.projectLocationsDefaultBadge': string;
   'settings.projectLocationsMakeDefault': string;
   'settings.projectLocationsDefaultSaved': string;
+  'settings.projectLocationsManualPlaceholder': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
@@ -2231,6 +2238,8 @@ export interface Dict {
   'ds.repoConnectPendingButton': string;
   'ds.repoConnectedTitle': string;
   'ds.repoConnectedBody': string;
+  'ds.contentsLabel': string;
+  'ds.contentsAriaLabel': string;
   'ds.repoImportButton': string;
   'ds.repoConnectBannerBody': string;
   'ds.repoConnectCardBody': string;

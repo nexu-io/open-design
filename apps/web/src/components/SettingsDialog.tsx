@@ -6949,11 +6949,13 @@ function MediaProvidersSection({
                         ].join(' ')}
                         title={
                           connection.connected
-                            ? 'Local Codex CLI login is working'
-                            : 'Local Codex CLI login was not detected'
+                            ? t('settings.mediaProviderConnectionConnectedTitle')
+                            : t('settings.mediaProviderConnectionDisconnectedTitle')
                         }
                       >
-                        {connection.connected ? 'Connected' : 'Not connected'}
+                        {connection.connected
+                          ? t('settings.mediaProviderConnectionConnected')
+                          : t('settings.mediaProviderConnectionDisconnected')}
                       </span>
                     ) : null}
                   </div>
@@ -6961,8 +6963,8 @@ function MediaProvidersSection({
                   {connection ? (
                     <span className="media-provider-connection-note">
                       {connection.connected
-                        ? 'Local Codex CLI login is working'
-                        : 'Sign in with the local Codex CLI to use this provider'}
+                        ? t('settings.mediaProviderConnectionConnectedNote')
+                        : t('settings.mediaProviderConnectionDisconnectedNote')}
                     </span>
                   ) : null}
                 </div>

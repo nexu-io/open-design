@@ -249,7 +249,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
             type="text"
             value={manualPath}
             onChange={(event) => setManualPath(event.currentTarget.value)}
-            placeholder="/home/abhishek/forge/design"
+            placeholder={t('settings.projectLocationsManualPlaceholder')}
             disabled={loading || saving}
           />
           <button type="submit" className="icon-btn project-location-manual-submit" disabled={loading || saving || !manualPath.trim()}>
