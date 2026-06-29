@@ -19,7 +19,7 @@ import {
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
-const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 // AMR product page on the production site (this repo has no /amr/ route).
 // Single destination for every AMR surface: the nav logo, the Agent

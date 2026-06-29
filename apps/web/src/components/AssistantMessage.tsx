@@ -82,7 +82,7 @@ export type QuestionFormOpenRequest = {
   submittedAnswers?: Record<string, string | string[]>;
 };
 
-const DISCORD_INVITE_URL = "https://discord.gg/9ptkbbqRu";
+const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 
 interface ActionNotice {
   message: string;

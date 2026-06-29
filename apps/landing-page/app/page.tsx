@@ -165,7 +165,7 @@ const REPO_CONTRIBUTORS = `${REPO}/graphs/contributors`;
 const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
 const REPO_DOCS = `${REPO}#readme`;
-const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_TWITTER = 'https://x.com/OpenDesignHQ';
 const YOUTUBE = 'https://www.youtube.com/channel/UChtshixMhvtgBWzoD9R_Qfg';
 

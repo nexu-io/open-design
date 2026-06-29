@@ -275,7 +275,7 @@ Wenn Sie kontinuierlich beigetragen haben und wissen möchten, wie der Weg zum M
 Das tl;dr: Liefern Sie gute PRs, prüfen Sie sorgfältig, halten Sie sich in [Discussions][discussions] / [Discord][discord] auf — und der Rest ergibt sich von selbst.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/9ptkbbqRu
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 
