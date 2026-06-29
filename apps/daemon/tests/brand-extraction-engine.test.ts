@@ -468,6 +468,10 @@ describe('agent-driven brand extraction engine', () => {
     expect(existsSync(path.join(expectedProjectDir, 'brand.html'))).toBe(true);
     expect(existsSync(path.join(expectedProjectDir, 'system', 'index.html'))).toBe(true);
     expect(existsSync(path.join(projectsRoot, result.projectId, 'system', 'index.html'))).toBe(false);
+    const manifest = JSON.parse(readFileSync(path.join(expectedProjectDir, '.open-design', 'project.json'), 'utf8')) as {
+      designSystemId?: string | null;
+    };
+    expect(manifest.designSystemId).toBe(project?.designSystemId);
   });
 
   it('localizes the seeded brand.html copy from the creation locale', async () => {
