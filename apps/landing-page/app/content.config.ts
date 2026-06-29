@@ -124,6 +124,11 @@ const blog = defineCollection({
       readingTime: z.number().int().positive(),
       summary: z.string(),
       author: z.string().optional(),
+      ctaKind: z.enum(['download-app', 'event-register']).optional(),
+      ctaHref: z.string().url().optional(),
+      ctaTitle: z.string().min(1).optional(),
+      ctaBody: z.string().min(1).optional(),
+      ctaLabel: z.string().min(1).optional(),
       i18n: z
         .record(
           z.string(),
@@ -138,6 +143,19 @@ const blog = defineCollection({
             .passthrough(),
         )
         .optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.ctaKind !== 'event-register') return;
+
+      for (const field of ['ctaHref', 'ctaTitle', 'ctaBody', 'ctaLabel'] as const) {
+        if (!data[field]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [field],
+            message: `${field} is required when ctaKind is event-register`,
+          });
+        }
+      }
     })
     .passthrough(),
 });

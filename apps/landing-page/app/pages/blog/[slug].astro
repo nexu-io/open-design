@@ -118,6 +118,7 @@ const tocLabel = getInfoPageCopy(locale).common.onThisPage;
 // `od-site-illustration` skill). Surfaced as a hero banner on the post itself,
 // not just on the index card.
 const coverSrc = `/blog/${post.id}-cover.webp`;
+const coverImage = new URL(coverSrc, Astro.site ?? 'https://open-design.ai/').toString();
 
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
@@ -126,9 +127,24 @@ const category = post.data.category.toLowerCase();
 // primary CTA at the desktop client download page (/download); Discord stays the
 // secondary button. Falls back to the category-based default when unset, so the
 // existing posts are unaffected.
-const ctaKind = (post.data as { ctaKind?: string }).ctaKind;
+const ctaConfig = post.data as {
+  ctaKind?: string;
+  ctaHref?: string;
+  ctaTitle?: string;
+  ctaBody?: string;
+  ctaLabel?: string;
+};
+const ctaKind = ctaConfig.ctaKind;
 const bottomCta =
-  ctaKind === 'download-app'
+  ctaKind === 'event-register'
+    ? {
+        title: ctaConfig.ctaTitle ?? ui.blog.cta.repoTitle,
+        body: ctaConfig.ctaBody ?? ui.blog.cta.repoBody,
+        href: ctaConfig.ctaHref ?? 'https://github.com/nexu-io/open-design',
+        label: ctaConfig.ctaLabel ?? ui.blog.cta.repoLabel,
+        external: true,
+      }
+    : ctaKind === 'download-app'
     ? {
         title: ui.blog.cta.downloadTitle,
         body: ui.blog.cta.downloadBody,
@@ -212,6 +228,7 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
       title={localizedPostField('title')}
       description={localizedPostField('summary')}
       pathname={Astro.url.pathname}
+      image={coverImage}
       datePublished={post.data.date}
       category={post.data.category}
     />
