@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import type { ProjectLocation } from '@open-design/contracts';
+import type { ProjectLocation, ProjectLocationFolderBrowserResponse } from '@open-design/contracts';
 import type { AppConfig } from '../types';
 import {
   browseProjectLocationFolders,
@@ -9,7 +9,6 @@ import {
   scanProjectLocations,
   updateProjectLocations,
 } from '../state/project-locations';
-import type { ProjectLocationFolderBrowserResponse } from '../state/project-locations';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 
@@ -189,7 +188,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     try {
       const next = await browseProjectLocationFolders(folderPath);
       if (!next) {
-        setFolderBrowserError('Could not load folders. Enter a folder path manually.');
+        setFolderBrowserError(t('settings.projectLocationsBrowserLoadError'));
         return false;
       }
       setFolderBrowser(next);
@@ -328,8 +327,8 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
               className="icon-btn project-location-browse"
               onClick={handleBrowseForLocation}
               disabled={loading || saving || folderBrowserLoading}
-              aria-label="Browse folders"
-              title="Browse folders"
+              aria-label={t('settings.projectLocationsBrowseFolders')}
+              title={t('settings.projectLocationsBrowseFolders')}
             >
               <Icon name="folder" size={14} />
             </button>
@@ -366,11 +365,11 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
       )}
 
       {folderBrowserOpen ? (
-        <div className="project-location-browser" role="dialog" aria-label="Choose project location">
+        <div className="project-location-browser" role="dialog" aria-label={t('settings.projectLocationsBrowserDialogLabel')}>
           <div className="project-location-browser-head">
             <div>
-              <strong>Choose folder</strong>
-              <code>{folderBrowser?.path ?? 'Loading folders...'}</code>
+              <strong>{t('settings.projectLocationsBrowserTitle')}</strong>
+              <code>{folderBrowser?.path ?? t('settings.projectLocationsBrowserLoading')}</code>
             </div>
             <button type="button" className="icon-btn" onClick={() => setFolderBrowserOpen(false)}>
               {t('common.cancel')}
@@ -384,7 +383,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
               disabled={folderBrowserLoading || !folderBrowser?.parentPath}
             >
               <Icon name="arrow-up" size={12} />
-              Parent folder
+              {t('settings.projectLocationsBrowserParentFolder')}
             </button>
             <button
               type="button"
@@ -393,7 +392,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
               disabled={folderBrowserLoading || !folderBrowser?.path}
             >
               <Icon name="check" size={12} />
-              Use this folder
+              {t('settings.projectLocationsBrowserUseFolder')}
             </button>
           </div>
           {folderBrowserError ? <p className="settings-rescan-status error">{folderBrowserError}</p> : null}
@@ -413,7 +412,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
               </button>
             ))}
             {!folderBrowserLoading && folderBrowser && folderBrowser.entries.length === 0 ? (
-              <p className="project-location-browser-empty">No child folders here.</p>
+              <p className="project-location-browser-empty">{t('settings.projectLocationsBrowserEmpty')}</p>
             ) : null}
           </div>
         </div>

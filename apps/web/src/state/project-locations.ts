@@ -1,20 +1,10 @@
 import type {
   ProjectLocation,
+  ProjectLocationFolderBrowserResponse,
   ProjectLocationsResponse,
   ScanProjectLocationsResponse,
   UpdateProjectLocationsRequest,
 } from '@open-design/contracts';
-
-export interface ProjectLocationFolderBrowserEntry {
-  name: string;
-  path: string;
-}
-
-export interface ProjectLocationFolderBrowserResponse {
-  path: string;
-  parentPath: string | null;
-  entries: ProjectLocationFolderBrowserEntry[];
-}
 
 export async function fetchProjectLocations(): Promise<ProjectLocation[]> {
   try {
