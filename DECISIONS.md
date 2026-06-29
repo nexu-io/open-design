@@ -202,3 +202,27 @@
 - 배지 라벨 non-i18n freeform 채택: 19로케일 churn 회피, ~7파일 유지. 내부툴이라 영문 OK (출처: brainstorming Q1)
 - "Usage credits 1M context" 에러 = 앱버그 아님, 글로벌 ~/.claude/settings.json model=sonnet[1m] fallback(앱 모델=default → 데몬 --model 미전달). fix=앱 컴포저서 표준모델 선택. 미적용(사용자 거부) (출처: investigate)
 - gh push 403 = credential helper evan2942 캐시. active=Gmin82여도 `gh auth switch --user Gmin82` 명시 필요 (출처: push 403 재발)
+
+## 2026-06-26 — P2 Naver-blog 산출물 설계 (brainstorming → spec)
+- D1 이미지 생성 X, 글(HTML)만: 썸네일/섹션배너 PNG 비범위 (출처: 사용자 지시 / P2 Naver-blog 스펙)
+- D2 Path A 원샷 제네릭: 블로그=단일 카피헤비 HTML 1건(A/B 없음) → Braze 무거운 레인 불필요. 신규 라우트/SQLite/contracts DTO/CLI 서브커맨드 0, 데몬 코드 0 (출처: braze 매핑 워크플로 wf_69f3df9d-979 권장)
+- D3 브랜드-범용 스킬 + bodoc DESIGN.md 보험특화: 스킬=네이버 채널규약(13 HTML룰·SEO)만, 보험사실(5카테고리·금소법·서비스4종)은 활성 DESIGN.md서 로드 → P2 브랜드 다중화 부합 (출처: 사용자 "1번이어도 보험특화 되게")
+- D4 SEO 룰만 베이크: 라이브 네이버 SERP 스크래핑(check-naver-rank Puppeteer) 비범위 — 외부통합/유지비 (출처: 사용자 지시)
+- D5 출력영속 = 에이전트 cwd 직접 Write(brief.md+HTML): cwd=프로젝트 관리 디렉터리(server.ts:8284/8538/9834), dual-track-safe(web/CLI 동일), 신규 REST 라우트 0 (출처: Path A 파일쓰기 메커니즘 Explore 검증)
+- D6 배지 Naver그린 신규 + 톤 단일 SoT 리팩터: BADGE_TONES const → 타입+zod 파생, TONE_CLASS Record 강제 → 향후 산출물 배지 확장 깔끔 (출처: 사용자 "이후 배지 항목 범용성 좋게")
+- P2 공통 추상화 보류: 2 데이터포인트(Braze 추적형 / Naver 경량)로 불충분 → 3번째 추적형 라이프사이클 등장 시 braze+그 버티컬서 공통 상태머신 추출 (출처: braze 매핑 블루프린트 결론)
+
+## 2026-06-28 — P2 Naver-blog 스펙 2라운드 교차리뷰 + 정정
+- 2-카탈로그 드리프트 가드 = **공유 서브셋 byte-identical**(SKILL.md/example.html/references/**, open-design.json 제외): 전체 `diff(정본,미러)==0`은 정본만 manifest 보유라 항상 RED → 불가. Braze는 이미 body 드리프트(step-3 JSON camelCase↔snake_case) → 가드 정당 (출처: P2 Naver-blog R2 재리뷰)
+- 2-카탈로그 미러 패턴 유지(단일정본+생성/미러드롭 대안 보류): Braze 선례 일관 + 데몬 코드 0(Path A). 미러드롭은 갤러리 라우트 변경=데몬코드라 위배 (출처: 사용자 AskUserQuestion)
+- green 톤 시퀀싱 = ①contracts green+build ②TONE_CLASS/CSS ③manifest: 부팅 등록이 plugin-runtime→contracts PluginManifestSchema 파싱, green 미선행 시 매니페스트 파싱/설치 조용히 실패(bundled.ts:166 warn+return, upsert 안 됨) (출처: codex P1 + R2 검증)
+- i18n = 19 로케일(it.ts 포함), manifest i18n = 18(Braze 키셋 es/it/vi/nl): web Dict 19와 세트 다름. AGENTS.md/구스펙 18은 stale (출처: R1+R2 리뷰 codebase 검증)
+- 스펙 결함 11건 전부 정정 = R1 사실오류 6(로케일·switch·pipeline이유·persistence·manifest i18n·z.enum폴백) + R2 전파모순 4(본문만 고치고 §2/§13/§16 미러위치 누락) + R2 drift-guard결함 1 (출처: 2라운드 리뷰)
+- 메타: 스펙 자가편집 후 독립 plan-reviewer 검증 필수 — 본문-미러 모순 + 자가주입 신규결함(diff==0) 둘 다 자가검토서 놓치고 agent가 포착. 자가편집 확증편향 (출처: R2 재리뷰 교훈)
+
+## 2026-06-29 — P2 Naver-blog 구현 플랜 작성 + 독립검증 + 정정
+- 구현 플랜 = 9 Task TDD red-spec 단위, green 시퀀싱(contracts BADGE_TONES+green+build → web TONE_CLASS/CSS → manifest tone:'green')을 Task 순서로 강제: 매니페스트 green 미선행 시 부팅 파싱(resolvePluginFolder→validateSafe) 조용히 실패 (출처: P2 Naver-blog 플랜)
+- 플랜 작성 전 fact-gathering 워크플로(14 reader 병렬, 682k tok): 스펙이 인용한 라인번호 다수 drift 확인 → 정확한 현재 코드로 플랜 작성 (출처: 워크플로 wf_0f7ab4db-85e)
+- 플랜 독립검증 = plan-reviewer(APPROVE-WITH-CHANGES) + Explore 6-fact verify 병렬. 자가편집 확증편향 재발: 내가 주입한 사실오류 3건(import db.js→registry.js / icon 'file-text'→없음, 유효=file / "critique.ts 없음"→실제 src/critique.ts 존재) self-review 통과, agent가 전부 포착 (출처: 2-에이전트 교차검증)
+- 정정 = F1~F3(명백 버그, 양 에이전트 검증) 즉시 + F4(discovery 라우트 검증, 스펙 §14) + F5(Task2 red-spec→regression 라벨정정+완전성가드) + F6(drift 가드 서브트리 목록 동등성). F7(line-number) prose 앵커로 보류 (출처: plan-reviewer findings)
+- blockquote 보더 #000(style SSoT) 채택, #333(2차 소스)는 플래그. 16 비-CJK 로케일 chip i18n = 영문 폴백(Braze 선례), CJK만 네이티브 (출처: 도메인 digest 충돌 + 플랜 결정)
