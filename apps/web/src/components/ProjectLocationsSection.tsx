@@ -3,11 +3,13 @@ import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { ProjectLocation } from '@open-design/contracts';
 import type { AppConfig } from '../types';
 import {
+  browseProjectLocationFolders,
   fetchProjectLocations,
   openProjectLocationFolderDialog,
   scanProjectLocations,
   updateProjectLocations,
 } from '../state/project-locations';
+import type { ProjectLocationFolderBrowserResponse } from '../state/project-locations';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 
@@ -47,6 +49,10 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [manualPath, setManualPath] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
+  const [folderBrowserLoading, setFolderBrowserLoading] = useState(false);
+  const [folderBrowserError, setFolderBrowserError] = useState<string | null>(null);
+  const [folderBrowser, setFolderBrowser] = useState<ProjectLocationFolderBrowserResponse | null>(null);
   const draftsRef = useRef<DraftLocation[]>(drafts);
   const manualPathInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -157,8 +163,37 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     if (!saved) setDrafts(previous);
     else {
       setManualPath('');
+      setFolderBrowserOpen(false);
       await runScan();
     }
+  }
+
+  async function loadFolderBrowser(folderPath?: string | null): Promise<boolean> {
+    setFolderBrowserLoading(true);
+    setFolderBrowserError(null);
+    try {
+      const next = await browseProjectLocationFolders(folderPath);
+      if (!next) {
+        setFolderBrowserError('Could not load folders. Enter a folder path manually.');
+        return false;
+      }
+      setFolderBrowser(next);
+      return true;
+    } finally {
+      setFolderBrowserLoading(false);
+    }
+  }
+
+  async function openFolderBrowser(): Promise<boolean> {
+    setFolderBrowserOpen(true);
+    return loadFolderBrowser(manualPath);
+  }
+
+  async function handleFolderBrowserUse() {
+    const selected = folderBrowser?.path;
+    if (!selected) return;
+    setFolderBrowserOpen(false);
+    await addLocationPath(selected);
   }
 
   async function handleAddFolder() {
@@ -166,9 +201,12 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     setStatus(null);
     const selected = await openProjectLocationFolderDialog();
     if (!selected) {
-      setStatus(`${t('settings.projectLocationsNoFolderSelected')} ${t('settings.projectLocationsManualPlaceholder')}`);
-      manualPathInputRef.current?.focus();
-      manualPathInputRef.current?.select();
+      const opened = await openFolderBrowser();
+      if (!opened) {
+        setStatus(`${t('settings.projectLocationsNoFolderSelected')} ${t('settings.projectLocationsManualPlaceholder')}`);
+        manualPathInputRef.current?.focus();
+        manualPathInputRef.current?.select();
+      }
       return;
     }
     await addLocationPath(selected ?? '');
@@ -275,6 +313,60 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         <Icon name="plus" size={12} />
         {t('settings.projectLocationsAddFolder')}
       </button>
+
+      {folderBrowserOpen ? (
+        <div className="project-location-browser" role="dialog" aria-label="Choose project location">
+          <div className="project-location-browser-head">
+            <div>
+              <strong>Choose folder</strong>
+              <code>{folderBrowser?.path ?? 'Loading folders...'}</code>
+            </div>
+            <button type="button" className="icon-btn" onClick={() => setFolderBrowserOpen(false)}>
+              {t('common.cancel')}
+            </button>
+          </div>
+          <div className="project-location-browser-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => loadFolderBrowser(folderBrowser?.parentPath)}
+              disabled={folderBrowserLoading || !folderBrowser?.parentPath}
+            >
+              <Icon name="arrow-up" size={12} />
+              Parent folder
+            </button>
+            <button
+              type="button"
+              className="icon-btn primary"
+              onClick={handleFolderBrowserUse}
+              disabled={folderBrowserLoading || !folderBrowser?.path}
+            >
+              <Icon name="check" size={12} />
+              Use this folder
+            </button>
+          </div>
+          {folderBrowserError ? <p className="settings-rescan-status error">{folderBrowserError}</p> : null}
+          <div className="project-location-browser-list">
+            {folderBrowser?.entries.map((entry) => (
+              <button
+                type="button"
+                className="project-location-browser-entry"
+                key={entry.path}
+                aria-label={entry.name}
+                onClick={() => loadFolderBrowser(entry.path)}
+                disabled={folderBrowserLoading}
+              >
+                <Icon name="folder" size={14} />
+                <span>{entry.name}</span>
+                <code>{entry.path}</code>
+              </button>
+            ))}
+            {!folderBrowserLoading && folderBrowser && folderBrowser.entries.length === 0 ? (
+              <p className="project-location-browser-empty">No child folders here.</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {status ? <p className="settings-rescan-status">{status}</p> : null}
       {error ? <p className="settings-rescan-status error">{error}</p> : null}
