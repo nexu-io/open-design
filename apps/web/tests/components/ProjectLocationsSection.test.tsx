@@ -8,11 +8,13 @@ import { I18nProvider } from '../../src/i18n';
 import type { AppConfig } from '../../src/types';
 
 const {
+  browseProjectLocationFoldersMock,
   fetchProjectLocationsMock,
   openProjectLocationFolderDialogMock,
   scanProjectLocationsMock,
   updateProjectLocationsMock,
 } = vi.hoisted(() => ({
+  browseProjectLocationFoldersMock: vi.fn(),
   fetchProjectLocationsMock: vi.fn(),
   openProjectLocationFolderDialogMock: vi.fn(),
   scanProjectLocationsMock: vi.fn(),
@@ -20,6 +22,7 @@ const {
 }));
 
 vi.mock('../../src/state/project-locations', () => ({
+  browseProjectLocationFolders: browseProjectLocationFoldersMock,
   fetchProjectLocations: fetchProjectLocationsMock,
   openProjectLocationFolderDialog: openProjectLocationFolderDialogMock,
   scanProjectLocations: scanProjectLocationsMock,
@@ -105,20 +108,56 @@ describe('ProjectLocationsSection', () => {
     expect(onProjectsRefresh).toHaveBeenCalledTimes(2);
   });
 
-  it('focuses the manual path input when the native folder picker returns no path', async () => {
+  it('opens an in-app folder browser when the native folder picker returns no path', async () => {
     fetchProjectLocationsMock.mockResolvedValue([builtInLocation]);
     openProjectLocationFolderDialogMock.mockResolvedValue(null);
+    browseProjectLocationFoldersMock
+      .mockResolvedValueOnce({
+        path: '/home/abhishek',
+        parentPath: null,
+        entries: [{ name: 'forge', path: '/home/abhishek/forge' }],
+      })
+      .mockResolvedValueOnce({
+        path: '/home/abhishek/forge',
+        parentPath: '/home/abhishek',
+        entries: [{ name: 'design', path: '/home/abhishek/forge/design' }],
+      })
+      .mockResolvedValueOnce({
+        path: '/home/abhishek/forge/design',
+        parentPath: '/home/abhishek/forge',
+        entries: [],
+      });
+    updateProjectLocationsMock.mockResolvedValue([builtInLocation, forgeLocation]);
+    scanProjectLocationsMock.mockResolvedValue(scanResult);
 
-    renderSection();
+    const { setCfg, onProjectsRefresh } = renderSection();
 
-    const pathInput = await screen.findByRole('textbox', { name: 'Project path' });
+    await screen.findByRole('textbox', { name: 'Project path' });
     fireEvent.click(screen.getByRole('button', { name: /Add folder/i }));
 
     await waitFor(() => {
       expect(openProjectLocationFolderDialogMock).toHaveBeenCalledTimes(1);
-      expect(document.activeElement).toBe(pathInput);
+      expect(screen.getByText('/home/abhishek')).toBeTruthy();
     });
-    expect(screen.getByText('No folder selected. Enter a folder path')).toBeTruthy();
-    expect(updateProjectLocationsMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'forge' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('/home/abhishek/forge')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'design' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('/home/abhishek/forge/design')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }));
+
+    await waitFor(() => {
+      expect(updateProjectLocationsMock).toHaveBeenCalledWith([
+        { path: '/home/abhishek/forge/design' },
+      ]);
+    });
+    expect(scanProjectLocationsMock).toHaveBeenCalledTimes(1);
+    expect(setCfg).toHaveBeenCalledWith(expect.any(Function));
+    expect(onProjectsRefresh).toHaveBeenCalledTimes(2);
   });
 });
