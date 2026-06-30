@@ -1,5 +1,6 @@
 export interface TaskCardViewModel {
   id: string;
+  projectId: string;
   title: string;
   description?: string;
   stage: string;
@@ -15,6 +16,7 @@ export interface TaskCardViewModel {
 
 export interface ActivityItemViewModel {
   id: string;
+  projectId: string;
   title: string;
   summary?: string;
   category: string;

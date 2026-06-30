@@ -3,6 +3,7 @@
 // the UI presents them as scheduled agent conversations.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@open-design/components';
 import type {
   AutomationEvolutionProposal,
   AutomationEvolutionProposalListResponse,
@@ -19,10 +20,13 @@ import { Icon, type IconName } from './Icon';
 import { navigate } from '../router';
 import { useT } from '../i18n';
 import type { SkillSummary } from '../types';
+import { buildCreatorDashboardDataFromOpenDesign } from '../creator-adapters';
+import type { ChatRunStatusResponse, Project } from '@open-design/contracts';
 
 type TranslateFn = ReturnType<typeof useT>;
 import { useAnalytics } from '../analytics/provider';
 import { trackAutomationsClick, trackPageView } from '../analytics/events';
+import { RUNS_CHANGED_EVENT } from '../providers/daemon';
 import {
   NewAutomationModal,
   describeScheduleSummary,
@@ -42,13 +46,15 @@ type TemplateFilter =
   | 'release'
   | 'quality';
 
+type TasksSurface = 'automations' | 'creator';
+
 type Modal =
   | { kind: 'create'; template?: AutomationTemplate }
   | { kind: 'edit'; routine: Routine }
   | null;
 
 interface Props {
-  projects?: ProjectSummary[];
+  projects?: Project[];
   skills?: SkillSummary[];
   designTemplates?: SkillSummary[];
   connectors?: ConnectorDetail[];
@@ -377,7 +383,11 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
+function creatorRetryAssistantMessageKey(projectId: string): string {
+  return `od:creator-retry-assistant:${projectId}`;
+}
+
+export function TasksView({ projects: entryProjects = [], skills = [], designTemplates = [], connectors = [] }: Props) {
   const t = useT();
   const analytics = useAnalytics();
   // P2 page_view page_name=automations. Ref-keyed so re-renders don't
@@ -406,12 +416,13 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     [analytics.track],
   );
   const [routines, setRoutines] = useState<Routine[]>([]);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [creatorRuns, setCreatorRuns] = useState<ChatRunStatusResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [templateFilter, setTemplateFilter] = useState<TemplateFilter>('all');
+  const [surface, setSurface] = useState<TasksSurface>('automations');
   const [automationCatalog, setAutomationCatalog] = useState<ContractAutomationTemplate[]>([]);
   const [proposals, setProposals] = useState<AutomationEvolutionProposal[]>([]);
   const [proposalBusyId, setProposalBusyId] = useState<string | null>(null);
@@ -420,6 +431,22 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
   const [focusRoutineId, setFocusRoutineId] = useState<string | null>(null);
   const routineRowRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const [historyTick, setHistoryTick] = useState(0);
+  const creatorDashboard = useMemo(
+    () =>
+      buildCreatorDashboardDataFromOpenDesign({
+        projects: entryProjects,
+        runs: creatorRuns,
+      }),
+    [entryProjects, creatorRuns],
+  );
+  const projectSummaries = useMemo<ProjectSummary[]>(
+    () =>
+      entryProjects.map((project) => ({
+        id: project.id,
+        name: project.name,
+      })),
+    [entryProjects],
+  );
 
   const templates = useMemo(
     () => buildAutomationTemplates(designTemplates, automationCatalog, t),
@@ -451,23 +478,20 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           proposalRefreshFailed = true;
           return null;
         });
-      const [rRes, pRes, tJson, proposalJson] = await Promise.all([
+      const [rRes, runsRes, tJson, proposalJson] = await Promise.all([
         fetch('/api/routines'),
-        fetch('/api/projects'),
+        fetch('/api/runs').catch(() => null),
         templateRequest,
         proposalRequest,
       ]);
       if (!rRes.ok) throw new Error(`routines: ${rRes.status}`);
       const rJson = await rRes.json();
       setRoutines(rJson.routines ?? []);
-      if (pRes.ok) {
-        const pJson = await pRes.json();
-        setProjects(
-          (pJson.projects ?? []).map((p: ProjectSummary) => ({
-            id: p.id,
-            name: p.name,
-          })),
-        );
+      if (runsRes?.ok) {
+        const runsJson = (await runsRes.json()) as { runs?: ChatRunStatusResponse[] };
+        setCreatorRuns(Array.isArray(runsJson.runs) ? runsJson.runs : []);
+      } else {
+        setCreatorRuns([]);
       }
       if (tJson) {
         setAutomationCatalog(Array.isArray(tJson.templates) ? tJson.templates : []);
@@ -488,11 +512,96 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const handleRunsChanged = () => {
+      void refresh();
+    };
+    window.addEventListener(RUNS_CHANGED_EVENT, handleRunsChanged);
+    return () => {
+      window.removeEventListener(RUNS_CHANGED_EVENT, handleRunsChanged);
+    };
+  }, [refresh]);
+
   const projectsById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of projects) map.set(p.id, p.name);
+    for (const p of projectSummaries) map.set(p.id, p.name);
     return map;
-  }, [projects]);
+  }, [projectSummaries]);
+
+  const openCreatorProject = useCallback((projectId: string | undefined) => {
+    if (!projectId) return;
+    navigate({
+      kind: 'project',
+      projectId,
+      conversationId: null,
+      fileName: null,
+    });
+  }, []);
+
+  const triggerCreatorFocusAction = useCallback(async () => {
+    const focus = creatorDashboard.focus;
+    if (!focus?.projectId) return;
+
+    if (
+      focus.recommendedAction === 'Monitor run' ||
+      focus.recommendedAction === 'Review output'
+    ) {
+      navigate({
+        kind: 'project',
+        projectId: focus.projectId,
+        conversationId: focus.conversationId ?? null,
+        fileName: null,
+      });
+      return;
+    }
+
+    if (focus.recommendedAction === 'Retry run') {
+      if (focus.assistantMessageId) {
+        try {
+          window.sessionStorage.setItem(
+            creatorRetryAssistantMessageKey(focus.projectId),
+            focus.assistantMessageId,
+          );
+        } catch {
+          // sessionStorage can be unavailable; fall back to opening the conversation.
+        }
+      }
+      navigate({
+        kind: 'project',
+        projectId: focus.projectId,
+        conversationId: focus.conversationId ?? null,
+        fileName: null,
+      });
+      return;
+    }
+
+    if (focus.recommendedAction === 'Start first run') {
+      const project = entryProjects.find((candidate) => candidate.id === focus.projectId);
+      const pendingPrompt = project?.pendingPrompt?.trim();
+      if (pendingPrompt) {
+        try {
+          window.sessionStorage.setItem(`od:auto-send-first:${focus.projectId}`, '1');
+        } catch {
+          // sessionStorage can be unavailable; project view will still open
+          // with the pending prompt prefilled.
+        }
+      }
+      navigate({
+        kind: 'project',
+        projectId: focus.projectId,
+        conversationId: null,
+        fileName: null,
+      });
+      return;
+    }
+
+    navigate({
+      kind: 'project',
+      projectId: focus.projectId,
+      conversationId: null,
+      fileName: null,
+    });
+  }, [creatorDashboard.focus, entryProjects]);
 
   // Sort routines by creation time, newest first
   const sortedRoutines = useMemo(
@@ -666,12 +775,200 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         </div>
       </header>
 
+      <div
+        className="tasks-surface-switch"
+        role="tablist"
+        aria-label="Tasks workspace views"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={surface === 'automations'}
+          className={`tasks-surface-switch__tab${surface === 'automations' ? ' is-active' : ''}`}
+          onClick={() => setSurface('automations')}
+        >
+          <span className="tasks-surface-switch__label">Automations</span>
+          <span className="tasks-surface-switch__count">{sortedRoutines.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={surface === 'creator'}
+          className={`tasks-surface-switch__tab${surface === 'creator' ? ' is-active' : ''}`}
+          onClick={() => setSurface('creator')}
+        >
+          <span className="tasks-surface-switch__label">Creator workbench</span>
+          <span className="tasks-surface-switch__count">{creatorDashboard.tasks.length}</span>
+        </button>
+      </div>
+
       {error ? (
         <div className="automations-view__error" role="alert">
           {error}
         </div>
       ) : null}
 
+      {surface === 'creator' ? (
+        <section className="creator-dashboard" aria-label="Creator workbench" data-testid="creator-dashboard">
+          <div className="automations-section-head">
+            <div>
+              <h2 className="automations-section__label">Creator workbench</h2>
+              <p className="automations-section__sub">
+                Topic, material, editing, and release context stitched into one working surface.
+              </p>
+            </div>
+            <span className="automations-section__meta">
+              {creatorDashboard.tasks.length} tasks · {creatorDashboard.activities.length} activities · {creatorDashboard.workflows.length} workflows
+            </span>
+          </div>
+
+          <div className="creator-dashboard__hero">
+            <div className="creator-dashboard__hero-card">
+              <span className="creator-dashboard__hero-label">Focus now</span>
+              <strong className="creator-dashboard__hero-title">
+                {creatorDashboard.focus?.title ?? 'No active task'}
+              </strong>
+              <p className="creator-dashboard__hero-copy">
+                {creatorDashboard.focus?.description ?? 'Queue a topic, material, or editing task to start the chain.'}
+              </p>
+              <div className="creator-list__chips">
+                {creatorDashboard.focus?.reason ? <span className="creator-chip">{creatorDashboard.focus.reason}</span> : null}
+                {creatorDashboard.focus?.recommendedAction ? <span className="creator-chip">{creatorDashboard.focus.recommendedAction}</span> : null}
+                {creatorDashboard.focus?.stageLabel ? <span className="creator-chip">{creatorDashboard.focus.stageLabel}</span> : null}
+                {creatorDashboard.focus?.statusLabel ? <span className="creator-chip">{creatorDashboard.focus.statusLabel}</span> : null}
+                {creatorDashboard.focus?.sourceLabel ? <span className="creator-chip">{creatorDashboard.focus.sourceLabel}</span> : null}
+              </div>
+              {creatorDashboard.focus?.projectId ? (
+                <div className="creator-dashboard__hero-actions">
+                  <Button
+                    variant="primary"
+                    className="creator-dashboard__hero-action"
+                    onClick={() => {
+                      void triggerCreatorFocusAction();
+                    }}
+                  >
+                    {creatorDashboard.focus?.recommendedAction ?? 'Open project'}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+            <div className="creator-dashboard__hero-stats" aria-label="Creator summary metrics">
+              <Metric label="Tasks" value={creatorDashboard.tasks.length} />
+              <Metric label="Activity" value={creatorDashboard.activities.length} />
+              <Metric label="Flows" value={creatorDashboard.workflows.length} />
+            </div>
+          </div>
+
+          <div className="creator-dashboard__grid">
+            <section className="creator-panel" aria-labelledby="creator-tasks-title">
+              <div className="creator-panel__head">
+                <h3 id="creator-tasks-title" className="creator-panel__title">Tasks</h3>
+                <span className="creator-panel__meta">Current queue</span>
+              </div>
+              <ul className="creator-list">
+                {creatorDashboard.tasks.map((task) => {
+                  return (
+                    <li key={task.id} className="creator-list__item">
+                      <div className="creator-list__main">
+                        <strong className="creator-list__title">{task.title}</strong>
+                        {task.description ? (
+                          <p className="creator-list__desc">{task.description}</p>
+                        ) : null}
+                        <div className="creator-list__chips">
+                          <span className="creator-chip">{task.stageLabel}</span>
+                          <span className="creator-chip">{task.statusLabel}</span>
+                          <span className="creator-chip">{task.priorityLabel}</span>
+                        {task.sourceLabel ? <span className="creator-chip">{task.sourceLabel}</span> : null}
+                      </div>
+                    </div>
+                    <div className="creator-list__side">
+                      <time className="creator-list__time" dateTime={task.updatedAt}>
+                        {formatCreatorTimestamp(task.updatedAt)}
+                      </time>
+                      {task.projectId ? (
+                        <Button
+                          variant="ghost"
+                          className="creator-list__action"
+                          onClick={() => openCreatorProject(task.projectId)}
+                        >
+                          Open
+                        </Button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <section className="creator-panel" aria-labelledby="creator-activity-title">
+              <div className="creator-panel__head">
+                <h3 id="creator-activity-title" className="creator-panel__title">Activity</h3>
+                <span className="creator-panel__meta">Recent chain</span>
+              </div>
+              <ul className="creator-list">
+                {creatorDashboard.activities.map((activity) => (
+                  <li key={activity.id} className="creator-list__item">
+                    <div className="creator-list__main">
+                      <strong className="creator-list__title">{activity.title}</strong>
+                      <p className="creator-list__desc">
+                        {activity.summary || activity.categoryLabel}
+                      </p>
+                      <div className="creator-list__chips">
+                        <span className="creator-chip">{activity.categoryLabel}</span>
+                        {activity.triggerSourceLabel ? (
+                          <span className="creator-chip">{activity.triggerSourceLabel}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="creator-list__side">
+                      <time className="creator-list__time" dateTime={activity.occurredAt}>
+                        {formatCreatorTimestamp(activity.occurredAt)}
+                      </time>
+                      {activity.projectId ? (
+                        <Button
+                          variant="ghost"
+                          className="creator-list__action"
+                          onClick={() => openCreatorProject(activity.projectId)}
+                        >
+                          Open
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="creator-panel" aria-labelledby="creator-workflows-title">
+              <div className="creator-panel__head">
+                <h3 id="creator-workflows-title" className="creator-panel__title">Workflows</h3>
+                <span className="creator-panel__meta">Execution lanes</span>
+              </div>
+              <ul className="creator-list">
+                {creatorDashboard.workflows.map((workflow) => (
+                  <li key={workflow.id} className="creator-list__item">
+                    <div className="creator-list__main">
+                      <strong className="creator-list__title">{workflow.name}</strong>
+                      {workflow.description ? (
+                        <p className="creator-list__desc">{workflow.description}</p>
+                      ) : null}
+                      <div className="creator-list__chips">
+                        <span className="creator-chip">{workflow.activeLabel}</span>
+                        <span className="creator-chip">{workflow.stageCount} stages</span>
+                        <span className="creator-chip">Default: {workflow.defaultStageLabel}</span>
+                      </div>
+                      <p className="creator-list__stages">{workflow.stageLabels.join(' / ')}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        </section>
+      ) : null}
+      {surface === 'automations' ? (
+        <>
       <section className="automations-saved" aria-label={t('automations.yourAutomations')}>
         <div className="automations-section-head">
           <h2 className="automations-section__label">{t('automations.yourAutomations')}</h2>
@@ -997,7 +1294,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               : null
         }
         templates={templates}
-        projects={projects}
+        projects={projectSummaries}
         skills={skills}
         connectors={connectors}
         onClose={() => setModal(null)}
@@ -1009,6 +1306,8 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           })();
         }}
       />
+        </>
+      ) : null}
     </section>
   );
 }
@@ -1024,6 +1323,15 @@ function Metric({ label, value }: { label: string; value: number }) {
       <span className="automations-metric__label">{label}</span>
     </div>
   );
+}
+
+function formatCreatorTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 function AutomationRunHistory({

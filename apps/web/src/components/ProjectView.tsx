@@ -574,6 +574,10 @@ function autoSendFirstMessageKey(projectId: string): string {
   return `od:auto-send-first:${projectId}`;
 }
 
+function creatorRetryAssistantMessageKey(projectId: string): string {
+  return `od:creator-retry-assistant:${projectId}`;
+}
+
 function autoSendAttachmentsKey(projectId: string): string {
   return `od:auto-send-attachments:${projectId}`;
 }
@@ -600,6 +604,15 @@ function clearAutoSendSession(projectId: string): void {
   try {
     window.sessionStorage.removeItem(autoSendFirstMessageKey(projectId));
     window.sessionStorage.removeItem(autoSendAttachmentsKey(projectId));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearCreatorRetrySession(projectId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(creatorRetryAssistantMessageKey(projectId));
   } catch {
     /* ignore */
   }
@@ -4830,6 +4843,42 @@ export function ProjectView({
     },
     [currentConversationActionDisabled, handleSend],
   );
+
+  const creatorRetryConsumedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeConversationId) return;
+    if (!messagesInitialized) return;
+    if (currentConversationActionDisabled) return;
+    if (messagesConversationIdRef.current !== activeConversationId) return;
+
+    let pendingAssistantId: string | null = null;
+    try {
+      pendingAssistantId = window.sessionStorage.getItem(creatorRetryAssistantMessageKey(project.id));
+    } catch {
+      pendingAssistantId = null;
+    }
+    if (!pendingAssistantId) return;
+    if (creatorRetryConsumedRef.current === pendingAssistantId) return;
+
+    const assistantMessage = messages.find(
+      (message) =>
+        message.id === pendingAssistantId &&
+        message.role === 'assistant' &&
+        message.runStatus === 'failed',
+    );
+    if (!assistantMessage) return;
+
+    creatorRetryConsumedRef.current = pendingAssistantId;
+    clearCreatorRetrySession(project.id);
+    handleRetry(assistantMessage);
+  }, [
+    activeConversationId,
+    currentConversationActionDisabled,
+    handleRetry,
+    messages,
+    messagesInitialized,
+    project.id,
+  ]);
 
   // "Continue" on a resumable failed run: send a fresh turn in the same
   // conversation. For a session-resuming runtime (Claude) the daemon persisted

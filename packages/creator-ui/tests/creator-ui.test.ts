@@ -140,6 +140,7 @@ describe("toTaskCardViewModel", () => {
   it("maps all fields with computed labels", () => {
     const vm = toTaskCardViewModel(task);
     expect(vm.id).toBe("t-1");
+    expect(vm.projectId).toBe("p-1");
     expect(vm.title).toBe("Test Task");
     expect(vm.description).toBe("A description");
     expect(vm.stage).toBe("topic");
@@ -183,6 +184,7 @@ describe("toActivityItemViewModelFromActivity", () => {
   it("maps all fields with category and categoryLabel", () => {
     const vm = toActivityItemViewModelFromActivity(activity);
     expect(vm.id).toBe("a-1");
+    expect(vm.projectId).toBe("p-1");
     expect(vm.title).toBe("Research done");
     expect(vm.summary).toBe("Detailed summary");
     expect(vm.category).toBe("topic");
@@ -252,6 +254,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     };
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
+    expect(vm!.projectId).toBe("p-1");
     expect(vm!.title).toBe("Research");
     expect(vm!.summary).toBe("Done");
     expect(vm!.category).toBe("topic");
@@ -272,6 +275,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     };
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
+    expect(vm!.projectId).toBe("p-1");
     expect(vm!.title).toBe("运行开始");
     expect(vm!.category).toBe("system");
     expect(vm!.categoryLabel).toBe("系统");
@@ -291,6 +295,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     };
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
+    expect(vm!.projectId).toBe("p-1");
     expect(vm!.title).toBe("运行完成");
     expect(vm!.category).toBe("system");
     expect(vm!.categoryLabel).toBe("系统");
@@ -308,6 +313,7 @@ describe("toActivityItemViewModelFromEvent", () => {
     };
     const vm = toActivityItemViewModelFromEvent(input);
     expect(vm).not.toBeNull();
+    expect(vm!.projectId).toBe("p-1");
     expect(vm!.title).toBe("Runback A");
     expect(vm!.category).toBe("system");
     expect(vm!.categoryLabel).toBe("系统");
@@ -363,6 +369,7 @@ describe("toWorkflowSummaryViewModel", () => {
 describe("normalizeTaskCardViewModel", () => {
   const validVm: TaskCardViewModel = {
     id: "t-1",
+    projectId: "p-1",
     title: "Test",
     stage: "topic",
     stageLabel: "选题",
@@ -392,6 +399,7 @@ describe("normalizeTaskCardViewModel", () => {
 describe("normalizeActivityItemViewModel", () => {
   const validVm: ActivityItemViewModel = {
     id: "a-1",
+    projectId: "p-1",
     title: "Test",
     category: "topic",
     categoryLabel: "选题",

@@ -19,6 +19,7 @@ import {
 export function toTaskCardViewModel(task: Task): TaskCardViewModel {
   return {
     id: task.id,
+    projectId: task.projectId,
     title: task.title,
     description: task.description,
     stage: task.stage,
@@ -40,6 +41,7 @@ export function toTaskCardViewModel(task: Task): TaskCardViewModel {
 export function toActivityItemViewModelFromActivity(activity: ActivityEvent): ActivityItemViewModel {
   return {
     id: activity.id,
+    projectId: activity.projectId,
     title: activity.title,
     summary: activity.summary ?? "",
     category: activity.category,
@@ -57,7 +59,8 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
   if (event.type === "activity.recorded") {
     const activity = event.payload.activity;
     return {
-      id: activity.id,
+      id: `activity.recorded:${activity.id}`,
+      projectId: activity.projectId,
       title: activity.title,
       summary: activity.summary ?? "",
       category: activity.category,
@@ -70,7 +73,8 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
   if (event.type === "run.started") {
     const session = event.payload.session;
     return {
-      id: session.id,
+      id: `run.started:${session.id}`,
+      projectId: session.projectId,
       title: "运行开始",
       summary: "",
       category: "system",
@@ -83,7 +87,8 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
   if (event.type === "run.finished") {
     const session = event.payload.session;
     return {
-      id: session.id,
+      id: `run.finished:${session.id}`,
+      projectId: session.projectId,
       title: "运行完成",
       summary: "",
       category: "system",
@@ -96,7 +101,8 @@ export function toActivityItemViewModelFromEvent(event: CreatorEvent): ActivityI
   if (event.type === "runback.recorded") {
     const runback = event.payload.runback;
     return {
-      id: runback.id,
+      id: `runback.recorded:${runback.id}`,
+      projectId: runback.projectId,
       title: runback.title,
       summary: "",
       category: "system",

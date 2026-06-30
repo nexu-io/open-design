@@ -908,6 +908,7 @@ export function EntryShell({
             </div>
             <div data-testid="entry-view-tasks" data-active={view === 'tasks' ? 'true' : 'false'} {...inactiveViewProps(view === 'tasks')}>
               <TasksView
+                projects={projects}
                 skills={skills}
                 designTemplates={designTemplates}
                 connectors={connectors}

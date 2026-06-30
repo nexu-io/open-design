@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Routine } from '@open-design/contracts';
+import type { ChatRunStatusResponse, Project, Routine } from '@open-design/contracts';
 
 import { TasksView } from '../../src/components/TasksView';
 import * as router from '../../src/router';
@@ -10,7 +10,15 @@ import * as router from '../../src/router';
 const originalFetch = globalThis.fetch;
 const originalConfirm = window.confirm;
 
-function mockTasksViewFetch({ routines = [] }: { routines?: Routine[] } = {}) {
+function mockTasksViewFetch({
+  routines = [],
+  creatorProjects = [],
+  creatorRuns = [],
+}: {
+  routines?: Routine[];
+  creatorProjects?: Project[];
+  creatorRuns?: ChatRunStatusResponse[];
+} = {}) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url === '/api/routines' && (!init || init.method === undefined)) {
@@ -20,7 +28,13 @@ function mockTasksViewFetch({ routines = [] }: { routines?: Routine[] } = {}) {
       });
     }
     if (url === '/api/projects' && (!init || init.method === undefined)) {
-      return new Response(JSON.stringify({ projects: [] }), {
+      return new Response(JSON.stringify({ projects: creatorProjects }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/runs' && (!init || init.method === undefined)) {
+      return new Response(JSON.stringify({ runs: creatorRuns }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -122,6 +136,268 @@ describe('TasksView page shell', () => {
       expect(summary.textContent ?? '').toContain('8');
       expect(summary.textContent ?? '').toContain('Templates');
     });
+  });
+
+  it('renders the creator workbench summary inside the tasks page', async () => {
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-video-1',
+        name: '校园黄昏短片',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 20_000,
+        updatedAt: Date.now() - 5_000,
+        pendingPrompt: '整理素材并推进剪辑节奏',
+        metadata: { kind: 'video' },
+        status: { value: 'running' },
+      },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorRuns: [
+        {
+          id: 'run-creator-1',
+          projectId: 'project-video-1',
+          conversationId: 'conv-1',
+          assistantMessageId: 'msg-1',
+          agentId: 'codex',
+          status: 'succeeded',
+          createdAt: Date.now() - 18_000,
+          updatedAt: Date.now() - 2_000,
+        },
+      ],
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+
+    const creatorDashboard = await screen.findByTestId('creator-dashboard');
+    expect(within(creatorDashboard).getByRole('heading', { name: 'Creator workbench' })).toBeTruthy();
+    expect(within(creatorDashboard).getByRole('heading', { name: 'Tasks' })).toBeTruthy();
+    expect(within(creatorDashboard).getByRole('heading', { name: 'Activity' })).toBeTruthy();
+    expect(within(creatorDashboard).getByRole('heading', { name: 'Workflows' })).toBeTruthy();
+    expect(within(creatorDashboard).getAllByText('校园黄昏短片').length).toBeGreaterThan(0);
+    expect(within(creatorDashboard).getAllByText('整理素材并推进剪辑节奏').length).toBeGreaterThan(0);
+    expect(within(creatorDashboard).getByText('Run output · 校园黄昏短片')).toBeTruthy();
+    expect(within(creatorDashboard).getByText('Media production pipeline')).toBeTruthy();
+  });
+
+  it('opens the focus project from the creator workbench hero action', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-focus-1',
+        name: '校园黄昏短片',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 20_000,
+        updatedAt: Date.now() - 5_000,
+        pendingPrompt: '整理素材并推进剪辑节奏',
+        metadata: { kind: 'video' },
+        status: { value: 'running' },
+      },
+    ];
+    mockTasksViewFetch({ creatorProjects, creatorRuns: [] });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start first run' }));
+
+    expect(window.sessionStorage.getItem('od:auto-send-first:project-focus-1')).toBe('1');
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-focus-1',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
+  it('routes monitor-run focus action into the active conversation', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-monitor-1',
+        name: '运行中的剪辑项目',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'video' },
+        status: { value: 'running' },
+      },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorRuns: [
+        {
+          id: 'run-monitor-1',
+          projectId: 'project-monitor-1',
+          conversationId: 'conv-monitor-1',
+          assistantMessageId: 'msg-monitor-1',
+          agentId: 'codex',
+          status: 'running',
+          createdAt: Date.now() - 20_000,
+          updatedAt: Date.now() - 2_000,
+        },
+      ],
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Monitor run' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-monitor-1',
+      conversationId: 'conv-monitor-1',
+      fileName: null,
+    });
+  });
+
+  it('routes retry-run focus action into the failed conversation', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-retry-1',
+        name: '失败的剪辑项目',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'video' },
+        status: { value: 'failed' },
+      },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorRuns: [
+        {
+          id: 'run-retry-1',
+          projectId: 'project-retry-1',
+          conversationId: 'conv-retry-1',
+          assistantMessageId: 'msg-retry-1',
+          agentId: 'codex',
+          status: 'failed',
+          createdAt: Date.now() - 20_000,
+          updatedAt: Date.now() - 2_000,
+        },
+      ],
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry run' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-retry-1',
+      conversationId: 'conv-retry-1',
+      fileName: null,
+    });
+  });
+
+  it('opens a project from the creator task list', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-task-1',
+        name: '待处理剪辑',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'video' },
+        status: { value: 'failed' },
+      },
+    ];
+    mockTasksViewFetch({ creatorProjects });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const creatorDashboard = await screen.findByTestId('creator-dashboard');
+    const openButtons = within(creatorDashboard).getAllByRole('button', { name: 'Open' });
+    const taskItem = openButtons[0]?.closest('li');
+    if (!taskItem) {
+      throw new Error('expected creator task row');
+    }
+
+    fireEvent.click(within(taskItem).getByRole('button', { name: 'Open' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-task-1',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
+  it('opens a project from the creator activity list', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-activity-1',
+        name: '相机样片整理',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 40_000,
+        updatedAt: Date.now() - 20_000,
+        metadata: { kind: 'image' },
+      },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorRuns: [
+        {
+          id: 'run-activity-1',
+          projectId: 'project-activity-1',
+          conversationId: 'conv-activity-1',
+          assistantMessageId: 'msg-activity-1',
+          agentId: 'codex',
+          status: 'succeeded',
+          createdAt: Date.now() - 18_000,
+          updatedAt: Date.now() - 5_000,
+        },
+      ],
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    const creatorDashboard = await screen.findByTestId('creator-dashboard');
+    const activityItem = within(creatorDashboard).getByText('Run output · 相机样片整理').closest('li');
+    if (!activityItem) {
+      throw new Error('expected creator activity row');
+    }
+
+    fireEvent.click(within(activityItem).getByRole('button', { name: 'Open' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-activity-1',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
+  it('keeps automations as the default surface until switching to creator workbench', async () => {
+    mockTasksViewFetch();
+
+    render(<TasksView />);
+
+    expect(await screen.findByLabelText('Your automations')).toBeTruthy();
+    expect(screen.queryByTestId('creator-dashboard')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Creator workbench/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('creator-dashboard')).toBeTruthy();
+    });
+    expect(screen.queryByLabelText('Your automations')).toBeNull();
   });
 
   it('shows the empty state and opens the create modal from it', async () => {

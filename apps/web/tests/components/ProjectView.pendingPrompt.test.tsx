@@ -10,6 +10,7 @@ import type {
   AppConfig,
   Conversation,
   DesignSystemSummary,
+  ChatMessage,
   Project,
   SkillSummary,
 } from '../../src/types';
@@ -247,6 +248,39 @@ describe('ProjectView pending prompt seeding', () => {
     await waitFor(() => {
       expect(composerValue()).toBe('');
     });
+  });
+
+  it('consumes a creator retry intent and retries the failed assistant message once', async () => {
+    const onClearPendingPrompt = vi.fn();
+    window.sessionStorage.setItem('od:creator-retry-assistant:with-retry', 'assistant-1');
+
+    mockedListConversations.mockImplementation(async (projectId) => [conversation(projectId)]);
+    mockedListMessages.mockResolvedValue([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Seed prompt',
+        createdAt: 1,
+      } as ChatMessage,
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Failed output',
+        createdAt: 2,
+        runStatus: 'failed',
+      } as ChatMessage,
+    ]);
+
+    renderProjectView(project('with-retry'), onClearPendingPrompt);
+
+    await waitFor(() => {
+      expect(listMessages).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem('od:creator-retry-assistant:with-retry')).toBeNull();
+    });
+    expect(onClearPendingPrompt).not.toHaveBeenCalled();
   });
 });
 
