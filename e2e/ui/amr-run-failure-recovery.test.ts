@@ -308,7 +308,19 @@ test('[P0] @critical AMR model catalog invalid-key failures route to authorizati
 
 test('[P0] @critical Settings reopens AMR with the configured profile, account badge, and model catalog', async ({ page }) => {
   await stubCatalogsEmpty(page);
-  await stubRuntimeAgents(page);
+  await routeAgents(page, [
+    CLAUDE_AGENT,
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+    AMR_AGENT,
+    ANTIGRAVITY_AGENT,
+  ]);
   const profile = 'test';
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -331,6 +343,8 @@ test('[P0] @critical Settings reopens AMR with the configured profile, account b
 
   await gotoEntryHome(page);
   const settings = await openSettingsDialog(page);
+  const agentCards = settings.locator('[data-testid^="settings-agent-card-"]');
+  await expect(agentCards.first()).toHaveAttribute('data-testid', 'settings-agent-card-amr');
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
@@ -347,6 +361,108 @@ test('[P0] @critical Settings reopens AMR with the configured profile, account b
   await expect(reopened.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(reopened.getByTestId('settings-agent-select-amr')).toContainText('settings-amr@example.com');
   await expect(reopened.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
+});
+
+test('[P1] Settings AMR wallet fallback balance renders from the daemon wallet endpoint', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
+  const profile = 'test';
+  let walletCalls = 0;
+  const walletUrls: string[] = [];
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        profile,
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'settings-wallet-user', email: 'settings-wallet@example.com', plan: 'free' },
+      }),
+    });
+  });
+  await page.route('**/api/integrations/vela/wallet**', async (route) => {
+    walletCalls += 1;
+    walletUrls.push(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'available',
+        profile,
+        user: { id: 'settings-wallet-user', email: 'settings-wallet@example.com', plan: 'free' },
+        balanceUsd: '1.0000',
+        updatedAt: '2026-06-30T03:00:00.000Z',
+        fetchedAt: '2026-06-30T03:00:00.000Z',
+        stale: false,
+        source: 'vela_api',
+      }),
+    });
+  });
+
+  await setupAmrWorkspace(page, {
+    profile,
+    selectedAgentId: 'amr',
+    assistantText: 'AMR wallet refresh smoke',
+  });
+
+  await gotoEntryHome(page);
+  const settings = await openSettingsDialog(page);
+  await settings.getByTestId('settings-agent-select-amr').click();
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-wallet@example.com');
+  await expect(settings.locator('.agent-card-amr-balance-value')).toContainText('$1.00');
+  await expect(settings.locator('.agent-card-amr-wallet-refresh')).toHaveCount(0);
+  expect(walletCalls).toBeGreaterThanOrEqual(1);
+  expect(walletUrls.every((url) => new URL(url).searchParams.get('refresh') == null)).toBe(true);
+});
+
+test('[P1] Settings AMR upgrade opens the attributed plans URL for the active profile', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
+  const profile = 'test';
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        profile,
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'settings-upgrade-user', email: 'settings-upgrade@example.com', plan: 'free' },
+        account: { plan: 'free', balanceUsd: '0.50' },
+      }),
+    });
+  });
+  let openedUrl = '';
+  await page.route('**/api/system/open-external', async (route) => {
+    const body = route.request().postDataJSON() as { url?: string };
+    openedUrl = body.url ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  await setupAmrWorkspace(page, {
+    profile,
+    selectedAgentId: 'amr',
+    assistantText: 'AMR settings upgrade smoke',
+  });
+
+  await gotoEntryHome(page);
+  const settings = await openSettingsDialog(page);
+  await settings.getByTestId('settings-agent-select-amr').click();
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-upgrade@example.com');
+
+  await settings.getByTestId('settings-agent-card-amr-upgrade').click();
+
+  await expect.poll(() => openedUrl).toBeTruthy();
+  const url = new URL(openedUrl);
+  expect(url.searchParams.get('view')).toBe('plans');
+  expect(url.searchParams.get('od_origin')).toBe('open_design');
+  expect(url.searchParams.get('od_entry_source')).toBe('settings_amr_upgrade');
+  expect(url.searchParams.get('od_entry_id')).toBeTruthy();
 });
 
 test('[P0] @critical Settings preserves AMR account, recharge shortcut, and model catalog after switching runtimes', async ({ page }) => {

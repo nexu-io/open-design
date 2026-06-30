@@ -2524,6 +2524,320 @@ test('[P1] composer design toolbox anti-AI polish action seeds its specific prom
   expect(runBodies[0]?.message).not.toContain('prefers-reduced-motion fallbacks');
 });
 
+test('[P1] project composer design toolbox hides disabled skill resources', async ({ page }) => {
+  await routeMockAgents(page);
+  await routeRuntimeSkills(page);
+  await routeAppConfig(page, {
+    disabledSkills: ['disabled-runtime-skill'],
+  });
+
+  await createEmptyProject(page, 'Runtime disabled skill toolbox');
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('chat-plus-trigger').click();
+  await page.getByRole('menuitem', { name: 'Design toolbox' }).click();
+  await page.getByRole('textbox', { name: /Search design toolbox resources/i }).fill('Runtime Skill');
+
+  await expect(page.getByRole('menuitem', { name: /Enabled Runtime Skill/i })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Disabled Runtime Skill/i })).toHaveCount(0);
+});
+
+test('[P1] completed background run sends the configured desktop notification', async ({ page }) => {
+  const notificationConfig = {
+    soundEnabled: false,
+    successSoundId: 'ding',
+    failureSoundId: 'buzz',
+    desktopEnabled: true,
+  };
+  await page.addInitScript(
+    ({ key, notificationsConfig }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          mode: 'daemon',
+          apiKey: '',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          onboardingCompleted: true,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          notifications: notificationsConfig,
+        }),
+      );
+    },
+    { key: STORAGE_KEY, notificationsConfig: notificationConfig },
+  );
+  await page.addInitScript(() => {
+    const notifications: Array<{ title: string; body?: string }> = [];
+    Object.defineProperty(window, '__odTestNotifications', {
+      value: notifications,
+      configurable: true,
+    });
+
+    class FakeNotification {
+      static permission = 'granted';
+
+      title: string;
+      body?: string;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      constructor(title: string, options?: NotificationOptions) {
+        this.title = title;
+        const body = options?.body;
+        if (body) {
+          this.body = body;
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+      }
+
+      close() {
+        this.onclose?.();
+      }
+    }
+
+    Object.defineProperty(window, 'Notification', {
+      value: FakeNotification,
+      configurable: true,
+    });
+    const serviceWorkerRegistration = {
+      showNotification: (title: string, options?: NotificationOptions) => {
+        const body = options?.body;
+        if (body) {
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+        return Promise.resolve();
+      },
+    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: () => Promise.resolve(serviceWorkerRegistration),
+        ready: Promise.resolve(serviceWorkerRegistration),
+      },
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hidden', {
+      get: () => true,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hasFocus', {
+      value: () => false,
+      configurable: true,
+    });
+  });
+  await routeMockAgents(page);
+  await routeAppConfig(page, {
+    notifications: notificationConfig,
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"notification-run"}',
+    });
+  });
+  let releaseEvents!: () => void;
+  const eventsReleased = new Promise<void>((resolve) => {
+    releaseEvents = resolve;
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await eventsReleased;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body: [
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stdout',
+        `data: ${JSON.stringify({ chunk: 'Background completion notification body.' })}`,
+        '',
+        'event: end',
+        'data: {"code":0,"status":"succeeded"}',
+        '',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  await createEmptyProject(page, 'Background notification run');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Finish and notify me');
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+  releaseEvents();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as typeof window & {
+        __odTestNotifications?: Array<{ title: string; body?: string }>;
+      }).__odTestNotifications ?? []),
+    )
+    .toContainEqual(expect.objectContaining({
+      title: 'Task completed',
+      body: expect.stringContaining('Background completion notification body.'),
+    }));
+});
+
+test('[P1] failed foreground run still sends the configured desktop notification', async ({ page }) => {
+  const notificationConfig = {
+    soundEnabled: false,
+    successSoundId: 'ding',
+    failureSoundId: 'buzz',
+    desktopEnabled: true,
+  };
+  await page.addInitScript(
+    ({ key, notificationsConfig }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          mode: 'daemon',
+          apiKey: '',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          onboardingCompleted: true,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          notifications: notificationsConfig,
+        }),
+      );
+    },
+    { key: STORAGE_KEY, notificationsConfig: notificationConfig },
+  );
+  await page.addInitScript(() => {
+    const notifications: Array<{ title: string; body?: string }> = [];
+    Object.defineProperty(window, '__odTestNotifications', {
+      value: notifications,
+      configurable: true,
+    });
+
+    class FakeNotification {
+      static permission = 'granted';
+
+      title: string;
+      body?: string;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      constructor(title: string, options?: NotificationOptions) {
+        this.title = title;
+        const body = options?.body;
+        if (body) {
+          this.body = body;
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+      }
+
+      close() {
+        this.onclose?.();
+      }
+    }
+
+    Object.defineProperty(window, 'Notification', {
+      value: FakeNotification,
+      configurable: true,
+    });
+    const serviceWorkerRegistration = {
+      showNotification: (title: string, options?: NotificationOptions) => {
+        const body = options?.body;
+        if (body) {
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+        return Promise.resolve();
+      },
+    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: () => Promise.resolve(serviceWorkerRegistration),
+        ready: Promise.resolve(serviceWorkerRegistration),
+      },
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hidden', {
+      get: () => false,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hasFocus', {
+      value: () => true,
+      configurable: true,
+    });
+  });
+  await routeMockAgents(page);
+  await routeAppConfig(page, {
+    notifications: notificationConfig,
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"notification-failure-run"}',
+    });
+  });
+  let releaseEvents!: () => void;
+  const eventsReleased = new Promise<void>((resolve) => {
+    releaseEvents = resolve;
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await eventsReleased;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body: [
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stderr',
+        `data: ${JSON.stringify({ chunk: 'Foreground failure notification body.' })}`,
+        '',
+        'event: end',
+        'data: {"code":1,"status":"failed"}',
+        '',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  await createEmptyProject(page, 'Foreground failure notification run');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Fail and notify me');
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+  releaseEvents();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as typeof window & {
+        __odTestNotifications?: Array<{ title: string; body?: string }>;
+      }).__odTestNotifications ?? []),
+    )
+    .toContainEqual(expect.objectContaining({
+      title: 'Task failed',
+      body: 'The task ended with an error.',
+    }));
+});
+
 test('[P1] Browser Inspiration page_info action seeds Browser tab context into the next run request', async ({ page }) => {
   await routeMockAgents(page);
 
@@ -3099,6 +3413,67 @@ async function routeMockAgents(page: Page) {
       },
     });
   });
+}
+
+async function routeAppConfig(page: Page, override: Record<string, unknown>) {
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          ...override,
+        },
+      },
+    });
+  });
+}
+
+async function routeRuntimeSkills(page: Page) {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({
+      json: {
+        skills: [
+          runtimeSkill('enabled-runtime-skill', 'Enabled Runtime Skill'),
+          runtimeSkill('disabled-runtime-skill', 'Disabled Runtime Skill'),
+        ],
+      },
+    });
+  });
+}
+
+function runtimeSkill(id: string, name: string) {
+  return {
+    id,
+    name,
+    description: `${name} fixture`,
+    triggers: [],
+    mode: 'prototype',
+    surface: 'web',
+    platform: 'desktop',
+    scenario: 'qa',
+    previewType: 'html',
+    designSystemRequired: true,
+    defaultFor: [],
+    upstream: null,
+    featured: null,
+    fidelity: null,
+    speakerNotes: null,
+    animations: null,
+    hasBody: true,
+    examplePrompt: '',
+    source: 'builtin',
+    category: 'Runtime',
+  };
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {

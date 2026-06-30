@@ -468,6 +468,110 @@ test('[P1] design files page keeps the current single-file actions and context h
   await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
 });
 
+test('[P1] design files batch delete removes selected files and keeps cancel retryable', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Design files batch delete');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  await seedProjectFile(page, projectId, 'batch-alpha.txt', 'alpha');
+  await seedProjectFile(page, projectId, 'batch-beta.txt', 'beta');
+  await seedProjectFile(page, projectId, 'batch-keep.txt', 'keep');
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await page.getByTestId('design-files-tab').click();
+
+  const alpha = page.getByTestId('design-file-row-batch-alpha.txt');
+  const beta = page.getByTestId('design-file-row-batch-beta.txt');
+  const keep = page.getByTestId('design-file-row-batch-keep.txt');
+  await expect(alpha).toBeVisible();
+  await expect(beta).toBeVisible();
+  await expect(keep).toBeVisible();
+  await alpha.getByRole('checkbox').click();
+  await beta.getByRole('checkbox').click();
+
+  const batchBar = page.getByTestId('design-files-batch-bar');
+  await expect(batchBar).toBeVisible();
+  await expect(batchBar).toContainText('2');
+
+  page.once('dialog', async (dialog) => {
+    await dialog.dismiss();
+  });
+  await page.getByTestId('design-files-batch-delete').click();
+  await expect(batchBar).toBeVisible();
+  await expect(alpha.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+  await expect(beta.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+
+  page.once('dialog', async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByTestId('design-files-batch-delete').click();
+
+  await expect(alpha).toHaveCount(0);
+  await expect(beta).toHaveCount(0);
+  await expect(keep).toBeVisible();
+  await expect(page.getByTestId('design-files-batch-bar')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
+      return (
+        names.includes('batch-keep.txt') &&
+        !names.includes('batch-alpha.txt') &&
+        !names.includes('batch-beta.txt')
+      );
+    })
+    .toBe(true);
+});
+
+test('[P1] design files batch download posts selected names to the archive endpoint', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Design files batch download');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  let archiveRequest: { files?: string[] } | null = null;
+  await page.route(`**/api/projects/${projectId}/archive/batch`, async (route) => {
+    archiveRequest = route.request().postDataJSON() as { files?: string[] };
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename*=UTF-8''selected-design-files.zip",
+      },
+      body: Buffer.from('PK\x05\x06batch-download'),
+    });
+  });
+
+  await seedProjectFile(page, projectId, 'download-alpha.txt', 'alpha');
+  await seedProjectFile(page, projectId, 'download-beta.txt', 'beta');
+  await seedProjectFile(page, projectId, 'download-skip.txt', 'skip');
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await page.getByTestId('design-files-tab').click();
+
+  const alpha = page.getByTestId('design-file-row-download-alpha.txt');
+  const beta = page.getByTestId('design-file-row-download-beta.txt');
+  await expect(alpha).toBeVisible();
+  await expect(beta).toBeVisible();
+  await alpha.getByRole('checkbox').click();
+  await beta.getByRole('checkbox').click();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('design-files-batch-bar').getByRole('button', { name: /^Download$/i }).click();
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toBe('selected-design-files.zip');
+  expect(archiveRequest).toEqual({ files: ['download-alpha.txt', 'download-beta.txt'] });
+});
+
 test('[P0] @critical file workspace restores HTML preview after switching through a source file', async ({ page }) => {
   await routeMockAgents(page);
 
