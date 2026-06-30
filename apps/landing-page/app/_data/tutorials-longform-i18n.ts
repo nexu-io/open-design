@@ -32,12 +32,17 @@ import { entry as e_open_design_full_walkthrough_self_hosted_alternative_ai_stac
 import { entry as e_open_design_in_20_minutes_coding_menace } from './tutorials-longform/open-design-in-20-minutes-coding-menace';
 import { entry as e_open_design_install_demo_systems_chase_ai } from './tutorials-longform/open-design-install-demo-systems-chase-ai';
 import { entry as e_open_design_local_setup_ollama_alternative_ai_automation_station } from './tutorials-longform/open-design-local-setup-ollama-alternative-ai-automation-station';
+import { entry as e_open_design_open_design_vs_claude_design_first_look_community } from './tutorials-longform/open-design-open-design-vs-claude-design-first-look-community';
 import { entry as e_open_design_open_design_vs_claude_design_landing_page_roy_shavit } from './tutorials-longform/open-design-open-design-vs-claude-design-landing-page-roy-shavit';
+import { entry as e_open_design_open_source_alternative_comparison_where_do_i_click } from './tutorials-longform/open-design-open-source-alternative-comparison-where-do-i-click';
 import { entry as e_open_design_open_source_claude_alternative_aicodeking } from './tutorials-longform/open-design-open-source-claude-alternative-aicodeking';
+import { entry as e_open_design_open_source_tools_roundup_chase_ai } from './tutorials-longform/open-design-open-source-tools-roundup-chase-ai';
 import { entry as e_open_design_overview_worldofai } from './tutorials-longform/open-design-overview-worldofai';
 import { entry as e_open_design_replacing_claude_design_jack_roberts } from './tutorials-longform/open-design-replacing-claude-design-jack-roberts';
+import { entry as e_open_design_revolutionary_approach_01coder } from './tutorials-longform/open-design-revolutionary-approach-01coder';
 import { entry as e_open_design_setup_gemini_cli_free_credits_sandeep_singh } from './tutorials-longform/open-design-setup-gemini-cli-free-credits-sandeep-singh';
 import { entry as e_open_design_vibe_coders_dream_sean_kochel } from './tutorials-longform/open-design-vibe-coders-dream-sean-kochel';
+import { entry as e_open_design_vs_claude_design_comparison_panda_making_money } from './tutorials-longform/open-design-vs-claude-design-comparison-panda-making-money';
 import { entry as e_open_design_windows_wsl_installation_setup_ai_automation } from './tutorials-longform/open-design-windows-wsl-installation-setup-ai-automation';
 
 export const tutorialsLongformI18n: TutorialLongformI18n = {
@@ -50,12 +55,17 @@ export const tutorialsLongformI18n: TutorialLongformI18n = {
   "open-design-in-20-minutes-coding-menace": e_open_design_in_20_minutes_coding_menace,
   "open-design-install-demo-systems-chase-ai": e_open_design_install_demo_systems_chase_ai,
   "open-design-local-setup-ollama-alternative-ai-automation-station": e_open_design_local_setup_ollama_alternative_ai_automation_station,
+  "open-design-open-design-vs-claude-design-first-look-community": e_open_design_open_design_vs_claude_design_first_look_community,
   "open-design-open-design-vs-claude-design-landing-page-roy-shavit": e_open_design_open_design_vs_claude_design_landing_page_roy_shavit,
+  "open-design-open-source-alternative-comparison-where-do-i-click": e_open_design_open_source_alternative_comparison_where_do_i_click,
   "open-design-open-source-claude-alternative-aicodeking": e_open_design_open_source_claude_alternative_aicodeking,
+  "open-design-open-source-tools-roundup-chase-ai": e_open_design_open_source_tools_roundup_chase_ai,
   "open-design-overview-worldofai": e_open_design_overview_worldofai,
   "open-design-replacing-claude-design-jack-roberts": e_open_design_replacing_claude_design_jack_roberts,
+  "open-design-revolutionary-approach-01coder": e_open_design_revolutionary_approach_01coder,
   "open-design-setup-gemini-cli-free-credits-sandeep-singh": e_open_design_setup_gemini_cli_free_credits_sandeep_singh,
   "open-design-vibe-coders-dream-sean-kochel": e_open_design_vibe_coders_dream_sean_kochel,
+  "open-design-vs-claude-design-comparison-panda-making-money": e_open_design_vs_claude_design_comparison_panda_making_money,
   "open-design-windows-wsl-installation-setup-ai-automation": e_open_design_windows_wsl_installation_setup_ai_automation,
 };
 
