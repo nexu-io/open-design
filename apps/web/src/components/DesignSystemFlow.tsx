@@ -5180,7 +5180,14 @@ function buildSourceContextManifest(
   }
   sections.push('', `Connector status: ${githubConnectorStatusForManifest(options)}`);
   if (githubUrls.length > 0) {
-    sections.push('', '### GitHub Connector Intake Runbook', '', buildGithubConnectorRunbook(githubUrls));
+    sections.push(
+      '',
+      '### GitHub Connector Intake Runbook',
+      '',
+      buildGithubConnectorRunbook(githubUrls, {
+        githubConnected: isGithubConnectorConnected(options.githubConnector),
+      }),
+    );
   }
 
   sections.push('', '## Local Code', '');
@@ -5279,20 +5286,48 @@ function buildLocalFolderRunbook(folders: string[]): string {
   ].join('\n');
 }
 
-function buildGithubConnectorRunbook(githubUrls: string[]): string {
+export interface GithubConnectorRunbookOptions {
+  /**
+   * Whether the Composio GitHub connector is already connected for this
+   * device/account. When connected the runbook must not lead with mandatory
+   * `gh auth login --web` re-authentication as if GitHub were not connected;
+   * that conflation is what makes design-system runs re-prompt for connect/auth
+   * on every command even after GitHub is connected (issue #4854).
+   */
+  githubConnected?: boolean;
+}
+
+export function buildGithubConnectorRunbook(
+  githubUrls: string[],
+  options: GithubConnectorRunbookOptions = {},
+): string {
   if (githubUrls.length === 0) return '';
+  const connected = options.githubConnected === true;
   const intakeCommands = githubUrls
     .map((url) => `   - \`"$OD_NODE_BIN" "$OD_BIN" tools connectors github-design-context --repo ${shellQuote(url)} --output context/github/${githubEvidenceFileName(url)}\``)
     .join('\n');
+  // The runbook is written into `context/source-context.md` and re-read on every
+  // subsequent run, so connection-blind copy keeps telling already-connected
+  // users to re-authenticate. Acknowledge the existing connection and demote
+  // `gh auth login --web` to a conditional fallback when GitHub is connected.
+  const intro = connected
+    ? 'GitHub is already connected for this workspace, so repository intake does not need a fresh connect or `gh auth login --web` setup step. Intake is still required before drafting the design system, but treat the connection as established:'
+    : 'GitHub repository intake is required before drafting the design system:';
+  const stepOne = connected
+    ? '1. For each linked repository, run the bounded intake command before writing design-system files. GitHub is already connected, so the bounded command reads the repository through the connected GitHub access and only falls back to this-device `git clone` or `gh auth login --web` when the connected path cannot read a repository. Do not re-authenticate just to begin intake.'
+    : '1. For each linked repository, run the bounded intake command before writing design-system files. The command tries this-device access first (`git clone`, then authenticated GitHub CLI via `gh auth login --web`) and uses the Composio GitHub connector only as a connector-platform fallback.';
+  const stepSix = connected
+    ? '6. The command is strict: if the bounded intake command cannot write snapshot files, stop and explain the actual blocker (permission, rate-limit, output-too-large, or clone problem). GitHub is already connected, so do not report this as a missing connection or ask the user to reconnect. Do not use ad-hoc public GitHub browsing, memory, or URL-only inference for design-system files.'
+    : '6. The command is strict: if the bounded intake command cannot write snapshot files, stop and explain the permission, GitHub CLI login, connection, rate-limit, or clone problem. Do not use ad-hoc public GitHub browsing, memory, or URL-only inference for design-system files.';
   return [
-    'GitHub repository intake is required before drafting the design system:',
-    '1. For each linked repository, run the bounded intake command before writing design-system files. The command tries this-device access first (`git clone`, then authenticated GitHub CLI via `gh auth login --web`) and uses the Composio GitHub connector only as a connector-platform fallback.',
+    intro,
+    stepOne,
     intakeCommands,
     '2. Do not call GitHub connector tree/content/raw tools directly from the agent. Large repositories can trigger `CONNECTOR_OUTPUT_TOO_LARGE`; the bounded intake command is the only allowed GitHub repository intake path for this workflow.',
     '3. The intake command selects design-system-relevant source files plus available logos/icons/fonts and writes a reviewable evidence note plus file snapshots under `context/github/`; keep those files as the source evidence for this design-system project.',
     '4. If you already hit `CONNECTOR_OUTPUT_TOO_LARGE` or `CONNECTOR_RATE_LIMITED` from a direct connector call, do not stop and do not retry the same direct tool. Run the bounded intake command above, then inspect the written snapshots.',
     '5. Treat `Read method: git-clone` as the preferred this-device path. Treat `Read method: connector` as valid connector-platform fallback evidence when local git/GitHub CLI could not read the repository.',
-    '6. The command is strict: if the bounded intake command cannot write snapshot files, stop and explain the permission, GitHub CLI login, connection, rate-limit, or clone problem. Do not use ad-hoc public GitHub browsing, memory, or URL-only inference for design-system files.',
+    stepSix,
     '7. Inspect the generated evidence note plus snapshots for README, package manifests, Tailwind/theme/token files, global CSS, font declarations, component source for buttons/forms/navigation/cards/tables, layout shells, icons/logos/assets, and representative app entry files.',
     '8. Use that evidence to create or update `DESIGN.md`, `colors_and_type.css`, `README.md`, `SKILL.md`, `preview/`, `ui_kits/app/`, `assets/`, and `fonts/` so the Design System tab can review the output as a reusable package.',
   ].join('\n');
