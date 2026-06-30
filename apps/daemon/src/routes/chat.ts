@@ -523,6 +523,18 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     return redacted;
   };
 
+  const redactAuthTokensInValue = (
+    value: unknown,
+    exactSecrets: Array<string | undefined | null> = [],
+  ): unknown => {
+    if (typeof value === 'string') return redactAuthTokens(value, exactSecrets);
+    if (Array.isArray(value)) return value.map((item) => redactAuthTokensInValue(item, exactSecrets));
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactAuthTokensInValue(item, exactSecrets)]),
+    );
+  };
+
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
@@ -1207,7 +1219,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!data) return false;
         const streamError = extractStreamErrorMessage(data);
         if (streamError) {
-          sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
+          const secretsToRedact = [effectiveApiKey];
+          sendProxyError(sse, `Provider error: ${redactAuthTokens(streamError, secretsToRedact)}`, {
+            details: redactAuthTokensInValue(data, secretsToRedact),
+          });
           ended = true;
           return true;
         }

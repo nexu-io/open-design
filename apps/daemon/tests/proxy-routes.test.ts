@@ -657,6 +657,37 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('redacts deployment provider credentials from OpenAI-compatible stream error frames', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(sseResponse(
+          'data: {"error":{"message":"bad key deployment-secret","details":{"authorization":"Bearer deployment-secret"}}}\n\n',
+        ));
+      }));
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('Provider error: bad key [REDACTED]');
+      expect(text).toContain('Bearer [REDACTED]');
+      expect(text).not.toContain('deployment-secret');
+    });
+  });
+
   it('redacts deployment provider credentials from OpenAI finalize upstream errors', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
