@@ -4,6 +4,7 @@ date: 2026-06-29
 category: "Community"
 readingTime: 3
 summary: "A small meetup for designers, builders, and AI-native teams exploring how agents change design, prototyping, and product work."
+socialImage: "/blog/open-design-osaka-kyoto-meetup-cover.jpg"
 ctaKind: event-register
 ctaTitle: "Join the Osaka / Kyoto meetup"
 ctaBody: "Save your spot for the July 6 Open Design meetup / workshop."
