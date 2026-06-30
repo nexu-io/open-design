@@ -2318,6 +2318,11 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg));
 }
+.chat-history-menu-titlegroup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
 .chat-history-menu-title {
   font-size: 10.5px;
   text-transform: uppercase;
