@@ -47,6 +47,7 @@ const PROJECTS_AUTO_REFRESH_MS = 15000;
 
 export const STATUS_ORDER = [
 	"not_started",
+	"queued",
 	"running",
 	"awaiting_input",
 	"succeeded",
@@ -961,8 +962,7 @@ export function DesignsTab({
 					{STATUS_ORDER.map((status) => {
 						const colProjects = filteredProjects.filter(
 							(item) =>
-								normalizeStatus(item.project.status?.value ?? "not_started") ===
-								status,
+								(item.project.status?.value ?? "not_started") === status,
 						);
 						return (
 							<div key={status} className="design-kanban-col">
@@ -1121,12 +1121,6 @@ export function DesignsTab({
 			</AnimatePresence>
 		</div>
 	);
-}
-
-function normalizeStatus(
-	status: ProjectDisplayStatus,
-): Exclude<ProjectDisplayStatus, "queued"> {
-	return status === "queued" ? "running" : status;
 }
 
 function statusLabel(
