@@ -1,6 +1,95 @@
 import type { SolutionLocaleCopy } from './types';
 
 export const ZH: SolutionLocaleCopy = {
+  aiWireframeGenerator: {
+    title: 'AI 线框图生成器 —— 用 Open Design 从提示词到线框图',
+    description:
+      '一个免费开源的 AI 线框图生成器：把一句提示词变成可编辑的多屏线框图，并一路带到可上线的代码。Open Design 跑在你已经在用的编程 agent 里，所以线框图和真实产品共用同一份源。',
+    breadcrumb: 'AI 线框图生成器',
+    label: '工具 · AI 线框图生成器',
+    heading: '一句提示词，生成线框图',
+    lead: '描述这个屏幕或流程，让你的 agent 生成干净、可编辑的线框图——一致的布局、真实的组件、多个屏幕。然后继续往前：同一份产物会变成带样式的原型、再变成可上线的代码，全在你已经在用的 agent 里完成。',
+    heroImageAlt: '编辑插画：一句提示词变成可编辑线框图、再变成成品 UI，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数 AI 线框图生成器只给你一张之后还要重做的图。Open Design 在你的编程 agent 里生成线框图，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
+    stepsTitle: 'AI 线框图生成器怎么用',
+    steps: [
+      {
+        title: '描述屏幕',
+        body: '用大白话告诉 agent 要做什么线框——"一个带侧边栏、统计行和近期动态表格的 dashboard"。Open Design 加载线框 skill，让 agent 排布结构和层级，而不只是出一张静态图。',
+        imageAlt: '插画：把大白话的屏幕描述敲进终端',
+      },
+      {
+        title: '生成可编辑线框',
+        body: 'agent 套用一套可复用设计系统里的布局模式和组件，让每个屏幕共享间距、栅格和结构。你得到可编辑、连贯的线框——一组屏幕，而不是一堆脱节的方框。',
+        imageAlt: '插画：多个线框屏幕以一致的布局栅格出现',
+      },
+      {
+        title: '提升保真度',
+        body: '让 agent 把线框带到带样式、可点击的原型——字体、配色、真实交互。同一份产物逐步提升保真，而不是重画，所以低保真到高保真之间什么都不丢。',
+        imageAlt: '插画：低保真线框变成精致的高保真屏幕',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '因为产物就在你的项目里，线框和最终代码共用同一份源。对着 agent 迭代；产出是你拥有、可上线的 HTML/代码——不被厂商锁定。',
+        imageAlt: '插画：线框流入被绿色选框框住的可上线代码',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般 AI 线框图生成器',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般 AI 线框图生成器',
+    tableRows: [
+      { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个网页工具、在它云端生成' },
+      { capability: '多个关联屏幕', withOd: '作为一组生成，共享布局与组件', without: '常常一次只出一个屏幕' },
+      { capability: '低保真到高保真', withOd: '同一产物提升保真——线框→原型→代码', without: '线框是死路，高保真和代码都要重做' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '只能在它 app 里编辑、导出受限' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按额度订阅、厂商托管' },
+    ],
+    featuresTitle: '你能线框化什么',
+    features: [
+      { title: 'Web 应用屏幕', body: 'Dashboard、设置、多屏流程——作为一组连贯线框，再带到代码。', thumb: 'example-web-prototype' },
+      { title: '移动端流程', body: '逐屏的移动端旅程，结构与状态一致。', thumb: 'example-mobile-app' },
+      { title: 'SaaS 落地页', body: '营销与 SaaS 落地布局，可线框、可上样式、可上线。', thumb: 'example-saas-landing' },
+      { title: '引导与表单', body: '多步引导、注册、表单流程，层级清晰。', thumb: 'example-hr-onboarding' },
+      { title: '任意视觉风格', body: '先低保真，再把连贯风格贯穿到底——编辑感、柔和或张扬。', thumb: 'example-gamified-app' },
+      { title: '落地与转化', body: 'Hero、定价、waitlist 布局，第一版就接线且贴品牌。', thumb: 'example-kami-landing' },
+    ],
+    galleryTitle: '用 Open Design 做出来的线框',
+    galleryLead:
+      '每一个都始于一句提示、渲染成可编辑可点击的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从线框到可上线代码。',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '约会 web 应用 —— 多屏线框' },
+      { thumb: 'example-hr-onboarding', caption: 'HR 引导流程' },
+      { thumb: 'example-kami-landing', caption: '产品落地布局' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web 线框' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: 'AI 线框图生成器常见问题',
+    faq: [
+      {
+        q: 'AI 线框图生成器免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——线框生成本身没有按席位或按额度计费。',
+      },
+      {
+        q: '线框是可编辑的还是只是图片？',
+        a: '可编辑。产出是真实的 HTML 和代码，所以你能对着 agent 改布局、组件和内容——不是烤死在图片里、之后还要重做。',
+      },
+      {
+        q: '线框能变成高保真原型和真实代码吗？',
+        a: '这正是重点。同一份产物逐步提升保真——线框→带样式原型→可上线代码——因为它就在你项目里，而不是每个阶段重画一遍。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就生成第一张线框',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你下一个屏幕想法变成可编辑线框——再变成可上线代码——全在你已经在用的 agent 里。',
+  },
   prototype: {
     title: '用 Open Design + Claude Code 做可交互原型',
     description:

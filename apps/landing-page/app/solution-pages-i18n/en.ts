@@ -1,6 +1,140 @@
 import type { SolutionLocaleCopy } from './types';
 
 export const EN: SolutionLocaleCopy = {
+  aiWireframeGenerator: {
+    title: 'AI Wireframe Generator — prompt to wireframe with Open Design',
+    description:
+      'A free, open-source AI wireframe generator that turns a prompt into editable, multi-screen wireframes — and takes them all the way to shipped code. Open Design runs inside the coding agent you already use, so the wireframe and the real product share one source.',
+    breadcrumb: 'AI wireframe generator',
+    label: 'Tool · AI wireframe generator',
+    heading: 'Wireframe at the speed of a prompt',
+    lead: 'Describe the screen or flow and let your agent generate a clean, editable wireframe — consistent layout, real components, multiple screens. Then keep going: the same artifact becomes a styled prototype and shipped code, in the agent you already run.',
+    heroImageAlt:
+      'Editorial illustration of a prompt turning into an editable wireframe and then a finished UI, framed by a green selection box',
+    tldrTitle: 'In one line',
+    tldrBody:
+      'Most AI wireframe generators hand you a picture you rebuild later. Open Design generates the wireframe inside your coding agent and carries it from prompt to shipped code — no export step, no handoff gap, no per-seat meter.',
+    stepsTitle: 'How the AI wireframe generator works',
+    steps: [
+      {
+        title: 'Describe the screen',
+        body: 'Tell your agent what to wireframe in plain language — "a dashboard with a sidebar, a stats row, and a recent-activity table." Open Design loads the wireframe skill so the agent lays out structure and hierarchy, not just a single static image.',
+        imageAlt: 'Illustration of a plain-language screen description typed into a terminal',
+      },
+      {
+        title: 'Generate editable wireframes',
+        body: 'The agent applies layout patterns and components from a reusable design system, so every screen shares spacing, grid, and structure. You get editable, coherent wireframes — multiple screens as a set, not disconnected boxes.',
+        imageAlt: 'Illustration of several wireframe screens appearing with one consistent layout grid',
+      },
+      {
+        title: 'Raise the fidelity',
+        body: 'Ask the agent to take the wireframe to a styled, clickable prototype — typography, color, real interactions. The same artifact gains fidelity instead of being redrawn, so nothing is thrown away between lo-fi and hi-fi.',
+        imageAlt: 'Illustration of a low-fidelity wireframe turning into a polished high-fidelity screen',
+      },
+      {
+        title: 'Ship the code you own',
+        body: 'Because the artifact lives in your project, the wireframe and the eventual code share one source of truth. Iterate by talking to the agent; the output is HTML/code you own and can ship — no vendor lock-in.',
+        imageAlt: 'Illustration of a wireframe flowing into shipped code held in a green selection frame',
+      },
+    ],
+    tableTitle: 'Open Design vs. typical AI wireframe generators',
+    tableColCapability: 'What you need',
+    tableColWithOd: 'With Open Design',
+    tableColWithout: 'Typical AI wireframe generators',
+    tableRows: [
+      {
+        capability: 'Generate from a prompt',
+        withOd: 'One prompt in the agent you already have open',
+        without: 'Sign up for a separate web tool, generate in their cloud',
+      },
+      {
+        capability: 'Multiple linked screens',
+        withOd: 'Generated as a set with shared layout and components',
+        without: 'Often one screen at a time',
+      },
+      {
+        capability: 'Lo-fi to hi-fi',
+        withOd: 'Same artifact gains fidelity — wireframe → prototype → code',
+        without: 'Wireframe is a dead end; rebuild for hi-fi and for code',
+      },
+      {
+        capability: 'Own the output',
+        withOd: 'Plain files and code in your repo, fully yours',
+        without: 'Editable only inside their app; export-limited',
+      },
+      {
+        capability: 'Cost & lock-in',
+        withOd: 'Open source, bring your own keys, runs locally',
+        without: 'Per-seat or per-credit subscription, vendor-hosted',
+      },
+    ],
+    featuresTitle: 'What you can wireframe',
+    features: [
+      {
+        title: 'Web app screens',
+        body: 'Dashboards, settings, multi-screen flows — wireframed as a coherent set, then taken to code.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Mobile app flows',
+        body: 'Screen-by-screen mobile journeys with consistent structure and states.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'SaaS landing pages',
+        body: 'Marketing and SaaS landing layouts you can wireframe, style, and ship.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding & forms',
+        body: 'Multi-step onboarding, sign-up, and form flows laid out with clear hierarchy.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Any visual taste',
+        body: 'Start lo-fi, then carry a coherent style end to end — editorial, soft, or bold.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Landing & conversion',
+        body: 'Hero, pricing, and waitlist layouts wired and on brand from the first pass.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Wireframes built with Open Design',
+    galleryLead:
+      'Every one started as a prompt and rendered to an editable, clickable artifact. Pick a template close to your idea, describe your variation, and the agent adapts it — from wireframe to shipped code.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Dating web app — multi-screen wireframe' },
+      { thumb: 'example-hr-onboarding', caption: 'HR onboarding flow' },
+      { thumb: 'example-kami-landing', caption: 'Product landing layout' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Soft-style web wireframe' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Browse templates',
+    faqTitle: 'AI wireframe generator FAQ',
+    faq: [
+      {
+        q: 'Is the AI wireframe generator free?',
+        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the wireframe generator itself.',
+      },
+      {
+        q: 'Are the wireframes editable, or just images?',
+        a: 'Editable. The output is real HTML and code, so you can refine layout, components, and content by talking to the agent — not pixels baked into a picture you would have to rebuild.',
+      },
+      {
+        q: 'Can a wireframe become a hi-fi prototype and real code?',
+        a: 'That is the whole point. The same artifact gains fidelity — wireframe to styled prototype to shipped code — because it lives in your project, instead of being redrawn at each stage.',
+      },
+      {
+        q: 'Which agents does it work with?',
+        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+      },
+    ],
+    ctaTitle: 'Generate your first wireframe tonight',
+    ctaBody:
+      'Star the repo, install Open Design, and turn your next screen idea into an editable wireframe — and then into shipped code — in the agent you already use.',
+  },
   prototype: {
     title: 'Build interactive prototypes with Open Design + Claude Code',
     description:
